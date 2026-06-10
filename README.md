@@ -95,7 +95,7 @@ Recommended sequence before release:
 Consumers should run:
 
 ```powershell
-apm install Peter-N91/hve-squad#v0.1.0   # pinned (recommended) change the version number based on the one you need.
+apm install Peter-N91/hve-squad#v0.1.0   # pinned (recommended); update the version tag to the one you need
 # or
 apm install Peter-N91/hve-squad          # latest on default branch
 ```
