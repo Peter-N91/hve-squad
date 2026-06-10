@@ -6,4 +6,5 @@ apm_modules/
 .github/**
 !.github/workflows/
 !.github/workflows/**
+!.github/pull_request_template.md
 .agents/

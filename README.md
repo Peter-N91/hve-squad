@@ -143,6 +143,40 @@ You can tune generation behavior in `scripts/Update-ApmDependencies.ps1`:
 - See [CHANGELOG.md](CHANGELOG.md) for what is included in each version.
 - Consumers can pin to a tagged version, for example `apm install "Peter-N91/hve-squad#v0.1.0"`.
 
+## Release process
+
+Releases use a tag-based flow on top of the default branch (`main`). The tag is the
+release artifact consumers install with `apm install "Peter-N91/hve-squad#vX.Y.Z"`.
+
+1. Cut a release branch from `main`:
+
+   ```powershell
+   git checkout main
+   git pull
+   git checkout -b release/vX.Y.Z
+   ```
+
+2. Update version metadata:
+   - Bump `version:` in `apm.yml` to `X.Y.Z`.
+   - Add a `## [X.Y.Z]` section to [CHANGELOG.md](CHANGELOG.md) describing the changes.
+   - Refresh the lockfile if dependencies changed: `apm run sync-deps` then `apm lock`.
+
+3. Open a PR into `main` titled `release: vX.Y.Z` (the PR template fills in the checklist).
+
+4. After the PR is merged, tag the merge commit on `main` and push the tag:
+
+   ```powershell
+   git checkout main
+   git pull
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+5. (Optional) Publish a GitHub Release for the tag.
+
+Avoid a long-lived `release` branch. Only create `release/vX.Y.z` from an existing
+tag when you need to patch an older version after newer work has landed on `main`.
+
 ## Notes
 
 - `.gitignore` ignores `apm_modules/`, generated `.github` assets, and keeps `.github/workflows/` tracked.
