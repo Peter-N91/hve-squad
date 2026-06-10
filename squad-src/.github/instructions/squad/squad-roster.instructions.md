@@ -1,0 +1,132 @@
+---
+description: "Squad roster schema and cast catalog mapping squad roles to deployed HVE Core agents"
+applyTo: '**/.copilot-tracking/squad/**'
+---
+
+# Squad Roster Conventions
+
+These conventions define the squad roster: the durable list of roles the Squad Coordinator can dispatch and the HVE Core agent that fills each role. The coordinator reads the roster at the start of every turn to decide who is available, how to invoke them, and which model tier to prefer.
+
+The roster is data, not behavior. It records identities and invocation details. Routing logic lives in `squad-routing.instructions.md`, and persistence rules live in `squad-state.instructions.md`.
+
+## Roster File
+
+The roster lives at `.copilot-tracking/squad/team.md`. The coordinator creates it on first use from the cast catalog below and updates it only through the Squad Scribe.
+
+The file begins with YAML frontmatter and a single H1 title, then a `## Members` table. Each row binds a squad role to a concrete agent.
+
+### Members Schema
+
+The `## Members` table uses these columns:
+
+| Column               | Meaning                                                                                                   |
+|----------------------|-----------------------------------------------------------------------------------------------------------|
+| Role                 | The stable squad role name (for example, `lead`, `developer`, `tester`)                                   |
+| Agent Name (Primary) | The exact `name:` frontmatter value of the deployed HVE Core agent the role resolves to by default        |
+| Alternate Agents     | Optional comma-separated `name:` values the role may resolve to instead, chosen per the catalog cue        |
+| Invocation           | How the coordinator dispatches the agent: `runSubagent`/`task` for non-user-facing roles                  |
+| Model Tier           | Preferred cost tier: `fast` for read-heavy roles, `default` for reasoning-heavy roles                     |
+
+The `Agent Name (Primary)` column holds exactly one agent; the role always has a deterministic default. `Alternate Agents` is optional and may be empty for one-to-one roles. The coordinator resolves the role to a single concrete agent at dispatch time using the *Resolving a Role to an Agent* rules below.
+
+### Members Example
+
+<!-- <example-roster> -->
+```markdown
+## Members
+
+| Role          | Agent Name (Primary)          | Alternate Agents                                  | Invocation         | Model Tier |
+|---------------|-------------------------------|---------------------------------------------------|--------------------|------------|
+| lead          | Task Planner                  | RPI Agent, Phase Implementor, Task Challenger     | runSubagent / task | default    |
+| developer     | Task Implementor              | Phase Implementor                                 | runSubagent / task | default    |
+| tester        | Task Reviewer                 | Code Review Full, PR Review, Plan Validator       | runSubagent / task | fast       |
+| product-owner | ADO Backlog Manager           | GitHub Backlog Manager, Jira Backlog Manager      | runSubagent / task | default    |
+| scribe        | Squad Scribe                  | Memory                                            | runSubagent / task | fast       |
+```
+<!-- </example-roster> -->
+
+## Cast Catalog
+
+The cast catalog is the default casting source and the canonical mapping between squad roles (members) and deployed HVE Core agents, keyed by each agent's exact `name:` frontmatter value. When a project has no `team.md`, the coordinator seeds the roster from this catalog.
+
+The relationship between roles and agents is **many-to-many**. A role names one **Primary** agent — the default the coordinator dispatches — plus optional **Alternate** agents it may resolve to instead when the request matches a **Selection Cue**. A single agent may also fill more than one role (for example, `Codebase Profiler` serves both `researcher` and `security`). See *Relationship Cardinality* below.
+
+Roles that have no stable HVE Core equivalent are marked **thin charter needed**. A thin charter is a small, squad-owned subagent authored under `squad-src/.github/agents/squad/` when the role is actually required; until then the coordinator omits the role or escalates to the user.
+
+| Role             | Primary Agent (`name:`)       | Alternate Agents (`name:`)                                                                                          | Selection Cue                                                                                                                                                                                                 |
+|------------------|-------------------------------|---------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| lead             | Task Planner                  | RPI Agent, Phase Implementor, Task Challenger                                                                        | Full research→plan→implement cycle → RPI Agent; execute one numbered plan phase → Phase Implementor; pressure-test a plan or assumptions → Task Challenger; otherwise plan a single task → Task Planner       |
+| researcher       | Task Researcher               | Researcher Subagent, Codebase Profiler, Meeting Analyst                                                              | External/web/MCP research → Researcher Subagent; technology-profile scan → Codebase Profiler; meeting-transcript mining → Meeting Analyst; otherwise codebase research → Task Researcher                       |
+| developer        | Task Implementor              | Phase Implementor                                                                                                   | Execute a numbered plan phase → Phase Implementor; otherwise implement a single task → Task Implementor                                                                                                       |
+| tester           | Task Reviewer                 | Code Review Full, Code Review Standards, Code Review Functional, PR Review, Implementation Validator, Plan Validator, RPI Validator | Full pre-PR review → Code Review Full; standards diff → Code Review Standards; correctness/edge-case diff → Code Review Functional; pull-request review → PR Review; implementation-vs-design → Implementation Validator; plan-vs-research → Plan Validator; changes-vs-plan → RPI Validator; otherwise task review → Task Reviewer |
+| challenger       | Task Challenger               | —                                                                                                                   | Single agent — devil's-advocate review of plans, assumptions, and scope                                                                                                                                       |
+| architect        | System Architecture Reviewer  | Arch Diagram Builder, ADR Creator, Network ISA-95 Planner                                                            | Architecture diagram → Arch Diagram Builder; decision record → ADR Creator; ISA-95 / OT network design → Network ISA-95 Planner; otherwise design-tradeoff review → System Architecture Reviewer              |
+| security         | Security Planner              | Security Reviewer, SSSC Planner, Skill Assessor, Finding Deep Verifier, Report Generator, Dependency Reviewer, Codebase Profiler | Code-level security review → Security Reviewer; supply-chain posture → SSSC Planner; single-skill assessment → Skill Assessor; verify a finding → Finding Deep Verifier; compile vulnerability report → Report Generator; dependency-change review → Dependency Reviewer; tech profiling → Codebase Profiler; otherwise security planning → Security Planner |
+| rai              | RAI Planner                   | —                                                                                                                   | Single agent — responsible-AI assessment and planning                                                                                                                                                        |
+| fact-checker     | Finding Deep Verifier         | —                                                                                                                   | Verification-focused (confirms FAIL/PARTIAL findings); confirm fit before dispatch                                                                                                                            |
+| designer         | UX UI Designer                | DT Coach, DT Learning Tutor                                                                                          | Facilitated design-thinking session → DT Coach; DT curriculum/learning → DT Learning Tutor; otherwise UX research, JTBD, journey mapping → UX UI Designer                                                     |
+| product-owner    | ADO Backlog Manager           | GitHub Backlog Manager, Jira Backlog Manager, Issue Triage Agent, AzDO PRD to WIT, Jira PRD to WIT, Agile Coach, Product Manager Advisor | Tracker selects the manager: GitHub → GitHub Backlog Manager, Jira → Jira Backlog Manager, ADO → ADO Backlog Manager; PRD→work items for ADO → AzDO PRD to WIT, for Jira → Jira PRD to WIT; single-issue triage → Issue Triage Agent; story refinement → Agile Coach; requirements discovery → Product Manager Advisor |
+| analyst          | PRD Builder                   | BRD Builder, Product Manager Advisor, Meeting Analyst                                                                | Business requirements → BRD Builder; advisory/validation → Product Manager Advisor; transcript→requirements → Meeting Analyst; otherwise product requirements → PRD Builder                                    |
+| data-scientist   | DS Gen Data Spec              | DS Gen Jupyter Notebook, DS Gen Streamlit Dashboard, DS Test Streamlit Dashboard                                    | EDA notebook → DS Gen Jupyter Notebook; dashboard build → DS Gen Streamlit Dashboard; dashboard test → DS Test Streamlit Dashboard; otherwise data dictionary/profile → DS Gen Data Spec                       |
+| prompt-engineer  | Prompt Builder                | Prompt Updater, Prompt Evaluator, Prompt Tester, Evaluation Dataset Creator                                          | Modify an existing prompt artifact → Prompt Updater; evaluate output quality → Prompt Evaluator; sandbox-test a prompt → Prompt Tester; build an eval dataset → Evaluation Dataset Creator; otherwise author a new prompt/agent/skill → Prompt Builder |
+| technical-writer | Doc Ops                       | Documentation Update Checker                                                                                         | Detect stale docs vs code → Documentation Update Checker; otherwise author/maintain documentation → Doc Ops                                                                                                   |
+| presenter        | PowerPoint Builder            | PowerPoint Subagent                                                                                                 | Delegated build/extract/validate step → PowerPoint Subagent; otherwise own the deck end-to-end → PowerPoint Builder                                                                                           |
+| experimenter     | Experiment Designer           | —                                                                                                                   | Single agent — Minimum Viable Experiment design                                                                                                                                                               |
+| scribe           | Squad Scribe                  | Memory                                                                                                              | Cross-session durable memory persistence → Memory; otherwise squad-state writes → Squad Scribe (squad-owned subagent)                                                                                         |
+| devrel           | —                             | —                                                                                                                   | Thin charter needed (no HVE Core equivalent)                                                                                                                                                                  |
+
+## Relationship Cardinality
+
+The mapping deliberately supports three shapes so squad roles can stay human-meaningful while reusing the full HVE Core cast:
+
+* **One-to-one** — a role maps to a single agent with no alternates. Examples: `rai → RAI Planner`, `challenger → Task Challenger`, `experimenter → Experiment Designer`.
+* **One-to-many** — a role maps to a Primary plus Alternates, and the coordinator resolves to one agent per the Selection Cue. Examples: `product-owner` resolves across the ADO/GitHub/Jira backlog managers by tracker; `tester` resolves across the review and validator agents by review sub-type.
+* **Many-to-one** — a single agent fills more than one role. Examples: `Codebase Profiler` serves `researcher` and `security`; `Finding Deep Verifier` serves `fact-checker`, `tester`, and `security`; `Product Manager Advisor` serves `product-owner` and `analyst`; `Phase Implementor` serves `lead` and `developer`; `Plan Validator` serves `lead` and `tester`; `Meeting Analyst` serves `researcher` and `analyst`.
+
+A shared agent is not a conflict: each role dispatches it with role-scoped context, and the Squad Scribe records which role invoked it under that role's history.
+
+## Resolving a Role to an Agent
+
+The coordinator turns a matched role into exactly one concrete agent at dispatch time:
+
+1. **Default to the Primary agent** named in the role's `team.md` row (seeded from this catalog).
+2. **Apply the Selection Cue** — when the request matches a cue, dispatch the indicated Alternate instead of the Primary.
+3. **Verify the agent is installed.** The resolved agent must be present in the project (its APM package deployed into `.github/`). When it is absent, escalate to the user — treat it the same as a **thin charter needed** role rather than silently substituting.
+4. **Record any non-primary resolution** through the Squad Scribe, so `history/<agent>.md` reflects the agent that actually ran and the cue that selected it.
+
+## Casting Rules
+
+* Use the exact `name:` frontmatter value from the deployed agent. Names with spaces are quoted when referenced from prompt or agent frontmatter.
+* Prefer a deployed HVE Core agent (Primary or Alternate) over a new charter. Author a thin charter only when a required role has no reasonable HVE Core fit.
+* Keep exactly one Primary per role so dispatch is always deterministic; list every other valid agent under Alternate Agents with a Selection Cue.
+* Treat `fact-checker → Finding Deep Verifier` as a best-fit mapping: the agent verifies findings rather than performing general fact-checking, so confirm it suits the request before dispatch.
+* Record any deviation from the catalog (a substituted agent, a non-primary resolution, or a new charter) through the Squad Scribe so the roster stays the single source of truth.
+
+## Squad Profiles
+
+A squad profile is a named, project-tailored subset of the cast catalog. Profiles let a project choose the squad that fits its work instead of always seeding the full cast. The coordinator selects a profile during Init Mode (see the Squad Coordinator agent), and the Squad Scribe stamps the chosen profile's members into `team.md`.
+
+The `scribe` role is always included in every profile — it is the single writer of squad state and is never proposed as an optional member.
+
+| Profile        | Members (roles)                                              | Choose when the project is…                                              |
+|----------------|-------------------------------------------------------------|--------------------------------------------------------------------------|
+| `default`      | lead, researcher, developer, tester, scribe                 | General build and delivery work — a balanced team (recommended default)  |
+| `full`         | lead, researcher, developer, tester, architect, security, rai, designer, fact-checker, scribe | You want every deployed capability available                             |
+| `security`     | security, rai, fact-checker, researcher, scribe             | Security-, threat-, or responsible-AI-focused (auth, secrets, ML, LLM)   |
+| `design`       | designer, researcher, lead, tester, scribe                  | UX/UI, accessibility, or product-design focused                          |
+| `architecture` | architect, researcher, lead, developer, scribe              | System design, infrastructure, or architecture-review focused            |
+
+### Profile Selection
+
+The coordinator chooses a profile in this order of precedence:
+
+1. **Explicit choice** — the user names a profile (for example, `profile=security`) or confirms one during Init Mode.
+2. **Project discovery** — the coordinator infers a profile from repository signals when the user does not name one:
+   * Source files, tests, and package manifests with no specialized signal → `default`.
+   * Authentication, secrets, threat modeling, ML/LLM, or data-handling signals → `security`.
+   * Frontend frameworks (React, Vue, Svelte, Angular), CSS, or accessibility signals → `design`.
+   * Infrastructure-as-code (Bicep, Terraform), system-design docs, or component diagrams → `architecture`.
+   * Mixed or unclear signals → propose `default` and offer `full`.
+3. **Fallback** — when discovery is inconclusive and the user gives no hint, propose `default` as the recommended profile.
+
+A profile only ever lists roles that exist in the cast catalog. Roles marked **thin charter needed** (such as `devrel`) are never part of a profile until a charter is authored.

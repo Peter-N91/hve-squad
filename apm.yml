@@ -1,5 +1,5 @@
 name: hve-squad
-version: 0.1.0
+version: 0.2.0
 description: APM package for hve-core and squad together
 author: Peter-N91
 # Which agent platforms to deploy to.
@@ -77,6 +77,7 @@ dependencies:
     - microsoft/hve-core/.github/instructions/ado/ado-wit-planning.instructions.md
     - microsoft/hve-core/.github/instructions/coding-standards/bash/bash.instructions.md
     - microsoft/hve-core/.github/instructions/coding-standards/bicep/bicep.instructions.md
+    - microsoft/hve-core/.github/instructions/coding-standards/code-review-telemetry.instructions.md
     - microsoft/hve-core/.github/instructions/coding-standards/code-review/diff-computation.instructions.md
     - microsoft/hve-core/.github/instructions/coding-standards/code-review/review-artifacts.instructions.md
     - microsoft/hve-core/.github/instructions/coding-standards/csharp/csharp-tests.instructions.md
@@ -90,6 +91,7 @@ dependencies:
     - microsoft/hve-core/.github/instructions/coding-standards/terraform/terraform.instructions.md
     - microsoft/hve-core/.github/instructions/coding-standards/uv-projects.instructions.md
     - microsoft/hve-core/.github/instructions/design-thinking/dt-canonical-deck.instructions.md
+    - microsoft/hve-core/.github/instructions/design-thinking/dt-coach-telemetry.instructions.md
     - microsoft/hve-core/.github/instructions/design-thinking/dt-coaching-identity.instructions.md
     - microsoft/hve-core/.github/instructions/design-thinking/dt-coaching-state.instructions.md
     - microsoft/hve-core/.github/instructions/design-thinking/dt-curriculum-01-scoping.instructions.md
@@ -153,6 +155,7 @@ dependencies:
     - microsoft/hve-core/.github/instructions/hve-core/markdown.instructions.md
     - microsoft/hve-core/.github/instructions/hve-core/prompt-builder.instructions.md
     - microsoft/hve-core/.github/instructions/hve-core/pull-request.instructions.md
+    - microsoft/hve-core/.github/instructions/hve-core/task-implementor-telemetry.instructions.md
     - microsoft/hve-core/.github/instructions/hve-core/writing-style.instructions.md
     - microsoft/hve-core/.github/instructions/jira/jira-backlog-discovery.instructions.md
     - microsoft/hve-core/.github/instructions/jira/jira-backlog-planning.instructions.md
@@ -160,14 +163,17 @@ dependencies:
     - microsoft/hve-core/.github/instructions/jira/jira-backlog-update.instructions.md
     - microsoft/hve-core/.github/instructions/jira/jira-wit-planning.instructions.md
     - microsoft/hve-core/.github/instructions/project-planning/adr-byo-template.instructions.md
+    - microsoft/hve-core/.github/instructions/project-planning/adr-creation-telemetry.instructions.md
     - microsoft/hve-core/.github/instructions/project-planning/adr-handoff.instructions.md
     - microsoft/hve-core/.github/instructions/project-planning/adr-identity.instructions.md
     - microsoft/hve-core/.github/instructions/project-planning/adr-standards.instructions.md
+    - microsoft/hve-core/.github/instructions/project-planning/prd-builder-telemetry.instructions.md
     - microsoft/hve-core/.github/instructions/pull-request.instructions.md
     - microsoft/hve-core/.github/instructions/rai-planning/rai-backlog-handoff.instructions.md
     - microsoft/hve-core/.github/instructions/rai-planning/rai-capture-coaching.instructions.md
     - microsoft/hve-core/.github/instructions/rai-planning/rai-identity.instructions.md
     - microsoft/hve-core/.github/instructions/rai-planning/rai-impact-assessment.instructions.md
+    - microsoft/hve-core/.github/instructions/rai-planning/rai-planner-telemetry.instructions.md
     - microsoft/hve-core/.github/instructions/rai-planning/rai-risk-classification.instructions.md
     - microsoft/hve-core/.github/instructions/rai-planning/rai-security-model.instructions.md
     - microsoft/hve-core/.github/instructions/rai-planning/rai-standards.instructions.md
@@ -175,11 +181,13 @@ dependencies:
     - microsoft/hve-core/.github/instructions/security/identity.instructions.md
     - microsoft/hve-core/.github/instructions/security/operational-buckets.instructions.md
     - microsoft/hve-core/.github/instructions/security/security-model.instructions.md
+    - microsoft/hve-core/.github/instructions/security/security-planner-telemetry.instructions.md
     - microsoft/hve-core/.github/instructions/security/sssc-assessment.instructions.md
     - microsoft/hve-core/.github/instructions/security/sssc-backlog.instructions.md
     - microsoft/hve-core/.github/instructions/security/sssc-gap-analysis.instructions.md
     - microsoft/hve-core/.github/instructions/security/sssc-handoff.instructions.md
     - microsoft/hve-core/.github/instructions/security/sssc-identity.instructions.md
+    - microsoft/hve-core/.github/instructions/security/sssc-planner-telemetry.instructions.md
     - microsoft/hve-core/.github/instructions/security/sssc-standards.instructions.md
     - microsoft/hve-core/.github/instructions/security/standards-mapping.instructions.md
     - microsoft/hve-core/.github/instructions/shared/coaching-patterns.instructions.md
@@ -259,6 +267,11 @@ dependencies:
     - microsoft/hve-core/.github/prompts/security/sssc-from-brd.prompt.md
     - microsoft/hve-core/.github/prompts/security/sssc-from-prd.prompt.md
     - microsoft/hve-core/.github/prompts/security/sssc-from-security-plan.prompt.md
+    - microsoft/hve-core/.github/skills/accessibility/aria-apg
+    - microsoft/hve-core/.github/skills/accessibility/coga
+    - microsoft/hve-core/.github/skills/accessibility/en-301-549
+    - microsoft/hve-core/.github/skills/accessibility/section-508
+    - microsoft/hve-core/.github/skills/accessibility/wcag-22
     - microsoft/hve-core/.github/skills/coding-standards/python-foundational
     - microsoft/hve-core/.github/skills/experimental/customer-card-render
     - microsoft/hve-core/.github/skills/experimental/mural
@@ -280,7 +293,16 @@ dependencies:
     - microsoft/hve-core/.github/skills/security/owasp-top-10
     - microsoft/hve-core/.github/skills/security/secure-by-design
     - microsoft/hve-core/.github/skills/security/security-reviewer-formats
+    - microsoft/hve-core/.github/skills/shared/backlog-templates
     - microsoft/hve-core/.github/skills/shared/pr-reference
+    - microsoft/hve-core/.github/skills/shared/telemetry-foundations
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-scribe.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-roster.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-routing.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-state.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad.prompt.md
+    - Peter-N91/hve-squad/squad-src/.github/skills/squad
   mcp: []
 includes: auto
 scripts:
