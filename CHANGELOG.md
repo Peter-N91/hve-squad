@@ -23,7 +23,7 @@ Initial release of the `hve-squad` APM package.
 Pin to this version:
 
 ```powershell
-apm install Peter-N91/hve-squad#v0.1.0
+apm install "Peter-N91/hve-squad#v0.1.0"
 ```
 
 [0.1.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.1.0

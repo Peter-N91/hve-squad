@@ -95,7 +95,7 @@ Recommended sequence before release:
 Consumers should run:
 
 ```powershell
-apm install Peter-N91/hve-squad#v0.1.0   # pinned (recommended); update the version tag to the one you need
+apm install "Peter-N91/hve-squad#v0.1.0"  # pinned (recommended); update the version tag to the one you need
 # or
 apm install Peter-N91/hve-squad          # latest on default branch
 ```
@@ -141,7 +141,7 @@ You can tune generation behavior in `scripts/Update-ApmDependencies.ps1`:
 
 - Releases follow [Semantic Versioning](https://semver.org/).
 - See [CHANGELOG.md](CHANGELOG.md) for what is included in each version.
-- Consumers can pin to a tagged version, for example `apm install Peter-N91/hve-squad#v0.1.0`.
+- Consumers can pin to a tagged version, for example `apm install "Peter-N91/hve-squad#v0.1.0"`.
 
 ## Notes
 
