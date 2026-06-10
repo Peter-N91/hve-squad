@@ -3,5 +3,7 @@
 apm_modules/
 
 # Generated/copied orchestration assets (local only)
-.github/
+.github/**
+!.github/workflows/
+!.github/workflows/**
 .agents/
