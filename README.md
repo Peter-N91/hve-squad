@@ -28,7 +28,7 @@ This package solves that by:
 - `apm.lock.yaml`: resolved dependency lock file
 - `scripts/Update-ApmDependencies.ps1`: dependency generator
 - `apm_modules/`: installed dependencies (ignored by git)
-- `.github/`: generated/deployed local assets (ignored by git)
+- `.github/`: generated/deployed local assets (ignored by git, except `.github/workflows/` if tracked)
 
 ## Prerequisites
 
@@ -90,7 +90,7 @@ Recommended sequence before release:
 2. `apm lock`
 3. `apm pack` (optional)
 
-## Consumer workflow (users of your packed/published package)
+## Consumer workflow (GitHub installs for your package)
 
 Consumers should run:
 
