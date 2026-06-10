@@ -1,7 +1,82 @@
 lockfile_version: '1'
-generated_at: '2026-06-10T14:57:29.123384+00:00'
+generated_at: '2026-06-10T15:23:05.477177+00:00'
 apm_version: 0.18.0
 dependencies:
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
+  virtual_path: squad-src/.github/agents/squad/squad-coordinator.agent.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/agents/squad-coordinator.agent.md
+  deployed_file_hashes:
+    .github/agents/squad-coordinator.agent.md: sha256:cd753bb7f96f61f5035814dc20210b757617490437bbe09f0b4568cb27bc7793
+  content_hash: sha256:3293e573e209d43c15cf34df3d01d5fa5eea89a18fd3a25280e37bdf8be6335c
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
+  virtual_path: squad-src/.github/agents/squad/squad-scribe.agent.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/agents/squad-scribe.agent.md
+  deployed_file_hashes:
+    .github/agents/squad-scribe.agent.md: sha256:db4d7ee4ee1c41ce00160abb296ffc7e2fed4c06b58f89d3aa98602ca6146348
+  content_hash: sha256:b16925980ad40ec1fccfc8a4f9d9171b7c06690ba069832b9c7de0834d4dd8b3
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
+  virtual_path: squad-src/.github/instructions/squad/squad-roster.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/instructions/squad-roster.instructions.md
+  deployed_file_hashes:
+    .github/instructions/squad-roster.instructions.md: sha256:855016b53d7b6618417d938a1b314f22e84d9219559da0566f221fdd8385ae2e
+  content_hash: sha256:89d14a38732c2e0960c2283876804510e69d81bbd36a5b0c2fdbf5ecd4eb5fa1
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
+  virtual_path: squad-src/.github/instructions/squad/squad-routing.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/instructions/squad-routing.instructions.md
+  deployed_file_hashes:
+    .github/instructions/squad-routing.instructions.md: sha256:54c96f2d405fefdeb0d94aa175eb5062804dcbe80e02984a8a16986576846679
+  content_hash: sha256:ea770877cc980f841e3d204e83e0cbfd52c69387999e04707a59cbe84adfa29a
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
+  virtual_path: squad-src/.github/instructions/squad/squad-state.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/instructions/squad-state.instructions.md
+  deployed_file_hashes:
+    .github/instructions/squad-state.instructions.md: sha256:dee03bc14cbb4a81a70ea9912595786ef23b7bd7ddc102e7dffdcea0ff9e69cc
+  content_hash: sha256:43f1c33109acf9c9a153215435902eb51d03e797f1153a0b1d7f856ea7de2011
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
+  virtual_path: squad-src/.github/prompts/squad/squad.prompt.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/prompts/squad.prompt.md
+  deployed_file_hashes:
+    .github/prompts/squad.prompt.md: sha256:9d6cda212880fd6552cb83ef8b9dc04de98e65c059ca6804a94479fbbf33ad89
+  content_hash: sha256:9edea4b245ae2b4286022139949ec82d0cf4d9256c4e5f80a19ccbfcaf686638
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
+  virtual_path: squad-src/.github/skills/squad
+  is_virtual: true
+  package_type: claude_skill
+  deployed_files:
+  - .agents/skills/squad
+  content_hash: sha256:bc8d7ceb74f2c7853c6212367629092e565e40de4f9fa2f0a355ab5a63893a93
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b

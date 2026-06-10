@@ -98,17 +98,45 @@ their deployed assets.
 
 ### 1. Install the package
 
-Run `apm install` from the root of the project you want the squad in:
+Run `apm install` from the root of the project you want the squad in.
+
+> **Heads-up (APM 0.18.0+).** APM no longer silently defaults to the Copilot harness. In
+> a project with no existing `.github/agents/`, `.github/prompts/`, `.github/instructions/`,
+> `.claude/`, `.cursor/`, etc., `apm install` will fail with `[x] No harness detected`
+> *after* downloading sources into `apm_modules/` but *before* deploying anything into
+> `.github/`. You must tell APM which harness to deploy to using one of the options below.
+
+**Option A — pass `--target copilot` on every install (one-off):**
 
 ```powershell
-apm install "Peter-N91/hve-squad#v0.2.0"  # pinned (recommended); update the version tag to the one you need
+apm install "Peter-N91/hve-squad#v0.2.0" --target copilot  # pinned (recommended)
 # or
-apm install Peter-N91/hve-squad          # latest on default branch
+apm install Peter-N91/hve-squad --target copilot           # latest on default branch
 ```
 
-This deploys the bundled HVE Core agents, prompts, instructions, and skills — plus the
-squad — into your project's `.github/` tree. Consumers do **not** need `sync-deps` or
-`install-sync`; those are maintainer-only scripts for regenerating the dependency list.
+**Option B — declare the target once in your project's `apm.yml` (persistent, recommended):**
+
+Create an `apm.yml` at the root of your consumer project:
+
+```yaml
+name: my-project
+version: 0.1.0
+targets:
+  - copilot
+```
+
+Then `apm install "Peter-N91/hve-squad#v0.2.0"` (no flag needed) will deploy to
+Copilot from now on. This also makes future `apm install` / `apm update` runs reproducible.
+
+Either way, this deploys the bundled HVE Core agents, prompts, instructions, and skills —
+plus the squad — into your project's `.github/` tree. Consumers do **not** need
+`sync-deps` or `install-sync`; those are maintainer-only scripts for regenerating the
+dependency list.
+
+**If your first install already failed with `No harness detected`:** the sources are
+already in `apm_modules/`. Just re-run with `--target copilot` (Option A) or add the
+`targets:` block to `apm.yml` (Option B) and re-run `apm install`; APM will re-run the
+deploy step and populate `.github/`.
 
 ### 2. Run the squad
 
@@ -161,10 +189,11 @@ coordinator to switch profiles.
 ### 3. Rebuild (re-deploy) after updating
 
 To pull a newer version of the package or refresh your deployed assets, re-run install
-with the version tag you want:
+with the version tag you want (include `--target copilot` if you have not declared
+`targets:` in your project's `apm.yml`):
 
 ```powershell
-apm install "Peter-N91/hve-squad#v0.2.0"
+apm install "Peter-N91/hve-squad#v0.2.0" --target copilot
 ```
 
 `apm install` re-flattens the package into `.github/`. Your squad **state** under
@@ -246,6 +275,20 @@ You can tune generation behavior in `scripts/Update-ApmDependencies.ps1`:
 
 ## Troubleshooting
 
+- `[x] No harness detected` after `apm install` (APM 0.18.0+):
+  - APM downloaded the sources into `apm_modules/` but skipped the deploy step because
+    no harness marker was found in your project (no `.github/agents/`, `.github/prompts/`,
+    `.claude/`, `.cursor/`, etc.). Re-run with `--target copilot`:
+
+    ```powershell
+    apm install "Peter-N91/hve-squad#v0.2.0" --target copilot
+    ```
+
+    Or add a `targets:` block to your project's `apm.yml` so future installs work without
+    the flag (see *Consumer workflow \u2192 Install the package, Option B*).
+- `apm_modules/` populated but `.github/` is empty and no error visible:
+  - Same root cause as above \u2014 scroll up in your terminal for the `No harness detected`
+    message and apply the `--target copilot` fix.
 - No scripts found:
   - Check the `scripts` block in `apm.yml` and run `apm list`.
 - Access failures to HVE Core:
