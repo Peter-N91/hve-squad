@@ -135,7 +135,7 @@ You can tune generation behavior in `scripts/Update-ApmDependencies.ps1`:
 - Dependencies look stale:
   - Run `apm run sync-deps`, then `apm lock`.
 - `.github` still appears in git status after ignoring:
-  - Run `git rm -r --cached .github` once, then commit.
+  - Run `git rm -r --cached .github` once, then `git add .github/workflows` (if you track workflows here), then commit.
 
 ## Versioning
 
