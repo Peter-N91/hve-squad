@@ -137,6 +137,12 @@ You can tune generation behavior in `scripts/Update-ApmDependencies.ps1`:
 - `.github` still appears in git status after ignoring:
   - Run `git rm -r --cached .github` once, then commit.
 
+## Versioning
+
+- Releases follow [Semantic Versioning](https://semver.org/).
+- See [CHANGELOG.md](CHANGELOG.md) for what is included in each version.
+- Consumers can pin to a tagged version, for example `apm install Peter-N91/hve-squad#v0.1.0`.
+
 ## Notes
 
 - `.gitignore` ignores `apm_modules/`, generated `.github` assets, and keeps `.github/workflows/` tracked.
