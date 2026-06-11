@@ -29,11 +29,6 @@
 .PARAMETER SquadRepoSlug
     Repository slug (owner/repo) that hosts the squad source. Squad virtual
     paths are emitted as <SquadRepoSlug>/<SquadSourceRoot>/.github/...
-.PARAMETER SquadDirectoryRoots
-    Repository-relative directories under the squad source tree that should be
-    deployed as APM directory packages (one entry per non-empty directory).
-    Used for content APM cannot resolve as a typed file package (for example,
-    the bundled .vscode/mcp.template.json that consumers merge into mcp.json).
 .PARAMETER DryRun
     If set, prints generated dependencies without updating apm.yml.
 .EXAMPLE
@@ -80,10 +75,6 @@ param(
     [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
     [string]$SquadRepoSlug = 'Peter-N91/hve-squad',
-
-    [Parameter(Mandatory = $false)]
-    [ValidateNotNullOrEmpty()]
-    [string[]]$SquadDirectoryRoots = @('.vscode'),
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun
@@ -309,56 +300,6 @@ function Build-SquadDependencyList {
     return @($selected | Sort-Object -Unique | ForEach-Object { "$Repository/$_" })
 }
 
-function Build-SquadDirectoryDependencyList {
-    [CmdletBinding()]
-    [OutputType([string[]])]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$SourceRoot,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Repository,
-
-        [Parameter(Mandatory = $true)]
-        [AllowEmptyCollection()]
-        [string[]]$DirectoryRoots
-    )
-
-    # Emits one APM directory package entry per non-empty directory root under
-    # the squad source tree. Used for content APM cannot resolve as a typed file
-    # package (for example, .vscode/mcp.template.json bundled for consumers to
-    # merge into .vscode/mcp.json). Mirrors the existing skill directory pattern
-    # (no trailing slash, no filename).
-    if (-not (Test-Path -LiteralPath $SourceRoot)) {
-        return @()
-    }
-
-    $resolvedRoot = (Resolve-Path -LiteralPath $SourceRoot).ProviderPath
-    $prefix = $SourceRoot.Replace('\', '/').TrimEnd('/')
-
-    $result = [System.Collections.Generic.List[string]]::new()
-    foreach ($root in $DirectoryRoots) {
-        $normalized = $root.Replace('\', '/').Trim('/')
-        if ([string]::IsNullOrWhiteSpace($normalized)) {
-            continue
-        }
-
-        $searchDir = Join-Path $resolvedRoot $normalized
-        if (-not (Test-Path -LiteralPath $searchDir)) {
-            continue
-        }
-
-        $files = @(Get-ChildItem -LiteralPath $searchDir -Recurse -File -ErrorAction SilentlyContinue)
-        if ($files.Count -eq 0) {
-            continue
-        }
-
-        $result.Add("$Repository/$prefix/$normalized")
-    }
-
-    return @($result | Sort-Object -Unique)
-}
-
 function Update-ApmDependencyList {
     [CmdletBinding()]
     [OutputType([void])]
@@ -446,14 +387,6 @@ if ($MyInvocation.InvocationName -ne '.') {
             $squadDeps = Build-SquadDependencyList -Paths $squadPaths -Repository $SquadRepoSlug -SourcePrefix $SquadSourceRoot
             if ($null -eq $squadDeps) {
                 $squadDeps = @()
-            }
-
-            $squadDirDeps = Build-SquadDirectoryDependencyList -SourceRoot $SquadSourceRoot -Repository $SquadRepoSlug -DirectoryRoots $SquadDirectoryRoots
-            if ($null -eq $squadDirDeps) {
-                $squadDirDeps = @()
-            }
-            if ($squadDirDeps.Count -gt 0) {
-                $squadDeps = @($squadDeps + $squadDirDeps | Sort-Object -Unique)
             }
             Write-Host "Found $($squadDeps.Count) squad dependencies." -ForegroundColor Green
         }

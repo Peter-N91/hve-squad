@@ -315,7 +315,6 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-state.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/skills/squad
-    - Peter-N91/hve-squad/squad-src/.vscode
   mcp: []
 includes: auto
 scripts:

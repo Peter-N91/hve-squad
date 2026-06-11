@@ -7,7 +7,7 @@ applyTo: '**/.copilot-tracking/squad/**'
 
 These conventions tell the Squad Coordinator and every dispatched role how to choose between a Model Context Protocol (MCP) server and a non-MCP default for a given capability. Dispatched roles do not assume an MCP is present. They name the capability they need, check whether a preferred MCP is configured in the workspace, and either use it or fall back to the named default without breaking the flow.
 
-The hve-squad package ships a small reference template at `squad-src/.vscode/mcp.template.json` that the consumer may merge into their own `.vscode/mcp.json`. The package never reads or writes the consumer's `.vscode/mcp.json`.
+The hve-squad package ships a small reference template at `.github/skills/squad/mcp.template.json` (alongside the squad skill `SKILL.md`) that the consumer may merge into their own `.vscode/mcp.json`. The package never reads or writes the consumer's `.vscode/mcp.json`.
 
 ## Capability Map
 
@@ -52,7 +52,7 @@ Run the python `diagrams` library through the `python-foundational` skill or dir
 
 ## Consumer Override
 
-The consumer owns every write to `.vscode/mcp.json`. The hve-squad APM package ships only the reference template at `squad-src/.vscode/mcp.template.json` and never overwrites the consumer's MCP configuration. Consumers are free to:
+The consumer owns every write to `.vscode/mcp.json`. The hve-squad APM package ships only the reference template at `.github/skills/squad/mcp.template.json` and never overwrites the consumer's MCP configuration. Consumers are free to:
 
 * Adopt the template verbatim by copying its `inputs` and `servers` entries into their `.vscode/mcp.json`.
 * Merge only selected entries from the template with servers they already have configured.
