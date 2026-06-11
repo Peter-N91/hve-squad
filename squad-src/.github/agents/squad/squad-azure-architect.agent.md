@@ -21,8 +21,8 @@ Author Azure high-level and low-level designs for a target workload. The charter
 Three references govern how this charter operates. Read them on first use of a turn and honor them throughout.
 
 * `.github/instructions/squad/squad-mcp-capability.instructions.md` defines the capability-aware MCP preference and the Mermaid fallback contract.
-* Azure Verified Modules catalog at https://aka.ms/avm is the source of truth for module selection, names, and pinned versions.
-* Azure landing zones reference architecture at https://aka.ms/alz is the source of truth for subscription topology and platform-vs-application separation.
+* Azure Verified Modules catalog at <https://aka.ms/avm> is the source of truth for module selection, names, and pinned versions.
+* Azure landing zones reference architecture at <https://aka.ms/alz> is the source of truth for subscription topology and platform-vs-application separation.
 * `.github/instructions/coding-standards/bicep/bicep.instructions.md` informs the shape of the LLD so a `developer` can convert it directly to Bicep. This charter does not author Bicep.
 
 ## Inputs
@@ -51,7 +51,7 @@ Choose the landing-zone pattern first so the AVM modules can be slotted into the
 1. When the consumer already operates Enterprise-Scale, default to ALZ Connected or ALZ Online per their existing subscription topology.
 2. When the consumer is greenfield, default to ALZ Hub-Spoke.
 3. When the consumer explicitly opts out of ALZ alignment, document the opt-out as an ASR trigger and proceed without forcing alignment.
-4. For every Azure resource the workload requires, prefer a published AVM resource module from https://aka.ms/avm.
+4. For every Azure resource the workload requires, prefer a published AVM resource module from <https://aka.ms/avm>.
 5. When no AVM module exists for a required resource, record it as a portfolio gap in the response rather than authoring a custom module inline.
 
 ### Step 3: Author the HLD in Mermaid

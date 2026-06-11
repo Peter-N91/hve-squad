@@ -68,7 +68,6 @@ Alpha, Beta, Gamma, Delta, Epsilon, Zeta, Eta, Theta, Iota, Kappa, Lambda, Mu, N
 
 When the seeded roster needs more than 24 names, the coordinator restarts the list and appends `-2`, `-3`, and so on (`Alpha-2`, `Beta-2`).
 
-
 ## Cast Catalog
 
 The cast catalog is the default casting source and the canonical mapping between squad roles (members) and deployed HVE Core agents, keyed by each agent's exact `name:` frontmatter value. When a project has no `team.md`, the coordinator seeds the roster from this catalog.
