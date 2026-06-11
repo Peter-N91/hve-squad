@@ -19,15 +19,16 @@ The file begins with YAML frontmatter and a single H1 title, then a `## Members`
 
 The `## Members` table uses these columns:
 
-| Column               | Meaning                                                                                                   |
-|----------------------|-----------------------------------------------------------------------------------------------------------|
-| Role                 | The stable squad role name (for example, `lead`, `developer`, `tester`)                                   |
-| Agent Name (Primary) | The exact `name:` frontmatter value of the deployed HVE Core agent the role resolves to by default        |
-| Alternate Agents     | Optional comma-separated `name:` values the role may resolve to instead, chosen per the catalog cue        |
-| Invocation           | How the coordinator dispatches the agent: `runSubagent`/`task` for non-user-facing roles                  |
-| Model Tier           | Preferred cost tier: `fast` for read-heavy roles, `default` for reasoning-heavy roles                     |
+| Column               | Meaning                                                                                                                                                            |
+|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Role                 | The squad role name (for example, `lead`, `developer`, `tester`); roles may appear on more than one row when distinguished by `Member Name`                         |
+| Member Name          | Optional display name for an individual squad member; required only when two rows share the same `Role` (see *Naming Conventions* below)                            |
+| Agent Name (Primary) | The exact `name:` frontmatter value of the deployed HVE Core agent the role resolves to by default                                                                  |
+| Alternate Agents     | Optional comma-separated `name:` values the role may resolve to instead, chosen per the catalog cue                                                                 |
+| Invocation           | How the coordinator dispatches the agent: `runSubagent`/`task` for non-user-facing roles                                                                            |
+| Model Tier           | Preferred cost tier: `fast` for read-heavy roles, `default` for reasoning-heavy roles                                                                               |
 
-The `Agent Name (Primary)` column holds exactly one agent; the role always has a deterministic default. `Alternate Agents` is optional and may be empty for one-to-one roles. The coordinator resolves the role to a single concrete agent at dispatch time using the *Resolving a Role to an Agent* rules below.
+The `Agent Name (Primary)` column holds exactly one agent; the role always has a deterministic default. `Alternate Agents` is optional and may be empty for one-to-one roles. The uniqueness key for a row is the (`Role`, `Member Name`) pair, so two rows with the same `Role` are legal when their `Member Name` values differ. When `Member Name` is empty, only one row per `Role` is allowed and the coordinator dispatches that row whenever the role matches. The coordinator resolves the role to a single concrete agent at dispatch time using the *Resolving a Role to an Agent* rules below.
 
 ### Members Example
 
@@ -35,15 +36,38 @@ The `Agent Name (Primary)` column holds exactly one agent; the role always has a
 ```markdown
 ## Members
 
-| Role          | Agent Name (Primary)          | Alternate Agents                                  | Invocation         | Model Tier |
-|---------------|-------------------------------|---------------------------------------------------|--------------------|------------|
-| lead          | Task Planner                  | RPI Agent, Phase Implementor, Task Challenger     | runSubagent / task | default    |
-| developer     | Task Implementor              | Phase Implementor                                 | runSubagent / task | default    |
-| tester        | Task Reviewer                 | Code Review Full, PR Review, Plan Validator       | runSubagent / task | fast       |
-| product-owner | ADO Backlog Manager           | GitHub Backlog Manager, Jira Backlog Manager      | runSubagent / task | default    |
-| scribe        | Squad Scribe                  | Memory                                            | runSubagent / task | fast       |
+| Role          | Member Name | Agent Name (Primary)          | Alternate Agents                                  | Invocation         | Model Tier |
+|---------------|-------------|-------------------------------|---------------------------------------------------|--------------------|------------|
+| lead          | Alpha       | Task Planner                  | RPI Agent, Phase Implementor, Task Challenger     | runSubagent / task | default    |
+| developer     | Beta        | Task Implementor              | Phase Implementor                                 | runSubagent / task | default    |
+| developer     | Gamma       | Task Implementor              | Phase Implementor                                 | runSubagent / task | default    |
+| tester        | Delta       | Task Reviewer                 | Code Review Full, PR Review, Plan Validator       | runSubagent / task | fast       |
+| product-owner |             | ADO Backlog Manager           | GitHub Backlog Manager, Jira Backlog Manager      | runSubagent / task | default    |
+| scribe        |             | Squad Scribe                  | Memory                                            | runSubagent / task | fast       |
 ```
 <!-- </example-roster> -->
+
+### Naming Conventions
+
+The `Member Name` column gives each member a human-readable handle that survives across turns. Names are optional. When a row's `Member Name` is empty, the role is dispatched by role alone (the existing single-row-per-role behavior). When two or more rows share the same `Role`, every such row needs a unique `Member Name` so the coordinator can disambiguate at dispatch time via the user-supplied `owner=<Member Name>` hint.
+
+The coordinator picks a name through one of four paths during Init Mode (see the Squad Coordinator's *Init Mode* propose phase):
+
+1. The user supplies a name per member.
+2. The coordinator assigns a deterministic alias from the wordlist below.
+3. A mix of (1) and (2): the user names selected members; the coordinator fills the rest.
+4. The user skips naming: every `Member Name` stays empty and the role-only behavior holds.
+
+#### Deterministic Alias Wordlist
+
+The coordinator picks aliases in order from this list, skipping any name already in use within the seeded roster. The list is intentionally small, ASCII-safe, and stable across runs so two squads seeded with the same profile receive the same default names.
+
+```text
+Alpha, Beta, Gamma, Delta, Epsilon, Zeta, Eta, Theta, Iota, Kappa, Lambda, Mu, Nu, Xi, Omicron, Pi, Rho, Sigma, Tau, Upsilon, Phi, Chi, Psi, Omega
+```
+
+When the seeded roster needs more than 24 names, the coordinator restarts the list and appends `-2`, `-3`, and so on (`Alpha-2`, `Beta-2`).
+
 
 ## Cast Catalog
 
@@ -72,6 +96,8 @@ Roles that have no stable HVE Core equivalent are marked **thin charter needed**
 | technical-writer | Doc Ops                       | Documentation Update Checker                                                                                         | Detect stale docs vs code → Documentation Update Checker; otherwise author/maintain documentation → Doc Ops                                                                                                   |
 | presenter        | PowerPoint Builder            | PowerPoint Subagent                                                                                                 | Delegated build/extract/validate step → PowerPoint Subagent; otherwise own the deck end-to-end → PowerPoint Builder                                                                                           |
 | experimenter     | Experiment Designer           | —                                                                                                                   | Single agent — Minimum Viable Experiment design                                                                                                                                                               |
+| cost-manager     | Squad Cost Manager            | —                                                                                                                   | Pricing lookups (Azure Retail Prices REST via Researcher Subagent), budget envelopes, FinOps-aligned tradeoffs, WAF Cost Optimization checklist (CO:01–CO:14); cost-impact review on plans and architecture     |
+| azure-architect  | Squad Azure Architect         | —                                                                                                                   | Azure HLD/LLD authoring with AVM modules and landing-zone patterns; distinct from `architect` (the System Architecture Reviewer reviews tradeoffs while this role authors)                                      |
 | scribe           | Squad Scribe                  | Memory                                                                                                              | Cross-session durable memory persistence → Memory; otherwise squad-state writes → Squad Scribe (squad-owned subagent)                                                                                         |
 | devrel           | —                             | —                                                                                                                   | Thin charter needed (no HVE Core equivalent)                                                                                                                                                                  |
 
@@ -108,13 +134,14 @@ A squad profile is a named, project-tailored subset of the cast catalog. Profile
 
 The `scribe` role is always included in every profile — it is the single writer of squad state and is never proposed as an optional member.
 
-| Profile        | Members (roles)                                              | Choose when the project is…                                              |
-|----------------|-------------------------------------------------------------|--------------------------------------------------------------------------|
-| `default`      | lead, researcher, developer, tester, scribe                 | General build and delivery work — a balanced team (recommended default)  |
-| `full`         | lead, researcher, developer, tester, architect, security, rai, designer, fact-checker, scribe | You want every deployed capability available                             |
-| `security`     | security, rai, fact-checker, researcher, scribe             | Security-, threat-, or responsible-AI-focused (auth, secrets, ML, LLM)   |
-| `design`       | designer, researcher, lead, tester, scribe                  | UX/UI, accessibility, or product-design focused                          |
-| `architecture` | architect, researcher, lead, developer, scribe              | System design, infrastructure, or architecture-review focused            |
+| Profile        | Members (roles)                                                                                                                                | Choose when the project is…                                              |
+|----------------|------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| `default`      | lead, researcher, developer, tester, scribe                                                                                                    | General build and delivery work — a balanced team (recommended default)  |
+| `full`         | lead, researcher, developer, tester, architect, azure-architect, security, rai, designer, fact-checker, cost-manager, scribe                   | You want every deployed capability available                             |
+| `security`     | security, rai, fact-checker, researcher, scribe                                                                                                | Security-, threat-, or responsible-AI-focused (auth, secrets, ML, LLM)   |
+| `design`       | designer, researcher, lead, tester, scribe                                                                                                     | UX/UI, accessibility, or product-design focused                          |
+| `architecture` | architect, azure-architect, researcher, lead, developer, cost-manager, scribe                                                                  | System design, infrastructure, or architecture-review focused            |
+| `azure`        | azure-architect, architect, cost-manager, security, lead, developer, scribe                                                                    | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
 
 ### Profile Selection
 
@@ -125,7 +152,8 @@ The coordinator chooses a profile in this order of precedence:
    * Source files, tests, and package manifests with no specialized signal → `default`.
    * Authentication, secrets, threat modeling, ML/LLM, or data-handling signals → `security`.
    * Frontend frameworks (React, Vue, Svelte, Angular), CSS, or accessibility signals → `design`.
-   * Infrastructure-as-code (Bicep, Terraform), system-design docs, or component diagrams → `architecture`.
+   * Bicep templates plus budget, pricing, FinOps, or `cost-manager` signals (or `.bicep` files alongside an Azure landing-zone reference) → `azure`.
+   * Infrastructure-as-code (Bicep, Terraform without Azure-specific cost signals), system-design docs, or component diagrams → `architecture`.
    * Mixed or unclear signals → propose `default` and offer `full`.
 3. **Fallback** — when discovery is inconclusive and the user gives no hint, propose `default` as the recommended profile.
 

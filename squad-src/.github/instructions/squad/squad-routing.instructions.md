@@ -31,6 +31,7 @@ The routing table uses these columns:
 * `auto` — The role proceeds and returns findings without pausing; suitable for read-only research and review.
 * `confirm` — The role drafts an action or plan and the coordinator confirms before any change lands.
 * `escalate` — The coordinator stops and routes the decision to the user before dispatching (see Escalation).
+* `auto-validated` — Opt-in tier defined in `.github/instructions/squad/squad-autonomous.instructions.md`. Runs an implementation role and the council in a bounded re-validation loop (max 2 cycles) on a single turn. Engaged through the `/squad` prompt input `mode=autonomous`. Never downgrades `confirm` for cost-impacting or irreversible-write actions and always escalates on the mandatory triggers listed in the autonomous conventions (Stop verdicts, Risk: High findings from security/cost/RAI, compliance violations, irreversible writes).
 
 ## Default Routing Rules
 
@@ -47,6 +48,7 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | architecture, system design, components    | System Architecture Reviewer | auto    | yes               |
 | responsible AI, RAI, fairness, harm        | RAI Planner            | confirm       | yes               |
 | verify finding, confirm claim, fact-check  | Finding Deep Verifier  | auto          | yes               |
+| validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |
 
 ### Filtering to the Active Roster
 
@@ -60,6 +62,16 @@ When a request matches a pattern whose role is absent from the active roster, th
 * Dispatch all parallel-eligible roles for a turn concurrently; run non-parallel roles (such as planning and implementation) sequentially.
 * Resolve every matched role through the roster before dispatch. If a role maps to **thin charter needed**, escalate rather than guessing a substitute.
 * Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles.
+
+### Implementation Gate
+
+Before dispatching an implementation-tier role (any role at `confirm` or `auto-validated` tier whose pattern indicates implementation, build, deploy, or merge), the coordinator checks `.copilot-tracking/squad/decisions.md` for the latest `## Council Verdict` entry on the matching topic id. The gate behavior is:
+
+* When no Council Verdict exists for the topic and the request crosses two or more council-member domains (architecture, security, cost, product-fit, RAI), the coordinator runs the council row before the implementer.
+* When the latest verdict is `Go` or `Go-With-Conditions`, the coordinator dispatches the implementer and passes the consolidated conditions as inputs.
+* When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the Scribe before any implementer dispatches.
+
+The gate enforces the council protocol from `.github/instructions/squad/squad-council.instructions.md` and the autonomous loop from `.github/instructions/squad/squad-autonomous.instructions.md` at routing time.
 
 ## Escalation
 

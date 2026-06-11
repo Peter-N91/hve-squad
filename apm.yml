@@ -67,6 +67,12 @@ dependencies:
     - microsoft/hve-core/.github/agents/security/subagents/finding-deep-verifier.agent.md
     - microsoft/hve-core/.github/agents/security/subagents/report-generator.agent.md
     - microsoft/hve-core/.github/agents/security/subagents/skill-assessor.agent.md
+    - microsoft/hve-core/.github/instructions/accessibility/accessibility-backlog-handoff.instructions.md
+    - microsoft/hve-core/.github/instructions/accessibility/accessibility-capture-coaching.instructions.md
+    - microsoft/hve-core/.github/instructions/accessibility/accessibility-framework-selection.instructions.md
+    - microsoft/hve-core/.github/instructions/accessibility/accessibility-identity.instructions.md
+    - microsoft/hve-core/.github/instructions/accessibility/accessibility-impact-assessment.instructions.md
+    - microsoft/hve-core/.github/instructions/accessibility/accessibility-license-posture.instructions.md
     - microsoft/hve-core/.github/instructions/ado/ado-backlog-sprint.instructions.md
     - microsoft/hve-core/.github/instructions/ado/ado-backlog-triage.instructions.md
     - microsoft/hve-core/.github/instructions/ado/ado-create-pull-request.instructions.md
@@ -193,6 +199,7 @@ dependencies:
     - microsoft/hve-core/.github/instructions/shared/coaching-patterns.instructions.md
     - microsoft/hve-core/.github/instructions/shared/disclaimer-language.instructions.md
     - microsoft/hve-core/.github/instructions/shared/hve-core-location.instructions.md
+    - microsoft/hve-core/.github/instructions/shared/planner-identity-base.instructions.md
     - microsoft/hve-core/.github/instructions/shared/story-quality.instructions.md
     - microsoft/hve-core/.github/instructions/workflows.instructions.md
     - microsoft/hve-core/.github/prompts/ado/ado-add-work-item.prompt.md
@@ -296,13 +303,19 @@ dependencies:
     - microsoft/hve-core/.github/skills/shared/backlog-templates
     - microsoft/hve-core/.github/skills/shared/pr-reference
     - microsoft/hve-core/.github/skills/shared/telemetry-foundations
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-azure-architect.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-cost-manager.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-scribe.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autonomous.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-council.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-roster.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-routing.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-state.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/skills/squad
+    - Peter-N91/hve-squad/squad-src/.vscode
   mcp: []
 includes: auto
 scripts:

@@ -31,6 +31,8 @@ State layout, ownership, and the tool-to-mechanism mapping are defined in `.gith
 * A history payload: the agent dispatched, the request it handled, and the findings or outcome to record.
 * (Optional) An initialization request: the coordinator-confirmed profile or member list to seed into `team.md`, plus a request to seed `routing.md`, `decisions.md`, `state.json`, and the `history/` directory.
 * (Optional) A memory payload: the role-scoped note to persist for a specific agent.
+* (Optional) A Council Verdict payload: the consolidated council findings, topic id, timestamp, council membership, and verdict label (`Go`, `Go-With-Conditions`, or `Stop`) per `.github/instructions/squad/squad-council.instructions.md`.
+* (Optional) An autonomous-loop summary payload: per-cycle verdicts, blocking issues, conditions, and the loop's final outcome per `.github/instructions/squad/squad-autonomous.instructions.md`.
 
 ## Required Steps
 
@@ -44,18 +46,27 @@ Append the dispatch record to `.copilot-tracking/squad/history/<agent>.md`, wher
 
 ### Step 3: Initialize State When Requested
 
-When the payload requests initialization, create `.copilot-tracking/squad/team.md` from the coordinator-confirmed roster (the chosen profile's members, not the full cast catalog) and `.copilot-tracking/squad/routing.md` from the default routing rules filtered to that roster — drop any routing row whose role is not on the seeded team. Always include the `scribe` role in the seeded roster. These two files use replace semantics; write them only when missing or when the coordinator explicitly requests a refresh.
+When the payload requests initialization, create `.copilot-tracking/squad/team.md` from the coordinator-confirmed roster (the chosen profile's members, not the full cast catalog) and `.copilot-tracking/squad/routing.md` from the default routing rules filtered to that roster — drop any routing row whose role is not on the seeded team. Always include the `scribe` role in the seeded roster. Include the `Member Name` column in `team.md` whenever the coordinator supplies names from the Init Mode naming step; leave individual cells empty for roles the user chose not to name. Two rows sharing the same `Role` are legal only when each has a unique `Member Name`. These two files use replace semantics; write them only when missing or when the coordinator explicitly requests a refresh.
 
 ### Step 4: Write Repository Memory
 
 When a memory payload is present, write the role-scoped note to `/memories/repo/squad-<agent>.md` using the memory tool. Repository memory survives across conversations, so record durable squad facts here (conventions a role discovered, recurring routing choices) rather than in the decision log.
 
+### Step 5: Write Council Verdict
+
+When a Council Verdict payload is present, append a new `## Council Verdict <timestamp> <topic-id>` entry to `.copilot-tracking/squad/decisions.md`. Use the exact schema defined in `.github/instructions/squad/squad-council.instructions.md`: the `Topic`, `Proposal Ref`, `Council Members Dispatched`, and `Verdict` header bullets; the `### Findings by Role` table; the `### Synthesis` consolidated lists (with role attribution inline); and the `### Implementation Gate` block. The `Verdict` value is one of exactly `Go`, `Go-With-Conditions`, or `Stop`. The entry is append-only; never edit or remove prior Council Verdict entries. When any required schema section is missing from the payload, do not write a partial verdict; return a failure note so the coordinator can re-assemble the payload.
+
+### Step 6: Write Autonomous-Loop Summary
+
+When an autonomous-loop summary payload is present, write a per-topic summary to `.copilot-tracking/squad/history/autonomous-loop-<id>.md`, where `<id>` is the topic-id slug from the matching Council Verdict. Use the exact shape defined in `.github/instructions/squad/squad-autonomous.instructions.md`: the YAML frontmatter (`description: "Autonomous-loop summary for topic <id>"`), the `# Autonomous Loop: <id>` heading, the `Topic` / `Opt-In` / `Cost Ceiling` / `Outcome` header bullets, the `## Iterations` table (one row per cycle, capped at two), and the `## Final Verdict Reference` pointer to `decisions.md`. The file is append-only by topic-id: when the file already exists, append a new dated `## Iterations` section rather than overwriting prior runs. Hand the per-agent dispatch records for each loop iteration to Step 2 so each role's `history/<agent>.md` also reflects the cycle.
+
 ## Required Protocol
 
 1. Follow the Required Steps for whichever payloads are present in the request.
-2. Treat `decisions.md` and `history/<agent>.md` as strictly append-only; treat `team.md`, `routing.md`, and `state.json` as replace-on-request.
-3. Make no decisions of your own — record exactly what the coordinator hands over.
-4. Return the Response Format confirmation once all writes complete.
+2. Treat `decisions.md` and `history/<agent>.md` as strictly append-only; treat `team.md`, `routing.md`, and `state.json` as replace-on-request. Treat `history/autonomous-loop-<id>.md` as append-only per topic-id.
+3. When the coordinator supplies a `Member Name` with the history payload, record it inside the dispatch entry under the existing `history/<agent>.md` file. Keep one history file per agent even when a single agent serves two named roles; do not create a separate `history/<agent>-<member>.md` file.
+4. Make no decisions of your own — record exactly what the coordinator hands over. The Council Verdict label, conditions, and blocking issues come from the payload; do not synthesize or downgrade them.
+5. Return the Response Format confirmation once all writes complete.
 
 ## Response Format
 
