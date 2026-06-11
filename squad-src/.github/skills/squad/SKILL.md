@@ -14,11 +14,13 @@ metadata:
 
 The squad is a user-invocable Squad Coordinator that dispatches a reusable cast of deployed HVE Core agents in parallel and persists roster, routing, decisions, and per-agent history under `.copilot-tracking/squad/`. There is no separate runtime: every squad verb is a thin convention over an existing HVE Core mechanism.
 
-This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements three instruction files that auto-apply when squad state is touched:
+This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements five instruction files that auto-apply when squad state is touched:
 
 * `.github/instructions/squad/squad-roster.instructions.md` — roster schema and cast catalog.
 * `.github/instructions/squad/squad-routing.instructions.md` — routing table and escalation rules.
 * `.github/instructions/squad/squad-state.instructions.md` — state layout, single-writer ownership, and tool-to-mechanism mapping.
+* `.github/instructions/squad/squad-council.instructions.md` — pre-implementation council protocol with parallel dispatch, most-restrictive-wins synthesis, and the Council Verdict schema.
+* `.github/instructions/squad/squad-autonomous.instructions.md` — opt-in `auto-validated` autonomy tier with a bounded re-validation loop, divergence detection, and mandatory escalation triggers.
 
 ## Prerequisites
 
@@ -34,21 +36,22 @@ The coordinator runs four stages each turn: **init**, **route**, **decide**, and
 
 A profile is a curated subset of the cast tailored to a kind of project. The coordinator seeds only the profile's members into `team.md`, and the routing table is filtered to those roles. The `scribe` role is always included. Profiles are defined canonically in `.github/instructions/squad/squad-roster.instructions.md`; the catalog below mirrors them.
 
-| Profile        | Members                                                  | Use When                                                   |
-|----------------|----------------------------------------------------------|------------------------------------------------------------|
-| `default`      | lead, researcher, developer, tester, scribe              | General-purpose work; recommended starting point           |
-| `full`         | all 10 deployed roles                                    | Complex, cross-cutting projects that need every discipline  |
-| `security`     | security, rai, fact-checker, researcher, scribe          | Security, threat-modeling, and responsible-AI focus         |
-| `design`       | designer, researcher, lead, tester, scribe               | UX/UI and product-design focus                              |
-| `architecture` | architect, researcher, lead, developer, scribe           | System design and architecture focus                        |
+| Profile        | Members                                                                                                                       | Use When                                                                                     |
+|----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
+| `default`      | lead, researcher, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |
+| `full`         | all deployed roles (lead, researcher, developer, tester, architect, azure-architect, security, rai, designer, fact-checker, cost-manager, scribe) | Complex, cross-cutting projects that need every discipline                                  |
+| `security`     | security, rai, fact-checker, researcher, scribe                                                                               | Security, threat-modeling, and responsible-AI focus                                          |
+| `design`       | designer, researcher, lead, tester, scribe                                                                                    | UX/UI and product-design focus                                                               |
+| `architecture` | architect, azure-architect, researcher, lead, developer, cost-manager, scribe                                                 | System design and architecture focus                                                         |
+| `azure`        | azure-architect, architect, cost-manager, security, lead, developer, scribe                                                   | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
 
 ### Init
 
 Run once per project, then verify on every turn. Init Mode mirrors a propose → confirm → create flow and never writes files before the user confirms.
 
 1. Check for `.copilot-tracking/squad/team.md` and `.copilot-tracking/squad/routing.md`.
-2. When either file is missing, **propose**: discover the project (languages, frameworks, tests, IaC, security/AI markers) read-only, then recommend a profile using the precedence in the roster's *Profile Selection* (explicit `profile=` hint → discovery inference → `default`). Present the recommended profile, its roles, and why it fits, and let the user accept, switch profiles, add or remove roles, or ask for more detail.
-3. On **confirm**, hand the chosen roster to the Squad Scribe to **create**: `team.md` from the confirmed profile's members, `routing.md` from the default routing rules filtered to that roster, plus `decisions.md`, `state.json`, and a `history/` directory.
+2. When either file is missing, **propose**: discover the project (languages, frameworks, tests, IaC, security/AI markers) read-only, then recommend a profile using the precedence in the roster's *Profile Selection* (explicit `profile=` hint → discovery inference → `default`). Present the recommended profile, its roles, and why it fits, and let the user accept, switch profiles, add or remove roles, or ask for more detail. Once a profile or customized roster is on the table, also offer naming choices for the seeded members per the roster's *Naming Conventions* (user-supplied per role, coordinator-assigned aliases from the deterministic wordlist, a mix, or skip). Wait on the user before any write.
+3. On **confirm**, hand the chosen roster to the Squad Scribe to **create**: `team.md` from the confirmed profile's members (including the `Member Name` column when names were provided), `routing.md` from the default routing rules filtered to that roster, plus `decisions.md`, `state.json`, and a `history/` directory.
 4. Confirm the roster and routing table are present before classifying the request. The coordinator never writes these files itself.
 
 ### Route
@@ -72,6 +75,28 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 2. Synthesize the collected findings into a concise answer for the user.
 3. Escalate to the user — rather than acting — when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose.
 
+### Council Procedure
+
+The council is the operator's pre-implementation cross-check. The coordinator triggers it when the user explicitly asks for a council, a validation, a cross-check, or a pre-implementation review, or when a request mixes implementation language with risk language and crosses two or more council-member domains (architecture, security, cost, product-fit, RAI). The full protocol lives in `.github/instructions/squad/squad-council.instructions.md`; the operator's view is:
+
+1. The coordinator dispatches the default council in a single parallel batch: `architect`, `security`, `cost-manager`, `product-owner`, plus optional `rai` when AI/ML, training data, agent autonomy, or regulated data is in scope.
+2. Each council role returns a finding with a verdict label (`Approve`, `Conditional`, `Concern`, `Block`) and a risk label (`Risk: Low`, `Risk: Medium`, `Risk: High`).
+3. The Squad Scribe synthesizes the findings using a most-restrictive-wins rule: any `Block` or any `Risk: High` drives a `Stop` verdict; any `Conditional` (with no blockers) drives `Go-With-Conditions`; otherwise the verdict is `Go`.
+4. The Scribe appends a single `## Council Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
+5. The verdict gates the next turn's implementation dispatch: `Go` or `Go-With-Conditions` permits dispatch (with conditions attached as inputs); `Stop` blocks dispatch and the coordinator escalates.
+
+### Autonomous Procedure
+
+The opt-in `auto-validated` tier lets a council validate a developer's output on the same turn, without an intervening user prompt. The full protocol lives in `.github/instructions/squad/squad-autonomous.instructions.md`; the operator's view is:
+
+1. The user opts in per turn by passing `mode=autonomous` to `/squad`. Without that input, the coordinator runs the normal six-step protocol.
+2. The coordinator runs the loop: council dispatch → verdict synthesis → implementer dispatch (on `Go` or `Go-With-Conditions`) → council re-validation (cycle 1) → optional council re-validation (cycle 2).
+3. The re-validation cap is hard at two cycles; after cycle 2 the coordinator escalates regardless of outcome.
+4. The loop stops and escalates immediately on any mandatory trigger: a `Stop` verdict, a `Risk: High` from `security` / `cost-manager` / `rai`, any cost-impacting `confirm`-tier move, any compliance violation, or any irreversible write (production deploy, schema migration, data deletion, force-push).
+5. Divergence detection escalates immediately when two consecutive cycles produce different verdicts on the same issue, even before the cap.
+6. A per-turn cost ceiling (`cost-ceiling=$X`, optional) caps spend; when exceeded, the coordinator escalates instead of running the next cycle.
+7. The Scribe writes a per-topic summary to `history/autonomous-loop-<id>.md` (append-only by topic-id) and per-cycle entries to each role's `history/<agent>.md`.
+
 ## Tool-to-Mechanism Mapping
 
 | Squad verb       | HVE Core mechanism                                                                                       |
@@ -87,7 +112,7 @@ The coordinator hands these templates to the Squad Scribe on first run, after th
 
 ### team.md
 
-Seeded from the confirmed profile's members; the template below shows the `full` profile (the entire cast catalog). For other profiles, only the profile's rows are written. The role-to-agent relationship is many-to-many: each role names one **Primary** agent the coordinator dispatches by default plus optional **Alternate** agents it resolves to per the cast catalog's Selection Cue (see `squad-roster.instructions.md`). The `devrel` role has no deployed HVE Core agent and is left as **thin charter needed** until a charter is authored.
+Seeded from the confirmed profile's members; the template below shows the `full` profile (the entire cast catalog). For other profiles, only the profile's rows are written. The `Member Name` column is populated from the Init Mode naming step: it may be empty for roles the user chose not to name, and it must be unique within a `Role` when two rows share the same role. The role-to-agent relationship is many-to-many: each role names one **Primary** agent the coordinator dispatches by default plus optional **Alternate** agents it resolves to per the cast catalog's Selection Cue (see `squad-roster.instructions.md`). The `devrel` role has no deployed HVE Core agent and is left as **thin charter needed** until a charter is authored.
 
 ```markdown
 ---
@@ -98,19 +123,21 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 
 ## Members
 
-| Role         | Agent Name (Primary)         | Alternate Agents                                       | Invocation         | Model Tier              |
-|--------------|------------------------------|--------------------------------------------------------|--------------------|-------------------------|
-| lead         | Task Planner                 | RPI Agent, Phase Implementor, Task Challenger          | runSubagent / task | default                 |
-| researcher   | Task Researcher              | Researcher Subagent, Codebase Profiler, Meeting Analyst | runSubagent / task | fast                    |
-| developer    | Task Implementor             | Phase Implementor                                      | runSubagent / task | default                 |
-| tester       | Task Reviewer                | Code Review Full, PR Review, Plan Validator            | runSubagent / task | fast                    |
-| architect    | System Architecture Reviewer | Arch Diagram Builder, ADR Creator                      | runSubagent / task | default                 |
-| security     | Security Planner             | Security Reviewer, SSSC Planner, Finding Deep Verifier | runSubagent / task | default                 |
-| rai          | RAI Planner                  | —                                                      | runSubagent / task | default                 |
-| designer     | UX UI Designer               | DT Coach, DT Learning Tutor                            | runSubagent / task | default                 |
-| fact-checker | Finding Deep Verifier        | —                                                      | runSubagent / task | fast                    |
-| scribe       | Squad Scribe                 | Memory                                                 | runSubagent / task | fast                    |
-| devrel       | —                            | —                                                      | —                  | — (thin charter needed) |
+| Role            | Member Name | Agent Name (Primary)         | Alternate Agents                                       | Invocation         | Model Tier              |
+|-----------------|-------------|------------------------------|--------------------------------------------------------|--------------------|-------------------------|
+| lead            | Alpha       | Task Planner                 | RPI Agent, Phase Implementor, Task Challenger          | runSubagent / task | default                 |
+| researcher      | Beta        | Task Researcher              | Researcher Subagent, Codebase Profiler, Meeting Analyst | runSubagent / task | fast                    |
+| developer       | Gamma       | Task Implementor             | Phase Implementor                                      | runSubagent / task | default                 |
+| tester          | Delta       | Task Reviewer                | Code Review Full, PR Review, Plan Validator            | runSubagent / task | fast                    |
+| architect       | Epsilon     | System Architecture Reviewer | Arch Diagram Builder, ADR Creator                      | runSubagent / task | default                 |
+| azure-architect | Zeta        | Squad Azure Architect        | —                                                      | runSubagent / task | default                 |
+| security        | Eta         | Security Planner             | Security Reviewer, SSSC Planner, Finding Deep Verifier | runSubagent / task | default                 |
+| rai             | Theta       | RAI Planner                  | —                                                      | runSubagent / task | default                 |
+| designer        | Iota        | UX UI Designer               | DT Coach, DT Learning Tutor                            | runSubagent / task | default                 |
+| fact-checker    | Kappa       | Finding Deep Verifier        | —                                                      | runSubagent / task | fast                    |
+| cost-manager    | Lambda      | Squad Cost Manager           | —                                                      | runSubagent / task | default                 |
+| scribe          |             | Squad Scribe                 | Memory                                                 | runSubagent / task | fast                    |
+| devrel          |             | —                            | —                                                      | —                  | — (thin charter needed) |
 ```
 
 ### routing.md
@@ -135,11 +162,12 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | architecture, system design, components    | System Architecture Reviewer | auto          | yes               |
 | responsible AI, RAI, fairness, harm        | RAI Planner                  | confirm       | yes               |
 | verify finding, confirm claim, fact-check  | Finding Deep Verifier        | auto          | yes               |
+| validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |
 ```
 
 ### decisions.md
 
-Append-only log. The header is written once; every decision is appended below it and prior entries are never edited.
+Append-only log. The header is written once; every decision is appended below it and prior entries are never edited. Council Verdicts (from the Council Procedure) use the same append-only contract but a fixed schema; the placeholder below shows the shape the Scribe stamps in.
 
 ```markdown
 ---
@@ -148,14 +176,45 @@ description: "Append-only log of squad decisions and their rationale"
 
 # Squad Decisions
 
-Entries are appended below in chronological order. Each entry records the decision, its rationale, the turn it was made on, and a reference to an ADR when the decision is architecturally significant. Prior entries are never edited or removed.
+Entries are appended below in chronological order. Each entry records the decision, its rationale, the turn it was made on, and a reference to an ADR when the decision is architecturally significant. Council Verdicts use the `## Council Verdict <timestamp> <topic-id>` heading and the schema in `.github/instructions/squad/squad-council.instructions.md`. Prior entries are never edited or removed.
 
 <!-- Append new decision entries below this line. -->
+
+<!--
+Council Verdict placeholder (Scribe stamps this shape when a council runs):
+
+## Council Verdict <timestamp> <topic-id>
+
+* Topic: <one-line summary of the proposal>
+* Proposal Ref: <path-to-plan-or-design>
+* Council Members Dispatched: architect, security, cost-manager, product-owner
+* Verdict: Go | Go-With-Conditions | Stop
+
+### Findings by Role
+
+| Role          | Verdict | Risk        | Blocking Issues | Conditions | Suggested Follow-ups |
+|---------------|---------|-------------|-----------------|------------|----------------------|
+| architect     | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
+| security      | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
+| cost-manager  | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
+| product-owner | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
+
+### Synthesis
+
+* Blocking Issues: <consolidated list with role attribution; empty when verdict is Go>
+* Conditions: <consolidated list with role attribution; empty when verdict is Go>
+* Suggested Follow-ups: <consolidated list with role attribution>
+
+### Implementation Gate
+
+* Permits Implementation Dispatch: yes (Go, Go-With-Conditions) | no (Stop)
+* Conditions Outstanding: <count>
+-->
 ```
 
 ### history/<agent>.md
 
-One append-only file per dispatched agent. Replace `<agent>` with the dispatched agent's name (for example, `history/Task Researcher.md`). The header is created with the file; dispatch records are appended.
+One append-only file per dispatched agent. Replace `<agent>` with the dispatched agent's name (for example, `history/Task Researcher.md`). The header is created with the file; dispatch records are appended. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
 
 ```markdown
 ---
@@ -167,6 +226,47 @@ description: "Append-only dispatch history for a single squad agent"
 Each entry records a request this agent handled, the findings or outcome it returned, and the turn it was dispatched on. Entries are appended in chronological order and never edited.
 
 <!-- Append new dispatch entries below this line. -->
+
+<!--
+Autonomous-loop dispatch entry pattern (Scribe stamps this shape when mode=autonomous is in effect):
+
+### <timestamp> autonomous-loop:<topic-id> cycle:<1|2>
+
+* Request: <scoped request the agent received>
+* Verdict Returned: <label> (Risk: <level>)
+* Blocking Issues: <list-or-none>
+* Conditions: <list-or-none>
+* Outcome: <one-line summary>
+* See: `.copilot-tracking/squad/history/autonomous-loop-<topic-id>.md`
+-->
+```
+
+### history/autonomous-loop-<id>.md
+
+One file per autonomous-loop topic. Append-only by topic-id: subsequent runs against the same topic append a new dated `## Iterations` section rather than overwriting. The Scribe writes this file only when the coordinator runs in `mode=autonomous`.
+
+```markdown
+---
+description: "Autonomous-loop summary for topic <id>"
+---
+
+# Autonomous Loop: <id>
+
+* Topic: <one-line summary>
+* Opt-In: mode=autonomous
+* Cost Ceiling: <value or unset>
+* Outcome: converged (Go) | converged (Go-With-Conditions) | escalated (<reason>)
+
+## Iterations
+
+| Cycle | Verdict                        | Blocking Issues | Conditions     | Notes                    |
+|-------|--------------------------------|-----------------|----------------|--------------------------|
+| 1     | Go / Go-With-Conditions / Stop | <list-or-none>  | <list-or-none> | <one-line cycle summary> |
+| 2     | (when run)                     | <list-or-none>  | <list-or-none> | <one-line cycle summary> |
+
+## Final Verdict Reference
+
+* Council Verdict: see `decisions.md` under `## Council Verdict <timestamp> <id>`
 ```
 
 ### state.json

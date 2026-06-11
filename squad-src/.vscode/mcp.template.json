@@ -1,0 +1,71 @@
+// hve-squad MCP server template (JSONC: JSON with comments)
+//
+// Purpose
+//   Reference snippet for consumers who want the squad's recommended
+//   Model Context Protocol (MCP) servers wired into their workspace.
+//
+// Scope
+//   This file is documentation only. The hve-squad APM package never
+//   reads or writes the consumer's `.vscode/mcp.json`. The consumer
+//   owns merge and override of every entry below.
+//
+// How to use
+//   1. Open or create `.vscode/mcp.json` in your workspace.
+//   2. Copy the entries from `inputs` and `servers` below into your file.
+//   3. Merge with any servers you already have configured; do not
+//      replace existing entries you depend on.
+//   4. Reload VS Code so Copilot picks up the new servers.
+//
+// Why this template is small
+//   Only one official, Microsoft-maintained MCP server applies to the
+//   squad's current scope: `@azure-devops/mcp`. No official MCP exists
+//   for draw.io or for the python `diagrams` library at the time this
+//   template was authored. See
+//   `.github/instructions/squad/squad-mcp-capability.instructions.md`
+//   for the capability-aware fallbacks and out-of-band options.
+//
+// Credentials
+//   The Azure DevOps server uses VS Code's managed Entra OAuth via the
+//   `inputs` mechanism below. No Personal Access Token, secret, or
+//   API key is stored in this file. Never commit secrets to
+//   `.vscode/mcp.json`; rely on `inputs` and the system credential
+//   store instead.
+{
+  "inputs": [
+    {
+      "id": "ado_org",
+      "type": "promptString",
+      "description": "Azure DevOps organization name (for example, 'contoso')",
+      "default": ""
+    },
+    {
+      "id": "ado_tenant",
+      "type": "promptString",
+      "description": "Microsoft Entra tenant ID (required for multi-tenant scenarios)",
+      "default": ""
+    }
+  ],
+  "servers": {
+    "ado": {
+      // Official Microsoft Azure DevOps MCP server (npm: @azure-devops/mcp).
+      // Authenticates with managed Entra OAuth via the `inputs` above;
+      // no PAT is embedded in this template.
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@azure-devops/mcp",
+        "${input:ado_org}",
+        "--tenant",
+        "${input:ado_tenant}",
+        "-d",
+        "core",
+        "work",
+        "work-items",
+        "search",
+        "repositories",
+        "pipelines"
+      ]
+    }
+  }
+}
