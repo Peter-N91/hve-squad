@@ -109,7 +109,7 @@ Run `apm install` from the root of the project you want the squad in.
 **Option A — pass `--target copilot` on every install (one-off):**
 
 ```powershell
-apm install "Peter-N91/hve-squad#v0.2.0" --target copilot  # pinned (recommended)
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot  # pinned (recommended)
 # or
 apm install Peter-N91/hve-squad --target copilot           # latest on default branch
 ```
@@ -125,7 +125,7 @@ targets:
   - copilot
 ```
 
-Then `apm install "Peter-N91/hve-squad#v0.2.0"` (no flag needed) will deploy to
+Then `apm install "Peter-N91/hve-squad#vX.Y.z"` (no flag needed) will deploy to
 Copilot from now on. This also makes future `apm install` / `apm update` runs reproducible.
 
 Either way, this deploys the bundled HVE Core agents, prompts, instructions, and skills —
@@ -193,7 +193,7 @@ with the version tag you want (include `--target copilot` if you have not declar
 `targets:` in your project's `apm.yml`):
 
 ```powershell
-apm install "Peter-N91/hve-squad#v0.2.0" --target copilot
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot
 ```
 
 `apm install` re-flattens the package into `.github/`. Your squad **state** under
@@ -281,7 +281,7 @@ You can tune generation behavior in `scripts/Update-ApmDependencies.ps1`:
     `.claude/`, `.cursor/`, etc.). Re-run with `--target copilot`:
 
     ```powershell
-    apm install "Peter-N91/hve-squad#v0.2.0" --target copilot
+    apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot
     ```
 
     Or add a `targets:` block to your project's `apm.yml` so future installs work without
@@ -302,7 +302,7 @@ You can tune generation behavior in `scripts/Update-ApmDependencies.ps1`:
 
 - Releases follow [Semantic Versioning](https://semver.org/).
 - See [CHANGELOG.md](CHANGELOG.md) for what is included in each version.
-- Consumers can pin to a tagged version, for example `apm install "Peter-N91/hve-squad#v0.2.0"`.
+- Consumers can pin to a tagged version, for example `apm install "Peter-N91/hve-squad#vX.Y.z"`.
 
 ## Release process
 

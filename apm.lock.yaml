@@ -1,7 +1,18 @@
 lockfile_version: '1'
-generated_at: '2026-06-10T15:23:05.477177+00:00'
+generated_at: '2026-06-11T14:05:06.529151+00:00'
 apm_version: 0.18.0
 dependencies:
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 64031658fba2cc0de1a5ddf65b061442b4910904
+  virtual_path: squad-src/.github/agents/squad/squad-azure-architect.agent.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/agents/squad-azure-architect.agent.md
+  deployed_file_hashes:
+    .github/agents/squad-azure-architect.agent.md: sha256:44799d8941749ba53e38e27c39e416433623729b18810034629aac2b29523f7a
+  content_hash: sha256:8904cf742d1a983f49a6a7b31304b48cf5b11a6783cf6910a275fc29926cf5a6
 - repo_url: Peter-N91/hve-squad
   host: github.com
   resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
@@ -15,6 +26,17 @@ dependencies:
   content_hash: sha256:3293e573e209d43c15cf34df3d01d5fa5eea89a18fd3a25280e37bdf8be6335c
 - repo_url: Peter-N91/hve-squad
   host: github.com
+  resolved_commit: 64031658fba2cc0de1a5ddf65b061442b4910904
+  virtual_path: squad-src/.github/agents/squad/squad-cost-manager.agent.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/agents/squad-cost-manager.agent.md
+  deployed_file_hashes:
+    .github/agents/squad-cost-manager.agent.md: sha256:e75ab667bd374cbcfe741caff71ef723a5ef4abf8f4d9b4a95f18a278446b056
+  content_hash: sha256:55d3b15d7a44c0dbb75143d70a14198cd57d8be2e37f794d3b69f9b73a1bbc57
+- repo_url: Peter-N91/hve-squad
+  host: github.com
   resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
   virtual_path: squad-src/.github/agents/squad/squad-scribe.agent.md
   is_virtual: true
@@ -24,6 +46,39 @@ dependencies:
   deployed_file_hashes:
     .github/agents/squad-scribe.agent.md: sha256:db4d7ee4ee1c41ce00160abb296ffc7e2fed4c06b58f89d3aa98602ca6146348
   content_hash: sha256:b16925980ad40ec1fccfc8a4f9d9171b7c06690ba069832b9c7de0834d4dd8b3
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 64031658fba2cc0de1a5ddf65b061442b4910904
+  virtual_path: squad-src/.github/instructions/squad/squad-autonomous.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/instructions/squad-autonomous.instructions.md
+  deployed_file_hashes:
+    .github/instructions/squad-autonomous.instructions.md: sha256:5b11e8dd54b8a7a25840a22436315e0cbbf4e4dec57b1b428122ae5d985bc130
+  content_hash: sha256:03925bf237d9ed8f3d101c3287ad8e31d9ff7f2ad19bea462323fe0d0a5ba308
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 64031658fba2cc0de1a5ddf65b061442b4910904
+  virtual_path: squad-src/.github/instructions/squad/squad-council.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/instructions/squad-council.instructions.md
+  deployed_file_hashes:
+    .github/instructions/squad-council.instructions.md: sha256:e206dc3ae1837de64022401ec11fc56b4d1a7e3fb9eb6dfd039b63a45bde5b95
+  content_hash: sha256:68e652e4d858d21f4a293c252b7a3d9c0a3cf77ccd509da8cbf79852333b74a9
+- repo_url: Peter-N91/hve-squad
+  host: github.com
+  resolved_commit: 64031658fba2cc0de1a5ddf65b061442b4910904
+  virtual_path: squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .github/instructions/squad-mcp-capability.instructions.md
+  deployed_file_hashes:
+    .github/instructions/squad-mcp-capability.instructions.md: sha256:b8e410d6130914a26e7b9e7fd3798215c2f8bf2a2b499df66815a6af16361bd9
+  content_hash: sha256:10c8b682ab710751dc9f7dc9d195f7042207cf815769d99c0f2b1bf98ea51ec1
 - repo_url: Peter-N91/hve-squad
   host: github.com
   resolved_commit: 29f6aab2a43ba77afcb6cd2aeced9ff50b7b1834
@@ -483,6 +538,42 @@ dependencies:
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:7c71a85223ab4ca1801b1bc1fa5cdd4f718ef0810692b08414cb958f220e0262
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
+  virtual_path: .github/instructions/accessibility/accessibility-backlog-handoff.instructions.md
+  is_virtual: true
+  content_hash: sha256:727804778f17efdb61faddfff126407d39da27ca8dc6937509e052f116c3ec3d
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
+  virtual_path: .github/instructions/accessibility/accessibility-capture-coaching.instructions.md
+  is_virtual: true
+  content_hash: sha256:580f8df926c81d89ef8d97d9fcfda7ae78f076acba503019cb38163ba11bef42
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
+  virtual_path: .github/instructions/accessibility/accessibility-framework-selection.instructions.md
+  is_virtual: true
+  content_hash: sha256:302ae385e48c2d6dec227605e20779c385d20c9beef46a5c74e3bbf0022ce6f7
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
+  virtual_path: .github/instructions/accessibility/accessibility-identity.instructions.md
+  is_virtual: true
+  content_hash: sha256:989af358d0652dee860f2b02bdca9a3dc06dbd6b31a7b2d6837dbbf1f28b667e
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
+  virtual_path: .github/instructions/accessibility/accessibility-impact-assessment.instructions.md
+  is_virtual: true
+  content_hash: sha256:c968014c0e0ce219ea6cc6d9d6f423c5bc216c578bbb1f674621aa384b745225
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
+  virtual_path: .github/instructions/accessibility/accessibility-license-posture.instructions.md
+  is_virtual: true
+  content_hash: sha256:23e043e021b8542372e87dccbfede8c2cc442eef608edbf6ca087daece693c77
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
@@ -1397,6 +1488,12 @@ dependencies:
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:cd03d45d2261a7f6e61c6c857ee73fae6ad1ff63d9851a17b53ec574842b493f
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
+  virtual_path: .github/instructions/shared/planner-identity-base.instructions.md
+  is_virtual: true
+  content_hash: sha256:e38337a529ee43f0c9ba09db4e96ba97c3b9b2689d9a71c5d8d6855b86a35190
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
