@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="hve-squad logo" width="64" height="64">
+  <defs>
+    <linearGradient id="hsEdge" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3ddc97"/>
+      <stop offset="1" stop-color="#5aa9ff"/>
+    </linearGradient>
+    <radialGradient id="hsCore" cx="32" cy="30" r="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8ffccf"/>
+      <stop offset="1" stop-color="#3ddc97"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Hexagon badge -->
+  <polygon
+    points="32,3 55.1,16.5 55.1,47.5 32,61 8.9,47.5 8.9,16.5"
+    fill="#11171f" stroke="url(#hsEdge)" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Routing links: coordinator -> squad -->
+  <g stroke="#5aa9ff" stroke-width="2" stroke-linecap="round" opacity="0.55">
+    <line x1="32" y1="30" x2="32" y2="16"/>
+    <line x1="32" y1="30" x2="18" y2="44"/>
+    <line x1="32" y1="30" x2="46" y2="44"/>
+  </g>
+
+  <!-- Squad agent nodes -->
+  <g fill="#5aa9ff">
+    <circle cx="32" cy="16" r="4"/>
+    <circle cx="18" cy="44" r="4"/>
+    <circle cx="46" cy="44" r="4"/>
+  </g>
+
+  <!-- Coordinator core -->
+  <circle cx="32" cy="30" r="6.5" fill="url(#hsCore)" stroke="#06281c" stroke-width="1.5"/>
+
+  <!-- Command chevron inside the core -->
+  <path d="M29.6 27.4 L33 30 L29.6 32.6" fill="none" stroke="#06281c" stroke-width="1.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

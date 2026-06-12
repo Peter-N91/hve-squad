@@ -64,12 +64,32 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
 }
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-family: var(--mono);
   font-weight: 700;
   color: var(--text);
   letter-spacing: 0.5px;
 }
+.brand img { width: 28px; height: 28px; display: block; }
 .brand .dot { color: var(--accent); }
+
+/* Hero logo lockup */
+.hero-logo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.hero-logo img { width: 60px; height: 60px; }
+.hero-logo .wordmark {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: 0.5px;
+}
+.hero-logo .wordmark .dot { color: var(--accent); }
 .nav-links {
   display: flex;
   gap: 16px;

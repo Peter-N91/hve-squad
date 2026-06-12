@@ -1,8 +1,14 @@
-# hve-squad
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="hve-squad logo" width="120" height="120" />
+</p>
 
-APM package that assembles HVE Core agents, prompts, instructions, and skills into one
-installable bundle for Copilot target environments, and ships a Squad Coordinator that routes
-your request to a cast of agents in parallel.
+<h1 align="center">hve-squad</h1>
+
+<p align="center">
+  APM package that assembles HVE Core agents, prompts, instructions, and skills into one
+  installable bundle for Copilot target environments, and ships a Squad Coordinator that routes
+  your request to a cast of agents in parallel.
+</p>
 
 ## Documentation
 
