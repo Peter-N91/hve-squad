@@ -18,11 +18,39 @@ All squad state lives under `.copilot-tracking/squad/`:
 | `team.md`             | Roster of roles and the agents that fill them (see roster conventions)     | Replace via scribe   |
 | `routing.md`          | Request-pattern routing table (see routing conventions)                    | Replace via scribe   |
 | `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only          |
+| `notifications.md`    | Chronological log of notifications (pings) fired and their delivery channel | Append-only          |
 | `history/<agent>.md`  | Per-agent dispatch history: requests handled, findings, outcomes           | Append-only          |
-| `state.json`          | Machine-readable squad status: current turn, active roles, open escalations | Replace via scribe   |
+| `history/autopilot-run-<id>.md` | Per-run autopilot pipeline summary: stages, gates, approvals     | Append-only by id    |
+| `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via scribe   |
 
-* `decisions.md` and the `history/<agent>.md` files are **append-only**. New entries are added to the end; prior entries are never edited or removed.
-* `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the coordinator overwrites as the squad advances.
+* `decisions.md`, `notifications.md`, and the `history/<agent>.md` files are **append-only**. New entries are added to the end; prior entries are never edited or removed.
+* `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the coordinator overwrites as the squad advances. It carries the `notify` object (the captured notification contact) and the current `mode`.
+
+### state.json Shape
+
+The Scribe seeds `state.json` on first run and overwrites it as the squad advances:
+
+```json
+{
+  "schemaVersion": "1.1",
+  "updated": "",
+  "turn": 0,
+  "mode": "interactive",
+  "activeRoles": [],
+  "openEscalations": [],
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": {
+      "handle": "",
+      "repo": ""
+    }
+  }
+}
+```
+
+The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`).
 
 ## State Ownership
 
@@ -39,6 +67,7 @@ The squad's coordination verbs map onto existing HVE Core mechanisms. There is n
 | `squad_route`    | Dispatch the assigned role via `runSubagent` / `task` against a `user-invocable: false` agent            |
 | `squad_decide`   | Append the decision and rationale to `decisions.md`; optionally record an ADR via the `adr-author` skill |
 | `squad_memory`   | Write durable per-agent notes with the memory tool to `/memories/repo/squad-<agent>.md`                  |
+| `squad_notify`   | Fire a notification per `squad-notifications.instructions.md`; deliver via a configured notification tool when present, else in-chat, and append the record to `notifications.md` |
 | `squad_escalate` | Apply the escalate-to-user convention from the routing rules before any role acts                        |
 
 ### Decision Recording

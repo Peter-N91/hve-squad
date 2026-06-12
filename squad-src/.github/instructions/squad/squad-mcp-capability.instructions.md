@@ -20,8 +20,11 @@ The coordinator passes a capability hint to each dispatched role when the role n
 | Azure-pricing      | An Azure Cost MCP server when one is configured | Researcher Subagent against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
 | architecture-docs  | `microsoft-docs` MCP when configured         | Researcher Subagent against `learn.microsoft.com` via web fetch                 |
 | code-context       | `context7` MCP when configured               | Researcher Subagent against the published library documentation                 |
+| github-issue       | `github` MCP (GitHub official) when configured | The `gh` CLI when authenticated; otherwise an in-chat ping (no remote approval) |
 
 The "Preferred MCP" column names the server the role tries first. The "Non-MCP Fallback" column is what the role does when the preferred MCP is not configured, is unreachable, or returns an error during the dispatched turn.
+
+The `github-issue` capability backs the remote approval channel in `.github/instructions/squad/squad-notifications.instructions.md`. Its fallback chain is `github` MCP → `gh` CLI → in-chat: on a headless VM an authenticated `gh` CLI is sufficient and the MCP is not required, and when neither is available the squad degrades to an in-chat approval (the user simply cannot approve remotely).
 
 ## Capability Hint Contract
 

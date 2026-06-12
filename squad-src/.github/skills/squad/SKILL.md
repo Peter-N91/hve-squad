@@ -14,13 +14,15 @@ metadata:
 
 The squad is a user-invocable Squad Coordinator that dispatches a reusable cast of deployed HVE Core agents in parallel and persists roster, routing, decisions, and per-agent history under `.copilot-tracking/squad/`. There is no separate runtime: every squad verb is a thin convention over an existing HVE Core mechanism.
 
-This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements five instruction files that auto-apply when squad state is touched:
+This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements seven instruction files that auto-apply when squad state is touched:
 
 * `.github/instructions/squad/squad-roster.instructions.md` — roster schema and cast catalog.
 * `.github/instructions/squad/squad-routing.instructions.md` — routing table and escalation rules.
 * `.github/instructions/squad/squad-state.instructions.md` — state layout, single-writer ownership, and tool-to-mechanism mapping.
 * `.github/instructions/squad/squad-council.instructions.md` — pre-implementation council protocol with parallel dispatch, most-restrictive-wins synthesis, and the Council Verdict schema.
 * `.github/instructions/squad/squad-autonomous.instructions.md` — opt-in `auto-validated` autonomy tier with a bounded re-validation loop, divergence detection, and mandatory escalation triggers.
+* `.github/instructions/squad/squad-autopilot.instructions.md` — opt-in `mode=autopilot` full pipeline (research→plan→implement→review) with Human Gates only on impactful actions and final-outcome validation.
+* `.github/instructions/squad/squad-notifications.instructions.md` — user-contact capture at squad build time and the delivery-agnostic notification (ping) contract per mode.
 
 ## Prerequisites
 
@@ -51,7 +53,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 1. Check for `.copilot-tracking/squad/team.md` and `.copilot-tracking/squad/routing.md`.
 2. When either file is missing, **propose**: discover the project (languages, frameworks, tests, IaC, security/AI markers) read-only, then recommend a profile using the precedence in the roster's *Profile Selection* (explicit `profile=` hint → discovery inference → `default`). Present the recommended profile, its roles, and why it fits, and let the user accept, switch profiles, add or remove roles, or ask for more detail. Once a profile or customized roster is on the table, also offer naming choices for the seeded members per the roster's *Naming Conventions* (user-supplied per role, coordinator-assigned aliases from the deterministic wordlist, a mix, or skip). Wait on the user before any write.
-3. On **confirm**, hand the chosen roster to the Squad Scribe to **create**: `team.md` from the confirmed profile's members (including the `Member Name` column when names were provided), `routing.md` from the default routing rules filtered to that roster, plus `decisions.md`, `state.json`, and a `history/` directory.
+3. On **confirm**, hand the chosen roster to the Squad Scribe to **create**: `team.md` from the confirmed profile's members (including the `Member Name` column when names were provided), `routing.md` from the default routing rules filtered to that roster, plus `decisions.md`, `notifications.md`, `state.json`, and a `history/` directory. Before the create step, capture an optional approval channel per `.github/instructions/squad/squad-notifications.instructions.md` (`github-issue` for remote/unattended approval, `webhook`, or `in-chat`) and seed it into the `state.json` `notify` object.
 4. Confirm the roster and routing table are present before classifying the request. The coordinator never writes these files itself.
 
 ### Route
@@ -97,6 +99,26 @@ The opt-in `auto-validated` tier lets a council validate a developer's output on
 6. A per-turn cost ceiling (`cost-ceiling=$X`, optional) caps spend; when exceeded, the coordinator escalates instead of running the next cycle.
 7. The Scribe writes a per-topic summary to `history/autonomous-loop-<id>.md` (append-only by topic-id) and per-cycle entries to each role's `history/<agent>.md`.
 
+### Autopilot Procedure
+
+The opt-in `mode=autopilot` runs the full delivery pipeline end-to-end, stopping for the human only at impactful actions and final-outcome validation. The full protocol lives in `.github/instructions/squad/squad-autopilot.instructions.md`; the operator's view is:
+
+1. The user opts in per turn by passing `mode=autopilot` to `/squad`. Without that input, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing tier.
+2. The coordinator sequences the pipeline: research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn.
+3. The pipeline stops only at two Human Gate classes: an **Impactful-Action Gate** (deploy, `git push`/force-push, PR merge, schema migration, data deletion, destructive infra ops, secret rotation, or any user-marked irreversible action) and a **Risk Gate** (any `Stop` verdict, `Risk: High` from security/cost/RAI, `confirm`-tier cost move, compliance violation, validator divergence, or cost-ceiling breach).
+4. Autopilot never auto-releases: after review it fires a `final-outcome` notification to the registered contact and waits for human validation before any release-tier action.
+5. The Scribe writes a per-run summary to `history/autopilot-run-<id>.md` (append-only by topic-id) and the notification records to `notifications.md`.
+
+### Notification Procedure
+
+The squad captures an optional contact at build time and pings it for approvals. The full contract lives in `.github/instructions/squad/squad-notifications.instructions.md`; the operator's view is:
+
+1. During Init Mode the coordinator asks for an optional approval channel and seeds it into `state.json` under `notify`. The choices are `github-issue` (recommended for unattended/VM runs — approvable from a phone), `webhook` (outbound team ping only), or `in-chat` (default).
+2. Delivery is resolved at send time by the channel: `github-issue` opens/assigns an approval issue via the GitHub MCP or `gh` CLI; `webhook` POSTs to a configured tool/MCP or `SQUAD_WEBHOOK_URL`; otherwise it degrades to an in-chat ping. The package ships no transport, and the squad always keeps an in-chat approval available so a run is never permanently blocked.
+3. For `github-issue`, the human approves remotely with a keyword comment (`/approve`, `/approve-all`, `/changes: <note>`, `/stop`) or a `squad/*` label. Only the registered handle or a repo collaborator can approve, and only the keyword acts — comment prose is never executed as a command. An unattended run resumes via a host-side poll loop or a GitHub Action on `issue_comment` (the inbound half of Watch Mode / DR-01).
+4. In `mode=autopilot`, a ping fires at each Human Gate and at final-outcome validation. In interactive mode, a ping fires at each step gate. In `mode=autonomous`, a ping fires on the loop's mandatory escalations.
+5. The Scribe appends every fired notification to `notifications.md` (append-only).
+
 ## Tool-to-Mechanism Mapping
 
 | Squad verb       | HVE Core mechanism                                                                                       |
@@ -104,6 +126,7 @@ The opt-in `auto-validated` tier lets a council validate a developer's output on
 | `squad_route`    | Dispatch the assigned role via `runSubagent` / `task` against a `user-invocable: false` agent             |
 | `squad_decide`   | Append the decision and rationale to `decisions.md`; optionally record an ADR via the `adr-author` skill  |
 | `squad_memory`   | Write durable per-agent notes with the memory tool to `/memories/repo/squad-<agent>.md`                   |
+| `squad_notify`   | Fire a notification per `squad-notifications.instructions.md`; deliver via a configured tool when present, else in-chat, and append the record to `notifications.md` |
 | `squad_escalate` | Apply the escalate-to-user convention from the routing rules before any role acts                         |
 
 ## Seed Templates
@@ -269,17 +292,71 @@ description: "Autonomous-loop summary for topic <id>"
 * Council Verdict: see `decisions.md` under `## Council Verdict <timestamp> <id>`
 ```
 
+### history/autopilot-run-<id>.md
+
+One file per autopilot run. Append-only by topic-id: subsequent runs against the same topic append a new dated `## Stages` section rather than overwriting. The Scribe writes this file only when the coordinator runs in `mode=autopilot`.
+
+```markdown
+---
+description: "Autopilot-run summary for topic <id>"
+---
+
+# Autopilot Run: <id>
+
+* Topic: <one-line summary>
+* Opt-In: mode=autopilot
+* Cost Ceiling: <value or unset>
+* Outcome: completed (awaiting final validation) | escalated (<reason>) | stopped (<reason>)
+
+## Stages
+
+| Stage     | Role(s)     | Result                          | Gate Fired                 |
+|-----------|-------------|---------------------------------|----------------------------|
+| research  | <agent(s)>  | <one-line outcome>              | none                       |
+| plan      | <agent>     | <one-line outcome>              | none                       |
+| council   | <roles>     | <verdict-or-skipped>            | <none or Risk Gate reason> |
+| implement | <agent>     | <one-line outcome>              | <none or Impactful-Action> |
+| review    | <agent>     | <one-line outcome>              | none                       |
+| final     | coordinator | notified <recipient-or-in-chat> | Final-Outcome Validation   |
+```
+
+### notifications.md
+
+Append-only log of notifications (pings) the squad fired. The header is written once; every notification is appended below it. Records the trigger, the recipient, the resolved channel, and the decision awaited.
+
+```markdown
+---
+description: "Append-only log of squad notifications (pings) and their delivery channel"
+---
+
+# Squad Notifications
+
+Each entry records a notification the squad fired: when, to whom, the trigger, the channel it resolved to, and the decision awaited. Entries are appended in chronological order and never edited.
+
+<!-- Append new notification entries below this line. -->
+```
+
 ### state.json
 
 Machine-readable squad status. Uses replace semantics — the coordinator overwrites it (through the Squad Scribe) as the squad advances.
 
 ```json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "updated": "",
   "turn": 0,
+  "mode": "interactive",
   "activeRoles": [],
-  "openEscalations": []
+  "openEscalations": [],
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": {
+      "handle": "",
+      "repo": ""
+    }
+  }
 }
 ```
 

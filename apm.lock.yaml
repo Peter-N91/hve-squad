@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-06-11T14:05:06.529151+00:00'
+generated_at: '2026-06-12T08:42:26.178501+00:00'
 apm_version: 0.18.0
 dependencies:
 - repo_url: Peter-N91/hve-squad
@@ -8,10 +8,6 @@ dependencies:
   virtual_path: squad-src/.github/agents/squad/squad-azure-architect.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/squad-azure-architect.agent.md
-  deployed_file_hashes:
-    .github/agents/squad-azure-architect.agent.md: sha256:44799d8941749ba53e38e27c39e416433623729b18810034629aac2b29523f7a
   content_hash: sha256:8904cf742d1a983f49a6a7b31304b48cf5b11a6783cf6910a275fc29926cf5a6
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -19,10 +15,6 @@ dependencies:
   virtual_path: squad-src/.github/agents/squad/squad-coordinator.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/squad-coordinator.agent.md
-  deployed_file_hashes:
-    .github/agents/squad-coordinator.agent.md: sha256:cd753bb7f96f61f5035814dc20210b757617490437bbe09f0b4568cb27bc7793
   content_hash: sha256:3293e573e209d43c15cf34df3d01d5fa5eea89a18fd3a25280e37bdf8be6335c
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -30,10 +22,6 @@ dependencies:
   virtual_path: squad-src/.github/agents/squad/squad-cost-manager.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/squad-cost-manager.agent.md
-  deployed_file_hashes:
-    .github/agents/squad-cost-manager.agent.md: sha256:e75ab667bd374cbcfe741caff71ef723a5ef4abf8f4d9b4a95f18a278446b056
   content_hash: sha256:55d3b15d7a44c0dbb75143d70a14198cd57d8be2e37f794d3b69f9b73a1bbc57
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -41,10 +29,6 @@ dependencies:
   virtual_path: squad-src/.github/agents/squad/squad-scribe.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/squad-scribe.agent.md
-  deployed_file_hashes:
-    .github/agents/squad-scribe.agent.md: sha256:db4d7ee4ee1c41ce00160abb296ffc7e2fed4c06b58f89d3aa98602ca6146348
   content_hash: sha256:b16925980ad40ec1fccfc8a4f9d9171b7c06690ba069832b9c7de0834d4dd8b3
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -52,10 +36,6 @@ dependencies:
   virtual_path: squad-src/.github/instructions/squad/squad-autonomous.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/squad-autonomous.instructions.md
-  deployed_file_hashes:
-    .github/instructions/squad-autonomous.instructions.md: sha256:5b11e8dd54b8a7a25840a22436315e0cbbf4e4dec57b1b428122ae5d985bc130
   content_hash: sha256:03925bf237d9ed8f3d101c3287ad8e31d9ff7f2ad19bea462323fe0d0a5ba308
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -63,10 +43,6 @@ dependencies:
   virtual_path: squad-src/.github/instructions/squad/squad-council.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/squad-council.instructions.md
-  deployed_file_hashes:
-    .github/instructions/squad-council.instructions.md: sha256:e206dc3ae1837de64022401ec11fc56b4d1a7e3fb9eb6dfd039b63a45bde5b95
   content_hash: sha256:68e652e4d858d21f4a293c252b7a3d9c0a3cf77ccd509da8cbf79852333b74a9
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -74,10 +50,6 @@ dependencies:
   virtual_path: squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/squad-mcp-capability.instructions.md
-  deployed_file_hashes:
-    .github/instructions/squad-mcp-capability.instructions.md: sha256:b8e410d6130914a26e7b9e7fd3798215c2f8bf2a2b499df66815a6af16361bd9
   content_hash: sha256:10c8b682ab710751dc9f7dc9d195f7042207cf815769d99c0f2b1bf98ea51ec1
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -85,10 +57,6 @@ dependencies:
   virtual_path: squad-src/.github/instructions/squad/squad-roster.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/squad-roster.instructions.md
-  deployed_file_hashes:
-    .github/instructions/squad-roster.instructions.md: sha256:855016b53d7b6618417d938a1b314f22e84d9219559da0566f221fdd8385ae2e
   content_hash: sha256:89d14a38732c2e0960c2283876804510e69d81bbd36a5b0c2fdbf5ecd4eb5fa1
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -96,10 +64,6 @@ dependencies:
   virtual_path: squad-src/.github/instructions/squad/squad-routing.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/squad-routing.instructions.md
-  deployed_file_hashes:
-    .github/instructions/squad-routing.instructions.md: sha256:54c96f2d405fefdeb0d94aa175eb5062804dcbe80e02984a8a16986576846679
   content_hash: sha256:ea770877cc980f841e3d204e83e0cbfd52c69387999e04707a59cbe84adfa29a
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -107,10 +71,6 @@ dependencies:
   virtual_path: squad-src/.github/instructions/squad/squad-state.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/squad-state.instructions.md
-  deployed_file_hashes:
-    .github/instructions/squad-state.instructions.md: sha256:dee03bc14cbb4a81a70ea9912595786ef23b7bd7ddc102e7dffdcea0ff9e69cc
   content_hash: sha256:43f1c33109acf9c9a153215435902eb51d03e797f1153a0b1d7f856ea7de2011
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -118,10 +78,6 @@ dependencies:
   virtual_path: squad-src/.github/prompts/squad/squad.prompt.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/prompts/squad.prompt.md
-  deployed_file_hashes:
-    .github/prompts/squad.prompt.md: sha256:9d6cda212880fd6552cb83ef8b9dc04de98e65c059ca6804a94479fbbf33ad89
   content_hash: sha256:9edea4b245ae2b4286022139949ec82d0cf4d9256c4e5f80a19ccbfcaf686638
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -129,8 +85,6 @@ dependencies:
   virtual_path: squad-src/.github/skills/squad
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/squad
   content_hash: sha256:bc8d7ceb74f2c7853c6212367629092e565e40de4f9fa2f0a355ab5a63893a93
 - repo_url: microsoft/hve-core
   host: github.com
@@ -543,36 +497,42 @@ dependencies:
   resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
   virtual_path: .github/instructions/accessibility/accessibility-backlog-handoff.instructions.md
   is_virtual: true
+  package_type: apm_package
   content_hash: sha256:727804778f17efdb61faddfff126407d39da27ca8dc6937509e052f116c3ec3d
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
   virtual_path: .github/instructions/accessibility/accessibility-capture-coaching.instructions.md
   is_virtual: true
+  package_type: apm_package
   content_hash: sha256:580f8df926c81d89ef8d97d9fcfda7ae78f076acba503019cb38163ba11bef42
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
   virtual_path: .github/instructions/accessibility/accessibility-framework-selection.instructions.md
   is_virtual: true
+  package_type: apm_package
   content_hash: sha256:302ae385e48c2d6dec227605e20779c385d20c9beef46a5c74e3bbf0022ce6f7
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
   virtual_path: .github/instructions/accessibility/accessibility-identity.instructions.md
   is_virtual: true
+  package_type: apm_package
   content_hash: sha256:989af358d0652dee860f2b02bdca9a3dc06dbd6b31a7b2d6837dbbf1f28b667e
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
   virtual_path: .github/instructions/accessibility/accessibility-impact-assessment.instructions.md
   is_virtual: true
+  package_type: apm_package
   content_hash: sha256:c968014c0e0ce219ea6cc6d9d6f423c5bc216c578bbb1f674621aa384b745225
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
   virtual_path: .github/instructions/accessibility/accessibility-license-posture.instructions.md
   is_virtual: true
+  package_type: apm_package
   content_hash: sha256:23e043e021b8542372e87dccbfede8c2cc442eef608edbf6ca087daece693c77
 - repo_url: microsoft/hve-core
   host: github.com
@@ -650,10 +610,6 @@ dependencies:
   virtual_path: .github/instructions/coding-standards/code-review-telemetry.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/code-review-telemetry.instructions.md
-  deployed_file_hashes:
-    .github/instructions/code-review-telemetry.instructions.md: sha256:51f070dffb31660db1ded38bb76959bb288ec163bc45ad6fe644a086519a42b3
   content_hash: sha256:fb78ca8ff854d72e6b23df5488a1030843fcb873a5e780ebab0a2d107560964b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -739,318 +695,6 @@ dependencies:
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:122b8099b58ca1fad9594865e804c12947f048b53cdb80240083802011ce7c5e
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-canonical-deck.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:a53849307ab2ab6c2ff6d3b2cd815bbb377bd00b6aee7f2f439d9c58cae2f7e2
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: a206f47ec8229b628cd431dcb46250868e14f52c
-  virtual_path: .github/instructions/design-thinking/dt-coach-telemetry.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  deployed_files:
-  - .github/instructions/dt-coach-telemetry.instructions.md
-  deployed_file_hashes:
-    .github/instructions/dt-coach-telemetry.instructions.md: sha256:39b48eb2c23ff957fa603bb8b7be7b85cf0d7f8da79c2c58dba53ad4b281935b
-  content_hash: sha256:831556087842f57306c1ac934f5b93aadf0c56534ec6c6f433e89b06d3ebe73c
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-coaching-identity.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:8dba68e23cf434d926ab3fd16e6ae36b7306704a23251865e6c9ed450b40f35e
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-coaching-state.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:d31a5701e0cf927c44cc7b3c1d5617ac1fa5776d123e577146eb4583f2d33240
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-01-scoping.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:5cb0456ce8c4549a253f96f20e59cca2dfc9cfb853dc7cc93b621b550bcda4f2
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-02-research.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:4b49f7dd7a8095f7a1635047df5bc9759620664e961359c513cabc8656906585
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-03-synthesis.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:c0876db8958e288deb3ead1b1663722d490d9add83bbb7be4f00701451598f88
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-04-brainstorming.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:df9197ea698241e3c93065178eb11cb20f6914f5cda291b875dddb4ddb0c4a0f
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-05-concepts.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:225bb12bf7f710de08897f4b0424ea728d0689b1d7a86899018f91e9e3a06614
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-06-prototypes.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:f67f0b0fd69904464df9297fc44d32e9ea95af411739a4b4dc7f078368932281
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-07-testing.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:4b17d406e17a8be5be9d7f52c6b7921c1bf079d824324702372dbe4d8a50de61
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-08-iteration.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:c2cf41faaf172cad143eac3a80008fb47d66c67b15fa6812bb03f7ec0dee937b
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-09-handoff.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:7f99917c939bb31be6dc5db0bec75286f9b8057dfb39de6e83eefcd14e720da2
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-curriculum-scenario-manufacturing.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:4a15b147bd633bc0ee5b521acf96dd2ac7e44f062279d8aa3969b04c4b1701a7
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-image-prompt-generation.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:67ea8fadf98a9914cdd47c968ad0978e59cbabad94462b6e0ff596ace46ccbc6
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-industry-energy.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:0f27a47467c8029c5aa3614ca7f181466bc7eed507f5e886ac93a3b6d4253e28
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-industry-healthcare.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:434705663210c234006662f45ed4e0ec61ee8807a2e5c37ae460d6aac658ebbd
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-industry-manufacturing.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:cda3659bff75653a53b98f159bfab249055c721d6e76e7beb3e27d1b6ebd8ea7
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-01-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:cf69e3c92259c0f57cb7c737fc2d8e919aca9ae01341ece97c9b17d4a2e32725
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-01-scope.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:d80bfb6a3ffb195bbba4f0c3f776e72ea9f7bfa6295e3b83aafd45f11a5438a6
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-02-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:6e78c2d52bed8568a276b24932d471844f3c69273e16cbf2c49287391493f717
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-02-research.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:e7dc1def99ecd55b0b3891b0760bf6fda02b68ff95c04e6bda90f4c2420f0ad4
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-03-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:68e4027e9c27f32874cfb7cc637eb0ea70545212ef332353008497eee8b0fef2
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-03-synthesis.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:0bbda0e864449cac37e8f8d83eba24a18a13d73c5401b9b214ef1b2f71261b4a
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-04-brainstorming.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:3923e0042036c27d59703e1dbbe4f55906ddd347e8252b7573a4439bd0a2b8e9
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-04-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:57fa64235fd1923dab2bab6bdb1c7237694531f5080a171ebe8df16067ab0b3c
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-05-concepts.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:a9d3a3cf67dfbdd8f3ca1f5cae4f914d7a4a31e57b046d4f5a672c83c6d16682
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-05-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:edc93c0ca21bcaccec5817bf9236dab894ddbc78728069fbdfcd3686cb3f8d7a
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-06-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:f93a9df3e28b48b8982d1e9fa7743cdb62962ec3ddfbdb02af3edacac8879ee1
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-06-lofi-prototypes.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:ce6a79a7cd9c9c8948fa30c96d8c06d900879cf5a906541ed2829e8409acb631
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-07-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:395397420eb0d2ff0142198caa438b192e42196fd021d54cdf3619822e953bf2
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-07-hifi-prototypes.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:06e764dc237c0c1e024f735fa553f25b7d132071b61909bb5454999a6d16c062
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-08-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:6a57f4784f927a73e49243026920f895ea795b836041a23dc8ef24b736efbac7
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-08-testing.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:3b0ca3cd9c3d133c564e8e67e0add43471fdccc8b79144b7ebacc6cd7f7fd599
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-09-deep.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:c9e4a96bce92700984cff7dd8574f7064ce3b24e8f1d14f144d84cf1c0fc44e4
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-09-iteration.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:081410e4dc8b1ad8ca9209091cf8e922fe809db1ebaf0024bc0db423d7846397
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-method-sequencing.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:b5a1cb488592327d2488dc3b9e533d60bcf543b9acc41aaf341bcc3569d39124
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-quality-constraints.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:38ec4c79e519eb614536b986e2cbf840af3af0bb862936e72b0a932be0f1ed7a
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-rpi-handoff-contract.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:3fb36cf9fb7e297454fca06738d5d638c2925ad9256a7c0aa89bea7791a20430
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-rpi-implement-context.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:73aec403fcf00b7394d147702eae863fb68315d4bc7c10b1e3b28caa46e5b6c6
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-rpi-planning-context.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:92c20efdcea4436fb1fda406ec85b36a08ecbe55513fdee98d8adf6bc9a77157
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-rpi-research-context.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:92ecf659cf1e94420a5b88794c2dfb8410868c7cc88dfaeb5abb2a06e5fcd3dd
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-rpi-review-context.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:58a354919bcaf773c45c12dd8e080287171ff45cd78c9525f65b4617c9809cef
-- repo_url: microsoft/hve-core
-  host: github.com
-  resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
-  virtual_path: .github/instructions/design-thinking/dt-subagent-handoff.instructions.md
-  is_virtual: true
-  package_type: apm_package
-  content_hash: sha256:489ca3c95dbdd8f321a45067725a374cdd490911a86bbfd93e25d174bd7a4d59
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
@@ -1204,10 +848,6 @@ dependencies:
   virtual_path: .github/instructions/hve-core/task-implementor-telemetry.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/task-implementor-telemetry.instructions.md
-  deployed_file_hashes:
-    .github/instructions/task-implementor-telemetry.instructions.md: sha256:1350f506a288f6a509f43984e401a8e590f2f086b062082c71882727c4cfbfb5
   content_hash: sha256:3cd626f3d388f5d267875566ce00c4cdccbd72dd886fb0a9107cd16daaebd82f
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1264,10 +904,6 @@ dependencies:
   virtual_path: .github/instructions/project-planning/adr-creation-telemetry.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/adr-creation-telemetry.instructions.md
-  deployed_file_hashes:
-    .github/instructions/adr-creation-telemetry.instructions.md: sha256:02bbc71a6607b81d851e5a59f4c4c8329883213b31d4d974cdab519b503a119d
   content_hash: sha256:85b6190933d507eac314da4d0bba4bf1c4997d67c3e652a89bd6fdb63b23131d
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1296,10 +932,6 @@ dependencies:
   virtual_path: .github/instructions/project-planning/prd-builder-telemetry.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/prd-builder-telemetry.instructions.md
-  deployed_file_hashes:
-    .github/instructions/prd-builder-telemetry.instructions.md: sha256:93ea3788a75d8bb5680a9e3aad7b481b5b312c98dc38c4cfe532d2d883a2dbbd
   content_hash: sha256:e10d3bb7a9c365921d188d9160a51f0117514b84aba4a6c6d1dcd70f86e0dbb2
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1342,10 +974,6 @@ dependencies:
   virtual_path: .github/instructions/rai-planning/rai-planner-telemetry.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/rai-planner-telemetry.instructions.md
-  deployed_file_hashes:
-    .github/instructions/rai-planner-telemetry.instructions.md: sha256:79503dc64066e09d704c4f115acf3062c7b77fa84bd43b79ec3ebb18408e18d2
   content_hash: sha256:5023eadecd30230a392f55a93b162b254af814f2ae45556ed9a4662994708c3f
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1402,10 +1030,6 @@ dependencies:
   virtual_path: .github/instructions/security/security-planner-telemetry.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/security-planner-telemetry.instructions.md
-  deployed_file_hashes:
-    .github/instructions/security-planner-telemetry.instructions.md: sha256:595cadf5c20914c3fe5b2485faa33893df71999b0ab4920653f8b55b6667dc3c
   content_hash: sha256:02ce288be5a2075eef7f03466e83e3eef9e2499e90a5cb0b2ccd1843a1dc1b4e
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1448,10 +1072,6 @@ dependencies:
   virtual_path: .github/instructions/security/sssc-planner-telemetry.instructions.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/instructions/sssc-planner-telemetry.instructions.md
-  deployed_file_hashes:
-    .github/instructions/sssc-planner-telemetry.instructions.md: sha256:297c35c5d315792622b15f56c853526b808327bfb69df29dd43548fdc2b9a2cc
   content_hash: sha256:2cd1c70d0ec2ecefaf2a0b020f4960d75eeebaad93092f31f8147a662c10f07f
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1493,6 +1113,7 @@ dependencies:
   resolved_commit: 2158ced6d06a7288d2770a5d1239498a74997278
   virtual_path: .github/instructions/shared/planner-identity-base.instructions.md
   is_virtual: true
+  package_type: apm_package
   content_hash: sha256:e38337a529ee43f0c9ba09db4e96ba97c3b9b2689d9a71c5d8d6855b86a35190
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2018,8 +1639,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/aria-apg
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/aria-apg
   content_hash: sha256:0faac0aacb43c012d105aa9a79ff6c2e58a0297d1b61659381e548cd54f8751e
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2027,8 +1646,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/coga
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/coga
   content_hash: sha256:10dfa3dcf46e72ca688bc37a8c7d1847ec1a67fbbd2ac5bcd40785ad37b4bdbc
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2036,8 +1653,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/en-301-549
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/en-301-549
   content_hash: sha256:c24e359df7fcedc5f563d5d101574985c4591a6900474c8b69887bacebb7fe40
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2045,8 +1660,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/section-508
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/section-508
   content_hash: sha256:2ba024a162804bef6d8bef793cff465437ee6332d1e42e28dab6461d4cecebb9
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2054,8 +1667,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/wcag-22
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/wcag-22
   content_hash: sha256:c2b8621b903084eeb87073728fe05d7c3f13fd3c11c6022aadbf618e2036ab7f
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2063,17 +1674,41 @@ dependencies:
   virtual_path: .github/skills/coding-standards/python-foundational
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/python-foundational
   content_hash: sha256:8be7bff106fedb2777185a23444ab6c0a18dd04bc691a02750cadae0c49c8c8f
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: da1ee1b1ac1f8b61354a00c295ddc6d4f64bd2c5
+  virtual_path: .github/skills/design-thinking/dt-coaching-foundation
+  is_virtual: true
+  package_type: claude_skill
+  content_hash: sha256:8bf3f97023ec9caa1f95394305682ba5a2277a64468de4e3296b0a9becc84d51
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: da1ee1b1ac1f8b61354a00c295ddc6d4f64bd2c5
+  virtual_path: .github/skills/design-thinking/dt-curriculum
+  is_virtual: true
+  package_type: claude_skill
+  content_hash: sha256:05dfcc4f0fef2f99b40caaa78b31525619414500c657309fe76cf9175a159fb3
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: da1ee1b1ac1f8b61354a00c295ddc6d4f64bd2c5
+  virtual_path: .github/skills/design-thinking/dt-methods
+  is_virtual: true
+  package_type: claude_skill
+  content_hash: sha256:9fd0811a6b81446932c706bd5670b7ef0b9e741965171feca83d8ea4809407c4
+- repo_url: microsoft/hve-core
+  host: github.com
+  resolved_commit: da1ee1b1ac1f8b61354a00c295ddc6d4f64bd2c5
+  virtual_path: .github/skills/design-thinking/dt-rpi-integration
+  is_virtual: true
+  package_type: claude_skill
+  content_hash: sha256:699092e9745b60d9a41fd2b5bc8e3aea8656f393adceb7d0624e189717da75f6
 - repo_url: microsoft/hve-core
   host: github.com
   resolved_commit: ceb8c47b6258cb9bb2804651cbab076802cfc55b
   virtual_path: .github/skills/experimental/customer-card-render
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/customer-card-render
   content_hash: sha256:506abf89d0d8a126ecb5845e586f16b755340df8b18bdc065a5bf2e6cca3635b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2081,8 +1716,6 @@ dependencies:
   virtual_path: .github/skills/experimental/mural
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/mural
   content_hash: sha256:e48bd4857a26723bba86418a54c2df336ae6fcb06f9f8c3dee340189867d13c9
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2090,8 +1723,6 @@ dependencies:
   virtual_path: .github/skills/experimental/powerpoint
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/powerpoint
   content_hash: sha256:6d966bedb6eac007ffd4cbd2207ccd5f126f4336ceab4734dd0164b347543442
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2099,8 +1730,6 @@ dependencies:
   virtual_path: .github/skills/experimental/tts-voiceover
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/tts-voiceover
   content_hash: sha256:bbf20533c4505c0f5663dfee772340b6cacae567399a70eb5e5755218e92dc41
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2108,8 +1737,6 @@ dependencies:
   virtual_path: .github/skills/experimental/video-to-gif
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/video-to-gif
   content_hash: sha256:1ce6c59bc16d05467b8b8028f15f36f0968d96e4345f3c7a78e066f73621014d
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2117,8 +1744,6 @@ dependencies:
   virtual_path: .github/skills/experimental/vscode-playwright
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/vscode-playwright
   content_hash: sha256:c5bfc04d3ba5d057fb548489ba8a9bdb3139e3f08f0ea73f1db08bb418df65ef
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2126,8 +1751,6 @@ dependencies:
   virtual_path: .github/skills/github/gh-code-scanning
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/gh-code-scanning
   content_hash: sha256:ee4ff0a60ebe2efeb025decdb12bb96cea3892952c6375f79e940f1f7ce73c8e
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2135,8 +1758,6 @@ dependencies:
   virtual_path: .github/skills/gitlab/gitlab
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/gitlab
   content_hash: sha256:49d7128545236bb839da93cc6a5923657904e4a9b33118c072ae4b7f4ad25dde
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2144,8 +1765,6 @@ dependencies:
   virtual_path: .github/skills/installer/hve-core-installer
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/hve-core-installer
   content_hash: sha256:8ab72e21485067b9cb490a146966b496912c45e3165b549fad5d1c9d241266bb
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2153,8 +1772,6 @@ dependencies:
   virtual_path: .github/skills/jira/jira
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/jira
   content_hash: sha256:6c21fe9b2893994d4ed619f11548b109ee03e6445e9f0515d95aef117ce0139e
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2162,8 +1779,6 @@ dependencies:
   virtual_path: .github/skills/project-planning/adr-author
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/adr-author
   content_hash: sha256:59578ed27ed77e6eacd71f45f64d8e1a843f9634e542f4cd720883cd6e7e972b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2171,8 +1786,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-agentic
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-agentic
   content_hash: sha256:240bfb1499f0a400a12c2e52f25fe78bcbbdbca2caed5ed5686d6c5b3f20f7fe
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2180,8 +1793,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-cicd
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-cicd
   content_hash: sha256:03694a09121af95770cc2fa400ab0df7c83c54d15517878604b62af737d4173b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2189,8 +1800,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-docker
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-docker
   content_hash: sha256:682758cc4ad4b1d0301c6bc649219b6dfe042ad4e011e86441c893f295540a33
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2198,8 +1807,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-infrastructure
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-infrastructure
   content_hash: sha256:b6b342893b44c6dda3292bd8d2ae2daf1faf411b40d4e2807d711dac3ad75c72
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2207,8 +1814,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-llm
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-llm
   content_hash: sha256:c7f06bd220b14787285948ff8a11a6086ced5e91d2eb771c691f3fcdcf8c879c
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2216,8 +1821,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-mcp
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-mcp
   content_hash: sha256:23904fb3c8b41f5587c1ce070a58d872a3e3fa652ef7fd936353fe2042b785cb
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2225,8 +1828,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-top-10
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-top-10
   content_hash: sha256:9cec807344e6adeffadc1ff2974b6c6c2b3666f5274d82d13c859924c2147905
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2234,8 +1835,6 @@ dependencies:
   virtual_path: .github/skills/security/secure-by-design
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/secure-by-design
   content_hash: sha256:03f8b1cb126bbe134160b7e56239b9c90998ddc6b5ec1cd51680b985623d7690
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2243,8 +1842,6 @@ dependencies:
   virtual_path: .github/skills/security/security-reviewer-formats
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/security-reviewer-formats
   content_hash: sha256:1525c025c712f3c1dbff3f3bb2cc0bb0ceb020c9ca2d7f7ff610031849354a61
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2252,8 +1849,6 @@ dependencies:
   virtual_path: .github/skills/shared/backlog-templates
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/backlog-templates
   content_hash: sha256:e140526c8a6a4977443d1ed0f37763b20c5b58802dcacc5f55b445dc32bdea0b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2261,8 +1856,6 @@ dependencies:
   virtual_path: .github/skills/shared/pr-reference
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/pr-reference
   content_hash: sha256:a121e95c05bae67725e93f111c9cd1e7b4959e6a4ca35f3e7d95594ccfcd506f
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2270,6 +1863,4 @@ dependencies:
   virtual_path: .github/skills/shared/telemetry-foundations
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/telemetry-foundations
   content_hash: sha256:3b713a56a413502c977c91168f1d2ec132c7d25ef914a6d67be0085b6220cdc2

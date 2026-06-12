@@ -66,6 +66,22 @@
         "repositories",
         "pipelines"
       ]
+    },
+    "github": {
+      // Optional: official GitHub MCP server, used by the squad's
+      // `github-issue` approval channel to open/assign approval issues
+      // for unattended (VM) runs. Not required — an authenticated `gh`
+      // CLI is a sufficient fallback, and absent both the squad uses an
+      // in-chat approval. See
+      // `.github/instructions/squad/squad-notifications.instructions.md`.
+      // Provide a token via the GITHUB_PERSONAL_ACCESS_TOKEN env var
+      // (repo + issues scope); never embed the token in this file.
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@github/github-mcp-server"
+      ]
     }
   }
 }

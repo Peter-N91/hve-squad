@@ -33,12 +33,15 @@ Three squad instruction files define the data and rules this agent depends on. T
 * `.github/instructions/squad/squad-state.instructions.md` — the state layout, single-writer ownership rule, and tool-to-mechanism mapping.
 * `.github/instructions/squad/squad-council.instructions.md` — the pre-implementation council protocol (parallel dispatch, most-restrictive-wins synthesis, Council Verdict schema, implementation gate).
 * `.github/instructions/squad/squad-autonomous.instructions.md` — the opt-in `auto-validated` tier and the bounded re-validation loop (cap, divergence detection, mandatory escalation triggers, cost ceiling, history entries).
+* `.github/instructions/squad/squad-autopilot.instructions.md` — the opt-in `mode=autopilot` full pipeline (research→plan→implement→review) with Human Gates only on impactful actions and final-outcome validation.
+* `.github/instructions/squad/squad-notifications.instructions.md` — the user-contact capture at squad build time and the delivery-agnostic notification (ping) contract for each mode.
 
 ## Inputs
 
 * The user's request for this turn.
 * (Optional) A profile hint (`profile=default|full|security|design|architecture|azure`) that selects which squad to seed during Init Mode.
 * (Optional) A model-tier hint (`fast` or `default`) the user supplies to override cost-first defaults.
+* (Optional) A mode hint (`mode=autonomous` for the bounded validator loop, or `mode=autopilot` for the full research→plan→implement→review pipeline). When omitted, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing autonomy tier.
 * (Optional) A member-owner hint (`owner=<Member Name>`) that picks a specific named member from `team.md` when two rows share the same `Role`.
 * (Optional) An explicit role or roster override when the user names the agent to dispatch.
 
@@ -80,10 +83,11 @@ The available profiles and the cast they map to are defined in `.github/instruct
    2. The coordinator assigns deterministic aliases from the roster's wordlist, skipping any name already in use.
    3. A mix: the user names selected roles and the coordinator fills the rest from the wordlist.
    4. Skip naming so every `Member Name` stays empty and the single-row-per-role behavior holds.
+5. **Capture an approval channel.** After naming, first ask whether the user wants **remote** notifications at all, per `.github/instructions/squad/squad-notifications.instructions.md`. The default is `in-chat` (no remote ping) — explain that a local, at-the-PC run (such as a first run or a test) should keep in-chat and approve in the session, while remote notification is for unattended or multi-hour VM runs. Only if the user opts in, offer `github-issue` (approve remotely from a phone) or `webhook` (outbound team ping only); for `github-issue` capture the GitHub handle to assign/mention and the `owner/repo` (default: current repo), and for `webhook` confirm a tool/MCP or `SQUAD_WEBHOOK_URL` is configured without asking the user to paste the secret. Offer an optional email as an extra courtesy notifier (never the approval path). The whole step is skippable — declining keeps `in-chat`. Wait for the user before handing the choices to the Scribe.
 
 ### Phase 2: Create
 
-1. Once the user confirms a profile or a customized roster, hand the chosen member list to the Squad Scribe to stamp out `team.md` (the selected profile's members) and `routing.md` (the default routing rules filtered to the seeded roster). Also seed `decisions.md`, `state.json`, and the `history/` directory.
+1. Once the user confirms a profile or a customized roster, hand the chosen member list to the Squad Scribe to stamp out `team.md` (the selected profile's members) and `routing.md` (the default routing rules filtered to the seeded roster). Also seed `decisions.md`, `state.json` (including the `notify` object from the captured contact), `notifications.md`, and the `history/` directory.
 2. Confirm the squad was created, name the seeded profile and roles, and tell the user they can re-cast later by editing `team.md` or asking to switch profiles.
 3. Proceed to classify and dispatch the original request against the freshly seeded roster.
 
@@ -122,6 +126,17 @@ Hand the turn's decision and history payload to the Squad Scribe via `runSubagen
 ### Step 6: Synthesize and Escalate
 
 Synthesize the collected findings into a concise answer for the user. Escalate to the user, rather than acting, when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. On escalation, state the ambiguity, list the candidate roles, and ask the user to choose before any role acts.
+
+## Autopilot Mode
+
+When the user passes `mode=autopilot` to `/squad`, the coordinator runs the full delivery pipeline defined in `.github/instructions/squad/squad-autopilot.instructions.md` instead of the normal single-pattern classification. The pipeline sequences the squad's roles end-to-end — research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation — advancing stage-to-stage without a human turn except where a Human Gate fires.
+
+The coordinator stops the pipeline and hands control to the human at exactly two gate classes, then fires a notification per `.github/instructions/squad/squad-notifications.instructions.md`:
+
+* **Impactful-Action Gate** — before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, or any side effect the user marked irreversible. Autopilot completes all non-impactful work and stops precisely at the impactful step, presenting what is about to happen.
+* **Risk Gate** — on any `Stop` verdict, any `Risk: High` from `security`/`cost-manager`/`rai`, any `confirm`-tier cost-impacting move, any compliance violation, validator divergence, or a cost-ceiling breach.
+
+Autopilot never auto-releases: after review it compiles the outcome, fires a `final-outcome` notification to the registered contact, and waits for human validation before any release-tier action. The coordinator hands every stage transition and gate to the Squad Scribe, which records the autopilot-run summary and updates `state.json`. The coordinator never authors squad state directly.
 
 ## Autonomous Loop
 
