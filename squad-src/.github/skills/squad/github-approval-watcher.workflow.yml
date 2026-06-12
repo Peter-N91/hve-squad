@@ -1,0 +1,147 @@
+# hve-squad GitHub approval-watcher workflow (reference template)
+#
+# Purpose
+#   Closes the inbound half of the squad's `github-issue` approval channel for
+#   unattended / VM runs. When you reply to a squad approval issue from your
+#   phone (`/approve`, `/approve-all`, `/changes: <note>`, `/stop`), this
+#   workflow records the decision so the run can resume. See
+#   `.github/instructions/squad/squad-notifications.instructions.md`.
+#
+# Scope
+#   This file is a REFERENCE TEMPLATE shipped under the squad skill folder. It
+#   is documentation only and never runs from here. To activate it, copy it to
+#   `.github/workflows/squad-approval-watcher.yml` in the repo that hosts your
+#   approval issues, review it, and commit it deliberately.
+#
+# What it does
+#   1. Triggers on comments and label changes on issues labeled `squad-approval`.
+#   2. Verifies the actor is authorized (the run's registered approver or a repo
+#      collaborator with write access). Unauthorized actors are ignored.
+#   3. Parses ONLY the recognized keyword/label as the control signal; free-form
+#      prose is never treated as a command (prompt-injection guard).
+#   4. Records the decision back on the issue and as a workflow output your
+#      squad host (poll loop or a follow-on job) consumes to resume the run.
+#
+# What it intentionally does NOT do
+#   It does not itself perform deploys, pushes, merges, or any impactful action.
+#   It only relays an authorized human decision. The squad still gates every
+#   impactful action; this workflow just carries the approval inbound.
+#
+# Required permissions / secrets
+#   Uses the built-in GITHUB_TOKEN with `issues: write`. No extra secret is
+#   needed for same-repo approval. Branch protections and environment approvals
+#   on your side still apply to any downstream deploy job you wire up.
+
+name: Squad Approval Watcher
+
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  relay-approval:
+    # Only act on squad approval issues.
+    if: contains(join(github.event.issue.labels.*.name, ','), 'squad-approval')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve and authorize the decision
+        id: decide
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const evt = context.eventName;
+            const issue = context.payload.issue;
+            const actor = context.actor;
+
+            // 1) Authorization: registered approver or a write/admin collaborator.
+            // The registered approver handle is read from the issue body marker
+            // `Approver: @handle` that the squad writes into the approval issue.
+            const body = issue.body || '';
+            const approverMatch = body.match(/Approver:\s*@([A-Za-z0-9-]+)/);
+            const registered = approverMatch ? approverMatch[1].toLowerCase() : '';
+
+            let authorized = registered && actor.toLowerCase() === registered;
+            if (!authorized) {
+              try {
+                const perm = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: actor,
+                });
+                authorized = ['write', 'admin', 'maintain'].includes(perm.data.permission);
+              } catch (e) {
+                authorized = false;
+              }
+            }
+
+            if (!authorized) {
+              core.info(`Ignoring signal from unauthorized actor: ${actor}`);
+              core.setOutput('decision', 'ignored-unauthorized');
+              return;
+            }
+
+            // 2) Parse ONLY the recognized keyword/label. Prose is never a command.
+            let decision = '';
+            let note = '';
+            if (evt === 'issue_comment') {
+              const c = (context.payload.comment.body || '').trim();
+              if (/^\/approve-all\b/.test(c)) decision = 'approve-all';
+              else if (/^\/approve\b/.test(c)) decision = 'approve';
+              else if (/^\/stop\b/.test(c)) decision = 'stop';
+              else if (/^\/changes:/.test(c)) {
+                decision = 'changes-requested';
+                note = c.replace(/^\/changes:\s*/, '').slice(0, 500);
+              }
+            } else if (evt === 'issues') {
+              const label = (context.payload.label && context.payload.label.name) || '';
+              const map = {
+                'squad/approved': 'approve',
+                'squad/approve-all': 'approve-all',
+                'squad/stop': 'stop',
+                'squad/changes': 'changes-requested',
+              };
+              decision = map[label] || '';
+            }
+
+            if (!decision) {
+              core.info('No recognized approval signal in this event; nothing to relay.');
+              core.setOutput('decision', 'none');
+              return;
+            }
+
+            // 3) Record the decision back on the issue for the squad host to consume.
+            const stamp = new Date().toISOString();
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: [
+                '<!-- squad-approval-relay -->',
+                `Decision relayed: \`${decision}\` by @${actor} at ${stamp}.`,
+                note ? `Note: ${note}` : '',
+                'The squad run will pick this up at its pending gate.',
+              ].filter(Boolean).join('\n'),
+            });
+
+            core.setOutput('decision', decision);
+            core.setOutput('note', note);
+            core.setOutput('issue', String(issue.number));
+            core.setOutput('actor', actor);
+
+      # Hand off to your squad host here. Two common patterns:
+      #   - A poll loop on the VM reads the relayed comment and resumes the run.
+      #   - Add a follow-on step/job that re-invokes the squad with the decision.
+      # Keep any impactful downstream job behind a GitHub Environment approval
+      # so the platform enforces the gate independently of the squad.
+      - name: Decision summary
+        if: steps.decide.outputs.decision != '' && steps.decide.outputs.decision != 'none'
+        run: |
+          echo "Relayed decision: ${{ steps.decide.outputs.decision }}"
+          echo "On issue:        #${{ steps.decide.outputs.issue }}"
+          echo "By actor:        ${{ steps.decide.outputs.actor }}"

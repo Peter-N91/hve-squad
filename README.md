@@ -155,17 +155,62 @@ Optional inputs:
   proposes a recommended profile before creating anything.
 - `tier=fast|default` — a per-turn model-tier hint that overrides the coordinator's
   cost-first defaults.
+- `mode=autonomous|autopilot` — the autonomy mode for this turn (see **Autonomy modes**
+  below). Omit it to run interactively, approving each step.
 
 ```text
 /squad request="threat-model the auth service" profile=security
 /squad request="summarize the data layer" tier=fast
+/squad request="build the booking service end to end" mode=autopilot
 ```
 
+**Autonomy modes** (how much the squad does before it asks you):
+
+| Mode                  | How to run it       | Who approves what                                                                                          |
+|-----------------------|---------------------|------------------------------------------------------------------------------------------------------------|
+| Interactive (default) | no `mode` flag      | You approve **each step** (research, plan, implement, review). A ping fires at every step gate.            |
+| `mode=autonomous`     | `mode=autonomous`   | A narrow validator loop: the council re-validates one implementer output (max 2 cycles), then returns.     |
+| `mode=autopilot`      | `mode=autopilot`    | The squad runs research → plan → implement → review on its own and asks you **only** for impactful actions (deploy, `git push`, merge, schema/data changes) and to validate the **final outcome**. |
+
+Autopilot is the "tell it once, let it run" mode: it sequences the whole pipeline
+autonomously but always stops for a human before anything irreversible and before release.
+The two impactful/final stop-points fire a notification through the **approval channel** you
+choose at build time (interactive mode pings you at every step instead).
+
+**Approving remotely (unattended / VM runs).** If you run the squad on a VM for a long job,
+pick the `github-issue` approval channel at build time. At each gate the squad opens a
+GitHub issue, assigns and @mentions you (so you get a GitHub mobile push), and waits. You
+approve from your phone with a comment — `/approve`, `/approve-all`, `/changes: <note>`, or
+`/stop` — or a `squad/*` label, without touching the VM. Only your registered handle (or a
+repo collaborator) can approve, and only those keywords act. The other channels are
+`webhook` (an outbound Teams/Slack/Discord ping only) and `in-chat` (the default, which
+needs you at the PC). No channel requires the package to ship an email or chat transport —
+when a channel's tooling is absent it degrades to an in-chat approval, and the squad never
+proceeds on a timeout.
+
+**Remote approval setup (one-time, only for `github-issue`).** Local and in-chat runs need
+nothing extra. To approve remotely from a VM run, set up the `github-issue` channel once:
+
+1. **Authenticate GitHub on the run host.** Either run `gh auth login` (the `gh` CLI is
+   sufficient on a headless VM) or configure the official `github` MCP server. The package
+   ships a reference entry for it in `.github/skills/squad/mcp.template.json` that you can
+   merge into your `.vscode/mcp.json`; the GitHub MCP is preferred when present, and the
+   squad falls back to `gh`, then to in-chat. The token needs `repo` + `issues` scope.
+2. **Install the approval watcher.** Copy the reference workflow
+   `.github/skills/squad/github-approval-watcher.workflow.yml` to
+   `.github/workflows/squad-approval-watcher.yml` in the repo that hosts your approval
+   issues, then commit it. It relays your `/approve`, `/approve-all`, `/changes:`, or
+   `/stop` reply back so the run resumes — and only an authorized handle's recognized
+   keyword acts (free-form comment text is never executed as a command).
+3. **Pick `github-issue` at build time** and give the coordinator the GitHub handle to
+   @mention and the `owner/repo` for approval issues (defaults to the current repo).
+
 **First run (Init Mode).** When a project has no `.copilot-tracking/squad/team.md`, the
-coordinator proposes a squad profile, waits for your confirmation, then seeds
-`team.md`, `routing.md`, `decisions.md`, `state.json`, and a `history/` directory. It
-never writes files before you confirm. After that, each `/squad` call routes against the
-seeded roster.
+coordinator proposes a squad profile, waits for your confirmation, asks for an optional
+approval channel (`github-issue` for remote/phone approval, `webhook`, or `in-chat`), then
+seeds `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, and a
+`history/` directory. It never writes files before you confirm. After that, each `/squad`
+call routes against the seeded roster.
 
 **Profiles** (the cast each one seeds):
 
@@ -182,6 +227,9 @@ Requirements for running the squad:
 - A `runSubagent` or `task` tool must be enabled so the coordinator can dispatch the
   cast.
 - The memory tool should be available for durable per-agent notes under `/memories/repo/`.
+- For the `github-issue` approval channel only: an authenticated `gh` CLI or `github` MCP
+  on the run host, and the approval-watcher workflow installed (see *Remote approval
+  setup* above). Interactive and in-chat runs need neither.
 
 You can re-cast the squad later by editing `.copilot-tracking/squad/team.md` or asking the
 coordinator to switch profiles.
