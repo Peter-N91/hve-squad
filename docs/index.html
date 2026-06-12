@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hve-squad — APM package for HVE Core + Squad</title>
+  <meta name="description" content="An installable APM package that bundles HVE Core agents, prompts, instructions, and skills with a Squad Coordinator for Copilot." />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html" class="active">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">APM Package · Copilot</div>
+      <h1>HVE Core agents and a Squad Coordinator, in one install.</h1>
+      <p class="lead">
+        hve-squad assembles HVE Core agents, prompts, instructions, and skills into a single
+        installable bundle, and ships a Squad Coordinator that routes your request to a cast of
+        agents in parallel. Install once, then run <code>/squad</code>.
+      </p>
+      <a class="btn btn-primary" href="getting-started.html">Get started</a>
+      <a class="btn btn-ghost" href="usage.html">Run the squad</a>
+      <a class="btn btn-ghost" href="https://github.com/Peter-N91/hve-squad">View on GitHub</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="section">
+      <div class="container">
+        <p class="section-label">Start here</p>
+        <div class="grid">
+          <a class="card" href="getting-started.html">
+            <div class="icon">🚀</div>
+            <h3>Getting Started</h3>
+            <p>Prerequisites, installing the package with the correct target, and your first run.</p>
+            <span class="tag">Install</span>
+          </a>
+          <a class="card" href="usage.html">
+            <div class="icon">🤖</div>
+            <h3>Run the Squad</h3>
+            <p>Profiles, autonomy modes, remote approval, and how the coordinator routes work.</p>
+            <span class="tag">Consumer</span>
+          </a>
+          <a class="card" href="maintaining.html">
+            <div class="icon">🔧</div>
+            <h3>Maintaining</h3>
+            <p>Dependency generation, the author workflow, customization, and the release process.</p>
+            <span class="tag">Author</span>
+          </a>
+          <a class="card" href="troubleshooting.html">
+            <div class="icon">🩺</div>
+            <h3>Troubleshooting</h3>
+            <p>Known install errors with copy-paste fixes, versioning, and repository notes.</p>
+            <span class="tag">Reference</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <p class="section-label">What this project does</p>
+        <p>
+          This repository provides a curated APM package that references content from
+          <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a> under
+          <code>.github/agents</code>, <code>.github/instructions</code>,
+          <code>.github/prompts</code>, and <code>.github/skills</code>. Instead of hand-maintaining
+          hundreds of dependency paths, an automation script regenerates the dependency list in
+          <code>apm.yml</code>.
+        </p>
+        <div class="grid">
+          <div class="card">
+            <div class="icon">📦</div>
+            <h3>One bundle</h3>
+            <p>Auto-discovers supported markdown artifacts from selected HVE Core folders and ships them together.</p>
+          </div>
+          <div class="card">
+            <div class="icon">♻️</div>
+            <h3>Reproducible</h3>
+            <p>Dependencies are resolved into <code>apm.lock.yaml</code> so installs are repeatable.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🧩</div>
+            <h3>Squad included</h3>
+            <p>A locally authored Squad Coordinator plus supporting agents, instructions, a prompt, and a skill.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <p class="section-label">Quick install</p>
+        <pre><code># In the project you want the squad in:
+apm install "Peter-N91/hve-squad#v0.4.1" --target copilot</code></pre>
+        <p>
+          Then invoke the coordinator from Copilot Chat with the <code>/squad</code> prompt. See
+          <a href="getting-started.html">Getting Started</a> for the full flow.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

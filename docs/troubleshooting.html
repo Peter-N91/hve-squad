@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Troubleshooting — hve-squad</title>
+  <meta name="description" content="Known install errors with copy-paste fixes, versioning, and repository notes." />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html" class="active">Troubleshooting</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Reference</div>
+      <h1>Troubleshooting</h1>
+      <p class="lead">Known issues with copy-paste fixes, plus versioning and repository notes.</p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>Common issues</h2>
+
+      <h3><code>[x] No harness detected</code> after <code>apm install</code> (APM 0.18.0+)</h3>
+      <p>
+        APM downloaded the sources into <code>apm_modules/</code> but skipped the deploy step because
+        no harness marker was found in your project (no <code>.github/agents/</code>,
+        <code>.github/prompts/</code>, <code>.claude/</code>, <code>.cursor/</code>, etc.). Re-run with
+        <code>--target copilot</code>:
+      </p>
+      <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+      <p>
+        Or add a <code>targets:</code> block to your project's <code>apm.yml</code> so future installs
+        work without the flag (see <a href="getting-started.html">Getting Started → Option B</a>).
+      </p>
+
+      <h3><code>apm_modules/</code> populated but <code>.github/</code> is empty and no error visible</h3>
+      <p>
+        Same root cause as above — scroll up in your terminal for the <code>No harness detected</code>
+        message and apply the <code>--target copilot</code> fix.
+      </p>
+
+      <h3>No scripts found</h3>
+      <p>Check the <code>scripts</code> block in <code>apm.yml</code> and run <code>apm list</code>.</p>
+
+      <h3>Access failures to HVE Core</h3>
+      <p>Confirm git authentication and repository visibility.</p>
+
+      <h3>Dependencies look stale</h3>
+      <p>Run <code>apm run sync-deps</code>, then <code>apm lock</code>.</p>
+
+      <h3><code>.github</code> still appears in git status after ignoring</h3>
+      <p>
+        Run <code>git rm -r --cached .github</code> once, then
+        <code>git add .github/workflows</code> (if you track workflows here), then commit.
+      </p>
+
+      <h2>Versioning</h2>
+      <ul>
+        <li>Releases follow <a href="https://semver.org/">Semantic Versioning</a>.</li>
+        <li>See <a href="https://github.com/Peter-N91/hve-squad/blob/main/CHANGELOG.md">CHANGELOG.md</a> for what is included in each version.</li>
+        <li>Consumers can pin to a tagged version, for example <code>apm install "Peter-N91/hve-squad#vX.Y.z"</code>.</li>
+      </ul>
+
+      <h2>Notes</h2>
+      <ul>
+        <li><code>.gitignore</code> ignores <code>apm_modules/</code>, generated <code>.github</code> assets, and keeps <code>.github/workflows/</code> tracked.</li>
+        <li>The package remains reproducible through <code>apm.lock.yaml</code>.</li>
+      </ul>
+
+      <div class="pager">
+        <a class="prev" href="maintaining.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Maintaining</div>
+        </a>
+        <a class="next" href="index.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Home</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

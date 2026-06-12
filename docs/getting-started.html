@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Getting Started — hve-squad</title>
+  <meta name="description" content="Prerequisites, installing the hve-squad APM package, and your first squad run." />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html" class="active">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Consumer Guide</div>
+      <h1>Getting Started</h1>
+      <p class="lead">
+        Everything a consumer needs to install the package, deploy it to Copilot, and run the
+        squad for the first time.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>Prerequisites</h2>
+      <ul>
+        <li>PowerShell 7+</li>
+        <li>Git</li>
+        <li>APM CLI installed and available in <code>PATH</code></li>
+        <li>Access to the <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a> repository</li>
+      </ul>
+
+      <h2>1. Install the package</h2>
+      <p>Run <code>apm install</code> from the root of the project you want the squad in.</p>
+
+      <div class="callout warn">
+        <p>
+          <strong>Heads-up (APM 0.18.0+).</strong> APM no longer silently defaults to the Copilot
+          harness. In a project with no existing <code>.github/agents/</code>,
+          <code>.github/prompts/</code>, <code>.github/instructions/</code>, <code>.claude/</code>,
+          <code>.cursor/</code>, etc., <code>apm install</code> fails with
+          <code>[x] No harness detected</code> <em>after</em> downloading sources into
+          <code>apm_modules/</code> but <em>before</em> deploying anything into
+          <code>.github/</code>. Tell APM which harness to deploy to using one of the options below.
+        </p>
+      </div>
+
+      <h3>Option A — pass <code>--target copilot</code> on every install (one-off)</h3>
+      <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot  # pinned (recommended)
+# or
+apm install Peter-N91/hve-squad --target copilot           # latest on default branch</code></pre>
+
+      <h3>Option B — declare the target once in your project's <code>apm.yml</code> (persistent, recommended)</h3>
+      <p>Create an <code>apm.yml</code> at the root of your consumer project:</p>
+      <pre><code>name: my-project
+version: 0.1.0
+targets:
+  - copilot</code></pre>
+      <p>
+        Then <code>apm install "Peter-N91/hve-squad#vX.Y.z"</code> (no flag needed) deploys to
+        Copilot from now on. This also makes future <code>apm install</code> / <code>apm update</code>
+        runs reproducible.
+      </p>
+      <p>
+        Either way, this deploys the bundled HVE Core agents, prompts, instructions, and skills —
+        plus the squad — into your project's <code>.github/</code> tree. Consumers do <strong>not</strong>
+        need <code>sync-deps</code> or <code>install-sync</code>; those are maintainer-only scripts.
+      </p>
+
+      <div class="callout">
+        <p>
+          <strong>If your first install already failed with <code>No harness detected</code>:</strong>
+          the sources are already in <code>apm_modules/</code>. Re-run with <code>--target copilot</code>
+          (Option A) or add the <code>targets:</code> block to <code>apm.yml</code> (Option B) and
+          re-run <code>apm install</code>; APM re-runs the deploy step and populates
+          <code>.github/</code>.
+        </p>
+      </div>
+
+      <h2>2. Run the squad</h2>
+      <p>
+        The squad is a user-invocable Squad Coordinator that routes your request to a cast of HVE
+        Core agents and persists its state under <code>.copilot-tracking/squad/</code>. Invoke it
+        with the <code>/squad</code> prompt in Copilot Chat:
+      </p>
+      <pre><code>/squad request="add input validation to the login form"</code></pre>
+      <p>
+        On a fresh project the coordinator inspects your repo and proposes a profile before creating
+        anything. See <a href="usage.html">Usage</a> for profiles, autonomy modes, and remote
+        approval.
+      </p>
+
+      <h2>3. Rebuild (re-deploy) after updating</h2>
+      <p>
+        To pull a newer version of the package or refresh your deployed assets, re-run install with
+        the version tag you want (include <code>--target copilot</code> if you have not declared
+        <code>targets:</code> in your project's <code>apm.yml</code>):
+      </p>
+      <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+      <p>
+        <code>apm install</code> re-flattens the package into <code>.github/</code>. Your squad
+        <strong>state</strong> under <code>.copilot-tracking/squad/</code> is created per-project and
+        is never packaged, so re-installing does not overwrite your roster, routing, decisions, or
+        history.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="index.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Home</div>
+        </a>
+        <a class="next" href="usage.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Usage</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

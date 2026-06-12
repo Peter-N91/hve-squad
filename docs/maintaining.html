@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maintaining — hve-squad</title>
+  <meta name="description" content="Maintainer workflow, dependency generation, squad source layout, customization, and the release process." />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="maintaining.html" class="active">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Author Guide</div>
+      <h1>Maintaining the Package</h1>
+      <p class="lead">
+        The author workflow for regenerating dependencies, the squad source layout, customization
+        knobs, and the tag-based release process.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>Repository structure</h2>
+      <ul>
+        <li><code>apm.yml</code>: package metadata, dependency list, and scripts</li>
+        <li><code>apm.lock.yaml</code>: resolved dependency lock file</li>
+        <li><code>scripts/Update-ApmDependencies.ps1</code>: dependency generator</li>
+        <li><code>squad-src/.github/</code>: locally authored squad source (agents, prompts, instructions, skills)</li>
+        <li><code>apm_modules/</code>: installed dependencies (ignored by git)</li>
+        <li><code>.github/</code>: generated/deployed local assets (ignored by git, except <code>.github/workflows/</code> if tracked)</li>
+        <li><code>docs/</code>: this documentation site (served by GitHub Pages)</li>
+      </ul>
+
+      <h2>Scripts</h2>
+      <p>Defined in <code>apm.yml</code>:</p>
+      <ul>
+        <li><code>sync-deps</code> — regenerates <code>dependencies.apm</code> from HVE Core content.</li>
+        <li><code>install-sync</code> — regenerates <code>dependencies.apm</code> and runs <code>apm install</code>.</li>
+      </ul>
+
+      <h2>Maintainer workflow</h2>
+      <ol>
+        <li>
+          Regenerate dependencies:
+          <pre><code>apm run sync-deps</code></pre>
+        </li>
+        <li>
+          Install dependencies locally:
+          <pre><code>apm install
+# or
+apm run install-sync</code></pre>
+        </li>
+        <li>
+          Refresh lockfile:
+          <pre><code>apm lock</code></pre>
+        </li>
+        <li>
+          [OPTIONAL] Build package artifact (only needed to build a plugin):
+          <pre><code>apm pack</code></pre>
+        </li>
+        <li>
+          [OPTIONAL] Publish (if applicable):
+          <pre><code>apm publish</code></pre>
+        </li>
+      </ol>
+      <p>Recommended sequence before release:</p>
+      <ol>
+        <li><code>apm run sync-deps</code></li>
+        <li><code>apm lock</code></li>
+        <li><code>apm pack</code> (optional)</li>
+      </ol>
+
+      <h2>How dependency generation works</h2>
+      <p>The generator script:</p>
+      <ul>
+        <li>Connects to <code>microsoft/hve-core</code> at a target ref (default: <code>main</code>)</li>
+        <li>Enumerates files under <code>.github/agents</code>, <code>.github/instructions</code>, <code>.github/prompts</code>, and <code>.github/skills</code></li>
+        <li>Filters for markdown artifacts</li>
+        <li>Rewrites only <code>dependencies.apm</code> in <code>apm.yml</code></li>
+      </ul>
+      <p>This keeps package metadata stable while updating the dependency list safely.</p>
+
+      <h2>Squad source</h2>
+      <p>
+        In addition to the <code>microsoft/hve-core</code> dependencies, this package ships a locally
+        authored "squad" — a Squad Coordinator plus supporting agents, instructions, a prompt, and a
+        skill. The squad source lives under:
+      </p>
+      <ul>
+        <li><code>squad-src/.github/agents/squad/</code></li>
+        <li><code>squad-src/.github/instructions/squad/</code></li>
+        <li><code>squad-src/.github/prompts/squad/</code></li>
+        <li><code>squad-src/.github/skills/squad/</code></li>
+      </ul>
+
+      <h3>Why the source is separate from the deployed <code>.github/</code> tree</h3>
+      <p>
+        <code>apm install</code> deploys agents and prompts <em>flattened</em> into the consumer's
+        <code>.github/</code> tree. If the squad source lived directly under the top-level
+        <code>.github/agents/</code> (or <code>.github/prompts/</code>), a later <code>apm install</code>
+        would clobber it. Keeping the authored source under <code>squad-src/.github/...</code> places it
+        outside the deploy flatten zone while preserving the
+        <code>.github/{agents,prompts,instructions,skills}/</code> prefix the deploy mapping expects.
+        Runtime squad <em>state</em> is created per-project under <code>.copilot-tracking/squad/</code>
+        and is never packaged.
+      </p>
+
+      <h3>How squad entries are generated</h3>
+      <p>
+        <code>Update-ApmDependencies.ps1</code> enumerates the squad source from the <em>local</em>
+        filesystem (it is not cloned, because the source lives in this working tree and may not be
+        pushed yet). Squad entries are emitted as remote virtual paths of the form
+        <code>&lt;SquadRepoSlug&gt;/&lt;SquadSourceRoot&gt;/.github/...</code>, for example
+        <code>Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md</code>.
+        They are appended after the hve-core entries in <code>dependencies.apm</code>.
+      </p>
+      <p>The sync command accepts two squad-specific parameters:</p>
+      <pre><code>pwsh -File scripts/Update-ApmDependencies.ps1 `
+  -SquadSourceRoot squad-src `
+  -SquadRepoSlug Peter-N91/hve-squad</code></pre>
+      <ul>
+        <li><code>SquadSourceRoot</code>: local path to the squad source tree (default: <code>squad-src</code>). If the path does not exist, squad enumeration is skipped without error.</li>
+        <li><code>SquadRepoSlug</code>: <code>owner/repo</code> that hosts the squad source (default: <code>Peter-N91/hve-squad</code>).</li>
+      </ul>
+      <p>Use <code>-DryRun</code> to preview both the hve-core and squad entries without writing <code>apm.yml</code>.</p>
+
+      <div class="callout">
+        <p>
+          <code>apm lock</code> and <code>apm install</code> can only resolve the squad virtual paths
+          once the <code>squad-src/</code> tree has been pushed to the <code>SquadRepoSlug</code> remote.
+          Until then, <code>apm.yml</code> lists the squad entries but <code>apm.lock.yaml</code> will not
+          record them.
+        </p>
+      </div>
+
+      <h2>Customization</h2>
+      <p>You can tune generation behavior in <code>scripts/Update-ApmDependencies.ps1</code>:</p>
+      <ul>
+        <li><code>RepoSlug</code>: source repository</li>
+        <li><code>Ref</code>: branch/tag/commit to scan</li>
+        <li><code>IncludeRoots</code>: folders included in discovery</li>
+        <li><code>IncludeRegex</code>: file filter pattern</li>
+        <li><code>SquadSourceRoot</code>: local squad source tree path</li>
+        <li><code>SquadRepoSlug</code>: <code>owner/repo</code> hosting the squad source</li>
+      </ul>
+
+      <h2>Release process</h2>
+      <p>
+        Releases use a tag-based flow on top of the default branch (<code>main</code>). The tag is the
+        release artifact consumers install with <code>apm install "Peter-N91/hve-squad#vX.Y.Z"</code>.
+      </p>
+      <ol>
+        <li>
+          Cut a release branch from <code>main</code>:
+          <pre><code>git checkout main
+git pull
+git checkout -b release/vX.Y.Z</code></pre>
+        </li>
+        <li>
+          Update version metadata:
+          <ul>
+            <li>Bump <code>version:</code> in <code>apm.yml</code> to <code>X.Y.Z</code>.</li>
+            <li>Add a <code>## [X.Y.Z]</code> section to <code>CHANGELOG.md</code> describing the changes.</li>
+            <li>Refresh the lockfile if dependencies changed: <code>apm run sync-deps</code> then <code>apm lock</code>.</li>
+          </ul>
+        </li>
+        <li>Open a PR into <code>main</code> titled <code>release: vX.Y.Z</code> (the PR template fills in the checklist).</li>
+        <li>
+          After the PR is merged, tag the merge commit on <code>main</code> and push the tag:
+          <pre><code>git checkout main
+git pull
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+git push origin vX.Y.Z</code></pre>
+        </li>
+        <li>(Optional) Publish a GitHub Release for the tag.</li>
+      </ol>
+      <p>
+        Avoid a long-lived <code>release</code> branch. Only create <code>release/vX.Y.z</code> from an
+        existing tag when you need to patch an older version after newer work has landed on
+        <code>main</code>.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="usage.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Usage</div>
+        </a>
+        <a class="next" href="troubleshooting.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Troubleshooting</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

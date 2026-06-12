@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usage — hve-squad</title>
+  <meta name="description" content="Run the squad: inputs, profiles, autonomy modes, remote approval, and first-run Init Mode." />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html" class="active">Usage</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Consumer Guide</div>
+      <h1>Running the Squad</h1>
+      <p class="lead">
+        The Squad Coordinator routes your request to a cast of HVE Core agents, runs eligible roles
+        in parallel, and persists roster, routing, decisions, and history under
+        <code>.copilot-tracking/squad/</code>.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>Invoke the coordinator</h2>
+      <pre><code>/squad request="add input validation to the login form"</code></pre>
+
+      <h3>Optional inputs</h3>
+      <ul>
+        <li>
+          <code>profile=default|full|security|design|architecture</code> — seeds which cast is
+          created on first run. If omitted on a fresh project, the coordinator inspects your repo and
+          proposes a recommended profile before creating anything.
+        </li>
+        <li>
+          <code>tier=fast|default</code> — a per-turn model-tier hint that overrides the
+          coordinator's cost-first defaults.
+        </li>
+        <li>
+          <code>mode=autonomous|autopilot</code> — the autonomy mode for this turn. Omit it to run
+          interactively, approving each step.
+        </li>
+      </ul>
+      <pre><code>/squad request="threat-model the auth service" profile=security
+/squad request="summarize the data layer" tier=fast
+/squad request="build the booking service end to end" mode=autopilot</code></pre>
+
+      <h2>Autonomy modes</h2>
+      <p>How much the squad does before it asks you:</p>
+      <table>
+        <thead>
+          <tr><th>Mode</th><th>How to run it</th><th>Who approves what</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Interactive (default)</td>
+            <td>no <code>mode</code> flag</td>
+            <td>You approve <strong>each step</strong> (research, plan, implement, review). A ping fires at every step gate.</td>
+          </tr>
+          <tr>
+            <td><code>mode=autonomous</code></td>
+            <td><code>mode=autonomous</code></td>
+            <td>A narrow validator loop: the council re-validates one implementer output (max 2 cycles), then returns.</td>
+          </tr>
+          <tr>
+            <td><code>mode=autopilot</code></td>
+            <td><code>mode=autopilot</code></td>
+            <td>The squad runs research → plan → implement → review on its own and asks you <strong>only</strong> for impactful actions (deploy, <code>git push</code>, merge, schema/data changes) and to validate the <strong>final outcome</strong>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Autopilot is the "tell it once, let it run" mode: it sequences the whole pipeline
+        autonomously but always stops for a human before anything irreversible and before release.
+        The two impactful/final stop-points fire a notification through the approval channel you
+        choose at build time (interactive mode pings you at every step instead).
+      </p>
+
+      <h2>Approving remotely (unattended / VM runs)</h2>
+      <p>
+        If you run the squad on a VM for a long job, pick the <code>github-issue</code> approval
+        channel at build time. At each gate the squad opens a GitHub issue, assigns and @mentions you
+        (so you get a GitHub mobile push), and waits. You approve from your phone with a comment —
+        <code>/approve</code>, <code>/approve-all</code>, <code>/changes: &lt;note&gt;</code>, or
+        <code>/stop</code> — or a <code>squad/*</code> label, without touching the VM. Only your
+        registered handle (or a repo collaborator) can approve, and only those keywords act.
+      </p>
+      <p>
+        The other channels are <code>webhook</code> (an outbound Teams/Slack/Discord ping only) and
+        <code>in-chat</code> (the default, which needs you at the PC). No channel requires the package
+        to ship an email or chat transport — when a channel's tooling is absent it degrades to an
+        in-chat approval, and the squad never proceeds on a timeout.
+      </p>
+
+      <h3>Remote approval setup (one-time, only for <code>github-issue</code>)</h3>
+      <p>Local and in-chat runs need nothing extra. To approve remotely from a VM run, set up the channel once:</p>
+      <ol>
+        <li>
+          <strong>Authenticate GitHub on the run host.</strong> Either run <code>gh auth login</code>
+          (the <code>gh</code> CLI is sufficient on a headless VM) or configure the official
+          <code>github</code> MCP server. The package ships a reference entry in
+          <code>.github/skills/squad/mcp.template.json</code> you can merge into your
+          <code>.vscode/mcp.json</code>; the GitHub MCP is preferred when present, and the squad falls
+          back to <code>gh</code>, then to in-chat. The token needs <code>repo</code> +
+          <code>issues</code> scope.
+        </li>
+        <li>
+          <strong>Install the approval watcher.</strong> Copy the reference workflow
+          <code>.github/skills/squad/github-approval-watcher.workflow.yml</code> to
+          <code>.github/workflows/squad-approval-watcher.yml</code> in the repo that hosts your
+          approval issues, then commit it. It relays your <code>/approve</code>,
+          <code>/approve-all</code>, <code>/changes:</code>, or <code>/stop</code> reply back so the
+          run resumes — and only an authorized handle's recognized keyword acts (free-form comment
+          text is never executed as a command).
+        </li>
+        <li>
+          <strong>Pick <code>github-issue</code> at build time</strong> and give the coordinator the
+          GitHub handle to @mention and the <code>owner/repo</code> for approval issues (defaults to
+          the current repo).
+        </li>
+      </ol>
+
+      <h2>First run (Init Mode)</h2>
+      <p>
+        When a project has no <code>.copilot-tracking/squad/team.md</code>, the coordinator proposes a
+        squad profile, waits for your confirmation, asks for an optional approval channel
+        (<code>github-issue</code> for remote/phone approval, <code>webhook</code>, or
+        <code>in-chat</code>), then seeds <code>team.md</code>, <code>routing.md</code>,
+        <code>decisions.md</code>, <code>notifications.md</code>, <code>state.json</code>, and a
+        <code>history/</code> directory. It never writes files before you confirm. After that, each
+        <code>/squad</code> call routes against the seeded roster.
+      </p>
+
+      <h2>Profiles</h2>
+      <p>The cast each profile seeds:</p>
+      <table>
+        <thead>
+          <tr><th>Profile</th><th>Members</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>default</code></td><td>lead, researcher, developer, tester, scribe</td><td>General-purpose work; recommended starting point</td></tr>
+          <tr><td><code>full</code></td><td>all 10 deployed roles</td><td>Complex, cross-cutting projects</td></tr>
+          <tr><td><code>security</code></td><td>security, rai, fact-checker, researcher, scribe</td><td>Security, threat-modeling, responsible-AI focus</td></tr>
+          <tr><td><code>design</code></td><td>designer, researcher, lead, tester, scribe</td><td>UX/UI and product-design focus</td></tr>
+          <tr><td><code>architecture</code></td><td>architect, researcher, lead, developer, scribe</td><td>System design and architecture focus</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Requirements for running the squad</h3>
+      <ul>
+        <li>A <code>runSubagent</code> or <code>task</code> tool must be enabled so the coordinator can dispatch the cast.</li>
+        <li>The memory tool should be available for durable per-agent notes under <code>/memories/repo/</code>.</li>
+        <li>For the <code>github-issue</code> approval channel only: an authenticated <code>gh</code> CLI or <code>github</code> MCP on the run host, and the approval-watcher workflow installed. Interactive and in-chat runs need neither.</li>
+      </ul>
+      <p>
+        You can re-cast the squad later by editing <code>.copilot-tracking/squad/team.md</code> or
+        asking the coordinator to switch profiles.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="getting-started.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Getting Started</div>
+        </a>
+        <a class="next" href="maintaining.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Maintaining</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
