@@ -1,5 +1,5 @@
 name: hve-squad
-version: 0.5.0
+version: 0.6.0
 description: APM package for hve-core and squad together
 author: Peter-N91
 # Which agent platforms to deploy to.
@@ -273,6 +273,7 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-cost-manager.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-deployer.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-iac-author.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-modernization-planner.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-scribe.agent.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autonomous.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autopilot.instructions.md

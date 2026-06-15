@@ -32,7 +32,7 @@ The site source is in [docs/](docs/) and is published to GitHub Pages by
 Install the package into the project you want the squad in, then invoke `/squad` in Copilot Chat:
 
 ```powershell
-apm install "Peter-N91/hve-squad#v0.5.0" --target copilot
+apm install "Peter-N91/hve-squad#v0.6.0" --target copilot
 ```
 
 ```text
