@@ -9,9 +9,13 @@ targets:
 - copilot
 dependencies:
   apm: 
+    - microsoft/hve-core/.github/agents/accessibility/accessibility-planner.agent.md
+    - microsoft/hve-core/.github/agents/accessibility/accessibility-reviewer.agent.md
+    - microsoft/hve-core/.github/agents/accessibility/subagents/accessibility-skill-assessor.agent.md
     - microsoft/hve-core/.github/agents/ado/ado-backlog-manager.agent.md
     - microsoft/hve-core/.github/agents/ado/ado-prd-to-wit.agent.md
     - microsoft/hve-core/.github/agents/agentic-workflows.agent.md
+    - microsoft/hve-core/.github/agents/coding-standards/code-review-accessibility.agent.md
     - microsoft/hve-core/.github/agents/coding-standards/code-review-full.agent.md
     - microsoft/hve-core/.github/agents/coding-standards/code-review-functional.agent.md
     - microsoft/hve-core/.github/agents/coding-standards/code-review-standards.agent.md
@@ -248,6 +252,7 @@ dependencies:
     - microsoft/hve-core/.github/skills/experimental/vscode-playwright
     - microsoft/hve-core/.github/skills/github/gh-code-scanning
     - microsoft/hve-core/.github/skills/gitlab/gitlab
+    - microsoft/hve-core/.github/skills/hve-core/vally-tests
     - microsoft/hve-core/.github/skills/installer/hve-core-installer
     - microsoft/hve-core/.github/skills/jira/jira
     - microsoft/hve-core/.github/skills/project-planning/adr-author
