@@ -118,6 +118,21 @@ targets:
         history.
       </p>
 
+      <h2>Optional: scaffold the Azure execution layer</h2>
+      <p>
+        If you seed the <code>azure</code> profile, the squad can scaffold an Azure build-and-deploy
+        toolchain into your repo — a dev container, <code>azure/login@v2</code> OIDC deploy workflows
+        for Bicep and Terraform, a one-time OIDC setup script, a governance policy baseline, and the
+        <code>infra/</code> folder convention. Ask the coordinator to scaffold it, then review and
+        commit the copied files. Deploys always run behind the Impactful-Action Gate, so nothing
+        reaches Azure without your approval.
+      </p>
+      <ul>
+        <li>An Azure subscription (Owner or User Access Administrator to run the one-time OIDC setup).</li>
+        <li>The Azure CLI (<code>az</code>) and GitHub CLI (<code>gh</code>) — both provided by the bundled dev container.</li>
+      </ul>
+      <p>See <a href="usage.html">Usage → Azure execution layer</a> for the full scaffolding flow.</p>
+
       <div class="pager">
         <a class="prev" href="index.html">
           <div class="dir">← Back</div>

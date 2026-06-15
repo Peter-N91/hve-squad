@@ -35,7 +35,7 @@ The council adds a fifth role when the request involves AI/ML behavior, model se
 
 Each role resolves to its concrete agent through the roster's *Resolving a Role to an Agent* rules in `.github/instructions/squad/squad-roster.instructions.md`. A council membership change for a specific turn is acceptable (for example, swapping a Primary for an Alternate per a Selection Cue), but the council membership is recorded in the Council Verdict so the verdict is auditable.
 
-When a council role is absent from the active roster (`team.md`), the coordinator escalates rather than dispatching a partial council. A council quorum is the full default membership; the optional `rai` slot is the only conditional role.
+When a council role is absent from the active roster (`team.md`), or its mapped agent is not installed or not available at dispatch time, the coordinator escalates rather than dispatching a partial council. A council quorum is the full default membership (`architect`, `security`, `cost-manager`, `product-owner`); the optional `rai` slot is the only conditional role. The coordinator never synthesizes a Council Verdict from its own reasoning to cover a missing role, and never substitutes a non-mapped agent for an absent council member — a verdict assembled without the full quorum's dispatched findings is invalid and must not gate implementation.
 
 ## Parallel Dispatch Contract
 

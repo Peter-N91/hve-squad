@@ -34,6 +34,8 @@ When the input is absent, the coordinator runs the normal interactive per-turn p
 
 Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches the roles that own it (resolved through `team.md`), waits for their findings, hands the outcome to the Scribe, and advances to the next stage without a human turn — except where a Human Gate (below) fires.
 
+**Precondition — the squad must be built first.** Before the Research stage runs, a confirmed squad must exist: `.copilot-tracking/squad/team.md` and `routing.md` are present. When they are missing, the coordinator runs Init Mode (propose → confirm → create) from `.github/agents/squad/squad-coordinator.agent.md` to completion — including the user's profile confirmation — and only then enters the pipeline. Autopilot never auto-seeds the roster or starts Research without a built squad; the opt-in sequences the work, it does not waive the build.
+
 1. **Research.** Dispatch the `researcher` role (and any parallel-eligible read-only roles the request matches) at `auto` tier. Gather findings; no human gate.
 2. **Plan.** Dispatch the `lead` role to produce the implementation plan. In autopilot the plan does not pause for per-step human confirmation; the coordinator advances once the plan is recorded through the Scribe.
 3. **Pre-implementation council.** When the work crosses two or more council-member domains (architecture, security, cost, product-fit, RAI), run the council per `.github/instructions/squad/squad-council.instructions.md` before any implementation dispatch. A `Stop` verdict fires a Human Gate. A `Go` or `Go-With-Conditions` verdict permits the implementation stage with the conditions attached as inputs.
@@ -42,6 +44,20 @@ Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches t
 6. **Final-outcome validation.** Autopilot never auto-releases. After review, the coordinator compiles the run outcome and fires a final-outcome notification to the registered user per `.github/instructions/squad/squad-notifications.instructions.md`, then waits for human validation before any release-tier action.
 
 The coordinator advances stage-to-stage by reading the prior stage's findings; it hands every stage transition to the Scribe, which records it in the autopilot-run history file and updates `state.json`.
+
+## Artifact Gates (Evidence Required)
+
+Each pipeline stage is gated on the prior stage's artifact existing on disk. The coordinator confirms the evidence before advancing; a stage with no artifact and no `history/<agent>.md` entry did not run, and the pipeline cannot skip it. This is what makes the methodology auditable rather than assumed.
+
+| Stage     | Mapped role(s)                                                                  | Must produce                              | Cannot start until                                     |
+|-----------|--------------------------------------------------------------------------------|-------------------------------------------|--------------------------------------------------------|
+| research  | `researcher`                                                                   | `.copilot-tracking/research/<date>/*.md`  | request classified                                     |
+| plan      | `lead`                                                                          | `.copilot-tracking/plans/*.md`            | a research artifact exists                             |
+| council   | `architect`, `security`, `cost-manager`, `product-owner` (+`rai` when relevant) | a `## Council Verdict` in `decisions.md`  | a plan artifact exists                                 |
+| implement | `developer`                                                                    | `.copilot-tracking/changes/*`             | a plan artifact and a non-`Stop` Council Verdict exist |
+| review    | `tester`                                                                       | a review record + `history/<agent>.md`    | implementation changes exist                           |
+
+When a required artifact is missing, the coordinator dispatches the owning agent to produce it — it never authors the artifact itself and never advances on assumed completion. When the owning agent is not installed, the coordinator stops and escalates per *Dispatch Discipline* in `.github/agents/squad/squad-coordinator.agent.md`.
 
 ## Human Gates
 

@@ -1,0 +1,66 @@
+# Governance policy baseline — REFERENCE TEMPLATE (not an active workflow here)
+#
+# Scope
+#   Documentation-only reference template shipped under the azure-scaffold skill. It never runs from
+#   the hve-squad package (it is not in this repo's .github/workflows/ and carries a .workflow.yml
+#   suffix). To activate it, copy to `.github/workflows/governance-baseline.yml` in your consumer repo,
+#   replace every <PLACEHOLDER>, review, and commit deliberately.
+#
+# What it does
+#   On a weekly schedule (and on demand) it captures the effective Azure Policy assignments for your
+#   subscription — including management-group inheritance — into agent-output/_baseline/ via the
+#   read-only scripts/Get-PolicyBaseline.ps1, then opens a pull request when the baseline drifts so the
+#   IaC planner consumes real governance constraints. It never mutates Azure Policy.
+#
+# Prerequisite
+#   Enable Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
+
+name: Governance Policy Baseline
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays 05:00 UTC. Adjust as needed.
+    - cron: "0 5 * * 1"
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: governance-baseline
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    name: Capture policy baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Capture effective policy assignments (read-only)
+        shell: pwsh
+        run: |
+          ./scripts/Get-PolicyBaseline.ps1 `
+            -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -OutputPath "agent-output/_baseline/policy-baseline.json"
+
+      - name: Open a pull request on drift
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(governance): refresh Azure Policy baseline"
+          title: "chore(governance): Azure Policy baseline drift"
+          body: |
+            The scheduled governance baseline detected a change in effective Azure Policy assignments.
+            Review the updated `agent-output/_baseline/policy-baseline.json` and merge to refresh the
+            constraints the IaC planner consumes. This PR is never auto-merged.
+          branch: governance/policy-baseline
+          add-paths: agent-output/_baseline/**

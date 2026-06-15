@@ -58,6 +58,16 @@ Only the Squad Coordinator initiates state changes, and only the Squad Scribe pe
 
 This single-writer rule keeps shared state consistent across parallel dispatch: concurrent roles cannot race on the same files because every mutation funnels through the scribe.
 
+## Proof of Dispatch
+
+A `history/<agent>.md` entry is the squad's proof that a role actually ran. Because only the Scribe writes history — and only when the coordinator dispatched the agent and handed back findings — the presence of a per-agent history entry is verifiable evidence that the stage happened; its absence is evidence that it did not.
+
+The coordinator and the pipeline gates treat history as the gate mechanism:
+
+* A stage (research, plan, council, implement, review) counts as complete only when both its domain artifact and a `history/<agent>.md` entry for the dispatched agent exist.
+* A missing history entry means the stage did not run, regardless of any narrative claim that it did. The coordinator may not advance past a stage whose history entry is absent — it dispatches the owning agent (or escalates) instead of synthesizing the stage itself.
+* This makes the methodology checkable after the fact: every completed run leaves a research file, a plan file, a Council Verdict, change records, and one `history/<agent>.md` per dispatched agent. If any is missing, the run is provably incomplete.
+
 ## Tool-to-Mechanism Mapping
 
 The squad's coordination verbs map onto existing HVE Core mechanisms. There is no separate squad runtime; each verb is a thin convention over a deployed capability.

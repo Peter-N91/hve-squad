@@ -48,6 +48,8 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | architecture, system design, components    | System Architecture Reviewer | auto    | yes               |
 | responsible AI, RAI, fairness, harm        | RAI Planner            | confirm       | yes               |
 | verify finding, confirm claim, fact-check  | Finding Deep Verifier  | auto          | yes               |
+| author IaC, write Bicep, write Terraform, convert LLD to infra, infrastructure as code | Squad IaC Author | confirm | no |
+| deploy, provision, what-if, terraform plan, terraform apply, az deployment | Squad Deployer | confirm | no |
 | validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |
 
 ### Filtering to the Active Roster
@@ -65,7 +67,15 @@ When a request matches a pattern whose role is absent from the active roster, th
 
 ### Implementation Gate
 
-Before dispatching an implementation-tier role (any role at `confirm` or `auto-validated` tier whose pattern indicates implementation, build, deploy, or merge), the coordinator checks `.copilot-tracking/squad/decisions.md` for the latest `## Council Verdict` entry on the matching topic id. The gate behavior is:
+Before dispatching an implementation-tier role (any role at `confirm` or `auto-validated` tier whose pattern indicates implementation, build, deploy, or merge), the coordinator checks `.copilot-tracking/squad/decisions.md` for the latest `## Council Verdict` entry on the matching topic id.
+
+The coordinator first confirms the methodology artifacts exist on disk. Implementation may not begin "cold":
+
+* A research artifact exists under `.copilot-tracking/research/` for the topic. If missing, dispatch `researcher` first.
+* A plan artifact exists under `.copilot-tracking/plans/` for the topic. If missing, dispatch `lead` (planning) first.
+* A non-`Stop` Council Verdict exists for the topic when the request crosses two or more council-member domains. If missing, run the council row first.
+
+When any precondition is unmet, the coordinator dispatches the missing stage (or escalates) instead of implementing. It never produces the missing research, plan, or verdict itself. With the preconditions met, the gate behavior is:
 
 * When no Council Verdict exists for the topic and the request crosses two or more council-member domains (architecture, security, cost, product-fit, RAI), the coordinator runs the council row before the implementer.
 * When the latest verdict is `Go` or `Go-With-Conditions`, the coordinator dispatches the implementer and passes the consolidated conditions as inputs.
