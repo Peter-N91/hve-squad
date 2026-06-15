@@ -1,5 +1,5 @@
 name: hve-squad
-version: 0.4.1
+version: 0.5.0
 description: APM package for hve-core and squad together
 author: Peter-N91
 # Which agent platforms to deploy to.
@@ -266,6 +266,8 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-azure-architect.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-cost-manager.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-deployer.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-iac-author.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-scribe.agent.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autonomous.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autopilot.instructions.md
@@ -276,6 +278,7 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-routing.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-state.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad.prompt.md
+    - Peter-N91/hve-squad/squad-src/.github/skills/azure-scaffold
     - Peter-N91/hve-squad/squad-src/.github/skills/squad
   mcp: []
 includes: auto

@@ -1,0 +1,51 @@
+// Azure dev container — REFERENCE TEMPLATE (JSONC: JSON with comments)
+//
+// Scope
+//   Documentation-only reference template shipped under the azure-scaffold skill. It never runs from
+//   the hve-squad package. To activate it, copy this file to `.devcontainer/devcontainer.json` in your
+//   consumer repo, remove these comments if you prefer strict JSON, review, and commit it deliberately.
+//
+// What it provides
+//   Azure CLI (with the Bicep extension), Terraform (with TFLint), the GitHub CLI, Node.js, and
+//   Python — the toolchain the deploy workflows and setup scripts in this skill expect.
+{
+  "name": "Azure IaC Workspace",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    // Azure CLI + Bicep. `installBicep` adds the Bicep CLI via the az extension.
+    "ghcr.io/devcontainers/features/azure-cli:1": {
+      "version": "latest",
+      "installBicep": true
+    },
+    // Terraform + TFLint (and terraform-docs) for the Terraform track.
+    "ghcr.io/devcontainers/features/terraform:1": {
+      "version": "latest",
+      "tflint": "latest",
+      "terragrunt": "none"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-bicep",
+        "hashicorp.terraform",
+        "ms-azuretools.vscode-azureresourcegroups",
+        "github.vscode-github-actions",
+        "ms-vscode.powershell"
+      ]
+    }
+  },
+  // Verify the toolchain is present after the container builds. Non-fatal: prints versions only.
+  "postCreateCommand": "az version && az bicep version && terraform version && tflint --version && gh --version && node --version && python3 --version",
+  // Use a non-root user; OIDC means no secrets are mounted into the container.
+  "remoteUser": "vscode"
+}

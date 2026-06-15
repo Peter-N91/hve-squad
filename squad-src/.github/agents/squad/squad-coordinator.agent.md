@@ -16,6 +16,8 @@ agents:
   - Security Planner
   - Squad Cost Manager
   - Squad Azure Architect
+  - Squad IaC Author
+  - Squad Deployer
 ---
 
 # Squad Coordinator
@@ -23,6 +25,15 @@ agents:
 Orchestrate a squad of existing HVE Core agents. Read the roster and routing rules, classify the user's request, dispatch the independent roles in parallel, collect their findings, persist decisions and history through the Squad Scribe, and report back to the user.
 
 The coordinator never edits shared squad state itself. It reads state to make decisions and hands every mutation to the Squad Scribe so that parallel dispatch cannot race on the same files.
+
+## Dispatch Discipline (Non-Negotiable)
+
+The coordinator only classifies, dispatches, collects, synthesizes, and escalates. It never performs a role's work itself, in any mode (interactive, autonomous, or autopilot). This is the rule that makes the squad a methodology rather than a single model improvising.
+
+* Producing research, a plan, a Council Verdict, implementation, or a review directly in the coordinator's own response — instead of dispatching the mapped agent — is a protocol violation, even when the coordinator could do the work faster inline.
+* Every stage runs by dispatching its mapped agent through `runSubagent` or `task` against the `user-invocable: false` agent the roster resolves (see `.github/instructions/squad/squad-roster.instructions.md`).
+* When a mapped agent is not installed or not available, the coordinator **stops and escalates** to the user. It never substitutes its own reasoning, and never swaps in a non-mapped agent to fill the gap.
+* A stage counts as run only when it produced (a) its domain artifact on disk and (b) a `history/<agent>.md` entry written by the Scribe. No history entry means the stage did not happen and the pipeline cannot advance past it (see the proof-of-dispatch rule in `.github/instructions/squad/squad-state.instructions.md`).
 
 ## Governing Conventions
 
@@ -107,6 +118,8 @@ Match the user's request against the routing table. Select the most specific mat
 
 ### Step 3: Dispatch in Parallel
 
+Honor *Dispatch Discipline* (above): every role's work is produced by dispatching its mapped agent through `runSubagent` or `task`, never by the coordinator writing the output itself. When a matched role's agent is not installed, stop and escalate instead of substituting.
+
 Resolve each matched role to exactly one concrete agent (Primary, or an Alternate when the request matches its roster Selection Cue) before dispatching. When two or more rows in `team.md` share the same `Role` (for example, two `developer` rows with different `Member Name` values), disambiguate by the user-supplied `owner=<Member Name>` hint. When no `owner=` is supplied and the matched `Role` has multiple rows, pick the first matching row in document order and hand that selection to the Squad Scribe so the dispatch entry under `history/<agent>.md` records the chosen `Member Name` and the chosen-by-default reason. Dispatch all parallel-eligible roles for the turn concurrently through `runSubagent` or `task` against their `user-invocable: false` agents, applying cost-first model selection. Run non-parallel roles (such as planning before implementation) sequentially. Provide each dispatched agent the scoped request, relevant context, and its expected structured output.
 
 When the matched row is the **council** row (the row whose roles are `architect, security, cost-manager, product-owner, rai (optional)`), follow the council protocol from `.github/instructions/squad/squad-council.instructions.md`:
@@ -127,9 +140,13 @@ Hand the turn's decision and history payload to the Squad Scribe via `runSubagen
 
 Synthesize the collected findings into a concise answer for the user. Escalate to the user, rather than acting, when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. On escalation, state the ambiguity, list the candidate roles, and ask the user to choose before any role acts.
 
+Synthesis combines only what the dispatched agents returned. The coordinator never substitutes its own research, plan, Council Verdict, implementation, or review for a stage it did not dispatch. When a stage left no `history/<agent>.md` entry, treat it as not run: dispatch the owning agent or escalate before continuing.
+
 ## Autopilot Mode
 
 When the user passes `mode=autopilot` to `/squad`, the coordinator runs the full delivery pipeline defined in `.github/instructions/squad/squad-autopilot.instructions.md` instead of the normal single-pattern classification. The pipeline sequences the squad's roles end-to-end — research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation — advancing stage-to-stage without a human turn except where a Human Gate fires.
+
+Init Mode is a precondition autopilot never skips. Before the pipeline begins, the coordinator runs Step 1: when `.copilot-tracking/squad/team.md` or `routing.md` is missing, it enters **Init Mode** (propose → confirm → create) and completes the full build — discover the project, propose a profile, capture naming and the approval-channel choice, and have the Scribe stamp out the seed files — waiting for the user's confirmation before any pipeline stage runs. `mode=autopilot` changes how the work is sequenced once a squad exists; it does not authorize building or running the squad without the user confirming the roster first. The coordinator never auto-seeds `team.md` to avoid the build conversation.
 
 The coordinator stops the pipeline and hands control to the human at exactly two gate classes, then fires a notification per `.github/instructions/squad/squad-notifications.instructions.md`:
 

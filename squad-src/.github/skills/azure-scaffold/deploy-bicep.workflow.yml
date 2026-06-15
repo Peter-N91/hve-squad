@@ -1,0 +1,98 @@
+# Bicep deploy — REFERENCE TEMPLATE (not an active workflow here)
+#
+# Scope
+#   Documentation-only reference template shipped under the azure-scaffold skill. It never runs from
+#   the hve-squad package (it is not in this repo's .github/workflows/ and carries a .workflow.yml
+#   suffix). To activate it, copy to `.github/workflows/deploy-bicep.yml` in your consumer repo,
+#   replace every <PLACEHOLDER>, review, and commit deliberately.
+#
+# Identity
+#   Authenticates with Microsoft Entra workload-identity federation via azure/login@v2 (OIDC). No
+#   client secret is stored. Populate AZURE_CLIENT_ID, AZURE_TENANT_ID, and AZURE_SUBSCRIPTION_ID with
+#   scripts/Setup-AzureOidc.ps1. Pull requests run what-if only; deploys run on main or on demand.
+
+name: Deploy Bicep
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Project folder under infra/bicep/"
+        required: true
+        default: "<PROJECT>"
+      environment:
+        description: "Target environment (dev, staging, prod)"
+        required: true
+        default: "dev"
+  pull_request:
+    paths:
+      - "infra/bicep/**"
+  push:
+    branches: [main]
+    paths:
+      - "infra/bicep/**"
+
+# OIDC requires id-token: write. contents: read for checkout; pull-requests: write to post what-if.
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: deploy-bicep-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AZURE_REGION: "<AZURE_REGION>" # e.g. swedencentral
+  RESOURCE_GROUP: "<RESOURCE_GROUP>"
+  PROJECT: ${{ github.event.inputs.project || '<PROJECT>' }}
+
+jobs:
+  validate:
+    name: What-if (no changes applied)
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Bicep lint
+        run: az bicep build --file "infra/bicep/${PROJECT}/main.bicep"
+
+      - name: What-if
+        run: |
+          az deployment group what-if \
+            --resource-group "${RESOURCE_GROUP}" \
+            --template-file "infra/bicep/${PROJECT}/main.bicep" \
+            --parameters "infra/bicep/${PROJECT}/main.bicepparam"
+
+  deploy:
+    name: Deploy
+    needs: validate
+    # Only deploy on main or manual dispatch — never from a pull request.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy
+        run: |
+          az deployment group create \
+            --resource-group "${RESOURCE_GROUP}" \
+            --template-file "infra/bicep/${PROJECT}/main.bicep" \
+            --parameters "infra/bicep/${PROJECT}/main.bicepparam" \
+            --name "deploy-${PROJECT}-${{ github.run_number }}"

@@ -43,7 +43,7 @@
       <h3>Optional inputs</h3>
       <ul>
         <li>
-          <code>profile=default|full|security|design|architecture</code> — seeds which cast is
+          <code>profile=default|full|security|design|architecture|azure</code> — seeds which cast is
           created on first run. If omitted on a fresh project, the coordinator inspects your repo and
           proposes a recommended profile before creating anything.
         </li>
@@ -154,12 +154,37 @@
         </thead>
         <tbody>
           <tr><td><code>default</code></td><td>lead, researcher, developer, tester, scribe</td><td>General-purpose work; recommended starting point</td></tr>
-          <tr><td><code>full</code></td><td>all 10 deployed roles</td><td>Complex, cross-cutting projects</td></tr>
+          <tr><td><code>full</code></td><td>all deployed roles</td><td>Complex, cross-cutting projects</td></tr>
           <tr><td><code>security</code></td><td>security, rai, fact-checker, researcher, scribe</td><td>Security, threat-modeling, responsible-AI focus</td></tr>
           <tr><td><code>design</code></td><td>designer, researcher, lead, tester, scribe</td><td>UX/UI and product-design focus</td></tr>
           <tr><td><code>architecture</code></td><td>architect, researcher, lead, developer, scribe</td><td>System design and architecture focus</td></tr>
+          <tr><td><code>azure</code></td><td>azure-architect, iac-author, deployer, architect, cost-manager, security, lead, developer, scribe</td><td>Azure build with IaC authoring, deployment, budget, and security oversight</td></tr>
         </tbody>
       </table>
+
+      <h2>Azure execution layer</h2>
+      <p>
+        The <code>azure</code> profile adds an Azure build-and-deploy capability modeled on a
+        deployable Azure template repo, delivered the package way — as reference templates plus
+        squad agents:
+      </p>
+      <ul>
+        <li><strong>Squad Azure Architect</strong> authors the HLD/LLD (AVM modules, landing-zone patterns).</li>
+        <li><strong>Squad IaC Author</strong> converts that LLD into Bicep or Terraform under <code>infra/{track}/{project}</code>.</li>
+        <li><strong>Squad Cost Manager</strong> produces indicative estimates and WAF Cost Optimization findings.</li>
+        <li><strong>Squad Deployer</strong> runs <code>what-if</code>/<code>plan</code> and then the deploy — strictly behind the Impactful-Action Gate, never without your approval.</li>
+      </ul>
+      <p>
+        The <code>azure-scaffold</code> skill bundles documentation-only reference templates a squad
+        agent copies into your repo: a dev container (Azure CLI + Bicep, Terraform + TFLint,
+        <code>gh</code>, Node, Python), <code>azure/login@v2</code> OIDC deploy workflows for Bicep
+        and Terraform, a <code>Setup-AzureOidc.ps1</code> wizard (Entra app registration, federated
+        credentials, RBAC, GitHub secrets), a read-only <code>Get-PolicyBaseline.ps1</code> plus a
+        scheduled governance workflow, and the <code>infra/bicep/{project}</code> /
+        <code>infra/terraform/{project}</code> convention. Nothing runs from the package — activation
+        is always an explicit copy-and-commit into your repo, and authentication is OIDC (no stored
+        secrets).
+      </p>
 
       <h3>Requirements for running the squad</h3>
       <ul>

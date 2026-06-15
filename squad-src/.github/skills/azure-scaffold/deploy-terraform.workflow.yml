@@ -1,0 +1,108 @@
+# Terraform deploy — REFERENCE TEMPLATE (not an active workflow here)
+#
+# Scope
+#   Documentation-only reference template shipped under the azure-scaffold skill. It never runs from
+#   the hve-squad package (it is not in this repo's .github/workflows/ and carries a .workflow.yml
+#   suffix). To activate it, copy to `.github/workflows/deploy-terraform.yml` in your consumer repo,
+#   replace every <PLACEHOLDER>, review, and commit deliberately.
+#
+# Identity & state
+#   Authenticates with Entra workload-identity federation via azure/login@v2 (OIDC); the AzureRM
+#   provider reuses the OIDC token (ARM_USE_OIDC=true). State lives in an Azure Storage backend
+#   configured in infra/terraform/<project>/backend.tf. No client secret is stored. Pull requests run
+#   plan only; apply runs on main or on demand.
+
+name: Deploy Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Project folder under infra/terraform/"
+        required: true
+        default: "<PROJECT>"
+      environment:
+        description: "Target environment (dev, staging, prod)"
+        required: true
+        default: "dev"
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+  push:
+    branches: [main]
+    paths:
+      - "infra/terraform/**"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: deploy-terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PROJECT: ${{ github.event.inputs.project || '<PROJECT>' }}
+  # The AzureRM provider reads these from the azure/login OIDC session.
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  plan:
+    name: Plan (no changes applied)
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    defaults:
+      run:
+        working-directory: "infra/terraform/${{ github.event.inputs.project || '<PROJECT>' }}"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -input=false -out=tfplan
+
+  apply:
+    name: Apply
+    needs: plan
+    # Only apply on main or manual dispatch — never from a pull request.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    defaults:
+      run:
+        working-directory: "infra/terraform/${{ github.event.inputs.project || '<PROJECT>' }}"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve

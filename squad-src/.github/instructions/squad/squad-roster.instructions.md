@@ -99,6 +99,8 @@ Roles that have no stable HVE Core equivalent are marked **thin charter needed**
 | azure-architect  | Squad Azure Architect         | —                                                                                                                   | Azure HLD/LLD authoring with AVM modules and landing-zone patterns; distinct from `architect` (the System Architecture Reviewer reviews tradeoffs while this role authors)                                      |
 | scribe           | Squad Scribe                  | Memory                                                                                                              | Cross-session durable memory persistence → Memory; otherwise squad-state writes → Squad Scribe (squad-owned subagent)                                                                                         |
 | devrel           | —                             | —                                                                                                                   | Thin charter needed (no HVE Core equivalent)                                                                                                                                                                  |
+| iac-author       | Squad IaC Author              | —                                                                                                                   | Convert the Squad Azure Architect's LLD table into Bicep or Terraform under infra/{track}/{project} with AVM modules; authors IaC but never deploys (deployment is the deployer's role)                          |
+| deployer         | Squad Deployer                | —                                                                                                                   | Run Azure deployments (what-if/plan, then gated create/apply) in the consumer's environment, strictly behind the Impactful-Action Gate; defaults to a read-only dry-run                                          |
 
 ## Relationship Cardinality
 
@@ -118,6 +120,7 @@ The coordinator turns a matched role into exactly one concrete agent at dispatch
 2. **Apply the Selection Cue** — when the request matches a cue, dispatch the indicated Alternate instead of the Primary.
 3. **Verify the agent is installed.** The resolved agent must be present in the project (its APM package deployed into `.github/`). When it is absent, escalate to the user — treat it the same as a **thin charter needed** role rather than silently substituting.
 4. **Record any non-primary resolution** through the Squad Scribe, so `history/<agent>.md` reflects the agent that actually ran and the cue that selected it.
+5. **Never self-fill an absent role.** When the resolved agent is not installed or not available, the coordinator stops and escalates to the user. It must not perform the role's work itself, and must not substitute a non-mapped agent to fill the gap. An absent role blocks the stage until the user installs the agent, names a substitute, or removes the role.
 
 ## Casting Rules
 
@@ -136,11 +139,11 @@ The `scribe` role is always included in every profile — it is the single write
 | Profile        | Members (roles)                                                                                                                                | Choose when the project is…                                              |
 |----------------|------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | `default`      | lead, researcher, developer, tester, scribe                                                                                                    | General build and delivery work — a balanced team (recommended default)  |
-| `full`         | lead, researcher, developer, tester, architect, azure-architect, security, rai, designer, fact-checker, cost-manager, scribe                   | You want every deployed capability available                             |
+| `full`         | lead, researcher, developer, tester, architect, azure-architect, iac-author, deployer, security, rai, designer, fact-checker, cost-manager, scribe                   | You want every deployed capability available                             |
 | `security`     | security, rai, fact-checker, researcher, scribe                                                                                                | Security-, threat-, or responsible-AI-focused (auth, secrets, ML, LLM)   |
 | `design`       | designer, researcher, lead, tester, scribe                                                                                                     | UX/UI, accessibility, or product-design focused                          |
 | `architecture` | architect, azure-architect, researcher, lead, developer, cost-manager, scribe                                                                  | System design, infrastructure, or architecture-review focused            |
-| `azure`        | azure-architect, architect, cost-manager, security, lead, developer, scribe                                                                    | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
+| `azure`        | azure-architect, iac-author, deployer, architect, cost-manager, security, lead, developer, scribe                                                                    | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
 
 ### Profile Selection
 
