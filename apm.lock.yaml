@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-06-15T09:28:53.073134+00:00'
+generated_at: '2026-06-15T14:15:43.698782+00:00'
 apm_version: 0.18.0
 dependencies:
 - repo_url: Peter-N91/hve-squad
@@ -29,10 +29,6 @@ dependencies:
   virtual_path: squad-src/.github/agents/squad/squad-deployer.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/squad-deployer.agent.md
-  deployed_file_hashes:
-    .github/agents/squad-deployer.agent.md: sha256:fad44bd0a5bbb7ed78be83dcc3646cc65859ce9fbe30784515cffb33dad15650
   content_hash: sha256:37164213ff4db84e7a0ef4fd0f092e4b6c7c29120e90c5c189c15ac3d3a63614
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -40,10 +36,6 @@ dependencies:
   virtual_path: squad-src/.github/agents/squad/squad-iac-author.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/squad-iac-author.agent.md
-  deployed_file_hashes:
-    .github/agents/squad-iac-author.agent.md: sha256:292d4e7e53672cb12dec13be02e9f4c5d4976464b0bc3e0e8b98ed18d671ba15
   content_hash: sha256:0517486bf0e2ffe08c9f5b605dc430071c4dc863986bfde7252521c1b2ff21f6
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -121,8 +113,6 @@ dependencies:
   virtual_path: squad-src/.github/skills/azure-scaffold
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/azure-scaffold
   content_hash: sha256:434471c34e9279457fb21f2c2f89e65c8062761fa9cbc5b2549669021bb60526
 - repo_url: Peter-N91/hve-squad
   host: github.com
@@ -130,8 +120,6 @@ dependencies:
   virtual_path: squad-src/.github/skills/squad
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/squad
   content_hash: sha256:bc8d7ceb74f2c7853c6212367629092e565e40de4f9fa2f0a355ab5a63893a93
 - repo_url: microsoft/hve-core
   host: github.com
@@ -139,10 +127,6 @@ dependencies:
   virtual_path: .github/agents/accessibility/accessibility-planner.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/accessibility-planner.agent.md
-  deployed_file_hashes:
-    .github/agents/accessibility-planner.agent.md: sha256:a3db0ffbd7c09568972867bdec8df8c35bfcb2220b7e18dd2bd5e5cab23e836d
   content_hash: sha256:68ce531f56d37c925ef548d572358efcd7ca28905893262363363857ad60764d
 - repo_url: microsoft/hve-core
   host: github.com
@@ -150,10 +134,6 @@ dependencies:
   virtual_path: .github/agents/accessibility/accessibility-reviewer.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/accessibility-reviewer.agent.md
-  deployed_file_hashes:
-    .github/agents/accessibility-reviewer.agent.md: sha256:90de424ba76445acf6a2676dac50fdc764cf84989cc60f7c655d822353b75f18
   content_hash: sha256:989dd2acd76f0a6f86206dfbeebb209c31a11d51722f1abf55f0cd5790d9eda9
 - repo_url: microsoft/hve-core
   host: github.com
@@ -161,10 +141,6 @@ dependencies:
   virtual_path: .github/agents/accessibility/subagents/accessibility-skill-assessor.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/accessibility-skill-assessor.agent.md
-  deployed_file_hashes:
-    .github/agents/accessibility-skill-assessor.agent.md: sha256:0cc68dc8086f7b6f761169c0d08607ff4e3e1f87f073af68e9c543506eeac9a8
   content_hash: sha256:1b831943ff263096adbee8acfe1e0ce835bc26b1d85e08d6c7de8e43786197f3
 - repo_url: microsoft/hve-core
   host: github.com
@@ -193,10 +169,6 @@ dependencies:
   virtual_path: .github/agents/coding-standards/code-review-accessibility.agent.md
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .github/agents/code-review-accessibility.agent.md
-  deployed_file_hashes:
-    .github/agents/code-review-accessibility.agent.md: sha256:0aabd2b750031ec3f2c44d55b815e3021d04d0923569e72a1cb4bcbf7843c68c
   content_hash: sha256:3735c5317bec78741f8f7f28e4513233456038e8076c8566e883248e101ce7ea
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1730,8 +1702,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/aria-apg
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/aria-apg
   content_hash: sha256:0faac0aacb43c012d105aa9a79ff6c2e58a0297d1b61659381e548cd54f8751e
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1739,8 +1709,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/coga
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/coga
   content_hash: sha256:10dfa3dcf46e72ca688bc37a8c7d1847ec1a67fbbd2ac5bcd40785ad37b4bdbc
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1748,8 +1716,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/en-301-549
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/en-301-549
   content_hash: sha256:c24e359df7fcedc5f563d5d101574985c4591a6900474c8b69887bacebb7fe40
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1757,8 +1723,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/section-508
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/section-508
   content_hash: sha256:2ba024a162804bef6d8bef793cff465437ee6332d1e42e28dab6461d4cecebb9
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1766,8 +1730,6 @@ dependencies:
   virtual_path: .github/skills/accessibility/wcag-22
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/wcag-22
   content_hash: sha256:c2b8621b903084eeb87073728fe05d7c3f13fd3c11c6022aadbf618e2036ab7f
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1775,8 +1737,6 @@ dependencies:
   virtual_path: .github/skills/coding-standards/python-foundational
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/python-foundational
   content_hash: sha256:8be7bff106fedb2777185a23444ab6c0a18dd04bc691a02750cadae0c49c8c8f
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1784,8 +1744,6 @@ dependencies:
   virtual_path: .github/skills/design-thinking/dt-coaching-foundation
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/dt-coaching-foundation
   content_hash: sha256:8bf3f97023ec9caa1f95394305682ba5a2277a64468de4e3296b0a9becc84d51
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1793,8 +1751,6 @@ dependencies:
   virtual_path: .github/skills/design-thinking/dt-curriculum
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/dt-curriculum
   content_hash: sha256:05dfcc4f0fef2f99b40caaa78b31525619414500c657309fe76cf9175a159fb3
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1802,8 +1758,6 @@ dependencies:
   virtual_path: .github/skills/design-thinking/dt-methods
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/dt-methods
   content_hash: sha256:9fd0811a6b81446932c706bd5670b7ef0b9e741965171feca83d8ea4809407c4
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1811,8 +1765,6 @@ dependencies:
   virtual_path: .github/skills/design-thinking/dt-rpi-integration
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/dt-rpi-integration
   content_hash: sha256:699092e9745b60d9a41fd2b5bc8e3aea8656f393adceb7d0624e189717da75f6
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1820,8 +1772,6 @@ dependencies:
   virtual_path: .github/skills/experimental/customer-card-render
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/customer-card-render
   content_hash: sha256:506abf89d0d8a126ecb5845e586f16b755340df8b18bdc065a5bf2e6cca3635b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1829,8 +1779,6 @@ dependencies:
   virtual_path: .github/skills/experimental/mural
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/mural
   content_hash: sha256:e48bd4857a26723bba86418a54c2df336ae6fcb06f9f8c3dee340189867d13c9
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1838,8 +1786,6 @@ dependencies:
   virtual_path: .github/skills/experimental/powerpoint
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/powerpoint
   content_hash: sha256:6d966bedb6eac007ffd4cbd2207ccd5f126f4336ceab4734dd0164b347543442
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1847,8 +1793,6 @@ dependencies:
   virtual_path: .github/skills/experimental/tts-voiceover
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/tts-voiceover
   content_hash: sha256:bbf20533c4505c0f5663dfee772340b6cacae567399a70eb5e5755218e92dc41
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1856,8 +1800,6 @@ dependencies:
   virtual_path: .github/skills/experimental/video-to-gif
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/video-to-gif
   content_hash: sha256:1ce6c59bc16d05467b8b8028f15f36f0968d96e4345f3c7a78e066f73621014d
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1865,8 +1807,6 @@ dependencies:
   virtual_path: .github/skills/experimental/vscode-playwright
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/vscode-playwright
   content_hash: sha256:c5bfc04d3ba5d057fb548489ba8a9bdb3139e3f08f0ea73f1db08bb418df65ef
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1874,8 +1814,6 @@ dependencies:
   virtual_path: .github/skills/github/gh-code-scanning
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/gh-code-scanning
   content_hash: sha256:ee4ff0a60ebe2efeb025decdb12bb96cea3892952c6375f79e940f1f7ce73c8e
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1883,8 +1821,6 @@ dependencies:
   virtual_path: .github/skills/gitlab/gitlab
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/gitlab
   content_hash: sha256:49d7128545236bb839da93cc6a5923657904e4a9b33118c072ae4b7f4ad25dde
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1892,8 +1828,6 @@ dependencies:
   virtual_path: .github/skills/hve-core/vally-tests
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/vally-tests
   content_hash: sha256:7d8083eedd4c50129027092968d75c0e3f39f28b9ef324bc7ec5a1a25851bd5e
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1901,8 +1835,6 @@ dependencies:
   virtual_path: .github/skills/installer/hve-core-installer
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/hve-core-installer
   content_hash: sha256:8ab72e21485067b9cb490a146966b496912c45e3165b549fad5d1c9d241266bb
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1910,8 +1842,6 @@ dependencies:
   virtual_path: .github/skills/jira/jira
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/jira
   content_hash: sha256:6c21fe9b2893994d4ed619f11548b109ee03e6445e9f0515d95aef117ce0139e
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1919,8 +1849,6 @@ dependencies:
   virtual_path: .github/skills/project-planning/adr-author
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/adr-author
   content_hash: sha256:59578ed27ed77e6eacd71f45f64d8e1a843f9634e542f4cd720883cd6e7e972b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1928,8 +1856,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-agentic
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-agentic
   content_hash: sha256:240bfb1499f0a400a12c2e52f25fe78bcbbdbca2caed5ed5686d6c5b3f20f7fe
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1937,8 +1863,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-cicd
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-cicd
   content_hash: sha256:03694a09121af95770cc2fa400ab0df7c83c54d15517878604b62af737d4173b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1946,8 +1870,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-docker
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-docker
   content_hash: sha256:682758cc4ad4b1d0301c6bc649219b6dfe042ad4e011e86441c893f295540a33
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1955,8 +1877,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-infrastructure
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-infrastructure
   content_hash: sha256:b6b342893b44c6dda3292bd8d2ae2daf1faf411b40d4e2807d711dac3ad75c72
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1964,8 +1884,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-llm
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-llm
   content_hash: sha256:c7f06bd220b14787285948ff8a11a6086ced5e91d2eb771c691f3fcdcf8c879c
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1973,8 +1891,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-mcp
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-mcp
   content_hash: sha256:23904fb3c8b41f5587c1ce070a58d872a3e3fa652ef7fd936353fe2042b785cb
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1982,8 +1898,6 @@ dependencies:
   virtual_path: .github/skills/security/owasp-top-10
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/owasp-top-10
   content_hash: sha256:9cec807344e6adeffadc1ff2974b6c6c2b3666f5274d82d13c859924c2147905
 - repo_url: microsoft/hve-core
   host: github.com
@@ -1991,8 +1905,6 @@ dependencies:
   virtual_path: .github/skills/security/secure-by-design
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/secure-by-design
   content_hash: sha256:03f8b1cb126bbe134160b7e56239b9c90998ddc6b5ec1cd51680b985623d7690
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2000,8 +1912,6 @@ dependencies:
   virtual_path: .github/skills/security/security-reviewer-formats
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/security-reviewer-formats
   content_hash: sha256:1525c025c712f3c1dbff3f3bb2cc0bb0ceb020c9ca2d7f7ff610031849354a61
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2009,8 +1919,6 @@ dependencies:
   virtual_path: .github/skills/shared/backlog-templates
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/backlog-templates
   content_hash: sha256:e140526c8a6a4977443d1ed0f37763b20c5b58802dcacc5f55b445dc32bdea0b
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2018,8 +1926,6 @@ dependencies:
   virtual_path: .github/skills/shared/pr-reference
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/pr-reference
   content_hash: sha256:a121e95c05bae67725e93f111c9cd1e7b4959e6a4ca35f3e7d95594ccfcd506f
 - repo_url: microsoft/hve-core
   host: github.com
@@ -2027,6 +1933,4 @@ dependencies:
   virtual_path: .github/skills/shared/telemetry-foundations
   is_virtual: true
   package_type: claude_skill
-  deployed_files:
-  - .agents/skills/telemetry-foundations
   content_hash: sha256:3b713a56a413502c977c91168f1d2ec132c7d25ef914a6d67be0085b6220cdc2

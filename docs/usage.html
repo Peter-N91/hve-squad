@@ -186,6 +186,20 @@
         secrets).
       </p>
 
+      <h2>Modernization</h2>
+      <p>
+        The <code>modernizer</code> role plans modernization work and routes it to the right
+        execution engine, all from the single <code>/squad</code> entry point:
+      </p>
+      <ul>
+        <li><strong>Same-stack modernization</strong> — framework and dependency upgrades, deprecated-API remediation, containerization, and Azure-migration readiness. The plan recommends the squad <code>developer</code> role for scoped edits, or Microsoft's official GitHub Copilot App Modernization extension and CLI for large batch upgrades.</li>
+        <li><strong>Cross-stack re-platform</strong> — rewrites across languages or frameworks (for example, a Node.js backend rebuilt on .NET, or a React app rebuilt in Angular). The plan captures a behavior contract for the current system, sequences an incremental (strangler-fig) rewrite, and routes execution to the <code>developer</code> and <code>architect</code> roles under council review — never the official upgrade tooling.</li>
+      </ul>
+      <p>
+        Modernization runs at the <code>confirm</code> tier: the role produces a plan that gates
+        implementation, and cross-domain phases route through the council before any code changes.
+      </p>
+
       <h3>Requirements for running the squad</h3>
       <ul>
         <li>A <code>runSubagent</code> or <code>task</code> tool must be enabled so the coordinator can dispatch the cast.</li>
