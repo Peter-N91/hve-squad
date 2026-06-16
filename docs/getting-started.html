@@ -42,6 +42,7 @@
         <li>Git</li>
         <li>APM CLI installed and available in <code>PATH</code></li>
         <li>Access to the <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a> repository</li>
+        <li>Authenticated GitHub access (<code>gh auth login</code> or <code>GITHUB_TOKEN</code>) — strongly recommended; see the note in step 1</li>
       </ul>
 
       <h2>1. Install the package</h2>
@@ -56,6 +57,19 @@
           <code>[x] No harness detected</code> <em>after</em> downloading sources into
           <code>apm_modules/</code> but <em>before</em> deploying anything into
           <code>.github/</code>. Tell APM which harness to deploy to using one of the options below.
+        </p>
+      </div>
+
+      <div class="callout">
+        <p>
+          <strong>Authenticate first — it makes the install fast.</strong> This package pulls
+          hundreds of files from <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a>.
+          Unauthenticated GitHub access is rate limited to 60 requests/hour, which can stretch a
+          first install to 30+ minutes — APM waits on the rate-limit reset rather than failing, so it
+          looks stuck. Run <code>gh auth login</code> (APM detects it automatically) or set
+          <code>GITHUB_TOKEN</code> before installing to get 5,000 requests/hour. <code>hve-core</code>
+          is public, so a token with basic read scope is enough. See
+          <a href="troubleshooting.html">Troubleshooting</a> if an install is already crawling.
         </p>
       </div>
 

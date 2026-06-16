@@ -12,12 +12,19 @@
     .github folders, then enumerates the locally authored squad source tree, and
     rewrites only the dependencies.apm list. hve-core entries are listed first;
     squad entries are appended afterwards.
+
+    Every hve-core entry is pinned to the exact commit SHA that the requested ref
+    resolves to (appended as '#<sha>'), so the generated manifest stays
+    reproducible for downstream consumers even after hve-core's default branch
+    moves on. Squad self-references are pinned to -SquadRef when provided.
 .PARAMETER ApmFile
     Path to apm.yml to update.
 .PARAMETER RepoSlug
     Repository slug in owner/repo format.
 .PARAMETER Ref
-    Git ref to read from (branch, tag, or commit).
+    Git ref to read hve-core from (branch, tag, or commit SHA). The ref is
+    resolved to a concrete commit SHA, which is what every hve-core dependency is
+    pinned to.
 .PARAMETER IncludeRoots
     Repository-relative roots under which files are discovered.
 .PARAMETER IncludeRegex
@@ -29,12 +36,19 @@
 .PARAMETER SquadRepoSlug
     Repository slug (owner/repo) that hosts the squad source. Squad virtual
     paths are emitted as <SquadRepoSlug>/<SquadSourceRoot>/.github/...
+.PARAMETER SquadRef
+    Optional git ref (release tag or commit SHA) to pin squad self-references to,
+    appended as '#<ref>'. Use the release tag you are about to cut (for example
+    v0.7.0): commit the manifest, then create that tag on the same commit. When
+    omitted, squad entries are left unpinned.
 .PARAMETER DryRun
     If set, prints generated dependencies without updating apm.yml.
 .EXAMPLE
     ./scripts/Update-ApmDependencies.ps1 -ApmFile apm.yml
 .EXAMPLE
     ./scripts/Update-ApmDependencies.ps1 -Ref main -DryRun
+.EXAMPLE
+    ./scripts/Update-ApmDependencies.ps1 -Ref main -SquadRef v0.7.0
 .EXAMPLE
     ./scripts/Update-ApmDependencies.ps1 -SquadSourceRoot squad-src -SquadRepoSlug Peter-N91/hve-squad
 .NOTES
@@ -77,6 +91,9 @@ param(
     [string]$SquadRepoSlug = 'Peter-N91/hve-squad',
 
     [Parameter(Mandatory = $false)]
+    [string]$SquadRef,
+
+    [Parameter(Mandatory = $false)]
     [switch]$DryRun
 )
 
@@ -97,7 +114,7 @@ function Get-LeadingSpaceCount {
 
 function Get-RepoTreePaths {
     [CmdletBinding()]
-    [OutputType([string[]])]
+    [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory = $true)]
         [string]$Repository,
@@ -113,21 +130,41 @@ function Get-RepoTreePaths {
     $repoUrl = "https://github.com/$Repository.git"
 
     try {
-        $null = & git clone --depth 1 --filter=blob:none --branch $GitRef $repoUrl $tempRoot 2>&1
+        # Use init + fetch (rather than 'clone --branch') so that $GitRef may be a
+        # branch, a tag, or a bare commit SHA. 'clone --branch' rejects commit
+        # SHAs, which the pinned-release flow depends on.
+        $null = & git init --quiet $tempRoot 2>&1
         if ($LASTEXITCODE -ne 0) {
-            throw "git clone failed for '$Repository@$GitRef'."
+            throw "git init failed for temp clone of '$Repository'."
         }
 
         Push-Location $tempRoot
         try {
-            $null = & git rev-parse --verify HEAD 2>&1
+            $null = & git remote add origin $repoUrl 2>&1
             if ($LASTEXITCODE -ne 0) {
-                throw 'git repository is not in a valid state after clone.'
+                throw "git remote add failed for '$Repository'."
             }
+
+            $null = & git fetch --depth 1 --filter=blob:none origin $GitRef 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "git fetch failed for '$Repository@$GitRef'. The ref must be a branch, tag, or commit SHA."
+            }
+
+            $revParse = & git rev-parse FETCH_HEAD 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "git could not resolve a commit for '$Repository@$GitRef'."
+            }
+            $resolvedCommit = @($revParse) |
+                Where-Object { $_ -match '^[0-9a-f]{7,40}$' } |
+                Select-Object -First 1
+            if ([string]::IsNullOrWhiteSpace($resolvedCommit)) {
+                throw "git could not resolve a commit for '$Repository@$GitRef'."
+            }
+            $resolvedCommit = $resolvedCommit.Trim()
 
             $result = [System.Collections.Generic.List[string]]::new()
             foreach ($root in $Roots) {
-                $entries = & git ls-tree -r --name-only HEAD -- $root 2>&1
+                $entries = & git ls-tree -r --name-only FETCH_HEAD -- $root 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     throw "git ls-tree failed for root '$root'."
                 }
@@ -141,7 +178,10 @@ function Get-RepoTreePaths {
                 }
             }
 
-            return @($result)
+            return [pscustomobject]@{
+                ResolvedCommit = $resolvedCommit
+                Paths          = @($result)
+            }
         }
         finally {
             Pop-Location
@@ -168,7 +208,10 @@ function Build-DependencyList {
         [string[]]$Roots,
 
         [Parameter(Mandatory = $true)]
-        [string]$PathFilterRegex
+        [string]$PathFilterRegex,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Ref
     )
 
     # APM accepts only these file package extensions:
@@ -205,8 +248,9 @@ function Build-DependencyList {
             Sort-Object -Unique
     )
 
+    $refSuffix = if ([string]::IsNullOrWhiteSpace($Ref)) { '' } else { "#$Ref" }
     $selected = @($agentDeps + $promptDeps + $instructionDeps + $skillDeps)
-    return @($selected | Sort-Object -Unique | ForEach-Object { "$Repository/$_" })
+    return @($selected | Sort-Object -Unique | ForEach-Object { "$Repository/$_$refSuffix" })
 }
 
 function Get-SquadSourcePaths {
@@ -257,7 +301,10 @@ function Build-SquadDependencyList {
         [string]$Repository,
 
         [Parameter(Mandatory = $true)]
-        [string]$SourcePrefix
+        [string]$SourcePrefix,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Ref
     )
 
     # Squad paths are repo-relative and retain the squad source prefix, e.g.
@@ -296,8 +343,9 @@ function Build-SquadDependencyList {
             Sort-Object -Unique
     )
 
+    $refSuffix = if ([string]::IsNullOrWhiteSpace($Ref)) { '' } else { "#$Ref" }
     $selected = @($agentDeps + $promptDeps + $instructionDeps + $skillDeps)
-    return @($selected | Sort-Object -Unique | ForEach-Object { "$Repository/$_" })
+    return @($selected | Sort-Object -Unique | ForEach-Object { "$Repository/$_$refSuffix" })
 }
 
 function Update-ApmDependencyList {
@@ -372,9 +420,12 @@ function Update-ApmDependencyList {
 if ($MyInvocation.InvocationName -ne '.') {
     try {
         Write-Host "Reading repository tree from $RepoSlug@$Ref..." -ForegroundColor Cyan
-        $paths = Get-RepoTreePaths -Repository $RepoSlug -GitRef $Ref -Roots $IncludeRoots
+        $tree = Get-RepoTreePaths -Repository $RepoSlug -GitRef $Ref -Roots $IncludeRoots
+        $paths = $tree.Paths
+        $resolvedCommit = $tree.ResolvedCommit
+        Write-Host "Resolved $RepoSlug@$Ref to $resolvedCommit; pinning hve-core dependencies to that commit." -ForegroundColor Green
 
-        $deps = Build-DependencyList -Paths $paths -Repository $RepoSlug -Roots $IncludeRoots -PathFilterRegex $IncludeRegex
+        $deps = Build-DependencyList -Paths $paths -Repository $RepoSlug -Roots $IncludeRoots -PathFilterRegex $IncludeRegex -Ref $resolvedCommit
         if ($null -eq $deps) {
             $deps = @()
         }
@@ -384,9 +435,15 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (Test-Path -LiteralPath $SquadSourceRoot) {
             Write-Host "Reading squad source from $SquadSourceRoot..." -ForegroundColor Cyan
             $squadPaths = Get-SquadSourcePaths -SourceRoot $SquadSourceRoot -Roots $IncludeRoots
-            $squadDeps = Build-SquadDependencyList -Paths $squadPaths -Repository $SquadRepoSlug -SourcePrefix $SquadSourceRoot
+            $squadDeps = Build-SquadDependencyList -Paths $squadPaths -Repository $SquadRepoSlug -SourcePrefix $SquadSourceRoot -Ref $SquadRef
             if ($null -eq $squadDeps) {
                 $squadDeps = @()
+            }
+            if ([string]::IsNullOrWhiteSpace($SquadRef)) {
+                Write-Host "Squad dependencies left unpinned (pass -SquadRef <tag> to pin)." -ForegroundColor Yellow
+            }
+            else {
+                Write-Host "Pinned squad dependencies to $SquadRef." -ForegroundColor Green
             }
             Write-Host "Found $($squadDeps.Count) squad dependencies." -ForegroundColor Green
         }

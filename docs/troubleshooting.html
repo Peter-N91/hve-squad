@@ -35,6 +35,31 @@
     <div class="container">
       <h2>Common issues</h2>
 
+      <h3>First <code>apm install</code> takes 30+ minutes (but never errors)</h3>
+      <p>
+        Almost always GitHub API rate limiting. This package references hundreds of individual files
+        from <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a>, and APM fetches
+        each one over GitHub's HTTP path. Unauthenticated callers are capped at
+        <strong>60 requests/hour</strong>; once the cap is hit APM waits for the window to reset
+        (honoring GitHub's <code>Retry-After</code> header) and keeps going, so the install crawls
+        instead of failing. A fresh machine also has a cold APM cache, so every file is fetched.
+      </p>
+      <p>Authenticate before installing to raise the limit to 5,000 requests/hour:</p>
+      <pre><code>gh auth login            # recommended — APM picks it up automatically
+# or set a token (public read is enough; hve-core is public)
+$env:GITHUB_TOKEN = "ghp_xxx"
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+      <p>
+        APM's GitHub token precedence is <code>GITHUB_APM_PAT_&lt;ORG&gt;</code> →
+        <code>GITHUB_APM_PAT</code> → <code>GITHUB_TOKEN</code> → <code>GH_TOKEN</code> →
+        <code>gh auth token</code> → your git credential helper. Once authenticated the install
+        completes quickly, and the warm cache makes later installs near-instant.
+      </p>
+      <p>
+        Raising <code>--parallel-downloads</code> does <em>not</em> help an unauthenticated install —
+        the cap is per hour, so more concurrency just reaches it faster.
+      </p>
+
       <h3><code>[x] No harness detected</code> after <code>apm install</code> (APM 0.18.0+)</h3>
       <p>
         APM downloaded the sources into <code>apm_modules/</code> but skipped the deploy step because

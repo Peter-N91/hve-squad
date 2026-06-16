@@ -130,13 +130,15 @@ apm run install-sync</code></pre>
         <code>Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md</code>.
         They are appended after the hve-core entries in <code>dependencies.apm</code>.
       </p>
-      <p>The sync command accepts two squad-specific parameters:</p>
+      <p>The sync command accepts these squad-specific parameters:</p>
       <pre><code>pwsh -File scripts/Update-ApmDependencies.ps1 `
   -SquadSourceRoot squad-src `
-  -SquadRepoSlug Peter-N91/hve-squad</code></pre>
+  -SquadRepoSlug Peter-N91/hve-squad `
+  -SquadRef vX.Y.Z</code></pre>
       <ul>
         <li><code>SquadSourceRoot</code>: local path to the squad source tree (default: <code>squad-src</code>). If the path does not exist, squad enumeration is skipped without error.</li>
         <li><code>SquadRepoSlug</code>: <code>owner/repo</code> that hosts the squad source (default: <code>Peter-N91/hve-squad</code>).</li>
+        <li><code>SquadRef</code>: optional git ref (the release tag you are cutting, e.g. <code>vX.Y.Z</code>) that pins the squad self-references as <code>#&lt;ref&gt;</code>. Omit it during development so local installs keep resolving; supply it at release time.</li>
       </ul>
       <p>Use <code>-DryRun</code> to preview both the hve-core and squad entries without writing <code>apm.yml</code>.</p>
 
@@ -144,10 +146,22 @@ apm run install-sync</code></pre>
         <p>
           <code>apm lock</code> and <code>apm install</code> can only resolve the squad virtual paths
           once the <code>squad-src/</code> tree has been pushed to the <code>SquadRepoSlug</code> remote.
-          Until then, <code>apm.yml</code> lists the squad entries but <code>apm.lock.yaml</code> will not
-          record them.
+          When squad entries are pinned with <code>-SquadRef vX.Y.Z</code>, that tag must also exist on
+          the remote, so pin the squad references as part of cutting the release (commit, then create
+          the tag) and verify <code>apm install</code> from a fresh clone of the tag rather than the
+          working tree.
         </p>
       </div>
+
+      <h3>Reproducible pins</h3>
+      <p>
+        Every generated <code>microsoft/hve-core</code> entry is pinned to the exact commit SHA that
+        <code>-Ref</code> resolves to (appended as <code>#&lt;sha&gt;</code>), so a published version keeps
+        resolving the same files even after hve-core's <code>main</code> moves on. Without this, an
+        unpinned path that hve-core later renames or removes makes the install fail for every consumer
+        of that version. Pass <code>-Ref &lt;hve-core-ref&gt;</code> to pin against a specific hve-core
+        commit or tag (default: <code>main</code>).
+      </p>
 
       <h2>Customization</h2>
       <p>You can tune generation behavior in <code>scripts/Update-ApmDependencies.ps1</code>:</p>
@@ -158,6 +172,7 @@ apm run install-sync</code></pre>
         <li><code>IncludeRegex</code>: file filter pattern</li>
         <li><code>SquadSourceRoot</code>: local squad source tree path</li>
         <li><code>SquadRepoSlug</code>: <code>owner/repo</code> hosting the squad source</li>
+        <li><code>SquadRef</code>: optional release tag/commit that pins the squad self-references</li>
       </ul>
 
       <h2>Release process</h2>
@@ -177,7 +192,7 @@ git checkout -b release/vX.Y.Z</code></pre>
           <ul>
             <li>Bump <code>version:</code> in <code>apm.yml</code> to <code>X.Y.Z</code>.</li>
             <li>Add a <code>## [X.Y.Z]</code> section to <code>CHANGELOG.md</code> describing the changes.</li>
-            <li>Refresh the lockfile if dependencies changed: <code>apm run sync-deps</code> then <code>apm lock</code>.</li>
+            <li>Regenerate the dependency list pinned to this release: <code>pwsh -File scripts/Update-ApmDependencies.ps1 -Ref main -SquadRef vX.Y.Z</code>. This pins every hve-core entry to <code>main</code>'s commit SHA and the squad self-references to <code>vX.Y.Z</code>. Then refresh the lockfile with <code>apm lock</code>.</li>
           </ul>
         </li>
         <li>Open a PR into <code>main</code> titled <code>release: vX.Y.Z</code> (the PR template fills in the checklist).</li>
