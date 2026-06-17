@@ -36,16 +36,16 @@ The coordinator runs four stages each turn: **init**, **route**, **decide**, and
 
 ### Squad Profiles
 
-A profile is a curated subset of the cast tailored to a kind of project. The coordinator seeds only the profile's members into `team.md`, and the routing table is filtered to those roles. The `scribe` role is always included. Profiles are defined canonically in `.github/instructions/squad/squad-roster.instructions.md`; the catalog below mirrors them.
+A profile is a curated subset of the cast tailored to a kind of project. The coordinator seeds only the profile's members into `team.md`, and the routing table is filtered to those roles. The `scribe` role is always included, and so is the **methodology spine** (`researcher`, `lead`, `developer`, `tester`) that runs the Research → Plan → Implement → Review cycle in every profile. Profiles are defined canonically in `.github/instructions/squad/squad-roster.instructions.md`; the catalog below mirrors them.
 
 | Profile        | Members                                                                                                                       | Use When                                                                                     |
 |----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| `default`      | lead, researcher, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |
-| `full`         | lead, researcher, developer, tester, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, scribe | Complex, cross-cutting projects that need every discipline                                  |
-| `security`     | security, rai, fact-checker, researcher, scribe                                                                               | Security, threat-modeling, and responsible-AI focus                                          |
-| `design`       | designer, researcher, lead, tester, scribe                                                                                    | UX/UI and product-design focus                                                               |
-| `architecture` | architect, azure-architect, researcher, lead, developer, cost-manager, scribe                                                 | System design and architecture focus                                                         |
-| `azure`        | azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, lead, developer, scribe                                                   | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
+| `default`      | researcher, lead, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |
+| `full`         | researcher, lead, developer, tester, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, scribe | Complex, cross-cutting projects that need every discipline                                  |
+| `security`     | researcher, lead, developer, tester, security, rai, fact-checker, scribe                                                      | Security, threat-modeling, and responsible-AI focus                                          |
+| `design`       | researcher, lead, developer, tester, designer, scribe                                                                         | UX/UI and product-design focus                                                               |
+| `architecture` | researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe                                        | System design and architecture focus                                                         |
+| `azure`        | researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, scribe | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
 
 ### Init
 
