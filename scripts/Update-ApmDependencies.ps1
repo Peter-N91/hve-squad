@@ -39,7 +39,7 @@
 .PARAMETER SquadRef
     Optional git ref (release tag or commit SHA) to pin squad self-references to,
     appended as '#<ref>'. Use the release tag you are about to cut (for example
-    v0.7.0): commit the manifest, then create that tag on the same commit. When
+    v0.8.0): commit the manifest, then create that tag on the same commit. When
     omitted, squad entries are left unpinned.
 .PARAMETER DryRun
     If set, prints generated dependencies without updating apm.yml.
@@ -48,7 +48,7 @@
 .EXAMPLE
     ./scripts/Update-ApmDependencies.ps1 -Ref main -DryRun
 .EXAMPLE
-    ./scripts/Update-ApmDependencies.ps1 -Ref main -SquadRef v0.7.0
+    ./scripts/Update-ApmDependencies.ps1 -Ref main -SquadRef v0.8.0
 .EXAMPLE
     ./scripts/Update-ApmDependencies.ps1 -SquadSourceRoot squad-src -SquadRepoSlug Peter-N91/hve-squad
 .NOTES
