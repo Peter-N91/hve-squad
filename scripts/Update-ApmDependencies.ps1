@@ -41,14 +41,19 @@
     appended as '#<ref>'. Use the release tag you are about to cut (for example
     v0.7.0): commit the manifest, then create that tag on the same commit. When
     omitted, squad entries are left unpinned.
+.PARAMETER HveCoreRef
+    Optional git ref (release tag or commit SHA in THIS repo) to pin hve-core mirror
+    entries to, appended as '#<ref>'. When omitted, entries are left unpinned so that
+    consumers who install via a release tag (e.g. sohamda/hve-squad#v0.6.1) have APM
+    resolve all files at that tag automatically.
 .PARAMETER DryRun
     If set, prints generated dependencies without updating apm.yml.
 .EXAMPLE
     ./scripts/Update-ApmDependencies.ps1 -ApmFile apm.yml
 .EXAMPLE
-    ./scripts/Update-ApmDependencies.ps1 -Ref main -DryRun
+    ./scripts/Update-ApmDependencies.ps1 -DryRun
 .EXAMPLE
-    ./scripts/Update-ApmDependencies.ps1 -Ref main -SquadRef v0.7.0
+    ./scripts/Update-ApmDependencies.ps1 -SquadRef v0.7.0 -HveCoreRef v0.7.0
 .EXAMPLE
     ./scripts/Update-ApmDependencies.ps1 -SquadSourceRoot squad-src -SquadRepoSlug myorg/hve-squad
 .NOTES
@@ -92,6 +97,9 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$SquadRepoSlug,
+
+    [Parameter(Mandatory = $false)]
+    [string]$HveCoreRef,
 
     [Parameter(Mandatory = $false)]
     [string]$SquadRef,
@@ -493,8 +501,22 @@ if ($MyInvocation.InvocationName -ne '.') {
         Write-Host "Local mirror pinned to commit $resolvedCommit." -ForegroundColor Green
 
         $hveCoreMirrorPrefix = "$SquadRepoSlug/$HveCoreLocalRoot"
-        Write-Host "Emitting hve-core refs as '$hveCoreMirrorPrefix/...'." -ForegroundColor Cyan
-        $deps = Build-DependencyList -Paths $paths -Repository $hveCoreMirrorPrefix -Roots $IncludeRoots -PathFilterRegex $IncludeRegex -Ref $resolvedCommit
+        Write-Host "Emitting hve-core refs as '$hveCoreMirrorPrefix/...'..." -ForegroundColor Cyan
+
+        # Resolve the ref to use for hve-core mirror entries in apm.yml.
+        # Entries are left unpinned by default so that consumers who install via a
+        # release tag (e.g. sohamda/hve-squad#v0.6.1) have APM resolve all files at
+        # that tag automatically. Pass -HveCoreRef only when explicit pinning is needed.
+        if (-not [string]::IsNullOrWhiteSpace($HveCoreRef)) {
+            $hveCorePinRef = $HveCoreRef
+            Write-Host "Pinning hve-core mirror entries to provided ref: $hveCorePinRef" -ForegroundColor Green
+        }
+        else {
+            $hveCorePinRef = ''
+            Write-Host "hve-core mirror entries left unpinned (pass -HveCoreRef <tag> to pin)." -ForegroundColor Yellow
+        }
+
+        $deps = Build-DependencyList -Paths $paths -Repository $hveCoreMirrorPrefix -Roots $IncludeRoots -PathFilterRegex $IncludeRegex -Ref $hveCorePinRef
         if ($null -eq $deps) {
             $deps = @()
         }
