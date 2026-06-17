@@ -24,6 +24,13 @@ This mirrors the existing reference-template-in-a-skill pattern already used by 
 never reads or writes the consumer's `.devcontainer/`, `.github/workflows/`, `scripts/`, or `infra/`
 trees. The consumer owns every copy, merge, and commit.
 
+APM install brings the squad's agent context into a consumer repo; it never writes the consumer's
+`.vscode/` or `.devcontainer/` trees. The dev container and the MCP wiring are therefore turnkey
+*through scaffolding* rather than automatic on install: a consumer-facing squad agent or the
+coordinator performs an explicit, logged, consumer-approved copy (or merge) when asked. This keeps
+the clone-and-go convenience of a template repo while preserving the doc-only, consumer-owns-config
+boundary an APM package requires.
+
 > **Nothing here runs from the package.** Each file below is an inert reference template. Activation is
 > always an explicit, deliberate copy into the consumer repo followed by a reviewed commit.
 
@@ -32,6 +39,7 @@ trees. The consumer owns every copy, merge, and commit.
 | Template                                                       | Consumer destination                          | Purpose                                                                                     |
 |----------------------------------------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------|
 | [devcontainer.template.json](devcontainer.template.json)       | `.devcontainer/devcontainer.json`             | Dev container with Azure CLI + Bicep, Terraform + TFLint, GitHub CLI, Node.js, and Python.  |
+| [mcp.template.json](../squad/mcp.template.json)                | `.vscode/mcp.json` (merge, do not overwrite)  | Recommended MCP servers for squad roles: Azure DevOps and Azure, plus optional GitHub and pricing servers. |
 | [Setup-AzureOidc.template.ps1](Setup-AzureOidc.template.ps1)   | `scripts/Setup-AzureOidc.ps1`                 | One-time wizard: Entra app registration, OIDC federated credentials, RBAC, and GitHub secrets. |
 | [deploy-bicep.workflow.yml](deploy-bicep.workflow.yml)         | `.github/workflows/deploy-bicep.yml`          | Bicep what-if + deploy via `azure/login@v2` OIDC (no stored client secret).                 |
 | [deploy-terraform.workflow.yml](deploy-terraform.workflow.yml) | `.github/workflows/deploy-terraform.yml`      | Terraform plan + apply via `azure/login@v2` OIDC with an Azure Storage backend.             |
@@ -76,11 +84,17 @@ writes these paths itself.
    `deploy-bicep.workflow.yml` → `.github/workflows/deploy-bicep.yml`).
 3. **Fill placeholders.** Replace every `<PLACEHOLDER>` token (subscription ID, resource group, region,
    project name, management-group ID) with the consumer's values. Leave no placeholder behind.
-4. **Wire identity.** Run `scripts/Setup-AzureOidc.ps1` once to create the federated identity and
+4. **Merge MCP servers (optional).** When the consumer wants the squad's recommended MCP wiring,
+   merge the `inputs` and `servers` entries from the squad skill's `mcp.template.json` (the
+   `.vscode/mcp.json` row above) into the consumer's `.vscode/mcp.json` rather than overwriting it,
+   preserving any servers they already configured. Remind the consumer to reload VS Code so Copilot
+   picks up the new servers. As with every path here, the package never writes `.vscode/mcp.json`
+   itself: a consumer-facing squad agent or the coordinator performs the merge on request.
+5. **Wire identity.** Run `scripts/Setup-AzureOidc.ps1` once to create the federated identity and
    populate the GitHub secrets/variables the deploy workflows consume. No client secret is ever stored.
-5. **Enable PR creation (governance only).** For the governance baseline workflow, the consumer enables
+6. **Enable PR creation (governance only).** For the governance baseline workflow, the consumer enables
    *Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*.
-6. **Commit deliberately.** Stage and commit the scaffolded files in the consumer repo. Any actual
+7. **Commit deliberately.** Stage and commit the scaffolded files in the consumer repo. Any actual
    Azure deployment runs only through the Squad Deployer, strictly behind the squad's
    Impactful-Action Gate.
 

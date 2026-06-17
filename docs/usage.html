@@ -158,7 +158,7 @@
           <tr><td><code>security</code></td><td>security, rai, fact-checker, researcher, scribe</td><td>Security, threat-modeling, responsible-AI focus</td></tr>
           <tr><td><code>design</code></td><td>designer, researcher, lead, tester, scribe</td><td>UX/UI and product-design focus</td></tr>
           <tr><td><code>architecture</code></td><td>architect, researcher, lead, developer, scribe</td><td>System design and architecture focus</td></tr>
-          <tr><td><code>azure</code></td><td>azure-architect, iac-author, deployer, architect, cost-manager, security, lead, developer, scribe</td><td>Azure build with IaC authoring, deployment, budget, and security oversight</td></tr>
+          <tr><td><code>azure</code></td><td>azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, lead, developer, scribe</td><td>Azure build with IaC authoring, deployment, post-deploy documentation, troubleshooting, budget, and security oversight</td></tr>
         </tbody>
       </table>
 
@@ -172,7 +172,9 @@
         <li><strong>Squad Azure Architect</strong> authors the HLD/LLD (AVM modules, landing-zone patterns).</li>
         <li><strong>Squad IaC Author</strong> converts that LLD into Bicep or Terraform under <code>infra/{track}/{project}</code>.</li>
         <li><strong>Squad Cost Manager</strong> produces indicative estimates and WAF Cost Optimization findings.</li>
-        <li><strong>Squad Deployer</strong> runs <code>what-if</code>/<code>plan</code> and then the deploy — strictly behind the Impactful-Action Gate, never without your approval.</li>
+        <li><strong>Squad Deployer</strong> runs a read-only Azure Policy precheck (effective assignments and predicted denials), then <code>what-if</code>/<code>plan</code>, and finally the deploy — strictly behind the Impactful-Action Gate, never without your approval.</li>
+        <li><strong>Squad As-Built Author</strong> inventories deployed resources via Azure Resource Graph, builds a compliance matrix from Azure Policy state, and drafts an operations runbook and backup/DR plan — all read-only, never deploys or mutates resources.</li>
+        <li><strong>Squad Azure Diagnose</strong> queries Resource Health, Azure Monitor logs (KQL), and Resource Graph to correlate ranked hypotheses and recommend (never apply) remediations for unhealthy resources.</li>
       </ul>
       <p>
         The <code>azure-scaffold</code> skill bundles documentation-only reference templates a squad
@@ -184,6 +186,23 @@
         <code>infra/terraform/{project}</code> convention. Nothing runs from the package — activation
         is always an explicit copy-and-commit into your repo, and authentication is OIDC (no stored
         secrets).
+      </p>
+
+      <h3>Azure MCP capability</h3>
+      <p>
+        The Deployer precheck, As-Built Author, and Azure Diagnose all use the
+        <code>azure-resource</code> capability, which prefers the official
+        <code>@azure/mcp</code> server when configured and falls back to the <code>az</code> CLI
+        and the Azure Resource Graph REST API automatically when it is not. The squad never
+        blocks on a missing MCP.
+      </p>
+      <p>
+        To wire the Azure MCP server, merge the <code>azure</code> server entry from
+        <code>.github/skills/squad/mcp.template.json</code> into your
+        <code>.vscode/mcp.json</code> and reload VS Code. The server authenticates via
+        <code>az login</code> (<code>DefaultAzureCredential</code>) — no stored secrets. You can
+        ask the coordinator to scaffold this for you: <code>/squad request="merge the squad MCP
+        template into my workspace"</code>.
       </p>
 
       <h2>Modernization</h2>

@@ -41,11 +41,11 @@ A profile is a curated subset of the cast tailored to a kind of project. The coo
 | Profile        | Members                                                                                                                       | Use When                                                                                     |
 |----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | `default`      | lead, researcher, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |
-| `full`         | all deployed roles (lead, researcher, developer, tester, architect, azure-architect, security, rai, designer, fact-checker, cost-manager, modernizer, scribe) | Complex, cross-cutting projects that need every discipline                                  |
+| `full`         | lead, researcher, developer, tester, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, scribe | Complex, cross-cutting projects that need every discipline                                  |
 | `security`     | security, rai, fact-checker, researcher, scribe                                                                               | Security, threat-modeling, and responsible-AI focus                                          |
 | `design`       | designer, researcher, lead, tester, scribe                                                                                    | UX/UI and product-design focus                                                               |
 | `architecture` | architect, azure-architect, researcher, lead, developer, cost-manager, scribe                                                 | System design and architecture focus                                                         |
-| `azure`        | azure-architect, architect, cost-manager, security, lead, developer, scribe                                                   | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
+| `azure`        | azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, lead, developer, scribe                                                   | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
 
 ### Init
 

@@ -11,6 +11,7 @@ Execute Azure deployments of the Infrastructure-as-Code authored under `infra/{t
 ## Purpose
 
 * Run a read-only preview of a deployment (`az deployment group what-if` / `terraform plan`) at the `auto` tier and summarize the diff.
+* Discover the effective Azure Policy constraints for the target scope before the gate and surface any predicted denials, without ever mutating policy.
 * Stop at the Impactful-Action Gate before any `create`/`apply`, and proceed only on explicit human approval through the configured approval channel.
 * Execute the approved deployment and capture its outputs, resource IDs, and any failure for hand-back.
 * Verify that OIDC workload-identity federation (not a stored secret) backs the deployment before running.
@@ -21,8 +22,8 @@ Read these on first use of a turn and honor them throughout.
 
 * `.github/instructions/squad/squad-autopilot.instructions.md` defines the Impactful-Action Gate. Every deploy (`create`/`apply`), destructive operation, and production change is gated there.
 * `.github/instructions/squad/squad-autonomous.instructions.md` defines the Mandatory Escalation Triggers this role never bypasses (production deploys, destructive infra operations, `terraform apply -auto-approve`, `az` deletes).
-* The `azure-scaffold` skill provides the deploy workflow and OIDC setup templates this role expects the consumer repo to have activated.
-* `.github/instructions/squad/squad-mcp-capability.instructions.md` governs any docs or pricing lookups during a deploy review.
+* The `azure-scaffold` skill provides the deploy workflow and OIDC setup templates this role expects the consumer repo to have activated, plus the read-only `Get-PolicyBaseline` template the policy precheck falls back to.
+* `.github/instructions/squad/squad-mcp-capability.instructions.md` governs the `azure-resource` capability the policy precheck uses (`@azure/mcp` preferred, `az policy` fallback) and any docs or pricing lookups during a deploy review.
 
 ## Inputs
 
@@ -44,13 +45,19 @@ Read these on first use of a turn and honor them throughout.
 1. Run `az deployment group what-if` (Bicep) or `terraform plan -out=tfplan` (Terraform) against `infra/{track}/{project}`.
 2. Summarize the diff: resources to add, change, and delete. Surface any delete or replace explicitly.
 
-### Step 3: Impactful-Action Gate
+### Step 3: Azure Policy Precheck (read-only, `auto`)
 
-1. Stop before any `create`/`apply`. Present exactly what will change (from Step 2) and why.
+1. Query the effective Azure Policy assignments and compliance state for `target_scope` via `@azure/mcp` (the `azure-resource` capability in `.github/instructions/squad/squad-mcp-capability.instructions.md`). When that MCP is absent or errors, fall back to `az policy` and the read-only `Get-PolicyBaseline` template from the `azure-scaffold` skill, and record which path was used.
+2. Compare the discovered constraints against the planned changes from Step 2 and flag any predicted denials (for example a `deny` effect on a resource type, region, or SKU the plan would create).
+3. Keep this step strictly read-only: it never mutates Azure Policy and never auto-approves. Carry its findings into the Impactful-Action Gate so the human approves with policy context.
+
+### Step 4: Impactful-Action Gate
+
+1. Stop before any `create`/`apply`. Present exactly what will change (from Step 2), the policy constraints and any predicted denials (from Step 3), and why.
 2. Wait for explicit human approval through the configured approval channel. Never proceed on a timeout, and never auto-approve.
 3. On a production target, a destructive change, or an `-auto-approve` request, escalate per the Mandatory Escalation Triggers even if a prior approval exists for a lower environment.
 
-### Step 4: Deploy (only after approval)
+### Step 5: Deploy (only after approval)
 
 1. On approval, run `az deployment group create` (Bicep) or `terraform apply tfplan` (Terraform).
 2. Capture deployment outputs, resource IDs, and exit status. On failure, capture the error and hand back to the `Squad IaC Author`.
@@ -69,6 +76,7 @@ Return a structured payload to the coordinator containing:
 
 * `mode`: `dry-run` or `deploy`.
 * `whatif_summary`: the resources to add / change / delete from the preview.
+* `policy_precheck`: the effective Azure Policy constraints and any predicted denials for `target_scope`, and which capability path ran (`@azure/mcp` or the `az policy` / `Get-PolicyBaseline` fallback); `"none"` when no policy applies.
 * `gate_status`: `pending-approval`, `approved`, or `not-required` (dry-run only).
 * `deploy_result`: outputs and resource IDs on a successful apply, or `null` when gated or dry-run.
 * `failure`: the captured error and the hand-back target when a deploy fails, or `"none"`.
