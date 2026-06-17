@@ -112,24 +112,19 @@ jobs:
           # Record upstream commit SHA
           echo "${{ steps.latest.outputs.sha }}" > hve-core/.version
 
-      # ── Rewrite apm.yml: replace any owner/repo-prefixed hve-core refs with ./-relative ones ─
+      # ── Rewrite apm.yml: replace microsoft/hve-core refs with local ones ─
       - name: Update apm.yml references
         if: steps.needs_sync.outputs.skip != 'true'
         run: |
-          # Replace any microsoft/hve-core/<path>#<hash> or owner/repo/hve-core/<path>#<hash>
-          # with the canonical ./hve-core/<path> form (no pin).
+          # Replace any remaining microsoft/hve-core/<path>#<hash> → local mirror path
+          # (idempotent: already-local refs are left unchanged)
           REPO="${{ github.repository }}"
-          # Rewrite microsoft/hve-core/<path>#<hash> → ./hve-core/<path>
           sed -i \
-            "s|microsoft/hve-core/\([^#]*\)#[a-f0-9]*|./hve-core/\1|g" \
+            "s|microsoft/hve-core/\(.*\)#[a-f0-9]*|${REPO}/hve-core/\1|g" \
             apm.yml
-          # Rewrite owner/repo/hve-core/<path>#<hash> → ./hve-core/<path>
+          # Strip stale #<hash> suffixes from already-local refs (in case they got pinned)
           sed -i \
-            "s|${REPO}/hve-core/\([^#]*\)#[a-f0-9]*|./hve-core/\1|g" \
-            apm.yml
-          # Strip stale #<hash> suffixes from already-local ./hve-core refs
-          sed -i \
-            "s|\(./hve-core/[^#]*\)#[a-f0-9]*|\1|g" \
+            "s|\(${REPO}/hve-core/[^#]*\)#[a-f0-9]*|\1|g" \
             apm.yml
 
       # ── Open a PR with the changes ────────────────────────────────────────

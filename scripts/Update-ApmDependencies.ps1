@@ -93,6 +93,9 @@ param(
     [string]$SquadSourceRoot = 'squad-src',
 
     [Parameter(Mandatory = $false)]
+    [string]$SquadRepoSlug,
+
+    [Parameter(Mandatory = $false)]
     [string]$HveCoreRef,
 
     [Parameter(Mandatory = $false)]
@@ -104,6 +107,26 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Ensure all relative paths resolve against the repo root (parent of scripts/).
+# APM may invoke this script with a different working directory.
+Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
+
+# Auto-detect SquadRepoSlug from the git remote when not explicitly provided.
+# Parses 'git remote get-url origin' and converts the URL to owner/repo format.
+if ([string]::IsNullOrWhiteSpace($SquadRepoSlug)) {
+    $remoteUrl = & git remote get-url origin 2>$null
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($remoteUrl)) {
+        $remoteUrl = $remoteUrl.Trim()
+        # Handle both HTTPS (https://github.com/owner/repo.git) and SSH (git@github.com:owner/repo.git)
+        if ($remoteUrl -match 'github\.com[:/]([^/]+/[^/]+?)(\.git)?$') {
+            $SquadRepoSlug = $matches[1]
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($SquadRepoSlug)) {
+        throw "Could not detect SquadRepoSlug from git remote. Pass -SquadRepoSlug owner/repo explicitly."
+    }
+    Write-Host "Auto-detected SquadRepoSlug: $SquadRepoSlug" -ForegroundColor Cyan
+}
 
 #region Functions
 function Get-LeadingSpaceCount {
@@ -208,6 +231,9 @@ function Build-DependencyList {
         [string[]]$Paths,
 
         [Parameter(Mandatory = $true)]
+        [string]$Repository,
+
+        [Parameter(Mandatory = $true)]
         [string[]]$Roots,
 
         [Parameter(Mandatory = $true)]
@@ -260,7 +286,7 @@ function Build-DependencyList {
 
     $refSuffix = if ([string]::IsNullOrWhiteSpace($Ref)) { '' } else { "#$Ref" }
     $selected = @($agentDeps + $promptDeps + $instructionDeps + $skillDeps)
-    return @($selected | Sort-Object -Unique | ForEach-Object { "./$_$refSuffix" })
+    return @($selected | Sort-Object -Unique | ForEach-Object { "$Repository/$_$refSuffix" })
 }
 
 function Get-SquadSourcePaths {
@@ -308,6 +334,9 @@ function Build-SquadDependencyList {
         [string[]]$Paths,
 
         [Parameter(Mandatory = $true)]
+        [string]$Repository,
+
+        [Parameter(Mandatory = $true)]
         [string]$SourcePrefix,
 
         [Parameter(Mandatory = $false)]
@@ -352,7 +381,7 @@ function Build-SquadDependencyList {
 
     $refSuffix = if ([string]::IsNullOrWhiteSpace($Ref)) { '' } else { "#$Ref" }
     $selected = @($agentDeps + $promptDeps + $instructionDeps + $skillDeps)
-    return @($selected | Sort-Object -Unique | ForEach-Object { "./$_$refSuffix" })
+    return @($selected | Sort-Object -Unique | ForEach-Object { "$Repository/$_$refSuffix" })
 }
 
 function Update-ApmDependencyList {
@@ -475,14 +504,12 @@ if ($MyInvocation.InvocationName -ne '.') {
     try {
         Write-Host "Reading hve-core tree from local mirror '$HveCoreLocalRoot'..." -ForegroundColor Cyan
         $tree = Get-LocalRepoTreePaths -LocalRoot $HveCoreLocalRoot -Roots $IncludeRoots
-        # Prefix paths with the local mirror dir name so they are repo-root-relative
-        # (e.g. ".github/agents/foo.agent.md" → "hve-core/.github/agents/foo.agent.md")
-        $localRootNorm = $HveCoreLocalRoot.Replace('\', '/').TrimEnd('/')
-        $paths = @($tree.Paths | ForEach-Object { "$localRootNorm/$_" })
+        $paths = $tree.Paths
         $resolvedCommit = $tree.ResolvedCommit
         Write-Host "Local mirror pinned to commit $resolvedCommit." -ForegroundColor Green
 
-        Write-Host "Emitting hve-core refs as './$HveCoreLocalRoot/...' (relative paths)." -ForegroundColor Cyan
+        $hveCoreMirrorPrefix = "$SquadRepoSlug/$HveCoreLocalRoot"
+        Write-Host "Emitting hve-core refs as '$hveCoreMirrorPrefix/...'..." -ForegroundColor Cyan
 
         # Resolve the ref to use for hve-core mirror entries in apm.yml.
         # Entries are left unpinned by default so that consumers who install via a
@@ -497,7 +524,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             Write-Host "hve-core mirror entries left unpinned (pass -HveCoreRef <tag> to pin)." -ForegroundColor Yellow
         }
 
-        $deps = Build-DependencyList -Paths $paths -Roots $IncludeRoots -PathFilterRegex $IncludeRegex -PathPrefix $HveCoreLocalRoot -Ref $hveCorePinRef
+        $deps = Build-DependencyList -Paths $paths -Repository $hveCoreMirrorPrefix -Roots $IncludeRoots -PathFilterRegex $IncludeRegex -Ref $hveCorePinRef
         if ($null -eq $deps) {
             $deps = @()
         }
@@ -507,7 +534,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (Test-Path -LiteralPath $SquadSourceRoot) {
             Write-Host "Reading squad source from $SquadSourceRoot..." -ForegroundColor Cyan
             $squadPaths = Get-SquadSourcePaths -SourceRoot $SquadSourceRoot -Roots $IncludeRoots
-            $squadDeps = Build-SquadDependencyList -Paths $squadPaths -SourcePrefix $SquadSourceRoot -Ref $SquadRef
+            $squadDeps = Build-SquadDependencyList -Paths $squadPaths -Repository $SquadRepoSlug -SourcePrefix $SquadSourceRoot -Ref $SquadRef
             if ($null -eq $squadDeps) {
                 $squadDeps = @()
             }
