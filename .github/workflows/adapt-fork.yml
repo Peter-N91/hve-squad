@@ -1,0 +1,95 @@
+name: Adapt Fork
+
+# One-click workflow for fork owners to rewire apm.yml after forking.
+#
+# What it does:
+#   1. Detects the current repository's GitHub owner from the workflow context.
+#   2. Updates the `author:` field in apm.yml.
+#   3. Runs Update-ApmDependencies.ps1, which auto-detects the owner from
+#      `git remote get-url origin` and rewrites every dependency path from
+#      the previous fork's owner to this repo's owner.
+#   4. Commits and pushes the updated apm.yml (and apm.lock.yaml if changed).
+#
+# When to run:
+#   - Once, immediately after forking this repository.
+#   - Again after merging upstream changes that touch apm.yml, if the paths
+#     have reverted to the upstream owner.
+#
+# The workflow never creates a release or a tag. Use the Release workflow
+# (release.yml) for that.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hve_core_ref:
+        description: 'hve-core git ref for dependency regeneration (branch, tag, or commit SHA)'
+        required: false
+        default: 'main'
+        type: string
+      dry_run:
+        description: 'Print the regenerated dependency list without committing'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  adapt:
+    name: Adapt apm.yml to this fork
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # Derive owner (e.g. "sohamda") and full slug (e.g. "sohamda/hve-squad")
+      - name: Detect fork owner
+        id: owner
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          REPO_SLUG="${{ github.repository }}"
+          echo "owner=$OWNER"       >> "$GITHUB_OUTPUT"
+          echo "repo_slug=$REPO_SLUG" >> "$GITHUB_OUTPUT"
+          echo "Detected owner: $OWNER  slug: $REPO_SLUG"
+
+      # Update the author: field so apm.yml reflects the fork owner
+      - name: Update apm.yml author
+        run: |
+          OWNER="${{ steps.owner.outputs.owner }}"
+          sed -i "s/^author: .*/author: $OWNER/" apm.yml
+          echo "Set author to: $OWNER"
+
+      # Regenerate dependency paths — the script reads owner from git remote,
+      # which resolves to this repo's origin URL in the Actions runner.
+      - name: Regenerate dependency paths
+        run: |
+          pwsh scripts/Update-ApmDependencies.ps1 \
+            -Ref        "${{ inputs.hve_core_ref }}" \
+            ${{ inputs.dry_run == 'true' && '-DryRun' || '' }}
+
+      - name: Commit and push
+        if: ${{ inputs.dry_run == false || inputs.dry_run == 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          if ! git diff --quiet; then
+            git add apm.yml apm.lock.yaml
+            git commit -m "chore(fork): adapt apm.yml paths to ${{ steps.owner.outputs.repo_slug }}"
+            git push origin main
+            echo "::notice::apm.yml updated for fork ${{ steps.owner.outputs.repo_slug }}"
+          else
+            echo "::notice::No changes detected — apm.yml already uses the correct owner."
+          fi

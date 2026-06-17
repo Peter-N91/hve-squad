@@ -5,6 +5,63 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-06-17
+
+> **Fork note:** This version is published from [sohamda/hve-squad](https://github.com/sohamda/hve-squad),
+> a fork of [Peter-N91/hve-squad](https://github.com/Peter-N91/hve-squad) at `v0.7.0`.
+> All squad and hve-core content is identical to the upstream `v0.7.0` release.
+> The changes below are infrastructure-only additions specific to this fork.
+
+Introduces a local hve-core mirror, fork-portable dependency paths, a release
+workflow, and a one-click "adapt to fork" workflow so any consumer who forks this
+repository can rewire `apm.yml` to their own GitHub owner in a single Actions run.
+
+### Added
+
+- Local hve-core mirror (`hve-core/`): a sparse checkout of `microsoft/hve-core`
+  is stored directly in this repository and kept up to date by the existing
+  `sync-hve-core.yml` workflow. All `dependencies.apm` entries for hve-core files
+  now resolve from `{owner}/hve-squad/hve-core/...` (the mirror) instead of
+  requiring direct access to `microsoft/hve-core`, which may be private.
+- `scripts/Update-ApmDependencies.ps1` fork auto-detection: the script now
+  auto-detects `SquadRepoSlug` from `git remote get-url origin` (parsing both
+  HTTPS and SSH URL formats) so regenerated paths always use the running repo's
+  GitHub owner. No manual `-SquadRepoSlug` flag is needed in normal workflows.
+- Release workflow (`.github/workflows/release.yml`): automates the full release
+  cycle. A `workflow_dispatch` trigger accepts a `version` input, updates
+  `apm.yml`, runs `Update-ApmDependencies.ps1` (with auto-detected owner), commits
+  and pushes, then creates a GitHub Release from the CHANGELOG entry. A `push` to
+  `main` trigger creates the release if the tag does not already exist, skipping
+  commits that were authored by the workflow itself to prevent push-loops.
+- "Adapt fork" workflow (`.github/workflows/adapt-fork.yml`): a
+  `workflow_dispatch`-only workflow that re-generates `apm.yml` dependency paths
+  for the repo it runs in, using the auto-detected GitHub owner. Fork owners run
+  this once after forking — no local tooling required.
+
+### Changed
+
+- `apm.yml` dependency paths migrated from `Peter-N91/hve-squad/hve-core/...` to
+  `sohamda/hve-squad/hve-core/...` to reflect the local mirror in this fork.
+  Running `scripts/Update-ApmDependencies.ps1` or the "Adapt fork" workflow in any
+  fork will regenerate these paths with the correct owner automatically.
+- `apm.yml` package version bumped to `0.7.1` and `author` updated to `sohamda`.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "sohamda/hve-squad#v0.7.1"
+```
+
+### Fork owner quick-start
+
+After forking, run the **Adapt Fork** workflow from the Actions tab to rewrite
+`apm.yml` with your repo's owner. Then use the **Release** workflow to cut
+your first version.
+
+[0.7.1]: https://github.com/sohamda/hve-squad/releases/tag/v0.7.1
+
 ## [0.7.0] - 2026-06-16
 
 Makes installs reproducible by pinning every dependency to an immutable ref, so a published version keeps resolving the same files even after `microsoft/hve-core` changes its default branch. This fixes transitive installs of `0.6.0`, which broke when hve-core consolidated several instruction files on `main`.
