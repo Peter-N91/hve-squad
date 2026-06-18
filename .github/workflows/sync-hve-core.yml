@@ -1,162 +1,127 @@
-name: Sync hve-core Mirror
+name: Sync and Adapt
+
+# Runs every morning at 06:00 UTC or on demand.
+#
+# What it does:
+#   1. Gets the latest deployment SHA from microsoft/hve-core.
+#   2. Reads the SHA currently pinned in apm.yml (from the first hve-core entry).
+#   3. Skips if already up to date (unless force=true).
+#   4. Runs Update-ApmDependencies.ps1 -Ref <new_sha>, which:
+#        - clones microsoft/hve-core at that exact SHA
+#        - rewrites all microsoft/hve-core entries with the new SHA
+#        - auto-detects the GitHub owner for squad entries
+#        - updates apm.lock.yaml
+#   5. Sets author: in apm.yml to the repo owner.
+#   6. Commits and pushes directly to main.
+#
+# No local hve-core mirror involved — all content is referenced directly
+# from microsoft/hve-core at a pinned commit SHA.
 
 on:
   schedule:
-    # Runs daily at 06:00 UTC — checks for new hve-core deployments
     - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       force:
-        description: 'Force sync even if upstream version is unchanged'
+        description: 'Force update even if hve-core SHA is already current'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Print what would change without committing'
         type: boolean
         default: false
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  sync:
-    name: Sync hve-core mirror
+  sync-and-adapt:
+    name: Sync hve-core SHA + adapt paths
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout hve-squad
+      - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      # ── Read what version is already mirrored ────────────────────────────
-      - name: Read current mirrored version
-        id: current
-        run: |
-          if [[ -f hve-core/.version ]]; then
-            echo "sha=$(cat hve-core/.version)" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── Resolve latest hve-core deployment → commit SHA ────────────────────
-      - name: Get latest hve-core deployment
+      # ── Resolve latest hve-core deployment SHA ────────────────────────────
+      - name: Get latest hve-core deployment SHA
         id: latest
         env:
-          # Use HVE_CORE_TOKEN for private repos; falls back to GITHUB_TOKEN for public
           GH_TOKEN: ${{ secrets.HVE_CORE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          # Fetch the most recent deployment (deployments are returned newest-first)
           DEPLOY=$(gh api 'repos/microsoft/hve-core/deployments?per_page=1' --jq '.[0]')
           SHA=$(echo "$DEPLOY" | jq -r '.sha')
-          ENV=$(echo "$DEPLOY" | jq -r '.environment')
-          DEPLOY_ID=$(echo "$DEPLOY" | jq -r '.id')
           SHORT_SHA=${SHA:0:7}
-          echo "sha=$SHA"           >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA"             >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "env=$ENV"            >> "$GITHUB_OUTPUT"
-          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
-          echo "Latest deployment: #${DEPLOY_ID} (${ENV}) @ ${SHORT_SHA}"
+          echo "Latest hve-core deployment: ${SHORT_SHA} (${SHA})"
 
-      # ── Early-exit when already up to date ───────────────────────────────
-      - name: Check if sync is needed
-        id: needs_sync
+      # ── Read SHA currently pinned in apm.yml ─────────────────────────────
+      - name: Read current pinned SHA
+        id: current
+        run: |
+          # Grab the SHA from the first microsoft/hve-core entry (after the #)
+          SHA=$(grep -m1 'microsoft/hve-core/.*#' apm.yml | sed 's/.*#//' | tr -d '[:space:]' || true)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Current pinned SHA: ${SHA:-<none>}"
+
+      # ── Skip if already up to date ────────────────────────────────────────
+      - name: Check if update is needed
+        id: check
         run: |
           CURRENT="${{ steps.current.outputs.sha }}"
           LATEST="${{ steps.latest.outputs.sha }}"
           FORCE="${{ inputs.force }}"
           if [[ "$CURRENT" == "$LATEST" && "$FORCE" != "true" ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "hve-core mirror is already at ${{ steps.latest.outputs.short_sha }} (${LATEST}) — nothing to do."
+            echo "apm.yml already pinned to ${{ steps.latest.outputs.short_sha }} — nothing to do."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Update needed: ${CURRENT:-<none>} → ${{ steps.latest.outputs.short_sha }}"
           fi
 
-      # ── Sparse-checkout only selected subfolders from hve-core ──────────
-      - name: Sparse-checkout hve-core (agents/instructions/prompts/skills)
-        if: steps.needs_sync.outputs.skip != 'true'
+      # ── Regenerate apm.yml at the new SHA ────────────────────────────────
+      #    Script clones microsoft/hve-core at the SHA, rewrites all entries,
+      #    and auto-detects the owner for squad paths from git remote.
+      - name: Regenerate apm.yml dependencies
+        if: steps.check.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.HVE_CORE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          git clone \
-            --filter=blob:none \
-            --sparse \
-            --depth=1 \
-            "https://x-access-token:${GH_TOKEN}@github.com/microsoft/hve-core.git" \
-            /tmp/hve-core-src
+          ARGS=(-Ref "${{ steps.latest.outputs.sha }}")
+          [[ "${{ inputs.dry_run }}" == "true" ]] && ARGS+=(-DryRun)
+          pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
 
-          cd /tmp/hve-core-src
-          git sparse-checkout set \
-            .github/agents \
-            .github/instructions \
-            .github/prompts \
-            .github/skills
-          # Checkout pinned commit to ensure reproducibility
-          git fetch --depth=1 origin "${{ steps.latest.outputs.sha }}"
-          git checkout "${{ steps.latest.outputs.sha }}"
-
-      # ── Sync files into hve-core/ mirror ─────────────────────────────────
-      - name: Update hve-core mirror
-        if: steps.needs_sync.outputs.skip != 'true'
+      # ── Ensure apm.yml author matches this repo's owner ──────────────────
+      - name: Set apm.yml author
+        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
         run: |
-          # Clear only the four mirrored subfolders
-          rm -rf hve-core/.github/agents \
-                 hve-core/.github/instructions \
-                 hve-core/.github/prompts \
-                 hve-core/.github/skills
-          mkdir -p hve-core/.github
+          OWNER="${{ github.repository_owner }}"
+          sed -i "s/^author: .*/author: $OWNER/" apm.yml
+          echo "author set to: $OWNER"
 
-          # Copy only the four subfolders
-          for dir in agents instructions prompts skills; do
-            if [[ -d /tmp/hve-core-src/.github/$dir ]]; then
-              cp -r /tmp/hve-core-src/.github/$dir hve-core/.github/$dir
-            fi
-          done
-
-          # Record upstream commit SHA
-          echo "${{ steps.latest.outputs.sha }}" > hve-core/.version
-
-      # ── Rewrite apm.yml: replace microsoft/hve-core refs with local ones ─
-      - name: Update apm.yml references
-        if: steps.needs_sync.outputs.skip != 'true'
+      # ── Commit and push ───────────────────────────────────────────────────
+      - name: Commit and push
+        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Replace any remaining microsoft/hve-core/<path>#<hash> → local mirror path
-          # (idempotent: already-local refs are left unchanged)
-          REPO="${{ github.repository }}"
-          sed -i \
-            "s|microsoft/hve-core/\(.*\)#[a-f0-9]*|${REPO}/hve-core/\1|g" \
-            apm.yml
-          # Strip stale #<hash> suffixes from already-local refs (in case they got pinned)
-          sed -i \
-            "s|\(${REPO}/hve-core/[^#]*\)#[a-f0-9]*|\1|g" \
-            apm.yml
-
-      # ── Open a PR with the changes ────────────────────────────────────────
-      - name: Create Pull Request
-        if: steps.needs_sync.outputs.skip != 'true'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore(deps): sync hve-core mirror to ${{ steps.latest.outputs.short_sha }}"
-          branch: "chore/sync-hve-core-${{ steps.latest.outputs.short_sha }}"
-          delete-branch: true
-          title: "chore(deps): sync hve-core mirror to ${{ steps.latest.outputs.short_sha }}"
-          body: |
-            ## hve-core mirror sync
-
-            Automated sync of the `hve-core/` mirror from `microsoft/hve-core`.
-
-            | Field | Value |
-            |-------|-------|
-            | Deployment ID | `${{ steps.latest.outputs.deploy_id }}` |
-            | Environment | `${{ steps.latest.outputs.env }}` |
-            | Upstream commit | `${{ steps.latest.outputs.sha }}` |
-
-            ### What changed
-            - `hve-core/.github/agents/` refreshed
-            - `hve-core/.github/instructions/` refreshed
-            - `hve-core/.github/prompts/` refreshed
-            - `hve-core/.github/skills/` refreshed
-            - `hve-core/.version` updated
-            - `apm.yml` references verified (local mirror paths, no org auth required)
-
-            > This PR was opened automatically by the **Sync hve-core Mirror** workflow.
-          labels: |
-            dependencies
-            automated
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git add apm.yml apm.lock.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(deps): update hve-core pin to ${{ steps.latest.outputs.short_sha }}"
+            git push origin main
+            echo "::notice::Pushed hve-core update to ${{ steps.latest.outputs.short_sha }}"
+          else
+            echo "::notice::No changes after regeneration — nothing to commit."
+          fi
