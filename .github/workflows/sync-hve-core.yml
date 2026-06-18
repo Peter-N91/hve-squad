@@ -99,8 +99,9 @@ jobs:
           pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
 
       # ── Ensure apm.yml author matches this repo's owner ──────────────────
+      #    Always runs — author may be wrong even when the SHA is already current.
       - name: Set apm.yml author
-        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
+        if: inputs.dry_run != 'true'
         run: |
           OWNER="${{ github.repository_owner }}"
           sed -i "s/^author: .*/author: $OWNER/" apm.yml
@@ -108,7 +109,7 @@ jobs:
 
       # ── Commit and push ───────────────────────────────────────────────────
       - name: Commit and push
-        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
+        if: inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
