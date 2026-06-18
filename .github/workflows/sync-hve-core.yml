@@ -13,8 +13,8 @@ name: Sync and Adapt
 #   5. Bumps the patch version in apm.yml.
 #   6. Prepends a CHANGELOG entry for the new version.
 #   7. Commits apm.yml and CHANGELOG.md and pushes to main.
-#      (release.yml triggers automatically on that push to cut the tag
-#      and GitHub Release.)
+#   8. Dispatches release.yml to cut the tag and GitHub Release
+#      (required because GITHUB_TOKEN-authored pushes do not trigger workflows).
 #
 # No local hve-core mirror involved — all content is referenced directly
 # from microsoft/hve-core at a pinned commit SHA.
@@ -91,7 +91,6 @@ jobs:
 
       # ── Regenerate apm.yml at the new SHA ────────────────────────────────
       #    Script clones microsoft/hve-core at the SHA, rewrites all entries,
-      #    and auto-detects the owner for squad paths from git remote.
       - name: Regenerate apm.yml dependencies
         if: steps.check.outputs.skip != 'true'
         run: |
@@ -126,7 +125,7 @@ jobs:
 
       # ── Commit and push ───────────────────────────────────────────────────
       - name: Commit and push
-        if: inputs.dry_run != 'true'
+        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

@@ -109,7 +109,7 @@ jobs:
           fi
           printf '%s' "$NOTES" > /tmp/release_notes.md
 
-      # ── Create GitHub Release (also creates the annotated tag) ────────────
+      # ── Create GitHub Release (also creates the tag) ────────────
       - name: Create GitHub Release
         if: steps.tag_check.outputs.exists == 'false'
         env:
