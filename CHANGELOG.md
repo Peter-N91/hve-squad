@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-06-18
+
+Fork-specific release. No functional changes to squad content relative to upstream `Peter-N91/hve-squad@v0.8.1`.
+
+### Changed
+
+- Automated sync workflow (`sync-hve-core.yml`) rewritten: drops the local `hve-core/` mirror entirely; all `microsoft/hve-core` content is now referenced directly from `microsoft/hve-core` at a pinned commit SHA. On each run the workflow fetches the latest `microsoft/hve-core` commit, regenerates `apm.yml` deps, bumps the patch version, updates this changelog, and dispatches a release.
+- Squad dependency paths corrected to use `sohamda/hve-squad` instead of the upstream `Peter-N91/hve-squad`.
+- `release.yml` passes `-SquadRepoSlug` explicitly so any fork regenerates paths against its own owner automatically.
+
+### Consumer install
+
+```powershell
+apm install "sohamda/hve-squad#v0.8.2"
+```
+
+[0.8.2]: https://github.com/sohamda/hve-squad/releases/tag/v0.8.2
+
 ## [0.8.1] - 2026-06-17
 
 Guarantees the HVE Core delivery methodology — Research → Plan → Implement → Review — runs in every squad profile, not just the general-purpose ones. Adds a universal methodology spine to all profiles and a post-implementation review step, and lets the Squad Coordinator dispatch the three Azure-track roles that `0.8.0` shipped but left out of the coordinator's dispatch allowlist.
