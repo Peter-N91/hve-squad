@@ -16,14 +16,17 @@
 //      replace existing entries you depend on.
 //   4. Reload VS Code so Copilot picks up the new servers.
 //
-// Why this template is small
-//   Only one official, Microsoft-maintained MCP server applies to the
-//   squad's current scope: `@azure-devops/mcp`. The `github` and
-//   `azure-pricing` entries below are optional: `github` backs the
-//   remote approval channel, and `azure-pricing` backs the Squad Cost
-//   Manager's retail-price lookups. No official MCP exists for draw.io,
-//   for the python `diagrams` library, or (at authoring time) for Azure
-//   pricing, so each optional entry documents its non-MCP fallback. See
+// Which servers are in scope
+//   Two official, Microsoft-maintained MCP servers apply to the squad's
+//   current scope: `@azure-devops/mcp` for work-item, repository, and
+//   pipeline access, and `@azure/mcp` for live Azure governance
+//   discovery, deployed-resource inventory, and KQL troubleshooting. The
+//   `github` and `azure-pricing` entries below are optional: `github`
+//   backs the remote approval channel, and `azure-pricing` backs the
+//   Squad Cost Manager's retail-price lookups. No official MCP exists for
+//   draw.io, for the python `diagrams` library, or (at authoring time)
+//   for Azure pricing, so each optional entry documents its non-MCP
+//   fallback. See
 //   `.github/instructions/squad/squad-mcp-capability.instructions.md`
 //   for the capability-aware fallbacks and out-of-band options.
 //
@@ -70,6 +73,23 @@
         "pipelines"
       ]
     },
+    "azure": {
+      // Official Microsoft Azure MCP server (npm: @azure/mcp). Backs the
+      // squad's live Azure governance discovery, deployed-resource
+      // inventory, and KQL troubleshooting (the `azure-resource`
+      // capability used by the Deployer, As-Built Author, and Azure
+      // Diagnose roles). Authenticates with the Azure SDK
+      // `DefaultAzureCredential` chain via `az login` (managed Entra
+      // OAuth); no PAT, secret, or API key is stored in this template.
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@azure/mcp@latest",
+        "server",
+        "start"
+      ]
+    },
     "github": {
       // Optional: official GitHub MCP server, used by the squad's
       // `github-issue` approval channel to open/assign approval issues
@@ -87,25 +107,42 @@
       ]
     },
     "azure-pricing": {
-      // Optional: an Azure pricing MCP server used by the Squad Cost
-      // Manager for retail-price lookups. At authoring time there is no
-      // official Microsoft-maintained Azure pricing MCP, so this entry is
-      // a placeholder you point at a community or self-hosted server
-      // (for example, a stdio server that wraps the Azure Retail Prices
-      // API). Replace <azure-pricing-mcp-package> with the package you
-      // choose to trust, or remove this block to rely on the fallback.
+      // Optional: a community Azure pricing MCP server used by the Squad
+      // Cost Manager for retail-price, reserved-instance, spot, and
+      // orphaned-resource lookups. No official Microsoft-maintained Azure
+      // pricing MCP exists at authoring time, so the squad recommends a
+      // community server you choose to trust:
+      //   Primary:     msftnadavbh/AzurePricingMCP (active; ~18 tools,
+      //                including reserved-instance, spot, orphaned-
+      //                resource, Databricks, GitHub, and PTU sizing).
+      //   Alternative: the APEX-maintained jonathan-vella/apex-accelerator
+      //                pricing MCP (token-optimized compact output, latest
+      //                Python) for consumers who prefer compact responses.
+      //
+      // Packaging caveat: both servers are packaged for Python (pip /
+      // Docker / uvx), NOT npm, so the `npx` form the other entries use
+      // does not apply here. The invocation is likely one of the forms
+      // below; VERIFY THE EXACT STDIO COMMAND before use. The precise
+      // invocation is unverified and tracked as WI-02, so the
+      // command/args below are a labeled placeholder, not a runnable
+      // value:
+      //   uvx:    "command": "uvx",    "args": ["<pricing-mcp-dist>"]
+      //   pipx:   "command": "pipx",   "args": ["run", "<pricing-mcp-dist>"]
+      //   docker: "command": "docker", "args": ["run", "-i", "--rm", "<pricing-mcp-image>"]
+      //
       // When this server is absent, the cost-manager falls back to the
       // anonymous Azure Retail Prices REST API
       // (https://prices.azure.com/api/retail/prices) via the Researcher
-      // Subagent — see the `Azure-pricing` capability row in
+      // Subagent. See the `Azure-pricing` capability row in
       // `.github/instructions/squad/squad-mcp-capability.instructions.md`.
-      // The Retail Prices API is anonymous and daily-updated; no
-      // credential is required for either the MCP or the fallback.
+      // The Retail Prices REST fallback is anonymous and daily-updated
+      // and needs no credential; the pricing MCP's admin-tier tools
+      // (orphaned resources, spot history) require `az login` while its
+      // core price tools do not.
       "type": "stdio",
-      "command": "npx",
+      "command": "<verify-WI-02-exact-stdio-command>",
       "args": [
-        "-y",
-        "<azure-pricing-mcp-package>"
+        "<verify-WI-02-exact-stdio-args>"
       ]
     }
   }

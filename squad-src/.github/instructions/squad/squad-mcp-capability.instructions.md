@@ -17,7 +17,8 @@ The coordinator passes a capability hint to each dispatched role when the role n
 |--------------------|----------------------------------------------|---------------------------------------------------------------------------------|
 | diagram-rendering  | A draw.io MCP server when one is configured  | Render Mermaid in chat; or author Mermaid in repository markdown                |
 | ADO query          | `@azure-devops/mcp` (Microsoft official)     | Researcher Subagent against the Azure DevOps REST API with a user-supplied PAT  |
-| Azure-pricing      | An Azure Cost MCP server when one is configured | Researcher Subagent against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
+| Azure-pricing      | `msftnadavbh/AzurePricingMCP` community server (or the APEX `jonathan-vella/apex-accelerator` fork) | Researcher Subagent against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
+| azure-resource     | `@azure/mcp` (official Azure MCP server)      | Researcher Subagent against the Azure CLI (`az`) and the Azure Resource Graph / Resource Manager REST APIs using the user's `az login` context |
 | architecture-docs  | `microsoft-docs` MCP when configured         | Researcher Subagent against `learn.microsoft.com` via web fetch                 |
 | code-context       | `context7` MCP when configured               | Researcher Subagent against the published library documentation                 |
 | github-issue       | `github` MCP (GitHub official) when configured | The `gh` CLI when authenticated; otherwise an in-chat ping (no remote approval) |
@@ -25,6 +26,8 @@ The coordinator passes a capability hint to each dispatched role when the role n
 The "Preferred MCP" column names the server the role tries first. The "Non-MCP Fallback" column is what the role does when the preferred MCP is not configured, is unreachable, or returns an error during the dispatched turn.
 
 The `github-issue` capability backs the remote approval channel in `.github/instructions/squad/squad-notifications.instructions.md`. Its fallback chain is `github` MCP → `gh` CLI → in-chat: on a headless VM an authenticated `gh` CLI is sufficient and the MCP is not required, and when neither is available the squad degrades to an in-chat approval (the user simply cannot approve remotely).
+
+The `azure-resource` capability backs the squad's Azure governance discovery, as-built inventory, and diagnose roles. It reads Azure control-plane data such as policy assignments, Resource Graph results, and Azure Monitor logs through `@azure/mcp`, and falls back to the `az` CLI and the Azure Resource Graph and Resource Manager REST APIs under the user's `az login` context when that MCP is absent. All reads on this path are non-destructive.
 
 ## Capability Hint Contract
 

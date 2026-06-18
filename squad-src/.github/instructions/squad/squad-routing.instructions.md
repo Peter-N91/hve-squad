@@ -50,6 +50,8 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | verify finding, confirm claim, fact-check  | Finding Deep Verifier  | auto          | yes               |
 | author IaC, write Bicep, write Terraform, convert LLD to infra, infrastructure as code | Squad IaC Author | confirm | no |
 | deploy, provision, what-if, terraform plan, terraform apply, az deployment | Squad Deployer | confirm | no |
+| as-built, resource inventory, compliance matrix, operations runbook, DR plan, document deployed infrastructure | asbuilt-author | confirm | no |
+| diagnose, troubleshoot, resource health, why is resource failing, investigate deployed, policy check | azure-diagnose | auto | yes |
 | validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |
 | modernize, upgrade framework, migrate, port legacy, .NET upgrade, Java migration, dependency upgrade, containerize | modernizer | confirm | no |
 | re-platform, rewrite, port to, rebuild in, cross-stack rewrite, Node to .NET, React to Angular, convert to another language | modernizer | confirm | no |
@@ -84,6 +86,13 @@ When any precondition is unmet, the coordinator dispatches the missing stage (or
 * When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the Scribe before any implementer dispatches.
 
 The gate enforces the council protocol from `.github/instructions/squad/squad-council.instructions.md` and the autonomous loop from `.github/instructions/squad/squad-autonomous.instructions.md` at routing time.
+
+### Review Follow-Through
+
+The methodology does not end at implementation. After any implementation-tier role lands a change, the coordinator dispatches `tester` (review) as the closing stage before it reports the work complete — in every mode (interactive, autonomous, and autopilot). Review is an `auto`-tier, non-destructive read, so it runs without a separate gate. This makes the methodology symmetric: research and plan precede implementation, and review follows it, so Research → Plan → Implement → Review is enforced end-to-end.
+
+* Resolve `tester` to the matching review agent per the roster Selection Cue — for example `Code Review Full` for a pre-PR review, or `Implementation Validator` for an implementation-vs-design check — and fold its findings into the turn summary.
+* Every profile carries `tester` through the methodology spine (see `squad-roster.instructions.md`), so the review stage is always available. When a user has explicitly removed `tester` from the roster, the coordinator reports that the change closed unreviewed and recommends re-adding the role rather than silently skipping review.
 
 ## Escalation
 

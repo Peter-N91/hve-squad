@@ -5,62 +5,62 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.1] - 2026-06-17
+## [0.8.1] - 2026-06-17
 
-> **Fork note:** This version is published from [sohamda/hve-squad](https://github.com/sohamda/hve-squad),
-> a fork of [Peter-N91/hve-squad](https://github.com/Peter-N91/hve-squad) at `v0.7.0`.
-> All squad and hve-core content is identical to the upstream `v0.7.0` release.
-> The changes below are infrastructure-only additions specific to this fork.
+Guarantees the HVE Core delivery methodology — Research → Plan → Implement → Review — runs in every squad profile, not just the general-purpose ones. Adds a universal methodology spine to all profiles and a post-implementation review step, and lets the Squad Coordinator dispatch the three Azure-track roles that `0.8.0` shipped but left out of the coordinator's dispatch allowlist.
 
-Introduces a local hve-core mirror, fork-portable dependency paths, a release
-workflow, and a one-click "adapt to fork" workflow so any consumer who forks this
-repository can rewire `apm.yml` to their own GitHub owner in a single Actions run.
+### Fixed
+
+- The Squad Coordinator can now dispatch `Squad As-Built Author`, `Squad Azure Diagnose`, and `Squad Modernization Planner` (`squad-src/.github/agents/squad/squad-coordinator.agent.md`). `0.8.0` deployed these agent files and registered them in the roster, but the coordinator's `agents:` allowlist omitted them, so the as-built, diagnose, and modernization beats could not run.
+- Specialized profiles no longer skip legs of the methodology. The `security`, `design`, `architecture`, and `azure` profiles previously omitted one or more of `researcher`, `lead`, `developer`, and `tester`, so the routing Implementation Gate escalated (a required role was absent from the roster) instead of running Research → Plan → Implement. Every profile now carries the full spine (`squad-src/.github/instructions/squad/squad-roster.instructions.md`, mirrored in `squad-src/.github/skills/squad/SKILL.md`).
 
 ### Added
 
-- Local hve-core mirror (`hve-core/`): a sparse checkout of `microsoft/hve-core`
-  is stored directly in this repository and kept up to date by the existing
-  `sync-hve-core.yml` workflow. All `dependencies.apm` entries for hve-core files
-  now resolve from `{owner}/hve-squad/hve-core/...` (the mirror) instead of
-  requiring direct access to `microsoft/hve-core`, which may be private.
-- `scripts/Update-ApmDependencies.ps1` fork auto-detection: the script now
-  auto-detects `SquadRepoSlug` from `git remote get-url origin` (parsing both
-  HTTPS and SSH URL formats) so regenerated paths always use the running repo's
-  GitHub owner. No manual `-SquadRepoSlug` flag is needed in normal workflows.
-- Release workflow (`.github/workflows/release.yml`): automates the full release
-  cycle. A `workflow_dispatch` trigger accepts a `version` input, updates
-  `apm.yml`, runs `Update-ApmDependencies.ps1` (with auto-detected owner), commits
-  and pushes, then creates a GitHub Release from the CHANGELOG entry. A `push` to
-  `main` trigger creates the release if the tag does not already exist, skipping
-  commits that were authored by the workflow itself to prevent push-loops.
-- "Adapt fork" workflow (`.github/workflows/adapt-fork.yml`): a
-  `workflow_dispatch`-only workflow that re-generates `apm.yml` dependency paths
-  for the repo it runs in, using the auto-detected GitHub owner. Fork owners run
-  this once after forking — no local tooling required.
+- Methodology spine in the roster and skill: `researcher`, `lead`, `developer`, and `tester` are now always-included members of every profile (alongside `scribe`), documented as the four roles that run Research → Plan → Implement → Review (`squad-src/.github/instructions/squad/squad-roster.instructions.md`, `squad-src/.github/skills/squad/SKILL.md`).
+- A `Review Follow-Through` rule in the routing conventions (`squad-src/.github/instructions/squad/squad-routing.instructions.md`): after any implementation-tier role lands a change, the coordinator dispatches `tester` (review) as the closing stage in every mode, making the gate symmetric — research and plan precede implementation, review follows it.
 
 ### Changed
 
-- `apm.yml` dependency paths migrated from `Peter-N91/hve-squad/hve-core/...` to
-  `sohamda/hve-squad/hve-core/...` to reflect the local mirror in this fork.
-  Running `scripts/Update-ApmDependencies.ps1` or the "Adapt fork" workflow in any
-  fork will regenerate these paths with the correct owner automatically.
-- `apm.yml` package version bumped to `0.7.1` and `author` updated to `sohamda`.
+- `docs/usage.html` Profiles table updated so every profile lists its methodology-spine members, with a note that every profile runs Research → Plan → Implement → Review.
+- `apm.yml` package version bumped to `0.8.1`. The dependency entries are unchanged from `0.8.0` (the edited squad files keep the same paths), so the pinned hve-core commit from `0.7.0`/`0.8.0` is preserved.
 
 ### Consumer install
 
 Pin to this version:
 
 ```powershell
-apm install "sohamda/hve-squad#v0.7.1"
+apm install "Peter-N91/hve-squad#v0.8.1"
 ```
 
-### Fork owner quick-start
+[0.8.1]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.8.1
 
-After forking, run the **Adapt Fork** workflow from the Actions tab to rewrite
-`apm.yml` with your repo's owner. Then use the **Release** workflow to cut
-your first version.
+## [0.8.0] - 2026-06-17
 
-[0.7.1]: https://github.com/sohamda/hve-squad/releases/tag/v0.7.1
+Adds APEX Accelerator parity capabilities to the Azure squad: live Azure governance discovery, post-deployment as-built documentation, and resource-level triage and diagnosis — all delivered as two new read-only squad roles backed by the official `@azure/mcp` server, with named non-MCP fallbacks so a missing server never blocks the squad.
+
+### Added
+
+- `Squad As-Built Author` agent (`squad-src/.github/agents/squad/squad-asbuilt-author.agent.md`): a read-only post-deploy role that inventories deployed Azure resources via the `azure-resource` capability (`@azure/mcp` Resource Graph KQL preferred, `az` CLI / Resource Manager REST fallback), builds a compliance matrix from Azure Policy state, and drafts an operations runbook and backup/DR plan for Doc Ops to publish. Never deploys, mutates resources, or authors IaC.
+- `Squad Azure Diagnose` agent (`squad-src/.github/agents/squad/squad-azure-diagnose.agent.md`): a strictly read-only Azure troubleshooting role that queries Resource Health, Azure Monitor/Log Analytics KQL, and Resource Graph to correlate ranked hypotheses and recommend (never apply) remediations. Defers every change to the gated Squad Deployer or Squad IaC Author.
+- `azure-resource` MCP capability row in the capability map (`squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md`): maps the new `azure-resource` capability to `@azure/mcp` with a named `az` CLI / Resource Graph REST fallback, following the existing graceful-degradation contract.
+- Official `@azure/mcp` server wired into the MCP reference template (`squad-src/.github/skills/squad/mcp.template.json`): stdio entry invoking `@azure/mcp@latest server start`, authenticated via `DefaultAzureCredential` / `az login` with no stored secrets. A community Azure pricing MCP recommendation replaces the prior placeholder (primary: `msftnadavbh/AzurePricingMCP`; APEX-fork alternative available), with a labeled WI-02 placeholder for the unverified exact stdio invocation.
+- Read-only Azure Policy precheck on the Squad Deployer (`squad-src/.github/agents/squad/squad-deployer.agent.md`): a new step between the what-if/plan dry-run and the Impactful-Action Gate that queries effective Azure Policy assignments and compliance for the target scope, surfacing predicted denials before approval. The gate semantics, `confirm` tier, and Mandatory Escalation Triggers are unchanged.
+- `.vscode/mcp.json` entry in the azure-scaffold bundled templates and opt-in scaffolding flow (`squad-src/.github/skills/azure-scaffold/SKILL.md`): consumers can merge the squad MCP template into their workspace on request; the turnkey-via-scaffolding posture is documented in the skill overview. The APM package itself never writes consumer `.vscode/` or `.devcontainer/` trees.
+- Roster, routing, and profile wiring for both new roles (`squad-src/.github/instructions/squad/squad-roster.instructions.md`, `squad-routing.instructions.md`, `squad-src/.github/skills/squad/SKILL.md`): `asbuilt-author` at `confirm` tier (non-parallel), `azure-diagnose` at `auto` tier (parallel-eligible); both registered in the `azure` and `full` squad profiles. Pre-existing SKILL-vs-roster profile mirror drift for `iac-author`, `deployer`, and `modernizer` reconciled in the same edit.
+
+### Changed
+
+- `apm.yml` dependency list updated: two new squad agent files added (`squad-asbuilt-author.agent.md`, `squad-azure-diagnose.agent.md`) and the package version bumped to `0.8.0`.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.8.0"
+```
+
+[0.8.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.8.0
 
 ## [0.7.0] - 2026-06-16
 

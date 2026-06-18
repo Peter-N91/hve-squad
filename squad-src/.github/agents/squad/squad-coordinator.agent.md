@@ -18,6 +18,9 @@ agents:
   - Squad Azure Architect
   - Squad IaC Author
   - Squad Deployer
+  - Squad As-Built Author
+  - Squad Azure Diagnose
+  - Squad Modernization Planner
 ---
 
 # Squad Coordinator

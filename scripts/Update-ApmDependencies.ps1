@@ -33,28 +33,26 @@
     Local path to the squad source tree containing .github/{agents,prompts,
     instructions,skills}. Enumerated from the local filesystem (not cloned). If
     the path does not exist, squad enumeration is skipped without error.
+.PARAMETER SquadRepoSlug
+    Repository slug (owner/repo) that hosts the squad source. Squad virtual
+    paths are emitted as <SquadRepoSlug>/<SquadSourceRoot>/.github/...
 .PARAMETER SquadRef
     Optional git ref (release tag or commit SHA) to pin squad self-references to,
     appended as '#<ref>'. Use the release tag you are about to cut (for example
-    v0.7.0): commit the manifest, then create that tag on the same commit. When
+    v0.8.0): commit the manifest, then create that tag on the same commit. When
     omitted, squad entries are left unpinned.
-.PARAMETER HveCoreRef
-    Optional git ref (release tag or commit SHA in THIS repo) to pin hve-core mirror
-    entries to, appended as '#<ref>'. When omitted, entries are left unpinned so that
-    consumers who install via a release tag (e.g. sohamda/hve-squad#v0.6.1) have APM
-    resolve all files at that tag automatically.
 .PARAMETER DryRun
     If set, prints generated dependencies without updating apm.yml.
 .EXAMPLE
     ./scripts/Update-ApmDependencies.ps1 -ApmFile apm.yml
 .EXAMPLE
-    ./scripts/Update-ApmDependencies.ps1 -DryRun
+    ./scripts/Update-ApmDependencies.ps1 -Ref main -DryRun
 .EXAMPLE
-    ./scripts/Update-ApmDependencies.ps1 -SquadRef v0.7.0 -HveCoreRef v0.7.0
+    ./scripts/Update-ApmDependencies.ps1 -Ref main -SquadRef v0.8.0
+.EXAMPLE
+    ./scripts/Update-ApmDependencies.ps1 -SquadSourceRoot squad-src -SquadRepoSlug Peter-N91/hve-squad
 .NOTES
     Intended for use with: apm run sync-deps
-    All dependency paths are emitted as relative paths (./hve-core/... and ./squad-src/...)
-    so that apm.yml is portable across forks without any configuration changes.
 #>
 
 [CmdletBinding()]
@@ -86,17 +84,11 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
-    [string]$HveCoreLocalRoot = 'hve-core',
-
-    [Parameter(Mandatory = $false)]
-    [ValidateNotNullOrEmpty()]
     [string]$SquadSourceRoot = 'squad-src',
 
     [Parameter(Mandatory = $false)]
-    [string]$SquadRepoSlug,
-
-    [Parameter(Mandatory = $false)]
-    [string]$HveCoreRef,
+    [ValidateNotNullOrEmpty()]
+    [string]$SquadRepoSlug = 'Peter-N91/hve-squad',
 
     [Parameter(Mandatory = $false)]
     [string]$SquadRef,
@@ -106,27 +98,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-
-# Ensure all relative paths resolve against the repo root (parent of scripts/).
-# APM may invoke this script with a different working directory.
-Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
-
-# Auto-detect SquadRepoSlug from the git remote when not explicitly provided.
-# Parses 'git remote get-url origin' and converts the URL to owner/repo format.
-if ([string]::IsNullOrWhiteSpace($SquadRepoSlug)) {
-    $remoteUrl = & git remote get-url origin 2>$null
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($remoteUrl)) {
-        $remoteUrl = $remoteUrl.Trim()
-        # Handle both HTTPS (https://github.com/owner/repo.git) and SSH (git@github.com:owner/repo.git)
-        if ($remoteUrl -match 'github\.com[:/]([^/]+/[^/]+?)(\.git)?$') {
-            $SquadRepoSlug = $matches[1]
-        }
-    }
-    if ([string]::IsNullOrWhiteSpace($SquadRepoSlug)) {
-        throw "Could not detect SquadRepoSlug from git remote. Pass -SquadRepoSlug owner/repo explicitly."
-    }
-    Write-Host "Auto-detected SquadRepoSlug: $SquadRepoSlug" -ForegroundColor Cyan
-}
 
 #region Functions
 function Get-LeadingSpaceCount {
@@ -239,37 +210,30 @@ function Build-DependencyList {
         [Parameter(Mandatory = $true)]
         [string]$PathFilterRegex,
 
-        # Optional path prefix that was prepended to every entry in $Paths (e.g. "hve-core").
-        # When set, filter StartsWith checks are prefixed accordingly.
-        [Parameter(Mandatory = $false)]
-        [string]$PathPrefix,
-
         [Parameter(Mandatory = $false)]
         [string]$Ref
     )
-
-    $p = if ([string]::IsNullOrEmpty($PathPrefix)) { '' } else { "$($PathPrefix.TrimEnd('/'))/" }
 
     # APM accepts only these file package extensions:
     # .agent.md, .prompt.md, .instructions.md, .chatmode.md
     # Skills should be referenced as subdirectory packages (no file extension).
     $agentDeps = @(
         $Paths | Where-Object {
-            $_.StartsWith("${p}.github/agents/", [StringComparison]::OrdinalIgnoreCase) -and
+            $_.StartsWith('.github/agents/', [StringComparison]::OrdinalIgnoreCase) -and
             ($_ -match '\.agent\.md$')
         }
     )
 
     $promptDeps = @(
         $Paths | Where-Object {
-            $_.StartsWith("${p}.github/prompts/", [StringComparison]::OrdinalIgnoreCase) -and
+            $_.StartsWith('.github/prompts/', [StringComparison]::OrdinalIgnoreCase) -and
             (($_ -match '\.prompt\.md$') -or ($_ -match '\.chatmode\.md$'))
         }
     )
 
     $instructionDeps = @(
         $Paths | Where-Object {
-            $_.StartsWith("${p}.github/instructions/", [StringComparison]::OrdinalIgnoreCase) -and
+            $_.StartsWith('.github/instructions/', [StringComparison]::OrdinalIgnoreCase) -and
             ($_ -match '\.instructions\.md$')
         }
     )
@@ -277,7 +241,7 @@ function Build-DependencyList {
     $skillDeps = @(
         $Paths |
             Where-Object {
-                $_.StartsWith("${p}.github/skills/", [StringComparison]::OrdinalIgnoreCase) -and
+                $_.StartsWith('.github/skills/', [StringComparison]::OrdinalIgnoreCase) -and
                 ([string]::Equals([System.IO.Path]::GetFileName($_), 'SKILL.md', [StringComparison]::OrdinalIgnoreCase))
             } |
                 ForEach-Object { (Split-Path -Path $_ -Parent).Replace('\', '/') } |
@@ -450,81 +414,18 @@ function Update-ApmDependencyList {
     $lines.InsertRange($apmIndex + 1, $insertion)
     Set-Content -LiteralPath $Path -Value $lines -Encoding utf8
 }
-
-function Get-LocalRepoTreePaths {
-    [CmdletBinding()]
-    [OutputType([pscustomobject])]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$LocalRoot,
-
-        [Parameter(Mandatory = $true)]
-        [string[]]$Roots
-    )
-
-    if (-not (Test-Path -LiteralPath $LocalRoot)) {
-        throw "Local hve-core mirror not found at '$LocalRoot'. Run scripts/Sync-HveCore.ps1 first."
-    }
-
-    $resolvedRoot = (Resolve-Path -LiteralPath $LocalRoot).ProviderPath
-    $versionFile = Join-Path $resolvedRoot '.version'
-
-    if (-not (Test-Path -LiteralPath $versionFile)) {
-        throw "Version file not found at '$versionFile'. The mirror may be incomplete. Run scripts/Sync-HveCore.ps1 first."
-    }
-
-    $resolvedCommit = (Get-Content -LiteralPath $versionFile -Raw).Trim()
-    if ([string]::IsNullOrWhiteSpace($resolvedCommit)) {
-        throw "Version file '$versionFile' is empty. Run scripts/Sync-HveCore.ps1 first."
-    }
-
-    $result = [System.Collections.Generic.List[string]]::new()
-    foreach ($root in $Roots) {
-        $searchDir = Join-Path $resolvedRoot $root
-        if (-not (Test-Path -LiteralPath $searchDir)) {
-            continue
-        }
-
-        $files = Get-ChildItem -LiteralPath $searchDir -Recurse -File
-        foreach ($file in $files) {
-            $relative = [System.IO.Path]::GetRelativePath($resolvedRoot, $file.FullName).Replace('\', '/')
-            $result.Add($relative)
-        }
-    }
-
-    return [pscustomobject]@{
-        ResolvedCommit = $resolvedCommit
-        Paths          = @($result)
-    }
-}
 #endregion Functions
 
 #region Main Execution
 if ($MyInvocation.InvocationName -ne '.') {
     try {
-        Write-Host "Reading hve-core tree from local mirror '$HveCoreLocalRoot'..." -ForegroundColor Cyan
-        $tree = Get-LocalRepoTreePaths -LocalRoot $HveCoreLocalRoot -Roots $IncludeRoots
+        Write-Host "Reading repository tree from $RepoSlug@$Ref..." -ForegroundColor Cyan
+        $tree = Get-RepoTreePaths -Repository $RepoSlug -GitRef $Ref -Roots $IncludeRoots
         $paths = $tree.Paths
         $resolvedCommit = $tree.ResolvedCommit
-        Write-Host "Local mirror pinned to commit $resolvedCommit." -ForegroundColor Green
+        Write-Host "Resolved $RepoSlug@$Ref to $resolvedCommit; pinning hve-core dependencies to that commit." -ForegroundColor Green
 
-        $hveCoreMirrorPrefix = "$SquadRepoSlug/$HveCoreLocalRoot"
-        Write-Host "Emitting hve-core refs as '$hveCoreMirrorPrefix/...'..." -ForegroundColor Cyan
-
-        # Resolve the ref to use for hve-core mirror entries in apm.yml.
-        # Entries are left unpinned by default so that consumers who install via a
-        # release tag (e.g. sohamda/hve-squad#v0.6.1) have APM resolve all files at
-        # that tag automatically. Pass -HveCoreRef only when explicit pinning is needed.
-        if (-not [string]::IsNullOrWhiteSpace($HveCoreRef)) {
-            $hveCorePinRef = $HveCoreRef
-            Write-Host "Pinning hve-core mirror entries to provided ref: $hveCorePinRef" -ForegroundColor Green
-        }
-        else {
-            $hveCorePinRef = ''
-            Write-Host "hve-core mirror entries left unpinned (pass -HveCoreRef <tag> to pin)." -ForegroundColor Yellow
-        }
-
-        $deps = Build-DependencyList -Paths $paths -Repository $hveCoreMirrorPrefix -Roots $IncludeRoots -PathFilterRegex $IncludeRegex -Ref $hveCorePinRef
+        $deps = Build-DependencyList -Paths $paths -Repository $RepoSlug -Roots $IncludeRoots -PathFilterRegex $IncludeRegex -Ref $resolvedCommit
         if ($null -eq $deps) {
             $deps = @()
         }
