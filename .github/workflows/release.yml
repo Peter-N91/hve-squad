@@ -1,8 +1,9 @@
 name: Release
 
 # Triggers:
-#   workflow_dispatch — supply a version; workflow updates apm.yml, regenerates
-#                       pinned deps, commits, and creates the GitHub Release.
+#   workflow_dispatch — cuts a GitHub Release for the version in apm.yml.
+#                       If a `version` input is provided, apm.yml is bumped
+#                       to that version (and committed) before tagging.
 #   push to main      — reads version from apm.yml; creates a GitHub Release if
 #                       a matching tag does not exist yet. Expects the CHANGELOG
 #                       to already contain an entry for that version.
@@ -10,13 +11,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g. 0.8.2) — updates apm.yml and regenerates deps'
-        required: true
-        type: string
-      hve_core_ref:
-        description: 'hve-core git ref for dependency pinning (branch, tag, or commit SHA)'
+        description: 'Optional: override version in apm.yml (e.g. 0.9.0). Leave blank to release the version already in apm.yml.'
         required: false
-        default: 'main'
         type: string
       draft:
         description: 'Create as a draft release (review before publishing)'
@@ -55,15 +51,32 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      # ── Resolve version ───────────────────────────────────────────────────
+      # ── Manual dispatch only: bump apm.yml version if requested ─────────
+      - name: Bump apm.yml version (manual override)
+        if: github.event_name == 'workflow_dispatch' && inputs.version != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VER="${{ inputs.version }}"
+          CURRENT=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
+          if [[ "$CURRENT" == "$NEW_VER" ]]; then
+            echo "::notice::apm.yml already at $NEW_VER — no commit needed."
+          else
+            sed -i "s/^version: .*/version: $NEW_VER/" apm.yml
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git remote set-url origin \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+            git add apm.yml
+            git commit -m "chore(release): bump to $NEW_VER"
+            git push origin main
+          fi
+
+      # ── Resolve version ──────────────────────────────────────────────────
       - name: Resolve version
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
-          fi
+          VERSION=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION"    >> "$GITHUB_OUTPUT"
 
@@ -77,41 +90,6 @@ jobs:
             echo "::notice::Tag $TAG already exists — skipping release."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── Manual dispatch only: update apm.yml + regenerate pinned deps ─────
-      - name: Update apm.yml version
-        if: >
-          github.event_name == 'workflow_dispatch' &&
-          steps.tag_check.outputs.exists == 'false'
-        run: |
-          sed -i "s/^version: .*/version: ${{ steps.version.outputs.version }}/" apm.yml
-
-      - name: Regenerate pinned dependencies
-        if: >
-          github.event_name == 'workflow_dispatch' &&
-          steps.tag_check.outputs.exists == 'false'
-        run: |
-          pwsh scripts/Update-ApmDependencies.ps1 \
-            -Ref           "${{ inputs.hve_core_ref }}" \
-            -SquadRef      "${{ steps.version.outputs.tag }}" \
-            -SquadRepoSlug "${{ github.repository }}"
-
-      - name: Commit and push changes
-        if: >
-          github.event_name == 'workflow_dispatch' &&
-          steps.tag_check.outputs.exists == 'false'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
-          if ! git diff --quiet; then
-            git add apm.yml apm.lock.yaml
-            git commit -m "chore(release): bump to ${{ steps.version.outputs.version }}"
-            git push origin main
           fi
 
       # ── Extract release notes from CHANGELOG.md ───────────────────────────

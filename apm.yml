@@ -1,5 +1,5 @@
 name: hve-squad
-version: 0.8.3
+version: 0.8.2
 description: APM package for hve-core and squad together
 author: Peter-N91
 # Which agent platforms to deploy to.
@@ -258,26 +258,26 @@ dependencies:
     - microsoft/hve-core/.github/skills/shared/backlog-templates#7632791ff81f917775157cf179c486052d9f00cc
     - microsoft/hve-core/.github/skills/shared/pr-reference#7632791ff81f917775157cf179c486052d9f00cc
     - microsoft/hve-core/.github/skills/shared/telemetry-foundations#7632791ff81f917775157cf179c486052d9f00cc
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-asbuilt-author.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-azure-architect.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-azure-diagnose.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-cost-manager.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-deployer.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-iac-author.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-modernization-planner.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/agents/squad/squad-scribe.agent.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/instructions/squad/squad-autonomous.instructions.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/instructions/squad/squad-autopilot.instructions.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/instructions/squad/squad-council.instructions.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/instructions/squad/squad-notifications.instructions.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/instructions/squad/squad-roster.instructions.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/instructions/squad/squad-routing.instructions.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/instructions/squad/squad-state.instructions.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/prompts/squad/squad.prompt.md#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/skills/azure-scaffold#v0.8.3
-    - sohamda/hve-squad/squad-src/.github/skills/squad#v0.8.3
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-asbuilt-author.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-azure-architect.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-azure-diagnose.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-cost-manager.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-deployer.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-iac-author.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-modernization-planner.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-scribe.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autonomous.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autopilot.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-council.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-notifications.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-roster.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-routing.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-state.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad.prompt.md
+    - Peter-N91/hve-squad/squad-src/.github/skills/azure-scaffold
+    - Peter-N91/hve-squad/squad-src/.github/skills/squad
   mcp: []
 includes: auto
 scripts:
