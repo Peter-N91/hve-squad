@@ -11,8 +11,7 @@ name: Sync and Adapt
 #        - rewrites all microsoft/hve-core entries with the new SHA
 #        - auto-detects the GitHub owner for squad entries
 #        - updates apm.lock.yaml
-#   5. Sets author: in apm.yml to the repo owner.
-#   6. Commits and pushes directly to main.
+#   5. Commits and pushes directly to main.
 #
 # No local hve-core mirror involved — all content is referenced directly
 # from microsoft/hve-core at a pinned commit SHA.
@@ -97,15 +96,6 @@ jobs:
           ARGS=(-Ref "${{ steps.latest.outputs.sha }}" -SquadRepoSlug "${{ github.repository }}")
           [[ "${{ inputs.dry_run }}" == "true" ]] && ARGS+=(-DryRun)
           pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
-
-      # ── Ensure apm.yml author matches this repo's owner ──────────────────
-      #    Always runs — author may be wrong even when the SHA is already current.
-      - name: Set apm.yml author
-        if: inputs.dry_run != 'true'
-        run: |
-          OWNER="${{ github.repository_owner }}"
-          sed -i "s/^author: .*/author: $OWNER/" apm.yml
-          echo "author set to: $OWNER"
 
       # ── Commit and push ───────────────────────────────────────────────────
       - name: Commit and push
