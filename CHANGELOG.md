@@ -12,15 +12,15 @@ Fork-specific release. No functional changes to squad content relative to upstre
 ### Changed
 
 - Automated sync workflow (`sync-hve-core.yml`) rewritten: drops the local `hve-core/` mirror entirely; all `microsoft/hve-core` content is now referenced directly from `microsoft/hve-core` at a pinned commit SHA. On each run the workflow fetches the latest `microsoft/hve-core` commit, regenerates `apm.yml` deps, bumps the patch version, updates this changelog, and dispatches a release.
-- `release.yml` passes `-SquadRepoSlug` explicitly so any fork regenerates paths against its own owner automatically.
+- Both `sync-hve-core.yml` and `release.yml` pass `-SquadRepoSlug` explicitly so any fork regenerates paths against its own owner automatically.
 
 ### Consumer install
 
 ```powershell
-apm install "sohamda/hve-squad#v0.8.2"
+apm install "Peter-N91/hve-squad#v0.8.2"
 ```
 
-[0.8.2]: https://github.com/sohamda/hve-squad/releases/tag/v0.8.2
+[0.8.2]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.8.2
 
 ## [0.8.1] - 2026-06-17
 

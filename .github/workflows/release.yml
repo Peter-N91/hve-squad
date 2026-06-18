@@ -93,9 +93,21 @@ jobs:
           steps.tag_check.outputs.exists == 'false'
         run: |
           pwsh scripts/Update-ApmDependencies.ps1 \
-            -Ref        "${{ inputs.hve_core_ref }}" \
-            -SquadRef   "${{ steps.version.outputs.tag }}" \
-            -HveCoreRef "${{ steps.version.outputs.tag }}"
+            -Ref           "${{ inputs.hve_core_ref }}" \
+            -SquadRef      "${{ steps.version.outputs.tag }}" \
+            -SquadRepoSlug "${{ github.repository }}"
+
+      # ── Refresh apm.lock.yaml ─────────────────────────────────────────────
+      - name: Refresh lockfile
+        if: >
+          github.event_name == 'workflow_dispatch' &&
+          steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # apm must be installed and available in PATH.
+          # Example: npm install -g <your-apm-package>
+          apm lock
 
       - name: Commit and push changes
         if: >
