@@ -50,18 +50,17 @@ jobs:
         with:
           persist-credentials: false
 
-      # ── Resolve latest hve-core deployment SHA ────────────────────────────
-      - name: Get latest hve-core deployment SHA
+      # ── Resolve latest hve-core commit SHA (tip of main) ─────────────────
+      - name: Get latest hve-core commit SHA
         id: latest
         env:
           GH_TOKEN: ${{ secrets.HVE_CORE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          DEPLOY=$(gh api 'repos/microsoft/hve-core/deployments?per_page=1' --jq '.[0]')
-          SHA=$(echo "$DEPLOY" | jq -r '.sha')
+          SHA=$(gh api 'repos/microsoft/hve-core/commits/main' --jq '.sha')
           SHORT_SHA=${SHA:0:7}
           echo "sha=$SHA"             >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "Latest hve-core deployment: ${SHORT_SHA} (${SHA})"
+          echo "Latest hve-core commit: ${SHORT_SHA} (${SHA})"
 
       # ── Read SHA currently pinned in apm.yml ─────────────────────────────
       - name: Read current pinned SHA
@@ -95,7 +94,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HVE_CORE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          ARGS=(-Ref "${{ steps.latest.outputs.sha }}")
+          ARGS=(-Ref "${{ steps.latest.outputs.sha }}" -SquadRepoSlug "${{ github.repository }}")
           [[ "${{ inputs.dry_run }}" == "true" ]] && ARGS+=(-DryRun)
           pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
 
