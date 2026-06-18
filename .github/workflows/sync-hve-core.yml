@@ -10,11 +10,10 @@ name: Sync and Adapt
 #        - clones microsoft/hve-core at that exact SHA
 #        - rewrites all microsoft/hve-core entries with the new SHA
 #        - auto-detects the GitHub owner for squad entries
-#   5. Runs apm lock to regenerate apm.lock.yaml against the updated apm.yml.
-#   6. Bumps the patch version in apm.yml.
-#   7. Prepends a CHANGELOG entry for the new version.
-#   8. Commits apm.yml, apm.lock.yaml, and CHANGELOG.md.
-#   9. Dispatches release.yml to create the tag and GitHub Release.
+#   5. Bumps the patch version in apm.yml.
+#   6. Prepends a CHANGELOG entry for the new version.
+#   7. Commits apm.yml, apm.lock.yaml, and CHANGELOG.md.
+#   8. Dispatches release.yml to create the tag and GitHub Release.
 #
 # No local hve-core mirror involved — all content is referenced directly
 # from microsoft/hve-core at a pinned commit SHA.
@@ -100,16 +99,6 @@ jobs:
           ARGS=(-Ref "${{ steps.latest.outputs.sha }}" -SquadRepoSlug "${{ github.repository }}")
           [[ "${{ inputs.dry_run }}" == "true" ]] && ARGS+=(-DryRun)
           pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
-
-      # ── Refresh apm.lock.yaml ─────────────────────────────────────────────
-      - name: Refresh lockfile
-        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.HVE_CORE_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          # apm must be installed and available in PATH.
-          # Example: npm install -g <your-apm-package>
-          apm lock
 
       # ── Bump patch version in apm.yml ─────────────────────────────────────
       - name: Bump patch version
