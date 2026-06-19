@@ -17,7 +17,7 @@ The coordinator passes a capability hint to each dispatched role when the role n
 |--------------------|----------------------------------------------|---------------------------------------------------------------------------------|
 | diagram-rendering  | A draw.io MCP server when one is configured  | Render Mermaid in chat; or author Mermaid in repository markdown                |
 | ADO query          | `@azure-devops/mcp` (Microsoft official)     | Researcher Subagent against the Azure DevOps REST API with a user-supplied PAT  |
-| Azure-pricing      | `msftnadavbh/AzurePricingMCP` community server (or the APEX `jonathan-vella/apex-accelerator` fork) | Researcher Subagent against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
+| Azure-pricing      | `msftnadavbh/AzurePricingMCP` community server | Researcher Subagent against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
 | azure-resource     | `@azure/mcp` (official Azure MCP server)      | Researcher Subagent against the Azure CLI (`az`) and the Azure Resource Graph / Resource Manager REST APIs using the user's `az login` context |
 | architecture-docs  | `microsoft-docs` MCP when configured         | Researcher Subagent against `learn.microsoft.com` via web fetch                 |
 | code-context       | `context7` MCP when configured               | Researcher Subagent against the published library documentation                 |

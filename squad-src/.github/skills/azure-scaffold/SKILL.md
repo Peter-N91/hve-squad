@@ -14,7 +14,7 @@ metadata:
 
 This skill bundles the **documentation-only reference templates** a consumer repository needs to do
 Azure work end-to-end — author Infrastructure-as-Code, deploy to Azure, and govern infrastructure —
-the way a deployable template repo (such as the APEX accelerator) ships them. Because hve-squad is an
+the way a deployable template repo ships them. Because hve-squad is an
 APM **package** (installed *into* a repo) rather than a template repo (cloned *as* a repo), it cannot
 ship live pipelines. Instead it ships these templates and a consumer-facing agent copies them into the
 consumer's repo on demand.

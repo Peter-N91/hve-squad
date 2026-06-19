@@ -292,3 +292,54 @@ td { color: var(--muted); }
 .pager .dir { font-size: 12px; color: var(--muted); font-family: var(--mono); }
 .pager .ttl { color: var(--text); font-weight: 600; }
 .pager .next { text-align: right; }
+
+/* Demo chevrons — multi-demo selector / stepper */
+.demo-switch { margin: 28px 0 8px; }
+.demo-switch .label {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.demo-chevrons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.demo-chevrons li { margin: 0; }
+.demo-chevrons .chev {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 48px;
+  padding: 6px 20px 6px 30px;
+  background: var(--panel);
+  color: var(--muted);
+  text-decoration: none;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%);
+}
+.demo-chevrons li:first-child .chev {
+  padding-left: 20px;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%);
+}
+.demo-chevrons .chev .step {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.demo-chevrons .chev .name { font-size: 13px; font-weight: 600; color: var(--text); }
+.demo-chevrons a.chev:hover { background: var(--panel-2); text-decoration: none; }
+.demo-chevrons a.chev:hover .step { color: var(--accent-2); }
+.demo-chevrons .chev.active { background: var(--accent); }
+.demo-chevrons .chev.active .step,
+.demo-chevrons .chev.active .name { color: #06231a; }
+.demo-chevrons .chev.soon { opacity: 0.55; cursor: default; }
+.demo-chevrons .chev.soon .step { color: var(--warn); }
+.demo-chevrons .chev.soon .name { color: var(--muted); }

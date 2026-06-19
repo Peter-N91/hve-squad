@@ -115,11 +115,8 @@
       //   Primary:     msftnadavbh/AzurePricingMCP (active; ~18 tools,
       //                including reserved-instance, spot, orphaned-
       //                resource, Databricks, GitHub, and PTU sizing).
-      //   Alternative: the APEX-maintained jonathan-vella/apex-accelerator
-      //                pricing MCP (token-optimized compact output, latest
-      //                Python) for consumers who prefer compact responses.
       //
-      // Packaging caveat: both servers are packaged for Python (pip /
+      // Packaging caveat: this server is packaged for Python (pip /
       // Docker / uvx), NOT npm, so the `npx` form the other entries use
       // does not apply here. The invocation is likely one of the forms
       // below; VERIFY THE EXACT STDIO COMMAND before use. The precise

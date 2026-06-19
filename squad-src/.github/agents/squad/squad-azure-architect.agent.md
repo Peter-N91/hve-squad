@@ -21,6 +21,7 @@ Author Azure high-level and low-level designs for a target workload. The charter
 Three references govern how this charter operates. Read them on first use of a turn and honor them throughout.
 
 * `.github/instructions/squad/squad-mcp-capability.instructions.md` defines the capability-aware MCP preference and the Mermaid fallback contract.
+* `.github/skills/python-diagrams/` provides the file-based, Azure-icon diagram template (Python `diagrams` library) used when a committed PNG/SVG image is preferred over Mermaid for an HLD or LLD.
 * Azure Verified Modules catalog at <https://aka.ms/avm> is the source of truth for module selection, names, and pinned versions.
 * Azure landing zones reference architecture at <https://aka.ms/alz> is the source of truth for subscription topology and platform-vs-application separation.
 * `.github/instructions/coding-standards/bicep/bicep.instructions.md` informs the shape of the LLD so a `developer` can convert it directly to Bicep. This charter does not author Bicep.
@@ -62,7 +63,7 @@ The HLD is a Mermaid `graph TD` or `flowchart LR` diagram that frames the worklo
 2. Include the network topology: hub and spokes, VNets, subnets, private endpoints, peering, ingress and egress paths.
 3. Include the identity perimeter: Entra ID tenants, managed identities, role-assignment scopes, federation boundaries.
 4. Include data flows between major components, with crossings of trust boundaries called out explicitly.
-5. Prefer a diagram-rendering MCP when one is available per `.github/instructions/squad/squad-mcp-capability.instructions.md`. Fall back to Mermaid (always available in Copilot chat) when no MCP is present.
+5. Render per the `diagram-rendering` ladder in `.github/instructions/squad/squad-mcp-capability.instructions.md`: prefer a draw.io MCP when configured; when a committed icon image is wanted (HLD or LLD with Azure product icons), use the `python-diagrams` skill (`.github/skills/python-diagrams/`) to emit paired PNG + SVG into `docs/architecture/`; otherwise fall back to Mermaid (always available in Copilot chat).
 
 ### Step 4: Author the LLD as a Bicep-Friendly Resource Table
 
