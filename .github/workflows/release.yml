@@ -1,0 +1,124 @@
+name: Release
+
+# Triggers:
+#   workflow_dispatch — cuts a GitHub Release for the version in apm.yml.
+#                       If a `version` input is provided, apm.yml is bumped
+#                       to that version (and committed) before tagging.
+#   push to main      — reads version from apm.yml; creates a GitHub Release if
+#                       a matching tag does not exist yet. Expects the CHANGELOG
+#                       to already contain an entry for that version.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional: override version in apm.yml (e.g. 0.9.0). Leave blank to release the version already in apm.yml.'
+        required: false
+        type: string
+      draft:
+        description: 'Create as a draft release (review before publishing)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - 'apm.yml'
+      - 'CHANGELOG.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    # Skip commits that were authored by this workflow to prevent push-loop.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       !startsWith(github.event.head_commit.message, 'chore(release):'))
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # ── Manual dispatch only: bump apm.yml version if requested ─────────
+      - name: Bump apm.yml version (manual override)
+        if: github.event_name == 'workflow_dispatch' && inputs.version != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VER="${{ inputs.version }}"
+          CURRENT=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
+          if [[ "$CURRENT" == "$NEW_VER" ]]; then
+            echo "::notice::apm.yml already at $NEW_VER — no commit needed."
+          else
+            sed -i "s/^version: .*/version: $NEW_VER/" apm.yml
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git remote set-url origin \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+            git add apm.yml
+            git commit -m "chore(release): bump to $NEW_VER"
+            git push origin main
+          fi
+
+      # ── Resolve version ──────────────────────────────────────────────────
+      - name: Resolve version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION"    >> "$GITHUB_OUTPUT"
+
+      # ── Guard: skip if tag already exists (e.g. re-run, stale push) ──────
+      - name: Check if tag already exists
+        id: tag_check
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $2}' | grep -qx "refs/tags/$TAG"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag $TAG already exists — skipping release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Extract release notes from CHANGELOG.md ───────────────────────────
+      - name: Extract CHANGELOG entry
+        if: steps.tag_check.outputs.exists == 'false'
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Matches lines like "## [0.8.2] - 2026-06-17"
+          NOTES=$(awk -v ver="$VERSION" \
+            'BEGIN{found=0}
+             $0 ~ "^## \\[" ver "\\]" {found=1; next}
+             found && /^## \[/{exit}
+             found{print}' CHANGELOG.md)
+          if [[ -z "$NOTES" ]]; then
+            NOTES="See [CHANGELOG.md](CHANGELOG.md) for full details."
+          fi
+          printf '%s' "$NOTES" > /tmp/release_notes.md
+
+      # ── Create GitHub Release (also creates the tag) ────────────
+      - name: Create GitHub Release
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARGS=(
+            "${{ steps.version.outputs.tag }}"
+            --title "${{ steps.version.outputs.tag }}"
+            --notes-file /tmp/release_notes.md
+          )
+          [[ "${{ inputs.draft }}" == "true" ]] && ARGS+=(--draft)
+          gh release create "${ARGS[@]}"
