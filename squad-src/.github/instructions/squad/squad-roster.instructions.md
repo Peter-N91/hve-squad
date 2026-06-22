@@ -151,6 +151,7 @@ Every profile also carries the **methodology spine**: `researcher`, `lead`, `dev
 | `design`       | researcher, lead, developer, tester, designer, scribe                                                                                          | UX/UI, accessibility, or product-design focused                          |
 | `architecture` | researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe                                                          | System design, infrastructure, or architecture-review focused            |
 | `azure`        | researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, scribe                                                | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
+| `product`      | researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, scribe                       | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
 
 ### Profile Selection
 
@@ -163,6 +164,7 @@ The coordinator chooses a profile in this order of precedence:
    * Frontend frameworks (React, Vue, Svelte, Angular), CSS, or accessibility signals → `design`.
    * Bicep templates plus budget, pricing, FinOps, or `cost-manager` signals (or `.bicep` files alongside an Azure landing-zone reference) → `azure`.
    * Infrastructure-as-code (Bicep, Terraform without Azure-specific cost signals), system-design docs, or component diagrams → `architecture`.
+   * Requirements documents (BRD/PRD), product or roadmap docs, discovery/design-thinking artifacts, or a repository with little or no source code where the work is business discovery and delivery → `product`.
    * Mixed or unclear signals → propose `default` and offer `full`.
 3. **Fallback** — when discovery is inconclusive and the user gives no hint, propose `default` as the recommended profile.
 

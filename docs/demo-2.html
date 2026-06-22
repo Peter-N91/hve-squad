@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo 2 — hve-squad</title>
+  <meta name="description" content="A non-technical product squad demo: discovery, requirements (BRD), roadmap and backlog, a cheap validation experiment, a readiness review, and an executive deck — plus a say-it-once autopilot run." />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="demo.html" class="active">Demo</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Walkthrough</div>
+      <h1>Product Squad Demo</h1>
+      <p class="lead">
+        A runnable script for the <code>product</code> profile that takes one business idea from
+        discovery through a requirements document, a roadmap and backlog, a cheap validation
+        experiment, a readiness review, and a board-ready deck — every beat from the single
+        <code>/squad</code> entry point. The same arc also runs as a single autopilot request. No
+        cloud, no code, no spend — built to pitch to a non-technical audience, with the full HVE
+        methodology (research → plan → build → review) underneath.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+
+      <div class="demo-switch">
+        <div class="label">Choose a demo</div>
+        <!--
+          Multi-demo selector. To add a demo: give it the next "Demo N" number,
+          turn its chevron into a link (<a class="chev" href="demo-N.html">),
+          mark the current page's chevron .active, and drop the .soon class once
+          the demo page exists.
+        -->
+        <ul class="demo-chevrons">
+          <li><a class="chev" href="demo.html"><span class="step">Demo 1</span><span class="name">Azure Squad</span></a></li>
+          <li><span class="chev active"><span class="step">Demo 2</span><span class="name">Product Squad</span></span></li>
+          <li><span class="chev soon"><span class="step">Demo 3</span><span class="name">Coming soon</span></span></li>
+        </ul>
+      </div>
+
+      <h2>What you are proving</h2>
+      <p>
+        That the squad is a <em>methodology</em>, not just a code generator. The same Research → Plan
+        → Implement → Review spine that drives the Azure demo also runs business discovery and
+        delivery — owned by named specialists, persisted as decisions and history, and gated on every
+        action that matters. The differentiator for a non-technical client: every beat ends in an
+        artifact they can read and sign off on — a requirements document, a roadmap, a deck — never
+        raw markdown buried in a repo.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Capability</th><th>Squad role</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Discovery (personas, journey map)</td><td>designer (DT Coach)</td><td>Design Thinking facilitation — empathize and define, fully non-technical.</td></tr>
+          <tr><td>Requirements (BRD / PRD)</td><td>analyst (BRD Builder)</td><td>Turns the discovery into a signable business requirements document.</td></tr>
+          <tr><td>Roadmap + backlog</td><td>product-owner (Agile Coach)</td><td>Sequences the work into a roadmap and refined, goal-oriented stories.</td></tr>
+          <tr><td>Cheap validation</td><td>experimenter (Experiment Designer)</td><td>Designs a Minimum Viable Experiment for the riskiest assumption before anyone builds.</td></tr>
+          <tr><td>Executive deck</td><td>presenter (PowerPoint Builder)</td><td>A board-ready summary of the whole arc.</td></tr>
+          <tr><td>Research → Plan → Implement → Review</td><td>researcher, lead, developer, tester</td><td>The methodology spine, seeded into the <code>product</code> profile alongside the specialists.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Before you start</h2>
+      <p>
+        This demo touches no cloud and writes only documents, so it runs anywhere with VS Code and
+        Copilot — ideal for a first pitch. The one optional extra worth wiring is
+        <strong>phone approval</strong>, so a non-technical sponsor can approve the squad from their
+        device.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Prerequisite</th><th>Why</th><th>Check</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>hve-squad installed (with the <code>product</code> profile)</td><td>The discovery, requirements, roadmap, experiment, and deck roles are seeded by the <code>product</code> profile.</td><td><code>apm install "Peter-N91/hve-squad"</code></td></tr>
+          <tr><td>VS Code + Copilot (agent mode)</td><td>The squad dispatches subagents.</td><td>—</td></tr>
+          <tr><td><code>runSubagent</code> or <code>task</code> tool enabled</td><td>The coordinator needs it to dispatch the cast.</td><td>—</td></tr>
+          <tr><td>GitHub repo + <code>gh</code> auth <small>(optional)</small></td><td>Only for the <code>github-issue</code> approval channel — lets a sponsor approve from a phone.</td><td><code>gh auth status</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          <strong>No Azure, no spend, no code.</strong> Every beat in this demo produces a business
+          document. That makes it safe to run live in front of a non-technical client — there is
+          nothing to deploy and nothing to break. The PowerPoint and documentation roles are the
+          translation layer that turns squad artifacts into deliverables a client actually reads.
+        </p>
+      </div>
+
+      <h3>Make it about their world</h3>
+      <p>
+        The script below uses a placeholder, <code>{{CLIENT_PROCESS}}</code> — a business process the
+        client wants to improve (onboarding, expense approval, support intake, procurement, anything).
+        Swap it per client, or, in a live run, let the client name their own pain point in Beat 1. The
+        discovery roles are general-purpose, so the squad handles whatever they bring.
+      </p>
+
+      <h2>Beat 0 — Initialize the squad</h2>
+      <pre><code>/squad profile=product request="Set up the squad for a business improvement project."</code></pre>
+      <p>
+        The coordinator discovers the repo, proposes the <code>product</code> profile, and on your
+        confirmation seeds the squad. <strong>Narrate:</strong> "One team — discovery, requirements,
+        roadmap, experiment, and deck specialists — and riding along with them the
+        <em>methodology spine</em>: researcher, lead, developer, tester, so research → plan →
+        build → review is always there, even for business work."
+      </p>
+      <p>
+        At Init the coordinator offers an approval channel. Pick <code>github-issue</code> when you
+        want a sponsor to approve from a phone with a <code>/approve</code> comment; keep the default
+        <code>in-chat</code> for a simple at-the-desk run.
+      </p>
+
+      <h2>Beat 1 — Discovery</h2>
+      <pre><code>/squad request="Explore the problem of {{CLIENT_PROCESS}}. Map the people involved, their journey today, and where it hurts — produce personas and a journey map."</code></pre>
+      <p>
+        The <code>researcher</code> gathers context and the <code>designer</code> (DT Coach) runs the
+        Design Thinking empathize-and-define work — personas and a journey map. This is the visibly
+        non-technical beat: it is about people and process, not systems.
+        <strong>Live tip:</strong> ask the client to supply <code>{{CLIENT_PROCESS}}</code> here — it
+        is far more compelling than a canned scenario.
+      </p>
+
+      <h2>Beat 2 — Requirements (BRD)</h2>
+      <pre><code>/squad request="Turn the discovery into a Business Requirements Document for {{CLIENT_PROCESS}} — goals, scope, stakeholders, business requirements, and success measures."</code></pre>
+      <p>
+        The <code>analyst</code> (BRD Builder) produces a signable requirements document.
+        <strong>This is where the methodology surfaces:</strong> authoring the BRD is a
+        <code>confirm</code>-tier step, so the squad researches and plans the document before drafting
+        it, and reviews it after — the business artifact is planned and reviewed, not improvised.
+      </p>
+
+      <h2>Beat 3 — Roadmap and backlog</h2>
+      <pre><code>/squad request="Sequence the requirements into a phased roadmap and a refined backlog of goal-oriented stories with acceptance criteria."</code></pre>
+      <p>
+        The <code>lead</code> plans the phases and the <code>product-owner</code> (Agile Coach) refines
+        the backlog into clear, outcome-focused stories. The client leaves the beat with a roadmap and
+        a ready-to-work backlog — the bridge from idea to delivery.
+      </p>
+
+      <h2>Beat 4 — Validate cheaply</h2>
+      <pre><code>/squad request="Design a Minimum Viable Experiment to test the riskiest assumption behind {{CLIENT_PROCESS}} before we build anything."</code></pre>
+      <p>
+        The <code>experimenter</code> (Experiment Designer) frames a hypothesis and the cheapest
+        experiment that could prove or disprove it. <strong>Narrate:</strong> "Before we spend a
+        dollar building, the squad tells us the smallest test that de-risks the idea."
+      </p>
+
+      <h2>Beat 5 — Readiness review (go / no-go)</h2>
+      <pre><code>/squad request="Run a go/no-go readiness review of the plan and backlog before we commit — call out gaps, risks, and conditions."</code></pre>
+      <p>
+        The <code>product-owner</code> checks product fit and the <code>tester</code> (Plan Validator)
+        cross-checks the plan against the discovery and requirements, returning a clear go / conditions
+        / stop call. This is governance a non-technical sponsor understands: the squad will not wave
+        work through past a real gap.
+      </p>
+
+      <div class="callout">
+        <p>
+          <strong>The council scales up automatically.</strong> When an initiative grows technical or
+          risk dimensions — security, cost, or architecture — and the request crosses two or more of
+          those domains, the coordinator convenes the full pre-implementation council and synthesizes
+          a single Go / Go-With-Conditions / Stop verdict. Because the <code>product</code> profile
+          does not seed the <code>architect</code>, <code>security</code>, or <code>cost-manager</code>
+          roles, the squad offers to add them or switch to the <code>full</code> profile rather than
+          guessing — it never fills an absent role itself.
+        </p>
+      </div>
+
+      <h2>Beat 6 — Executive deck</h2>
+      <pre><code>/squad request="Build an executive summary deck of the whole initiative: the problem, the journey, the requirements, the roadmap, and the experiment — for a non-technical leadership audience."</code></pre>
+      <p>
+        The <code>presenter</code> (PowerPoint Builder) assembles a board-ready deck from the artifacts
+        the squad already produced. <strong>Review Follow-Through</strong> then dispatches
+        <code>tester</code> to check the deck against the source artifacts, so the closing deliverable
+        is validated, not just generated. The client walks away with something they can take into a
+        leadership meeting.
+      </p>
+
+      <h2>The say-it-once, run-it-once version</h2>
+      <p>
+        The same arc runs from a single autopilot request that expresses the <em>need</em> and names
+        no steps. The squad derives the sequence itself:
+      </p>
+      <pre><code>/squad mode=autopilot profile=product request="We want to improve {{CLIENT_PROCESS}} for our team. Understand who is involved and where it hurts today, write up the business requirements, lay out a phased roadmap with a refined backlog, design a cheap experiment to test the riskiest assumption, do a readiness review, and finish with an executive summary deck for non-technical leadership. Keep me in control of anything that needs my sign-off."</code></pre>
+      <p>From that one line, autopilot sequences the pipeline and stops only where it must:</p>
+      <ul>
+        <li><strong>Init</strong> — proposes the <code>product</code> profile and waits for your confirmation.</li>
+        <li><strong>Research → Plan</strong> — discovery (researcher + designer) then the roadmap plan (lead).</li>
+        <li><strong>Implement</strong> — the analyst, product-owner, experimenter, and presenter author the BRD, backlog, experiment, and deck.</li>
+        <li><strong>Review</strong> — <code>tester</code> validates each artifact against the discovery and requirements.</li>
+        <li><strong>Final-outcome validation</strong> — fires a notification to your registered contact and waits for your sign-off before calling the initiative done.</li>
+      </ul>
+      <p>
+        You only touch it at the profile confirm and the final sign-off — that is the
+        "tell it once, let it run" mode. With <code>github-issue</code> approval wired at Init, a
+        sponsor can give that sign-off from a phone.
+      </p>
+
+      <div class="callout warn">
+        <p>
+          <strong>Keep the experiment honest.</strong> The Minimum Viable Experiment is a design, not a
+          result. Do not narrate it as proven outcomes — the value is that the squad surfaces the
+          riskiest assumption and the cheapest way to test it <em>before</em> the client commits budget.
+        </p>
+      </div>
+
+      <h2>Failure-safe fallbacks</h2>
+      <table>
+        <thead>
+          <tr><th>If…</th><th>Then…</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>A role does not dispatch</td><td>Confirm the agent it maps to is installed — the <code>product</code> profile resolves <code>analyst</code>, <code>designer</code>, <code>product-owner</code>, <code>experimenter</code>, <code>presenter</code>, and <code>technical-writer</code> to deployed HVE Core agents.</td></tr>
+          <tr><td>The request needs security / cost / architecture review</td><td>The squad offers to add those roles or switch to the <code>full</code> profile — accept, and the council convenes.</td></tr>
+          <tr><td>No GitHub repo for phone approval</td><td>Keep the default <code>in-chat</code> channel and approve in the session — nothing blocks.</td></tr>
+          <tr><td>Live tooling hiccups</td><td>Cut to a pre-recorded run of the same script against a neutral scenario — the arc is identical, so the narrative never breaks.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Closing talking points</h2>
+      <ul>
+        <li><strong>It is a methodology, not a model.</strong> Research → plan → build → review runs in every profile, so even business discovery is planned and reviewed by named specialists.</li>
+        <li><strong>Every beat is a deliverable.</strong> Discovery, BRD, roadmap, experiment, deck — the client signs off on artifacts, not code.</li>
+        <li><strong>Approve from anywhere.</strong> With <code>github-issue</code> approval, a non-technical sponsor signs off from a phone.</li>
+        <li><strong>Safe to run live.</strong> No cloud, no spend, no code — the perfect first pitch, and it scales up to the full council the moment real risk enters.</li>
+      </ul>
+
+      <div class="pager">
+        <a class="prev" href="demo.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Demo 1 — Azure Squad</div>
+        </a>
+        <a class="next" href="maintaining.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Maintaining</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

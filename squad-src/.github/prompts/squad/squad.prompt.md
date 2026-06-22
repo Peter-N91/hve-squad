@@ -1,7 +1,7 @@
 ---
 description: "Hands a request to the Squad Coordinator, which routes it to a cast of HVE Core agents and persists squad state"
 agent: Squad Coordinator
-argument-hint: "request=... [profile=default|full|security|design|architecture|azure] [tier=...] [owner=...] [mode=autonomous|autopilot]"
+argument-hint: "request=... [profile=default|full|security|design|architecture|azure|product] [tier=...] [owner=...] [mode=autonomous|autopilot]"
 ---
 
 # Squad
@@ -9,7 +9,7 @@ argument-hint: "request=... [profile=default|full|security|design|architecture|a
 ## Inputs
 
 * ${input:request}: (Required) The work for the squad this turn, from the user prompt or conversation.
-* ${input:profile}: (Optional) The squad profile to seed when the project has no squad yet (`default`, `full`, `security`, `design`, `architecture`, or `azure`). Selects which cast the coordinator stamps out during Init Mode.
+* ${input:profile}: (Optional) The squad profile to seed when the project has no squad yet (`default`, `full`, `security`, `design`, `architecture`, `azure`, or `product`). Selects which cast the coordinator stamps out during Init Mode.
 * ${input:tier}: (Optional) A model-tier hint (`fast` or `default`) that overrides the coordinator's cost-first defaults for this turn.
 * ${input:owner}: (Optional) A `Member Name` from `team.md` that picks a specific named member when two rows share the same `Role` (for example, `owner=Beta` when both `developer` rows exist as `Beta` and `Gamma`).
 * ${input:mode}: (Optional) The autonomy mode for this turn. `autonomous` engages the bounded `auto-validated` validator loop from `.github/instructions/squad/squad-autonomous.instructions.md`. `autopilot` runs the full research→plan→implement→review pipeline from `.github/instructions/squad/squad-autopilot.instructions.md`, stopping for the human only at impactful actions and final-outcome validation. When omitted, the coordinator uses the standard interactive `auto` and `confirm` tiers from the routing table, approving each step.

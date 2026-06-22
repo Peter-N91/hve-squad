@@ -45,6 +45,12 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | review, validate, check quality            | Task Reviewer          | auto          | yes               |
 | security, threat, vulnerability, STRIDE    | Security Planner       | confirm       | yes               |
 | design, UX, UI, wireframe, accessibility   | UX UI Designer         | confirm       | yes               |
+| requirements, BRD, PRD, user story, acceptance criteria | PRD Builder | confirm       | yes               |
+| journey map, persona, design thinking, empathize, ideate, problem statement | DT Coach | confirm | yes               |
+| roadmap, backlog, epic, sprint, refine, prioritize, story | Agile Coach | confirm    | no                |
+| experiment, hypothesis, validate assumption, MVE, riskiest assumption | Experiment Designer | confirm | yes        |
+| presentation, deck, slides, executive summary, pitch | PowerPoint Builder | confirm | no                |
+| document, write up, summarize for stakeholders, readme | Doc Ops    | confirm       | no                |
 | architecture, system design, components    | System Architecture Reviewer | auto    | yes               |
 | responsible AI, RAI, fairness, harm        | RAI Planner            | confirm       | yes               |
 | verify finding, confirm claim, fact-check  | Finding Deep Verifier  | auto          | yes               |

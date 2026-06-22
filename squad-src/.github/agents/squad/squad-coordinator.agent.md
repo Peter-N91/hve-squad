@@ -21,6 +21,17 @@ agents:
   - Squad As-Built Author
   - Squad Azure Diagnose
   - Squad Modernization Planner
+  - PRD Builder
+  - BRD Builder
+  - Meeting Analyst
+  - Product Manager Advisor
+  - DT Coach
+  - Agile Coach
+  - GitHub Backlog Manager
+  - Experiment Designer
+  - PowerPoint Builder
+  - PowerPoint Subagent
+  - Doc Ops
 ---
 
 # Squad Coordinator
@@ -53,7 +64,7 @@ Three squad instruction files define the data and rules this agent depends on. T
 ## Inputs
 
 * The user's request for this turn.
-* (Optional) A profile hint (`profile=default|full|security|design|architecture|azure`) that selects which squad to seed during Init Mode.
+* (Optional) A profile hint (`profile=default|full|security|design|architecture|azure|product`) that selects which squad to seed during Init Mode.
 * (Optional) A model-tier hint (`fast` or `default`) the user supplies to override cost-first defaults.
 * (Optional) A mode hint (`mode=autonomous` for the bounded validator loop, or `mode=autopilot` for the full research→plan→implement→review pipeline). When omitted, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing autonomy tier.
 * (Optional) A member-owner hint (`owner=<Member Name>`) that picks a specific named member from `team.md` when two rows share the same `Role`.
@@ -90,7 +101,7 @@ The available profiles and the cast they map to are defined in `.github/instruct
 2. **Select a recommended profile** using the precedence in the roster's *Profile Selection*: an explicit `profile=` hint wins; otherwise infer from discovery; otherwise recommend `default`.
 3. **Propose the squad to the user.** Present the recommended profile, its member roles, and why it fits the discovered project. Offer these choices and wait for the user — do not create files yet:
    * Accept the recommended profile as-is.
-   * Switch to a different profile (`default`, `full`, `security`, `design`, `architecture`, `azure`).
+   * Switch to a different profile (`default`, `full`, `security`, `design`, `architecture`, `azure`, `product`).
    * Add or remove individual roles from the proposed roster (any role from the cast catalog).
    * Decline and ask for more detail before proposing again.
 4. **Offer naming choices for the seeded members.** Once a profile or customized roster is on the table, ask the user how to fill the roster's `Member Name` column per the *Naming Conventions* in `.github/instructions/squad/squad-roster.instructions.md`. Wait for the user before handing the roster to the Squad Scribe. The four supported choices are:
