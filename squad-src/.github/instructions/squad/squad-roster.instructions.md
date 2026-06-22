@@ -28,6 +28,8 @@ The `## Members` table uses these columns:
 | Invocation           | How the coordinator dispatches the agent: `runSubagent`/`task` for non-user-facing roles                                                                            |
 | Model Tier           | Preferred cost tier: `fast` for read-heavy roles, `default` for reasoning-heavy roles                                                                               |
 
+Model Tier records a preference, not what actually ran: the concrete model used for each dispatch is captured in the per-dispatch consumption block in `history/<agent>.md` and aggregated into `consumption.md`, never in `team.md`.
+
 The `Agent Name (Primary)` column holds exactly one agent; the role always has a deterministic default. `Alternate Agents` is optional and may be empty for one-to-one roles. The uniqueness key for a row is the (`Role`, `Member Name`) pair, so two rows with the same `Role` are legal when their `Member Name` values differ. When `Member Name` is empty, only one row per `Role` is allowed and the coordinator dispatches that row whenever the role matches. The coordinator resolves the role to a single concrete agent at dispatch time using the *Resolving a Role to an Agent* rules below.
 
 ### Members Example

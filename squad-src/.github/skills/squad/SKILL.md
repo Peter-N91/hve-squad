@@ -73,7 +73,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 ### Handoff
 
-1. Hand each dispatched agent's request and outcome to the Squad Scribe, which appends to `history/<agent>.md` (append-only).
+1. Hand each dispatched agent's request and outcome to the Squad Scribe, which appends them to `history/<agent>.md` (append-only) along with the per-dispatch consumption block (the model used plus estimated input, cached, and output token cost and credits), then rewrites the `consumption.md` ledger and updates the `state.json` `currentRun` totals. Every consumption figure is an estimate.
 2. Synthesize the collected findings into a concise answer for the user.
 3. Escalate to the user — rather than acting — when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose.
 
@@ -131,7 +131,7 @@ The squad captures an optional contact at build time and pings it for approvals.
 
 ## Seed Templates
 
-The coordinator hands these templates to the Squad Scribe on first run, after the user confirms a profile in Init Mode. They stay consistent with the three squad instruction files: `team.md` holds the confirmed profile's members (the full cast catalog shown below is the `full` profile), `routing.md` mirrors the default routing rules filtered to the seeded roster, and the write semantics match the state layout (`decisions.md` and `history/<agent>.md` are append-only; `team.md`, `routing.md`, and `state.json` use replace semantics).
+The coordinator hands these templates to the Squad Scribe on first run, after the user confirms a profile in Init Mode. They stay consistent with the three squad instruction files: `team.md` holds the confirmed profile's members (the full cast catalog shown below is the `full` profile), `routing.md` mirrors the default routing rules filtered to the seeded roster, and the write semantics match the state layout (`decisions.md` and `history/<agent>.md` are append-only; `team.md`, `routing.md`, `state.json`, `consumption.md`, and `consumption-rates.md` use replace semantics).
 
 ### team.md
 
@@ -348,6 +348,10 @@ Machine-readable squad status. Uses replace semantics — the coordinator overwr
   "mode": "interactive",
   "activeRoles": [],
   "openEscalations": [],
+  "currentRun": {
+    "estCostUsd": 0,
+    "estCreditsTotal": 0
+  },
   "notify": {
     "approvalChannel": "in-chat",
     "enabled": false,
@@ -358,6 +362,67 @@ Machine-readable squad status. Uses replace semantics — the coordinator overwr
     }
   }
 }
+```
+
+### consumption.md
+
+Scribe-aggregated ledger of squad members, the model each consumed, and estimated AI-credit cost; this is the common "members and credits" readme. Uses replace semantics: the Scribe rewrites it each turn, mirrors roster order, and recomputes the run total and the comparison line from `consumption-rates.md`. Every figure is an estimate, because no per-dispatch token telemetry exists (the runtime exposes only the per-user aggregate `ai_credits_used`); token counts are estimated and cost and credits are derived, never billed.
+
+```markdown
+---
+description: "Squad consumption ledger: members, models, estimated tokens, cost, and AI credits"
+---
+
+# Squad Consumption Ledger (Run: <run-id>)
+
+| Role      | Member | Agent   | Model   | Tier   | In Tokens | Cached | Out Tokens | Est. Cost (USD) | Est. Credits |
+|-----------|--------|---------|---------|--------|-----------|--------|------------|-----------------|--------------|
+| <role>    |        | <agent> | <model> | <tier> | 0         | 0      | 0          | 0.0000          | 0.00         |
+| **Total** |        |         |         |        | **0**     | **0**  | **0**      | **$0.00**       | **0.00**     |
+
+> Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API (optional post-hoc reconciliation). Token rates come from `consumption-rates.md` (observed <date>). 1 AI credit = $0.01 USD.
+
+## Cost Comparison (illustrative)
+
+This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** across <n> specialized agents, routing read-heavy roles to lightweight models and reserving high-output reasoning models only where needed. Reproducing the same outcome by manually prompting a single high-capability model across roughly <iterations> iterate-and-test turns is estimated at **$<manual-cost> (~<manual-credits> AI credits)**, a reduction of about <savings-pct>%.
+
+> Estimates only. Token rates change. See `consumption-rates.md` for current rates and methodology. Token counts and iteration counts are illustrative, not guarantees.
+```
+
+### consumption-rates.md
+
+Single maintainable rate table that isolates volatile per-model token pricing from agent logic. Uses replace semantics. The Scribe seeds it from this template on first run when the file is missing; every rate cell ships as a `<verify>` placeholder until confirmed against the current GitHub Copilot "Models and pricing" docs (verify before commit). Because only this file holds token rates, a price change updates one table and never touches an agent prompt.
+
+```markdown
+---
+description: "Maintainable per-model token-rate table and comparison methodology for squad consumption estimates"
+---
+
+# Consumption Rates (verify against the current GitHub Copilot "Models and pricing" docs)
+
+* Billing model: usage-based billing (UBB), token-metered, effective 2026-06-01.
+* Observed-on: <YYYY-MM-DD>. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
+* Credit conversion: 1 AI credit = $0.01 USD (fixed).
+
+## Per-model token rates in USD per 1M tokens (volatile, verify before commit)
+
+| Model (as routed)   | Tier    | Input    | Cached   | Output   | Notes                      |
+|---------------------|---------|----------|----------|----------|----------------------------|
+| GPT-5.4 nano        | fast    | <verify> | <verify> | <verify> | lightweight, read-heavy    |
+| Claude Haiku 4.5    | fast    | <verify> | <verify> | <verify> | lightweight reasoning      |
+| Claude Sonnet 4.6   | default | <verify> | <verify> | <verify> | versatile                  |
+| Claude Opus 4.8     | default | <verify> | <verify> | <verify> | high-capability reasoning  |
+| (additional models) |         | <verify> | <verify> | <verify> | update when GitHub changes |
+
+## Comparison methodology (token terms)
+
+* `est_cost_usd = (input_tokens × input_rate + cached_tokens × cached_rate + output_tokens × output_rate) / 1e6`
+* `est_credits = est_cost_usd / 0.01`
+* `squad_cost = sum over dispatched roles of est_cost_usd`
+* `manual_baseline = expected_iterations × baseline_model_cost_per_turn`
+* `savings_pct = 1 - (squad_cost / manual_baseline)`
+
+All values are labeled estimated, and token counts are estimated because no per-dispatch telemetry exists. Optionally reconcile the run total against the per-user aggregate `ai_credits_used` from the usage-metrics REST API after the run.
 ```
 
 ## Attribution

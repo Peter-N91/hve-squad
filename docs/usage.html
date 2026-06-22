@@ -226,6 +226,33 @@
         implementation, and cross-domain phases route through the council before any code changes.
       </p>
 
+      <h2>Run cost ledger</h2>
+      <p>
+        Each run estimates the model cost and AI-credit consumption of every dispatch so a project
+        can see what a run spent. The Squad Scribe records this in three places under
+        <code>.copilot-tracking/squad/</code>:
+      </p>
+      <ul>
+        <li>
+          a per-dispatch consumption block appended to <code>history/&lt;agent&gt;.md</code> with the
+          model, tier, estimated tokens, estimated cost, and estimated credits;
+        </li>
+        <li>
+          an aggregated <code>consumption.md</code> ledger of members, models, and credits, totaled
+          for the run, with a cost-comparison line against a single-model manual baseline;
+        </li>
+        <li>
+          a <code>consumption-rates.md</code> per-model token-rate table &mdash; the single place to
+          update when GitHub Copilot pricing changes.
+        </li>
+      </ul>
+      <p>
+        Every figure is an <strong>estimate, not a billed amount</strong>: no per-dispatch token
+        telemetry exists, so token counts are estimated and cost and credits are derived (1 AI credit
+        = $0.01 USD). The run totals also surface in <code>state.json</code> under
+        <code>currentRun</code>.
+      </p>
+
       <h3>Requirements for running the squad</h3>
       <ul>
         <li>A <code>runSubagent</code> or <code>task</code> tool must be enabled so the coordinator can dispatch the cast.</li>

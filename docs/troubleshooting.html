@@ -95,6 +95,36 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
         <code>git add .github/workflows</code> (if you track workflows here), then commit.
       </p>
 
+      <h3>Azure-icon diagrams (HLD/LLD) won't render</h3>
+      <p>
+        When the Squad Azure Architect produces a committed PNG/SVG with real Azure icons via the
+        <code>python-diagrams</code> skill, the render needs both Python and the Graphviz
+        <code>dot</code> binary. On a typical Windows dev box two things commonly block it:
+      </p>
+      <ul>
+        <li>
+          <strong><code>python</code> is the Microsoft Store stub.</strong> Running <code>python</code>
+          prints <em>"Python was not found"</em> and does nothing. Use the <code>py</code> launcher, or
+          better, <code>uv</code> — which supplies its own Python and the <code>diagrams</code> package
+          even when neither is on PATH:
+          <pre><code>uv run --with diagrams python docs/architecture/your-diagram.py</code></pre>
+        </li>
+        <li>
+          <strong>Graphviz is installed but not on PATH.</strong> The render fails with
+          <code>ExecutableNotFound</code> / "dot not found". Install it and reopen the shell, or prepend
+          it for the session:
+          <pre><code>winget install Graphviz.Graphviz   # then reopen the terminal
+# or, for the current session only:
+$env:PATH = "C:\Program Files\Graphviz\bin;$env:PATH"</code></pre>
+        </li>
+      </ul>
+      <p>
+        Verify the toolchain before authoring with the skill's checker:
+        <code>uv run --with diagrams python .github/skills/python-diagrams/scripts/verify_installation.py</code>.
+        If the diagram still won't render and you only need a quick visual, the architect falls back to
+        an inline Mermaid diagram automatically.
+      </p>
+
       <h2>Versioning</h2>
       <ul>
         <li>Releases follow <a href="https://semver.org/">Semantic Versioning</a>.</li>

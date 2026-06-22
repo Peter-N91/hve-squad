@@ -33,6 +33,7 @@ State layout, ownership, and the tool-to-mechanism mapping are defined in `.gith
 * (Optional) A memory payload: the role-scoped note to persist for a specific agent.
 * (Optional) A Council Verdict payload: the consolidated council findings, topic id, timestamp, council membership, and verdict label (`Go`, `Go-With-Conditions`, or `Stop`) per `.github/instructions/squad/squad-council.instructions.md`.
 * (Optional) An autonomous-loop summary payload: per-cycle verdicts, blocking issues, conditions, and the loop's final outcome per `.github/instructions/squad/squad-autonomous.instructions.md`.
+* (Optional) A consumption payload: per dispatched agent, the actual model used (or a `tier-default` marker when the model is unknown), the model tier, estimated token counts (input, cached, output), and the dispatch the block attaches to.
 
 ## Required Steps
 
@@ -60,10 +61,20 @@ When a Council Verdict payload is present, append a new `## Council Verdict <tim
 
 When an autonomous-loop summary payload is present, write a per-topic summary to `.copilot-tracking/squad/history/autonomous-loop-<id>.md`, where `<id>` is the topic-id slug from the matching Council Verdict. Use the exact shape defined in `.github/instructions/squad/squad-autonomous.instructions.md`: the YAML frontmatter (`description: "Autonomous-loop summary for topic <id>"`), the `# Autonomous Loop: <id>` heading, the `Topic` / `Opt-In` / `Cost Ceiling` / `Outcome` header bullets, the `## Iterations` table (one row per cycle, capped at two), and the `## Final Verdict Reference` pointer to `decisions.md`. The file is append-only by topic-id: when the file already exists, append a new dated `## Iterations` section rather than overwriting prior runs. Hand the per-agent dispatch records for each loop iteration to Step 2 so each role's `history/<agent>.md` also reflects the cycle.
 
+### Step 7: Write Consumption
+
+When a consumption payload is present, record the run's estimated model usage and AI-credit cost. All figures are estimates, not billed amounts: no per-dispatch token telemetry exists, so token counts are estimated and every numeric output carries an "estimated, not billed" disclaimer.
+
+1. When `.copilot-tracking/squad/consumption-rates.md` is missing, seed it from the `consumption-rates.md` template in `.github/skills/squad/SKILL.md` before computing any cost. This per-model token-rate table is the only source of token rates; never hardcode rates into the block or the ledger.
+2. Read the per-model token rates (USD per 1M tokens for input, cached, and output) from `consumption-rates.md`. When the actual model is known, use its rates and set `basis: estimated`; when the actual model is unknown, fall back to the dispatched role's roster `Model Tier` rates and set `basis: tier-default`. Compute `est_cost_usd = (input_tokens × input_rate + cached_tokens × cached_rate + output_tokens × output_rate) / 1e6`, then `est_credits = est_cost_usd / 0.01` (1 AI credit = $0.01 USD).
+3. Append the per-dispatch consumption block to `.copilot-tracking/squad/history/<agent>.md` for the dispatch it attaches to, using exactly this field order: `model`, `model_tier`, `input_tokens`, `cached_tokens`, `output_tokens`, `input_rate`, `cached_rate`, `output_rate`, `est_cost_usd`, `est_credits`, `basis`. The block is append-only; never edit or remove a prior block.
+4. Rewrite `.copilot-tracking/squad/consumption.md` (replace semantics) as a per-role ledger mirroring roster order: one row per dispatched role carrying its model, tier, estimated input/cached/output tokens, `est_cost_usd`, and `est_credits`, plus a run-total row that sums the columns. Append the cost-comparison line contrasting the squad run total against a modeled manual single-model iteration baseline, computed with the methodology in `consumption-rates.md`. Carry the estimates-only disclaimer on the ledger and the comparison line.
+5. Overwrite `state.json` `currentRun.estCostUsd` and `currentRun.estCreditsTotal` with the accumulated run totals so the machine-readable totals match the ledger.
+
 ## Required Protocol
 
 1. Follow the Required Steps for whichever payloads are present in the request.
-2. Treat `decisions.md` and `history/<agent>.md` as strictly append-only; treat `team.md`, `routing.md`, and `state.json` as replace-on-request. Treat `history/autonomous-loop-<id>.md` as append-only per topic-id.
+2. Treat `decisions.md` and `history/<agent>.md` as strictly append-only; treat `team.md`, `routing.md`, and `state.json` as replace-on-request. Treat `history/autonomous-loop-<id>.md` as append-only per topic-id. Treat `consumption.md` and `consumption-rates.md` as replace-on-request, and the per-dispatch consumption block appended to `history/<agent>.md` as append-only.
 3. When the coordinator supplies a `Member Name` with the history payload, record it inside the dispatch entry under the existing `history/<agent>.md` file. Keep one history file per agent even when a single agent serves two named roles; do not create a separate `history/<agent>-<member>.md` file.
 4. Make no decisions of your own — record exactly what the coordinator hands over. The Council Verdict label, conditions, and blocking issues come from the payload; do not synthesize or downgrade them.
 5. Return the Response Format confirmation once all writes complete.
@@ -74,4 +85,5 @@ Return a concise confirmation including:
 
 * The files written or appended, by path.
 * The repository memory note written, when applicable.
+* The consumption files written when a consumption payload was processed: the per-dispatch block in `history/<agent>.md`, the rewritten `consumption.md` ledger, the seeded `consumption-rates.md` (first run only), and the updated `state.json` `currentRun.estCostUsd` and `currentRun.estCreditsTotal`.
 * A note of any payload field that was missing or could not be written, or "None" when all writes succeeded.

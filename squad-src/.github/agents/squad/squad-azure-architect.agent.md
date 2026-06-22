@@ -64,6 +64,9 @@ The HLD is a Mermaid `graph TD` or `flowchart LR` diagram that frames the worklo
 3. Include the identity perimeter: Entra ID tenants, managed identities, role-assignment scopes, federation boundaries.
 4. Include data flows between major components, with crossings of trust boundaries called out explicitly.
 5. Render per the `diagram-rendering` ladder in `.github/instructions/squad/squad-mcp-capability.instructions.md`: prefer a draw.io MCP when configured; when a committed icon image is wanted (HLD or LLD with Azure product icons), use the `python-diagrams` skill (`.github/skills/python-diagrams/`) to emit paired PNG + SVG into `docs/architecture/`; otherwise fall back to Mermaid (always available in Copilot chat).
+6. When taking the `python-diagrams` path, **copy the skill's bundled files; never re-author them.** Copy `scripts/diagram_io.py` verbatim and a generator from `templates/` into `docs/architecture/`, then adapt only the generator's nodes and edges. Do not rewrite `diagram_io.py` or invent a custom dual-output helper — the bundled one already emits PNG + SVG natively.
+7. **Only use `diagrams.azure.*` node classes you have verified exist.** Do not guess class names. Validate every import against the installed library (for example `python -c "import diagrams.azure.network as m; print(dir(m))"`) or the skill's *Azure node reference*, and run `scripts/verify_installation.py` first. Common correct names: PostgreSQL is `DatabaseForPostgresqlServers`, NSG is `NetworkSecurityGroupsClassic`, Azure Firewall is `Firewall` (in `diagrams.azure.network`), ACI is `ContainerInstances`.
+8. **Every diagram node must be a real node object, never a bare string.** Model external actors (internet, customer/API clients) with real nodes such as `diagrams.onprem.network.Internet` or `diagrams.onprem.client.Users`; a Python `str` cannot participate in `>>`/`<<` edges and will fail at render.
 
 ### Step 4: Author the LLD as a Bicep-Friendly Resource Table
 
@@ -88,6 +91,7 @@ Identify the architecturally significant decisions in the HLD and the diagrams t
 4. Do not author Bicep source. The LLD is Bicep-friendly (named resources, SKUs, regions, AVM module names) but the actual Bicep authoring belongs to the `developer` role.
 5. Do not review architectural tradeoffs. When a tradeoff review is requested, emit a handoff candidate for `System Architecture Reviewer` instead of performing the review.
 6. Pause on missing inputs rather than guessing. Clarifying questions go in the Response Format and the Coordinator decides whether to escalate.
+7. When emitting committed Azure-icon diagrams, copy the `python-diagrams` skill's `scripts/diagram_io.py` and a `templates/` generator rather than authoring them from scratch; verify every `diagrams.azure.*` node class exists before use; and model external actors as real nodes, never strings. A guessed node class or a string used as a node is a defect, not an acceptable shortcut.
 
 ## Response Format
 

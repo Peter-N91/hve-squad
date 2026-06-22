@@ -22,6 +22,8 @@ All squad state lives under `.copilot-tracking/squad/`:
 | `history/<agent>.md`  | Per-agent dispatch history: requests handled, findings, outcomes           | Append-only          |
 | `history/autopilot-run-<id>.md` | Per-run autopilot pipeline summary: stages, gates, approvals     | Append-only by id    |
 | `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via scribe   |
+| `consumption.md`      | Aggregated member/model/credit ledger; carries the cost comparison line    | Replace via scribe   |
+| `consumption-rates.md`| Per-model token-rate table (USD per 1M) plus the comparison methodology    | Replace via scribe   |
 
 * `decisions.md`, `notifications.md`, and the `history/<agent>.md` files are **append-only**. New entries are added to the end; prior entries are never edited or removed.
 * `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the coordinator overwrites as the squad advances. It carries the `notify` object (the captured notification contact) and the current `mode`.
@@ -38,6 +40,10 @@ The Scribe seeds `state.json` on first run and overwrites it as the squad advanc
   "mode": "interactive",
   "activeRoles": [],
   "openEscalations": [],
+  "currentRun": {
+    "estCostUsd": 0,
+    "estCreditsTotal": 0
+  },
   "notify": {
     "approvalChannel": "in-chat",
     "enabled": false,
@@ -50,7 +56,28 @@ The Scribe seeds `state.json` on first run and overwrites it as the squad advanc
 }
 ```
 
-The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`).
+The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`). The `currentRun` object holds the run totals `estCostUsd` and `estCreditsTotal`, both seeded at 0 and overwritten by the Scribe as dispatches accumulate; they are per-run estimates, not billed amounts (see [Consumption Tracking](#consumption-tracking)).
+
+## Consumption Tracking
+
+Squad runs estimate the model cost and AI-credit consumption of every dispatch so a project can see what a run spent. The billing model is GitHub Copilot usage-based billing (UBB): token-metered, effective 2026-06-01, priced per model in USD per 1M tokens, where 1 AI credit equals $0.01 USD. No per-dispatch token telemetry exists, so every figure is an estimate. The runtime exposes only a per-user aggregate `ai_credits_used` through the usage-metrics REST API, available after the fact for optional reconciliation.
+
+The Scribe records consumption in three places:
+
+* A per-dispatch consumption block appended to `history/<agent>.md` (append-only), one block per dispatch, with fields in this order: `model`, `model_tier`, `input_tokens`, `cached_tokens`, `output_tokens`, `input_rate`, `cached_rate`, `output_rate`, `est_cost_usd`, `est_credits`, `basis`.
+* The aggregated `consumption.md` ledger (replace via scribe), which mirrors roster order, lists every dispatched member with its model, tier, estimated tokens, estimated cost, and estimated credits, totals the run, and carries the cost-comparison line. This ledger is the common readme of members, models, and credits.
+* The `consumption-rates.md` per-model token-rate table (replace via scribe), the single maintainable source of input, cached, and output rates in USD per 1M tokens plus the comparison methodology. Volatile rate values use `<verify>` placeholders until confirmed against current billing documentation.
+
+The `basis` field records how a block was derived: `estimated` when the model is known and token counts are estimated from context and response size, or `tier-default` when the actual model is unknown and the roster Model Tier rates were used instead.
+
+The Scribe computes the cost and credit estimates from the rates in `consumption-rates.md`:
+
+```text
+est_cost_usd = (input_tokens × input_rate + cached_tokens × cached_rate + output_tokens × output_rate) / 1e6
+est_credits  = est_cost_usd / 0.01
+```
+
+Every numeric output carries an "estimated, not billed" disclaimer. These values support run planning and cost comparison, not invoicing.
 
 ## State Ownership
 

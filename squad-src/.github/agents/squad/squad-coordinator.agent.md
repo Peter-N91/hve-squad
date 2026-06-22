@@ -76,6 +76,7 @@ Apply cost-first model selection on every dispatch so the squad reserves expensi
 * Prefer the `fast` tier for read-heavy `auto` roles (research, review, verification) where the work is gathering and summarizing rather than deciding.
 * Reserve the `default` tier for reasoning-heavy `confirm` roles (planning, implementation, architecture, RAI, security) where judgment drives the outcome.
 * Honor the `Model Tier` column in the roster as the per-role default, and let an explicit user tier hint override it for the turn.
+* Record the dispatched model (or its tier when the model is unknown) through the Squad Scribe for consumption attribution, so every cost-first choice is visible in the `consumption.md` ledger.
 
 ## Init Mode: Choosing the Squad for the Project
 
@@ -138,6 +139,8 @@ Gather each agent's structured response. Keep this turn lean: extract the decisi
 ### Step 5: Hand State to the Squad Scribe
 
 Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`. The scribe appends to `.copilot-tracking/squad/decisions.md` and `.copilot-tracking/squad/history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`. The coordinator does not write these files directly.
+
+Include a consumption payload alongside the decision and history payloads so the Scribe can attribute each dispatch's estimated cost. For every dispatched agent this turn, supply the actual model used (`model`), the roster tier it resolved against (`model_tier`), and the estimated token counts for the dispatch (`input_tokens`, `cached_tokens`, `output_tokens`). When the actual model is unknown, omit `model` and pass only the roster `model_tier` so the Scribe applies the tier-default rates and records `basis: tier-default`; when the model is known, the Scribe records `basis: estimated`. The coordinator supplies these values only, and the Scribe stays the single writer that appends the per-dispatch consumption block, aggregates `consumption.md`, and updates `state.json` `currentRun`.
 
 ### Step 6: Synthesize and Escalate
 

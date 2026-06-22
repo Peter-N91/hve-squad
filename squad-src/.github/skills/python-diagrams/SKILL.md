@@ -49,19 +49,36 @@ draw.io path), generate Bicep/Terraform, or deploy anything.
 ## Prerequisites
 
 1. **Graphviz** (system binary, not pip-installable) on PATH:
-   * Windows: `winget install Graphviz.Graphviz` (machine-scope; run elevated, then reopen the shell)
+   * Windows: `winget install Graphviz.Graphviz` (machine-scope; run elevated, then **reopen the shell**)
    * macOS: `brew install graphviz`
    * Linux: `apt-get install graphviz`
 2. **Python packages**: `pip install -r requirements.txt` (or `uv run --with diagrams ...`).
 
-Verify both with `python scripts/verify_installation.py`.
+Verify both **before authoring** with `python scripts/verify_installation.py` (it confirms `diagrams`
+imports and Graphviz `dot` renders).
+
+> **Windows gotchas.** On a typical Windows dev box, `python` is often the **Microsoft Store stub**
+> (it prints "Python was not found" and does nothing), and Graphviz may be installed but **not on
+> PATH**. If `python` fails, use the `py` launcher or `uv` (see *Usage*). If a render fails with
+> `ExecutableNotFound` / "dot not found", Graphviz is installed but off PATH — prepend it for the
+> session: `$env:PATH = "C:\Program Files\Graphviz\bin;$env:PATH"`.
 
 ## Usage
 
-1. Copy `scripts/diagram_io.py` and a generator from `templates/` into the consumer repo (for an LLD,
-   copy `templates/azure-webapp-lld.py` next to `diagram_io.py` under `docs/architecture/`).
-2. Edit the generator's nodes and edges to match the project's actual Bicep or Terraform modules.
-3. Run it: `python azure-webapp-lld.py` (or `uv run --with diagrams python azure-webapp-lld.py`).
+1. **Copy the bundled files; do not re-author them.** Copy `scripts/diagram_io.py` **verbatim** and a
+   generator from `templates/` into the consumer repo (for an LLD, copy `templates/azure-webapp-lld.py`
+   next to `diagram_io.py` under `docs/architecture/`). The bundled `diagram_io.py` already emits PNG +
+   SVG natively — never rewrite it or invent a custom output helper.
+2. Edit only the generator's **nodes and edges** to match the project's actual Bicep or Terraform
+   modules. Keep every node a real node object (see *Azure node reference*).
+3. Run it. Prefer `uv` — it supplies Python and `diagrams` even when neither is on PATH:
+
+   ```pwsh
+   uv run --with diagrams python azure-webapp-lld.py
+   ```
+
+   Fallbacks when `uv` is absent: `py azure-webapp-lld.py` (the Windows launcher) or
+   `python azure-webapp-lld.py`. Ensure Graphviz `dot` is on PATH first (see *Prerequisites*).
 4. Commit the emitted `azure-webapp-lld.png` and `.svg`.
 
 ## Dual-output contract
@@ -80,16 +97,37 @@ with Diagram("My architecture", **diagram_kwargs("01-architecture", direction="L
 
 ## Azure node reference
 
-Import the specific node class per resource; common Azure nodes used by the web app template:
+Import the specific node class per resource. **Only use classes you have verified exist — do not
+guess.** Validate against the installed library before use, for example
+`python -c "import diagrams.azure.network as m; print(dir(m))"`, or browse the full catalog at
+<https://diagrams.mingrammer.com/docs/nodes/azure>.
+
+Common nodes, including the ones most often guessed wrong:
 
 ```python
-from diagrams.azure.compute import AppServices
-from diagrams.azure.database import SQLDatabases
-from diagrams.azure.network import VirtualNetworks, PrivateEndpoint, Subnets
+from diagrams.azure.compute import AppServices, ContainerInstances
+from diagrams.azure.database import SQLDatabases, DatabaseForPostgresqlServers  # NOT "DatabasesPostgreSQL"
+from diagrams.azure.network import (
+    VirtualNetworks,
+    Subnets,
+    PrivateEndpoint,
+    ApplicationGateway,
+    Firewall,                      # Azure Firewall lives in network, NOT azure.general
+    NetworkSecurityGroupsClassic,  # NOT "NetworkSecurityGroups"
+)
 from diagrams.azure.security import KeyVaults
 from diagrams.azure.storage import StorageAccounts
 from diagrams.azure.analytics import LogAnalyticsWorkspaces
-from diagrams.azure.identity import ManagedIdentities
+from diagrams.azure.identity import ManagedIdentities, ActiveDirectory
+```
+
+**Every node must be a real node object — never a bare string.** Model external actors (internet,
+customer/API clients) with real nodes, since a Python `str` cannot take part in `>>`/`<<` edges and
+will fail at render:
+
+```python
+from diagrams.onprem.network import Internet  # the public internet / external integrations
+from diagrams.onprem.client import Users      # external users / API consumers
 ```
 
 The full Azure node catalog is at <https://diagrams.mingrammer.com/docs/nodes/azure>.
