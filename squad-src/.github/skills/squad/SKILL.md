@@ -71,6 +71,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 2. Hand the turn's decision and rationale to the Squad Scribe, which appends to `decisions.md` (append-only).
 3. When a decision is architecturally significant, additionally capture it as an Architecture Decision Record via the `adr-author` skill and reference that ADR from the decision entry.
 4. Persist durable, role-scoped learnings to `/memories/repo/squad-<agent>.md` through the Squad Scribe and the memory tool.
+5. Consult the shipped `learnings/shared-learnings.md` playbook (skill-root-relative within the deployed `squad` skill) as read-only, authoritative context and apply any curated entry whose scenario matches the work at hand. This shipped file complements the consumer-local memory written in the prior step: the coordinator reads the shared playbook and writes local learnings, and it never writes back to the shipped file. When the organization has configured the tenant-internal APM dependency, the consumer also carries a tenant playbook at `.agents/skills/squad-learnings-tenant/tenant-learnings.md`; consult it after the shipped playbook as additional read-only, authoritative context and apply any entry whose scenario matches. That tenant file is present only when the organization configured the dependency, and the coordinator never writes to it. The full read order is local memory first, then the shipped playbook, then the optional tenant playbook. A local learning reaches the shared playbook only through the fork-and-PR promotion path in `CONTRIBUTING.md`.
 
 ### Handoff
 
@@ -129,6 +130,8 @@ The squad captures an optional contact at build time and pings it for approvals.
 | `squad_memory`   | Write durable per-agent notes with the memory tool to `/memories/repo/squad-<agent>.md`                   |
 | `squad_notify`   | Fire a notification per `squad-notifications.instructions.md`; deliver via a configured tool when present, else in-chat, and append the record to `notifications.md` |
 | `squad_escalate` | Apply the escalate-to-user convention from the routing rules before any role acts                         |
+
+`squad_memory` spans up to three surfaces. It reads the shipped `learnings/shared-learnings.md` playbook (skill-root-relative within the deployed `squad` skill) as read-only, authoritative shared context, and when the organization configured the tenant-internal APM dependency it also reads the tenant playbook at `.agents/skills/squad-learnings-tenant/tenant-learnings.md` as read-only context, in addition to writing durable per-agent notes to the consumer-local `/memories/repo/squad-<agent>.md`. Neither shared playbook is ever written from a run: promotion of a local learning into a shared surface flows only through the human-reviewed promotion paths in `CONTRIBUTING.md`.
 
 ## Seed Templates
 

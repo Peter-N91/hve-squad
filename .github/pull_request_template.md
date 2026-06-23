@@ -1,3 +1,4 @@
+<!-- markdownlint-disable-file MD041 -- GitHub PR templates are injected verbatim into the PR description, so they cannot start with a top-level heading or YAML frontmatter. -->
 <!--
 Title convention: release: vX.Y.Z   (for releases)
                   type(scope): short description   (for regular changes)
@@ -19,6 +20,16 @@ Title convention: release: vX.Y.Z   (for releases)
 - [ ] Fix
 - [ ] Docs only
 - [ ] Chore / maintenance
+
+## Shared learning sanitization (if proposing a learning)
+
+<!-- Complete only if this PR adds or edits squad-src/.github/skills/squad/learnings/shared-learnings.md. -->
+
+- [ ] Remove all secrets, tokens, credentials, and connection strings.
+- [ ] Remove customer, organization, and individual names.
+- [ ] Remove repository-specific absolute paths and internal URLs.
+- [ ] Generalize stack-specific or environment-specific details so the learning applies beyond its origin.
+- [ ] Confirm the learning is broadly applicable across consumers and scenarios.
 
 ## Changelog
 
