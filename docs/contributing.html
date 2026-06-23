@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contributing — hve-squad</title>
+  <meta name="description" content="How changes reach the hve-squad package and how to promote a sanitized shared learning through the review gate." />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="demo.html">Demo</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="contributing.html" class="active">Contributing</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Contribute</div>
+      <h1>Contributing</h1>
+      <p class="lead">How a fix found in one environment reaches every other consumer, and how to promote a sanitized shared learning through the review gate.</p>
+      <a class="btn btn-primary" href="https://github.com/Peter-N91/hve-squad/blob/main/CONTRIBUTING.md">Read the full contributing guide</a>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <p>
+        The canonical contribution guide lives in
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
+        at the repository root, where GitHub surfaces it in the new-issue and pull-request flows. This
+        page is a short orientation; the root file is the source of truth.
+      </p>
+
+      <h2>How contributions reach the package</h2>
+      <p>
+        hve-squad ships through APM as one-directional package content: consumers pull the package, and
+        the package never reads from consumer environments. The only route for a change to reach the
+        published package is a fork and pull request against the repository.
+      </p>
+      <ol>
+        <li>Fork the repository.</li>
+        <li>Create a branch for your change.</li>
+        <li>Open a pull request against the default branch.</li>
+        <li>A maintainer reviews, requests changes when needed, and merges.</li>
+      </ol>
+      <p>Consumers receive the merged change the next time they run <code>apm run sync-deps</code>.</p>
+
+      <h2>Proposing a shared learning</h2>
+      <p>
+        A shared learning is a durable, broadly applicable rule discovered while using the squad that
+        should help every other consumer facing the same scenario. Live agent memory always stays local
+        to each consumer and is never promoted automatically. Promotion is a deliberate, human-reviewed
+        pull request, and that review is the defense against memory poisoning, data leakage, and context
+        drift.
+      </p>
+      <p>Sanitize every entry before you propose it:</p>
+      <ul>
+        <li>Remove all secrets, tokens, credentials, and connection strings.</li>
+        <li>Remove customer, organization, and individual names.</li>
+        <li>Remove repository-specific absolute paths and internal URLs.</li>
+        <li>Generalize stack-specific details so the learning applies beyond its origin.</li>
+        <li>Confirm the learning is broadly applicable across consumers and scenarios.</li>
+      </ul>
+      <p>
+        Curated shared learnings travel as package content in
+        <code>squad-src/.github/skills/squad/learnings/shared-learnings.md</code>. When a learning is
+        specific to one organization's projects, promote it to a tenant-internal repository instead. The
+        two paths, and the <code>squad-learnings-tenant</code> scaffold, are described in
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/shared-learnings.md">Shared learnings</a>.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="troubleshooting.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Troubleshooting</div>
+        </a>
+        <a class="next" href="index.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Home</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

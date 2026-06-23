@@ -114,8 +114,13 @@ The squad's coordination verbs map onto existing HVE Core mechanisms. There is n
 
 ### Memory Recording
 
-* `squad_memory` persists role-scoped learnings to `/memories/repo/squad-<agent>.md` via the memory tool, keeping squad notes in repository memory rather than ephemeral turn context.
+Squad learnings live on up to three distinct surfaces: a consumer-local writable surface, a shipped read-only surface, and an optional tenant-internal read-only surface.
+
+* `squad_memory` persists role-scoped learnings to the consumer-local `/memories/repo/squad-<agent>.md` via the memory tool, keeping squad notes in repository memory rather than ephemeral turn context. This surface is writable per consumer and is unchanged by the shared playbooks.
 * Repository memory survives across conversations in the workspace, so durable squad facts (conventions a role discovered, recurring routing choices) belong here rather than in `decisions.md`.
+* The squad skill's shipped `learnings/shared-learnings.md` playbook is the second surface. It travels as versioned package content, and the coordinator consults it as read-only, authoritative context. No run ever writes to it.
+* An optional tenant-internal playbook is the third surface, present only when the organization configured the tenant APM dependency. It deploys to `.agents/skills/squad-learnings-tenant/tenant-learnings.md`, and the coordinator consults it as read-only, authoritative context after the shipped playbook and never writes to it.
+* Consumer-local memory is never auto-promoted into either shared surface. Promotion is a deliberate, human-reviewed path documented in `CONTRIBUTING.md`, which keeps a maintainer review gate between a local note and shared content; that governance covers both upstream promotion to the shipped playbook and promotion to a tenant-internal repository.
 
 ## Deferred: Watch Mode (DR-01)
 

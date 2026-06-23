@@ -19,6 +19,7 @@
         <a href="demo.html">Demo</a>
         <a href="maintaining.html">Maintaining</a>
         <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="contributing.html">Contributing</a>
         <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
       </div>
     </div>
@@ -145,6 +146,27 @@
         <code>decisions.md</code>, <code>notifications.md</code>, <code>state.json</code>, and a
         <code>history/</code> directory. It never writes files before you confirm. After that, each
         <code>/squad</code> call routes against the seeded roster.
+      </p>
+
+      <h2>Promote a learning (<code>/squad-learn</code>)</h2>
+      <p>
+        Live agent memory always stays local to each consumer. When a squad run surfaces a durable,
+        broadly applicable learning, <code>/squad-learn</code> drafts a sanitized candidate from
+        consumer-local memory and opens a pull request to promote it. It never modifies live memory and
+        never pushes without your explicit approval.
+      </p>
+      <pre><code>/squad-learn
+/squad-learn target=upstream
+/squad-learn target=tenant learning="re-read reviewer verdicts before re-dispatching"</code></pre>
+      <p>
+        The command walks through discover &rarr; sanitize &rarr; choose target &rarr; open PR. Two
+        targets are offered: <code>upstream</code> promotes to the public package so the merged learning
+        reaches every consumer, and <code>tenant</code> promotes to your organization's private
+        tenant-internal repository so the learning stays inside the tenant. Both are gated by a human
+        pull-request review, the defense against memory poisoning, data leakage, and context drift. The
+        <code>tenant</code> target requires the private learnings repository to exist first (see the
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/tenant-squad-learnings/README.md">tenant scaffold</a>);
+        <code>upstream</code> works out of the box.
       </p>
 
       <h2>Profiles</h2>
