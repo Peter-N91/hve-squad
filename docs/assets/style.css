@@ -343,3 +343,28 @@ td { color: var(--muted); }
 .demo-chevrons .chev.soon { opacity: 0.55; cursor: default; }
 .demo-chevrons .chev.soon .step { color: var(--warn); }
 .demo-chevrons .chev.soon .name { color: var(--muted); }
+
+/* Demo selector band — pinned at the top of the page, above the walkthrough */
+.demo-bar {
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+}
+.demo-bar .demo-switch { margin: 18px 0; }
+
+/* Demo hub — parent landing cards */
+.demo-hub {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 8px 0 24px;
+}
+.demo-hub .card { display: block; height: 100%; }
+.demo-hub .card .step {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.demo-hub .card.soon { opacity: 0.6; pointer-events: none; }
+.demo-hub .card.soon .step { color: var(--warn); }
