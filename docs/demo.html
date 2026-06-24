@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Demo — hve-squad</title>
-  <meta name="description" content="A runnable Azure squad demo: cost, architecture, IaC, governance-checked deploy, as-built, and diagnose — plus an autonomous one-request version." />
+  <meta name="description" content="Choose a runnable hve-squad walkthrough: the Azure Squad demo (cost, architecture, IaC, gated deploy, as-built, diagnose), the Migration Autopilot demo (a one-request Contoso → Azure migration where the review gate stops on blockers), or the non-technical Product Squad demo (discovery, requirements, roadmap, experiment, deck)." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <link rel="stylesheet" href="assets/style.css" />
 </head>
@@ -25,16 +25,35 @@
     </div>
   </nav>
 
+  <!-- Demo selector — pinned at the top; pick a chevron and the walkthrough opens on its own page. -->
+  <div class="demo-bar">
+    <div class="container">
+      <div class="demo-switch">
+        <div class="label">Choose a demo</div>
+        <!--
+          Multi-demo selector. To add a demo: give it the next "Demo N" number,
+          turn its chevron into a link (<a class="chev" href="demo-N.html">), and
+          drop the .soon class once the demo page exists. This parent page leaves
+          every existing demo as a link (none .active) so it reads as a hub.
+        -->
+        <ul class="demo-chevrons">
+          <li><a class="chev" href="demo-1.html"><span class="step">Demo 1</span><span class="name">Azure Squad</span></a></li>
+          <li><a class="chev" href="demo-2.html"><span class="step">Demo 2</span><span class="name">Migration Autopilot</span></a></li>
+          <li><a class="chev" href="demo-3.html"><span class="step">Demo 3</span><span class="name">Product Squad</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
   <header class="hero">
     <div class="container">
       <div class="eyebrow">Walkthrough</div>
-      <h1>Azure Squad Demo</h1>
+      <h1>Pick a Squad Demo</h1>
       <p class="lead">
-        A runnable script for the <code>azure</code> profile that takes one workload from cost
-        estimate through architecture, IaC, a governance-checked deploy, as-built documentation, and
-        diagnosis — every beat from the single <code>/squad</code> entry point. The same arc also
-        runs as a single autonomous request. Every deploy stays behind a human gate; as-built and
-        diagnose are strictly read-only.
+        Each demo is a runnable script that drives one workload end to end from the single
+        <code>/squad</code> entry point — research → plan → implement → review underneath, with a
+        human gate on every action that matters. Choose a chevron above, or pick a card below; the
+        walkthrough opens on its own page so you can run it beat by beat.
       </p>
     </div>
   </header>
@@ -42,250 +61,73 @@
   <main class="content">
     <div class="container">
 
-      <div class="demo-switch">
-        <div class="label">Choose a demo</div>
-        <!--
-          Multi-demo selector. To add a demo: give it the next "Demo N" number,
-          turn its chevron into a link (<a class="chev" href="demo-N.html">),
-          mark the current page's chevron .active, and drop the .soon class once
-          the demo page exists.
-        -->
-        <ul class="demo-chevrons">
-          <li><span class="chev active"><span class="step">Demo 1</span><span class="name">Azure Squad</span></span></li>
-          <li><a class="chev" href="demo-2.html"><span class="step">Demo 2</span><span class="name">Product Squad</span></a></li>
-          <li><span class="chev soon"><span class="step">Demo 3</span><span class="name">Coming soon</span></span></li>
-        </ul>
+      <h2>The demos</h2>
+      <div class="demo-hub">
+        <a class="card" href="demo-1.html">
+          <div class="step">Demo 1</div>
+          <h3>Azure Squad</h3>
+          <p>
+            One Azure workload from cost estimate through architecture, IaC, a governance-checked
+            deploy, as-built documentation, and diagnosis. MCP-optional with graceful fallbacks;
+            every deploy stays behind a human gate; as-built and diagnose are strictly read-only.
+          </p>
+          <span class="tag">Technical · Azure · profile=azure</span>
+        </a>
+        <a class="card" href="demo-2.html">
+          <div class="step">Demo 2</div>
+          <h3>Migration Autopilot</h3>
+          <p>
+            A single autopilot request plans a Contoso Inc. → Azure migration end to end — research,
+            plan, council, Bicep IaC, cost, security, and HLD/LLD diagrams — then the review gate
+            catches five production blockers and stops, escalating instead of shipping broken work.
+          </p>
+          <span class="tag">Technical · Migration · mode=autopilot</span>
+        </a>
+        <a class="card" href="demo-3.html">
+          <div class="step">Demo 3</div>
+          <h3>Product Squad</h3>
+          <p>
+            One business idea from discovery through a requirements document, a roadmap and backlog,
+            a cheap validation experiment, a readiness review, and a board-ready deck. No cloud, no
+            code, no spend — built to pitch to a non-technical audience.
+          </p>
+          <span class="tag">Non-technical · Product · profile=product</span>
+        </a>
       </div>
 
-      <h2>What you are proving</h2>
+      <h2>How to read a demo</h2>
       <p>
-        Each beat maps a capability to the squad role that owns it. This is the narration backbone —
-        the differentiator is that all of it ships as an APM package installed into <em>any</em>
-        repo, MCP-optional with graceful fallbacks, with a human gate on every deploy.
+        Both demos share the same shape, so once you have run one the others feel familiar:
       </p>
       <table>
         <thead>
-          <tr><th>Capability</th><th>Squad role</th><th>Notes</th></tr>
+          <tr><th>Section</th><th>What it gives you</th></tr>
         </thead>
         <tbody>
-          <tr><td>Cost estimate / pricing</td><td>Squad Cost Manager</td><td>Pricing MCP when wired, Azure Retail Prices REST fallback otherwise.</td></tr>
-          <tr><td>Architecture (HLD / LLD)</td><td>Squad Azure Architect</td><td>AVM modules + landing-zone patterns, Mermaid by default.</td></tr>
-          <tr><td>IaC codegen (Bicep / Terraform)</td><td>Squad IaC Author</td><td>Converts the LLD into <code>infra/{track}/{project}</code>; never deploys.</td></tr>
-          <tr><td>Governance precheck + deploy</td><td>Squad Deployer</td><td>Read-only Azure Policy precheck <em>before</em> the Impactful-Action Gate.</td></tr>
-          <tr><td>As-built documentation</td><td>Squad As-Built Author</td><td>Resource inventory, compliance matrix, runbook, DR plan — read-only.</td></tr>
-          <tr><td>Diagnose</td><td>Squad Azure Diagnose</td><td>Ranked hypotheses from Resource Health / Monitor / Resource Graph — read-only.</td></tr>
-          <tr><td>Research → Plan → Implement → Review</td><td>researcher, lead, developer, tester</td><td>The methodology spine, seeded into the <code>azure</code> profile alongside the specialists.</td></tr>
-        </tbody>
-      </table>
-
-      <h2>Before you start</h2>
-      <p>
-        Point the read-only beats (as-built, diagnose) at an <strong>existing resource group</strong>
-        you already have. They then produce real output with zero deploy, zero spend, and zero risk.
-      </p>
-      <table>
-        <thead>
-          <tr><th>Prerequisite</th><th>Why</th><th>Check</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>hve-squad <code>v0.8.1</code> installed</td><td>The methodology spine and the as-built/diagnose roles require <code>0.8.1</code>.</td><td><code>apm install "Peter-N91/hve-squad#v0.8.1"</code></td></tr>
-          <tr><td>Azure subscription + <code>az login</code></td><td>Real reads for cost / as-built / diagnose; optional deploy.</td><td><code>az account show</code></td></tr>
-          <tr><td>Node.js + <code>npx</code></td><td>Runs the optional <code>@azure/mcp</code> server.</td><td><code>node -v</code></td></tr>
-          <tr><td>VS Code + Copilot (agent mode)</td><td>The squad dispatches subagents.</td><td>—</td></tr>
-          <tr><td>uv (or Python) + Graphviz <small>(optional)</small></td><td>Only for committed Azure-icon architecture diagrams via the <code>python-diagrams</code> skill; the squad falls back to Mermaid without them.</td><td><code>dot -V</code></td></tr>
+          <tr><td>What you are proving</td><td>The narration backbone — each beat mapped to the squad role that owns it.</td></tr>
+          <tr><td>Before you start</td><td>Prerequisites and the safe, zero-spend way to run it live.</td></tr>
+          <tr><td>Beat 0 → Beat N</td><td>The runnable <code>/squad</code> requests, in order, with what to narrate at each.</td></tr>
+          <tr><td>The one-request version</td><td>The same arc as a single autopilot run that stops only where it must.</td></tr>
+          <tr><td>Failure-safe fallbacks</td><td>What to do when tooling hiccups, so the narrative never breaks.</td></tr>
         </tbody>
       </table>
 
       <div class="callout">
         <p>
-          <strong>The Azure MCP is optional.</strong> The Deployer precheck, As-Built Author, and
-          Azure Diagnose all use the <code>azure-resource</code> capability, which prefers
-          <code>@azure/mcp</code> when configured and falls back to the <code>az</code> CLI and the
-          Azure Resource Graph REST API automatically. A missing MCP never blocks the squad — call
-          that out as MCP-optional by design.
+          <strong>Same methodology, different audience.</strong> The Azure demo proves the squad on
+          infrastructure; the Product demo proves the <em>same</em> research → plan → build → review
+          spine on non-technical business work. Pick the one that matches who is in the room.
         </p>
       </div>
-
-      <h3>Wiring the Azure MCP (optional)</h3>
-      <p>
-        The package never writes your <code>.vscode/mcp.json</code> on install, and a normal squad
-        request will not silently create it either. You get it one of two ways:
-      </p>
-      <ol>
-        <li>
-          <strong>Ask the coordinator to scaffold it</strong> (opt-in merge, shown as a diff before it
-          commits): <code>/squad request="merge the squad MCP template into my workspace"</code>.
-        </li>
-        <li>
-          <strong>Create it by hand</strong> — the minimal runnable version is just the official
-          server:
-          <pre><code>{
-  "servers": {
-    "azure": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@azure/mcp@latest", "server", "start"]
-    }
-  }
-}</code></pre>
-          Reload VS Code, then confirm it is live: ask Copilot to list your resource groups.
-        </li>
-      </ol>
-      <p>
-        The scaffold is a <em>merge</em>, never an overwrite, so any servers you already have are
-        preserved. The pricing block in <code>mcp.template.json</code> is a tracked placeholder, not
-        runnable — only the <code>@azure/mcp</code> server above is demo-ready.
-      </p>
-
-      <h3 id="icon-diagrams">Optional — Azure-icon architecture diagrams</h3>
-      <p>
-        By default the Azure Architect renders the HLD as Mermaid. When you want a committed
-        <strong>icon</strong> diagram (PNG/SVG with real Azure product icons) instead, the architect
-        uses the <code>python-diagrams</code> skill, which renders with the Python
-        <code>diagrams</code> library on a Graphviz backend. It is opt-in and needs two local tools:
-      </p>
-      <ul>
-        <li><strong>uv (or Python)</strong> — runs the generator: <code>winget install astral-sh.uv</code>.</li>
-        <li><strong>Graphviz</strong> — the rendering backend, a system binary: <code>winget install Graphviz.Graphviz</code> (run elevated, then reopen the shell so <code>dot</code> is on PATH).</li>
-      </ul>
-      <p>
-        Both are pure pre-deploy tooling — no Azure login, no spend. On a clean machine the implement
-        stage pauses to install Graphviz (it needs elevation), so pre-install it for a smooth run. To
-        trigger it, add one clause to the design request — you name the <em>outcome</em>, not the
-        resources, and the architect derives the diagram from its own design and the Bicep, committing
-        paired PNG + SVG under <code>docs/architecture/</code>:
-      </p>
-      <pre><code>/squad request="... Also render the architecture you decide on as committed Azure-icon diagram images using the python-diagrams skill."</code></pre>
-      <p>Without these tools the architect simply falls back to Mermaid; nothing breaks.</p>
-
-      <h2>Beat 0 — Initialize the squad</h2>
-      <pre><code>/squad profile=azure request="Set up the squad for an Azure infrastructure project."</code></pre>
-      <p>
-        The coordinator discovers the repo, proposes the <code>azure</code> profile, and on your
-        confirmation seeds the squad. <strong>Narrate:</strong> "One cast — Cost Manager, Architect,
-        IaC Author, Deployer, As-Built, and Diagnose — and riding along with them the
-        <em>methodology spine</em>: researcher, lead, developer, tester, so research → plan →
-        implement → review is always available."
-      </p>
-
-      <h2>Beat 1 — Cost analysis</h2>
-      <pre><code>/squad request="Estimate the monthly Azure cost for a small internal web workload in West Europe: a frontend and a backend App Service, an Azure SQL Database, a Key Vault, and a Storage account, reached over private endpoints on a VNet. I need the monthly cost to stay under $60 — give an indicative figure and WAF cost-optimization recommendations to hit that target."</code></pre>
-      <p>
-        The Cost Manager produces an indicative estimate via the pricing path (MCP if wired, REST
-        fallback otherwise) plus the WAF Cost Optimization checklist.
-      </p>
-
-      <h2>Beat 2 — Architecture, then IaC</h2>
-      <pre><code>/squad request="Design the HLD and LLD for that workload — frontend and backend web apps, Azure SQL, Key Vault, and Storage in West Europe — using Azure Verified Modules and a landing-zone-aligned layout. Configure the VNet and subnets, add private endpoints and private links where needed, follow security standards, and decide whether containerization is worth it."</code></pre>
-      <pre><code>/squad request="Author the Bicep for that LLD under infra/bicep/demo using AVM modules. Do not deploy."</code></pre>
-      <p>
-        The Azure Architect emits the Mermaid HLD and the Bicep-friendly LLD table.
-        <strong>This is where the methodology surfaces:</strong> "author the Bicep" is an
-        implementation-tier request, so the Implementation Gate runs <strong>Task Researcher</strong>
-        (AVM modules, landing-zone) then <strong>Task Planner</strong> (the IaC plan) <em>before</em>
-        the IaC Author writes a line. It never implements cold.
-      </p>
-      <p>
-        Want committed <strong>Azure-icon</strong> diagrams instead of Mermaid? Add
-        <em>"render it as Azure-icon diagram images using the python-diagrams skill"</em> to the design
-        request — see <a href="#icon-diagrams">Optional — Azure-icon architecture diagrams</a> above for
-        the one-time <code>uv</code> + Graphviz setup.
-      </p>
-
-      <h2>Beat 2b — Review the implementation <small>(new in 0.8.1)</small></h2>
-      <p>
-        After the IaC Author lands the Bicep, <strong>Review Follow-Through</strong> dispatches
-        <code>tester</code> (Implementation Validator or Code Review Full) to check the IaC against
-        the LLD. Review now closes every implementation, making the gate symmetric — research and
-        plan precede the build, review follows it. You can also request it explicitly:
-      </p>
-      <pre><code>/squad request="Review the Bicep we just authored against the LLD and flag any drift."</code></pre>
-
-      <h2>Beat 3 — Governance discovery + gated deploy</h2>
-      <pre><code>/squad request="Deploy infra/bicep/demo to my subscription. Run the policy precheck first and show me what governance constraints apply before the gate."</code></pre>
-      <p>
-        The Deployer runs a <strong>read-only Azure Policy precheck</strong> (effective assignments
-        and predicted denials) <em>before</em> the Impactful-Action Gate, then stops for your
-        approval. <strong>Narrate:</strong> "It discovers real subscription policy before asking to
-        deploy — and never deploys without me." For a safe demo, decline at the gate; the precheck
-        value is already shown.
-      </p>
-
-      <h2>Beat 4 — As-built documentation</h2>
-      <p>Point at an <strong>existing</strong> resource group so it works with no deploy:</p>
-      <pre><code>/squad request="Document the deployed Azure infrastructure in resource group rg-demo as as-built artifacts: a resource inventory, a compliance matrix from Azure Policy, an operations runbook, and a backup/DR plan."</code></pre>
-      <p>
-        The As-Built Author inventories via Resource Graph (read-only), builds the compliance matrix,
-        and drafts the runbook and DR plan for Doc Ops — delivered as a markdown package.
-      </p>
-
-      <h2>Beat 5 — Diagnose</h2>
-      <pre><code>/squad request="Diagnose why the App Service in resource group rg-demo is returning 5xx errors. Query Resource Health and recent logs, rank the likely causes, and recommend fixes — but do not change anything."</code></pre>
-      <p>
-        The Azure Diagnose role queries Resource Health, Azure Monitor (KQL), and Resource Graph,
-        returns ranked hypotheses with evidence, and hands any fix to the gated Deployer or the IaC
-        Author — strictly read-only.
-      </p>
-
-      <h2>The autonomous one-request version</h2>
-      <p>
-        The same arc runs from a single autopilot request that expresses the <em>need</em> and names
-        no steps. The squad derives the sequence itself:
-      </p>
-      <pre><code>/squad mode=autopilot profile=azure request="Stand up a small, production-ready web app on Azure for an internal team — web apps for a frontend and a backend with a SQL database, secrets handling, and file storage in West Europe, I need you to configure vnets and subnets for that and decide on the resources that you prefer. Make sure to follow security standards and create private endpoints and private links when needed. I need monthly cost to stay under $60, the setup to respect our governance, and to be able to operate and troubleshoot it once it's live. So you are free to decide whether it is better to do containerization or not. Keep me in control of anything that spends money or changes my subscription. Also render the architecture you decide on as committed Azure-icon diagram images."</code></pre>
-      <p>From that one line, autopilot sequences the pipeline and stops only where it must:</p>
-      <ul>
-        <li><strong>Init</strong> — proposes the <code>azure</code> profile and waits for your confirmation.</li>
-        <li><strong>Research → Plan</strong> — Task Researcher then Task Planner.</li>
-        <li><strong>Council</strong> — architect, security, and cost weigh in before any build.</li>
-        <li><strong>Implement</strong> — Azure Architect and IaC Author produce the design and the Bicep.</li>
-        <li><strong>Review</strong> — <code>tester</code> validates the implementation.</li>
-        <li><strong>Impactful-Action Gate</strong> — stops before the deploy and asks for approval.</li>
-        <li><strong>As-built + final-outcome validation</strong> — documents the result and waits for your sign-off.</li>
-      </ul>
-      <p>
-        You only touch it at the profile confirm, the deploy gate, and the final sign-off — that is
-        the "tell it once, let it run" mode.
-      </p>
-
-      <div class="callout warn">
-        <p>
-          <strong>Diagnose needs a symptom.</strong> On a clean deploy there is nothing failing, so
-          the autonomous run naturally covers cost → architecture → IaC → review → gated deploy →
-          as-built, but <em>not</em> a live diagnosis. Keep Beat 5 as a separate reactive request when
-          you want to show it — folding a fake failure into the autonomous request would feel staged.
-        </p>
-      </div>
-
-      <h2>Failure-safe fallbacks</h2>
-      <table>
-        <thead>
-          <tr><th>If…</th><th>Then…</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><code>@azure/mcp</code> will not load</td><td>The squad falls back to the <code>az</code> CLI / Retail Prices REST automatically — call it out as MCP-optional design.</td></tr>
-          <tr><td>No spare subscription to deploy</td><td>Stop Beat 3 at the gate; run Beats 4 and 5 against an existing resource group.</td></tr>
-          <tr><td>A role does not dispatch</td><td>Confirm <code>v0.8.1</code> is installed — the as-built, diagnose, and modernization roles entered the coordinator's dispatch list in <code>0.8.1</code>.</td></tr>
-          <tr><td>Deep pricing (RI / spot / PTU) asked</td><td>The community pricing MCP is opt-in; the Retail Prices REST fallback covers retail pricing today.</td></tr>
-        </tbody>
-      </table>
-
-      <h2>Closing talking points</h2>
-      <ul>
-        <li><strong>No clone.</strong> hve-squad is <code>apm install</code> into <em>your</em> repo — the squad rides along.</li>
-        <li><strong>MCP-optional.</strong> Every Azure capability has a named non-MCP fallback, so a missing server never blocks the squad.</li>
-        <li><strong>Safe by construction.</strong> Deploys stay behind the Impactful-Action Gate; as-built and diagnose are strictly read-only.</li>
-        <li><strong>Full methodology.</strong> Research → plan → implement → review runs in every profile, so the Azure work is planned and reviewed, not improvised.</li>
-      </ul>
 
       <div class="pager">
         <a class="prev" href="usage.html">
           <div class="dir">← Back</div>
           <div class="ttl">Usage</div>
         </a>
-        <a class="next" href="maintaining.html">
+        <a class="next" href="demo-1.html">
           <div class="dir">Next →</div>
-          <div class="ttl">Maintaining</div>
+          <div class="ttl">Demo 1 — Azure Squad</div>
         </a>
       </div>
     </div>
