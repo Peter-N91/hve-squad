@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PowerPoint Templates — hve-squad</title>
+  <meta name="description" content="Bring your own PowerPoint template so the squad always generates on-brand, high-quality decks: where to put the .pptx, how to prepare it, and how to make it auto-apply." />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="ppt-templates.html" class="active">PPT Templates</a>
+        <a href="demo.html">Demo</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="contributing.html">Contributing</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Consumer Guide</div>
+      <h1>Bring your own PowerPoint template</h1>
+      <p class="lead">
+        The squad's PowerPoint Builder generates decks from your content. Give it your branded
+        <code>.pptx</code> once and every deck inherits your slide masters, layouts, theme colors, and
+        fonts. The branding rule ships with hve-squad and switches on by itself — a non-technical user
+        never copies a file, edits a config, or restates the template on each request.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>How branding flows in</h2>
+      <p>
+        When you ask the squad to build a deck, the Squad Coordinator dispatches the
+        <strong>PowerPoint Builder</strong>, which runs the <code>powerpoint</code> skill's
+        <code>build_deck.py</code>. Branding is applied through the <code>--template</code> flag
+        (PowerShell <code>-TemplatePath</code>): the build inherits the template's
+        <strong>slide masters, layouts, and theme (colors and fonts)</strong> and discards the
+        template's own example slides, then adds only the slides defined in your content.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>The template is everything.</strong> A polished deck comes from a well-built
+          template far more than from the generator. Spend your effort on the master and layouts in
+          PowerPoint, and the squad fills them in consistently.
+        </p>
+      </div>
+
+      <h2>Step 1 — Prepare a branded template</h2>
+      <p>Open PowerPoint, build a 16:9 template, and save it as a <code>.pptx</code>. Make sure it has:</p>
+      <ul>
+        <li>
+          <strong>Slide Masters</strong> with your branded backgrounds, logo placement, and footer —
+          set under <em>View → Slide Master</em>.
+        </li>
+        <li>
+          <strong>Named layouts</strong> the builder maps onto, at minimum
+          <code>Title Slide</code>, <code>Title and Content</code>, and <code>Section Header</code>.
+        </li>
+        <li>
+          <strong>Theme colors and fonts</strong> defined in the theme
+          (<em>Slide Master → Colors / Fonts</em>) so <code>@theme_name</code> references resolve to
+          your brand palette.
+        </li>
+      </ul>
+      <p>
+        You do not need to leave any example slides in the file — a <code>--template</code> build
+        discards them and keeps only the masters, layouts, and theme.
+      </p>
+
+      <h2>Step 2 — Put it in a stable place</h2>
+      <p>
+        The template lives at a fixed path so the squad always knows where to find it. The
+        convention:
+      </p>
+      <pre><code>.github/brand/pptx-brand-template.pptx</code></pre>
+      <p>
+        You do not have to create that folder yourself. If you just hand the squad your
+        <code>.pptx</code> (or point it at one), it offers to save a copy there for you — so a
+        non-technical user never navigates the file tree.
+      </p>
+
+      <h2>Step 3 — It applies automatically</h2>
+      <p>
+        You do not need to copy, paste, or edit anything. hve-squad ships a branding instruction as
+        part of the package, so on <code>apm install</code> it lands in your repo at
+        <code>.github/instructions/pptx-brand-template.instructions.md</code> and switches on by
+        itself. Because its <code>applyTo</code> matches <code>**/.copilot-tracking/ppt/**</code>, the
+        PowerPoint Builder reads it every time it works on a deck.
+      </p>
+      <p>
+        The instruction tells the builder to use your template as <code>--template</code> for full
+        rebuilds and <code>--source</code> for partial rebuilds. If no template is present yet, the
+        builder does not quietly fall back to a plain deck — it asks you, in plain language, whether
+        you have a branded <code>.pptx</code>, and offers to save the one you provide to
+        <code>.github/brand/pptx-brand-template.pptx</code> for you. A non-technical user never has to
+        touch a folder or a config file.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>Full rebuild vs. partial rebuild.</strong> <code>--template</code> creates a new
+          deck and keeps only masters, layouts, and theme — use it for new decks and full
+          regenerations. For updating a few slides in an existing deck, the builder uses
+          <code>--source</code> with <code>--slides</code> instead. Never combine the two: with both,
+          <code>--template</code> wins and every slide not listed is lost.
+        </p>
+      </div>
+
+      <h2>Step 4 — Align content with the template <span style="font-weight:400;font-size:0.7em;opacity:0.7;">(optional, technical)</span></h2>
+      <p>
+        You can skip this section — the squad handles it for you. If you want tighter control, two
+        small settings keep slide content in sync with the brand theme. In
+        <code>content/global/style.yaml</code>, declare the template and map layout names:
+      </p>
+      <pre><code>template:
+  path: ".github/brand/pptx-brand-template.pptx"
+  preserve_dimensions: true
+layouts:
+  title:   "Title Slide"
+  content: "Title and Content"
+  section: "Section Header"</code></pre>
+      <p>
+        Then in each slide's <code>content.yaml</code>, reference colors with <code>@theme_name</code>
+        rather than hardcoded hex values, so every slide adapts to whatever theme the template
+        defines.
+      </p>
+
+      <h2>Step 5 — Always validate</h2>
+      <p>
+        The PowerPoint Builder's validation pass is what turns a correct deck into a polished one. It
+        runs geometric checks (margins, overflow, spacing) and optional vision checks (overlaps,
+        contrast, alignment, leftover placeholders), then loops back to fix issues. Let it iterate
+        rather than accepting the first build — that loop is the difference between "it generated" and
+        "it looks great."
+      </p>
+
+      <h2>Putting it together</h2>
+      <ol>
+        <li>Build a branded <code>.pptx</code> with proper masters, named layouts, and theme.</li>
+        <li>Hand it to the squad — or save it at <code>.github/brand/pptx-brand-template.pptx</code>; the squad will offer to place it for you.</li>
+        <li>Ask the squad for a deck. The shipped instruction applies automatically — nothing to copy or configure.</li>
+        <li>(Optional, technical) Set <code>template</code> and <code>layouts</code> in <code>style.yaml</code> and use <code>@theme_name</code> colors for tighter control.</li>
+        <li>Let validation iterate to a clean result.</li>
+      </ol>
+      <p>
+        After that, a request as simple as
+        <code>/squad request="build a 6-slide overview deck for the booking service"</code> produces
+        an on-brand deck without any per-request template wiring.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="usage.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Usage</div>
+        </a>
+        <a class="next" href="demo.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Demo</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
