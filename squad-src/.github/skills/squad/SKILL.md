@@ -106,7 +106,7 @@ The opt-in `auto-validated` tier lets a council validate a developer's output on
 The opt-in `mode=autopilot` runs the full delivery pipeline end-to-end, stopping for the human only at impactful actions and final-outcome validation. The full protocol lives in `.github/instructions/squad/squad-autopilot.instructions.md`; the operator's view is:
 
 1. The user opts in per turn by passing `mode=autopilot` to `/squad`. Without that input, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing tier.
-2. The coordinator sequences the pipeline: research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn.
+2. The coordinator sequences the pipeline: research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn. For a profile that carries two or more deliverable-producing roles (the `product` profile), the implement stage fans out across the owning specialists — the plan enumerates the deliverables and the coordinator dispatches each specialist in dependency order, each a Scribe-recorded stage — instead of a single `developer`; every other (spine-shaped) profile keeps the single-build implement stage.
 3. The pipeline stops only at two Human Gate classes: an **Impactful-Action Gate** (deploy, `git push`/force-push, PR merge, schema migration, data deletion, destructive infra ops, secret rotation, or any user-marked irreversible action) and a **Risk Gate** (any `Stop` verdict, `Risk: High` from security/cost/RAI, `confirm`-tier cost move, compliance violation, validator divergence, or cost-ceiling breach).
 4. Autopilot never auto-releases: after review it fires a `final-outcome` notification to the registered contact and waits for human validation before any release-tier action.
 5. The Scribe writes a per-run summary to `history/autopilot-run-<id>.md` (append-only by topic-id) and the notification records to `notifications.md`.
@@ -323,6 +323,8 @@ description: "Autopilot-run summary for topic <id>"
 | review    | <agent>     | <one-line outcome>              | none                       |
 | final     | coordinator | notified <recipient-or-in-chat> | Final-Outcome Validation   |
 ```
+
+In a deliverable fan-out run (the `product` profile), the single `implement` row expands into one row per deliverable (`implement: <deliverable>` with its owning agent).
 
 ### notifications.md
 

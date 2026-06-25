@@ -37,13 +37,30 @@ Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches t
 **Precondition — the squad must be built first.** Before the Research stage runs, a confirmed squad must exist: `.copilot-tracking/squad/team.md` and `routing.md` are present. When they are missing, the coordinator runs Init Mode (propose → confirm → create) from `.github/agents/squad/squad-coordinator.agent.md` to completion — including the user's profile confirmation — and only then enters the pipeline. Autopilot never auto-seeds the roster or starts Research without a built squad; the opt-in sequences the work, it does not waive the build.
 
 1. **Research.** Dispatch the `researcher` role (and any parallel-eligible read-only roles the request matches) at `auto` tier. Gather findings; no human gate.
-2. **Plan.** Dispatch the `lead` role to produce the implementation plan. In autopilot the plan does not pause for per-step human confirmation; the coordinator advances once the plan is recorded through the Scribe.
+2. **Plan.** Dispatch the `lead` role to produce the implementation plan. In autopilot the plan does not pause for per-step human confirmation; the coordinator advances once the plan is recorded through the Scribe. When the team carries two or more **deliverable-producing roles** (see *Deliverable Fan-Out* below), the plan also enumerates the requested deliverables and the specialist role that owns each, in dependency order; that deliverable list becomes the Implement stage's execution script.
 3. **Pre-implementation council.** When the work crosses two or more council-member domains (architecture, security, cost, product-fit, RAI), run the council per `.github/instructions/squad/squad-council.instructions.md` before any implementation dispatch. A `Stop` verdict fires a Human Gate. A `Go` or `Go-With-Conditions` verdict permits the implementation stage with the conditions attached as inputs.
-4. **Implement.** Dispatch the `developer` role. The implementation stage runs the bounded validator loop from `.github/instructions/squad/squad-autonomous.instructions.md` (council re-validation, max two cycles, divergence detection) so the build self-validates before review. Any action the implementer cannot self-validate — and every impactful action — fires a Human Gate rather than proceeding.
+4. **Implement.** The Implement stage takes one of two shapes, selected by what the Plan stage produced:
+   * **Single build (default).** Dispatch the `developer` role. The implementation stage runs the bounded validator loop from `.github/instructions/squad/squad-autonomous.instructions.md` (council re-validation, max two cycles, divergence detection) so the build self-validates before review. Any action the implementer cannot self-validate — and every impactful action — fires a Human Gate rather than proceeding. This is the shape for every spine-shaped profile (`default`, `full`, `security`, `design`, `architecture`, `azure`).
+   * **Deliverable fan-out.** When the plan's deliverable list names two or more deliverable-producing roles on the team, dispatch each owning specialist in dependency order instead of a single `developer`, each a Scribe-recorded stage. See *Deliverable Fan-Out* below.
 5. **Review.** Dispatch the `tester` role at `auto` tier against the implemented changes. Record the review outcome through the Scribe.
 6. **Final-outcome validation.** Autopilot never auto-releases. After review, the coordinator compiles the run outcome and fires a final-outcome notification to the registered user per `.github/instructions/squad/squad-notifications.instructions.md`, then waits for human validation before any release-tier action.
 
 The coordinator advances stage-to-stage by reading the prior stage's findings; it hands every stage transition to the Scribe, which records it in the autopilot-run history file and updates `state.json`.
+
+## Deliverable Fan-Out (Specialist Profiles)
+
+Some profiles deliver their value through several distinct, specialist-owned artifacts rather than a single code or infrastructure build. The canonical case is the `product` profile, whose work spans requirements, a roadmap and backlog, an experiment, written documentation, and a stakeholder deck — each owned by a different **deliverable-producing role** (`analyst`, `product-owner`, `designer`, `experimenter`, `presenter`, `technical-writer`, `data-scientist`; defined in `.github/instructions/squad/squad-roster.instructions.md`). The fixed single-`developer` Implement stage cannot produce these, so autopilot fans the Implement stage out across the owning specialists.
+
+**When fan-out engages.** The coordinator selects fan-out when the Plan stage's deliverable list names **two or more deliverable-producing roles that are present on the team**. Every spine-shaped profile (`default`, `full`, `security`, `design`, `architecture`, `azure`) carries at most one deliverable-producing role, so its plan is always a single build and the Implement stage runs the unchanged single-`developer` shape. Fan-out never changes the Research, Plan, council, Review, or Final-outcome stages — only the Implement stage's internal shape.
+
+**How fan-out runs.** The Implement stage becomes an ordered sub-pipeline driven by the plan's deliverable list:
+
+1. For each deliverable, in dependency order, the coordinator resolves the owning role to a concrete agent through the roster's *Resolving a Role to an Agent* rules and dispatches it via `runSubagent`/`task`, passing the prior deliverables as context.
+2. Deliverables that do not depend on each other are dispatched in the same parallel batch; dependent deliverables run sequentially. A typical `product` order is: requirements (`analyst`) → then the roadmap and backlog (`product-owner`) and the experiment (`experimenter`) in parallel → then documentation (`technical-writer`) → then the deck (`presenter`). Design research (`designer`) runs alongside requirements when the request needs it.
+3. Each specialist dispatch is a first-class recorded stage: the Scribe appends its `history/<agent>.md` entry and a consumption block, exactly as for any other dispatch. The proof-of-dispatch rule from `.github/instructions/squad/squad-state.instructions.md` applies per deliverable — a deliverable with no history entry did not run, and the run is not complete until every planned deliverable has one or the coordinator has escalated.
+4. The Human Gates are unchanged. A deliverable-producing specialist that reaches an impactful action (for example, `product-owner` creating work items in a live tracker) fires the Impactful-Action Gate; a `Risk: High` or `Stop` finding fires the Risk Gate. Document and design artifacts that only write under `.copilot-tracking/` and `docs/` are not impactful and flow automatically.
+
+**Dispatch discipline still holds.** Fan-out changes which agents the Implement stage dispatches, not the rule that the coordinator dispatches them. The coordinator never authors a deliverable itself; when an owning agent is not installed it stops and escalates per *Dispatch Discipline* rather than substituting its own output.
 
 ## Artifact Gates (Evidence Required)
 
@@ -58,6 +75,8 @@ Each pipeline stage is gated on the prior stage's artifact existing on disk. The
 | review    | `tester`                                                                       | a review record + `history/<agent>.md`    | implementation changes exist                           |
 
 When a required artifact is missing, the coordinator dispatches the owning agent to produce it — it never authors the artifact itself and never advances on assumed completion. When the owning agent is not installed, the coordinator stops and escalates per *Dispatch Discipline* in `.github/agents/squad/squad-coordinator.agent.md`.
+
+For a **deliverable fan-out** run (see above), the single `implement` row expands into one sub-row per planned deliverable: each owning specialist must produce its artifact (under `.copilot-tracking/` or `docs/`, per that agent's convention) and its own `history/<agent>.md` entry before the Review stage runs. The Review stage does not begin until every planned deliverable has a recorded artifact or the coordinator has escalated the gap.
 
 ## Human Gates
 
@@ -145,5 +164,7 @@ description: "Autopilot-run summary for topic <id>"
 |-----------|----------------------|-------------------------------|------------------------|
 | <ts>      | <Impactful / Risk / Final> | <human decision or pending> | <one-line>             |
 ```
+
+In a **deliverable fan-out** run, the single `implement` row expands into one row per deliverable — labelled `implement: <deliverable>` with its owning agent — so the run's per-specialist outcomes and any gates are all visible in the table.
 
 The autopilot-run file is append-only by topic-id; one file per run topic. Re-running the same topic appends a new dated `## Stages` section rather than overwriting.
