@@ -57,7 +57,7 @@ jobs:
       - name: Get latest hve-core commit SHA
         id: latest
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
         run: |
           SHA=$(gh api 'repos/microsoft/hve-core/commits/main' --jq '.sha')
           SHORT_SHA=${SHA:0:7}
@@ -151,7 +151,7 @@ jobs:
       - name: Commit and push
         if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -173,7 +173,7 @@ jobs:
       - name: Trigger release
         if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
         run: |
           gh workflow run release.yml --ref main
           echo "::notice::Triggered release.yml for v${{ steps.bump.outputs.version }}"
