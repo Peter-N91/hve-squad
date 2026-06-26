@@ -99,11 +99,14 @@ The available profiles and the cast they map to are defined in `.github/instruct
 
 1. **Discover the project.** Read lightweight repository signals (languages, frameworks, test setup, infrastructure-as-code, security/AI markers) to infer the most fitting profile. Do not modify anything during discovery.
 2. **Select a recommended profile** using the precedence in the roster's *Profile Selection*: an explicit `profile=` hint wins; otherwise infer from discovery; otherwise recommend `default`.
-3. **Propose the squad to the user.** Present the recommended profile, its member roles, and why it fits the discovered project. Offer these choices and wait for the user — do not create files yet:
-   * Accept the recommended profile as-is.
-   * Switch to a different profile (`default`, `full`, `security`, `design`, `architecture`, `azure`, `product`).
-   * Add or remove individual roles from the proposed roster (any role from the cast catalog).
-   * Decline and ask for more detail before proposing again.
+3. **Ask the user to proceed with the profile, or choose differently.** Present the profile under consideration and wait for the user — do not create files yet:
+   * **Name the profile and its source.** When the user passed a `profile=` hint, present that profile as their explicit choice. When they did not, present the profile the coordinator selected as the most appropriate for the request and explain why it fits the discovered project.
+   * **List the profile's member roles** so the user sees exactly who they would get.
+   * **Ask whether to proceed.** Wait for one of two outcomes:
+     * **Proceed** — the user accepts the stated profile as-is, and Init continues unchanged at naming (step 4).
+     * **Decline** — the user does not want the stated profile. Offer exactly two alternatives and let the user settle on one before continuing to step 4:
+       1. **Choose a different profile** from the listed set (`default`, `full`, `security`, `design`, `architecture`, `azure`, `product`), each shown with its one-line *Choose when* description from the roster's *Squad Profiles* table.
+       2. **Build a custom roster** from the role menu in the roster's *Building a Custom Roster*. Choose this when no profile fits **or when a profile is close but not exact** — present each selectable role with its plain-language description so the user knows what each one does, and let the user start from any profile's roles or an empty baseline and add or remove from there. Keep `scribe` in every roster, recommend the methodology spine, and flag any chosen role whose mapped agent is not installed (treat it as **thin charter needed** and leave it out). Never invent a role or an agent that is not in the cast catalog. Record the result as a custom roster, noting the profile it was derived from when the user started from one.
 4. **Offer naming choices for the seeded members.** Once a profile or customized roster is on the table, ask the user how to fill the roster's `Member Name` column per the *Naming Conventions* in `.github/instructions/squad/squad-roster.instructions.md`. Wait for the user before handing the roster to the Squad Scribe. The four supported choices are:
    1. The user provides a `Member Name` per role.
    2. The coordinator assigns deterministic aliases from the roster's wordlist, skipping any name already in use.
@@ -114,7 +117,7 @@ The available profiles and the cast they map to are defined in `.github/instruct
 ### Phase 2: Create
 
 1. Once the user confirms a profile or a customized roster, hand the chosen member list to the Squad Scribe to stamp out `team.md` (the selected profile's members) and `routing.md` (the default routing rules filtered to the seeded roster). Also seed `decisions.md`, `state.json` (including the `notify` object from the captured contact), `notifications.md`, and the `history/` directory.
-2. Confirm the squad was created, name the seeded profile and roles, and tell the user they can re-cast later by editing `team.md` or asking to switch profiles.
+2. Confirm the squad was created and name the seeded roles. Name the profile when one was seeded as-is; when the roster was customized, label it a custom roster and note the profile it was derived from when the user started from one. Tell the user they can re-cast later by editing `team.md` or asking to switch profiles.
 3. Proceed to classify and dispatch the original request against the freshly seeded roster.
 
 `scribe` is always part of the seeded roster regardless of profile, because it is the single writer of squad state.
