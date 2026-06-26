@@ -171,3 +171,41 @@ The coordinator chooses a profile in this order of precedence:
 3. **Fallback** — when discovery is inconclusive and the user gives no hint, propose `default` as the recommended profile.
 
 A profile only ever lists roles that exist in the cast catalog. Roles marked **thin charter needed** (such as `devrel`) are never part of a profile until a charter is authored.
+
+### Building a Custom Roster
+
+When no named profile fits — or when one is close but not exact — the coordinator helps the user assemble a custom roster rather than inventing one. The coordinator presents the role menu below — each row is a role the squad can dispatch, the plain-language work it contributes, and the deployed agent that fills it by default — and the user picks any subset. The user may start from a profile's roles and add or remove from there; when they do, the roster is recorded as a custom roster derived from that profile, because any change to a profile's exact member set makes it custom.
+
+Three rules bound a custom roster so it never references work the squad cannot actually do:
+
+* **`scribe` is always included** — it is the single writer of squad state and is never offered as optional.
+* **The methodology spine (`researcher`, `lead`, `developer`, `tester`) is recommended** so the Research → Plan → Implement → Review cycle stays intact. The user may drop a spine role, but that disables the matching leg and the Implementation Gate in `squad-routing.instructions.md` escalates if it is later needed.
+* **Only catalog roles are selectable.** The coordinator never invents a role or an agent outside the cast catalog. A role whose mapped agent is not installed, or a **thin charter needed** role such as `devrel`, is flagged and left out rather than seeded.
+
+The menu mirrors the Cast Catalog above; each item names the role, the deployed agent that fills it by default (in parentheses), and the user-facing gloss.
+
+* **researcher** (Task Researcher) — Investigates the codebase, the web, and connected tools to gather the context the squad needs.
+* **lead** (Task Planner) — Plans the work: breaks a request into tasks, sequences them, and can run the full delivery cycle.
+* **developer** (Task Implementor) — Implements the change: writes and edits code to carry out the plan.
+* **tester** (Task Reviewer) — Reviews changes for quality, correctness, and standards before they ship.
+* **challenger** (Task Challenger) — Pressure-tests a plan or its assumptions as a devil's advocate before the squad commits.
+* **architect** (System Architecture Reviewer) — Reviews system-design tradeoffs and well-architected alignment; can produce ADRs and diagrams.
+* **security** (Security Planner) — Plans security: threat-models the work, identifies risks, and maps controls.
+* **rai** (RAI Planner) — Assesses responsible-AI concerns such as fairness, harm, and transparency for AI/ML work.
+* **fact-checker** (Finding Deep Verifier) — Independently verifies findings and claims before the squad trusts them.
+* **designer** (UX UI Designer) — Researches users and designs the experience: journey maps, jobs-to-be-done, and accessibility.
+* **product-owner** (ADO Backlog Manager) — Manages the backlog: triages, refines, and organizes work items in your tracker.
+* **analyst** (PRD Builder) — Captures product and business requirements as a PRD or BRD.
+* **data-scientist** (DS Gen Data Spec) — Profiles data and builds exploratory-analysis notebooks and dashboards.
+* **prompt-engineer** (Prompt Builder) — Authors and refines prompts, agents, instructions, and skills.
+* **technical-writer** (Doc Ops) — Authors and maintains documentation that stays in step with the code.
+* **presenter** (PowerPoint Builder) — Builds slide decks and executive summaries.
+* **experimenter** (Experiment Designer) — Designs a Minimum Viable Experiment to validate the riskiest assumption.
+* **cost-manager** (Squad Cost Manager) — Estimates Azure cost and applies FinOps and Well-Architected cost guidance.
+* **azure-architect** (Squad Azure Architect) — Authors Azure high- and low-level designs with AVM modules and landing-zone patterns.
+* **iac-author** (Squad IaC Author) — Converts an Azure design into Bicep or Terraform; authors IaC but never deploys.
+* **deployer** (Squad Deployer) — Runs Azure deployments behind a human approval gate; defaults to a read-only dry run.
+* **modernizer** (Squad Modernization Planner) — Plans framework, dependency, and cloud-migration modernization.
+* **asbuilt-author** (Squad As-Built Author) — Documents already-deployed infrastructure (inventory, compliance, runbook, DR); strictly read-only.
+* **azure-diagnose** (Squad Azure Diagnose) — Triages deployed Azure resources read-only into ranked hypotheses; recommends but never applies fixes.
+* **scribe** (Squad Scribe) — Writes squad state: decisions, history, and memory. Always included; never optional.
