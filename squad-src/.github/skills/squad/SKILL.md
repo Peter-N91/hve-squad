@@ -75,7 +75,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 ### Handoff
 
-1. Hand each dispatched agent's request and outcome to the Squad Scribe, which appends them to `history/<agent>.md` (append-only) along with the per-dispatch consumption block (the model used plus estimated input, cached, and output token cost and credits), then rewrites the `consumption.md` ledger and updates the `state.json` `currentRun` totals. Every consumption figure is an estimate.
+1. Hand each dispatched agent's request and outcome to the Squad Scribe, which appends them to `history/<agent>.md` (append-only) along with the per-dispatch consumption block (the model used plus estimated input, cached, and output token cost and credits), then rewrites the `consumption.md` ledger and updates the `state.json` `currentRun` totals. The consumption block is written for every dispatch, never conditionally: the coordinator always supplies at least the resolved role's model tier, and when it omits the payload the Scribe self-derives a `tier-default` estimate, so a history append never lands without its consumption block and the ledger never stays at its seed while dispatches have run. Every consumption figure is an estimate.
 2. Synthesize the collected findings into a concise answer for the user.
 3. Escalate to the user — rather than acting — when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose.
 

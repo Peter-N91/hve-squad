@@ -92,8 +92,9 @@ A `history/<agent>.md` entry is the squad's proof that a role actually ran. Beca
 The coordinator and the pipeline gates treat history as the gate mechanism:
 
 * A stage (research, plan, council, implement, review) counts as complete only when both its domain artifact and a `history/<agent>.md` entry for the dispatched agent exist.
+* Every `history/<agent>.md` dispatch entry MUST be accompanied by its per-dispatch consumption block (see [Consumption Tracking](#consumption-tracking)). A history entry written without its consumption block is an incomplete dispatch record: the Scribe always writes the two together, and the coordinator may not treat a stage as complete — or advance past it — when the consumption block is missing. This binds consumption to the same gate that already guarantees history, so a run can never leave `consumption.md` at its seed while history shows dispatches occurred.
 * A missing history entry means the stage did not run, regardless of any narrative claim that it did. The coordinator may not advance past a stage whose history entry is absent — it dispatches the owning agent (or escalates) instead of synthesizing the stage itself.
-* This makes the methodology checkable after the fact: every completed run leaves a research file, a plan file, a Council Verdict, change records, and one `history/<agent>.md` per dispatched agent. If any is missing, the run is provably incomplete.
+* This makes the methodology checkable after the fact: every completed run leaves a research file, a plan file, a Council Verdict, change records, and one `history/<agent>.md` per dispatched agent, each carrying its consumption block. If any is missing, the run is provably incomplete.
 
 ## Tool-to-Mechanism Mapping
 
