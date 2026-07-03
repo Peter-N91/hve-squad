@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo 4 — hve-squad</title>
+  <meta name="description" content="A single autopilot request modernizes a legacy app in place from .NET Framework 4.8 to .NET 10 — research, a pre-implementation council, a security Risk Gate, an SDK-style upgrade, and a review loop that closes every finding to zero before a Go verdict." />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="ppt-templates.html">PPT Templates</a>
+        <a href="demo.html" class="active">Demo</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="contributing.html">Contributing</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Demo selector — pinned at the top; the walkthrough below follows the demo you choose. -->
+  <div class="demo-bar">
+    <div class="container">
+      <div class="demo-switch">
+        <div class="label">Choose a demo</div>
+        <!--
+          Multi-demo selector. To add a demo: give it the next "Demo N" number,
+          turn its chevron into a link (<a class="chev" href="demo-N.html">),
+          mark the current page's chevron .active, and drop the .soon class once
+          the demo page exists.
+        -->
+        <ul class="demo-chevrons">
+          <li><a class="chev" href="demo-1.html"><span class="step">Demo 1</span><span class="name">Azure Squad</span></a></li>
+          <li><a class="chev" href="demo-2.html"><span class="step">Demo 2</span><span class="name">Migration Autopilot</span></a></li>
+          <li><a class="chev" href="demo-3.html"><span class="step">Demo 3</span><span class="name">Product Squad</span></a></li>
+          <li><span class="chev active"><span class="step">Demo 4</span><span class="name">Modernize .NET</span></span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Walkthrough</div>
+      <h1>Modernize .NET Demo</h1>
+      <p class="lead">
+        One <code>/squad</code> autopilot request — no per-step prompting — modernizes a real legacy
+        app <strong>in place</strong> from <strong>.NET&nbsp;Framework&nbsp;4.8 → .NET&nbsp;10</strong>:
+        dependency research, a pre-implementation council (architecture, security, RAI), a
+        <strong>security Risk Gate</strong>, the SDK-style upgrade itself, and a review loop that finds
+        real issues, remediates them, and re-reviews to <strong>zero findings</strong> before it says
+        Go. The headline is the closed loop: the gate stopped, a human approved with conditions, the
+        work shipped, review caught gaps, and the squad fixed them and proved it — all on one repo.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+
+      <h2>What you are proving</h2>
+      <p>
+        That a single autopilot line can take a legacy codebase and autonomously drive a complete,
+        council-reviewed <em>in-place</em> framework upgrade — <em>and</em>, just as importantly, that
+        the built-in Risk Gate and review loop keep a human in control and refuse to declare success
+        until the findings are actually zero. Unlike the <a href="demo-2.html">Migration Autopilot</a>
+        walkthrough, which stopped at the gate and escalated, this run shows the <strong>full closed
+        loop</strong>: gate → conditional approval → implement → review → remediate → clean re-review →
+        Go. The squad derived the whole Research → Council → Plan → Implement → Review pipeline itself.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Capability</th><th>Squad member (role)</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Upgrade-path research</td><td>Alpha (researcher)</td><td>Dependency &amp; compatibility assessment; three blockers — non-SDK csproj, MSTest v1/GAC, dotnet CLI runbook.</td></tr>
+          <tr><td>Modernization planning</td><td>Beta (lead), Epsilon (modernizer)</td><td>Sequenced the SDK conversion, test-stack swap, and config cleanup with gate criteria.</td></tr>
+          <tr><td>Council (arch, security, RAI)</td><td>Zeta, Eta, Theta (architect, security, rai)</td><td>Go-With-Conditions; Security flagged <strong>High Risk</strong> and fired the Risk Gate.</td></tr>
+          <tr><td>In-place upgrade</td><td>Gamma (developer)</td><td>SDK-style <code>.csproj</code>, <code>net10.0</code>, NuGet MSTest, <code>dotnet</code> CLI + <code>global.json</code> pinning.</td></tr>
+          <tr><td>Quality review + gate</td><td>Delta (tester)</td><td><strong>The star of this demo</strong> — found workflow gaps, then re-reviewed the fixes to zero.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Before you start</h2>
+      <p>
+        This demo runs against a prepared repository, <code>hve-squad-modernize-dotnet</code> — the
+        <strong>Legacy Inventory Manager</strong>, a small app that is <em>intentionally</em> legacy:
+        a class library, a console front-end, and 20 MSTest unit tests, all starting on
+        <strong>.NET&nbsp;Framework&nbsp;4.8</strong>. The whole run edits the repo in place; there is
+        no cloud and no spend, so it is safe to run live.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Prerequisite</th><th>Why</th><th>Check</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>hve-squad installed</td><td>The modernization cast — researcher, lead, modernizer, developer, tester, architect, security, RAI — is dispatched by the coordinator.</td><td><code>apm install "Peter-N91/hve-squad"</code></td></tr>
+          <tr><td>VS Code + Copilot (agent mode)</td><td>The coordinator dispatches the cast as subagents.</td><td>—</td></tr>
+          <tr><td>The <code>hve-squad-modernize-dotnet</code> repo</td><td>Holds the legacy .NET Framework 4.8 solution (Core, ConsoleApp, Tests).</td><td>Open it as the workspace.</td></tr>
+          <tr><td>.NET 10 SDK</td><td>Needed for the in-place upgrade to build and run the modernized <code>net10.0</code> projects.</td><td><code>dotnet --version</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          <strong>In place, not a rewrite.</strong> The squad upgrades the existing solution — same
+          domain models, same tests, same behavior — it does not scaffold a new app. That is the
+          point: modernization you could hand to a maintainer, with every change owned by a named
+          member and persisted as decisions and history under <code>.copilot-tracking/squad/</code>.
+        </p>
+      </div>
+
+      <h2>The one request</h2>
+      <p>
+        The entire demo is this single autopilot line. It names the <em>outcome</em>, not the steps —
+        the squad sequences the pipeline itself:
+      </p>
+      <pre><code>/squad mode=autopilot request="Modernize this repository from .NET Framework 4.8 to .NET 10. Assess the current projects and dependencies, define the target state, and carry out the in-place upgrade end-to-end."</code></pre>
+      <p>
+        <strong>Narrate:</strong> "One line, no babysitting. Autopilot runs Research → Council → Plan →
+        Implement → Review, stops only where risk demands a human, and won't claim success until the
+        findings are zero."
+      </p>
+
+      <h2>Where it self-escalated first</h2>
+      <p>
+        Early on, the researcher (<strong>Alpha</strong>) reported it was missing the delegation
+        tooling it needed and <strong>paused the pipeline</strong> rather than guessing. The human
+        approved a roster override — the <strong>Squad Modernization Planner</strong> took over the
+        research duties — and the run resumed. It is a small moment, but it is the safety story in
+        miniature: the squad stops and asks instead of forcing a bad path.
+      </p>
+
+      <h2>What autopilot produced (Research → Council)</h2>
+      <p>
+        Research completed with a conditional Go, then a pre-implementation council assessed the
+        upgrade from three angles before any code changed:
+      </p>
+      <table>
+        <thead>
+          <tr><th>Stage</th><th>Owner(s)</th><th>Output</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1 · Research</td><td>Alpha</td><td>Dependency &amp; compatibility findings; blockers B1 non-SDK csproj, B2 MSTest v1/GAC, B3 framework-specific App.config, B4 VS-path-dependent build.</td><td>✅ Go (conditional)</td></tr>
+          <tr><td>2 · Council</td><td>Zeta, Eta, Theta</td><td>Architecture (test-platform discontinuity, build/config drift), Security (<strong>High Risk</strong>: missing SAST+SCA, undefined dependency-trust policy), RAI (non-material).</td><td>✅ Go-With-Conditions</td></tr>
+          <tr><td>3 · Risk Gate</td><td>Human</td><td>Security High Risk fired the gate — approved with conditions in advisory strictness mode.</td><td>✅ Approved</td></tr>
+          <tr><td>4 · Implement</td><td>Gamma, Epsilon</td><td>SDK-style conversion, NuGet MSTest, App.config cleanup, <code>dotnet</code> CLI workflows, <code>global.json</code> pinning.</td><td>✅ Complete</td></tr>
+          <tr><td>5 · Review</td><td>Delta</td><td>Validation + remediation loop.</td><td>✅ Go (after remediation)</td></tr>
+          <tr><td>6 · Validate</td><td>—</td><td>Final-outcome validation.</td><td>⏸ Awaiting user (Promote-to-RC)</td></tr>
+        </tbody>
+      </table>
+
+      <h2>The Risk Gate — where it stopped for a human</h2>
+      <p>
+        The council verdict was unanimous <strong>Go-With-Conditions</strong>, but Security
+        (<strong>Eta</strong>) rated the work <strong>High Risk</strong> and named two hard blockers,
+        which fired the Risk Gate. Autopilot did not push past it — it <strong>paused and handed the
+        decision to the human</strong>:
+      </p>
+      <table>
+        <thead>
+          <tr><th>Role</th><th>Verdict</th><th>Key conditions</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Architecture (Zeta)</td><td>Go-With-Conditions</td><td>Document the test-platform migration; add a build-contract stability plan; make the config-modernization strategy explicit.</td></tr>
+          <tr><td>Security (Eta)</td><td><strong>Go-With-Conditions · High Risk</strong></td><td>Add a SAST + SCA scanning workflow and a defined dependency-trust policy <em>before</em> modernized code merges.</td></tr>
+          <tr><td>RAI (Theta)</td><td>Go-With-Conditions</td><td>Non-material scope; keep review/quality gates and audit traceability intact.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The human chose <strong>Approve-With-Conditions</strong> in advisory strictness mode: the
+        pipeline resumes, the conditions ride along into the plan, and non-critical issues are logged
+        and tracked rather than silently ignored. The squad never picks for you at a risk gate.
+      </p>
+
+      <h2>What the upgrade actually changed</h2>
+      <p>
+        With the gate cleared, the developer (<strong>Gamma</strong>) and modernizer
+        (<strong>Epsilon</strong>) carried out the in-place upgrade — resolving every research blocker:
+      </p>
+      <table>
+        <thead>
+          <tr><th>Blocker</th><th>Before</th><th>After</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Project format</td><td>Legacy non-SDK <code>.csproj</code>, .NET Framework 4.8</td><td>SDK-style <code>.csproj</code> targeting <code>net10.0</code></td></tr>
+          <tr><td>Test stack</td><td>MSTest v1 wired through the GAC</td><td>NuGet MSTest (<code>Microsoft.NET.Test.Sdk</code>, <code>MSTest.TestFramework</code>, <code>MSTest.TestAdapter</code>)</td></tr>
+          <tr><td>Build &amp; test</td><td>Visual Studio path-dependent</td><td><code>dotnet</code> CLI with SDK pinned in <code>global.json</code></td></tr>
+          <tr><td>App config</td><td>Framework-specific <code>App.config</code> metadata</td><td>Stale config removed</td></tr>
+          <tr><td>CI / security</td><td>None</td><td><code>dotnet-ci.yml</code> + <code>security-scanning.yml</code> (SAST + SCA) added</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Independent validation reported a clean <code>dotnet restore</code>, Debug and Release builds,
+        and <strong>20/20 tests passing</strong> — same tests, same behavior, new framework. The
+        analyzer / nullability hardening (B5) was <strong>deferred by design</strong> and tracked as a
+        follow-on, not silently dropped.
+      </p>
+
+      <h2>The review loop — where it proved the work</h2>
+      <p>
+        This is the payoff. The first review (<strong>Delta</strong>) passed the build but did
+        <em>not</em> wave the work through — it found three real issues and sent the work back:
+      </p>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Finding</th><th>Severity</th><th>Why it matters</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>CodeQL job can drift to the runner's preinstalled SDK</td><td>Medium</td><td>Security scan wasn't pinned to <code>global.json</code>, so it could validate a different SDK than CI.</td></tr>
+          <tr><td>2</td><td>CI triggers only on PR + manual dispatch</td><td>Medium</td><td>Direct pushes to <code>main</code> or merge-queue edges could bypass CI entirely.</td></tr>
+          <tr><td>3</td><td>Empty <code>App.config</code> still included</td><td>Low</td><td>Harmless at runtime, but ambiguous for maintainers.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The squad ran a <strong>remediation loop</strong>: pinned the CodeQL SDK via
+        <code>actions/setup-dotnet</code> with <code>global.json</code>, added a <code>push</code>
+        trigger for <code>main</code>, and removed the empty <code>App.config</code> include. The
+        re-review came back <strong>0 Critical · 0 High · 0 Medium · 0 Low</strong> with 20/20 tests
+        still green — verdict <strong>Go</strong>.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>This is the whole point of the demo.</strong> A model that just generated code would
+          have handed over a green build and called it done. The squad reviewed its own work, named
+          three concrete gaps with file and line, fixed them, and <em>re-proved</em> the result to
+          zero findings before claiming success — with a human approving the risk gate along the way.
+        </p>
+      </div>
+
+      <h2>The decision point</h2>
+      <p>
+        With a clean Go verdict, the run halts at final-outcome validation and lets the human choose —
+        it never promotes for you:
+      </p>
+      <ul>
+        <li><strong>Promote-to-RC</strong> (recommended) — accept the Go verdict and tag the code as a release candidate for final signoff.</li>
+        <li><strong>Request-Changes</strong> — send it back into Implement → Review for more work.</li>
+        <li><strong>Stop</strong> — halt the run; the code stays as-is.</li>
+      </ul>
+      <p>
+        The whole run took <strong>8 turns</strong> across <strong>11 dispatches</strong> for roughly
+        <strong>$0.72 (~72 AI credits)</strong>, with two human interventions — the researcher override
+        and the risk-gate approval — every decision persisted under
+        <code>.copilot-tracking/squad/</code>.
+      </p>
+
+      <h2>Failure-safe fallbacks</h2>
+      <table>
+        <thead>
+          <tr><th>If…</th><th>Then…</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>A role reports missing tooling</td><td>That is the self-escalation story — the squad pauses and asks for a roster override rather than forcing a bad path. Show the decision log entry.</td></tr>
+          <tr><td>The .NET 10 SDK is not installed</td><td>Research, council, and planning still run; only the live build/test needs the SDK. Show <code>global.json</code> pinning instead.</td></tr>
+          <tr><td>Review comes back clean on the first pass</td><td>Point at the review artifact anyway — the remediation loop is the differentiator; describe the findings it <em>would</em> have caught.</td></tr>
+          <tr><td>Someone asks "just upgrade it and ship"</td><td>The squad still runs the Risk Gate and review loop — it never skips the gate or claims success past open findings.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Closing talking points</h2>
+      <ul>
+        <li><strong>One request, full pipeline.</strong> A single autopilot line drove Research → Council → Plan → Implement → Review with no per-step prompting.</li>
+        <li><strong>In-place modernization, not a rewrite.</strong> The legacy solution moved from .NET Framework 4.8 to .NET 10 with the same tests passing — 20/20, before and after.</li>
+        <li><strong>The gate and the loop are the product.</strong> Security fired a Risk Gate a human approved, then review found three gaps and the squad remediated to zero findings before Go.</li>
+        <li><strong>You stay in control.</strong> Two human decisions — a roster override and the risk-gate approval — and every choice persisted as decisions and history.</li>
+      </ul>
+
+      <div class="pager">
+        <a class="prev" href="demo-3.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Demo 3 — Product Squad</div>
+        </a>
+        <a class="next" href="maintaining.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Maintaining</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
