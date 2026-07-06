@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.18] - 2026-07-06
+
+### Added
+
+- Companion **hve-squad-mcp** server repository — a deployable Model Context Protocol (MCP) server that publishes the squad as model-invocable tools (`squad_research`, `squad_plan`, `squad_review`, `squad_architect`, `squad_run`) plus a deterministic `squad_render_pptx` file-output tool, over Streamable HTTP with Entra auth for hosts such as Copilot Studio. See [github.com/Peter-N91/hve-squad-mcp](https://github.com/Peter-N91/hve-squad-mcp).
+
+### Changed
+
+- Coordinating version bump that establishes the link between this package version and the companion `hve-squad-mcp` release: the MCP server pins its bundled squad cast to `hve-squad@0.8.18` (`host/cast/package-pin.json`). The hve-core dependency pin is unchanged (`c5de202`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.8.18"
+```
+
+[0.8.18]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.8.18
+
 ## [0.8.17] - 2026-07-04
 
 ### Changed

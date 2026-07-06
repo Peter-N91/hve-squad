@@ -127,6 +127,22 @@
 
     <section class="section">
       <div class="container">
+        <p class="section-label">Companion server</p>
+        <p>
+          Beyond the local <code>/squad</code> experience, the squad is also available as a deployable
+          <strong>Model Context Protocol (MCP) server</strong>. It publishes the squad as
+          model-invocable tools — <code>squad_research</code>, <code>squad_plan</code>,
+          <code>squad_review</code>, <code>squad_architect</code>, <code>squad_run</code>, and a
+          deterministic <code>squad_render_pptx</code> file-output tool — over Streamable HTTP with
+          Entra auth, so hosts such as Copilot Studio can call the squad. It ships in its own
+          repository and each release is pinned to a matching hve-squad package version.
+        </p>
+        <a class="btn btn-ghost" href="https://github.com/Peter-N91/hve-squad-mcp">hve-squad-mcp on GitHub →</a>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
         <p class="section-label">Quick install</p>
         <pre><code># In the project you want the squad in:
 apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
