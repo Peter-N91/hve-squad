@@ -9,3 +9,5 @@ apm_modules/
 !.github/pull_request_template.md
 .agents/
 .copilot-tracking/
+
+knowledge-docs/

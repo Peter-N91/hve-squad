@@ -1,0 +1,64 @@
+// hve-squad OUTBOUND MCP server registration template (JSONC: JSON with comments)
+//
+// Purpose
+//   Reference snippet for consumers who want to call the hve-squad as MCP
+//   TOOLS from an MCP host (Phase 0: VS Code GitHub Copilot, over stdio).
+//   This registers the squad's OWN server, which ships in the companion
+//   repository Peter-N91/hve-squad-mcp (https://github.com/Peter-N91/hve-squad-mcp)
+//   and exposes 5 coarse intent tools: squad_research, squad_plan,
+//   squad_review, squad_architect, and squad_run.
+//
+//   This is the OUTBOUND inverse of the sibling `mcp.template.json`: that file
+//   registers external servers the squad CONSUMES; this file registers the
+//   squad server other hosts consume.
+//
+// Scope
+//   This file is documentation only. The hve-squad APM package never reads or
+//   writes the consumer's `.vscode/mcp.json`. You own the merge and override
+//   of every entry below.
+//
+// How to use
+//   1. Clone + build the server once (see the hve-squad-mcp README):
+//        git clone https://github.com/Peter-N91/hve-squad-mcp
+//        cd hve-squad-mcp && npm install && npm run build
+//   2. Open or create `.vscode/mcp.json` in your workspace.
+//   3. Copy the `servers` entry below into your file (merge with any servers
+//      you already have; do not replace entries you depend on).
+//   4. Pick the command form that matches your install (see the two options
+//      in the entry) and delete the other.
+//   5. Reload VS Code so Copilot picks up the new server, then ask Copilot to
+//      "research X with the squad" — the squad_* tools become model-invocable.
+//
+// Execution model (Phase 0)
+//   DELEGATED. Each tool returns the Squad Coordinator persona, the matched
+//   routing row, and a framed dispatch request; VS Code's own agent host runs
+//   the runSubagent/task loop to dispatch the cast. The server calls no model
+//   and needs no credentials. The cloud surfaces (Copilot Studio, M365,
+//   Cowork) arrive in Phase 1 over remote Streamable HTTP + Entra auth.
+//
+// Credentials
+//   None. stdio inherits the local user's trust; no token, secret, or API key
+//   is stored in this file.
+{
+  "servers": {
+    "hve-squad": {
+      // Phase 0: local stdio. The server runs as a child process of VS Code.
+      "type": "stdio",
+
+      // Option A (published package): run via npx. Use this once the
+      // `squad-mcp` package is published to a registry your `npx` can reach.
+      "command": "npx",
+      "args": [
+        "-y",
+        "@hve-squad/mcp"
+      ]
+
+      // Option B (local build, not published): run the compiled entrypoint
+      // directly. Replace Option A above with the two lines below, pointing
+      // `args` at YOUR absolute path to the cloned hve-squad-mcp checkout's
+      // dist/src/server.js:
+      //   "command": "node",
+      //   "args": ["/absolute/path/to/hve-squad-mcp/dist/src/server.js"]
+    }
+  }
+}
