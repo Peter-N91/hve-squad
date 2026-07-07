@@ -21,6 +21,7 @@ agents:
   - Squad As-Built Author
   - Squad Azure Diagnose
   - Squad Modernization Planner
+  - Squad SQL Migration Advisor
   - PRD Builder
   - BRD Builder
   - Meeting Analyst

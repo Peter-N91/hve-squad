@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.21] - 2026-07-07
+
+### Added
+
+- Added `Squad SQL Migration Advisor` as a dedicated advisory subagent for SQL Server-to-Azure migration planning, including schema/data migration path selection and downtime-aware cutover guidance.
+- Added the `sql-migration-advisor` skill and wired SQL migration cues so modernization requests can deterministically route to the SQL advisory path.
+
+### Changed
+
+- Extended the `modernizer` role mapping with `Squad SQL Migration Advisor` as an alternate, and added `modernizer` to the `azure` profile roster.
+- Updated squad coordinator dispatch allowlist and routing rules to recognize SQL migration keywords and send those requests through `modernizer` in confirm-mode.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.8.21"
+```
+
+[0.8.21]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.8.21
+
 ## [0.8.20] - 2026-07-07
 
 ### Changed
