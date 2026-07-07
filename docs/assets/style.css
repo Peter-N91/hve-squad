@@ -263,6 +263,17 @@ td { color: var(--muted); }
 .callout p { margin: 0; }
 .callout strong { color: var(--text); }
 
+/* Mermaid diagrams */
+.mermaid {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 18px 0;
+  text-align: center;
+  overflow-x: auto;
+}
+
 /* Footer */
 .footer {
   border-top: 1px solid var(--border);

@@ -138,6 +138,34 @@
         </li>
       </ol>
 
+      <h2>Finding the details behind a gate</h2>
+      <p>
+        When the squad pauses at a gate — a council verdict, an impactful action, or the final
+        outcome — the chat message stays deliberately short so it does not bury the conversation.
+        The full reasoning lives in <code>.copilot-tracking/squad/decisions.md</code>, which is
+        <strong>append-only</strong>: a new <code>## Council Verdict</code> entry is inserted in the
+        file (often in the middle, next to earlier entries), not always at the end. To save you
+        hunting for it, every gate message carries a <strong>Decision Ref</strong> — a deep link
+        straight to the exact section:
+      </p>
+      <pre><code>.copilot-tracking/squad/decisions.md#council-verdict-2026-07-07-residual-controls</code></pre>
+      <p>
+        The anchor is the Markdown heading of the verdict entry (lower-cased, spaces to hyphens), so
+        opening the link in VS Code or on GitHub Pages jumps you straight to the verdict, its
+        findings-by-role table, and the conditions — no scrolling required. The gate message and the
+        notification payload both include this <code>Decision Ref</code>; the <code>State</code>
+        pointer to <code>state.json</code> and the history file remains as a fallback.
+      </p>
+      <p>Where each gate records its details:</p>
+      <div class="mermaid">
+flowchart TD
+    A["Gate reached (council / impactful / final)"] --> B["Short chat / notification message"]
+    B --> C["Decision Ref deep link"]
+    C --> D["decisions.md#council-verdict-DATE-TOPIC — verdict, findings, conditions"]
+    B -. fallback .-> E["state.json + history — run state and audit trail"]
+    B --> F["notifications.md — append-only ping log"]
+      </div>
+
       <h2>First run (Init Mode)</h2>
       <p>
         When a project has no <code>.copilot-tracking/squad/team.md</code>, the coordinator proposes a
@@ -312,5 +340,9 @@
       </p>
     </div>
   </footer>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'strict' });
+  </script>
 </body>
 </html>

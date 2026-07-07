@@ -103,11 +103,23 @@ Required fields:
 
 The schema is the contract: any Scribe write that omits one of these sections fails the council protocol and the coordinator escalates rather than proceeding.
 
+## Verdict Anchor and Decision Ref
+
+Because `decisions.md` is append-only and grows over time, a new `## Council Verdict` entry lands *inside* the file rather than always at the end, which makes it hard for a human to find the entry a gate is talking about. To remove that friction, every Council Verdict entry is addressable by a stable **Decision Ref** — a link straight to the entry's own section — that the coordinator surfaces whenever it reports the verdict or opens a gate.
+
+The Decision Ref is the `decisions.md` path plus the GitHub/VS Code Markdown heading anchor of the `## Council Verdict <timestamp> <topic-id>` line. The anchor is derived from that heading the standard way: lower-case the text, drop punctuation other than hyphens, and replace each run of spaces with a single hyphen. So the heading `## Council Verdict 2026-07-07 residual-controls` yields:
+
+```text
+.copilot-tracking/squad/decisions.md#council-verdict-2026-07-07-residual-controls
+```
+
+Whenever the coordinator reports a verdict to the user — in a chat reply, at a Human Gate, or in a final-outcome summary — it includes this Decision Ref so the human can open the exact section in one click instead of scanning the middle of the file. The reference is derived deterministically from the entry's heading; it is not a new stored field, so it stays valid for the life of the append-only entry.
+
 ## Single-Writer Rule
 
 The Squad Scribe is the only agent that writes the Council Verdict entry. The coordinator assembles the synthesis prompt (raw findings, council membership, topic id, timestamp) and hands it to the Scribe through the normal dispatch contract. Council roles never edit `decisions.md`. This preserves the parallel-dispatch race-prevention guarantee from `.github/instructions/squad/squad-state.instructions.md`.
 
-When the Scribe receives a Council Verdict payload it writes the entry as an append (never edits or removes prior entries) and returns a confirmation listing the verdict label, the topic id, and the file path.
+When the Scribe receives a Council Verdict payload it writes the entry as an append (never edits or removes prior entries) and returns a confirmation listing the verdict label, the topic id, the file path, and the **Decision Ref** (the file path plus the entry's heading anchor, per *Verdict Anchor and Decision Ref* above) so the coordinator can link straight to the section when it reports the verdict or opens a gate.
 
 ## Implementation Gate
 
@@ -115,6 +127,6 @@ Implementation-tier roles (`developer`, `tester` when it acts as an implementer,
 
 * `Go` permits dispatch on the next turn with no extra conditions.
 * `Go-With-Conditions` permits dispatch only when the implementer's payload acknowledges each consolidated condition (a condition may be satisfied in-flight or deferred with an explicit recorded acceptance).
-* `Stop` blocks dispatch entirely. The coordinator escalates to the user with the verdict, the blocking issues, and the council membership.
+* `Stop` blocks dispatch entirely. The coordinator escalates to the user with the verdict, the blocking issues, the council membership, and the **Decision Ref** (per *Verdict Anchor and Decision Ref*) so the user can open the full verdict section directly.
 
 The coordinator does not bypass the gate. When a user explicitly overrides a `Stop` verdict, the coordinator records the override decision through the Scribe before any implementer dispatches, so the audit trail shows both the verdict and the override.
