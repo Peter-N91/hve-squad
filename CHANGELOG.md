@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.19] - 2026-07-07
+
+### Added
+
+- **Decision Ref** deep links on council and autopilot gates. Every Council Verdict entry in `decisions.md` is now addressable by a stable Markdown-heading anchor (for example `.copilot-tracking/squad/decisions.md#council-verdict-<timestamp>-<topic-id>`), and the coordinator surfaces that reference whenever it reports a verdict or opens a gate. The Scribe returns the anchor in its verdict-write confirmation, and the notification payload carries a `Decision Ref` line so a human can jump straight to the exact section of the append-only file instead of scanning for it. See `squad-council.instructions.md`, `squad-notifications.instructions.md`, `squad-autopilot.instructions.md`, `squad-scribe.agent.md`, and `squad-coordinator.agent.md`.
+- Consumer docs: a "Finding the details behind a gate" section in `docs/usage.html` with a rendered Mermaid diagram showing where each gate records its details (`decisions.md`, `state.json`/history, `notifications.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.8.19"
+```
+
+[0.8.19]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.8.19
+
 ## [0.8.18] - 2026-07-06
 
 ### Added

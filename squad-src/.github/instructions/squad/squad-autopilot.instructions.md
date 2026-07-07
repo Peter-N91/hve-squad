@@ -124,7 +124,7 @@ A single qualifying trigger is enough to fire the gate, no matter how many other
 
 When the pipeline reaches Final-outcome validation:
 
-1. The coordinator compiles a concise outcome: what the squad built, the review result, any conditions left open, and the impactful actions awaiting approval (if any).
+1. The coordinator compiles a concise outcome: what the squad built, the review result, any conditions left open, and the impactful actions awaiting approval (if any). For any council-gated work it includes the Council Verdict's **Decision Ref** (per `.github/instructions/squad/squad-council.instructions.md`) so the human can open the exact verdict section rather than scanning `decisions.md`.
 2. The coordinator fires a `final-outcome` notification to the registered approval channel through `.github/instructions/squad/squad-notifications.instructions.md`. When the channel is `github-issue`, the human can validate the outcome from a phone. When no channel is configured, or no transport is available, the notification degrades to an in-chat summary and is still logged.
 3. The coordinator waits for human validation. The human may approve (releasing the gated impactful actions one by one), request changes (re-entering the pipeline at the appropriate stage), or stop.
 

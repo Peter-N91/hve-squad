@@ -135,8 +135,11 @@ Every notification, regardless of channel, carries this payload so the human can
 - Topic: <one-line summary of the work>
 - Awaiting: <the specific decision or approval the human must make>
 - Detail: <2-4 line summary: what happened, what is about to happen, any conditions>
+- Decision Ref: <deep link to the exact section behind this gate, when one exists — e.g. .copilot-tracking/squad/decisions.md#council-verdict-<timestamp>-<topic-id> for a council gate; omit when no such section applies>
 - State: see .copilot-tracking/squad/state.json and the relevant history file
 ```
+
+The `Decision Ref` is a click-through pointer so the human lands on the exact entry instead of scanning an append-only file. For a council or implementation gate it is the Council Verdict's Decision Ref (the `decisions.md` path plus the entry's heading anchor, per `.github/instructions/squad/squad-council.instructions.md`). For other gates it points at the specific section a human should read (for example, the relevant plan or change record); when no single section applies, the line is omitted and `State` remains the fallback.
 
 When the channel is `github-issue`, the payload also includes a **How to respond** block so the decision is possible from the issue alone (for example, from the GitHub mobile app):
 
