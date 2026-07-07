@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.22] - 2026-07-07
+
+### Changed
+
+- Rewrote the `sql-migration-advisor` skill to align with the upstream interview-first playbook: source-of-truth fetch posture, core principles, ~11-question guided interview with answer lists, deterministic Step A–D scoring, clean-Markdown recommendation card, and guardrails (adapted from `fredgis/sql-migration-advisor`, MIT, with attribution retained).
+- Updated `Squad SQL Migration Advisor` to load the skill and enforce a strict one-question-at-a-time interview using the skill's answer lists, withholding the recommendation card until the interview completes and tying scoring to the skill's Step A–D decision rules.
+
+### Added
+
+- Bundled `reference/decision-rules.md` as an offline fallback for the `sql-migration-advisor` skill so deterministic scoring works without network access.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.8.22"
+```
+
+[0.8.22]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.8.22
+
 ## [0.8.21] - 2026-07-07
 
 ### Added
