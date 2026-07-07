@@ -163,6 +163,11 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 | designer        | Iota        | UX UI Designer               | DT Coach, DT Learning Tutor                            | runSubagent / task | default                 |
 | fact-checker    | Kappa       | Finding Deep Verifier        | —                                                      | runSubagent / task | fast                    |
 | cost-manager    | Lambda      | Squad Cost Manager           | —                                                      | runSubagent / task | default                 |
+| iac-author      | Mu          | Squad IaC Author             | —                                                      | runSubagent / task | default                 |
+| deployer        | Nu          | Squad Deployer               | —                                                      | runSubagent / task | default                 |
+| asbuilt-author  | Xi          | Squad As-Built Author        | —                                                      | runSubagent / task | default                 |
+| azure-diagnose  | Omicron     | Squad Azure Diagnose         | —                                                      | runSubagent / task | fast                    |
+| modernizer      | Pi          | Squad Modernization Planner  | Squad SQL Migration Advisor                            | runSubagent / task | default                 |
 | scribe          |             | Squad Scribe                 | Memory                                                 | runSubagent / task | fast                    |
 | devrel          |             | —                            | —                                                      | —                  | — (thin charter needed) |
 ```
@@ -189,7 +194,14 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | architecture, system design, components    | System Architecture Reviewer | auto          | yes               |
 | responsible AI, RAI, fairness, harm        | RAI Planner                  | confirm       | yes               |
 | verify finding, confirm claim, fact-check  | Finding Deep Verifier        | auto          | yes               |
+| author IaC, write Bicep, write Terraform, convert LLD to infra, infrastructure as code | Squad IaC Author | confirm | no |
+| deploy, provision, what-if, terraform plan, terraform apply, az deployment | Squad Deployer | confirm | no |
+| as-built, resource inventory, compliance matrix, operations runbook, DR plan, document deployed infrastructure | asbuilt-author | confirm | no |
+| diagnose, troubleshoot, resource health, why is resource failing, investigate deployed, policy check | azure-diagnose | auto | yes |
 | validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |
+| modernize, upgrade framework, migrate, port legacy, .NET upgrade, Java migration, dependency upgrade, containerize | modernizer | confirm | no |
+| sql migration, database migration, schema migration, data migration, sql server to azure, downtime migration plan, cutover strategy | modernizer | confirm | no |
+| re-platform, rewrite, port to, rebuild in, cross-stack rewrite, Node to .NET, React to Angular, convert to another language | modernizer | confirm | no |
 ```
 
 ### decisions.md
