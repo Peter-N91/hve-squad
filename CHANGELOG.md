@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Watch Mode (DR-01)** — the event-driven "continuous AI" trigger contract that turns a new issue (or PR, comment, schedule, or manual dispatch) into a headless squad run that opens a draft pull request. New `.github/instructions/squad/squad-watch-mode.instructions.md` defines the opt-in gates, the event-to-intent map, injection-safe payload handling (issue text is data, never instructions), profile inference (falls back to `default` when the issue is ambiguous), the draft-PR deliverable, idempotency and resume, and escalation.
-- Shipped the documentation-only reference workflow `.github/skills/squad/squad-watch.workflow.yml` that runs the squad headlessly via the GitHub Copilot CLI (`copilot -p`), label-gated on `squad/auto`, authorized to write collaborators, with the issue payload passed as data. Copy it to `.github/workflows/squad-watch.yml` to activate.
+- Shipped the documentation-only reference workflow `.github/skills/squad/squad-watch.workflow.yml` that runs the squad headlessly via the GitHub Copilot CLI (`copilot -p`). It wires the full event-to-intent map in one file — labeled issues, `squad/review` pull requests, `/squad` comment commands, a scheduled maintenance sweep, `workflow_dispatch`, and branch-filtered pushes — each authorized to write collaborators, fork-safe (never `pull_request_target`), with the event payload passed as data. Copy it to `.github/workflows/squad-watch.yml` to activate.
 - Documented Watch Mode setup and its end-to-end flow (with a Mermaid diagram) on the Usage page.
 
 ### Changed

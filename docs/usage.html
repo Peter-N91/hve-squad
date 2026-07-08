@@ -196,11 +196,99 @@ flowchart TD
           on the issue.
         </li>
       </ol>
+      <h3>Create and apply the <code>squad/auto</code> label</h3>
+      <p>
+        The trigger is an ordinary GitHub label named exactly <code>squad/auto</code>. Create it once,
+        then applying it to any issue starts a run &mdash; anyone with write access can do both. In the
+        GitHub UI: <strong>Issues &rarr; Labels &rarr; New label</strong>, name it <code>squad/auto</code>,
+        and save. Or with the <code>gh</code> CLI:
+      </p>
+      <pre><code>gh label create squad/auto --description "Hand this issue to the squad" --color 1D76DB
+gh issue edit 42 --add-label squad/auto</code></pre>
+      <p>
+        Labeling is the signal: the <code>issues: [labeled]</code> event fires, the workflow checks the
+        label is <code>squad/auto</code> and the labeler has write access, and the run begins. One run
+        stays active per issue (a re-label will not start a second, competing run). The
+        <code>squad/auto</code> trigger label is separate from the <code>squad/*</code> approval labels
+        (<code>squad/approved</code>, <code>squad/stop</code>, &hellip;) the approval watcher reads at a
+        gate.
+      </p>
       <p>
         Watch Mode is opt-in and in-repo only for now: an unlabeled issue does nothing, and pull
-        requests from forks never start a privileged run. The same event-to-intent mapping extends
-        beyond issues (PR reviews, scheduled maintenance sweeps, <code>/squad</code> comment
-        commands), so you can grow it into a broader automation once the issue flow is comfortable.
+        requests from forks never start a privileged run (the workflow never uses
+        <code>pull_request_target</code>).
+      </p>
+
+      <h3>Other triggers (beyond a new issue)</h3>
+      <p>
+        A new labeled issue is just the first entry in Watch Mode's <strong>event-to-intent map</strong>.
+        The contract (<code>.github/instructions/squad/squad-watch-mode.instructions.md</code>) defines
+        how any repository event becomes a routed run: the trigger only supplies the event payload as
+        data, and the coordinator's routing table picks the role. The shipped reference workflow wires
+        <strong>all of them in one file</strong> &mdash; a single <em>Prepare run</em> step authorizes the
+        actor, enforces fork-safety, and builds the routed prompt for whichever event fired.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Trigger</th><th>How it fires</th><th>What the squad does</th><th>Shipped?</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>New issue</td>
+            <td>Apply the <code>squad/auto</code> label</td>
+            <td><code>mode=autopilot</code> &rarr; draft PR that closes the issue</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Manual dispatch</td>
+            <td>Actions tab &rarr; <strong>Run workflow</strong> (a request or an issue number)</td>
+            <td><code>mode=autopilot</code> or a routed run</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Pull request</td>
+            <td>Apply a <code>squad/review</code> label to a same-repo PR</td>
+            <td>Routes to the <code>tester</code> role &rarr; review comments on the PR</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Comment command</td>
+            <td>Comment <code>/squad &lt;request&gt;</code> on an issue or PR</td>
+            <td>Routes per the command &rarr; per-role outcome</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Scheduled sweep</td>
+            <td>The <code>cron</code> in the workflow</td>
+            <td>A maintenance sweep (dependency/docs/SSSC) &rarr; draft PR or issue</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td>Push</td>
+            <td>A push to the configured branch pattern</td>
+            <td>A validation council &rarr; verdict (opens an issue only on <em>Stop</em>)</td>
+            <td>Yes</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Every trigger runs through the same guardrails: an opt-in gate (a <code>squad/*</code> label or
+        an authorized <code>/squad</code> keyword), an authorized actor, the payload treated as data,
+        human-approved gates for anything impactful, and same-repo only (fork PRs are skipped and
+        <code>pull_request_target</code> is never used). Two triggers are time/branch based, so tune them
+        for your repo before enabling &mdash; and delete any trigger you do not want:
+      </p>
+      <pre><code># In .github/workflows/squad-watch.yml
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'      # when the maintenance sweep runs — adjust or remove
+  push:
+    branches: ['release/**'] # which pushes get a validation council — adjust or remove</code></pre>
+      <p>
+        The <code>issues</code>, <code>pull_request</code>, <code>issue_comment</code>, and
+        <code>workflow_dispatch</code> triggers need no tuning &mdash; they are gated by labels and the
+        <code>/squad</code> keyword, so they stay dormant until you opt an item in.
       </p>
 
       <h2>Finding the details behind a gate</h2>
