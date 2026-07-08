@@ -138,6 +138,71 @@
         </li>
       </ol>
 
+      <h2>Watch Mode &mdash; trigger the squad from a new issue</h2>
+      <p>
+        Watch Mode is the event-driven, "continuous AI" side of the squad: instead of you typing
+        <code>/squad</code>, a repository event starts the run. The shipped pattern turns a
+        <strong>new issue labeled <code>squad/auto</code></strong> into a headless
+        <code>mode=autopilot</code> run that opens a <strong>draft pull request</strong> which closes
+        the issue. It reuses everything you already configured &mdash; the autopilot pipeline, the
+        council, and the <code>github-issue</code> approval channel &mdash; so a gate still pauses for
+        your approval from a phone.
+      </p>
+      <div class="mermaid">
+flowchart TD
+    A["Issue labeled squad/auto"] --> B{"Write collaborator?"}
+    B -- no --> X["Ignored, comment left on issue"]
+    B -- yes --> C["Copilot CLI runs /squad mode=autopilot"]
+    C --> D["Profile inferred from the issue (fallback: default)"]
+    D --> E["Research, Plan, Implement, Review"]
+    E --> F{"Impactful or Risk Gate?"}
+    F -- yes --> G["Approve from phone via github-issue"]
+    G --> E
+    F -- no --> H["Open DRAFT pull request that closes the issue"]
+    H --> I["You review and merge"]
+      </div>
+      <p>
+        The issue title and body are always treated as <strong>data, never instructions</strong>: the
+        run reads them as the task description and never as commands that change its roster, routing,
+        gates, or approvals. The run opens a draft PR only &mdash; it never merges, force-pushes, or
+        deploys; those stay human-approved gates, backed by your branch protection.
+      </p>
+
+      <h3>Enable Watch Mode (one-time)</h3>
+      <ol>
+        <li>
+          <strong>Create a Copilot token.</strong> Generate a fine-grained personal access token with
+          the <strong>Copilot Requests</strong> permission and add it as the repository secret
+          <code>COPILOT_GITHUB_TOKEN</code>. The built-in Actions token cannot authenticate Copilot,
+          so this dedicated secret is required.
+        </li>
+        <li>
+          <strong>Protect your default branch.</strong> Require a pull request and review before
+          merge, so the squad's draft PR can never merge itself.
+        </li>
+        <li>
+          <strong>Install the trigger workflow.</strong> Copy the reference workflow
+          <code>.github/skills/squad/squad-watch.workflow.yml</code> to
+          <code>.github/workflows/squad-watch.yml</code>, review it, and commit it.
+        </li>
+        <li>
+          <strong>Install the approval watcher</strong> (if you have not already) so gate approvals
+          flow back: copy <code>.github/skills/squad/github-approval-watcher.workflow.yml</code> to
+          <code>.github/workflows/squad-approval-watcher.yml</code>.
+        </li>
+        <li>
+          <strong>Label an issue <code>squad/auto</code></strong> to start a run. Only a repository
+          collaborator with write access can trigger it; an unauthorized label is ignored and noted
+          on the issue.
+        </li>
+      </ol>
+      <p>
+        Watch Mode is opt-in and in-repo only for now: an unlabeled issue does nothing, and pull
+        requests from forks never start a privileged run. The same event-to-intent mapping extends
+        beyond issues (PR reviews, scheduled maintenance sweeps, <code>/squad</code> comment
+        commands), so you can grow it into a broader automation once the issue flow is comfortable.
+      </p>
+
       <h2>Finding the details behind a gate</h2>
       <p>
         When the squad pauses at a gate — a council verdict, an impactful action, or the final

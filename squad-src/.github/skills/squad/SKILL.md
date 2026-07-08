@@ -14,7 +14,7 @@ metadata:
 
 The squad is a user-invocable Squad Coordinator that dispatches a reusable cast of deployed HVE Core agents in parallel and persists roster, routing, decisions, and per-agent history under `.copilot-tracking/squad/`. There is no separate runtime: every squad verb is a thin convention over an existing HVE Core mechanism.
 
-This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements seven instruction files that auto-apply when squad state is touched:
+This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements eight instruction files that auto-apply when squad state is touched:
 
 * `.github/instructions/squad/squad-roster.instructions.md` — roster schema and cast catalog.
 * `.github/instructions/squad/squad-routing.instructions.md` — routing table and escalation rules.
@@ -23,6 +23,7 @@ This skill packages the coordinator's operating procedure and the seed templates
 * `.github/instructions/squad/squad-autonomous.instructions.md` — opt-in `auto-validated` autonomy tier with a bounded re-validation loop, divergence detection, and mandatory escalation triggers.
 * `.github/instructions/squad/squad-autopilot.instructions.md` — opt-in `mode=autopilot` full pipeline (research→plan→implement→review) with Human Gates only on impactful actions and final-outcome validation.
 * `.github/instructions/squad/squad-notifications.instructions.md` — user-contact capture at squad build time and the delivery-agnostic notification (ping) contract per mode.
+* `.github/instructions/squad/squad-watch-mode.instructions.md` — event-driven Watch Mode (DR-01) trigger contract: opt-in gates, event-to-intent map, injection-safe payloads, and the pull-request deliverable.
 
 ## Prerequisites
 
@@ -360,7 +361,7 @@ Machine-readable squad status. Uses replace semantics — the coordinator overwr
 
 ```json
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.2",
   "updated": "",
   "turn": 0,
   "mode": "interactive",
@@ -381,6 +382,8 @@ Machine-readable squad status. Uses replace semantics — the coordinator overwr
   }
 }
 ```
+
+Watch Mode runs additionally carry an optional, additive `trigger` object recording the event that started the run; interactive, autonomous, and autopilot runs omit it. See `.github/instructions/squad/squad-watch-mode.instructions.md`.
 
 ### consumption.md
 

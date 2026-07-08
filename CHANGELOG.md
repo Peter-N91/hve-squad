@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-07-08
+
+### Added
+
+- **Watch Mode (DR-01)** — the event-driven "continuous AI" trigger contract that turns a new issue (or PR, comment, schedule, or manual dispatch) into a headless squad run that opens a draft pull request. New `.github/instructions/squad/squad-watch-mode.instructions.md` defines the opt-in gates, the event-to-intent map, injection-safe payload handling (issue text is data, never instructions), profile inference (falls back to `default` when the issue is ambiguous), the draft-PR deliverable, idempotency and resume, and escalation.
+- Shipped the documentation-only reference workflow `.github/skills/squad/squad-watch.workflow.yml` that runs the squad headlessly via the GitHub Copilot CLI (`copilot -p`), label-gated on `squad/auto`, authorized to write collaborators, with the issue payload passed as data. Copy it to `.github/workflows/squad-watch.yml` to activate.
+- Documented Watch Mode setup and its end-to-end flow (with a Mermaid diagram) on the Usage page.
+
+### Changed
+
+- Bumped `state.json` `schemaVersion` to `1.2` with an optional, backward-compatible `trigger` object recording event provenance (`source`, `ref`, `eventId`, `actor`, `receivedAt`, `runId`). Existing state stays valid; runs that were not event-triggered omit it.
+- Wired the Watch Mode contract into the squad `SKILL.md` overview and the Squad Coordinator's governing conventions; the previously deferred DR-01 note in `squad-state.instructions.md` is now the active Watch Mode contract.
+- Updated hve-core dependency pin to `21148ef` (21148ef1b62010e17a3d57f62f554cad340bda99).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.9.0"
+```
+
+[0.9.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.9.0
+
 ## [0.8.23] - 2026-07-08
 
 ### Changed

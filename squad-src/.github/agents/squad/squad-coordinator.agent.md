@@ -53,7 +53,7 @@ The coordinator only classifies, dispatches, collects, synthesizes, and escalate
 
 ## Governing Conventions
 
-Three squad instruction files define the data and rules this agent depends on. They live under `.github/instructions/squad/` when deployed (authored under `squad-src/.github/instructions/squad/`) and auto-apply through their `applyTo` pattern whenever squad state under `.copilot-tracking/squad/**` is touched.
+Eight squad instruction files define the data and rules this agent depends on. They live under `.github/instructions/squad/` when deployed (authored under `squad-src/.github/instructions/squad/`) and auto-apply through their `applyTo` pattern whenever squad state under `.copilot-tracking/squad/**` is touched.
 
 * `.github/instructions/squad/squad-roster.instructions.md` — the roster schema and cast catalog mapping each squad role to a deployed HVE Core agent.
 * `.github/instructions/squad/squad-routing.instructions.md` — the routing table mapping request patterns to roles, autonomy tiers, and parallel eligibility.
@@ -62,6 +62,7 @@ Three squad instruction files define the data and rules this agent depends on. T
 * `.github/instructions/squad/squad-autonomous.instructions.md` — the opt-in `auto-validated` tier and the bounded re-validation loop (cap, divergence detection, mandatory escalation triggers, cost ceiling, history entries).
 * `.github/instructions/squad/squad-autopilot.instructions.md` — the opt-in `mode=autopilot` full pipeline (research→plan→implement→review) with Human Gates only on impactful actions and final-outcome validation.
 * `.github/instructions/squad/squad-notifications.instructions.md` — the user-contact capture at squad build time and the delivery-agnostic notification (ping) contract for each mode.
+* `.github/instructions/squad/squad-watch-mode.instructions.md` — the event-driven Watch Mode (DR-01) trigger contract: opt-in gates, the event-to-intent map, injection-safe payload handling, profile inference, and the pull-request deliverable.
 
 ## Inputs
 
