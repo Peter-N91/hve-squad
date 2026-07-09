@@ -181,6 +181,16 @@ flowchart TD
           merge, so the squad's draft PR can never merge itself.
         </li>
         <li>
+          <strong>Allow Actions to open pull requests.</strong> In <strong>Settings &rarr; Actions
+          &rarr; General &rarr; Workflow permissions</strong>, enable <em>"Allow GitHub Actions to
+          create and approve pull requests."</em> Without it, the squad can push its branch but GitHub
+          blocks the draft PR with a 403 &mdash; the run finishes with the branch created but <strong>no
+          PR</strong>. The workflow's <code>pull-requests: write</code> permission is not sufficient on
+          its own. (This setting also lets Actions <em>approve</em> PRs; your branch protection keeps
+          merges human-gated. For tighter scoping, use a dedicated PAT or GitHub App token for PR
+          creation instead of this toggle.)
+        </li>
+        <li>
           <strong>Install the trigger workflow.</strong> Copy the reference workflow
           <code>.github/skills/squad/squad-watch.workflow.yml</code> to
           <code>.github/workflows/squad-watch.yml</code>, review it, and commit it.

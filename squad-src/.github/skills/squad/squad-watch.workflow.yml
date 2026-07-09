@@ -50,6 +50,13 @@
 #   built-in GITHUB_TOKEN does not carry Copilot access. Branch protections and any
 #   GitHub Environment approvals on your side still gate every downstream action.
 #
+#   IMPORTANT: also enable "Allow GitHub Actions to create and approve pull
+#   requests" (Settings -> Actions -> General -> Workflow permissions). Without it,
+#   the default GITHUB_TOKEN cannot open the draft PR even with pull-requests:write,
+#   so a run finishes with the branch pushed but no PR (gh pr create returns 403).
+#   That toggle also permits Actions to approve PRs; a dedicated PAT/App token used
+#   only for PR creation is the tighter alternative.
+#
 # Hardening
 #   `--allow-all-tools` lets the agent work unattended. For stricter isolation, run
 #   inside a sandbox (`copilot --cloud`, or `/sandbox enable`) and rely on branch
