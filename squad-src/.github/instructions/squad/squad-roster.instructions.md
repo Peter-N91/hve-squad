@@ -174,12 +174,12 @@ A profile only ever lists roles that exist in the cast catalog. Roles marked **t
 
 ### Building a Custom Roster
 
-When no named profile fits — or when one is close but not exact — the coordinator helps the user assemble a custom roster rather than inventing one. The coordinator presents the role menu below — each row is a role the squad can dispatch, the plain-language work it contributes, and the deployed agent that fills it by default — and the user picks any subset. The user may start from a profile's roles and add or remove from there; when they do, the roster is recorded as a custom roster derived from that profile, because any change to a profile's exact member set makes it custom.
+When no named profile fits — or when one is close but not exact — the coordinator helps the user assemble a custom roster rather than inventing one. The coordinator presents the role menu below — each row is a role the squad can dispatch, the plain-language work it contributes, and the deployed agent that fills it by default — and the user starts from a baseline that already includes `scribe` plus the methodology spine, then adds or removes specialist roles as needed. The user may start from a profile's roles and add or remove from there; when they do, the roster is recorded as a custom roster derived from that profile, because any change to a profile's exact member set makes it custom.
 
 Three rules bound a custom roster so it never references work the squad cannot actually do:
 
 * **`scribe` is always included** — it is the single writer of squad state and is never offered as optional.
-* **The methodology spine (`researcher`, `lead`, `developer`, `tester`) is recommended** so the Research → Plan → Implement → Review cycle stays intact. The user may drop a spine role, but that disables the matching leg and the Implementation Gate in `squad-routing.instructions.md` escalates if it is later needed.
+* **The methodology spine (`researcher`, `lead`, `developer`, `tester`) is preselected in every custom roster** so the Research → Plan → Implement → Review cycle stays intact from the first draft of the roster. The user may still remove a spine role, but doing so disables the matching leg and the Implementation Gate in `squad-routing.instructions.md` escalates if it is later needed.
 * **Only catalog roles are selectable.** The coordinator never invents a role or an agent outside the cast catalog. A role whose mapped agent is not installed, or a **thin charter needed** role such as `devrel`, is flagged and left out rather than seeded.
 
 The menu mirrors the Cast Catalog above; each item names the role, the deployed agent that fills it by default (in parentheses), and the user-facing gloss.
