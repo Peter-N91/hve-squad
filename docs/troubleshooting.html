@@ -63,6 +63,27 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
         the cap is per hour, so more concurrency just reaches it faster.
       </p>
 
+      <h3>A few packages fail with <code>HTTP 502</code> (or 503) — <em>Failed to download virtual package</em></h3>
+      <pre><code>[x] 2 packages failed:
+    +- hve-core-github-execute-backlog -- Failed to download virtual package:
+       Failed to download .github/prompts/github/github-execute-backlog.prompt.md: HTTP 502</code></pre>
+      <p>
+        This is a <strong>transient GitHub server error</strong>, not a problem with your manifest or
+        pins. <code>502 Bad Gateway</code> (and <code>503</code>) mean GitHub's file endpoint briefly
+        failed to respond while APM was fetching one of the hundreds of individual files this package
+        references. The tell-tale sign it is transient: only a handful of packages fail while the rest
+        succeed, and they fail on the <em>download</em> step even though the pin resolved fine.
+      </p>
+      <p>Just run the install again — cached files are skipped, so only the missing packages are retried:</p>
+      <pre><code>apm install</code></pre>
+      <p>
+        Do <em>not</em> confuse this with <code>404</code> / <em>"File not found (tried refs: main,
+        master)"</em>, which means a file no longer exists at that ref (upstream drift or a bad pin), or
+        with the slow-but-never-erroring rate-limit case above. If 502s persist across several retries,
+        GitHub itself may be degraded — check <a href="https://www.githubstatus.com">githubstatus.com</a>.
+        Authenticating first (<code>gh auth login</code>) also makes installs more resilient.
+      </p>
+
       <h3><code>[x] No harness detected</code> after <code>apm install</code> (APM 0.18.0+)</h3>
       <p>
         APM downloaded the sources into <code>apm_modules/</code> but skipped the deploy step because
