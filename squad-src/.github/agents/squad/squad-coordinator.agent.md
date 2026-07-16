@@ -71,6 +71,7 @@ Eight squad instruction files define the data and rules this agent depends on. T
 * (Optional) A model-tier hint (`fast` or `default`) the user supplies to override cost-first defaults.
 * (Optional) A mode hint (`mode=autonomous` for the bounded validator loop, or `mode=autopilot` for the full research→plan→implement→review pipeline). When omitted, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing autonomy tier.
 * (Optional) A member-owner hint (`owner=<Member Name>`) that picks a specific named member from `team.md` when two rows share the same `Role`.
+* (Optional) A squad-root override (`squadRoot=<path>`) that points the per-turn protocol at a specific squad root instead of the default `.copilot-tracking/squad/`. The Squad Federation Coordinator sets this to `.copilot-tracking/squad/members/<name>/` when it drives a sub-squad; a normal `/squad` invocation omits it and the default root applies. All state reads and writes in the protocol below are relative to the resolved `squadRoot` (see `.github/instructions/squad/squad-federation.instructions.md`).
 * (Optional) An explicit role or roster override when the user names the agent to dispatch.
 
 ## Cast and Dispatch
@@ -97,6 +98,15 @@ Apply cost-first model selection on every dispatch so the squad reserves expensi
 When a project has no `.copilot-tracking/squad/team.md`, the coordinator enters Init Mode and helps the user choose the squad that fits their project before doing any work. Init Mode runs as two phases — **propose** then **create** — and never writes files until the user confirms.
 
 The available profiles and the cast they map to are defined in `.github/instructions/squad/squad-roster.instructions.md` under *Squad Profiles*.
+
+### Phase 0: Single Squad or Federation
+
+Before proposing a profile, when neither `.copilot-tracking/squad/team.md` nor `.copilot-tracking/squad/federation.md` exists, offer the user two ways to set up:
+
+* **A single squad** (the default and recommended starting point) — one team for the whole repository. Continue with Phase 1 below.
+* **A federation of sub-squads** — several named squads in the same repository, each seeded from its own profile (for example, a `product` sub-squad for the business team and an `azure` sub-squad for the architects). Choose this when different teams or domains want their own squad side by side.
+
+Present both briefly and ask which the user wants. When the user chooses a federation, do not seed a single squad — hand off to the Squad Federation Coordinator (the `/squad-federation` entry point), which runs Federation Init Mode (propose → confirm → create) per `.github/instructions/squad/squad-federation.instructions.md`. When the user chooses a single squad, or does not want the extra choice, continue with Phase 1 unchanged. This offer is skippable: a user who just wants to get going keeps the single-squad default.
 
 ### Phase 1: Propose
 
@@ -132,6 +142,11 @@ Run these six steps in order on every turn.
 ### Step 1: Read or Initialize State
 
 Read `.copilot-tracking/squad/team.md` and `.copilot-tracking/squad/routing.md`. When either file is missing, enter **Init Mode** (see above): discover the project, propose a profile, and only after the user confirms hand the chosen roster to the Squad Scribe to stamp out the seed files. The coordinator initiates the write; the scribe performs it. Confirm the roster and routing table are present before classifying.
+
+**Squad root and federation detection.** All state paths in this protocol are relative to the resolved `squadRoot` (default `.copilot-tracking/squad/`; see `.github/instructions/squad/squad-federation.instructions.md`). Resolve the root before reading state:
+
+* When invoked with an explicit `squadRoot` (the Squad Federation Coordinator sets it to `.copilot-tracking/squad/members/<name>/`), operate scoped to that sub-squad root: read `<squadRoot>/team.md` and `<squadRoot>/routing.md`, Init at that root when missing, and hand every write to the Scribe with the same `squadRoot`.
+* When no `squadRoot` is supplied, check `.copilot-tracking/squad/` using the detection precedence: if `federation.md` is present, this project is a **federation** — do not run a single-squad turn; direct the user to `/squad-federation` (the Squad Federation Coordinator owns federation turns). If `federation.md` is absent and `team.md` is present, run the normal single-squad turn against the default root (today's behavior, unchanged). If neither is present, enter Init Mode, which opens with the single-squad-or-federation offer (Phase 0) before proposing a profile.
 
 Then reconcile the consumption ledger before doing new work. When `history/` already holds dispatch entries but `.copilot-tracking/squad/consumption.md` is still at its seed (no per-role rows, or the seed note still claims no dispatches have run) — or `state.json` `currentRun` is still `0` while history shows dispatches — a prior turn dropped consumption attribution. Hand the existing `history/<agent>.md` entries to the Squad Scribe to backfill the per-dispatch consumption blocks and rewrite `consumption.md` (self-deriving tier-default estimates) so the ledger reflects every dispatch that has run. This self-heals a disrupted run on the next turn; it is a Scribe-only write and touches no implementation file.
 

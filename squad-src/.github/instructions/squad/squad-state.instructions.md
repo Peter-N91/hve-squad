@@ -9,9 +9,18 @@ These conventions define where squad state lives, who may change it, and how the
 
 State is per-project and runtime-created. It is never packaged with the squad source — only the coordinator produces it under `.copilot-tracking/squad/` when a project first runs the squad.
 
+## Squad Root (parameterized state root)
+
+Every state path below is relative to a **squad root**. The root is parameterized so the same layout can serve either a single squad or a sub-squad within a federation:
+
+* The default squad root is `.copilot-tracking/squad/`. When no root is supplied, the paths in this file are literal and behavior is exactly today's single-squad behavior.
+* In a **federation** (opt-in), each sub-squad roots at `.copilot-tracking/squad/members/<name>/`, and every path in this file is read as `<squadRoot>/...`. The Squad Coordinator and Squad Scribe accept an optional `squadRoot`; when omitted, the default preserves single-squad behavior.
+
+The federation layout, the registry, meta-routing, detection precedence (`federation.md` → federation, else `team.md` → plain squad, else Init), and the two-level single-writer rule are defined in `.github/instructions/squad/squad-federation.instructions.md`. The remainder of this file describes the state tree under a single squad root; it applies unchanged to each sub-squad root in a federation.
+
 ## State Layout
 
-All squad state lives under `.copilot-tracking/squad/`:
+All squad state lives under the squad root (`.copilot-tracking/squad/` by default; `.copilot-tracking/squad/members/<name>/` for a federation sub-squad):
 
 | Path                  | Purpose                                                                    | Write Semantics      |
 |-----------------------|----------------------------------------------------------------------------|----------------------|

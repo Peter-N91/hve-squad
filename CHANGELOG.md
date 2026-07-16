@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-07-16
+
+### Added
+
+- **Squad federation (in-repo sub-squads)** — one repository can now host several named sub-squads side by side (for example, a `product` sub-squad for the business team and an `azure` sub-squad for the architects), each an ordinary squad rooted at `.copilot-tracking/squad/members/<name>/`. Federation is opt-in and additive: a repository that never opts in behaves exactly as before.
+  - New `Squad Federation Coordinator` agent and `/squad-federation` prompt: builds a federation (propose → confirm → create), then routes each request to one or more sub-squads (or an explicit `squad=<name>` target) and runs each scoped to its own root (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`, `squad-src/.github/prompts/squad/squad-federation.prompt.md`).
+  - New `squad-federation.instructions.md` conventions: the parameterized squad root (`squadRoot`), the federation state layout, detection precedence (`federation.md` → federation, else top-level `team.md` → plain squad, else Init), the `federation.md` registry and `meta-routing.md` schemas, required-unique sub-squad naming, and the two-level single-writer rule (`squad-src/.github/instructions/squad/squad-federation.instructions.md`).
+  - The Squad Coordinator gained an optional `squadRoot` input and a federation-aware Step 1, and its Init Mode now opens with a single-squad-or-federation choice on a fresh project; the Squad Scribe writes scoped to the resolved root and to the federation root; the squad skill documents the federation layer and ships federation seed templates (`squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-scribe.agent.md`, `squad-src/.github/skills/squad/SKILL.md`, `squad-src/.github/prompts/squad/squad.prompt.md`).
+- Documentation: a Federation section in the Usage guide and a Federation feature card on the site home page (`docs/usage.html`, `docs/index.html`).
+
+### Notes
+
+- Multi-repo federation (a hub coordinating one squad per repository) and federation-level autopilot (a coordinated pipeline across sub-squads) are researched and planned but not shipped in this release; single-sub-squad autonomy modes work today via forwarding.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.10.0"
+```
+
+[0.10.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.0
+
 ## [0.9.5] - 2026-07-15
 
 ### Changed

@@ -28,7 +28,7 @@ State layout, ownership, and the tool-to-mechanism mapping are defined in `.gith
 ## Inputs
 
 * A decision payload: the decision made, its rationale, and an optional architectural-significance flag.
-* A history payload: the agent dispatched, the request it handled, and the findings or outcome to record.
+* (Optional) A squad-root path (`squadRoot`) that scopes every write below. It defaults to `.copilot-tracking/squad/`; when the coordinator drives a federation sub-squad it passes `.copilot-tracking/squad/members/<name>/`, and when it hands federation-level state it passes the federation root. All `.copilot-tracking/squad/...` paths in the Required Steps are read as `<squadRoot>/...`; the default preserves single-squad behavior. See `.github/instructions/squad/squad-federation.instructions.md`.* A history payload: the agent dispatched, the request it handled, and the findings or outcome to record.
 * (Optional) An initialization request: the coordinator-confirmed profile or member list to seed into `team.md`, plus a request to seed `routing.md`, `decisions.md`, `state.json`, and the `history/` directory.
 * (Optional) A memory payload: the role-scoped note to persist for a specific agent.
 * (Optional) A Council Verdict payload: the consolidated council findings, topic id, timestamp, council membership, and verdict label (`Go`, `Go-With-Conditions`, or `Stop`) per `.github/instructions/squad/squad-council.instructions.md`.
@@ -76,10 +76,11 @@ Write a consumption block for **every** dispatch recorded in Step 2 — never co
 ## Required Protocol
 
 1. Follow the Required Steps for whichever payloads are present in the request. Step 7 (Write Consumption) is the exception: it runs for every dispatch recorded in Step 2 whether or not a consumption payload was supplied — self-derive a tier-default estimate when none is provided so a history append never lands without its consumption block.
-2. Treat `decisions.md` and `history/<agent>.md` as strictly append-only; treat `team.md`, `routing.md`, and `state.json` as replace-on-request. Treat `history/autonomous-loop-<id>.md` as append-only per topic-id. Treat `consumption.md` and `consumption-rates.md` as replace-on-request, and the per-dispatch consumption block appended to `history/<agent>.md` as append-only.
-3. When the coordinator supplies a `Member Name` with the history payload, record it inside the dispatch entry under the existing `history/<agent>.md` file. Keep one history file per agent even when a single agent serves two named roles; do not create a separate `history/<agent>-<member>.md` file.
-4. Make no decisions of your own — record exactly what the coordinator hands over. The Council Verdict label, conditions, and blocking issues come from the payload; do not synthesize or downgrade them.
-5. Return the Response Format confirmation once all writes complete.
+2. Scope every write to the resolved `squadRoot`: each `.copilot-tracking/squad/...` path in the Required Steps is `<squadRoot>/...`. The default `.copilot-tracking/squad/` preserves single-squad behavior; a federation sub-squad uses `.copilot-tracking/squad/members/<name>/`. When the coordinator hands a federation-level payload, write the federation-root files (`federation.md`, `meta-routing.md` with replace semantics; `decisions.md` and `history/<sub-squad>.md` append-only; `state.json` replace) at `.copilot-tracking/squad/` per `.github/instructions/squad/squad-federation.instructions.md`. Each sub-squad's writes stay inside its own root so parallel sub-squads never race on shared files.
+3. Treat `decisions.md` and `history/<agent>.md` as strictly append-only; treat `team.md`, `routing.md`, and `state.json` as replace-on-request. Treat `history/autonomous-loop-<id>.md` as append-only per topic-id. Treat `consumption.md` and `consumption-rates.md` as replace-on-request, and the per-dispatch consumption block appended to `history/<agent>.md` as append-only.
+4. When the coordinator supplies a `Member Name` with the history payload, record it inside the dispatch entry under the existing `history/<agent>.md` file. Keep one history file per agent even when a single agent serves two named roles; do not create a separate `history/<agent>-<member>.md` file.
+5. Make no decisions of your own — record exactly what the coordinator hands over. The Council Verdict label, conditions, and blocking issues come from the payload; do not synthesize or downgrade them.
+6. Return the Response Format confirmation once all writes complete.
 
 ## Response Format
 

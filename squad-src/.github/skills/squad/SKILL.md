@@ -14,7 +14,7 @@ metadata:
 
 The squad is a user-invocable Squad Coordinator that dispatches a reusable cast of deployed HVE Core agents in parallel and persists roster, routing, decisions, and per-agent history under `.copilot-tracking/squad/`. There is no separate runtime: every squad verb is a thin convention over an existing HVE Core mechanism.
 
-This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements eight instruction files that auto-apply when squad state is touched:
+This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements nine instruction files that auto-apply when squad state is touched:
 
 * `.github/instructions/squad/squad-roster.instructions.md` — roster schema and cast catalog.
 * `.github/instructions/squad/squad-routing.instructions.md` — routing table and escalation rules.
@@ -24,6 +24,7 @@ This skill packages the coordinator's operating procedure and the seed templates
 * `.github/instructions/squad/squad-autopilot.instructions.md` — opt-in `mode=autopilot` full pipeline (research→plan→implement→review) with Human Gates only on impactful actions and final-outcome validation.
 * `.github/instructions/squad/squad-notifications.instructions.md` — user-contact capture at squad build time and the delivery-agnostic notification (ping) contract per mode.
 * `.github/instructions/squad/squad-watch-mode.instructions.md` — event-driven Watch Mode (DR-01) trigger contract: opt-in gates, event-to-intent map, injection-safe payloads, and the pull-request deliverable.
+* `.github/instructions/squad/squad-federation.instructions.md` — opt-in federation of named sub-squads under one repo: the parameterized squad root, the registry (`federation.md`) and meta-routing (`meta-routing.md`) schemas, detection precedence, and the two-level single-writer rule.
 
 ## Prerequisites
 
@@ -49,12 +50,25 @@ A profile is a curated subset of the cast tailored to a kind of project. The coo
 | `azure`        | researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, modernizer, scribe | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
 | `product`      | researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, scribe | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
 
+### Federation (Sub-Squads)
+
+Federation is an opt-in way to run several named sub-squads under one repository — for example, a business team's `product` sub-squad and an architecture team's `azure` sub-squad, side by side. It is additive: a repository that never opts in keeps exactly the single-squad behavior described here. The full contract is `.github/instructions/squad/squad-federation.instructions.md`; the operator's view is:
+
+* **Parameterized squad root.** Each squad's state lives under a *squad root*. The default is `.copilot-tracking/squad/`; a federation roots each sub-squad at `.copilot-tracking/squad/members/<name>/`. Every state path is `<squadRoot>/...`, so a sub-squad is an ordinary squad rooted at a named path — same roster, routing, decisions, history, consumption, and single-writer Scribe.
+* **Detection precedence.** At the start of a turn the coordinator checks `.copilot-tracking/squad/`: a `federation.md` registry means a federation (the Squad Federation Coordinator owns the turn); otherwise a top-level `team.md` means a plain squad (unchanged); otherwise Init Mode. `federation.md` versus `team.md` at the top is the single discriminator.
+* **Meta layer.** The federation root adds `federation.md` (the sub-squad registry) and `meta-routing.md` (request pattern → sub-squad) plus a federation-level `decisions.md`, `history/<sub-squad>.md`, and `state.json`. The Squad Federation Coordinator reads the registry and meta-routing, classifies the request to one or more sub-squads (or honors an explicit `squad=<name>` target), and runs each sub-squad's per-turn protocol scoped to `members/<name>/`.
+* **Required unique names.** Every sub-squad — including a custom one — must have a required, unique, lower-kebab-case name, because the name is at once the `members/<name>/` directory and the `squad=<name>` selector. Init Mode validates names against each other and against the registry before creating any folder and asks the user to rename on a collision; it never auto-suffixes or reuses an existing sub-squad directory.
+* **Entry point.** `/squad-federation` invokes the Squad Federation Coordinator. Its Federation Init Mode proposes → confirms → creates a set of sub-squads (each seeded from a profile via the standard Init), then routes the request. `/squad` continues to serve plain single-squad projects.
+* **Two-level single writer.** The Squad Scribe remains the only writer at both levels: it writes each sub-squad's state under its own root and the federation-level decision/history at the federation root, with each level's entries linked. Each sub-squad's writes stay inside its own root, so parallel sub-squads never race.
+
+The **multi-repo** federation — a hub coordinating one squad per repository — reuses this layout and only changes a sub-squad's kind to `repo` with an external location plus a cross-repo execution driver; it is deferred (see the multi-repo plan).
+
 ### Init
 
 Run once per project, then verify on every turn. Init Mode mirrors a propose → confirm → create flow and never writes files before the user confirms.
 
 1. Check for `.copilot-tracking/squad/team.md` and `.copilot-tracking/squad/routing.md`.
-2. When either file is missing, **propose**: discover the project (languages, frameworks, tests, IaC, security/AI markers) read-only, then recommend a profile using the precedence in the roster's *Profile Selection* (explicit `profile=` hint → discovery inference → `default`). Present the profile under consideration — the user's `profile=` choice when given, otherwise the most appropriate profile the coordinator selected — with its roles and why it fits, and ask the user to proceed or choose differently. On **proceed** the flow is unchanged; on **decline** the user either picks a different profile from the listed set or builds a custom roster from the role menu (each role shown with a plain-language description), per the roster's *Building a Custom Roster*. Once a profile or customized roster is on the table, also offer naming choices for the seeded members per the roster's *Naming Conventions* (user-supplied per role, coordinator-assigned aliases from the deterministic wordlist, a mix, or skip). Wait on the user before any write.
+2. When either file is missing (and no `.copilot-tracking/squad/federation.md` exists), first **offer single squad or federation** (Phase 0): a single squad (default) for one team across the repo, or a federation of named sub-squads when different teams or domains each want their own squad. When the user chooses a federation, hand off to `/squad-federation` (the Squad Federation Coordinator) instead of seeding a single squad; otherwise continue. Then **propose**: discover the project (languages, frameworks, tests, IaC, security/AI markers) read-only, then recommend a profile using the precedence in the roster's *Profile Selection* (explicit `profile=` hint → discovery inference → `default`). Present the profile under consideration — the user's `profile=` choice when given, otherwise the most appropriate profile the coordinator selected — with its roles and why it fits, and ask the user to proceed or choose differently. On **proceed** the flow is unchanged; on **decline** the user either picks a different profile from the listed set or builds a custom roster from the role menu (each role shown with a plain-language description), per the roster's *Building a Custom Roster*. Once a profile or customized roster is on the table, also offer naming choices for the seeded members per the roster's *Naming Conventions* (user-supplied per role, coordinator-assigned aliases from the deterministic wordlist, a mix, or skip). Wait on the user before any write.
 3. On **confirm**, hand the chosen roster to the Squad Scribe to **create**: `team.md` from the confirmed profile's members (including the `Member Name` column when names were provided), `routing.md` from the default routing rules filtered to that roster, plus `decisions.md`, `notifications.md`, `state.json`, and a `history/` directory. Before the create step, capture an optional approval channel per `.github/instructions/squad/squad-notifications.instructions.md` (`github-issue` for remote/unattended approval, `webhook`, or `in-chat`) and seed it into the `state.json` `notify` object.
 4. Confirm the roster and routing table are present before classifying the request. The coordinator never writes these files itself.
 
@@ -445,6 +459,79 @@ description: "Maintainable per-model token-rate table and comparison methodology
 
 All values are labeled estimated, and token counts are estimated because no per-dispatch telemetry exists. Optionally reconcile the run total against the per-user aggregate `ai_credits_used` from the usage-metrics REST API after the run.
 ```
+
+### Federation Seed Templates
+
+The Squad Federation Coordinator hands these templates to the Squad Scribe when it creates a federation (after the user confirms the sub-squad set in Federation Init Mode). They stay consistent with `.github/instructions/squad/squad-federation.instructions.md`: `federation.md`, `meta-routing.md`, and the federation `state.json` use replace semantics; the federation `decisions.md` and `history/<sub-squad>.md` are append-only. Each `members/<name>/` sub-squad is seeded with the ordinary `team.md`, `routing.md`, `decisions.md`, `state.json`, and `history/` templates above, rooted at `members/<name>/`.
+
+#### federation.md
+
+Registry of the sub-squads in this repository. One row per sub-squad; the `Sub-squad` value is also its `members/<name>/` directory. `Kind` is `in-repo` for a sub-squad whose state lives under `members/<name>/`; `repo` is reserved for the deferred multi-repo federation.
+
+```markdown
+---
+description: "Squad federation registry: the named sub-squads in this repository and the profile each was seeded from"
+---
+
+# Squad Federation
+
+## Sub-Squads
+
+| Sub-squad | Profile | Kind    | Location          | Owner         | Description                                              |
+|-----------|---------|---------|-------------------|---------------|---------------------------------------------------------|
+| product   | product | in-repo | members/product/  | business-team | Requirements, roadmap, and stakeholder deliverables     |
+| azure     | azure   | in-repo | members/azure/    | architects    | Azure build: Bicep, landing-zone, cost, and deployment  |
+```
+
+#### meta-routing.md
+
+Maps a request pattern or domain to a registered sub-squad. Seeded from each sub-squad's profile and description; every row points at a sub-squad that exists in `federation.md`.
+
+```markdown
+---
+description: "Squad federation meta-routing: request patterns mapped to the sub-squad that handles them"
+---
+
+# Squad Federation Meta-Routing
+
+| Pattern / Domain                                                 | Sub-squad | Parallel-Eligible |
+|------------------------------------------------------------------|-----------|-------------------|
+| requirements, PRD, BRD, roadmap, backlog, stakeholder, discovery | product   | yes               |
+| Azure, Bicep, landing zone, deploy, IaC, cost, infrastructure    | azure     | yes               |
+```
+
+#### decisions.md (federation root)
+
+Append-only log of federation-level routing decisions — which sub-squad handled a request and why. Each entry references the sub-squad's own decision entries so the two levels stay linked. Uses the same append-only contract as a per-squad `decisions.md`.
+
+```markdown
+---
+description: "Append-only log of squad federation routing decisions and their rationale"
+---
+
+# Squad Federation Decisions
+
+Entries are appended below in chronological order. Each entry records which sub-squad(s) a request was routed to, the matched meta-routing pattern or explicit `squad=` target, the turn it was made on, and a reference to the sub-squad's own decision entries. Prior entries are never edited or removed.
+
+<!-- Append new federation decision entries below this line. -->
+```
+
+#### state.json (federation root)
+
+Machine-readable federation status. Replace semantics — the Scribe overwrites it as the federation advances.
+
+```json
+{
+  "schemaVersion": "1.0",
+  "updated": "",
+  "turn": 0,
+  "subSquads": [],
+  "activeSubSquads": [],
+  "openEscalations": []
+}
+```
+
+`subSquads` lists every registered sub-squad name (mirroring `federation.md`); `activeSubSquads` lists the sub-squad(s) dispatched on the current turn. Each sub-squad keeps its own `state.json` under `members/<name>/` per `.github/instructions/squad/squad-state.instructions.md`.
 
 ## Attribution
 

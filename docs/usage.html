@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Usage — hve-squad</title>
-  <meta name="description" content="Run the squad: inputs, profiles, autonomy modes, remote approval, and first-run Init Mode." />
+  <meta name="description" content="Run the squad: inputs, profiles, autonomy modes, remote approval, first-run Init Mode, and federation of sub-squads." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <link rel="stylesheet" href="assets/style.css" />
 </head>
@@ -341,8 +341,58 @@ flowchart TD
         <code>decisions.md</code>, <code>notifications.md</code>, <code>state.json</code>, and a
         <code>history/</code> directory. It never writes files before you confirm. After that, each
         <code>/squad</code> call routes against the seeded roster.
+      </p>      <p>
+        On a brand-new project (no squad yet), Init Mode first offers a choice: a <strong>single
+        squad</strong> (the default) for one team across the repo, or a <strong>federation</strong> of
+        several named sub-squads. Choosing a federation hands off to <code>/squad-federation</code>
+        (see below); choosing a single squad keeps the flow above unchanged.
       </p>
 
+      <h2>Federation &mdash; several sub-squads in one repo</h2>
+      <p>
+        Federation lets one repository host more than one squad side by side &mdash; for example a
+        <code>product</code> sub-squad for the business team and an <code>azure</code> sub-squad for the
+        architects. It is <strong>opt-in and additive</strong>: a repository that never opts in behaves
+        exactly like a single squad. Each sub-squad is an <em>ordinary</em> squad &mdash; same roster,
+        routing, decisions, history, and consumption &mdash; only rooted at
+        <code>.copilot-tracking/squad/members/&lt;name&gt;/</code> instead of the top level.
+      </p>
+      <pre><code># Build a federation (propose → confirm → create)
+/squad-federation init
+
+# Route a request to a specific sub-squad
+/squad-federation request="draft the Q3 roadmap" squad=product
+
+# Omit squad= and let meta-routing pick by keyword/domain
+/squad-federation request="design the landing-zone network"</code></pre>
+      <p>
+        A <strong>meta layer</strong> at <code>.copilot-tracking/squad/</code> holds
+        <code>federation.md</code> (the registry of sub-squads) and <code>meta-routing.md</code>
+        (request pattern &rarr; sub-squad), plus a federation-level decisions and history trail. The
+        <strong>Squad Federation Coordinator</strong> reads them, picks the sub-squad(s) &mdash; or honors
+        your explicit <code>squad=&lt;name&gt;</code> &mdash; and runs each sub-squad's normal per-turn
+        protocol scoped to its own root.
+      </p>
+      <p>
+        The coordinator decides which squad you are on by a simple rule: a
+        <code>federation.md</code> at the top means a federation (use <code>/squad-federation</code>);
+        a top-level <code>team.md</code> means a plain squad (use <code>/squad</code> as before). The
+        two are mutually exclusive, so an existing single-squad project is untouched.
+      </p>
+      <p>
+        Every sub-squad has a <strong>required, unique, lower-kebab-case name</strong>, because the name
+        is at once its <code>members/&lt;name&gt;/</code> folder and the <code>squad=&lt;name&gt;</code>
+        selector you type. Init validates names before creating any folder and asks you to rename on a
+        collision &mdash; it never silently reuses or overwrites a sub-squad directory. Profiles are
+        proposed per sub-squad from your repo and request (just like a single squad), and you can accept,
+        swap a profile, add or remove a sub-squad, or build a custom roster for any of them.
+      </p>
+      <p>
+        Autonomy modes work <em>inside</em> a targeted sub-squad today &mdash;
+        <code>/squad-federation squad=azure mode=autopilot request="…"</code> runs that sub-squad's full
+        pipeline. A coordinated, federation-wide autopilot across multiple sub-squads is planned but not
+        yet shipped.
+      </p>
       <h2>Promote a learning (<code>/squad-learn</code>)</h2>
       <p>
         Live agent memory always stays local to each consumer. When a squad run surfaces a durable,
