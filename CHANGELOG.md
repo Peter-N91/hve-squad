@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-07-17
+
+### Changed
+
+- Updated hve-core dependency pin to `5c15a03` (5c15a03c78da2408527693e0fc3b3e387bf99cb2).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.10.1"
+```
+
+[0.10.1]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.1
+
 ## [0.10.0] - 2026-07-16
 
 ### Added
