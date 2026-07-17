@@ -388,10 +388,15 @@ flowchart TD
         swap a profile, add or remove a sub-squad, or build a custom roster for any of them.
       </p>
       <p>
-        Autonomy modes work <em>inside</em> a targeted sub-squad today &mdash;
-        <code>/squad-federation squad=azure mode=autopilot request="…"</code> runs that sub-squad's full
-        pipeline. A coordinated, federation-wide autopilot across multiple sub-squads is planned but not
-        yet shipped.
+        Autonomy modes work <em>inside</em> a targeted sub-squad &mdash;
+        <code>/squad-federation squad=azure mode=autopilot request="…"</code> runs that one sub-squad's
+        full pipeline (forward-only, exactly as before). Drop the <code>squad=</code> target and
+        <code>/squad-federation mode=autopilot request="…"</code> now runs a <strong>federation-wide
+        autopilot</strong>: it orders the selected sub-squads by dependency (confirmed at the first
+        gate), runs each one's standard autopilot in turn, lifts every Impactful-Action and Risk Gate to
+        the federation level (attributed to the sub-squad that raised it), applies one aggregate
+        <code>cost-ceiling</code>, and ends with a single consolidated final-outcome validation. Each
+        sub-squad's inner pipeline is unchanged, and it never auto-releases.
       </p>
       <h2>Promote a learning (<code>/squad-learn</code>)</h2>
       <p>

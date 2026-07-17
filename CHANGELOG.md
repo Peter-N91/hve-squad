@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-07-17
+
+### Added
+
+- **Federation-level autopilot (opt-in)** — `/squad-federation mode=autopilot` with no `squad=` target now runs a meta-pipeline that coordinates several sub-squads under one coherent set of Human Gates. It orders the selected sub-squads by dependency (confirmed at the first gate), runs each one's standard single-squad autopilot inner run scoped to `members/<name>/`, aggregates every Impactful-Action and Risk Gate to the federation level (attributed to the raising sub-squad, most-restrictive-wins), applies one aggregate `cost-ceiling`, and ends with a single consolidated final-outcome validation. It is opt-in and backward-compatible: a single `squad=` target keeps the forward-only behavior, single-squad autopilot is unchanged, and each sub-squad's inner pipeline is untouched.
+  - New `squad-federation-autopilot.instructions.md` conventions: the trigger and opt-in surface, the build precondition, the meta-pipeline contract, sub-squad execution ordering, federation Human Gates, the aggregate cost ceiling, and consolidated final-outcome validation (`squad-src/.github/instructions/squad/squad-federation-autopilot.instructions.md`).
+  - `Squad Federation Coordinator` gains a **Federation Autopilot Mode** section, and the `/squad-federation` prompt documents the meta-pipeline trigger (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`, `squad-src/.github/prompts/squad/squad-federation.prompt.md`).
+  - Two-level run provenance: the Squad Scribe writes a federation-root `history/autopilot-run-<id>.md` linking each sub-squad's inner run, and the federation `state.json` gains additive `mode` and `currentRun` fields (`schemaVersion` `1.0` → `1.1`) for the aggregate cost (`squad-src/.github/agents/squad/squad-scribe.agent.md`, `squad-src/.github/skills/squad/SKILL.md`, `squad-src/.github/instructions/squad/squad-federation.instructions.md`).
+  - Watch Mode gains a federation-routing clause: a repository event is routed to a sub-squad via `meta-routing.md`, then that sub-squad's autopilot runs unchanged and produces a pull request (`squad-src/.github/instructions/squad/squad-watch-mode.instructions.md`).
+  - Documented federation-wide autopilot on the usage page (`docs/usage.html`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.10.2"
+```
+
+[0.10.2]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.2
+
 ## [0.10.1] - 2026-07-17
 
 ### Changed

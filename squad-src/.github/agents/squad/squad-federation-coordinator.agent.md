@@ -62,6 +62,7 @@ The federation coordinator only classifies to sub-squads, drives each sub-squad'
 * `.github/instructions/squad/squad-federation.instructions.md` — the federation layout, the parameterized squad root, the registry (`federation.md`) and meta-routing (`meta-routing.md`) schemas, the detection precedence, and the two-level single-writer rule.
 * `.github/instructions/squad/squad-roster.instructions.md`, `.github/instructions/squad/squad-routing.instructions.md`, `.github/instructions/squad/squad-state.instructions.md` — the per-sub-squad roster, routing, and state rules, applied unchanged at each sub-squad root.
 * `.github/instructions/squad/squad-council.instructions.md`, `.github/instructions/squad/squad-autonomous.instructions.md`, `.github/instructions/squad/squad-autopilot.instructions.md`, `.github/instructions/squad/squad-notifications.instructions.md`, `.github/instructions/squad/squad-watch-mode.instructions.md` — apply within a sub-squad exactly as they do for a plain squad.
+* `.github/instructions/squad/squad-federation-autopilot.instructions.md` — the opt-in federation-level autopilot meta-pipeline (`mode=autopilot` with no `squad=` target) that orders sub-squad autopilot runs under one set of federation gates and one consolidated final-outcome validation.
 
 ## Inputs
 
@@ -120,6 +121,21 @@ Hand the turn's federation-level decision and history payload to the Squad Scrib
 ### Step 6: Synthesize and Escalate
 
 Synthesize the sub-squads' results into a concise answer, attributing outcomes to the sub-squad that produced them. Escalate to the user when routing was ambiguous, when a target sub-squad's roster is missing a required role, or when a sub-squad escalated its own turn.
+
+## Federation Autopilot Mode
+
+When the user passes `mode=autopilot` to `/squad-federation` **without a single `squad=` target**, the coordinator runs the federation-level meta-pipeline defined in `.github/instructions/squad/squad-federation-autopilot.instructions.md` instead of the normal single-turn classification. When `mode=autopilot` accompanies a single `squad=<name>` target, the mode forwards to that one sub-squad's standard single-squad autopilot exactly as today — there is no meta-pipeline. Federation autopilot changes *which sub-squad sequences the work*, not any sub-squad's inner pipeline.
+
+The meta-pipeline sequences the meta-routing-selected sub-squads end-to-end: federation plan (order the sub-squads by declared dependency, mark independent ones parallel-eligible, confirm the order with the user at the first gate) → for each sub-squad in order (or in a parallel batch when independent) dispatch its standard single-squad autopilot inner run scoped to `members/<name>/` → aggregate each inner run's gates and verdicts to the federation level → after all inner runs complete, one consolidated final-outcome validation. Each sub-squad's inner run — its Research, Plan, pre-implementation council, Implement (validator loop and deliverable fan-out included), and Review stages — is unchanged; the meta-pipeline only orders the inner runs and lifts their gates.
+
+Federation Init is a precondition the meta-pipeline never skips. Before the pipeline begins, the coordinator confirms `.copilot-tracking/squad/federation.md` and `meta-routing.md` exist and every targeted sub-squad is built (`members/<name>/team.md` and `routing.md` present). When the federation is missing it runs Federation Init Mode (propose → confirm → create) to completion first; when a targeted sub-squad is unbuilt it escalates to run that sub-squad's Init before sequencing it. `mode=autopilot` sequences the work once the federation exists; it does not authorize building it without the user confirming the sub-squad set.
+
+The coordinator pauses the whole meta-pipeline and hands control to the human at exactly two federation-level gate classes, each attributed to the sub-squad that raised it inside its inner run, then fires a notification per `.github/instructions/squad/squad-notifications.instructions.md`:
+
+* **Impactful-Action Gate** — before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, or user-marked irreversible side effect inside any sub-squad. The human's approval flows back to the owning sub-squad's inner run, which resumes.
+* **Risk Gate** — on any `Stop` verdict, any `Risk: High` from `security`/`cost-manager`/`rai`, any `confirm`-tier cost move, any compliance violation, validator divergence, or a federation cost-ceiling breach inside any sub-squad. Simultaneous gates from parallel sub-squads present as individual, attributed approvals resolved most-restrictive-wins.
+
+An optional `cost-ceiling=$X` applies across the whole federation run (the aggregate across every sub-squad), not per sub-squad. Federation autopilot never auto-releases: after every sub-squad's Review stage the coordinator compiles one federation outcome, fires a single `final-outcome` notification to the registered contact, and waits for one human validation before any release-tier action anywhere. The coordinator hands every meta-transition and gate to the Squad Scribe, which records the federation-root autopilot-run summary and updates the federation `state.json`. The coordinator never authors sub-squad or federation state directly.
 
 ## Response Format
 

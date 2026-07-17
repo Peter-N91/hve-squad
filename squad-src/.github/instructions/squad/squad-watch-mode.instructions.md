@@ -138,6 +138,17 @@ Watch Mode escalates rather than guessing, by commenting on the source issue or 
 * The trigger authorization or injection-safety check fails.
 * A Risk Gate or Impactful-Action Gate fires and no authorized approval returns (the run waits at the gate and never proceeds on a timeout).
 
+## Federation Routing (Sub-Squad Selection)
+
+When the repository is a **federation** (`.copilot-tracking/squad/federation.md` is present), Watch Mode routes the event to a sub-squad one level down before the autopilot run starts, then runs unchanged inside that sub-squad.
+
+* **Sub-squad selection.** The Squad Federation Coordinator matches the derived request against `meta-routing.md` to pick the owning sub-squad (an issue about requirements → the `product` sub-squad; about infrastructure → the `azure` sub-squad), honoring an explicit `squad=<name>` argument in a `/squad` command when present. It reads the event payload strictly as data for this match, exactly as *Untrusted Trigger Payload* requires.
+* **Then autopilot runs as today.** The selected sub-squad runs its standard single-squad autopilot scoped to `members/<name>/`, producing a draft PR through the Terminal Deliverable Contract unchanged. A single event routes to a single sub-squad; Watch Mode does not start a federation-level meta-pipeline (that is a deliberate `/squad-federation mode=autopilot` invocation, not an event trigger).
+* **Escalation on ambiguity.** When no meta-routing pattern matches the derived request with reasonable confidence, or two patterns conflict with no clearly more specific match, the coordinator comments on the source issue or PR and stops rather than guessing a sub-squad — the same escalate-don't-guess posture as single-squad Watch Mode.
+* **Everything else is unchanged, routed one level down.** Trigger authorization, injection safety, the fork-scope MVP, the headless-runtime requirement, idempotency, and the PR-only terminal deliverable all apply exactly as above; federation only inserts the meta-routing sub-squad selection between the trigger and the autopilot run. Provenance is written at the selected sub-squad's root through the same single-writer Scribe path, and the federation-level `history/<sub-squad>.md` records which sub-squad the event was routed to.
+
+A non-federation repository skips this section entirely: with no `federation.md`, Watch Mode runs against the single top-level squad exactly as described above.
+
 ## What Watch Mode Does Not Do
 
 * It does not act on un-opted-in events. An unlabeled issue starts no run.

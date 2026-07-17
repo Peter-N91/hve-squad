@@ -25,6 +25,7 @@ This skill packages the coordinator's operating procedure and the seed templates
 * `.github/instructions/squad/squad-notifications.instructions.md` — user-contact capture at squad build time and the delivery-agnostic notification (ping) contract per mode.
 * `.github/instructions/squad/squad-watch-mode.instructions.md` — event-driven Watch Mode (DR-01) trigger contract: opt-in gates, event-to-intent map, injection-safe payloads, and the pull-request deliverable.
 * `.github/instructions/squad/squad-federation.instructions.md` — opt-in federation of named sub-squads under one repo: the parameterized squad root, the registry (`federation.md`) and meta-routing (`meta-routing.md`) schemas, detection precedence, and the two-level single-writer rule.
+* `.github/instructions/squad/squad-federation-autopilot.instructions.md` — opt-in federation-level autopilot: the meta-pipeline (`mode=autopilot` with no `squad=` target) that orders sub-squad autopilot runs under one set of federation gates, an aggregate cost ceiling, and one consolidated final-outcome validation.
 
 ## Prerequisites
 
@@ -60,6 +61,7 @@ Federation is an opt-in way to run several named sub-squads under one repository
 * **Required unique names.** Every sub-squad — including a custom one — must have a required, unique, lower-kebab-case name, because the name is at once the `members/<name>/` directory and the `squad=<name>` selector. Init Mode validates names against each other and against the registry before creating any folder and asks the user to rename on a collision; it never auto-suffixes or reuses an existing sub-squad directory.
 * **Entry point.** `/squad-federation` invokes the Squad Federation Coordinator. Its Federation Init Mode proposes → confirms → creates a set of sub-squads (each seeded from a profile via the standard Init), then routes the request. `/squad` continues to serve plain single-squad projects.
 * **Two-level single writer.** The Squad Scribe remains the only writer at both levels: it writes each sub-squad's state under its own root and the federation-level decision/history at the federation root, with each level's entries linked. Each sub-squad's writes stay inside its own root, so parallel sub-squads never race.
+* **Federation autopilot (opt-in).** `/squad-federation mode=autopilot` with no `squad=` target runs a federation-level meta-pipeline: it orders the selected sub-squads by dependency (confirmed at the first gate), runs each one's standard single-squad autopilot inner run scoped to `members/<name>/`, aggregates every Impactful-Action and Risk Gate to the federation level (attributed to the sub-squad that raised it), applies one aggregate `cost-ceiling`, and ends with a single consolidated final-outcome validation. A single `squad=` target keeps the forward-only behavior, and each sub-squad's inner autopilot pipeline is unchanged. The full contract is `.github/instructions/squad/squad-federation-autopilot.instructions.md`.
 
 The **multi-repo** federation — a hub coordinating one squad per repository — reuses this layout and only changes a sub-squad's kind to `repo` with an external location plus a cross-repo execution driver; it is deferred (see the multi-repo plan).
 
@@ -522,16 +524,57 @@ Machine-readable federation status. Replace semantics — the Scribe overwrites 
 
 ```json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "updated": "",
   "turn": 0,
+  "mode": "interactive",
   "subSquads": [],
   "activeSubSquads": [],
-  "openEscalations": []
+  "openEscalations": [],
+  "currentRun": {
+    "estCostUsd": 0,
+    "estCreditsTotal": 0
+  }
 }
 ```
 
 `subSquads` lists every registered sub-squad name (mirroring `federation.md`); `activeSubSquads` lists the sub-squad(s) dispatched on the current turn. Each sub-squad keeps its own `state.json` under `members/<name>/` per `.github/instructions/squad/squad-state.instructions.md`.
+
+`mode` and `currentRun` are additive fields for federation-level autopilot (`.github/instructions/squad/squad-federation-autopilot.instructions.md`). `mode` records the autonomy mode in effect for the current federation turn (`interactive` or `autopilot`); `currentRun` aggregates the estimated cost and credits summed across every sub-squad inner run of the current meta-run, so the federation-level cost ceiling reads one number. Both are backward-compatible — a federation that never runs autopilot leaves `mode` at `interactive` and `currentRun` at zero — so the `schemaVersion` bump from `1.0` to `1.1` keeps existing federation state valid.
+
+#### history/autopilot-run-\<id>.md (federation root)
+
+One file per federation autopilot meta-run, at the federation root. Append-only by topic-id: a subsequent meta-run against the same topic appends a new dated `## Meta-Stages` section rather than overwriting. The Scribe writes this file only when the Federation Coordinator runs in `mode=autopilot` with no `squad=` target (a single-target `mode=autopilot` forwards to one sub-squad and writes only that sub-squad's own `members/<name>/history/autopilot-run-<id>.md`).
+
+```markdown
+---
+description: "Federation autopilot meta-run summary for topic <id>"
+---
+
+# Federation Autopilot Run: <id>
+
+* Topic: <one-line summary>
+* Opt-In: mode=autopilot (no squad= target)
+* Cost Ceiling: <value or unset>
+* Aggregate Cost: <est-usd> (~<est-credits> AI credits, estimated, not billed)
+* Outcome: completed (awaiting final validation) | escalated (<reason>) | stopped (<reason>)
+
+## Meta-Stages
+
+| Order | Sub-squad | Inner Run                                        | Result             | Gate Fired (attributed)     |
+|-------|-----------|--------------------------------------------------|--------------------|-----------------------------|
+| 1     | <name>    | members/<name>/history/autopilot-run-<inner>.md  | <one-line outcome> | <none or gate + sub-squad>  |
+| 2     | <name>    | members/<name>/history/autopilot-run-<inner>.md  | <one-line outcome> | <none or gate + sub-squad>  |
+| final | (federation) | consolidated final-outcome                    | notified <recipient-or-in-chat> | Final-Outcome Validation |
+
+## Gates and Approvals
+
+| Timestamp | Gate                       | Raised By (sub-squad) | Awaiting / Resolved By      | Notes      |
+|-----------|----------------------------|-----------------------|-----------------------------|------------|
+| <ts>      | <Impactful / Risk / Final> | <sub-squad>           | <human decision or pending> | <one-line> |
+```
+
+Each row's `Inner Run` links the sub-squad's own `members/<name>/history/autopilot-run-<inner>.md`, so the two levels of provenance stay linked and auditable.
 
 ## Attribution
 

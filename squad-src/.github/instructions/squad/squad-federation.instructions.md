@@ -31,12 +31,13 @@ A federation adds a small meta layer at the federation root (`.copilot-tracking/
 | `meta-routing.md`                      | Request pattern / domain → sub-squad routing table                          | Replace via scribe |
 | `decisions.md`                         | Federation-level cross-squad routing decisions and rationale                | Append-only        |
 | `history/<sub-squad>.md`               | Per-sub-squad federation dispatch history (which sub-squad ran, for what)   | Append-only        |
-| `state.json`                           | Federation status: active sub-squads, mode, open escalations                | Replace via scribe |
+| `history/autopilot-run-<id>.md`        | Federation autopilot meta-run summary linking each sub-squad's inner run     | Append-only        |
+| `state.json`                           | Federation status: active sub-squads, mode, current-run cost, open escalations | Replace via scribe |
 | `members/<name>/`                      | A full ordinary squad state tree (the sub-squad's `squadRoot`)              | Per squad-state    |
 
 Each `members/<name>/` directory is an unmodified squad: `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `history/<agent>.md`, `state.json`, `consumption.md`, and `consumption-rates.md`, all governed by `squad-state.instructions.md` rooted at `members/<name>/`.
 
-The federation root's `decisions.md` and `history/<sub-squad>.md` are **append-only**; `federation.md`, `meta-routing.md`, and the federation `state.json` use **replace** semantics — mirroring the per-squad rules one level up.
+The federation root's `decisions.md` and `history/<sub-squad>.md` are **append-only**; `federation.md`, `meta-routing.md`, and the federation `state.json` use **replace** semantics — mirroring the per-squad rules one level up. The federation `history/autopilot-run-<id>.md` is **append-only by topic-id** and is written only for a federation-level autopilot meta-run; see `.github/instructions/squad/squad-federation-autopilot.instructions.md`. The federation `state.json` carries additive `mode` and `currentRun` fields for that meta-run (the autonomy mode in effect and the cost aggregated across every sub-squad inner run); both are backward-compatible, so a federation that never runs autopilot omits or zeroes them and existing state stays valid.
 
 ## Detection Precedence
 
