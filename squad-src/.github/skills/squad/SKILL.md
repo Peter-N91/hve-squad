@@ -14,10 +14,11 @@ metadata:
 
 The squad is a user-invocable Squad Coordinator that dispatches a reusable cast of deployed HVE Core agents in parallel and persists roster, routing, decisions, and per-agent history under `.copilot-tracking/squad/`. There is no separate runtime: every squad verb is a thin convention over an existing HVE Core mechanism.
 
-This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements nine instruction files that auto-apply when squad state is touched:
+This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements ten instruction files that auto-apply when squad state is touched:
 
 * `.github/instructions/squad/squad-roster.instructions.md` — roster schema and cast catalog.
 * `.github/instructions/squad/squad-routing.instructions.md` — routing table and escalation rules.
+* `.github/instructions/squad/squad-intake-gate.instructions.md` — conditional pre-work intake gate that validates requirement and input artifacts before planning or implementation, with a bounded auto-remediation loop and the Intake Readiness Verdict schema.
 * `.github/instructions/squad/squad-state.instructions.md` — state layout, single-writer ownership, and tool-to-mechanism mapping.
 * `.github/instructions/squad/squad-council.instructions.md` — pre-implementation council protocol with parallel dispatch, most-restrictive-wins synthesis, and the Council Verdict schema.
 * `.github/instructions/squad/squad-autonomous.instructions.md` — opt-in `auto-validated` autonomy tier with a bounded re-validation loop, divergence detection, and mandatory escalation triggers.
@@ -39,17 +40,17 @@ The coordinator runs four stages each turn: **init**, **route**, **decide**, and
 
 ### Squad Profiles
 
-A profile is a curated subset of the cast tailored to a kind of project. The coordinator seeds only the profile's members into `team.md`, and the routing table is filtered to those roles. The `scribe` role is always included, and so is the **methodology spine** (`researcher`, `lead`, `developer`, `tester`) that runs the Research → Plan → Implement → Review cycle in every profile. Profiles are defined canonically in `.github/instructions/squad/squad-roster.instructions.md`; the catalog below mirrors them.
+A profile is a curated subset of the cast tailored to a kind of project. The coordinator seeds only the profile's members into `team.md`, and the routing table is filtered to those roles. The `scribe` role is always included (the single writer of squad state), and so is the **methodology spine** (`researcher`, `lead`, `developer`, `tester`) that runs the Research → Plan → Implement → Review cycle in every profile; the `intake-validator` role is seeded into the `product` and `full` profiles and can be added to any roster. Profiles are defined canonically in `.github/instructions/squad/squad-roster.instructions.md`; the catalog below mirrors them.
 
 | Profile        | Members                                                                                                                       | Use When                                                                                     |
 |----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | `default`      | researcher, lead, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |
-| `full`         | researcher, lead, developer, tester, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, scribe | Complex, cross-cutting projects that need every discipline                                  |
+| `full`         | researcher, lead, developer, tester, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, intake-validator, scribe | Complex, cross-cutting projects that need every discipline                                  |
 | `security`     | researcher, lead, developer, tester, security, rai, fact-checker, scribe                                                      | Security, threat-modeling, and responsible-AI focus                                          |
 | `design`       | researcher, lead, developer, tester, designer, scribe                                                                         | UX/UI and product-design focus                                                               |
 | `architecture` | researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe                                        | System design and architecture focus                                                         |
 | `azure`        | researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, modernizer, scribe | Azure-focused build with budget and security oversight (Bicep, landing-zone, FinOps signals) |
-| `product`      | researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, scribe | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
+| `product`      | researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, intake-validator, scribe | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
 
 ### Federation (Sub-Squads)
 
@@ -96,6 +97,16 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 2. Synthesize the collected findings into a concise answer for the user.
 3. Escalate to the user — rather than acting — when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose.
 
+### Intake Gate Procedure
+
+The intake gate is the operator's pre-work readiness check on the inputs a turn builds on. It is conditional: the coordinator runs it only when the turn's work is grounded in requirement or input artifacts (a PRD, BRD, specification, requirements document, user story, design document, transcript, or a user-referenced input file) and advances toward a plan, a build, or a deliverable. When no input grounds the work, the gate is a no-op. The full protocol lives in `.github/instructions/squad/squad-intake-gate.instructions.md`; the operator's view is:
+
+1. The coordinator dispatches `intake-validator` (seeded in the `product` and `full` profiles and addable to any roster, resolved by input type per the roster Selection Cue: PRD → PRD Quality Reviewer, BRD → BRD Quality Reviewer, assumption or scope pressure-test → Task Challenger, otherwise Product Manager Advisor) to assess the inputs for completeness, clarity, testability, consistency, and scope boundaries. When the active roster lacks `intake-validator`, the coordinator offers to add it rather than skipping the check.
+2. The validator returns a verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`) with its blocking and non-blocking gaps and any clarifying questions.
+3. The Squad Scribe appends a single `## Intake Readiness Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
+4. On `Ready` or `Ready-With-Gaps`, downstream planning and implementation proceed (non-blocking gaps carried as recorded assumptions). On `Not-Ready`, the coordinator runs the bounded auto-remediation loop — dispatch `analyst` or `product-owner` to fill the blocking gaps, then re-validate; capped at two cycles — and escalates when a gap needs a human decision, the cap is reached with blocking gaps open, or the blocking-gap set stops shrinking.
+5. The verdict gates downstream dispatch and runs ahead of the Council and Implementation gates; a non-stale `Ready` verdict for the same unchanged inputs is reused rather than re-run.
+
 ### Council Procedure
 
 The council is the operator's pre-implementation cross-check. The coordinator triggers it when the user explicitly asks for a council, a validation, a cross-check, or a pre-implementation review, or when a request mixes implementation language with risk language and crosses two or more council-member domains (architecture, security, cost, product-fit, RAI). The full protocol lives in `.github/instructions/squad/squad-council.instructions.md`; the operator's view is:
@@ -123,7 +134,7 @@ The opt-in `auto-validated` tier lets a council validate a developer's output on
 The opt-in `mode=autopilot` runs the full delivery pipeline end-to-end, stopping for the human only at impactful actions and final-outcome validation. The full protocol lives in `.github/instructions/squad/squad-autopilot.instructions.md`; the operator's view is:
 
 1. The user opts in per turn by passing `mode=autopilot` to `/squad`. Without that input, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing tier.
-2. The coordinator sequences the pipeline: research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn. For a profile that carries two or more deliverable-producing roles (the `product` profile), the implement stage fans out across the owning specialists — the plan enumerates the deliverables and the coordinator dispatches each specialist in dependency order, each a Scribe-recorded stage — instead of a single `developer`; every other (spine-shaped) profile keeps the single-build implement stage.
+2. The coordinator sequences the pipeline: a conditional intake gate (when the work is grounded in requirement or input artifacts) → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn. For a profile that carries two or more deliverable-producing roles (the `product` profile), the implement stage fans out across the owning specialists — the plan enumerates the deliverables and the coordinator dispatches each specialist in dependency order, each a Scribe-recorded stage — instead of a single `developer`; every other (spine-shaped) profile keeps the single-build implement stage.
 3. The pipeline stops only at two Human Gate classes: an **Impactful-Action Gate** (deploy, `git push`/force-push, PR merge, schema migration, data deletion, destructive infra ops, secret rotation, or any user-marked irreversible action) and a **Risk Gate** (any `Stop` verdict, `Risk: High` from security/cost/RAI, `confirm`-tier cost move, compliance violation, validator divergence, or cost-ceiling breach).
 4. Autopilot never auto-releases: after review it fires a `final-outcome` notification to the registered contact and waits for human validation before any release-tier action.
 5. The Scribe writes a per-run summary to `history/autopilot-run-<id>.md` (append-only by topic-id) and the notification records to `notifications.md`.
@@ -185,6 +196,7 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 | asbuilt-author  | Xi          | Squad As-Built Author        | —                                                      | runSubagent / task | default                 |
 | azure-diagnose  | Omicron     | Squad Azure Diagnose         | —                                                      | runSubagent / task | fast                    |
 | modernizer      | Pi          | Squad Modernization Planner  | Squad SQL Migration Advisor                            | runSubagent / task | default                 |
+| intake-validator |            | Product Manager Advisor      | PRD Quality Reviewer, BRD Quality Reviewer, Task Challenger | runSubagent / task | fast                    |
 | scribe          |             | Squad Scribe                 | Memory                                                 | runSubagent / task | fast                    |
 | devrel          |             | —                            | —                                                      | —                  | — (thin charter needed) |
 ```
@@ -206,6 +218,7 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | plan, break down, sequence, design plan    | Task Planner                 | confirm       | no                |
 | implement, build, code, fix                | Task Implementor             | confirm       | no                |
 | review, validate, check quality            | Task Reviewer                | auto          | yes               |
+| validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
 | security, threat, vulnerability, STRIDE    | Security Planner             | confirm       | yes               |
 | design, UX, UI, wireframe, accessibility   | UX UI Designer               | confirm       | yes               |
 | architecture, system design, components    | System Architecture Reviewer | auto          | yes               |
@@ -265,6 +278,41 @@ Council Verdict placeholder (Scribe stamps this shape when a council runs):
 
 * Permits Implementation Dispatch: yes (Go, Go-With-Conditions) | no (Stop)
 * Conditions Outstanding: <count>
+-->
+
+<!--
+Intake Readiness Verdict placeholder (Scribe stamps this shape when the intake gate runs):
+
+## Intake Readiness Verdict <timestamp> <topic-id>
+
+* Topic: <one-line summary of the work the inputs ground>
+* Inputs Reviewed: <comma-separated artifact paths or references>
+* Validator Dispatched: <resolved agent name>
+* Verdict: Ready | Ready-With-Gaps | Not-Ready
+* Remediation Cycles: <0, 1, or 2>
+
+### Findings
+
+| Dimension        | Result    | Blocking Gaps  | Non-Blocking Gaps |
+|------------------|-----------|----------------|-------------------|
+| Completeness     | pass/fail | <list-or-none> | <list-or-none>    |
+| Clarity          | pass/fail | <list-or-none> | <list-or-none>    |
+| Testability      | pass/fail | <list-or-none> | <list-or-none>    |
+| Consistency      | pass/fail | <list-or-none> | <list-or-none>    |
+| Scope Boundaries | pass/fail | <list-or-none> | <list-or-none>    |
+
+### Clarifying Questions
+
+* <question for the user; empty when verdict is Ready>
+
+### Recorded Assumptions
+
+* <assumption carried into downstream work; empty when none>
+
+### Intake Gate
+
+* Permits Downstream Dispatch: yes (Ready, Ready-With-Gaps) | no (Not-Ready)
+* Blocking Gaps Outstanding: <count>
 -->
 ```
 

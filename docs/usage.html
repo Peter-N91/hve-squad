@@ -94,6 +94,23 @@
         choose at build time (interactive mode pings you at every step instead).
       </p>
 
+      <h2>Requirements intake gate</h2>
+      <p>
+        When a run is grounded in requirement or input artifacts &mdash; a PRD, BRD, spec, user
+        story, design doc, transcript, or a file you point the squad at &mdash; the coordinator runs
+        an <strong>intake gate</strong> before it plans or builds, checking those inputs for
+        completeness, clarity, testability, consistency, and scope. It records an
+        <code>## Intake Readiness Verdict</code> in <code>decisions.md</code>
+        (<code>Ready</code>, <code>Ready-With-Gaps</code>, or <code>Not-Ready</code>).
+      </p>
+      <p>
+        On <code>Not-Ready</code> the squad does not build on shaky inputs: it dispatches the analyst
+        or product-owner to fill the blocking gaps and re-validates (capped at two cycles), and
+        escalates to you when a gap needs a human decision. When no input artifact grounds the run,
+        the gate is a silent no-op. It ships with the <code>product</code> and <code>full</code>
+        profiles; other profiles are offered the role when a run turns out to be requirements-driven.
+      </p>
+
       <h2>Approving remotely (unattended / VM runs)</h2>
       <p>
         If you run the squad on a VM for a long job, pick the <code>github-issue</code> approval
@@ -303,7 +320,7 @@ on:
 
       <h2>Finding the details behind a gate</h2>
       <p>
-        When the squad pauses at a gate — a council verdict, an impactful action, or the final
+        When the squad pauses at a gate — an intake-readiness or council verdict, an impactful action, or the final
         outcome — the chat message stays deliberately short so it does not bury the conversation.
         The full reasoning lives in <code>.copilot-tracking/squad/decisions.md</code>, which is
         <strong>append-only</strong>: a new <code>## Council Verdict</code> entry is inserted in the

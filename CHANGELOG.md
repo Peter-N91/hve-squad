@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2026-07-20
+
+### Added
+
+- **Requirements intake gate (conditional pre-work readiness check)** — before the squad plans, implements, or produces a deliverable on work grounded in requirement or input artifacts (a PRD, BRD, specification, user story, design document, transcript, or a user-referenced file), the coordinator now runs an intake gate that validates those inputs for completeness, clarity, testability, consistency, and scope boundaries, and records an `## Intake Readiness Verdict` (`Ready`, `Ready-With-Gaps`, or `Not-Ready`) in `decisions.md`. On `Not-Ready` it runs a bounded auto-remediation loop (dispatch `analyst`/`product-owner` to fill the blocking gaps, then re-validate; capped at two cycles) and escalates when a gap needs a human decision. The gate is conditional and additive: with no input artifacts in scope it is a silent no-op.
+  - New `squad-intake-gate.instructions.md` conventions: trigger conditions, gate membership, readiness assessment, verdict synthesis, the auto-remediation loop, the Intake Readiness Verdict schema, the verdict anchor and reuse, and mode/federation interaction (`squad-src/.github/instructions/squad/squad-intake-gate.instructions.md`).
+  - New `intake-validator` role seeded into the `product` and `full` profiles (addable to any roster), reusing existing agents by input type — Product Manager Advisor (default), PRD Quality Reviewer, BRD Quality Reviewer, and Task Challenger (`squad-src/.github/instructions/squad/squad-roster.instructions.md`).
+  - Routing gains an Intake Gate section and an explicit `intake-validator` routing row; the gate runs ahead of the Implementation Gate and, in profiles without the role, escalates to add it rather than skipping the check (`squad-src/.github/instructions/squad/squad-routing.instructions.md`).
+  - The Squad Coordinator runs the gate in its per-turn protocol and as autopilot stage 0; the Squad Federation Coordinator inherits it per sub-squad; the Squad Scribe writes the Intake Readiness Verdict (`squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-scribe.agent.md`).
+  - Autopilot adds a conditional intake stage (stage 0) with an artifact gate and a Risk Gate trigger for an unclearable `Not-Ready`; the state conventions record the intake stage in proof-of-dispatch; the squad skill documents the gate procedure and seed templates (`squad-src/.github/instructions/squad/squad-autopilot.instructions.md`, `squad-src/.github/instructions/squad/squad-state.instructions.md`, `squad-src/.github/skills/squad/SKILL.md`).
+  - Documented the intake gate on the usage page and the home page (`docs/usage.html`, `docs/index.html`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.10.3"
+```
+
+[0.10.3]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.3
+
 ## [0.10.2] - 2026-07-17
 
 ### Added

@@ -36,6 +36,7 @@ Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches t
 
 **Precondition — the squad must be built first.** Before the Research stage runs, a confirmed squad must exist: `.copilot-tracking/squad/team.md` and `routing.md` are present. When they are missing, the coordinator runs Init Mode (propose → confirm → create) from `.github/agents/squad/squad-coordinator.agent.md` to completion — including the user's profile confirmation — and only then enters the pipeline. Autopilot never auto-seeds the roster or starts Research without a built squad; the opt-in sequences the work, it does not waive the build.
 
+0. **Intake gate (conditional).** When the run's work is grounded in requirement or input artifacts (a PRD, BRD, specification, requirements document, user story, design document, transcript, or a user-referenced input file), run the intake gate per `.github/instructions/squad/squad-intake-gate.instructions.md` before Research: dispatch `intake-validator`, record the `## Intake Readiness Verdict` through the Scribe, and on `Not-Ready` run the bounded auto-remediation loop (dispatch `analyst` or `product-owner`, re-validate, cap two cycles). A `Not-Ready` the loop cannot clear fires a Human Gate (Risk Gate). When no input artifact grounds the run, this stage is a no-op and the pipeline starts at Research. When inputs ground the run but the roster lacks `intake-validator` (profiles other than `product` and `full`), the coordinator escalates to add the role before advancing.
 1. **Research.** Dispatch the `researcher` role (and any parallel-eligible read-only roles the request matches) at `auto` tier. Gather findings; no human gate.
 2. **Plan.** Dispatch the `lead` role to produce the implementation plan. In autopilot the plan does not pause for per-step human confirmation; the coordinator advances once the plan is recorded through the Scribe. When the team carries two or more **deliverable-producing roles** (see *Deliverable Fan-Out* below), the plan also enumerates the requested deliverables and the specialist role that owns each, in dependency order; that deliverable list becomes the Implement stage's execution script.
 3. **Pre-implementation council.** When the work crosses two or more council-member domains (architecture, security, cost, product-fit, RAI), run the council per `.github/instructions/squad/squad-council.instructions.md` before any implementation dispatch. A `Stop` verdict fires a Human Gate. A `Go` or `Go-With-Conditions` verdict permits the implementation stage with the conditions attached as inputs.
@@ -68,6 +69,7 @@ Each pipeline stage is gated on the prior stage's artifact existing on disk. The
 
 | Stage     | Mapped role(s)                                                                  | Must produce                              | Cannot start until                                     |
 |-----------|--------------------------------------------------------------------------------|-------------------------------------------|--------------------------------------------------------|
+| intake    | `intake-validator` (+`analyst`/`product-owner` on remediation)                 | a `## Intake Readiness Verdict` in `decisions.md` (only when inputs ground the run) | requirement or input artifacts are in scope |
 | research  | `researcher`                                                                   | `.copilot-tracking/research/<date>/*.md`  | request classified                                     |
 | plan      | `lead`                                                                          | `.copilot-tracking/plans/*.md`            | a research artifact exists                             |
 | council   | `architect`, `security`, `cost-manager`, `product-owner` (+`rai` when relevant) | a `## Council Verdict` in `decisions.md`  | a plan artifact exists                                 |
@@ -110,6 +112,7 @@ Autopilot also stops, regardless of pipeline stage, on any of these — identica
 * Any compliance violation flagged by `rai` or `security` (regulated-data handling, PII leakage, GDPR/HIPAA scope).
 * Divergence: two consecutive validator cycles producing different verdicts on the same issue.
 * The configured per-turn cost ceiling (`cost-ceiling=$X`) would be exceeded by the next stage or cycle.
+* An intake-readiness `Not-Ready` verdict the bounded auto-remediation loop could not clear (see `.github/instructions/squad/squad-intake-gate.instructions.md`).
 
 A single qualifying trigger is enough to fire the gate, no matter how many other findings are clean.
 

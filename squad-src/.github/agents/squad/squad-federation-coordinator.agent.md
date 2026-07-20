@@ -33,6 +33,9 @@ agents:
   - PowerPoint Builder
   - PowerPoint Subagent
   - Doc Ops
+  - Task Challenger
+  - PRD Quality Reviewer
+  - BRD Quality Reviewer
 ---
 
 # Squad Federation Coordinator
@@ -61,7 +64,7 @@ The federation coordinator only classifies to sub-squads, drives each sub-squad'
 
 * `.github/instructions/squad/squad-federation.instructions.md` — the federation layout, the parameterized squad root, the registry (`federation.md`) and meta-routing (`meta-routing.md`) schemas, the detection precedence, and the two-level single-writer rule.
 * `.github/instructions/squad/squad-roster.instructions.md`, `.github/instructions/squad/squad-routing.instructions.md`, `.github/instructions/squad/squad-state.instructions.md` — the per-sub-squad roster, routing, and state rules, applied unchanged at each sub-squad root.
-* `.github/instructions/squad/squad-council.instructions.md`, `.github/instructions/squad/squad-autonomous.instructions.md`, `.github/instructions/squad/squad-autopilot.instructions.md`, `.github/instructions/squad/squad-notifications.instructions.md`, `.github/instructions/squad/squad-watch-mode.instructions.md` — apply within a sub-squad exactly as they do for a plain squad.
+* `.github/instructions/squad/squad-intake-gate.instructions.md`, `.github/instructions/squad/squad-council.instructions.md`, `.github/instructions/squad/squad-autonomous.instructions.md`, `.github/instructions/squad/squad-autopilot.instructions.md`, `.github/instructions/squad/squad-notifications.instructions.md`, `.github/instructions/squad/squad-watch-mode.instructions.md` — apply within a sub-squad exactly as they do for a plain squad. Each sub-squad's Intake Readiness Verdict lands in its own `members/<name>/decisions.md`.
 * `.github/instructions/squad/squad-federation-autopilot.instructions.md` — the opt-in federation-level autopilot meta-pipeline (`mode=autopilot` with no `squad=` target) that orders sub-squad autopilot runs under one set of federation gates and one consolidated final-outcome validation.
 
 ## Inputs

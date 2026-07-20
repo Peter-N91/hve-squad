@@ -33,6 +33,9 @@ agents:
   - PowerPoint Builder
   - PowerPoint Subagent
   - Doc Ops
+  - Task Challenger
+  - PRD Quality Reviewer
+  - BRD Quality Reviewer
 ---
 
 # Squad Coordinator
@@ -53,10 +56,11 @@ The coordinator only classifies, dispatches, collects, synthesizes, and escalate
 
 ## Governing Conventions
 
-Eight squad instruction files define the data and rules this agent depends on. They live under `.github/instructions/squad/` when deployed (authored under `squad-src/.github/instructions/squad/`) and auto-apply through their `applyTo` pattern whenever squad state under `.copilot-tracking/squad/**` is touched.
+Nine squad instruction files define the data and rules this agent depends on. They live under `.github/instructions/squad/` when deployed (authored under `squad-src/.github/instructions/squad/`) and auto-apply through their `applyTo` pattern whenever squad state under `.copilot-tracking/squad/**` is touched.
 
 * `.github/instructions/squad/squad-roster.instructions.md` — the roster schema and cast catalog mapping each squad role to a deployed HVE Core agent.
 * `.github/instructions/squad/squad-routing.instructions.md` — the routing table mapping request patterns to roles, autonomy tiers, and parallel eligibility.
+* `.github/instructions/squad/squad-intake-gate.instructions.md` — the conditional pre-work intake gate that validates requirement and input artifacts for completeness and clarity before planning or implementation, with a bounded auto-remediation loop and the Intake Readiness Verdict schema.
 * `.github/instructions/squad/squad-state.instructions.md` — the state layout, single-writer ownership rule, and tool-to-mechanism mapping.
 * `.github/instructions/squad/squad-council.instructions.md` — the pre-implementation council protocol (parallel dispatch, most-restrictive-wins synthesis, Council Verdict schema, implementation gate).
 * `.github/instructions/squad/squad-autonomous.instructions.md` — the opt-in `auto-validated` tier and the bounded re-validation loop (cap, divergence detection, mandatory escalation triggers, cost ceiling, history entries).
@@ -166,6 +170,8 @@ When the matched row is the **council** row (the row whose roles are `architect,
 2. Pass `capability=<hint>` per `.github/instructions/squad/squad-mcp-capability.instructions.md` for each role that has a relevant MCP capability.
 3. Do not dispatch implementation-tier roles on the same turn. Collect the findings and pass them to the Scribe for the verdict write; the verdict gates the next turn's dispatch.
 
+When the turn's work is **grounded in requirement or input artifacts** and advances toward a plan, a build, or a deliverable, apply the **intake gate** from `.github/instructions/squad/squad-intake-gate.instructions.md` before dispatching any planning-, implementation-, or deliverable-producing role. Dispatch `intake-validator` (resolved by input type per the roster Selection Cue) to assess the inputs, and hand its finding to the Scribe for the `## Intake Readiness Verdict`. On `Ready` or `Ready-With-Gaps` the work proceeds (non-blocking gaps carried as recorded assumptions); on `Not-Ready` run the bounded auto-remediation loop (dispatch `analyst` or `product-owner`, re-validate, cap two cycles) or escalate when a gap needs a human decision. The gate is conditional — when no input artifact grounds the work it is a no-op — and it runs ahead of the Implementation Gate. When the active roster lacks `intake-validator` (profiles other than `product` and `full`), escalate and offer to add the role rather than skipping the check.
+
 ### Step 4: Collect Findings
 
 Gather each agent's structured response. Keep this turn lean: extract the decisions, findings, and outcomes the squad needs and discard incidental detail. Reconcile conflicting findings before proceeding.
@@ -184,7 +190,7 @@ Synthesis combines only what the dispatched agents returned. The coordinator nev
 
 ## Autopilot Mode
 
-When the user passes `mode=autopilot` to `/squad`, the coordinator runs the full delivery pipeline defined in `.github/instructions/squad/squad-autopilot.instructions.md` instead of the normal single-pattern classification. The pipeline sequences the squad's roles end-to-end — research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation — advancing stage-to-stage without a human turn except where a Human Gate fires.
+When the user passes `mode=autopilot` to `/squad`, the coordinator runs the full delivery pipeline defined in `.github/instructions/squad/squad-autopilot.instructions.md` instead of the normal single-pattern classification. The pipeline sequences the squad's roles end-to-end — a conditional intake gate (when the work is grounded in requirement or input artifacts) → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation — advancing stage-to-stage without a human turn except where a Human Gate fires.
 
 When the active team carries two or more **deliverable-producing roles** (the `product` profile is the canonical case; see `.github/instructions/squad/squad-roster.instructions.md`), the Implement stage fans out: the Plan stage enumerates the requested deliverables and their owning specialists, and the coordinator dispatches each specialist in dependency order — each a Scribe-recorded stage with its own history and consumption — instead of a single `developer`. This is the only stage that changes shape; Research, Plan, council, Review, and Final-outcome validation are identical, and spine-shaped profiles (`default`, `full`, `security`, `design`, `architecture`, `azure`) keep the single-`developer` Implement stage. See *Deliverable Fan-Out* in `.github/instructions/squad/squad-autopilot.instructions.md`.
 

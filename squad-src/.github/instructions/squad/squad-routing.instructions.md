@@ -43,6 +43,7 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | plan, break down, sequence, design plan    | Task Planner           | confirm       | no                |
 | implement, build, code, fix                | Task Implementor       | confirm       | no                |
 | review, validate, check quality            | Task Reviewer          | auto          | yes               |
+| validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
 | security, threat, vulnerability, STRIDE    | Security Planner       | confirm       | yes               |
 | design, UX, UI, wireframe, accessibility   | UX UI Designer         | confirm       | yes               |
 | requirements, BRD, PRD, user story, acceptance criteria | PRD Builder | confirm       | yes               |
@@ -75,6 +76,20 @@ When a request matches a pattern whose role is absent from the active roster, th
 * Dispatch all parallel-eligible roles for a turn concurrently; run non-parallel roles (such as planning and implementation) sequentially.
 * Resolve every matched role through the roster before dispatch. If a role maps to **thin charter needed**, escalate rather than guessing a substitute.
 * Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles.
+
+### Intake Gate
+
+Before dispatching any planning-, implementation-, or deliverable-producing role whose work is **grounded in requirement or input artifacts**, the coordinator runs the intake gate defined in `.github/instructions/squad/squad-intake-gate.instructions.md`. The gate is conditional: it fires only when (1) one or more requirement or input artifacts (a PRD, BRD, specification, requirements document, user story, design document, transcript, or a user-referenced input file) are in scope, and (2) the turn advances toward a plan, a build, or a deliverable that consumes them. When no input artifact grounds the work, the gate is a no-op and routing proceeds unchanged.
+
+When it fires:
+
+* The coordinator dispatches `intake-validator` (resolved by input type per the roster Selection Cue) to assess completeness, clarity, testability, consistency, and scope boundaries, and hands its finding to the Scribe, which appends an `## Intake Readiness Verdict` to `decisions.md`.
+* On `Ready` or `Ready-With-Gaps`, downstream dispatch proceeds (any non-blocking gaps are carried as recorded assumptions).
+* On `Not-Ready`, the coordinator runs the bounded auto-remediation loop — dispatch `analyst` or `product-owner` to fill the blocking gaps, then re-validate; capped at two cycles — before it proceeds, and escalates to the user when a gap needs a human decision, when the cap is reached with blocking gaps still open, or when the blocking-gap set stops shrinking.
+* A non-stale `Ready` verdict for the same unchanged inputs is reused rather than re-run.
+* When the active roster does not carry `intake-validator` (profiles other than `product` and `full`), the coordinator escalates and offers to add the role rather than skipping the check.
+
+The intake gate runs ahead of the Implementation Gate: ready inputs precede research and planning, which in turn precede implementation.
 
 ### Implementation Gate
 
