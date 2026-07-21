@@ -384,6 +384,9 @@ td { color: var(--muted); }
 .video-figure {
   margin: 20px 0 28px;
   padding: 12px;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -391,6 +394,7 @@ td { color: var(--muted); }
 .video-figure video {
   display: block;
   width: 100%;
+  max-width: 100%;
   height: auto;
   border-radius: calc(var(--radius) - 4px);
   background: #000;
