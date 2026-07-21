@@ -56,3 +56,25 @@ See [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html
 - Releases follow [Semantic Versioning](https://semver.org/).
 - See [CHANGELOG.md](CHANGELOG.md) for what is included in each version.
 - Consumers can pin to a tagged version, for example `apm install "Peter-N91/hve-squad#vX.Y.z"`.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+The MIT License covers the original work in this repository (the `squad-src/`
+tree, `docs/`, `scripts/`, and package metadata). It does not extend to the
+third-party dependencies this package composes, which retain their own
+licenses. See [NOTICE](NOTICE) for attribution details.
+
+## Acknowledgements
+
+hve-squad is a distribution and composition layer built on top of
+[microsoft/hve-core](https://github.com/microsoft/hve-core), which is licensed
+under the MIT License (© Microsoft Corporation). Dependencies are declared in
+[apm.yml](apm.yml) and fetched at install time into `apm_modules/` (not
+redistributed in this repository).
+
+Some `hve-core` skill content is derived from OWASP Foundation publications and
+is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/);
+those skills carry their own attribution. See [NOTICE](NOTICE) for the full
+third-party attribution and trademark notice.

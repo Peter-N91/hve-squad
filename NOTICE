@@ -1,0 +1,39 @@
+hve-squad
+Copyright (c) 2026 Peter-N91
+
+This product is licensed under the MIT License (see the LICENSE file). The MIT
+License applies to the original work authored in this repository: the
+`squad-src/` tree, `docs/`, `scripts/`, and package metadata files.
+
+This product is a distribution and composition layer and depends on third-party
+software that retains its own licensing. It does not redistribute the source of
+those dependencies; they are declared in `apm.yml` and fetched at install time
+into `apm_modules/` (git-ignored).
+
+--------------------------------------------------------------------------------
+Third-party attributions
+--------------------------------------------------------------------------------
+
+microsoft/hve-core
+  https://github.com/microsoft/hve-core
+  Copyright (c) Microsoft Corporation
+  Licensed under the MIT License.
+
+  Most hve-core content is MIT-licensed. Certain skill content derived from
+  OWASP Foundation publications is licensed under Creative Commons
+  Attribution-ShareAlike 4.0 International (CC BY-SA 4.0):
+  https://creativecommons.org/licenses/by-sa/4.0/
+  Each affected skill identifies its license in frontmatter and includes a
+  Third-Party Attribution section. See the hve-core THIRD-PARTY-NOTICES file for
+  full details: https://github.com/microsoft/hve-core/blob/main/THIRD-PARTY-NOTICES
+
+--------------------------------------------------------------------------------
+Trademark notice
+--------------------------------------------------------------------------------
+
+This project may reference trademarks or logos for projects, products, or
+services (including Microsoft). Authorized use of Microsoft trademarks or logos
+is subject to and must follow Microsoft's Trademark & Brand Guidelines. Use of
+Microsoft trademarks or logos in modified versions of this project must not
+cause confusion or imply Microsoft sponsorship. Any use of third-party
+trademarks or logos is subject to those third parties' policies.
