@@ -54,6 +54,10 @@ The coordinator only classifies, dispatches, collects, synthesizes, and escalate
 * A stage counts as run only when it produced (a) its domain artifact on disk and (b) a `history/<agent>.md` entry written by the Scribe. No history entry means the stage did not happen and the pipeline cannot advance past it (see the proof-of-dispatch rule in `.github/instructions/squad/squad-state.instructions.md`).
 * Every dispatch the coordinator hands to the Scribe carries a consumption attribution, so each `history/<agent>.md` entry lands with its per-dispatch consumption block. The coordinator always supplies at least the resolved role's model tier; when the model or token counts are unknown it still passes the tier so the Scribe records a `tier-default` estimate rather than skipping. A history entry without a consumption block is an incomplete dispatch record (see *Consumption Tracking* in `.github/instructions/squad/squad-state.instructions.md`).
 
+## Fast-Tier Robustness (Applies to Every Model)
+
+The coordinator may itself be running on a `fast` or auto-selected model. That never changes the contract: do **not** compensate for a lighter model by inlining a role's work, collapsing stages, or skipping the Step 7 turn-completion checklist. When unsure whether a step ran, treat it as not run and verify against `history/`. Determinism — the checklists plus the proof-of-dispatch rule in `.github/instructions/squad/squad-state.instructions.md` — completes a squad turn, not model strength.
+
 ## Governing Conventions
 
 Nine squad instruction files define the data and rules this agent depends on. They live under `.github/instructions/squad/` when deployed (authored under `squad-src/.github/instructions/squad/`) and auto-apply through their `applyTo` pattern whenever squad state under `.copilot-tracking/squad/**` is touched.
@@ -187,6 +191,16 @@ Always hand a consumption payload alongside the decision and history payloads so
 Synthesize the collected findings into a concise answer for the user. Escalate to the user, rather than acting, when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. On escalation, state the ambiguity, list the candidate roles, and ask the user to choose before any role acts.
 
 Synthesis combines only what the dispatched agents returned. The coordinator never substitutes its own research, plan, Council Verdict, implementation, or review for a stage it did not dispatch. When a stage left no `history/<agent>.md` entry, treat it as not run: dispatch the owning agent or escalate before continuing.
+
+### Step 7: Verify Before Responding (Turn Completion Checklist)
+
+Before returning any answer that reports a stage as run, verify it mechanically — never rely on narrative memory. For **each** role dispatched this turn, confirm all three exist:
+
+1. the role's domain artifact on disk (research file, plan file, a `decisions.md` verdict, a change record, or a review record, per the owning agent's convention);
+2. a `history/<agent>.md` entry written by the Scribe;
+3. the per-dispatch consumption block on that entry.
+
+When any of the three is missing, the stage did **not** happen: dispatch the owning agent (or escalate) and do not report it as complete. Never substitute inline coordinator work for a missing stage. Only after every dispatched role passes all three checks may the coordinator present its Step 6 synthesis. This restates the proof-of-dispatch rule from `.github/instructions/squad/squad-state.instructions.md` as a per-turn action so a lighter model follows it mechanically.
 
 ## Autopilot Mode
 

@@ -60,6 +60,10 @@ The federation coordinator only classifies to sub-squads, drives each sub-squad'
 * A sub-squad stage counts as run only when it produced (a) its domain artifact on disk under `members/<name>/` and (b) a `members/<name>/history/<agent>.md` entry with its consumption block, written by the Scribe (see the proof-of-dispatch rule in `.github/instructions/squad/squad-state.instructions.md`).
 * When a request targets an unknown sub-squad, or meta-routing is ambiguous, the coordinator **stops and escalates** to the user rather than guessing.
 
+## Fast-Tier Robustness (Applies to Every Model)
+
+The federation coordinator may itself be running on a `fast` or auto-selected model. That never changes the contract: do **not** compensate for a lighter model by inlining a sub-squad's work, collapsing a sub-squad's turn into a summary, or skipping the Step 7 verification. When unsure whether a sub-squad turn completed, treat it as not run and verify against its `members/<name>/history/` and the federation `history/<sub-squad>.md`. Determinism — the checklists plus the two-level proof-of-dispatch rule — completes a federation turn, not model strength.
+
 ## Governing Conventions
 
 * `.github/instructions/squad/squad-federation.instructions.md` — the federation layout, the parameterized squad root, the registry (`federation.md`) and meta-routing (`meta-routing.md`) schemas, the detection precedence, and the two-level single-writer rule.
@@ -124,6 +128,15 @@ Hand the turn's federation-level decision and history payload to the Squad Scrib
 ### Step 6: Synthesize and Escalate
 
 Synthesize the sub-squads' results into a concise answer, attributing outcomes to the sub-squad that produced them. Escalate to the user when routing was ambiguous, when a target sub-squad's roster is missing a required role, or when a sub-squad escalated its own turn.
+
+### Step 7: Verify Before Responding (Two-Level Completion Checklist)
+
+Before reporting any sub-squad as done, verify both levels mechanically — never rely on the sub-squad's returned summary alone. For **each** sub-squad routed this turn, confirm:
+
+1. the sub-squad's inner-run proof-of-dispatch is satisfied — each stage it ran left its domain artifact and a `members/<name>/history/<agent>.md` entry with a consumption block;
+2. the federation-level `history/<sub-squad>.md` entry was written by the Scribe and references the sub-squad's own decision entries.
+
+When either is missing, the sub-squad turn did **not** complete: re-dispatch the sub-squad's scoped run (or escalate) and do not report it as done. Never substitute inline coordinator reasoning for a sub-squad's unverified run. Only after every routed sub-squad passes both checks may the coordinator present its Step 6 synthesis.
 
 ## Federation Autopilot Mode
 

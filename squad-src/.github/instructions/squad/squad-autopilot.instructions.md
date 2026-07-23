@@ -80,6 +80,10 @@ When a required artifact is missing, the coordinator dispatches the owning agent
 
 For a **deliverable fan-out** run (see above), the single `implement` row expands into one sub-row per planned deliverable: each owning specialist must produce its artifact (under `.copilot-tracking/` or `docs/`, per that agent's convention) and its own `history/<agent>.md` entry before the Review stage runs. The Review stage does not begin until every planned deliverable has a recorded artifact or the coordinator has escalated the gap.
 
+## Per-Stage Advance Checklist (Run After Every Stage)
+
+Do not advance from stage N to stage N+1 until, for stage N, both are confirmed on disk: (a) the required artifact from the *Artifact Gates* table above, and (b) a `history/<agent>.md` entry with its consumption block. When either is absent, re-dispatch the owning role or fire the Risk Gate — never advance on assumed completion. State the confirmed evidence (the artifact path and the history entry) when reporting the stage. For a deliverable fan-out run, apply this check per deliverable before the Review stage begins. This restates the Artifact Gates as a mechanical per-stage loop so a lighter model cannot skip a stage by narrating it as done.
+
 ## Human Gates
 
 Human Gates are the only points where autopilot stops and hands control to the human. They are deliberately narrow. A gate stops the pipeline, fires a notification per `.github/instructions/squad/squad-notifications.instructions.md`, and waits for explicit human approval through the configured approval channel before the gated action proceeds.

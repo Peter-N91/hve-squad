@@ -66,6 +66,16 @@ Federation Human Gates are the only points where federation autopilot stops and 
 
 When the approval channel is `github-issue`, a federation gate is approvable remotely from a phone exactly as a single-squad gate is: the coordinator persists the pending gate in the federation `state.json`, fires the notification, and resumes the owning sub-squad only when an authorized approval returns — never on a timeout.
 
+## Meta-Stage Advance and Gate-Propagation Checklist (Run After Every Inner Run)
+
+Before advancing the meta-pipeline past a sub-squad's inner run, confirm all of the following — never advance on the inner run's returned summary alone:
+
+1. the inner run left its Review record and its per-stage `members/<name>/history/<agent>.md` entries (the inner run's own proof-of-dispatch is satisfied);
+2. the federation-level `history/<sub-squad>.md` meta-transition entry was written by the Scribe;
+3. **any Impactful-Action or Risk Gate raised inside the inner run was surfaced to the federation level, is attributed to the owning sub-squad, and is awaiting human approval.**
+
+Item 3 is mandatory and safety-critical: never advance the meta-pipeline past an inner gate that was not lifted to the federation level and approved. When any item is unmet, pause the meta-pipeline, re-verify, or escalate — a lighter model must not narrate an inner run as complete, or an inner gate as cleared, without this check.
+
 ## Federation Cost Ceiling
 
 An optional `cost-ceiling=$X` on a federation autopilot run applies **across the whole federation run**, not per sub-squad. The coordinator tracks the aggregate estimated cost across every sub-squad inner run and escalates through the Risk Gate when the aggregate would exceed the ceiling on the next meta-stage or inner-run cycle, rather than enforcing a separate ceiling inside each sub-squad. Each sub-squad's own consumption ledger under `members/<name>/` is unchanged; the federation-level aggregate is the sum across sub-squads recorded in the federation `state.json` `currentRun`.

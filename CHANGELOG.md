@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.5] - 2026-07-23
+
+### Changed
+
+- **Auto-mode reliability hardening for the squad orchestrators** — restated the existing proof-of-dispatch and artifact-gate rules as mechanical, imperative checklists so lighter or auto-selected models follow them step-by-step instead of narrating skipped stages. Additive only: no new modes, gates, or human approvals, and no behavior change for frontier models.
+  - Squad Coordinator gains a **Step 7: Verify Before Responding** turn-completion checklist and a **Fast-Tier Robustness** callout (`squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+  - Squad Federation Coordinator gains a two-level **Step 7** verification and a **Fast-Tier Robustness** callout (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+  - Autopilot adds a **Per-Stage Advance Checklist**; federation autopilot adds a **Meta-Stage Advance and Gate-Propagation Checklist** that requires an inner sub-squad gate to be surfaced and approved before the meta-pipeline advances (`squad-src/.github/instructions/squad/squad-autopilot.instructions.md`, `squad-src/.github/instructions/squad/squad-federation-autopilot.instructions.md`).
+- Updated hve-core dependency pin to `a66a3ce` (a66a3ceb1ebaa7d06b201186a05bd3f75fa7a207).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.10.5"
+```
+
+[0.10.5]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.5
+
 ## [0.10.4] - 2026-07-22
 
 ### Changed
