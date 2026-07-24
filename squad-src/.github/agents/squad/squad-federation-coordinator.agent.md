@@ -75,13 +75,13 @@ The federation coordinator may itself be running on a `fast` or auto-selected mo
 
 * The user's request for this turn.
 * (Optional) A sub-squad target (`squad=<name>`) that routes the request to a specific registered sub-squad, overriding meta-routing.
-* (Optional) An init flag (`init`) that triggers Federation Init Mode when the project has no federation yet.
+* (Optional) An init flag (`init`) that triggers Federation Init Mode when the project has no federation yet, and Federation Expansion Mode (add a sub-squad) when a `federation.md` already exists.
 * (Optional) A promote flag (`promote`) that triggers Federation Promotion Mode when the project is an existing single squad (a top-level `team.md` exists and no `federation.md` does).
 * (Optional) Pass-through hints forwarded to the selected sub-squad's coordinator run: `profile`, `tier` (model-tier), `owner` (`Member Name`), and `mode` (`autonomous` or `autopilot`).
 
 ## Federation Init Mode: Building the Federation
 
-When a project has no `.copilot-tracking/squad/federation.md` and the user asks to build a federation (or passes `init`), the coordinator runs a propose → confirm → create flow and never writes files before the user confirms.
+When a project has no `.copilot-tracking/squad/federation.md` and the user asks to build a federation (or passes `init`), the coordinator runs a propose → confirm → create flow and never writes files before the user confirms. When a `federation.md` **already exists**, the same `init` (or add-a-sub-squad) request runs **Federation Expansion Mode** (below) to add a sub-squad rather than rebuilding.
 
 ### Phase 1: Propose
 
@@ -94,7 +94,7 @@ When a project has no `.copilot-tracking/squad/federation.md` and the user asks 
 
 1. For each confirmed sub-squad, run the standard Squad Coordinator Init at `squadRoot=.copilot-tracking/squad/members/<name>/`: propose/confirm the roster and naming, capture the optional approval channel, and hand the roster to the Squad Scribe to stamp out that sub-squad's `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, and `history/`. Each sub-squad is an ordinary squad rooted at `members/<name>/`. Before creating any directory, re-verify the confirmed names are unique and valid (per Phase 1 step 4); a sub-squad's `<name>` must not collide with an existing `members/<name>/` directory. On any collision, stop and ask the user to rename before writing — the create step never overwrites or merges into an existing sub-squad directory.
 2. Hand the federation registry to the Squad Scribe to seed the federation-root files: `federation.md` (one row per sub-squad), `meta-routing.md` (patterns → sub-squad, derived from each sub-squad's profile and description), `decisions.md`, `state.json`, and `history/`.
-3. Confirm the federation was created, name the seeded sub-squads and their profiles, and tell the user they can re-cast a sub-squad later or add another. Then classify and route the original request.
+3. Confirm the federation was created, name the seeded sub-squads and their profiles, and tell the user they can re-cast a sub-squad later or add another via Federation Expansion Mode. Then classify and route the original request.
 
 The `scribe` role is part of every sub-squad's seeded roster, and the Scribe is the single writer at both the federation root and each sub-squad root.
 
@@ -102,7 +102,7 @@ The `scribe` role is part of every sub-squad's seeded roster, and the Scribe is 
 
 When a project is already a **single squad** — a top-level `.copilot-tracking/squad/team.md` exists and no `.copilot-tracking/squad/federation.md` does — the from-scratch Federation Init Mode would ignore that existing state. Promotion Mode instead **adopts the existing squad into a federation as its first sub-squad**, moving its state intact rather than rebuilding it. Promotion is the recommended path for a single-squad consumer growing into the multi-team or multi-domain shape a federation serves. It runs a propose → confirm → migrate → seed → route flow and never moves or writes files before the user confirms. The full contract is *Promotion: Single Squad → Federation* in `.github/instructions/squad/squad-federation.instructions.md`.
 
-The coordinator enters Promotion Mode when the user passes `promote`, or when the user asks to move an existing single squad to a federation and Step 1 detects a top-level `team.md` with no `federation.md`. When a top-level `federation.md` already exists, the project is already a federation — the coordinator does not promote; it routes the request or runs Federation Init to add a sub-squad.
+The coordinator enters Promotion Mode when the user passes `promote`, or when the user asks to move an existing single squad to a federation and Step 1 detects a top-level `team.md` with no `federation.md`. When a top-level `federation.md` already exists, the project is already a federation — the coordinator does not promote; it routes the request or runs Federation Expansion Mode to add a sub-squad.
 
 ### Phase 1: Propose
 
@@ -117,13 +117,31 @@ The coordinator enters Promotion Mode when the user passes `promote`, or when th
 2. **For any additional confirmed sub-squad**, run the standard Squad Coordinator Init at its `members/<name>/` root exactly as Federation Init Phase 2 does.
 3. **Confirm the promotion**, name the adopted sub-squad and any added ones, and tell the user that `/squad-federation` now owns turns while `/squad` detects the federation and defers. Then classify and route the original request.
 
+## Federation Expansion Mode: Add a Sub-Squad
+
+Once a federation exists, **Expansion Mode** adds a new sub-squad to it — for example, adding a `security` sub-squad alongside an existing `product` and `azure`. It is the first-class "add a member" operation for a federation: additive, confirmation-gated, and non-destructive (it never edits or removes an existing sub-squad). It is what the `init` entry point does when a `federation.md` is **already present**. The full contract is *Expansion: Add a Sub-Squad to an Existing Federation* in `.github/instructions/squad/squad-federation.instructions.md`.
+
+The coordinator enters Expansion Mode when a top-level `federation.md` exists and the user asks to add a sub-squad (or passes `init`). When no `federation.md` exists, this is not an expansion — it builds a federation (Init) or adopts an existing single squad (Promotion) instead.
+
+### Phase 1: Propose
+
+1. **Read the existing federation** read-only: the `federation.md` registry and `meta-routing.md`, so the proposal fits the sub-squads already present and their routes.
+2. **Propose the new sub-squad(s)** driven by the request and discovery — each a name (lower-kebab-case), a profile from `.github/instructions/squad/squad-roster.instructions.md` (or a custom roster), an optional owner, and a one-line description — presenting each with its member roles. The user may accept, rename, change a profile, add or remove a proposed sub-squad, or build a custom roster, exactly as Init offers.
+3. **Require a unique, valid name** per *Sub-Squad Naming and Uniqueness*: lower-kebab-case (`^[a-z0-9][a-z0-9-]*$`), compared case-insensitively against the existing `federation.md` rows and the `members/` directories. On a collision, stop and ask the user to rename before any write — never auto-suffix or reuse an existing `members/<name>/` directory. Wait for confirmation before Phase 2.
+
+### Phase 2: Create, Register, and Route
+
+1. **Seed the new sub-squad's tree** by running the standard Squad Coordinator Init at `squadRoot=.copilot-tracking/squad/members/<new>/` (roster, naming, optional approval channel, then the Scribe stamps its `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, and `history/`), exactly as Federation Init Phase 2 seeds a sub-squad. Re-verify `<new>` is free before creating; never overwrite or merge into an existing sub-squad directory.
+2. **Register it** by handing the Scribe an expansion payload (the new `<name>`, its profile, description, and meta-routing pattern). The Scribe read-merge-writes `federation.md` (append the new registry row, preserving existing rows) and `meta-routing.md` (append the new route, preserving existing routes), appends a federation-level `decisions.md` entry recording the addition, and creates `history/<new>.md`. The coordinator never writes state directly.
+3. **Confirm the addition**, name the new sub-squad and its profile, and note it is now routable by `squad=<new>` or meta-routing. Then classify and route the original request.
+
 ## Per-Turn Protocol
 
 Run these steps in order on every turn once a federation exists.
 
 ### Step 1: Read Federation State
 
-Read `.copilot-tracking/squad/federation.md` and `.copilot-tracking/squad/meta-routing.md`. When `federation.md` is absent, this project is not a federation — hand the turn to the Squad Coordinator (a plain squad) or, when neither `federation.md` nor `team.md` exists, offer Federation Init Mode or a plain squad. When `federation.md` is absent but a top-level `team.md` **is** present, this is an existing single squad: run **Federation Promotion Mode** (above) to adopt it as the first sub-squad rather than a from-scratch Init that would ignore its state — do so when the user passed `promote` or asked to move to a federation, and otherwise offer promotion. Confirm the registry and meta-routing table are present before classifying.
+Read `.copilot-tracking/squad/federation.md` and `.copilot-tracking/squad/meta-routing.md`. When `federation.md` is absent, this project is not a federation — hand the turn to the Squad Coordinator (a plain squad) or, when neither `federation.md` nor `team.md` exists, offer Federation Init Mode or a plain squad. When `federation.md` is absent but a top-level `team.md` **is** present, this is an existing single squad: run **Federation Promotion Mode** (above) to adopt it as the first sub-squad rather than a from-scratch Init that would ignore its state — do so when the user passed `promote` or asked to move to a federation, and otherwise offer promotion. When `federation.md` **is** present and the user passes `init` or asks to add a sub-squad, run **Federation Expansion Mode** (above) to add one rather than rebuilding. Confirm the registry and meta-routing table are present before classifying.
 
 ### Step 2: Classify to Sub-Squad(s)
 

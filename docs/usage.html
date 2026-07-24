@@ -457,7 +457,25 @@ flowchart TD
         It is <strong>safe and additive</strong>: a relocation, not a delete or rewrite; it refuses on a
         name collision or when a <code>federation.md</code> already exists; and a consumer who never
         promotes is completely unaffected. You can adopt more sub-squads alongside the promoted one in
-        the same turn, or add them later with <code>/squad-federation init</code>.
+        the same turn, or add them later (see below).
+      </p>
+
+      <h3>Add a sub-squad to an existing federation</h3>
+      <p>
+        Federations grow. Once a federation exists, <code>/squad-federation init</code> (or just asking
+        to add a sub-squad) runs <strong>Expansion Mode</strong> &mdash; the same <code>init</code>
+        entry point <em>builds</em> a federation on a fresh project and <em>expands</em> one that
+        already exists.
+      </p>
+      <pre><code># Add a new sub-squad to the current federation
+/squad-federation init request="add a security sub-squad for threat modeling"</code></pre>
+      <p>
+        Expansion proposes the new sub-squad (name, profile, roles) and, on your confirmation, seeds it
+        under <code>members/&lt;new&gt;/</code> and registers it &mdash; appending a row to
+        <code>federation.md</code> and a route to <code>meta-routing.md</code>, plus a federation
+        decision entry. It is <strong>additive and non-destructive</strong>: existing sub-squads are
+        never edited or removed, and it refuses on a name collision. After it completes, the new
+        sub-squad is routable by <code>squad=&lt;new&gt;</code> or by meta-routing keyword.
       </p>
       <p>
         Autonomy modes work <em>inside</em> a targeted sub-squad &mdash;

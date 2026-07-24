@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.8] - 2026-07-24
+
+### Added
+
+- **Add a sub-squad to an existing federation (Federation Expansion)** — a federation can now grow: once a `federation.md` exists, `/squad-federation init` (or an add-a-sub-squad request) runs **Federation Expansion Mode**, which proposes and, on confirmation, seeds a new sub-squad under `members/<new>/` and registers it — appending a row to `federation.md` and a route to `meta-routing.md` (preserve-on-replace, so existing sub-squads are untouched), plus a federation-level decision entry and `history/<new>.md`. The same `init` entry point now *builds* a federation on a fresh project and *expands* one that already exists, resolving the prior gap where adding a sub-squad was referenced but undefined. Additive, confirmation-gated, and non-destructive: it refuses on a name collision and never edits or removes an existing sub-squad.
+  - New *Expansion: Add a Sub-Squad to an Existing Federation* contract with trigger, preserve-on-replace registration, and collision guards (`squad-src/.github/instructions/squad/squad-federation.instructions.md`).
+  - The Squad Federation Coordinator gains **Federation Expansion Mode**; Init Mode branches on federation existence (build vs expand), and the previously undefined "runs Federation Init to add a sub-squad" references now point at Expansion (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+  - The Squad Scribe gains an expansion payload and **Step 11** that read-merge-writes the registry and meta-routing (preserving existing rows), appends the decision, and creates `history/<new>.md` (`squad-src/.github/agents/squad/squad-scribe.agent.md`).
+  - The `/squad-federation` prompt clarifies that `init` builds a federation or adds a sub-squad to an existing one (`squad-src/.github/prompts/squad/squad-federation.prompt.md`).
+- Documentation: an "Add a sub-squad to an existing federation" subsection in the Usage guide and an operator-view expansion bullet in the squad skill (`docs/usage.html`, `squad-src/.github/skills/squad/SKILL.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.10.8"
+```
+
+[0.10.8]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.8
+
 ## [0.10.7] - 2026-07-24
 
 ### Added

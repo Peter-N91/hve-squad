@@ -73,6 +73,26 @@ The move (step 2) removes the top-level `team.md`, so detection precedence flips
 * **No overwrite.** Promotion never moves the existing tree into a `members/<name>/` directory that already exists; on a name collision the coordinator stops and asks the user to choose a different name.
 * **Additional sub-squads (optional).** In the same promotion turn the user may add further sub-squads by reusing Federation Init's propose → confirm → create for each new one; the minimum promotion wraps the existing squad as exactly one sub-squad.
 
+## Expansion: Add a Sub-Squad to an Existing Federation
+
+Once a federation exists, a team can grow it by **adding a new sub-squad** — for example, adding a `security` sub-squad alongside an existing `product` and `azure`. Expansion is the first-class operation for this; it is additive and confirmation-gated, and it never touches an existing sub-squad. Expansion is what the Federation Init entry point does when a federation is **already present**: Init *builds* a federation on a fresh project (no `federation.md`) and *expands* one when a `federation.md` is already there.
+
+### Trigger
+
+The Squad Federation Coordinator runs Expansion when a top-level `federation.md` is present and the user asks to add a sub-squad (or passes `init`, which on an existing federation means expand, not rebuild). Nothing is written before the user confirms.
+
+### Steps
+
+1. **Propose the new sub-squad(s).** Each is a unique lower-kebab-case name, a profile (or a custom roster), an optional owner, and a one-line description, proposed from the repo and request exactly as Init proposes a sub-squad. Validate each name per *Sub-Squad Naming and Uniqueness*, comparing it against the existing `federation.md` rows and the `members/` directories.
+2. **Seed the new sub-squad's tree** under `members/<new>/` via the standard Squad Coordinator Init scoped to that root (its `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, and `history/`), exactly as Federation Init Phase 2 seeds each sub-squad.
+3. **Register it (Scribe-performed, preserve-on-replace).** `federation.md` and `meta-routing.md` use replace semantics, so the Scribe **read-merge-writes** them: it appends the new sub-squad's registry row to `federation.md` and its pattern → sub-squad route to `meta-routing.md`, preserving every existing row and route. It appends a federation-level `decisions.md` entry recording the addition and creates `history/<new>.md`. Existing sub-squad rows, routes, decisions, and history are never edited or removed.
+
+### Guards
+
+* **No overwrite.** Expansion never seeds into a `members/<new>/` directory that already exists, and never registers a name already in `federation.md`; on a collision the coordinator stops and asks the user to choose a different name.
+* **Additive only.** Expansion adds a sub-squad; it never edits, renames, or removes an existing one. Renaming or removing a sub-squad is a separate, explicit Scribe-performed operation.
+* **Requires a federation.** When no top-level `federation.md` exists, this is not an expansion: build a federation (Init) or adopt an existing single squad (Promotion) instead.
+
 ## Registry Schema (`federation.md`)
 
 The registry is the durable list of sub-squads the Federation Coordinator can route to. It begins with YAML frontmatter and a single H1, then a `## Sub-Squads` table:
