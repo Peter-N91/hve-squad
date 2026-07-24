@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-07-24
+
+### Added
+
+- **Promote a single squad to a federation (opt-in)** — an existing single-squad project (a top-level `team.md`) can now be adopted into a federation as its first sub-squad without starting over. `/squad-federation promote` runs a confirmation-gated propose → confirm → migrate → seed → route flow: it relocates the whole top-level state tree (`team.md`, `routing.md`, `decisions.md`, `history/`, consumption, and the rest) into `members/<name>/` intact — append-only decision and history logs preserved byte-for-byte — then seeds the federation meta layer (`federation.md`, `meta-routing.md`, and a federation-level decisions/history trail). The move removes the top-level `team.md`, flipping detection to federation mode. It is additive and non-destructive: a relocation rather than a rebuild, refusing on a name collision or when a `federation.md` already exists, and a consumer who never promotes is unaffected.
+  - New *Promotion: Single Squad → Federation* contract with trigger, Scribe-performed relocation and meta-seed steps, and idempotency/collision guards (`squad-src/.github/instructions/squad/squad-federation.instructions.md`).
+  - The Squad Federation Coordinator gains **Federation Promotion Mode** and a `promote` input, and its Step 1 detects an existing top-level `team.md` and routes to promotion instead of a from-scratch Init (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+  - The Squad Scribe gains a promotion payload and **Step 10** that relocates the top-level tree and seeds the federation-root meta layer as the single writer (`squad-src/.github/agents/squad/squad-scribe.agent.md`).
+  - The `/squad-federation` prompt adds the `promote` input, and the single Squad Coordinator (and `/squad` prompt) offer the `/squad-federation promote` handoff when a top-level `team.md` exists and the user asks to federate (`squad-src/.github/prompts/squad/squad-federation.prompt.md`, `squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/prompts/squad/squad.prompt.md`).
+- Documentation: a "Promote a single squad to a federation" subsection in the Usage guide and an operator-view promotion bullet in the squad skill (`docs/usage.html`, `squad-src/.github/skills/squad/SKILL.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.0"
+```
+
+[0.11.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.0
+
 ## [0.10.6] - 2026-07-24
 
 ### Changed

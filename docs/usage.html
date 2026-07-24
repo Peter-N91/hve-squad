@@ -418,7 +418,8 @@ flowchart TD
         The coordinator decides which squad you are on by a simple rule: a
         <code>federation.md</code> at the top means a federation (use <code>/squad-federation</code>);
         a top-level <code>team.md</code> means a plain squad (use <code>/squad</code> as before). The
-        two are mutually exclusive, so an existing single-squad project is untouched.
+        two are mutually exclusive, so an existing single-squad project is untouched &mdash; until you
+        choose to promote it (below).
       </p>
       <p>
         Every sub-squad has a <strong>required, unique, lower-kebab-case name</strong>, because the name
@@ -427,6 +428,36 @@ flowchart TD
         collision &mdash; it never silently reuses or overwrites a sub-squad directory. Profiles are
         proposed per sub-squad from your repo and request (just like a single squad), and you can accept,
         swap a profile, add or remove a sub-squad, or build a custom roster for any of them.
+      </p>
+
+      <h3>Promote a single squad to a federation</h3>
+      <p>
+        If you started on an older version with a <strong>single squad</strong> and now want the
+        federation shape for a more complex, multi-team or multi-domain project, you do not start over.
+        <code>/squad-federation promote</code> <strong>adopts your existing squad into a federation as
+        its first sub-squad</strong>, moving its state intact rather than rebuilding it.
+      </p>
+      <pre><code># Promote the current single squad into a federation
+/squad-federation promote
+
+# (Or just ask on /squad and accept the handoff it offers)
+/squad request="I want to move this squad to a federation"</code></pre>
+      <p>
+        Promotion runs a <strong>propose &rarr; confirm &rarr; migrate &rarr; seed &rarr; route</strong>
+        flow and never moves or writes anything before you confirm. On confirmation it relocates the
+        whole top-level state tree &mdash; <code>team.md</code>, <code>routing.md</code>,
+        <code>decisions.md</code>, <code>history/</code>, consumption, and the rest &mdash; into
+        <code>members/&lt;name&gt;/</code>, preserving your append-only decision and history logs
+        byte-for-byte, then seeds the meta layer (<code>federation.md</code>,
+        <code>meta-routing.md</code>, and a federation-level decisions/history trail). That move removes
+        the top-level <code>team.md</code>, so from the next turn <code>/squad-federation</code> owns
+        turns and <code>/squad</code> detects the federation and defers.
+      </p>
+      <p>
+        It is <strong>safe and additive</strong>: a relocation, not a delete or rewrite; it refuses on a
+        name collision or when a <code>federation.md</code> already exists; and a consumer who never
+        promotes is completely unaffected. You can adopt more sub-squads alongside the promoted one in
+        the same turn, or add them later with <code>/squad-federation init</code>.
       </p>
       <p>
         Autonomy modes work <em>inside</em> a targeted sub-squad &mdash;

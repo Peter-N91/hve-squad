@@ -49,6 +49,30 @@ The Squad Coordinator resolves what kind of squad a project has at the start of 
 
 `federation.md` at the top level versus `team.md` at the top level is the single discriminator between a federation and a plain squad. The two are mutually exclusive at the federation root: a federation keeps `team.md` only inside each `members/<name>/`, never at the top.
 
+## Promotion: Single Squad → Federation
+
+An existing single-squad project already has a top-level `team.md`, so the Init-Mode single-squad-or-federation offer (which fires only when neither `team.md` nor `federation.md` exists) never reaches it, and detection precedence keeps it a plain squad. **Promotion** is the additive path that adopts that existing squad into a federation as its first sub-squad without losing any state. It is opt-in and confirmation-gated: a consumer who never promotes is completely unaffected.
+
+Promotion is a **relocation, not a rebuild**. It moves the existing top-level squad tree under a named sub-squad root and seeds the thin meta layer; it never re-creates the roster or rewrites the append-only logs.
+
+### Trigger
+
+The Squad Federation Coordinator enters Promotion Mode when **all** of these hold: a top-level `team.md` is present, no top-level `federation.md` is present, and the user asks to move to a federation (or invokes `/squad-federation promote`). The single Squad Coordinator, on detecting a top-level `team.md` and a user request to federate, offers the handoff to `/squad-federation promote` rather than promoting anything itself. Nothing is moved or written before the user confirms.
+
+### Steps (Scribe-performed)
+
+1. **Choose the sub-squad name.** Default to a name derived from the existing squad's seeded profile (for example, `default`, `azure`, `product`), normalized to lower-kebab-case and validated per *Sub-Squad Naming and Uniqueness*. The user may override. The name must not collide with an existing `members/<name>/` directory.
+2. **Relocate the existing tree.** Move the full top-level squad state tree — `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/<agent>.md` — from `.copilot-tracking/squad/` into `.copilot-tracking/squad/members/<name>/`, preserving contents byte-for-byte. Append-only files (`decisions.md`, `history/<agent>.md`, per-dispatch consumption blocks) are moved intact, never edited or truncated. Because the squad root is parameterized (`<squadRoot>/...`), the moved files keep working unchanged once rooted at `members/<name>/`.
+3. **Seed the meta layer** at the federation root `.copilot-tracking/squad/`: `federation.md` with one row for the promoted sub-squad (profile inferred from the moved `team.md`, `kind=in-repo`, `location=members/<name>/`); `meta-routing.md` whose patterns all route to that sole sub-squad initially (derived from its profile and description); a federation `decisions.md` whose first entry records the promotion and the source→destination move; `history/<name>.md`; and a federation `state.json`.
+
+The move (step 2) removes the top-level `team.md`, so detection precedence flips from "top-level `team.md`" (plain squad) to "top-level `federation.md`" (federation) the moment promotion completes. From the next turn, `/squad-federation` owns turns and `/squad` detects the federation and defers.
+
+### Guards
+
+* **Idempotency.** When a top-level `federation.md` already exists, the project is already a federation — the coordinator does not promote; it routes the request (or runs Federation Init to add a sub-squad) instead.
+* **No overwrite.** Promotion never moves the existing tree into a `members/<name>/` directory that already exists; on a name collision the coordinator stops and asks the user to choose a different name.
+* **Additional sub-squads (optional).** In the same promotion turn the user may add further sub-squads by reusing Federation Init's propose → confirm → create for each new one; the minimum promotion wraps the existing squad as exactly one sub-squad.
+
 ## Registry Schema (`federation.md`)
 
 The registry is the durable list of sub-squads the Federation Coordinator can route to. It begins with YAML frontmatter and a single H1, then a `## Sub-Squads` table:
