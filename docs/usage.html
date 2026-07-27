@@ -330,6 +330,64 @@ on:
         <code>/squad</code> keyword, so they stay dormant until you opt an item in.
       </p>
 
+      <h3>Every run gets its own sub-squad</h3>
+      <p>
+        Unattended runs are only trustworthy if you can see what they did. So every Watch Mode run
+        executes inside a <strong>federation sub-squad dedicated to its triggering event</strong>. Issue
+        #123 gets <code>members/issue-123/</code>, with its own roster, decisions log, per-agent history,
+        and consumption ledger. Nothing from one automated run bleeds into another's trail, and months
+        later you can still open a folder and read exactly which roles ran, what they decided, and why.
+      </p>
+      <p>
+        You do not have to set the federation up first. Watch Mode <strong>bootstraps whatever is
+        missing</strong> before the run starts:
+      </p>
+      <table>
+        <thead>
+          <tr><th>What your repo has</th><th>What Watch Mode does</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Nothing yet</td>
+            <td>Creates the federation, then the event's sub-squad</td>
+          </tr>
+          <tr>
+            <td>A plain single squad</td>
+            <td>Auto-promotes it into a federation (your existing state relocated intact, logs preserved byte-for-byte), then adds the event's sub-squad alongside it</td>
+          </tr>
+          <tr>
+            <td>Already a federation</td>
+            <td>Adds the event's sub-squad</td>
+          </tr>
+          <tr>
+            <td>The event's sub-squad already exists</td>
+            <td>Reuses it and resumes &mdash; a re-labelled issue or a new PR push stays in one trail</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The names are deterministic, so you always know where to look:
+      </p>
+      <pre><code>issue-123                   # an issue, or a /squad comment on it
+pr-456                      # a PR review, or a /squad comment on the PR
+sweep-2026-07-27            # a scheduled maintenance sweep
+push-release-2-0-a1b2c3d    # a push to release/2.0 at commit a1b2c3d
+dispatch-9911223344         # a free-form manual dispatch (workflow run id)</code></pre>
+      <p>
+        Two safety properties matter here. First, a sub-squad name is a folder path, so it is derived
+        <strong>only from structural event metadata</strong> &mdash; issue and PR numbers, branch refs,
+        commit shas, the run id, the date. Never from an issue title or a comment body, which anyone
+        can write. Second, the bootstrap <strong>never writes into a sub-squad it did not create</strong>:
+        if the derived name collides with one of your own, the run comments on the source issue and
+        stops instead of overwriting it. Watch-created sub-squads are marked <code>Owner=watch-mode</code>
+        in <code>federation.md</code> and registered with a narrow, ref-keyed route, so your interactive
+        <code>/squad-federation</code> requests never land in one by accident.
+      </p>
+      <p>
+        These sub-squads are <strong>kept</strong> &mdash; they are the audit trail, so nothing prunes
+        them automatically. Archiving or removing one is a deliberate thing you ask for.
+      </p>
+
       <h2>Finding the details behind a gate</h2>
       <p>
         When the squad pauses at a gate — an intake-readiness or council verdict, an impactful action, or the final

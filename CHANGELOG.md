@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.10] - 2026-07-27
+
+### Added
+
+- **Event-scoped sub-squads for Watch Mode (continuous AI)** — every event-triggered run now executes inside a federation sub-squad dedicated to its triggering event, so what continuous AI did and why is auditable per issue, per pull request, per sweep, and per push. The Squad Federation Coordinator bootstraps whatever the repository is missing before the run starts: it initializes a federation on a bare project, **auto-promotes** an existing single squad into one (state relocated intact, append-only logs preserved byte-for-byte) and then adds the event's sub-squad, or **auto-expands** an existing federation. A re-triggered event reuses its sub-squad and resumes. Names are deterministic — `issue-<N>`, `pr-<N>`, `sweep-<YYYY-MM-DD>`, `push-<branch-slug>-<sha7>`, `dispatch-<runId>` — and are derived **only** from structural event metadata, never from issue, pull-request, or comment text, because a name becomes a filesystem path segment. The unattended promotion and expansion are auto-approved rather than confirmation-gated, bounded by writing only under `.copilot-tracking/squad/`, running only after the Watch Mode opt-in and trigger-authorization gates, and waiving no Human Gate inside the run.
+  - New *Event-Scoped Sub-Squads (Federation Bootstrap)* contract replacing the old meta-routing sub-squad selection: bootstrap decision table, naming table with slug/length/fallback rules, metadata-only naming as an injection control, reuse-collision-concurrency rules, explicit-target override, profile precedence, provenance, retention, and escalation (`squad-src/.github/instructions/squad/squad-watch-mode.instructions.md`).
+  - New *Automatic Promotion (Watch Mode)*, *Automatic Expansion (Watch Mode)*, and *Watch-Owned Sub-Squads* sections; watch-created rows carry `Owner=watch-mode` and a narrow ref-keyed meta-routing pattern (`Parallel-Eligible: no`) so interactive requests never route into an event sub-squad — no registry schema change required (`squad-src/.github/instructions/squad/squad-federation.instructions.md`).
+  - The Squad Federation Coordinator gains **Watch Mode Bootstrap Mode** and a `watch=` provenance input; Step 1 branches to it and Step 2's classification is skipped for event turns (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+  - The Squad Scribe's promotion refusal is now documented as the **compare-and-swap** that makes concurrent bootstraps safe (the loser re-detects and continues as an expansion), and its expansion step records watch provenance, the `watch-mode` owner, and the ref-keyed route (`squad-src/.github/agents/squad/squad-scribe.agent.md`).
+  - The Squad Coordinator states that Watch Mode turns arrive with `squadRoot` already set to the event's sub-squad root and never run against the top-level root (`squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+  - The `/squad-federation` prompt gains the `watch` input (`squad-src/.github/prompts/squad/squad-federation.prompt.md`).
+  - The reference trigger workflow derives the sub-squad name in its prepare step from structural metadata only, exposes it as a step output, and routes every event through `/squad-federation ... watch=...` (`squad-src/.github/skills/squad/squad-watch.workflow.yml`).
+- Documentation: an "Every run gets its own sub-squad" subsection in the Usage guide and an operator-view bullet in the squad skill (`docs/usage.html`, `squad-src/.github/skills/squad/SKILL.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.10.10"
+```
+
+[0.10.10]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.10
+
 ## [0.10.9] - 2026-07-27
 
 ### Changed

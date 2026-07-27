@@ -136,6 +136,6 @@ Squad learnings live on up to three distinct surfaces: a consumer-local writable
 
 ## Watch Mode (DR-01)
 
-Watch Mode — triggering the squad automatically on repository events (a new issue, a PR, a `/squad` comment, a schedule) so a run produces a pull request — is specified in `.github/instructions/squad/squad-watch-mode.instructions.md`. A Watch Mode run reads `routing.md` and appends to `decisions.md` and `history/<agent>.md` through the same single-writer Scribe path an interactive run uses.
+Watch Mode — triggering the squad automatically on repository events (a new issue, a PR, a `/squad` comment, a schedule) so a run produces a pull request — is specified in `.github/instructions/squad/squad-watch-mode.instructions.md`. A Watch Mode run reads `routing.md` and appends to `decisions.md` and `history/<agent>.md` through the same single-writer Scribe path an interactive run uses, rooted at the **event-scoped sub-squad** the run executes in (`.copilot-tracking/squad/members/<name>/`) rather than the top-level squad root.
 
 Watch Mode adds one backward-compatible state change: an optional `trigger` object in `state.json`, with `schemaVersion` moving to `1.2` (see [state.json Shape](#statejson-shape)). The object is additive — a squad that never runs in Watch Mode omits it — so existing state stays valid. The inbound approval half ships as the reference workflow `.github/skills/squad/github-approval-watcher.workflow.yml`; the outbound trigger half ships as the reference workflow `.github/skills/squad/squad-watch.workflow.yml`.

@@ -1,5 +1,5 @@
 ---
-description: "Squad federation layout: opt-in sub-squads under one repo, the parameterized squad root, the federation registry and meta-routing schemas, detection precedence, and two-level single-writer state"
+description: "Squad federation layout: opt-in sub-squads under one repo, the parameterized squad root, the federation registry and meta-routing schemas, detection precedence, two-level single-writer state, and the unattended Watch Mode bootstrap"
 applyTo: '**/.copilot-tracking/squad/**'
 ---
 
@@ -47,7 +47,9 @@ The Squad Coordinator resolves what kind of squad a project has at the start of 
 2. **No `federation.md`, but `team.md` present** → **plain single-squad mode**. Behavior is exactly today's: the Squad Coordinator runs the six-step protocol against `.copilot-tracking/squad/`.
 3. **Neither present** → **Init Mode**. The user is offered a plain squad (the default) or a federation of named sub-squads.
 
-`federation.md` at the top level versus `team.md` at the top level is the single discriminator between a federation and a plain squad. The two are mutually exclusive at the federation root: a federation keeps `team.md` only inside each `members/<name>/`, never at the top.
+`federation.md` at the top level versus `team.md` at the top level is the single discriminator between a federation and a plain squad. The two are mutually exclusive at the federation root: a federation keeps `team.md` only inside each `members/<name>/`, never at the top. When both are present — a state a manual edit can produce — precedence still makes the project a federation, and the stray top-level `team.md` is reported for a human to reconcile rather than silently promoted.
+
+An **event-triggered Watch Mode run** resolves the same precedence but never stops at case 2 or 3: it bootstraps whatever is missing (Init, automatic Promotion, or automatic Expansion) so the run always executes inside a sub-squad dedicated to its triggering event. See `.github/instructions/squad/squad-watch-mode.instructions.md`.
 
 ## Promotion: Single Squad → Federation
 
@@ -73,6 +75,16 @@ The move (step 2) removes the top-level `team.md`, so detection precedence flips
 * **No overwrite.** Promotion never moves the existing tree into a `members/<name>/` directory that already exists; on a name collision the coordinator stops and asks the user to choose a different name.
 * **Additional sub-squads (optional).** In the same promotion turn the user may add further sub-squads by reusing Federation Init's propose → confirm → create for each new one; the minimum promotion wraps the existing squad as exactly one sub-squad.
 
+### Automatic Promotion (Watch Mode)
+
+An event-triggered **Watch Mode** run has no human in the loop at trigger time, yet it must execute inside an event-scoped sub-squad. When such a run finds a plain single squad — a top-level `team.md` and no `federation.md` — it performs the same promotion **auto-approved**, then adds the event's own sub-squad through *Automatic Expansion* below. The full trigger contract is `.github/instructions/squad/squad-watch-mode.instructions.md`.
+
+Everything about the promotion is otherwise identical: the same Scribe-performed relocation, the same byte-for-byte preservation of the append-only logs, the same meta-layer seed, the same collision refusal. Only the confirmation step differs, and that exception is deliberately bounded — the operation writes only under `.copilot-tracking/squad/`, it runs only after the Watch Mode opt-in gate and trigger authorization have already passed, it is a relocation rather than a rebuild, and it waives no Human Gate inside the run.
+
+* **Name derivation.** The promoted sub-squad takes the name of the profile recorded in the existing `team.md` (for example `azure`, `product`), normalized and validated per *Sub-Squad Naming and Uniqueness*, falling back to `default` when the profile cannot be read. The name is never derived from the triggering event, because the squad predates it.
+* **Concurrent promotion is a compare-and-swap.** Two events may be in flight and both observe a plain single squad. The Scribe's existing refusal when a `federation.md` already exists is the swap check: the loser re-detects the repository state once and continues as an expansion instead. Only a second consecutive failure escalates.
+* **Escalation, not overwrite.** A collision with an existing `members/<name>/` directory stops the run and escalates on the source thread, exactly as the interactive guard does. Watch Mode never proceeds without its sub-squad.
+
 ## Expansion: Add a Sub-Squad to an Existing Federation
 
 Once a federation exists, a team can grow it by **adding a new sub-squad** — for example, adding a `security` sub-squad alongside an existing `product` and `azure`. Expansion is the first-class operation for this; it is additive and confirmation-gated, and it never touches an existing sub-squad. Expansion is what the Federation Init entry point does when a federation is **already present**: Init *builds* a federation on a fresh project (no `federation.md`) and *expands* one when a `federation.md` is already there.
@@ -92,6 +104,14 @@ The Squad Federation Coordinator runs Expansion when a top-level `federation.md`
 * **No overwrite.** Expansion never seeds into a `members/<new>/` directory that already exists, and never registers a name already in `federation.md`; on a collision the coordinator stops and asks the user to choose a different name.
 * **Additive only.** Expansion adds a sub-squad; it never edits, renames, or removes an existing one. Renaming or removing a sub-squad is a separate, explicit Scribe-performed operation.
 * **Requires a federation.** When no top-level `federation.md` exists, this is not an expansion: build a federation (Init) or adopt an existing single squad (Promotion) instead.
+
+### Automatic Expansion (Watch Mode)
+
+A **Watch Mode** run adds its own event-scoped sub-squad through this same expansion path, **auto-approved** rather than confirmation-gated, for the same bounded reasons given under *Automatic Promotion (Watch Mode)*. The registration is unchanged: preserve-on-replace read-merge-write of `federation.md` and `meta-routing.md`, a federation-level `decisions.md` entry, and a new `history/<name>.md`.
+
+* **Event-derived name.** The new sub-squad's name comes from the event's structural identity (`issue-<N>`, `pr-<N>`, `sweep-<YYYY-MM-DD>`, `push-<branch-slug>-<sha7>`, `dispatch-<runId>`), never from payload prose. The naming table and normalization rules live in `.github/instructions/squad/squad-watch-mode.instructions.md`.
+* **Reuse before create.** When the derived name already exists as a watch-owned sub-squad whose recorded trigger provenance matches this event, the run reuses it and no expansion occurs. A watch-owned name with different provenance is disambiguated by appending the workflow run id once.
+* **Never into a human-owned sub-squad.** When the derived name matches a sub-squad that is not watch-owned, or a `members/<name>/` directory exists with no registry row, the run escalates and stops. The no-overwrite guard is absolute in the unattended path.
 
 ## Registry Schema (`federation.md`)
 
@@ -118,6 +138,22 @@ The registry is the durable list of sub-squads the Federation Coordinator can ro
 | product   | product | in-repo | members/product/  | business-team | Requirements, roadmap, and stakeholder deliverables     |
 | azure     | azure   | in-repo | members/azure/    | architects    | Azure build: Bicep, landing-zone, cost, and deployment  |
 ```
+
+### Watch-Owned Sub-Squads
+
+Sub-squads created by the unattended Watch Mode bootstrap are marked with the registry's existing optional columns, so no schema change is needed and every existing registry stays valid:
+
+* `Owner` is `watch-mode`. This marker is the discriminator that lets the unattended path decide whether a name collision is a safe reuse or a refusal.
+* `Description` records the source ref and the terminal deliverable, for example `Watch Mode run for owner/repo#123 (issue) -> PR #456`.
+* The `meta-routing.md` route for a watch-owned sub-squad is **narrow and ref-keyed**: its `Pattern / Domain` is the exact event ref token (for example `watch: owner/repo#123`) and `Parallel-Eligible` is `no`. A broad keyword pattern would hijack interactive routing, so watch-owned sub-squads are never selected by keyword matching — Watch Mode targets them by name.
+
+```markdown
+| Sub-squad | Profile | Kind    | Location           | Owner      | Description                                          |
+|-----------|---------|---------|--------------------|------------|------------------------------------------------------|
+| issue-123 | default | in-repo | members/issue-123/ | watch-mode | Watch Mode run for owner/repo#123 (issue) -> PR #456 |
+```
+
+Watch-owned sub-squads are **retained**: they are the audit trail of what continuous AI did, so nothing prunes them automatically. Archiving or removing one is a separate, explicit, human-initiated Scribe operation, exactly as renaming or removing any sub-squad is.
 
 ### Sub-Squad Naming and Uniqueness
 
