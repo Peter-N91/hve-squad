@@ -26,13 +26,15 @@ Only `github-issue` closes the loop for a truly unattended run: it both reaches 
 
 ## Capture at Squad Build
 
+The capture is a **required question, with an optional answer**. Every build path that seeds a `notify` object — a plain squad's Init Mode, a federation's Init, Promotion, and Expansion Modes — must put the question to the user and wait for an answer before the Scribe stamps out state. The coordinator never resolves it silently to the default, never infers it from the request, and never treats it as a step it may compress away because the default is `in-chat`. `enabled: false` records a decision the user made, not a question the squad skipped. The single exception is an unattended run, which has no user to ask (see *Capture in a Federation* and *Unattended Runs*).
+
 During Init Mode (see `.github/agents/squad/squad-coordinator.agent.md`), after the roster and naming choices are confirmed and before the Scribe stamps out state, the coordinator asks the user how they want to approve the squad's work:
 
 1. **Whether to notify remotely at all.** First ask whether the user wants remote notifications. The default is **no** — `in-chat`. Explain plainly: if they are running the squad locally and staying at their PC (for example, a first run or a test), they can decline and just approve in-chat; remote notification is for unattended or long-running jobs where they step away. The squad never enables a remote channel unless the user opts in.
-2. **Approval channel (only if they opted in).** Ask which channel: `github-issue` (recommended for unattended runs — approvable from a phone) or `webhook` (outbound team ping only). Skipping this question keeps `in-chat`.
+2. **Approval channel (only if they opted in).** Ask which channel: `github-issue` (recommended for unattended runs — approvable from a phone) or `webhook` (outbound team ping only). Answering "none" here keeps `in-chat`.
 3. **Channel details.** For `github-issue`, ask for the GitHub handle to assign/mention and the `owner/repo` that hosts the approval issues (default: the current repo). For `webhook`, confirm a webhook tool/MCP or the `SQUAD_WEBHOOK_URL` environment variable is configured — never ask the user to paste the secret URL into chat or state.
 4. **Optional email.** Offer an optional email address as an extra courtesy notifier (it never serves as the approval path).
-5. **Skipping.** Every part of this is optional. When the user declines or skips, the channel stays `in-chat` and the squad still runs — it just asks for approvals in the chat session, which is exactly what a local, at-the-PC run wants.
+5. **Declining.** Every *answer* is optional. When the user declines, the channel stays `in-chat` and the squad still runs — it just asks for approvals in the chat session, which is exactly what a local, at-the-PC run wants. Declining is an answer the user gives; it is not a reason to omit the question.
 
 The coordinator hands the choices to the Scribe, which records them in `state.json` under the `notify` object (replace semantics — never appended to `decisions.md` or a history file).
 
@@ -56,6 +58,21 @@ The `notify` object in `state.json`:
 * `github.handle` / `github.repo`: the assignee/mention handle and the repo that hosts approval issues, used only by the `github-issue` channel.
 
 The webhook URL is **never** stored in `state.json`; it is read at send time from a configured tool/MCP or the `SQUAD_WEBHOOK_URL` environment variable, per the privacy rules below. The user can change or remove any of this later by asking the coordinator to update it; the Scribe rewrites the `notify` object.
+
+## Capture in a Federation
+
+A federation seeds several sub-squads in one build, so asking the four-part question once per sub-squad would be redundant. The contract is **ask once at the federation level, then inherit**:
+
+1. **Ask once, at the federation root.** The Squad Federation Coordinator puts the question to the user exactly once per build — during Federation Init Phase 1, Promotion Phase 1, or Expansion Phase 1 — before any sub-squad is seeded. It is the same required question with the same optional answer, and the same wait-for-the-user gate.
+2. **Seed the federation `notify` object.** The captured choice lands in the federation `state.json` under `notify` (replace semantics via the Scribe), where it is the federation-wide default.
+3. **Inherit into every sub-squad.** Each `members/<name>/state.json` is seeded with the same `notify` object. A sub-squad's own Init **does not re-ask**: the federation coordinator passes the captured object down, and the Squad Coordinator running with an inherited `notify` skips its own capture step rather than asking again.
+4. **Promotion reuses what already exists.** When promoting an existing single squad, its relocated `state.json` already carries a `notify` object. Reuse it as the federation default and present it back to the user for confirmation instead of asking from scratch; ask the full question only when the promoted squad has no `notify` object.
+5. **Expansion inherits by default.** A new sub-squad added to an existing federation inherits the federation `notify` object. Offer a per-sub-squad override in one line and accept the inherited value when the user does not want one.
+6. **A per-sub-squad override is allowed.** When the user asks for a different channel for one sub-squad, write that sub-squad's `notify` object and leave the federation default untouched. At send time a sub-squad's own `notify` wins over the federation default.
+
+### Unattended Runs
+
+An event-triggered Watch Mode bootstrap has no user in the loop, so it **never asks**. It inherits the federation `notify` object as-is into the event sub-squad. When the federation has no `notify` object, the event sub-squad is seeded with `in-chat` / `enabled: false` and the run's gates degrade to an in-chat approval, which the run log records — the bootstrap never invents a channel and never blocks on a question it cannot ask.
 
 ## Delivery Model
 

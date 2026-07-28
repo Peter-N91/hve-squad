@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.12] - 2026-07-28
+
+### Fixed
+
+- **The approval-channel question is no longer skippable during a federation build.** Federation Init seeded `notify` with the `in-chat` default without ever asking the user, because the capture existed only as a sub-clause inside the *create* phase ("capture the optional approval channel") rather than as a gated question, and the detailed contract lives in an instruction file whose `applyTo` (`**/.copilot-tracking/squad/**`) does not match a repository that has no squad state yet. The question is now **required with an optional answer**: declining is a decision the user makes, not a step the coordinator may compress away.
+  - The capture is promoted to a numbered **Federation Init Phase 1 step 5** with the choices inlined and an explicit wait-for-the-user gate, mirroring the single-squad treatment; Phase 2 now passes the captured object down instead of re-asking per sub-squad (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+  - New **ask-once-then-inherit** contract for federations: the channel is captured once at the federation root, seeded into the federation `state.json` `notify` object, and inherited by every `members/<name>/state.json`. Promotion reuses the existing squad's `notify` and confirms it back; Expansion inherits and offers a one-line override; a per-sub-squad override wins over the federation default at send time (`squad-src/.github/instructions/squad/squad-notifications.instructions.md`, `squad-src/.github/instructions/squad/squad-federation.instructions.md`).
+  - New **Unattended Runs** rule: a Watch Mode bootstrap has no user to ask, so it inherits the federation `notify` silently and falls back to `in-chat` rather than inventing a channel or blocking (`squad-src/.github/instructions/squad/squad-notifications.instructions.md`, `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+  - The Squad Coordinator gains an inherited `notify=<object>` input and its Init step 5 is restated as required-not-skippable, with the inherited object as the single exception (`squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+  - The Squad Scribe's init, promotion, and expansion payloads now carry the `notify` object explicitly, and promotion seeds it into the federation `state.json` (`squad-src/.github/agents/squad/squad-scribe.agent.md`).
+  - Operator-view wording aligned in the squad skill (`squad-src/.github/skills/squad/SKILL.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.10.12"
+```
+
+[0.10.12]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.12
+
 ## [0.10.11] - 2026-07-28
 
 ### Changed
