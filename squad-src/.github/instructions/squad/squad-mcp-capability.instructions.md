@@ -16,11 +16,11 @@ The coordinator passes a capability hint to each dispatched role when the role n
 | Capability         | Preferred MCP                                | Non-MCP Fallback                                                                |
 |--------------------|----------------------------------------------|---------------------------------------------------------------------------------|
 | diagram-rendering  | A draw.io MCP server when one is configured  | Render Mermaid in chat; or author Mermaid in repository markdown                |
-| ADO query          | `@azure-devops/mcp` (Microsoft official)     | RPI Researcher against the Azure DevOps REST API with a user-supplied PAT  |
-| Azure-pricing      | `msftnadavbh/AzurePricingMCP` community server | RPI Researcher against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
-| azure-resource     | `@azure/mcp` (official Azure MCP server)      | RPI Researcher against the Azure CLI (`az`) and the Azure Resource Graph / Resource Manager REST APIs using the user's `az login` context |
-| architecture-docs  | `microsoft-docs` MCP when configured         | RPI Researcher against `learn.microsoft.com` via web fetch                 |
-| code-context       | `context7` MCP when configured               | RPI Researcher against the published library documentation                 |
+| ADO query          | `@azure-devops/mcp` (Microsoft official)     | Squad Researcher against the Azure DevOps REST API with a user-supplied PAT  |
+| Azure-pricing      | `msftnadavbh/AzurePricingMCP` community server | Squad Researcher against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
+| azure-resource     | `@azure/mcp` (official Azure MCP server)      | Squad Researcher against the Azure CLI (`az`) and the Azure Resource Graph / Resource Manager REST APIs using the user's `az login` context |
+| architecture-docs  | `microsoft-docs` MCP when configured         | Squad Researcher against `learn.microsoft.com` via web fetch                 |
+| code-context       | `context7` MCP when configured               | Squad Researcher against the published library documentation                 |
 | github-issue       | `github` MCP (GitHub official) when configured | The `gh` CLI when authenticated; otherwise an in-chat ping (no remote approval) |
 
 The "Preferred MCP" column names the server the role tries first. The "Non-MCP Fallback" column is what the role does when the preferred MCP is not configured, is unreachable, or returns an error during the dispatched turn.

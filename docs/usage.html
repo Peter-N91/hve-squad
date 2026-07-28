@@ -591,15 +591,17 @@ flowchart TD
           <tr><td><code>security</code></td><td>researcher, lead, developer, tester, security, rai, fact-checker, scribe</td><td>Security, threat-modeling, responsible-AI focus</td></tr>
           <tr><td><code>design</code></td><td>researcher, lead, developer, tester, designer, scribe</td><td>UX/UI and product-design focus</td></tr>
           <tr><td><code>architecture</code></td><td>researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe</td><td>System design and architecture focus</td></tr>
-          <tr><td><code>azure</code></td><td>researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, scribe</td><td>Azure build with IaC authoring, deployment, post-deploy documentation, troubleshooting, budget, and security oversight</td></tr>
-          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, scribe</td><td>Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical)</td></tr>
+          <tr><td><code>azure</code></td><td>researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, modernizer, scribe</td><td>Azure build with IaC authoring, deployment, post-deploy documentation, troubleshooting, budget, and security oversight</td></tr>
+          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, intake-validator, scribe</td><td>Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical)</td></tr>
         </tbody>
       </table>
       <p>
         Every profile includes the <strong>methodology spine</strong> &mdash; <code>researcher</code>,
         <code>lead</code>, <code>developer</code>, and <code>tester</code> &mdash; plus <code>scribe</code>,
         so Research &rarr; Plan &rarr; Implement &rarr; Review runs in any profile. Each profile adds its
-        specialist roles on top.
+        specialist roles on top. Two further roles ship as addable extras and are seeded only in
+        <code>full</code>: <code>challenger</code>, which pressure-tests a plan and checks it against the
+        research it rests on, and <code>prompt-engineer</code>, which authors and reviews prompt artifacts.
       </p>
 
       <h2>Azure execution layer</h2>

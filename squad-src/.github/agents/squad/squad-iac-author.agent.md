@@ -3,7 +3,7 @@ name: Squad IaC Author
 description: "Converts the Squad Azure Architect's LLD table into Bicep or Terraform under infra/{track}/{project} using AVM modules; scaffolds the infra folder convention and deploy templates; never deploys"
 user-invocable: false
 agents:
-  - RPI Researcher
+  - Squad Researcher
 ---
 
 # Squad IaC Author
@@ -25,7 +25,7 @@ Read these on first use of a turn and honor them throughout.
 * The `azure-scaffold` skill provides the `infra/` folder convention and the deploy/dev-container/OIDC reference templates. Scaffold from it rather than inventing structure.
 * `.github/instructions/coding-standards/bicep/bicep.instructions.md` governs Bicep authoring.
 * `.github/instructions/coding-standards/terraform/terraform.instructions.md` governs Terraform authoring.
-* `.github/instructions/squad/squad-mcp-capability.instructions.md` governs AVM and Microsoft-docs lookups: prefer the `architecture-docs` (`microsoft-docs` MCP) or `code-context` (`context7` MCP) capability when present, and fall back to the RPI Researcher against `learn.microsoft.com` and the AVM catalog (<https://aka.ms/avm>) otherwise.
+* `.github/instructions/squad/squad-mcp-capability.instructions.md` governs AVM and Microsoft-docs lookups: prefer the `architecture-docs` (`microsoft-docs` MCP) or `code-context` (`context7` MCP) capability when present, and fall back to the Squad Researcher against `learn.microsoft.com` and the AVM catalog (<https://aka.ms/avm>) otherwise.
 * The Azure Verified Modules catalog at <https://aka.ms/avm> is the source of truth for module names and pinned versions.
 
 ## Inputs

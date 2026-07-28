@@ -112,6 +112,22 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
       <h3>Dependencies look stale</h3>
       <p>Run <code>apm run sync-deps</code>, then <code>apm lock</code>.</p>
 
+      <h3>A role never produces its artifact, or the coordinator quietly “reroutes” to another agent</h3>
+      <p>
+        Symptoms: a stage reports blocked and the run continues anyway; no
+        <code>history/&lt;agent&gt;.md</code> entry for that role; later gates pass without evidence. The usual
+        cause is a roster row whose Primary cannot accept a role-scoped dispatch — either the agent is no
+        longer deployed after an HVE Core upgrade, or it is a <em>delegated worker</em> that refuses to act
+        without a full input contract. Both look identical at run time.
+      </p>
+      <p>
+        Check the role’s Primary in <code>.copilot-tracking/squad/team.md</code> against the cast catalog in
+        <code>.github/instructions/squad/squad-roster.instructions.md</code>, and confirm the agent file exists
+        under <code>.github/agents/</code>. A role whose <em>Deliverable Root</em> its Primary cannot write is
+        always a wrong row. After any hve-core bump, re-run <code>apm install</code> and compare the cast with
+        <code>scripts/Get-HveCoreCastDelta.ps1</code>.
+      </p>
+
       <h3><code>.github</code> still appears in git status after ignoring</h3>
       <p>
         Run <code>git rm -r --cached .github</code> once, then

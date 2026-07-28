@@ -43,6 +43,8 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | plan, break down, sequence, design plan    | lead                   | confirm       | no                |
 | implement, build, code, fix                | developer              | confirm       | no                |
 | review, validate, check quality            | tester                 | auto          | yes               |
+| challenge, pressure-test, poke holes, devil's advocate, what could go wrong | challenger | auto | yes               |
+| author prompt, write agent file, refactor instructions, analyse skill | prompt-engineer | confirm | no               |
 | validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
 | security, threat, vulnerability, STRIDE    | Security Planner       | confirm       | yes               |
 | design, UX, UI, wireframe, accessibility   | UX UI Designer         | confirm       | yes               |

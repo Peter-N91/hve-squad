@@ -5,7 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.2] - 2026-07-28
+
+### Fixed
+
+- **The `researcher` role pointed at a delegated lane worker, so the Research stage could never produce its artifact.** `0.11.0` gave `lead`, `developer`, `tester`, and `technical-writer` squad-owned charters when their hve-core agents became skills, but repointed `researcher` straight at `RPI Researcher`. That agent is not a research orchestrator: it executes one bounded lane and returns `Blocked` without writing unless the dispatch supplies a cycle number, a wave type, one lane type, an exact lane path, and a **distinct parent primary artifact path** that only a parent can create. A role-scoped dispatch supplies none of those. The same commit assigned the role a Deliverable Root of `.copilot-tracking/research/<date>/` — a path that agent is contractually forbidden to write. `researcher` now resolves to the new `Squad Researcher` charter (`squad-src/.github/instructions/squad/squad-roster.instructions.md`).
+  - This was the root of a wider failure, not an isolated one. The Artifact Gates chain research → plan → implement, so a Research stage that can never produce its artifact makes **every downstream gate unsatisfiable**. A run instructed to proceed end-to-end then narrates past the gates instead of stopping: intake verdicts written outside `decisions.md`, no plan artifact, no `lead` or `tester` history entry, and deliverables presented for final approval that no gate ever cleared.
+- **Four other charters delegated lookups straight to the same lane worker.** `Squad Cost Manager`, `Squad Modernization Planner`, `Squad IaC Author`, and `Squad Azure Diagnose` each declared `RPI Researcher` in `agents:` and asked it for pricing, version, AVM, and Azure-resource lookups with plain prompts, hitting the identical guard. All four now delegate to `Squad Researcher`, as does every non-MCP fallback in the capability map (`squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md`).
+
+### Added
+
+- **`Squad Researcher`** — the parent the research stage was missing. It runs the `rpi-research` skill, creates the primary artifact **before** delegating so the worker's preflight can succeed, decomposes the request into bounded lanes, dispatches `RPI Researcher` once per lane with the full delegated-input contract, and synthesizes the lanes back into the primary artifact with the canonical `C#` and `W#` identifiers the worker is forbidden to assign.
+- **`Squad Challenger`** — fills the `challenger` role, vacant since `Task Challenger` was retired. Runs `rpi-challenger` for assumption and reasoning critique and `rpi-plan-critique` for plan-versus-research verification, restoring the capability the retired `Plan Validator` provided. Returns objections graded blocking, material, or minor.
+- **`Squad Prompt Engineer`** — fills the `prompt-engineer` role. Routes to `prompt-builder`, `prompt-refactor`, or `prompt-analyze` by request shape, and defaults to analysis when authoring intent is ambiguous.
+- **A `Worker Agents Are Not Roles` rule in the roster.** Dispatchability was necessary but not sufficient: an agent can be `user-invocable: false` and still refuse every role-scoped dispatch because it validates a delegated-input contract first. Such workers may never be a Primary or an Alternate. The rule also names the detection test — a role whose Deliverable Root its Primary cannot write is a wrong row (`squad-src/.github/instructions/squad/squad-roster.instructions.md`).
+
+### Changed
+
+- **`researcher` moves from the `fast` tier to `default`.** The charter constructs the delegated contract and performs cross-lane synthesis; the volume stays cheap because the lanes it dispatches run on `RPI Researcher`, which carries its own fast-model preference. Cheap lanes, competent synthesizer.
+- **`challenger` and `prompt-engineer` join the `full` profile and the custom-roster menu**, and both gain routing rules. `devrel` remains unselectable and is now labelled accurately: it has no agent **and no backing skill**, so a charter there would invent a capability rather than expose one.
+- **The `team.md` seed template in the squad skill gains the `Deliverable Root` column** the roster schema has required since `0.11.0`, and lists the full catalog including the three restored roles (`squad-src/.github/skills/squad/SKILL.md`).
+
+[0.11.2]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.2
+
 ## [0.11.1] - 2026-07-28
+
+> **Superseded — use 0.11.2 or later.** The `researcher` role still resolves to a delegated lane worker that cannot accept a role-scoped dispatch, so the Research stage produces no artifact and every downstream Artifact Gate is unsatisfiable. Fixed in 0.11.2.
 
 ### Fixed
 
@@ -23,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.11.1]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.1
 
 ## [0.11.0] - 2026-07-28
+
+> **Superseded — use 0.11.2 or later.** This release restored four of the five spine roles but repointed `researcher` at a delegated lane worker, so the Research stage produces no artifact and every downstream Artifact Gate is unsatisfiable. Fixed in 0.11.2.
 
 ### Fixed
 
@@ -70,7 +97,9 @@ apm install "Peter-N91/hve-squad#v0.11.0"
 
 [0.11.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.0
 
-## [0.10.12] - 2026-07-28
+## [0.10.12] - 2026-07-28 [YANKED]
+
+> **Do not use.** The squad methodology spine does not dispatch: the cast catalog names hve-core agents that no longer ship, so research, planning, implementation, and review silently produce nothing and the coordinator authors deliverables inline. Upgrade to 0.11.2 or later.
 
 ### Fixed
 
@@ -92,7 +121,9 @@ apm install "Peter-N91/hve-squad#v0.10.12"
 
 [0.10.12]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.12
 
-## [0.10.11] - 2026-07-28
+## [0.10.11] - 2026-07-28 [YANKED]
+
+> **Do not use.** The squad methodology spine does not dispatch: the cast catalog names hve-core agents that no longer ship, so research, planning, implementation, and review silently produce nothing and the coordinator authors deliverables inline. Upgrade to 0.11.2 or later.
 
 ### Changed
 
@@ -108,7 +139,9 @@ apm install "Peter-N91/hve-squad#v0.10.11"
 
 [0.10.11]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.11
 
-## [0.10.10] - 2026-07-27
+## [0.10.10] - 2026-07-27 [YANKED]
+
+> **Do not use.** The squad methodology spine does not dispatch: the cast catalog names hve-core agents that no longer ship, so research, planning, implementation, and review silently produce nothing and the coordinator authors deliverables inline. Upgrade to 0.11.2 or later.
 
 ### Added
 
@@ -132,7 +165,9 @@ apm install "Peter-N91/hve-squad#v0.10.10"
 
 [0.10.10]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.10.10
 
-## [0.10.9] - 2026-07-27
+## [0.10.9] - 2026-07-27 [YANKED]
+
+> **Do not use.** This release bumped hve-core to a commit that consolidated Research, Plan, Implement, Review, and documentation from agents into skills, but the cast catalog still named the removed agents. The methodology spine stops dispatching from here through 0.10.12. Upgrade to 0.11.2 or later; 0.10.8 is the last known-good 0.10.x.
 
 ### Changed
 

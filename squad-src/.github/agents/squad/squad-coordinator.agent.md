@@ -5,11 +5,13 @@ user-invocable: true
 disable-model-invocation: true
 agents:
   - Squad Scribe
+  - Squad Researcher
   - Squad Lead
   - Squad Implementor
   - Squad Reviewer
+  - Squad Challenger
   - Squad Technical Writer
-  - RPI Researcher
+  - Squad Prompt Engineer
   - RPI Planner
   - Codebase Profiler
   - Meeting Analyst

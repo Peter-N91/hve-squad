@@ -31,7 +31,7 @@ This skill packages the coordinator's operating procedure and the seed templates
 ## Prerequisites
 
 * A `runSubagent` or `task` tool is available so the coordinator can dispatch `user-invocable: false` agents.
-* The deployed HVE Core cast exists (RPI Researcher, System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier, PowerPoint Subagent) plus the squad-owned charters (Squad Scribe, Squad Lead, Squad Implementor, Squad Reviewer, Squad Technical Writer).
+* The deployed HVE Core cast exists (System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier, PowerPoint Subagent) plus the squad-owned charters (Squad Scribe, Squad Researcher, Squad Lead, Squad Implementor, Squad Reviewer, Squad Challenger, Squad Technical Writer, Squad Prompt Engineer).
 * Every roster Primary resolves to an installed agent that does **not** set `disable-model-invocation: true`; the coordinator's Step 1b roster-resolution precheck confirms this before any dispatch.
 * The memory tool is available for durable per-agent notes under `/memories/repo/`.
 
@@ -46,7 +46,7 @@ A profile is a curated subset of the cast tailored to a kind of project. The coo
 | Profile        | Members                                                                                                                       | Use When                                                                                     |
 |----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | `default`      | researcher, lead, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |
-| `full`         | researcher, lead, developer, tester, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, intake-validator, scribe | Complex, cross-cutting projects that need every discipline                                  |
+| `full`         | researcher, lead, developer, tester, challenger, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, prompt-engineer, intake-validator, scribe | Complex, cross-cutting projects that need every discipline                                  |
 | `security`     | researcher, lead, developer, tester, security, rai, fact-checker, scribe                                                      | Security, threat-modeling, and responsible-AI focus                                          |
 | `design`       | researcher, lead, developer, tester, designer, scribe                                                                         | UX/UI and product-design focus                                                               |
 | `architecture` | researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe                                        | System design and architecture focus                                                         |
@@ -171,7 +171,7 @@ The coordinator hands these templates to the Squad Scribe on first run, after th
 
 ### team.md
 
-Seeded from the confirmed profile's members; the template below shows the `full` profile (the entire cast catalog). For other profiles, only the profile's rows are written. The `Member Name` column is populated from the Init Mode naming step: it may be empty for roles the user chose not to name, and it must be unique within a `Role` when two rows share the same role. The role-to-agent relationship is many-to-many: each role names one **Primary** agent the coordinator dispatches by default plus optional **Alternate** agents it resolves to per the cast catalog's Selection Cue (see `squad-roster.instructions.md`). The `devrel` role has no deployed HVE Core agent and is left as **thin charter needed** until a charter is authored.
+Seeded from the confirmed profile's members; the template below shows the `full` profile (the entire cast catalog). For other profiles, only the profile's rows are written. The `Member Name` column is populated from the Init Mode naming step: it may be empty for roles the user chose not to name, and it must be unique within a `Role` when two rows share the same role. The role-to-agent relationship is many-to-many: each role names one **Primary** agent the coordinator dispatches by default plus optional **Alternate** agents it resolves to per the cast catalog's Selection Cue (see `squad-roster.instructions.md`). The `devrel` role has no deployed HVE Core agent and no backing skill, so it stays unselectable until one exists.
 
 ```markdown
 ---
@@ -182,29 +182,31 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 
 ## Members
 
-| Role            | Member Name | Agent Name (Primary)         | Alternate Agents                                       | Invocation         | Model Tier              |
-|-----------------|-------------|------------------------------|--------------------------------------------------------|--------------------|-------------------------|
-| lead            | Alpha       | Squad Lead                   | RPI Planner                                            | runSubagent / task | default                 |
-| researcher      | Beta        | RPI Researcher               | Codebase Profiler, Meeting Analyst                     | runSubagent / task | fast                    |
-| developer       | Gamma       | Squad Implementor            | —                                                      | runSubagent / task | default                 |
-| tester          | Delta       | Squad Reviewer               | Code Review Functional, Code Review Standards          | runSubagent / task | fast                    |
-| architect       | Epsilon     | System Architecture Reviewer | ADR Creator                                            | runSubagent / task | default                 |
-| azure-architect | Zeta        | Squad Azure Architect        | —                                                      | runSubagent / task | default                 |
-| security        | Eta         | Security Planner             | SSSC Planner, Skill Assessor, Finding Deep Verifier    | runSubagent / task | default                 |
-| rai             | Theta       | RAI Planner                  | RAI Skill Assessor                                     | runSubagent / task | default                 |
-| designer        | Iota        | UX UI Designer               | DT Coach, DT Learning Tutor                            | runSubagent / task | default                 |
-| fact-checker    | Kappa       | Finding Deep Verifier        | —                                                      | runSubagent / task | fast                    |
-| cost-manager    | Lambda      | Squad Cost Manager           | —                                                      | runSubagent / task | default                 |
-| iac-author      | Mu          | Squad IaC Author             | —                                                      | runSubagent / task | default                 |
-| deployer        | Nu          | Squad Deployer               | —                                                      | runSubagent / task | default                 |
-| asbuilt-author  | Xi          | Squad As-Built Author        | —                                                      | runSubagent / task | default                 |
-| azure-diagnose  | Omicron     | Squad Azure Diagnose         | —                                                      | runSubagent / task | fast                    |
-| modernizer      | Pi          | Squad Modernization Planner  | Squad SQL Migration Advisor                            | runSubagent / task | default                 |
-| presenter       | Rho         | PowerPoint Subagent          | —                                                      | runSubagent / task | default                 |
-| technical-writer | Sigma      | Squad Technical Writer       | —                                                      | runSubagent / task | fast                    |
-| intake-validator |            | Product Manager Advisor      | PRD Quality Reviewer, BRD Quality Reviewer             | runSubagent / task | fast                    |
-| scribe          |             | Squad Scribe                 | —                                                      | runSubagent / task | fast                    |
-| devrel          |             | —                            | —                                                      | —                  | — (thin charter needed) |
+| Role            | Member Name | Agent Name (Primary)         | Alternate Agents                                       | Invocation         | Model Tier              | Deliverable Root                      |
+|-----------------|-------------|------------------------------|--------------------------------------------------------|--------------------|-------------------------|---------------------------------------|
+| researcher      | Alpha       | Squad Researcher             | Codebase Profiler, Meeting Analyst                     | runSubagent / task | default                 | .copilot-tracking/research/<date>/    |
+| lead            | Beta        | Squad Lead                   | RPI Planner                                            | runSubagent / task | default                 | .copilot-tracking/plans/              |
+| developer       | Gamma       | Squad Implementor            | —                                                      | runSubagent / task | default                 | .copilot-tracking/changes/            |
+| tester          | Delta       | Squad Reviewer               | Code Review Functional, Code Review Standards          | runSubagent / task | fast                    | .copilot-tracking/reviews/            |
+| challenger      | Epsilon     | Squad Challenger             | —                                                      | runSubagent / task | default                 | .copilot-tracking/reviews/            |
+| architect       | Zeta        | System Architecture Reviewer | ADR Creator                                            | runSubagent / task | default                 | docs/architecture/                    |
+| azure-architect | Eta         | Squad Azure Architect        | —                                                      | runSubagent / task | default                 | docs/architecture/                    |
+| security        | Theta       | Security Planner             | SSSC Planner, Skill Assessor, Finding Deep Verifier    | runSubagent / task | default                 | —                                     |
+| rai             | Iota        | RAI Planner                  | RAI Skill Assessor                                     | runSubagent / task | default                 | —                                     |
+| designer        | Kappa       | UX UI Designer               | DT Coach, DT Learning Tutor                            | runSubagent / task | default                 | .copilot-tracking/plans/              |
+| fact-checker    | Lambda      | Finding Deep Verifier        | —                                                      | runSubagent / task | fast                    | —                                     |
+| cost-manager    | Mu          | Squad Cost Manager           | —                                                      | runSubagent / task | default                 | —                                     |
+| iac-author      | Nu          | Squad IaC Author             | —                                                      | runSubagent / task | default                 | .copilot-tracking/changes/            |
+| deployer        | Xi          | Squad Deployer               | —                                                      | runSubagent / task | default                 | —                                     |
+| asbuilt-author  | Omicron     | Squad As-Built Author        | —                                                      | runSubagent / task | default                 | docs/architecture/                    |
+| azure-diagnose  | Pi          | Squad Azure Diagnose         | —                                                      | runSubagent / task | fast                    | —                                     |
+| modernizer      | Rho         | Squad Modernization Planner  | Squad SQL Migration Advisor                            | runSubagent / task | default                 | .copilot-tracking/plans/              |
+| prompt-engineer | Sigma       | Squad Prompt Engineer        | Evaluation Dataset Creator, Vally Test Author          | runSubagent / task | default                 | .copilot-tracking/prompts/            |
+| presenter       | Tau         | PowerPoint Subagent          | —                                                      | runSubagent / task | default                 | .copilot-tracking/ppt/<date>/<slug>/  |
+| technical-writer | Upsilon    | Squad Technical Writer       | —                                                      | runSubagent / task | fast                    | docs/                                 |
+| intake-validator |            | Product Manager Advisor      | PRD Quality Reviewer, BRD Quality Reviewer             | runSubagent / task | fast                    | —                                     |
+| scribe          |             | Squad Scribe                 | —                                                      | runSubagent / task | fast                    | (squad state)                         |
+| devrel          |             | —                            | —                                                      | —                  | — (no backing skill)    | —                                     |
 ```
 
 ### routing.md
@@ -224,6 +226,8 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | plan, break down, sequence, design plan    | lead                         | confirm       | no                |
 | implement, build, code, fix                | developer                    | confirm       | no                |
 | review, validate, check quality            | tester                       | auto          | yes               |
+| challenge, pressure-test, poke holes, devil's advocate, what could go wrong | challenger | auto | yes         |
+| author prompt, write agent file, refactor instructions, analyse skill | prompt-engineer | confirm | no         |
 | validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
 | security, threat, vulnerability, STRIDE    | Security Planner             | confirm       | yes               |
 | design, UX, UI, wireframe, accessibility   | UX UI Designer               | confirm       | yes               |
@@ -324,7 +328,7 @@ Intake Readiness Verdict placeholder (Scribe stamps this shape when the intake g
 
 ### history/<agent>.md
 
-One append-only file per dispatched agent. Replace `<agent>` with the dispatched agent's name (for example, `history/RPI Researcher.md`). The header is created with the file; dispatch records are appended. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
+One append-only file per dispatched agent. Replace `<agent>` with the dispatched agent's name (for example, `history/Squad Researcher.md`). The header is created with the file; dispatch records are appended. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
 
 ```markdown
 ---
