@@ -39,6 +39,10 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot
 /squad request="add input validation to the login form"
 ```
 
+The `/` picker lists two entries named `squad`: pick the **prompt** ("Hands a request to the Squad
+Coordinator...") to run the squad. The **skill** ("Operating procedure for...") only loads the squad
+procedure as context and is normally loaded by the coordinator itself.
+
 See [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) for the full flow.
 
 ## Repository structure
