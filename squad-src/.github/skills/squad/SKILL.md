@@ -31,7 +31,8 @@ This skill packages the coordinator's operating procedure and the seed templates
 ## Prerequisites
 
 * A `runSubagent` or `task` tool is available so the coordinator can dispatch `user-invocable: false` agents.
-* The deployed HVE Core cast exists (Task Researcher, Task Planner, Task Implementor, Task Reviewer, System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier) plus the Squad Scribe.
+* The deployed HVE Core cast exists (RPI Researcher, System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier, PowerPoint Subagent) plus the squad-owned charters (Squad Scribe, Squad Lead, Squad Implementor, Squad Reviewer, Squad Technical Writer).
+* Every roster Primary resolves to an installed agent that does **not** set `disable-model-invocation: true`; the coordinator's Step 1b roster-resolution precheck confirms this before any dispatch.
 * The memory tool is available for durable per-agent notes under `/memories/repo/`.
 
 ## Procedure
@@ -104,7 +105,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 The intake gate is the operator's pre-work readiness check on the inputs a turn builds on. It is conditional: the coordinator runs it only when the turn's work is grounded in requirement or input artifacts (a PRD, BRD, specification, requirements document, user story, design document, transcript, or a user-referenced input file) and advances toward a plan, a build, or a deliverable. When no input grounds the work, the gate is a no-op. The full protocol lives in `.github/instructions/squad/squad-intake-gate.instructions.md`; the operator's view is:
 
-1. The coordinator dispatches `intake-validator` (seeded in the `product` and `full` profiles and addable to any roster, resolved by input type per the roster Selection Cue: PRD → PRD Quality Reviewer, BRD → BRD Quality Reviewer, assumption or scope pressure-test → Task Challenger, otherwise Product Manager Advisor) to assess the inputs for completeness, clarity, testability, consistency, and scope boundaries. When the active roster lacks `intake-validator`, the coordinator offers to add it rather than skipping the check.
+1. The coordinator dispatches `intake-validator` (seeded in the `product` and `full` profiles and addable to any roster, resolved by input type per the roster Selection Cue: PRD → PRD Quality Reviewer, BRD → BRD Quality Reviewer, otherwise Product Manager Advisor) to assess the inputs for completeness, clarity, testability, consistency, and scope boundaries. When the active roster lacks `intake-validator`, the coordinator offers to add it rather than skipping the check.
 2. The validator returns a verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`) with its blocking and non-blocking gaps and any clarifying questions.
 3. The Squad Scribe appends a single `## Intake Readiness Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
 4. On `Ready` or `Ready-With-Gaps`, downstream planning and implementation proceed (non-blocking gaps carried as recorded assumptions). On `Not-Ready`, the coordinator runs the bounded auto-remediation loop — dispatch `analyst` or `product-owner` to fill the blocking gaps, then re-validate; capped at two cycles — and escalates when a gap needs a human decision, the cap is reached with blocking gaps open, or the blocking-gap set stops shrinking.
@@ -183,14 +184,14 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 
 | Role            | Member Name | Agent Name (Primary)         | Alternate Agents                                       | Invocation         | Model Tier              |
 |-----------------|-------------|------------------------------|--------------------------------------------------------|--------------------|-------------------------|
-| lead            | Alpha       | Task Planner                 | RPI Agent, Phase Implementor, Task Challenger          | runSubagent / task | default                 |
-| researcher      | Beta        | Task Researcher              | Researcher Subagent, Codebase Profiler, Meeting Analyst | runSubagent / task | fast                    |
-| developer       | Gamma       | Task Implementor             | Phase Implementor                                      | runSubagent / task | default                 |
-| tester          | Delta       | Task Reviewer                | Code Review Full, PR Review, Plan Validator            | runSubagent / task | fast                    |
-| architect       | Epsilon     | System Architecture Reviewer | Arch Diagram Builder, ADR Creator                      | runSubagent / task | default                 |
+| lead            | Alpha       | Squad Lead                   | RPI Planner                                            | runSubagent / task | default                 |
+| researcher      | Beta        | RPI Researcher               | Codebase Profiler, Meeting Analyst                     | runSubagent / task | fast                    |
+| developer       | Gamma       | Squad Implementor            | —                                                      | runSubagent / task | default                 |
+| tester          | Delta       | Squad Reviewer               | Code Review Functional, Code Review Standards          | runSubagent / task | fast                    |
+| architect       | Epsilon     | System Architecture Reviewer | ADR Creator                                            | runSubagent / task | default                 |
 | azure-architect | Zeta        | Squad Azure Architect        | —                                                      | runSubagent / task | default                 |
-| security        | Eta         | Security Planner             | Security Reviewer, SSSC Planner, Finding Deep Verifier | runSubagent / task | default                 |
-| rai             | Theta       | RAI Planner                  | —                                                      | runSubagent / task | default                 |
+| security        | Eta         | Security Planner             | SSSC Planner, Skill Assessor, Finding Deep Verifier    | runSubagent / task | default                 |
+| rai             | Theta       | RAI Planner                  | RAI Skill Assessor                                     | runSubagent / task | default                 |
 | designer        | Iota        | UX UI Designer               | DT Coach, DT Learning Tutor                            | runSubagent / task | default                 |
 | fact-checker    | Kappa       | Finding Deep Verifier        | —                                                      | runSubagent / task | fast                    |
 | cost-manager    | Lambda      | Squad Cost Manager           | —                                                      | runSubagent / task | default                 |
@@ -199,8 +200,10 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 | asbuilt-author  | Xi          | Squad As-Built Author        | —                                                      | runSubagent / task | default                 |
 | azure-diagnose  | Omicron     | Squad Azure Diagnose         | —                                                      | runSubagent / task | fast                    |
 | modernizer      | Pi          | Squad Modernization Planner  | Squad SQL Migration Advisor                            | runSubagent / task | default                 |
-| intake-validator |            | Product Manager Advisor      | PRD Quality Reviewer, BRD Quality Reviewer, Task Challenger | runSubagent / task | fast                    |
-| scribe          |             | Squad Scribe                 | Memory                                                 | runSubagent / task | fast                    |
+| presenter       | Rho         | PowerPoint Subagent          | —                                                      | runSubagent / task | default                 |
+| technical-writer | Sigma      | Squad Technical Writer       | —                                                      | runSubagent / task | fast                    |
+| intake-validator |            | Product Manager Advisor      | PRD Quality Reviewer, BRD Quality Reviewer             | runSubagent / task | fast                    |
+| scribe          |             | Squad Scribe                 | —                                                      | runSubagent / task | fast                    |
 | devrel          |             | —                            | —                                                      | —                  | — (thin charter needed) |
 ```
 
@@ -217,10 +220,10 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 
 | Pattern / Keyword                          | Role(s)                      | Autonomy Tier | Parallel-Eligible |
 |--------------------------------------------|------------------------------|---------------|-------------------|
-| research, investigate, explore, find out   | Task Researcher              | auto          | yes               |
-| plan, break down, sequence, design plan    | Task Planner                 | confirm       | no                |
-| implement, build, code, fix                | Task Implementor             | confirm       | no                |
-| review, validate, check quality            | Task Reviewer                | auto          | yes               |
+| research, investigate, explore, find out   | researcher                   | auto          | yes               |
+| plan, break down, sequence, design plan    | lead                         | confirm       | no                |
+| implement, build, code, fix                | developer                    | confirm       | no                |
+| review, validate, check quality            | tester                       | auto          | yes               |
 | validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
 | security, threat, vulnerability, STRIDE    | Security Planner             | confirm       | yes               |
 | design, UX, UI, wireframe, accessibility   | UX UI Designer               | confirm       | yes               |
@@ -321,7 +324,7 @@ Intake Readiness Verdict placeholder (Scribe stamps this shape when the intake g
 
 ### history/<agent>.md
 
-One append-only file per dispatched agent. Replace `<agent>` with the dispatched agent's name (for example, `history/Task Researcher.md`). The header is created with the file; dispatch records are appended. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
+One append-only file per dispatched agent. Replace `<agent>` with the dispatched agent's name (for example, `history/RPI Researcher.md`). The header is created with the file; dispatch records are appended. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
 
 ```markdown
 ---

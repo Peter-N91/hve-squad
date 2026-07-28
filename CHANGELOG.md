@@ -5,6 +5,54 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-07-28
+
+### Fixed
+
+- **The squad roster named agents hve-core no longer ships, so the methodology spine silently stopped dispatching.** Upstream consolidated Research, Plan, Implement, Review, and documentation from agents into skills. The cast catalog kept naming `Task Researcher`, `Task Planner`, `Task Implementor`, `Task Reviewer`, `Task Challenger`, `Phase Implementor`, `Researcher Subagent`, `Doc Ops`, `Code Review Full`, `PR Review`, `Plan Validator`, `RPI Validator`, `Implementation Validator`, `Arch Diagram Builder`, `Prompt Builder`, `Documentation Update Checker`, and `Memory` — none of which resolve. A dispatch against a missing agent returns nothing, and a coordinator that receives nothing tends to fill the gap by authoring the deliverable inline: no per-role history, no consumption ledger, no intake gate, and no council. The cast catalog is now rebuilt against the agents hve-core actually deploys (`squad-src/.github/instructions/squad/squad-roster.instructions.md`).
+- **A roster Primary could be an agent that `runSubagent` can never reach.** hve-core marks its user-invocable entry points `disable-model-invocation: true`, which makes them unreachable from a dispatch. Four roles pointed at one — most consequentially `presenter → PowerPoint Builder`, which is why deck builds fell back to improvised scripts instead of the `powerpoint` skill. A new **Dispatchability** rule forbids naming such an agent as a Primary or Alternate, and `presenter` now resolves to `PowerPoint Subagent` (`squad-src/.github/instructions/squad/squad-roster.instructions.md`).
+- **Deliverable paths were undefined for a federation.** The autopilot Artifact Gates named repository-root tracking paths while federation parameterized only *squad state*, so a sub-squad's BRD, plan, and deck had no defined home and landed inconsistently. A new **Deliverable Roots** table binds each role to a directory, adds a `Deliverable Root` column to `team.md`, and states the sub-squad rebasing rule explicitly; `docs/` alone stays repository-rooted (`squad-src/.github/instructions/squad/squad-roster.instructions.md`, `squad-src/.github/instructions/squad/squad-autopilot.instructions.md`).
+- **Verification was self-attested, so a run could report paths it never read.** Step 7 in both coordinators now requires enumerating directories and forbids quoting a path the turn did not read; the federation checklist calls out its two specific failure shapes — a cited deliverable path that does not exist, and a `members/<name>/history/` thinner than the roles the inner run claims to have dispatched (`squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+
+### Added
+
+- **Four squad-owned thin charters** restoring the roles whose hve-core agents became skills. Each is a dispatchable `user-invocable: false` shell that runs the corresponding skill and adds no method of its own: `Squad Lead` (`rpi-plan`, and it enumerates the run's deliverables and owning roles for fan-out), `Squad Implementor` (`rpi-implement`), `Squad Reviewer` (`rpi-review` and `code-review`), and `Squad Technical Writer` (`documentation`) — all under `squad-src/.github/agents/squad/`.
+- **A roster-resolution precheck (Step 1b) before any dispatch.** The coordinator confirms every role in `team.md` resolves to an agent that is both installed and dispatchable, and stops with the failing list and three concrete corrections rather than working around it. This converts a silent dispatch failure into a visible one at the start of the turn (`squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+- **Model pinning on both orchestrators.** `Squad Coordinator` and `Squad Federation Coordinator` now declare a `model:` preference list (Claude Sonnet 5 → GPT-5.6 Terra → Claude Haiku 4.5), so an auto-selected model cannot route the two most instruction-heavy agents in the system to the cheapest option.
+- **`scripts/Get-HveCoreCastDelta.ps1`** — compares the deployable agent cast between two hve-core refs and reports agents added, removed, and whose dispatchability flipped, cross-checked against `squad-src/` to mark a delta **BREAKING** when the squad still references a name. Emits a markdown adaptation brief, JSON, and workflow outputs.
+- **An issue-driven upgrade loop, with no cron running a squad.** When the daily sync finds a breaking cast delta it stops before `apm.yml` and opens a `squad/auto` labeled issue whose body *is* the adaptation brief — what changed and why it breaks, eight numbered steps, editing constraints, acceptance criteria, and the generated delta table. One open issue per target SHA, so a repeat cron on an unresolved delta comments instead of duplicating. The label is the Watch Mode trigger, so the squad's task description is a durable, reviewable artifact rather than a string buried in a workflow.
+- **`.github/workflows/squad-watch.yml`** — the live Watch Mode workflow, derived from the shipped reference template and scoped to two triggers: an issue labeled `squad/auto` runs autopilot in sub-squad `issue-<N>` and opens a draft PR that closes the issue; a pull request labeled `squad/review` runs the tester role in sub-squad `pr-<N>` and posts review findings. A `workflow_dispatch` input exists for testing the loop by hand. No schedule trigger — the only cron in the repository is the mechanical sync.
+- **Unattended Gate Disposition** in `squad-src/.github/instructions/squad/squad-watch-mode.instructions.md` — the contract for how Human Gates resolve when nobody is attached to a run. Stage transitions proceed on artifact evidence; final-outcome validation is satisfied by the draft pull request rather than a wait that can never end; Risk-Gate findings are recorded in `decisions.md` and reproduced in the PR body instead of blocking. The **Impactful-Action Gate never proceeds** — no exception, no payload override — and is enforced three independent ways: the contract, the absence of any deployment credential on the runner, and branch protection on the default branch.
+- **Deck-pipeline guardrails.** `pptx-brand-template.instructions.md` now states that the `powerpoint` skill pipeline is the only supported path, forbids hand-rolled deck builders, and requires naming the missing prerequisite (`uv`, Python 3.11+, PowerShell 7+, LibreOffice) and returning the blocked step instead of improvising. Its `applyTo` also covers federation sub-squad deck paths.
+- **A repository-scoped model pin for headless runs.** `squad-watch.yml` passes `--model` to the Copilot CLI from a workflow-level `SQUAD_MODEL` variable, with a `workflow_dispatch` input to override it for a single run. CLI precedence is `--model` over `COPILOT_MODEL` over `~/.copilot/settings.json`, and only the flag lives in the repository — so this is the one lever that pins a model for this project without changing anything user-wide or machine-wide. Agent `model:` frontmatter is honored by the VS Code host; it is not a substitute for the flag on the CI path.
+
+### Changed
+
+- **`sync-hve-core.yml` no longer bumps a breaking upgrade — it delegates one.** The mechanical path (move the SHA, bump the patch, write the CHANGELOG, release) is unchanged when the agent cast is stable. When the cast delta is breaking, the workflow stops before `apm.yml` and raises the labeled issue instead. A SHA move cannot repoint a roster row; this is the specific regression that shipped in `0.10.11`.
+- `product-owner` resolves to `GitHub Backlog Manager`; ADO and Jira backlog managers are user-invocable only, so their tracker writes are planned by the squad and handed to the user to run.
+- `Researcher Subagent` references across the Squad Cost Manager, IaC Author, Azure Diagnose, Modernization Planner, and the MCP capability map now point at `RPI Researcher`.
+- The default routing table uses role names for the spine instead of agent names, so a future rename cannot break routing (`squad-src/.github/instructions/squad/squad-routing.instructions.md`).
+
+### Upgrade notes
+
+Existing squad state seeded by an earlier release still holds the old roster. After upgrading, re-seed so `team.md` picks up the corrected cast:
+
+- **Single squad** — delete `.copilot-tracking/squad/team.md` and `routing.md`, then run `/squad`; Init reseeds them from the new catalog. Append-only logs are untouched.
+- **Federation** — do the same inside each `.copilot-tracking/squad/members/<name>/`.
+- Verify the spine reads `RPI Researcher`, `Squad Lead`, `Squad Implementor`, `Squad Reviewer`, and that `presenter` reads `PowerPoint Subagent`.
+
+For decks, install the skill's prerequisites (`uv`, Python 3.11+, PowerShell 7+, LibreOffice) and save a branded template at `.github/brand/pptx-brand-template.pptx`.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.0"
+```
+
+[0.11.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.0
+
 ## [0.10.12] - 2026-07-28
 
 ### Fixed

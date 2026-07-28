@@ -189,8 +189,8 @@
       <p>
         The Azure Architect emits the Mermaid HLD and the Bicep-friendly LLD table.
         <strong>This is where the methodology surfaces:</strong> "author the Bicep" is an
-        implementation-tier request, so the Implementation Gate runs <strong>Task Researcher</strong>
-        (AVM modules, landing-zone) then <strong>Task Planner</strong> (the IaC plan) <em>before</em>
+        implementation-tier request, so the Implementation Gate runs the <strong>researcher</strong>
+        role (AVM modules, landing-zone) then the <strong>lead</strong> role (the IaC plan) <em>before</em>
         the IaC Author writes a line. It never implements cold.
       </p>
       <p>
@@ -224,7 +224,7 @@
       <pre><code>/squad request="Document the deployed Azure infrastructure in resource group rg-demo as as-built artifacts: a resource inventory, a compliance matrix from Azure Policy, an operations runbook, and a backup/DR plan."</code></pre>
       <p>
         The As-Built Author inventories via Resource Graph (read-only), builds the compliance matrix,
-        and drafts the runbook and DR plan for Doc Ops — delivered as a markdown package.
+        and drafts the runbook and DR plan for the technical-writer role &mdash; delivered as a markdown package.
       </p>
 
       <h2>Beat 5 — Diagnose</h2>
@@ -244,7 +244,7 @@
       <p>From that one line, autopilot sequences the pipeline and stops only where it must:</p>
       <ul>
         <li><strong>Init</strong> — proposes the <code>azure</code> profile and waits for your confirmation.</li>
-        <li><strong>Research → Plan</strong> — Task Researcher then Task Planner.</li>
+        <li><strong>Research &rarr; Plan</strong> &mdash; the researcher role, then the lead role.</li>
         <li><strong>Council</strong> — architect, security, and cost weigh in before any build.</li>
         <li><strong>Implement</strong> — Azure Architect and IaC Author produce the design and the Bicep.</li>
         <li><strong>Review</strong> — <code>tester</code> validates the implementation.</li>

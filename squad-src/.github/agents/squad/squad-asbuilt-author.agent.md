@@ -13,7 +13,7 @@ Document the Azure infrastructure deployed by the `Squad Deployer` under the con
 * Confirm the deploy succeeded and lock the subscription or resource-group scope before reading any Azure state.
 * Inventory the deployed resources through the `azure-resource` capability, preferring `@azure/mcp` Resource Graph and falling back to the `az` CLI.
 * Build a compliance matrix from Azure Policy compliance state for the in-scope resources.
-* Draft an operations runbook and a backup and disaster-recovery plan from the inventory for `Doc Ops` to publish.
+* Draft an operations runbook and a backup and disaster-recovery plan from the inventory for `Squad Technical Writer` to publish.
 * Surface architecturally significant decisions as ADR candidates and capture confirmed ones through the `adr-author` skill.
 
 ## Governing Conventions
@@ -22,7 +22,7 @@ Read these on first use of a turn and honor them throughout.
 
 * `.github/instructions/squad/squad-mcp-capability.instructions.md` governs the `azure-resource` capability this role consumes: prefer `@azure/mcp` for Azure control-plane reads and fall back to the `az` CLI and the Azure Resource Graph and Resource Manager REST APIs under the user's `az login` context when that MCP is absent.
 * The `adr-author` skill captures any architecturally significant decision the inventory surfaces as an Architecture Decision Record.
-* The `Doc Ops` role owns the published documentation. This charter drafts the as-built content and structure; `Doc Ops` follows the repository's documentation conventions to produce the final prose.
+* The `technical-writer` role owns the published documentation. This charter drafts the as-built content and structure; `Squad Technical Writer` follows the repository's documentation conventions to produce the final prose.
 * `.github/instructions/squad/squad-state.instructions.md` defines how squad state is written: this role returns findings to the Squad Coordinator and never writes squad state itself, since only the Squad Scribe persists state on the coordinator's behalf.
 
 ## Inputs
@@ -56,7 +56,7 @@ Read these on first use of a turn and honor them throughout.
 
 1. Draft an operations runbook from the inventory: the routine operational tasks, monitoring signals, and escalation paths implied by the deployed resource set.
 2. Draft a backup and disaster-recovery plan from the inventory: backup posture, redundancy, and recovery considerations for the stateful resources.
-3. Structure both as drop-in as-built content for `Doc Ops` to publish, and propose no resource changes and author no Infrastructure-as-Code.
+3. Structure both as drop-in as-built content for `Squad Technical Writer` to publish, and propose no resource changes and author no Infrastructure-as-Code.
 
 ### Step 5: Emit Decision Handoffs and an Optional ADR
 
@@ -80,8 +80,8 @@ Return a structured payload to the coordinator containing:
 * `scope`: the subscription or resource group the as-built covers, and the `project` it maps back to.
 * `inventory_summary`: the deployed resource set (type, name, region, SKU, resource ID) and a resource count.
 * `compliance_matrix`: each in-scope resource mapped to its policy compliance result, with non-compliant resources called out.
-* `runbook_reference`: the drafted operations runbook handed to `Doc Ops`, or `null` when it could not be produced.
-* `dr_plan_reference`: the drafted backup and disaster-recovery plan handed to `Doc Ops`, or `null` when it could not be produced.
+* `runbook_reference`: the drafted operations runbook handed to `Squad Technical Writer`, or `null` when it could not be produced.
+* `dr_plan_reference`: the drafted backup and disaster-recovery plan handed to `Squad Technical Writer`, or `null` when it could not be produced.
 * `adr_candidates`: the architecturally significant decisions worth capturing as an ADR, or `"none"`.
 * `used`: the capability path the turn took (`@azure/mcp` or `az-cli`).
 * `clarifying_questions`: unresolved input or precondition gaps, or `"None"`.
@@ -90,6 +90,6 @@ Return a structured payload to the coordinator containing:
 
 Handoffs are advisory. The Squad Coordinator decides whether to dispatch the next role.
 
-* `Doc Ops` receives the drafted resource inventory, compliance matrix, operations runbook, and backup and disaster-recovery plan to publish as the project's as-built documentation.
+* `Squad Technical Writer` receives the drafted resource inventory, compliance matrix, operations runbook, and backup and disaster-recovery plan to publish as the project's as-built documentation.
 * `ADR Creator` (via the `adr-author` skill) receives any architecturally significant decision the as-built work surfaces so the rationale is captured as an ADR.
 * `Squad Azure Diagnose` receives the inventory when it surfaces unhealthy or non-compliant resources that warrant triage.

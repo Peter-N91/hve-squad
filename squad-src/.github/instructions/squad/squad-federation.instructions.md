@@ -113,7 +113,7 @@ A **Watch Mode** run adds its own event-scoped sub-squad through this same expan
 
 * **Event-derived name.** The new sub-squad's name comes from the event's structural identity (`issue-<N>`, `pr-<N>`, `sweep-<YYYY-MM-DD>`, `push-<branch-slug>-<sha7>`, `dispatch-<runId>`), never from payload prose. The naming table and normalization rules live in `.github/instructions/squad/squad-watch-mode.instructions.md`.
 * **Reuse before create.** When the derived name already exists as a watch-owned sub-squad whose recorded trigger provenance matches this event, the run reuses it and no expansion occurs. A watch-owned name with different provenance is disambiguated by appending the workflow run id once.
-* **Never into a human-owned sub-squad.** When the derived name matches a sub-squad that is not watch-owned, or a `members/<name>/` directory exists with no registry row, the run escalates and stops. The no-overwrite guard is absolute in the unattended path.
+* **Never into a human-owned sub-squad.** When the derived name matches a sub-squad that is not watch-owned, the run escalates and stops. A `members/<name>/` directory with **no registry row** is resolved by evidence rather than refused outright: when its `state.json` `trigger.ref` and `trigger.eventId` match the current event it is this run's own prior attempt, so the row is re-registered and the run resumes; otherwise it is treated as human-owned and the run escalates and stops. See *Reuse, Collisions, and Concurrency* in `.github/instructions/squad/squad-watch-mode.instructions.md`. The no-overwrite guard remains absolute in the unattended path: nothing that cannot prove it belongs to this event is ever written into.
 
 ## Registry Schema (`federation.md`)
 

@@ -44,9 +44,22 @@
         <li><code>apm.yml</code>: package metadata, dependency list, and scripts</li>
         <li><code>apm.lock.yaml</code>: resolved dependency lock file</li>
         <li><code>scripts/Update-ApmDependencies.ps1</code>: dependency generator</li>
+        <li><code>scripts/Get-HveCoreCastDelta.ps1</code>: compares the deployable agent cast between two hve-core refs</li>
         <li><code>squad-src/.github/</code>: locally authored squad source (agents, prompts, instructions, skills)</li>
         <li><code>apm_modules/</code>: installed dependencies (ignored by git)</li>
         <li><code>.github/</code>: generated/deployed local assets (ignored by git, except <code>.github/workflows/</code> if tracked)</li>
+        <li>
+          <code>.copilot-tracking/</code>: agent working state. <strong>Ignored by default</strong> &mdash;
+          your research, plans, and interactive squad runs stay local with no action required. The
+          exception is the audit trail of an unattended Watch Mode run, which <code>.gitignore</code>
+          re-includes at both levels because proof-of-dispatch is two-level:
+          <code>squad/members/issue-*/</code> and <code>squad/members/pr-*/</code> (the inner run) plus
+          <code>squad/history/issue-*.md</code> and <code>squad/history/pr-*.md</code> (the
+          federation-level meta-transition). The federation root scalars
+          (<code>federation.md</code>, <code>meta-routing.md</code>, <code>state.json</code>, and the
+          aggregate ledgers) stay local: they use replace semantics, so committing them would
+          guarantee conflicts between concurrent runs, and the bootstrap rebuilds them.
+        </li>
         <li><code>docs/</code>: this documentation site (served by GitHub Pages)</li>
       </ul>
 
@@ -98,6 +111,151 @@ apm run install-sync</code></pre>
         <li>Rewrites only <code>dependencies.apm</code> in <code>apm.yml</code></li>
       </ul>
       <p>This keeps package metadata stable while updating the dependency list safely.</p>
+
+      <h2>Upgrading hve-core: the two paths</h2>
+      <p>
+        The squad roster binds every role to an hve-core agent by its exact <code>name:</code>
+        frontmatter value. That makes an hve-core upgrade two different operations wearing the same
+        clothes, and only one of them is safe to automate end to end. The split is decided by one
+        question: <em>does this hve-core revision move an agent the squad still names?</em>
+      </p>
+      <div class="mermaid">
+flowchart TD
+    A["Cron 06:00 UTC<br/>sync-hve-core.yml"] --> B["Get-HveCoreCastDelta.ps1<br/>pinned SHA vs hve-core main"]
+    B --> C{"Does squad-src still reference<br/>a removed or un-dispatched agent?"}
+
+    C -- "no (mechanical)" --> D["Bump pin + patch version<br/>CHANGELOG + push"]
+    D --> E["release.yml<br/>tag + GitHub Release"]
+
+    C -- "yes (breaking)" --> F["Open issue labeled squad/auto<br/>body = full adaptation brief"]
+    F --> G["squad-watch.yml<br/>fires on the label"]
+    G --> H["Sub-squad issue-N<br/>autopilot, unattended"]
+    H --> I["DRAFT PR that closes the issue"]
+    I --> J{"Label the PR squad/review?"}
+    J -- yes --> K["squad-watch.yml again<br/>sub-squad pr-N, tester role"]
+    K --> L["Review comments on the PR"]
+    L --> M["Human merges"]
+    J -- no --> M
+      </div>
+      <p>
+        Note that <strong>no cron runs a squad</strong>. The only scheduled job is the mechanical sync;
+        when it finds a breaking delta it writes an issue and stops. The issue is both the trigger and
+        the brief, so the squad's task description is a durable, reviewable artifact rather than a
+        string buried in a workflow file.
+      </p>
+
+      <h3>Path 1 &mdash; mechanical (no cast change)</h3>
+      <p>
+        <code>sync-hve-core.yml</code> moves the pinned SHA, bumps the patch version, writes a
+        CHANGELOG line, pushes, and dispatches the release. Unchanged behavior, with one addition: it
+        runs the cast-delta script as a <strong>guard</strong> first. A SHA move cannot repoint a
+        roster row, and shipping it anyway releases a squad whose roles resolve to nothing &mdash;
+        which is exactly what happened in <code>0.10.11</code>.
+      </p>
+
+      <h3>Path 2 &mdash; adaptive (the cast changed)</h3>
+      <p>
+        The sync workflow does <strong>not</strong> touch <code>apm.yml</code>. It opens an issue
+        labeled <code>squad/auto</code> whose body carries the whole brief: what changed and why it
+        breaks, eight numbered steps, the editing constraints, acceptance criteria, and the generated
+        cast-delta table. One open issue per target SHA &mdash; a repeat cron on an unresolved delta
+        comments rather than opening a duplicate.
+      </p>
+      <p>
+        <code>squad-watch.yml</code> fires on that label, runs the squad headlessly in sub-squad
+        <code>issue-&lt;N&gt;</code>, and opens a <strong>draft</strong> PR that closes the issue.
+        Labeling that PR <code>squad/review</code> fires the same workflow again in sub-squad
+        <code>pr-&lt;N&gt;</code>, routed to the tester role, which posts its findings as PR comments.
+      </p>
+
+      <h3>How gates behave when nobody is watching</h3>
+      <p>
+        An unattended run cannot wait for an approval that will never arrive, so Watch Mode moves
+        <em>where</em> the gate is satisfied rather than removing it. See
+        <em>Unattended Gate Disposition</em> in the Watch Mode instructions.
+      </p>
+      <ul>
+        <li><strong>Stage transitions</strong> &mdash; proceed on artifact evidence, as in any autopilot run.</li>
+        <li><strong>Final-outcome validation</strong> &mdash; satisfied by the draft PR. The run compiles its outcome into the PR body instead of pausing.</li>
+        <li><strong>Risk Gate</strong> &mdash; recorded, not blocking. Findings land in <code>decisions.md</code> and are reproduced in the PR body under <em>Blocking findings</em>; the PR stays a draft.</li>
+        <li>
+          <strong>Impactful-Action Gate</strong> &mdash; <strong>never proceeds</strong>. No merge, no
+          deploy, no force-push, no migration, no secret rotation, and no payload can change that. It
+          is enforced three ways: the contract, the absence of any deployment credential on the runner,
+          and branch protection on <code>main</code>.
+        </li>
+      </ul>
+
+      <p>Run the delta check yourself at any time:</p>
+      <pre><code>./scripts/Get-HveCoreCastDelta.ps1
+./scripts/Get-HveCoreCastDelta.ps1 -ToRef main -MarkdownPath delta.md</code></pre>
+
+      <h3>Configuration required</h3>
+      <ul>
+        <li>
+          <strong>Secrets.</strong> <code>COPILOT_GITHUB_TOKEN</code> &mdash; a fine-grained PAT with the
+          <em>Copilot Requests</em> permission (the built-in Actions token cannot authenticate Copilot).
+          <code>SYNC_DEPS_TOKEN</code> &mdash; used to read <code>microsoft/hve-core</code> and push the
+          release commit.
+        </li>
+        <li>
+          <strong>Labels.</strong> Create <code>squad/auto</code> and <code>squad/review</code>. These are
+          the two triggers; without them nothing fires.
+        </li>
+        <li>
+          <strong>Settings &rarr; Actions &rarr; General &rarr; Workflow permissions:</strong> enable
+          <em>&ldquo;Allow GitHub Actions to create and approve pull requests.&rdquo;</em> Without it
+          <code>gh pr create</code> returns 403 and the run finishes with a branch but no PR.
+        </li>
+        <li>
+          <strong>Branch ruleset on <code>main</code>:</strong> requires a pull request, with the
+          repository-admin role as the only bypass actor. This is the third enforcement layer under
+          the Impactful-Action Gate, and the one most often left half-configured &mdash; a rule that
+          only forbids force pushes and deletions does <em>not</em> stop a direct push to
+          <code>main</code>, it limits the damage of one. The admin bypass is what separates the two
+          automations: <code>sync-hve-core.yml</code> pushes with a maintainer PAT and passes
+          straight through, while Watch Mode pushes as <code>github-actions[bot]</code>, which holds
+          no repository role and cannot reach <code>main</code> at all. Required approvals are set to
+          zero on purpose, so a solo maintainer is not locked out of merging their own pull request.
+        </li>
+        <li>
+          <strong>Model pin (already set).</strong> <code>squad-watch.yml</code> passes
+          <code>--model</code> to the Copilot CLI from the workflow-level <code>SQUAD_MODEL</code>
+          variable. Do not leave this to <code>auto</code>: the coordinator is the most
+          instruction-heavy agent in the system, and an auto-selected model routes exactly that agent
+          to whatever is cheapest &mdash; which is how a run ends up authoring deliverables inline
+          instead of dispatching its cast. Precedence in the CLI is
+          <code>--model</code> &gt; <code>COPILOT_MODEL</code> &gt;
+          <code>~/.copilot/settings.json</code>; only the flag is repository-scoped, because only the
+          flag lives in the repo. Confirm the IDs available on your plan by running
+          <code>copilot</code> interactively and typing <code>/model</code> &mdash; they are lowercase
+          slugs such as <code>claude-sonnet-5</code>, not the display names used in agent frontmatter.
+          A <code>workflow_dispatch</code> run can override the pin for one execution.
+        </li>
+        <li>
+          <strong>Approval watcher (optional):</strong> copy
+          <code>.github/skills/squad/github-approval-watcher.workflow.yml</code> into
+          <code>.github/workflows/</code> if you also want interactive runs to be approvable from a phone.
+        </li>
+      </ul>
+
+      <h3>Testing the loop by hand</h3>
+      <p>
+        Run <strong>Squad Watch</strong> from the Actions tab with an <code>issue_number</code> input to
+        exercise the whole path against an issue you wrote yourself, without waiting for an upstream
+        change. Do this once before relying on the cron.
+      </p>
+
+      <h3>Reviewing an adaptation PR</h3>
+      <p>The PR body carries the checklist; the two items that matter most are:</p>
+      <ul>
+        <li>No roster Primary or Alternate sets <code>disable-model-invocation: true</code> &mdash; those agents cannot be dispatched.</li>
+        <li>
+          <code>.copilot-tracking/squad/members/&lt;sub-squad&gt;/history/</code> holds one entry per
+          dispatched role. A thin history means the run authored the changes inline instead of
+          dispatching its cast, and the diff should not be trusted on its own.
+        </li>
+      </ul>
 
       <h2>Squad source</h2>
       <p>
@@ -235,5 +393,9 @@ git push origin vX.Y.Z</code></pre>
       </p>
     </div>
   </footer>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'strict' });
+  </script>
 </body>
 </html>

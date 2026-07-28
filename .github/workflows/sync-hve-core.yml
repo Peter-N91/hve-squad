@@ -6,18 +6,41 @@ name: Sync and Adapt
 #   1. Gets the latest deployment SHA from microsoft/hve-core.
 #   2. Reads the SHA currently pinned in apm.yml (from the first hve-core entry).
 #   3. Skips if already up to date (unless force=true).
-#   4. Runs Update-ApmDependencies.ps1 -Ref <new_sha>, which:
+#   4. Compares the deployable agent CAST between the pinned SHA and the new one.
+#
+#      NON-BREAKING (the cast is unchanged, or nothing this package references
+#      moved) -> continue with the mechanical bump at step 5.
+#
+#      BREAKING (this package still binds a squad role to an agent the new SHA
+#      removes, renames, or un-dispatches) -> STOP. Do not touch apm.yml. Open a
+#      `squad/auto` labeled issue carrying the full adaptation brief. That label is
+#      the Watch Mode trigger: `squad-watch.yml` picks the issue up, runs the squad
+#      unattended, and opens a draft pull request. A SHA move cannot repoint a
+#      roster row, so shipping it anyway would release a squad whose roles resolve
+#      to nothing.
+#
+#   5. Runs Update-ApmDependencies.ps1 -Ref <new_sha>, which:
 #        - clones microsoft/hve-core at that exact SHA
 #        - rewrites all microsoft/hve-core entries with the new SHA
 #        - leaves squad entries pointing at the default upstream slug
-#   5. Bumps the patch version in apm.yml.
-#   6. Prepends a CHANGELOG entry for the new version.
-#   7. Commits apm.yml and CHANGELOG.md and pushes to main.
-#   8. Dispatches release.yml to cut the tag and GitHub Release
+#   6. Bumps the patch version in apm.yml.
+#   7. Prepends a CHANGELOG entry for the new version.
+#   8. Commits apm.yml and CHANGELOG.md and pushes to main.
+#   9. Dispatches release.yml to cut the tag and GitHub Release
 #      (required because GITHUB_TOKEN-authored pushes do not trigger workflows).
 #
 # No local hve-core mirror involved — all content is referenced directly
 # from microsoft/hve-core at a pinned commit SHA.
+#
+# Required configuration
+#   Secret SYNC_DEPS_TOKEN — a PAT with Contents: read and write, Issues: read and
+#     write, and Actions: read and write on this repository. It is used for the
+#     push, for the release dispatch, and for raising the adaptation issue. All
+#     three need a PAT rather than the built-in GITHUB_TOKEN, because events
+#     authored by GITHUB_TOKEN do not trigger other workflows — a GITHUB_TOKEN
+#     issue would never reach `squad-watch.yml`, and a GITHUB_TOKEN push would
+#     never reach `release.yml`.
+#   Labels `squad/auto` and `squad/review` must exist (see squad-watch.yml).
 
 on:
   schedule:
@@ -47,6 +70,7 @@ jobs:
     permissions:
       contents: write
       actions: write
+      issues: write
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -89,10 +113,154 @@ jobs:
             echo "Update needed: ${CURRENT:-<none>} → ${{ steps.latest.outputs.short_sha }}"
           fi
 
+      # ── Refuse to bump when the upstream agent cast changed ───────────────
+      #    This workflow is mechanical: it moves a SHA. It cannot repoint a roster
+      #    row whose agent hve-core renamed, removed, or turned into a skill. When
+      #    that happens the bump is refused and the run raises a labeled issue
+      #    instead, which is what starts the squad through Watch Mode. Shipping the
+      #    SHA anyway would release a squad whose roles resolve to nothing.
+      - name: Guard against a breaking cast delta
+        if: steps.check.outputs.skip != 'true'
+        id: castguard
+        shell: pwsh
+        run: |
+          ./scripts/Get-HveCoreCastDelta.ps1 `
+            -ToRef '${{ steps.latest.outputs.sha }}' `
+            -MarkdownPath 'hve-core-cast-delta.md' `
+            -GitHubOutput
+          Get-Content hve-core-cast-delta.md | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+
+      # ── Hand off to Watch Mode by raising a labeled issue ─────────────────
+      #    The issue is the trigger AND the brief: `squad-watch.yml` fires on the
+      #    `squad/auto` label and the squad reads this body as its task description.
+      #    Everything the sub-squad needs to act must therefore be in the body.
+      - name: Raise the adaptation issue
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'true'
+        id: raise
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TO_SHA: ${{ steps.latest.outputs.sha }}
+          TO_SHORT: ${{ steps.latest.outputs.short_sha }}
+          FROM_SHA: ${{ steps.current.outputs.sha }}
+        with:
+          # A PAT, not the built-in GITHUB_TOKEN. Events authored by GITHUB_TOKEN do
+          # not trigger other workflows, so labelling this issue with the default
+          # token would create the brief and then never fire `squad-watch.yml` — the
+          # handoff would fail silently and look like Watch Mode was simply ignoring
+          # the label. Same reason the push step below uses SYNC_DEPS_TOKEN.
+          github-token: ${{ secrets.SYNC_DEPS_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const to = process.env.TO_SHA;
+            const from = process.env.FROM_SHA;
+            const short = process.env.TO_SHORT;
+
+            // Idempotency marker: one open issue per target SHA, so a daily cron on an
+            // unresolved delta comments instead of opening a duplicate every morning.
+            const marker = `<!-- hve-core-sync:${to} -->`;
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: 'squad/auto', per_page: 100,
+            });
+            const match = existing.find(i => (i.body || '').includes(marker));
+            if (match) {
+              core.notice(`Adaptation issue #${match.number} is already open for hve-core@${short}.`);
+              core.setOutput('issue', String(match.number));
+              core.setOutput('created', 'false');
+              return;
+            }
+
+            const delta = fs.readFileSync('hve-core-cast-delta.md', 'utf8');
+
+            const body = [
+              marker,
+              '',
+              '> Raised automatically by **Sync and Adapt**. The mechanical SHA bump was',
+              '> refused because this hve-core revision changes the deployable agent cast.',
+              '',
+              '## What happened',
+              '',
+              `microsoft/hve-core moved from \`${from}\` to \`${to}\`, and that revision renames,`,
+              'removes, or un-dispatches at least one agent this package still binds a squad role to.',
+              'A roster row that names a missing agent does not fail loudly: the dispatch returns',
+              'nothing, and a coordinator that receives nothing tends to author the deliverable',
+              'inline instead — no per-role history, no consumption ledger, no intake gate.',
+              'That is why this is an issue and not an automatic version bump.',
+              '',
+              '## What to do',
+              '',
+              'Adapt `squad-src/` so every roster Primary again resolves to an agent that is',
+              '**installed** and **dispatchable**, then move the pin.',
+              '',
+              '1. Read `.github/instructions/squad/squad-roster.instructions.md`, sections',
+              '   *Dispatchability* and *Deliverable Roots*, before editing anything.',
+              '2. For every at-risk name in the delta below, repoint it in `squad-src/` to a',
+              '   shipped, dispatchable agent. An agent is dispatchable only when it does **not**',
+              '   set `disable-model-invocation: true` — those are user-invocable entry points and',
+              '   `runSubagent` cannot reach them.',
+              '3. When no dispatchable hve-core agent fits a role, author a squad-owned thin charter',
+              '   under `squad-src/.github/agents/squad/` that runs the equivalent hve-core skill.',
+              '   Follow `Squad Lead`, `Squad Implementor`, `Squad Reviewer`, and',
+              '   `Squad Technical Writer` as the pattern.',
+              '4. Update the `agents:` frontmatter of `squad-coordinator.agent.md` and',
+              '   `squad-federation-coordinator.agent.md` so both list only real, dispatchable names.',
+              '5. Update the seed templates in `squad-src/.github/skills/squad/SKILL.md` and the',
+              '   default routing table in `squad-routing.instructions.md` to match.',
+              `6. Run \`pwsh scripts/Update-ApmDependencies.ps1 -Ref ${to}\` so \`apm.yml\` pins the`,
+              '   new SHA and picks up any new charter files.',
+              '7. Bump the **minor** version in `apm.yml` — a cast change is not a patch — and',
+              '   prepend a Keep a Changelog entry naming the rename map and any new charters.',
+              '8. Update any documentation that names a changed agent, role, or path. Search',
+              '   `docs/`, `README.md`, and `CONTRIBUTING.md` for every old name in the rename map.',
+              '   A rename that lands in `squad-src/` but not in the docs leaves a reader following',
+              '   instructions that no longer work, which is the same defect in a different file.',
+              '   If nothing in the docs refers to a changed name, say so explicitly in the PR',
+              '   rather than leaving it unmentioned.',
+              `9. Re-run \`pwsh scripts/Get-HveCoreCastDelta.ps1 -ToRef ${to}\` and paste the output`,
+              '   into the pull request. The verdict must no longer read BREAKING.',
+              '',
+              '## Constraints',
+              '',
+              '- Edit `squad-src/` only. The repository-root `.github/` tree is generated from it',
+              '  by the installer and any edit there is discarded on the next install.',
+              '- Do not merge, force-push, or deploy. The deliverable is a **draft pull request**.',
+              '- Every stage must leave its history entry. A run whose `history/` is thinner than',
+              '  the roles it claims to have dispatched is a failed run, not a finished one.',
+              '',
+              '## Acceptance criteria',
+              '',
+              '- [ ] Every roster Primary names an agent present in hve-core@' + short,
+              '- [ ] No Primary or Alternate sets `disable-model-invocation: true`',
+              '- [ ] Any new thin charter runs a real hve-core skill and declares a Deliverable Root',
+              '- [ ] `apm.yml` pins `' + to + '` and lists any new charter files',
+              '- [ ] Version bumped as a minor release, CHANGELOG entry written',
+              '- [ ] Docs naming a changed agent or role are updated, or the PR states that none do',
+              '- [ ] `Get-HveCoreCastDelta.ps1` reports a non-breaking verdict',
+              '',
+              '## Cast delta',
+              '',
+              delta,
+            ].join('\n');
+
+            const issue = await github.rest.issues.create({
+              owner, repo,
+              title: `Adapt squad cast to hve-core@${short}`,
+              body,
+              labels: ['squad/auto'],
+            });
+            core.notice(`Opened #${issue.data.number} for hve-core@${short}; Watch Mode will pick it up.`);
+            core.setOutput('issue', String(issue.data.number));
+            core.setOutput('created', 'true');
+
+      - name: Summarize the handoff
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'true'
+        run: |
+          echo "::warning::hve-core@${{ steps.latest.outputs.short_sha }} changes the agent cast. Mechanical bump refused; issue #${{ steps.raise.outputs.issue }} hands the upgrade to Watch Mode."
+
       # ── Regenerate apm.yml at the new SHA ────────────────────────────────
       #    Script clones microsoft/hve-core at the SHA, rewrites all entries,
       - name: Regenerate apm.yml dependencies
-        if: steps.check.outputs.skip != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true'
         run: |
           ARGS=(-Ref "${{ steps.latest.outputs.sha }}")
           [[ "${{ inputs.dry_run }}" == "true" ]] && ARGS+=(-DryRun)
@@ -100,7 +268,7 @@ jobs:
 
       # ── Bump patch version in apm.yml ─────────────────────────────────────
       - name: Bump patch version
-        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
         id: bump
         run: |
           CURRENT=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
@@ -112,7 +280,7 @@ jobs:
 
       # ── Prepend CHANGELOG entry ────────────────────────────────────────────
       - name: Update CHANGELOG
-        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
         run: |
           NEW_VERSION="${{ steps.bump.outputs.version }}"
           TODAY=$(date -u +%Y-%m-%d)
@@ -149,7 +317,7 @@ jobs:
 
       # ── Commit and push ───────────────────────────────────────────────────
       - name: Commit and push
-        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
         run: |
@@ -171,7 +339,7 @@ jobs:
       # dispatch release.yml explicitly. It will read the new version from
       # apm.yml and cut the tag + GitHub Release.
       - name: Trigger release
-        if: steps.check.outputs.skip != 'true' && inputs.dry_run != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
         run: |

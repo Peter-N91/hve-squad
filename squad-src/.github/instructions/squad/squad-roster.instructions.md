@@ -27,6 +27,7 @@ The `## Members` table uses these columns:
 | Alternate Agents     | Optional comma-separated `name:` values the role may resolve to instead, chosen per the catalog cue                                                                 |
 | Invocation           | How the coordinator dispatches the agent: `runSubagent`/`task` for non-user-facing roles                                                                            |
 | Model Tier           | Preferred cost tier: `fast` for read-heavy roles, `default` for reasoning-heavy roles                                                                               |
+| Deliverable Root     | The directory this role writes its artifact into, resolved per *Deliverable Roots* below; makes the Artifact Gate a lookup rather than an inference                 |
 
 Model Tier records a preference, not what actually ran: the concrete model used for each dispatch is captured in the per-dispatch consumption block in `history/<agent>.md` and aggregated into `consumption.md`, never in `team.md`.
 
@@ -38,14 +39,14 @@ The `Agent Name (Primary)` column holds exactly one agent; the role always has a
 ```markdown
 ## Members
 
-| Role          | Member Name | Agent Name (Primary)          | Alternate Agents                                  | Invocation         | Model Tier |
-|---------------|-------------|-------------------------------|---------------------------------------------------|--------------------|------------|
-| lead          | Alpha       | Task Planner                  | RPI Agent, Phase Implementor, Task Challenger     | runSubagent / task | default    |
-| developer     | Beta        | Task Implementor              | Phase Implementor                                 | runSubagent / task | default    |
-| developer     | Gamma       | Task Implementor              | Phase Implementor                                 | runSubagent / task | default    |
-| tester        | Delta       | Task Reviewer                 | Code Review Full, PR Review, Plan Validator       | runSubagent / task | fast       |
-| product-owner |             | ADO Backlog Manager           | GitHub Backlog Manager, Jira Backlog Manager      | runSubagent / task | default    |
-| scribe        |             | Squad Scribe                  | Memory                                            | runSubagent / task | fast       |
+| Role          | Member Name | Agent Name (Primary)   | Alternate Agents                                       | Invocation         | Model Tier | Deliverable Root           |
+|---------------|-------------|------------------------|--------------------------------------------------------|--------------------|------------|----------------------------|
+| lead          | Alpha       | Squad Lead             | RPI Planner                                            | runSubagent / task | default    | .copilot-tracking/plans/   |
+| developer     | Beta        | Squad Implementor      |                                                        | runSubagent / task | default    | .copilot-tracking/changes/ |
+| developer     | Gamma       | Squad Implementor      |                                                        | runSubagent / task | default    | .copilot-tracking/changes/ |
+| tester        | Delta       | Squad Reviewer         | Code Review Functional, Code Review Standards          | runSubagent / task | fast       | .copilot-tracking/reviews/ |
+| product-owner |             | GitHub Backlog Manager | Issue Triage Agent, Agile Coach, Product Manager Advisor | runSubagent / task | default  | .copilot-tracking/plans/   |
+| scribe        |             | Squad Scribe           |                                                        | runSubagent / task | fast       | (squad state)              |
 ```
 <!-- </example-roster> -->
 
@@ -78,43 +79,72 @@ The relationship between roles and agents is **many-to-many**. A role names one 
 
 Roles that have no stable HVE Core equivalent are marked **thin charter needed**. A thin charter is a small, squad-owned subagent authored under `squad-src/.github/agents/squad/` when the role is actually required; until then the coordinator omits the role or escalates to the user.
 
+Every Primary in this catalog is **dispatchable** (see *Dispatchability* below). Agents that HVE Core ships as user-invocable orchestrators — `PowerPoint Builder`, `ADO Backlog Manager`, `Jira Backlog Manager`, `Code Review`, `Documentation`, `RPI Agent`, `Security Reviewer`, `Network ISA-95 Planner`, and the other `disable-model-invocation: true` entry points — are never a Primary and never an Alternate, because `runSubagent` and `task` cannot reach them. Where HVE Core moved a capability from an agent to a skill (research, planning, implementation, review, documentation), the squad dispatches a thin charter that runs that skill.
+
 | Role             | Primary Agent (`name:`)       | Alternate Agents (`name:`)                                                                                          | Selection Cue                                                                                                                                                                                                 |
 |------------------|-------------------------------|---------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| lead             | Task Planner                  | RPI Agent, Phase Implementor, Task Challenger                                                                        | Full research→plan→implement cycle → RPI Agent; execute one numbered plan phase → Phase Implementor; pressure-test a plan or assumptions → Task Challenger; otherwise plan a single task → Task Planner       |
-| researcher       | Task Researcher               | Researcher Subagent, Codebase Profiler, Meeting Analyst                                                              | External/web/MCP research → Researcher Subagent; technology-profile scan → Codebase Profiler; meeting-transcript mining → Meeting Analyst; otherwise codebase research → Task Researcher                       |
-| developer        | Task Implementor              | Phase Implementor                                                                                                   | Execute a numbered plan phase → Phase Implementor; otherwise implement a single task → Task Implementor                                                                                                       |
-| tester           | Task Reviewer                 | Code Review Full, Code Review Standards, Code Review Functional, PR Review, Implementation Validator, Plan Validator, RPI Validator | Full pre-PR review → Code Review Full; standards diff → Code Review Standards; correctness/edge-case diff → Code Review Functional; pull-request review → PR Review; implementation-vs-design → Implementation Validator; plan-vs-research → Plan Validator; changes-vs-plan → RPI Validator; otherwise task review → Task Reviewer |
-| challenger       | Task Challenger               | —                                                                                                                   | Single agent — devil's-advocate review of plans, assumptions, and scope                                                                                                                                       |
-| architect        | System Architecture Reviewer  | Arch Diagram Builder, ADR Creator, Network ISA-95 Planner                                                            | Architecture diagram → Arch Diagram Builder; decision record → ADR Creator; ISA-95 / OT network design → Network ISA-95 Planner; otherwise design-tradeoff review → System Architecture Reviewer              |
-| security         | Security Planner              | Security Reviewer, SSSC Planner, Skill Assessor, Finding Deep Verifier, Report Generator, Dependency Reviewer, Codebase Profiler | Code-level security review → Security Reviewer; supply-chain posture → SSSC Planner; single-skill assessment → Skill Assessor; verify a finding → Finding Deep Verifier; compile vulnerability report → Report Generator; dependency-change review → Dependency Reviewer; tech profiling → Codebase Profiler; otherwise security planning → Security Planner |
-| rai              | RAI Planner                   | —                                                                                                                   | Single agent — responsible-AI assessment and planning                                                                                                                                                        |
+| lead             | Squad Lead                    | RPI Planner                                                                                                         | Revise one numbered phase inside an existing plan artifact → RPI Planner; otherwise author the plan and enumerate the run's deliverables → Squad Lead (squad-owned charter running the `rpi-plan` skill)      |
+| researcher       | RPI Researcher                | Codebase Profiler, Meeting Analyst                                                                                  | Technology-profile scan → Codebase Profiler; meeting-transcript mining → Meeting Analyst; otherwise internal, external, or hybrid research lanes → RPI Researcher                                              |
+| developer        | Squad Implementor             | —                                                                                                                   | Squad-owned charter running the `rpi-implement` skill; writes the change record under `.copilot-tracking/changes/` and stops at every impactful action                                                         |
+| tester           | Squad Reviewer                | Code Review Functional, Code Review Standards, Code Review Security, Code Review Accessibility, Code Review Readiness, Code Review PR | Correctness/edge-case diff → Code Review Functional; standards diff → Code Review Standards; security diff → Code Review Security; accessibility diff → Code Review Accessibility; PR deliverable readiness → Code Review Readiness; pull-request walkthrough → Code Review PR; otherwise implementation-versus-plan review → Squad Reviewer |
+| challenger       | —                             | —                                                                                                                   | Thin charter needed (HVE Core no longer ships a dispatchable devil's-advocate agent)                                                                                                                          |
+| architect        | System Architecture Reviewer  | ADR Creator                                                                                                         | Decision record → ADR Creator; otherwise design-tradeoff and well-architected review → System Architecture Reviewer                                                                                            |
+| security         | Security Planner              | SSSC Planner, Skill Assessor, Supply Chain Skill Assessor, Finding Deep Verifier, Report Generator, Dependency Reviewer, Codebase Profiler | Supply-chain posture → SSSC Planner; single security-skill assessment → Skill Assessor; supply-chain skill assessment → Supply Chain Skill Assessor; verify a finding → Finding Deep Verifier; compile vulnerability report → Report Generator; dependency-change review → Dependency Reviewer; tech profiling → Codebase Profiler; otherwise security planning → Security Planner |
+| rai              | RAI Planner                   | RAI Skill Assessor                                                                                                  | Single-framework assessment against the codebase → RAI Skill Assessor; otherwise responsible-AI assessment and planning → RAI Planner                                                                          |
+| privacy          | Privacy Planner               | —                                                                                                                   | Single agent — data maps, DPIA thresholds, and privacy controls for a processing activity                                                                                                                     |
 | fact-checker     | Finding Deep Verifier         | —                                                                                                                   | Verification-focused (confirms FAIL/PARTIAL findings); confirm fit before dispatch                                                                                                                            |
 | designer         | UX UI Designer                | DT Coach, DT Learning Tutor                                                                                          | Facilitated design-thinking session → DT Coach; DT curriculum/learning → DT Learning Tutor; otherwise UX research, JTBD, journey mapping → UX UI Designer                                                     |
-| product-owner    | ADO Backlog Manager           | GitHub Backlog Manager, Jira Backlog Manager, Issue Triage Agent, AzDO PRD to WIT, Jira PRD to WIT, Agile Coach, Product Manager Advisor | Tracker selects the manager: GitHub → GitHub Backlog Manager, Jira → Jira Backlog Manager, ADO → ADO Backlog Manager; PRD→work items for ADO → AzDO PRD to WIT, for Jira → Jira PRD to WIT; single-issue triage → Issue Triage Agent; story refinement → Agile Coach; requirements discovery → Product Manager Advisor |
+| product-owner    | GitHub Backlog Manager        | Issue Triage Agent, AzDO PRD to WIT, Jira PRD to WIT, Agile Coach, Product Manager Advisor                           | PRD→work items for ADO → AzDO PRD to WIT, for Jira → Jira PRD to WIT; single-issue triage → Issue Triage Agent; story refinement → Agile Coach; requirements discovery → Product Manager Advisor; otherwise backlog management → GitHub Backlog Manager. **ADO and Jira**: `ADO Backlog Manager` and `Jira Backlog Manager` are user-invocable only and cannot be dispatched; when the project's tracker is ADO or Jira, plan the work items here and escalate the tracker write to the user, who runs that manager directly |
 | analyst          | PRD Builder                   | BRD Builder, Product Manager Advisor, Meeting Analyst                                                                | Business requirements → BRD Builder; advisory/validation → Product Manager Advisor; transcript→requirements → Meeting Analyst; otherwise product requirements → PRD Builder                                    |
 | data-scientist   | DS Gen Data Spec              | DS Gen Jupyter Notebook, DS Gen Streamlit Dashboard, DS Test Streamlit Dashboard                                    | EDA notebook → DS Gen Jupyter Notebook; dashboard build → DS Gen Streamlit Dashboard; dashboard test → DS Test Streamlit Dashboard; otherwise data dictionary/profile → DS Gen Data Spec                       |
-| prompt-engineer  | Prompt Builder                | Prompt Updater, Prompt Evaluator, Prompt Tester, Evaluation Dataset Creator                                          | Modify an existing prompt artifact → Prompt Updater; evaluate output quality → Prompt Evaluator; sandbox-test a prompt → Prompt Tester; build an eval dataset → Evaluation Dataset Creator; otherwise author a new prompt/agent/skill → Prompt Builder |
-| technical-writer | Doc Ops                       | Documentation Update Checker                                                                                         | Detect stale docs vs code → Documentation Update Checker; otherwise author/maintain documentation → Doc Ops                                                                                                   |
-| presenter        | PowerPoint Builder            | PowerPoint Subagent                                                                                                 | Delegated build/extract/validate step → PowerPoint Subagent; otherwise own the deck end-to-end → PowerPoint Builder                                                                                           |
+| prompt-engineer  | —                             | Evaluation Dataset Creator, Vally Test Author, HVE Artifact Tester                                                   | Thin charter needed for authoring: HVE Core ships prompt authoring as the `prompt-builder` skill behind a user-invocable entry point. Eval dataset → Evaluation Dataset Creator; conformance stimuli → Vally Test Author; artifact conformance run → HVE Artifact Tester |
+| technical-writer | Squad Technical Writer        | —                                                                                                                   | Squad-owned charter running the `documentation` skill; `Documentation` itself is user-invocable only and cannot be dispatched                                                                                  |
+| presenter        | PowerPoint Subagent           | —                                                                                                                   | Owns the deck end-to-end through the `powerpoint` skill pipeline (extract → content YAML → build → validate). `PowerPoint Builder` is the user-invocable orchestrator and cannot be dispatched, so the subagent is the Primary |
 | experimenter     | Experiment Designer           | —                                                                                                                   | Single agent — Minimum Viable Experiment design                                                                                                                                                               |
-| cost-manager     | Squad Cost Manager            | —                                                                                                                   | Pricing lookups (Azure Retail Prices REST via Researcher Subagent), budget envelopes, FinOps-aligned tradeoffs, WAF Cost Optimization checklist (CO:01–CO:14); cost-impact review on plans and architecture     |
+| cost-manager     | Squad Cost Manager            | —                                                                                                                   | Pricing lookups (Azure Retail Prices REST via RPI Researcher), budget envelopes, FinOps-aligned tradeoffs, WAF Cost Optimization checklist (CO:01–CO:14); cost-impact review on plans and architecture         |
 | azure-architect  | Squad Azure Architect         | —                                                                                                                   | Azure HLD/LLD authoring with AVM modules and landing-zone patterns; distinct from `architect` (the System Architecture Reviewer reviews tradeoffs while this role authors)                                      |
-| scribe           | Squad Scribe                  | Memory                                                                                                              | Cross-session durable memory persistence → Memory; otherwise squad-state writes → Squad Scribe (squad-owned subagent)                                                                                         |
+| scribe           | Squad Scribe                  | —                                                                                                                   | Squad-owned subagent; the single writer of squad state and of durable per-agent notes under `/memories/repo/`                                                                                                 |
 | devrel           | —                             | —                                                                                                                   | Thin charter needed (no HVE Core equivalent)                                                                                                                                                                  |
 | iac-author       | Squad IaC Author              | —                                                                                                                   | Convert the Squad Azure Architect's LLD table into Bicep or Terraform under infra/{track}/{project} with AVM modules; authors IaC but never deploys (deployment is the deployer's role)                          |
 | deployer         | Squad Deployer                | —                                                                                                                   | Run Azure deployments (what-if/plan, then gated create/apply) in the consumer's environment, strictly behind the Impactful-Action Gate; defaults to a read-only dry-run                                          |
 | modernizer       | Squad Modernization Planner   | Squad SQL Migration Advisor                                                                                          | Framework, dependency, deprecated-API, containerization, or Azure-migration-readiness modernization routes to Squad Modernization Planner. SQL migration advisory requests (SQL Server to Azure, schema or data migration path selection, downtime-class migration planning) route to Squad SQL Migration Advisor. |
 | asbuilt-author   | Squad As-Built Author         | —                                                                                                                   | Author drop-in as-built artifacts (resource inventory, compliance matrix, operations runbook, DR plan) for already-deployed infrastructure; strictly read-only, never deploys or authors IaC                     |
 | azure-diagnose   | Squad Azure Diagnose          | —                                                                                                                   | Read-only triage of deployed Azure resources (Resource Health, Monitor/Log Analytics, configuration) into ranked hypotheses; recommends fixes but never applies them, deferring to the deployer or IaC author    |
-| intake-validator | Product Manager Advisor       | PRD Quality Reviewer, BRD Quality Reviewer, Task Challenger                                                          | Seeded in the `product` and `full` profiles (addable to any roster); dispatched only by the intake gate in `.github/instructions/squad/squad-intake-gate.instructions.md`. PRD input → PRD Quality Reviewer; BRD input → BRD Quality Reviewer; pressure-test assumptions, scope, or ambiguity of any input → Task Challenger; otherwise requirements completeness and clarity check → Product Manager Advisor |
+| intake-validator | Product Manager Advisor       | PRD Quality Reviewer, BRD Quality Reviewer                                                                          | Seeded in the `product` and `full` profiles (addable to any roster); dispatched only by the intake gate in `.github/instructions/squad/squad-intake-gate.instructions.md`. PRD input → PRD Quality Reviewer; BRD input → BRD Quality Reviewer; otherwise requirements completeness and clarity check → Product Manager Advisor |
+
+### Dispatchability
+
+A role's Primary must be an agent the coordinator can actually reach. An agent is **dispatchable** through `runSubagent` or `task` only when its frontmatter does **not** set `disable-model-invocation: true`. HVE Core sets that flag on its user-invocable entry points, so those agents are reachable by a person typing their name and by nothing else.
+
+* Never seed a `disable-model-invocation: true` agent as a Primary or an Alternate. A dispatch against one silently returns nothing, and a lighter model that receives nothing tends to fill the gap by doing the work inline — which is exactly the protocol violation *Dispatch Discipline* forbids.
+* When the only agent that fits a role is user-invocable, the role is **thin charter needed**: either author a squad-owned charter that runs the same underlying skill, or escalate the step to the user so they invoke that agent themselves.
+* The squad-owned charters `Squad Lead`, `Squad Implementor`, `Squad Reviewer`, and `Squad Technical Writer` exist for exactly this reason. HVE Core moved planning, implementation, review, and documentation from agents to the `rpi-plan`, `rpi-implement`, `rpi-review`, and `documentation` skills; the charters are the dispatchable shells that run them.
+
+### Deliverable Roots
+
+Each role writes its artifact into a fixed directory so the Artifact Gate in `.github/instructions/squad/squad-autopilot.instructions.md` is a path lookup rather than a per-run inference. The Scribe records the resolved root in the `Deliverable Root` column of `team.md` when it seeds the roster.
+
+| Role                                              | Deliverable Root                                    |
+|---------------------------------------------------|-----------------------------------------------------|
+| researcher                                        | `.copilot-tracking/research/<date>/`                |
+| lead                                              | `.copilot-tracking/plans/`                          |
+| developer, iac-author                             | `.copilot-tracking/changes/`                        |
+| tester                                            | `.copilot-tracking/reviews/`                        |
+| analyst, product-owner, designer, experimenter    | `.copilot-tracking/plans/`                          |
+| presenter                                         | `.copilot-tracking/ppt/<date>/<deck-slug>/`         |
+| technical-writer                                  | `docs/`                                             |
+| architect, azure-architect                        | `docs/architecture/`                                |
+| scribe                                            | the squad root itself (state, not a deliverable)    |
+
+**In a federation, deliverable roots are rebased.** A sub-squad's `squadRoot` is `.copilot-tracking/squad/members/<name>/`, and every root in the table above is written relative to it — a `product` sub-squad's plan lands at `.copilot-tracking/squad/members/product/plans/`, and its deck at `.copilot-tracking/squad/members/product/ppt/<date>/<deck-slug>/`. Only `docs/` stays at the repository root, because published documentation and architecture are repository-wide outputs rather than per-sub-squad working state. A sub-squad that writes a deliverable to the repository-root tracking path has escaped its root; the coordinator treats that as a failed stage and re-dispatches with the rebased path stated explicitly.
 
 ## Relationship Cardinality
 
 The mapping deliberately supports three shapes so squad roles can stay human-meaningful while reusing the full HVE Core cast:
 
-* **One-to-one** — a role maps to a single agent with no alternates. Examples: `rai → RAI Planner`, `challenger → Task Challenger`, `experimenter → Experiment Designer`.
-* **One-to-many** — a role maps to a Primary plus Alternates, and the coordinator resolves to one agent per the Selection Cue. Examples: `product-owner` resolves across the ADO/GitHub/Jira backlog managers by tracker; `tester` resolves across the review and validator agents by review sub-type.
-* **Many-to-one** — a single agent fills more than one role. Examples: `Codebase Profiler` serves `researcher` and `security`; `Finding Deep Verifier` serves `fact-checker`, `tester`, and `security`; `Product Manager Advisor` serves `product-owner` and `analyst`; `Phase Implementor` serves `lead` and `developer`; `Plan Validator` serves `lead` and `tester`; `Meeting Analyst` serves `researcher` and `analyst`.
+* **One-to-one** — a role maps to a single agent with no alternates. Examples: `privacy → Privacy Planner`, `experimenter → Experiment Designer`, `presenter → PowerPoint Subagent`.
+* **One-to-many** — a role maps to a Primary plus Alternates, and the coordinator resolves to one agent per the Selection Cue. Examples: `product-owner` resolves across the triage, PRD-to-work-item, and refinement agents by request shape; `tester` resolves across the code-review perspective subagents by review sub-type.
+* **Many-to-one** — a single agent fills more than one role. Examples: `Codebase Profiler` serves `researcher` and `security`; `Finding Deep Verifier` serves `fact-checker` and `security`; `Product Manager Advisor` serves `product-owner`, `analyst`, and `intake-validator`; `Meeting Analyst` serves `researcher` and `analyst`.
 
 A shared agent is not a conflict: each role dispatches it with role-scoped context, and the Squad Scribe records which role invoked it under that role's history.
 
@@ -124,17 +154,19 @@ The coordinator turns a matched role into exactly one concrete agent at dispatch
 
 1. **Default to the Primary agent** named in the role's `team.md` row (seeded from this catalog).
 2. **Apply the Selection Cue** — when the request matches a cue, dispatch the indicated Alternate instead of the Primary.
-3. **Verify the agent is installed.** The resolved agent must be present in the project (its APM package deployed into `.github/`). When it is absent, escalate to the user — treat it the same as a **thin charter needed** role rather than silently substituting.
+3. **Verify the agent is installed and dispatchable.** The resolved agent must be present in the project (its APM package deployed into `.github/agents/`) **and** must not set `disable-model-invocation: true`. Check both before dispatching, not after a silent no-op. When either check fails, escalate to the user — treat it the same as a **thin charter needed** role rather than silently substituting.
 4. **Record any non-primary resolution** through the Squad Scribe, so `history/<agent>.md` reflects the agent that actually ran and the cue that selected it.
-5. **Never self-fill an absent role.** When the resolved agent is not installed or not available, the coordinator stops and escalates to the user. It must not perform the role's work itself, and must not substitute a non-mapped agent to fill the gap. An absent role blocks the stage until the user installs the agent, names a substitute, or removes the role.
+5. **Never self-fill an absent role.** When the resolved agent is not installed, not dispatchable, or returns nothing, the coordinator stops and escalates to the user. It must not perform the role's work itself, and must not substitute a non-mapped agent to fill the gap. An absent role blocks the stage until the user installs the agent, names a substitute, or removes the role. A dispatch that returns nothing is an absent role, not an invitation to improvise.
 
 ## Casting Rules
 
 * Use the exact `name:` frontmatter value from the deployed agent. Names with spaces are quoted when referenced from prompt or agent frontmatter.
-* Prefer a deployed HVE Core agent (Primary or Alternate) over a new charter. Author a thin charter only when a required role has no reasonable HVE Core fit.
+* Prefer a deployed HVE Core agent (Primary or Alternate) over a new charter. Author a thin charter only when a required role has no reasonable **dispatchable** HVE Core fit.
+* Never name a `disable-model-invocation: true` agent as a Primary or an Alternate (see *Dispatchability*).
 * Keep exactly one Primary per role so dispatch is always deterministic; list every other valid agent under Alternate Agents with a Selection Cue.
 * Treat `fact-checker → Finding Deep Verifier` as a best-fit mapping: the agent verifies findings rather than performing general fact-checking, so confirm it suits the request before dispatch.
 * Record any deviation from the catalog (a substituted agent, a non-primary resolution, or a new charter) through the Squad Scribe so the roster stays the single source of truth.
+* **Re-validate the catalog against the deployed cast whenever the HVE Core dependency is upgraded.** Agent names move when upstream consolidates agents into skills; a roster row pointing at a name that no longer ships is indistinguishable at run time from a broken dispatch. The coordinator's Step 1 roster-resolution precheck is the runtime guard, but the catalog itself is the thing to correct.
 
 ## Squad Profiles
 
@@ -171,7 +203,7 @@ The coordinator chooses a profile in this order of precedence:
    * Mixed or unclear signals → propose `default` and offer `full`.
 3. **Fallback** — when discovery is inconclusive and the user gives no hint, propose `default` as the recommended profile.
 
-A profile only ever lists roles that exist in the cast catalog. Roles marked **thin charter needed** (such as `devrel`) are never part of a profile until a charter is authored.
+A profile only ever lists roles that exist in the cast catalog. Roles marked **thin charter needed** (such as `devrel`, `challenger`, and `prompt-engineer`) are never part of a profile until a charter is authored.
 
 ### Building a Custom Roster
 
@@ -181,26 +213,25 @@ Three rules bound a custom roster so it never references work the squad cannot a
 
 * **`scribe` is always included** — it is the single writer of squad state and is never offered as optional.
 * **The methodology spine (`researcher`, `lead`, `developer`, `tester`) is recommended** so the Research → Plan → Implement → Review cycle stays intact. The user may drop a spine role, but that disables the matching leg and the Implementation Gate in `squad-routing.instructions.md` escalates if it is later needed.
-* **Only catalog roles are selectable.** The coordinator never invents a role or an agent outside the cast catalog. A role whose mapped agent is not installed, or a **thin charter needed** role such as `devrel`, is flagged and left out rather than seeded.
+* **Only catalog roles with a dispatchable Primary are selectable.** The coordinator never invents a role or an agent outside the cast catalog. A role whose mapped agent is not installed or is not dispatchable, or a **thin charter needed** role such as `devrel`, `challenger`, or `prompt-engineer`, is flagged and left out rather than seeded.
 
 The menu mirrors the Cast Catalog above; each item names the role, the deployed agent that fills it by default (in parentheses), and the user-facing gloss.
 
-* **researcher** (Task Researcher) — Investigates the codebase, the web, and connected tools to gather the context the squad needs.
-* **lead** (Task Planner) — Plans the work: breaks a request into tasks, sequences them, and can run the full delivery cycle.
-* **developer** (Task Implementor) — Implements the change: writes and edits code to carry out the plan.
-* **tester** (Task Reviewer) — Reviews changes for quality, correctness, and standards before they ship.
-* **challenger** (Task Challenger) — Pressure-tests a plan or its assumptions as a devil's advocate before the squad commits.
-* **architect** (System Architecture Reviewer) — Reviews system-design tradeoffs and well-architected alignment; can produce ADRs and diagrams.
+* **researcher** (RPI Researcher) — Investigates the codebase, the web, and connected tools to gather the context the squad needs.
+* **lead** (Squad Lead) — Plans the work: breaks a request into phases, sequences them, and names the deliverables and their owners.
+* **developer** (Squad Implementor) — Implements the change: writes and edits code to carry out the plan.
+* **tester** (Squad Reviewer) — Reviews changes for quality, correctness, and standards before they ship.
+* **architect** (System Architecture Reviewer) — Reviews system-design tradeoffs and well-architected alignment; can produce ADRs.
 * **security** (Security Planner) — Plans security: threat-models the work, identifies risks, and maps controls.
 * **rai** (RAI Planner) — Assesses responsible-AI concerns such as fairness, harm, and transparency for AI/ML work.
+* **privacy** (Privacy Planner) — Maps personal-data flows, tests DPIA thresholds, and plans privacy controls.
 * **fact-checker** (Finding Deep Verifier) — Independently verifies findings and claims before the squad trusts them.
 * **designer** (UX UI Designer) — Researches users and designs the experience: journey maps, jobs-to-be-done, and accessibility.
-* **product-owner** (ADO Backlog Manager) — Manages the backlog: triages, refines, and organizes work items in your tracker.
+* **product-owner** (GitHub Backlog Manager) — Manages the backlog: triages, refines, and organizes work items. ADO and Jira writes are planned here and handed to you to run.
 * **analyst** (PRD Builder) — Captures product and business requirements as a PRD or BRD.
 * **data-scientist** (DS Gen Data Spec) — Profiles data and builds exploratory-analysis notebooks and dashboards.
-* **prompt-engineer** (Prompt Builder) — Authors and refines prompts, agents, instructions, and skills.
-* **technical-writer** (Doc Ops) — Authors and maintains documentation that stays in step with the code.
-* **presenter** (PowerPoint Builder) — Builds slide decks and executive summaries.
+* **technical-writer** (Squad Technical Writer) — Authors and maintains documentation that stays in step with the code.
+* **presenter** (PowerPoint Subagent) — Builds slide decks and executive summaries through the PowerPoint skill pipeline.
 * **experimenter** (Experiment Designer) — Designs a Minimum Viable Experiment to validate the riskiest assumption.
 * **cost-manager** (Squad Cost Manager) — Estimates Azure cost and applies FinOps and Well-Architected cost guidance.
 * **azure-architect** (Squad Azure Architect) — Authors Azure high- and low-level designs with AVM modules and landing-zone patterns.

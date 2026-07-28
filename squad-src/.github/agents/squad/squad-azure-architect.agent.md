@@ -109,5 +109,5 @@ Return a structured payload to the Coordinator containing:
 
 Handoffs are advisory. The Squad Coordinator decides whether to dispatch any of these on the next turn, and only the Coordinator initiates dispatch.
 
-* `Arch Diagram Builder` (apm package `microsoft/hve-core-arch-diagram-builder`) consumes the `lld_table` and the `avm_modules_used` list to render an ASCII block diagram of the Azure architecture. Pass the LLD table verbatim plus the chosen `alz_pattern` so the rendered diagram preserves subscription and network boundaries.
+* Diagram rendering is owned by this charter through the `architecture-diagrams` skill (Mermaid or ASCII) or the `python-diagrams` skill (committed Azure-icon PNG and SVG). Render from the `lld_table` and the `avm_modules_used` list, preserving the chosen `alz_pattern` so subscription and network boundaries survive the rendering.
 * `ADR Creator` (apm package `microsoft/hve-core-adr-creation`) consumes the `asr_triggers` list and the relevant HLD slices to draft Architecture Decision Records via the `adr-author` skill. Pass each ASR trigger as a separate ADR seed with its decision context, the alternatives considered, and the chosen direction.

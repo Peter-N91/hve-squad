@@ -8,6 +8,45 @@ apm_modules/
 !.github/workflows/**
 !.github/pull_request_template.md
 .agents/
-.copilot-tracking/
+
+# Agent tracking artifacts.
+#
+# Default is IGNORED: research, plans, details, changes, and interactive squad
+# runs are local scratch and must never be pushed. Nobody has to remember to put
+# them anywhere special — the default protects them.
+#
+# Re-included: the audit trail of an unattended Watch Mode run. Those sub-squads
+# are named deterministically (`issue-<N>`, `pr-<N>`, per
+# squad-watch-mode.instructions.md) and are the evidence a reviewer checks on the
+# pull request. Two levels are needed, because proof-of-dispatch is two-level:
+#   squad/members/<name>/     the inner run — decisions, per-role history, consumption
+#   squad/history/<name>.md   the federation-level meta-transition entry
+# Both are per-event files written by exactly one run, so concurrent runs on
+# separate branches never touch the same path.
+#
+# Deliberately still ignored, even though a run writes them:
+#   federation.md, meta-routing.md, state.json   replace semantics — every run
+#     rewrites the whole file, so committing them guarantees merge conflicts
+#     between concurrent runs. They are rebuildable: Watch Mode Bootstrap Mode
+#     reconstructs the registry from the committed member trees.
+#   decisions.md, consumption.md, consumption-rates.md (federation root)
+#     repo-wide aggregates. The per-run equivalents inside members/<name>/ are
+#     committed and are what a reviewer actually reads.
+#
+# NOTE for future editors: this MUST stay `.copilot-tracking/**` and not
+# `.copilot-tracking/`. Git cannot re-include a path whose parent directory is
+# excluded, so the directory form silently disables every negation below it.
+# Interactive sub-squads (`members/product/`, `members/platform/`, ...) stay local
+# by design.
+.copilot-tracking/**
+!.copilot-tracking/squad/
+!.copilot-tracking/squad/history/
+!.copilot-tracking/squad/history/issue-*.md
+!.copilot-tracking/squad/history/pr-*.md
+!.copilot-tracking/squad/members/
+!.copilot-tracking/squad/members/issue-*/
+!.copilot-tracking/squad/members/issue-*/**
+!.copilot-tracking/squad/members/pr-*/
+!.copilot-tracking/squad/members/pr-*/**
 
 knowledge-docs/

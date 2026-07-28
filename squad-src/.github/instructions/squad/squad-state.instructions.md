@@ -92,7 +92,7 @@ Every numeric output carries an "estimated, not billed" disclaimer. These values
 
 ## State Ownership
 
-Only the Squad Coordinator initiates state changes, and only the Squad Scribe performs the writes. Dispatched cast agents (Task Researcher, Task Planner, and the rest) return findings to the coordinator; they never write squad state directly.
+Only the Squad Coordinator initiates state changes, and only the Squad Scribe performs the writes. Dispatched cast agents (RPI Researcher, Squad Lead, Squad Implementor, and the rest) return findings to the coordinator; they never write squad state directly.
 
 This single-writer rule keeps shared state consistent across parallel dispatch: concurrent roles cannot race on the same files because every mutation funnels through the scribe.
 

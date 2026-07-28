@@ -39,10 +39,10 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 
 | Pattern / Keyword                          | Role(s)                | Autonomy Tier | Parallel-Eligible |
 |--------------------------------------------|------------------------|---------------|-------------------|
-| research, investigate, explore, find out   | Task Researcher        | auto          | yes               |
-| plan, break down, sequence, design plan    | Task Planner           | confirm       | no                |
-| implement, build, code, fix                | Task Implementor       | confirm       | no                |
-| review, validate, check quality            | Task Reviewer          | auto          | yes               |
+| research, investigate, explore, find out   | researcher             | auto          | yes               |
+| plan, break down, sequence, design plan    | lead                   | confirm       | no                |
+| implement, build, code, fix                | developer              | confirm       | no                |
+| review, validate, check quality            | tester                 | auto          | yes               |
 | validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
 | security, threat, vulnerability, STRIDE    | Security Planner       | confirm       | yes               |
 | design, UX, UI, wireframe, accessibility   | UX UI Designer         | confirm       | yes               |
@@ -50,8 +50,8 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | journey map, persona, design thinking, empathize, ideate, problem statement | DT Coach | confirm | yes               |
 | roadmap, backlog, epic, sprint, refine, prioritize, story | Agile Coach | confirm    | no                |
 | experiment, hypothesis, validate assumption, MVE, riskiest assumption | Experiment Designer | confirm | yes        |
-| presentation, deck, slides, executive summary, pitch | PowerPoint Builder | confirm | no                |
-| document, write up, summarize for stakeholders, readme | Doc Ops    | confirm       | no                |
+| presentation, deck, slides, executive summary, pitch | presenter    | confirm       | no                |
+| document, write up, summarize for stakeholders, readme | technical-writer | confirm  | no                |
 | architecture, system design, components    | System Architecture Reviewer | auto    | yes               |
 | responsible AI, RAI, fairness, harm        | RAI Planner            | confirm       | yes               |
 | verify finding, confirm claim, fact-check  | Finding Deep Verifier  | auto          | yes               |
@@ -113,7 +113,7 @@ The gate enforces the council protocol from `.github/instructions/squad/squad-co
 
 The methodology does not end at implementation. After any implementation-tier role lands a change, the coordinator dispatches `tester` (review) as the closing stage before it reports the work complete — in every mode (interactive, autonomous, and autopilot). Review is an `auto`-tier, non-destructive read, so it runs without a separate gate. This makes the methodology symmetric: research and plan precede implementation, and review follows it, so Research → Plan → Implement → Review is enforced end-to-end.
 
-* Resolve `tester` to the matching review agent per the roster Selection Cue — for example `Code Review Full` for a pre-PR review, or `Implementation Validator` for an implementation-vs-design check — and fold its findings into the turn summary.
+* Resolve `tester` to the matching review agent per the roster Selection Cue — for example `Code Review Functional` for a correctness and edge-case diff, or `Code Review Security` for a security diff — and fold its findings into the turn summary. When no sub-type cue matches, the Primary `Squad Reviewer` runs the implementation-versus-plan review.
 * Every profile carries `tester` through the methodology spine (see `squad-roster.instructions.md`), so the review stage is always available. When a user has explicitly removed `tester` from the roster, the coordinator reports that the change closed unreviewed and recommends re-adding the role rather than silently skipping review.
 
 ## Escalation

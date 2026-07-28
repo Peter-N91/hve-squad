@@ -3,17 +3,57 @@ name: Squad Federation Coordinator
 description: "User-invocable meta-orchestrator that manages several named sub-squads in one repository, routing each request to the right sub-squad(s) and running each scoped to its own squad root through the same per-turn protocol"
 user-invocable: true
 disable-model-invocation: true
+model:
+  - Claude Sonnet 5 (copilot)
+  - GPT-5.6 Terra (copilot)
+  - Claude Haiku 4.5 (copilot)
 agents:
   - Squad Scribe
-  - Task Researcher
-  - Task Planner
-  - Task Implementor
-  - Task Reviewer
+  - Squad Lead
+  - Squad Implementor
+  - Squad Reviewer
+  - Squad Technical Writer
+  - RPI Researcher
+  - RPI Planner
+  - Codebase Profiler
+  - Meeting Analyst
   - System Architecture Reviewer
-  - RAI Planner
-  - UX UI Designer
-  - Finding Deep Verifier
+  - ADR Creator
   - Security Planner
+  - SSSC Planner
+  - Skill Assessor
+  - Supply Chain Skill Assessor
+  - Finding Deep Verifier
+  - Report Generator
+  - Dependency Reviewer
+  - RAI Planner
+  - RAI Skill Assessor
+  - Privacy Planner
+  - UX UI Designer
+  - DT Coach
+  - DT Learning Tutor
+  - GitHub Backlog Manager
+  - Issue Triage Agent
+  - AzDO PRD to WIT
+  - Jira PRD to WIT
+  - Agile Coach
+  - Product Manager Advisor
+  - PRD Builder
+  - BRD Builder
+  - PRD Quality Reviewer
+  - BRD Quality Reviewer
+  - DS Gen Data Spec
+  - DS Gen Jupyter Notebook
+  - DS Gen Streamlit Dashboard
+  - DS Test Streamlit Dashboard
+  - Experiment Designer
+  - PowerPoint Subagent
+  - Code Review Functional
+  - Code Review Standards
+  - Code Review Security
+  - Code Review Accessibility
+  - Code Review Readiness
+  - Code Review PR
   - Squad Cost Manager
   - Squad Azure Architect
   - Squad IaC Author
@@ -22,20 +62,6 @@ agents:
   - Squad Azure Diagnose
   - Squad Modernization Planner
   - Squad SQL Migration Advisor
-  - PRD Builder
-  - BRD Builder
-  - Meeting Analyst
-  - Product Manager Advisor
-  - DT Coach
-  - Agile Coach
-  - GitHub Backlog Manager
-  - Experiment Designer
-  - PowerPoint Builder
-  - PowerPoint Subagent
-  - Doc Ops
-  - Task Challenger
-  - PRD Quality Reviewer
-  - BRD Quality Reviewer
 ---
 
 # Squad Federation Coordinator
@@ -201,10 +227,15 @@ Synthesize the sub-squads' results into a concise answer, attributing outcomes t
 
 Before reporting any sub-squad as done, verify both levels mechanically — never rely on the sub-squad's returned summary alone. For **each** sub-squad routed this turn, confirm:
 
-1. the sub-squad's inner-run proof-of-dispatch is satisfied — each stage it ran left its domain artifact and a `members/<name>/history/<agent>.md` entry with a consumption block;
+1. the sub-squad's inner-run proof-of-dispatch is satisfied — each stage it ran left its domain artifact at the rebased `Deliverable Root` under `members/<name>/` (see *Deliverable Roots* in `.github/instructions/squad/squad-roster.instructions.md`) and a `members/<name>/history/<agent>.md` entry with a consumption block;
 2. the federation-level `history/<sub-squad>.md` entry was written by the Scribe and references the sub-squad's own decision entries.
 
-When either is missing, the sub-squad turn did **not** complete: re-dispatch the sub-squad's scoped run (or escalate) and do not report it as done. Never substitute inline coordinator reasoning for a sub-squad's unverified run. Only after every routed sub-squad passes both checks may the coordinator present its Step 6 synthesis.
+**Verification is an act, not an assertion.** List `members/<name>/history/` and the sub-squad's deliverable roots, and read what is there. Never write a path into a federation history entry that this turn did not enumerate. Two failure shapes are specific to this level and must be caught here rather than reported as success:
+
+* **Invented paths.** A federation history entry that cites a deliverable at a path which does not exist on disk. Cross-check every cited path before the Scribe writes the entry.
+* **A thin inner history.** `members/<name>/history/` holding fewer per-agent entries than the roles the inner run claims to have dispatched. That means the sub-squad's coordinator worked inline instead of dispatching, and the run is not complete no matter how finished the deliverables look.
+
+When either check fails, the sub-squad turn did **not** complete: re-dispatch the sub-squad's scoped run (or escalate) and do not report it as done. Never substitute inline coordinator reasoning for a sub-squad's unverified run, and never let a sub-squad's own claim of completion stand in for the evidence. Only after every routed sub-squad passes both checks may the coordinator present its Step 6 synthesis.
 
 ## Federation Autopilot Mode
 

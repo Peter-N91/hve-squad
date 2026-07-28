@@ -31,7 +31,7 @@
       <div class="eyebrow">Consumer Guide</div>
       <h1>Bring your own PowerPoint template</h1>
       <p class="lead">
-        The squad's PowerPoint Builder generates decks from your content. Give it your branded
+        The squad's <code>presenter</code> role generates decks from your content. Give it your branded
         <code>.pptx</code> once and every deck inherits your slide masters, layouts, theme colors, and
         fonts. The branding rule ships with hve-squad and switches on by itself — a non-technical user
         never copies a file, edits a config, or restates the template on each request.
@@ -44,7 +44,7 @@
       <h2>How branding flows in</h2>
       <p>
         When you ask the squad to build a deck, the Squad Coordinator dispatches the
-        <strong>PowerPoint Builder</strong>, which runs the <code>powerpoint</code> skill's
+        <strong>PowerPoint Subagent</strong>, which runs the <code>powerpoint</code> skill's
         <code>build_deck.py</code>. Branding is applied through the <code>--template</code> flag
         (PowerShell <code>-TemplatePath</code>): the build inherits the template's
         <strong>slide masters, layouts, and theme (colors and fonts)</strong> and discards the
@@ -98,7 +98,7 @@
         part of the package, so on <code>apm install</code> it lands in your repo at
         <code>.github/instructions/pptx-brand-template.instructions.md</code> and switches on by
         itself. Because its <code>applyTo</code> matches <code>**/.copilot-tracking/ppt/**</code>, the
-        PowerPoint Builder reads it every time it works on a deck.
+        PowerPoint Subagent reads it every time it works on a deck.
       </p>
       <p>
         The instruction tells the builder to use your template as <code>--template</code> for full
@@ -139,7 +139,7 @@ layouts:
 
       <h2>Step 5 — Always validate</h2>
       <p>
-        The PowerPoint Builder's validation pass is what turns a correct deck into a polished one. It
+        The PowerPoint skill's validation pass is what turns a correct deck into a polished one. It
         runs geometric checks (margins, overflow, spacing) and optional vision checks (overlaps,
         contrast, alignment, leftover placeholders), then loops back to fix issues. Let it iterate
         rather than accepting the first build — that loop is the difference between "it generated" and

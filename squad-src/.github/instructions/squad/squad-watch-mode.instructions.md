@@ -96,6 +96,27 @@ A Watch Mode run's output is a **branch and a draft pull request** — never a d
 * Merge, deploy, `git push` to a protected branch, schema migration, and secret rotation remain **Impactful-Action Gates** (`.github/instructions/squad/squad-autopilot.instructions.md`). They are approved by a human through the `github-issue` channel and enforced independently by branch protection and GitHub Environment approvals.
 * Watch Mode never auto-merges and never auto-releases.
 
+### Unattended Gate Disposition
+
+An interactive autopilot run pauses at each Human Gate and waits for a person. A Watch Mode run has no person attached at trigger time, so a run that waits is a run that hangs until the job times out. The resolution is not to waive the gates but to **move where they are satisfied**: in a run whose terminal deliverable is a draft pull request, the pull request *is* the approval surface.
+
+Gates therefore resolve in one of three ways, and the split is not negotiable by the payload:
+
+| Gate | Unattended disposition |
+| --- | --- |
+| Stage transitions (research → plan → implement → review) | **Proceed.** These were never Human Gates in autopilot; they advance on artifact evidence as normal. |
+| Final-outcome validation | **Satisfied by the draft pull request.** The coordinator does not wait for an in-chat approval; it compiles the outcome into the PR body and opens the PR. The human validates by reviewing the PR. |
+| Risk Gate (`Stop` verdict, `Risk: High`, compliance finding, divergence, cost ceiling) | **Record, do not block.** The finding is written to the sub-squad `decisions.md` and reproduced verbatim in the PR body under a `Blocking findings` heading, and the PR stays a draft. A `Stop` verdict additionally stops the Implement stage, so the PR carries the research and plan plus the reason no implementation followed. |
+| Impactful-Action Gate (merge, deploy, push to a protected branch, schema migration, data deletion, destructive infrastructure operation, secret rotation) | **Never proceeds.** No exception, no payload override, no `unattended` flag. |
+
+The Impactful-Action Gate is absolute in the unattended path because the whole safety argument rests on it. It is enforced in three independent places, so a single failure — including a prompt-injection success — does not carry the action through:
+
+1. **The contract.** The coordinator stops and returns the pending action rather than performing it.
+2. **The environment.** The runner is not given deployment credentials, cloud subscriptions, or a token with merge rights, so the action has nothing to execute against.
+3. **The repository.** Branch protection on the default branch means the draft pull request cannot merge itself even if the first two failed.
+
+A consumer who wants an unattended run to reach further than a draft pull request does not loosen this file: they add a *separate*, human-approved step after the PR. That keeps continuous AI's blast radius at "a branch a human has not read yet".
+
 ## Idempotency and Concurrency
 
 * **One active run per source event.** A re-triggered event (a new label, an edited issue, a `synchronize` push) resumes or references the existing run rather than starting a competing one. The event's own sub-squad is the anchor for that check: a re-trigger resolves to the same derived name and reuses that sub-squad's recorded state (see *Reuse, Collisions, and Concurrency*).
@@ -187,7 +208,12 @@ Names are normalized before use: lowercase; every character outside `[a-z0-9]` r
 * **Watch-owned rows are marked.** A sub-squad the bootstrap creates is registered with `Owner=watch-mode` and a `Description` carrying its source ref and terminal deliverable, per *Watch-Owned Sub-Squads* in `.github/instructions/squad/squad-federation.instructions.md`. That marker is what makes the rules below decidable.
 * **Reuse on matching provenance.** When the derived name already exists as a watch-owned sub-squad whose `state.json` `trigger.ref` and `eventId` match this event, the run reuses it and resumes from the recorded state instead of creating anything. This is how a re-labeled issue, an edited issue, a `synchronize` push on a pull request, and a re-run of the same workflow all stay in one trail.
 * **Disambiguate a watch-owned name whose provenance differs.** When the name exists as a watch-owned sub-squad but its provenance is a different event — two scheduled sweeps on the same UTC day, for example — the run appends the workflow run id once (`<name>-<runId>`) and creates that. It never silently merges two events into one sub-squad.
-* **Never write into a human-owned sub-squad.** When the derived name exists and its registry row is not `Owner=watch-mode`, or when a `members/<name>/` directory exists with no registry row at all, the run comments on the source issue or pull request and stops. The bootstrap never overwrites or merges into a sub-squad it did not create.
+* **Never write into a human-owned sub-squad.** When the derived name exists and its registry row is not `Owner=watch-mode`, the run comments on the source issue or pull request and stops. The bootstrap never overwrites or merges into a sub-squad it did not create.
+* **An unregistered directory is adopted only on matching provenance.** A `members/<name>/` directory with no registry row is ambiguous: it is either something a human left behind, or this event's own earlier run in a repository that does not commit the registry. Resolve it by evidence, not by assumption — read that directory's `state.json`:
+  * `trigger.ref` and `trigger.eventId` match **this** event → it is this run's own prior attempt. Adopt it: re-register the row, resume from the recorded state, and note the re-registration in the federation decision entry.
+  * `trigger` is absent, or its `ref` belongs to a different event → treat it as human-owned. Comment on the source thread and stop.
+
+  This keeps the no-overwrite guard exactly as strong as before — a directory that cannot prove it belongs to this event is still off limits — while allowing the common and safe case to proceed. It matters because a consumer may deliberately commit the per-event member trees (they are the reviewable audit trail) while leaving `federation.md` uncommitted (it uses replace semantics and would conflict between concurrent runs). In that repository every re-trigger, retry, and follow-up event would otherwise hit a tree with no row and refuse to run.
 * **Repair a registered sub-squad whose tree is missing.** When a registry row exists but `members/<name>/` does not, seed the missing tree at that root and record the repair in the federation-level decision entry rather than failing the run.
 * **Concurrent bootstrap is a compare-and-swap, not a lock.** Two events can be in flight at once, so both may observe a plain single squad and both attempt promotion. The Squad Scribe already refuses a promotion when a `federation.md` exists, so the loser of the race receives a refusal, re-detects the repository state once, and continues as an Auto-Expansion. Only a second consecutive failure escalates. No new locking primitive is introduced, and the concurrency group in the trigger workflow still keeps one active run per source event.
 * **Mixed state resolves to federation.** When a top-level `federation.md` and a top-level `team.md` are both present, detection precedence makes the project a federation: the bootstrap skips promotion, runs Auto-Expansion, and notes the stray `team.md` in the federation decision entry for a human to reconcile.
@@ -206,7 +232,7 @@ Names are normalized before use: lowercase; every character outside `[a-z0-9]` r
 
 ### Bootstrap Escalation
 
-The bootstrap escalates and stops the run — commenting on the source issue or pull request, or opening an issue when the event has no thread to comment on (`schedule`, `push`) — when the derived name collides with a human-owned sub-squad or an unregistered directory, when a promotion fails twice, when the promoted name collides with an existing `members/` directory, or when any bootstrap write is refused. A Watch Mode run never proceeds without its event sub-squad.
+The bootstrap escalates and stops the run — commenting on the source issue or pull request, or opening an issue when the event has no thread to comment on (`schedule`, `push`) — when the derived name collides with a human-owned sub-squad or with an unregistered directory whose provenance does not match this event, when a promotion fails twice, when the promoted name collides with an existing `members/` directory, or when any bootstrap write is refused. A Watch Mode run never proceeds without its event sub-squad.
 
 ## What Watch Mode Does Not Do
 

@@ -3,7 +3,7 @@ name: Squad Azure Diagnose
 description: "Triages deployed Azure resources read-only via the azure-resource capability, correlating health, logs, and configuration into ranked hypotheses; recommends remediations but never applies them, deferring every change to the gated Deployer or the IaC Author"
 user-invocable: false
 agents:
-  - Researcher Subagent
+  - RPI Researcher
 ---
 
 # Squad Azure Diagnose
@@ -22,7 +22,7 @@ Triage deployed Azure resources in the **consumer's** environment to explain why
 
 Read these on first use of a turn and honor them throughout.
 
-* `.github/instructions/squad/squad-mcp-capability.instructions.md` governs the `azure-resource` capability: prefer the `@azure/mcp` server when it is configured and reachable, and fall back to the Researcher Subagent against the `az` CLI and the Azure Resource Graph and Resource Manager REST APIs under the user's `az login` context when it is absent. All reads on this path are non-destructive.
+* `.github/instructions/squad/squad-mcp-capability.instructions.md` governs the `azure-resource` capability: prefer the `@azure/mcp` server when it is configured and reachable, and fall back to the RPI Researcher against the `az` CLI and the Azure Resource Graph and Resource Manager REST APIs under the user's `az login` context when it is absent. All reads on this path are non-destructive.
 * `.github/instructions/squad/squad-autonomous.instructions.md` defines the read-only posture this role holds and the Mandatory Escalation Triggers it never bypasses. This role never runs a destructive operation, a production change, or a resource mutation, regardless of mode.
 * `.github/instructions/squad/squad-state.instructions.md` governs squad state: this role returns findings to the coordinator and never writes state directly. Only the Squad Scribe writes history, on the coordinator's behalf.
 
