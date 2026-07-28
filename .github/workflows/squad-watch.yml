@@ -87,11 +87,15 @@ permissions:
 env:
   # Model pin for headless runs, scoped to THIS repository.
   #
+  # A headless Copilot CLI run does NOT read the `model:` frontmatter the VS Code
+  # host honors, so this flag is the only model lever on the CI path.
+  #
   # The coordinator is the most instruction-heavy agent in the system: it holds the
   # dispatch contract, the roster, the routing table, and the two-level verification
   # checklist. Letting model selection fall to `auto` routes exactly that agent to
   # whatever is cheapest, and a coordinator that cannot hold the contract fills the
-  # gap by authoring deliverables inline instead of dispatching its cast.
+  # gap by authoring deliverables inline instead of dispatching its cast. Keep this
+  # on a frontier model; never pin a fast tier here.
   #
   # Precedence in the CLI is: --model flag > COPILOT_MODEL env > ~/.copilot/settings.json.
   # Only the flag is repo-scoped, because only the flag lives in this file — the

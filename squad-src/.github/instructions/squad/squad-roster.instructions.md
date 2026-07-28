@@ -71,6 +71,18 @@ Alpha, Beta, Gamma, Delta, Epsilon, Zeta, Eta, Theta, Iota, Kappa, Lambda, Mu, N
 
 When the seeded roster needs more than 24 names, the coordinator restarts the list and appends `-2`, `-3`, and so on (`Alpha-2`, `Beta-2`).
 
+#### Naming in a Federation
+
+A federation seeds several rosters in one build, so asking the four-part naming question once per sub-squad would be repetitive. The contract mirrors *Capture in a Federation* in `.github/instructions/squad/squad-notifications.instructions.md`: **ask the policy once, then apply it per sub-squad.**
+
+1. **Ask once, at the federation level.** The Squad Federation Coordinator puts the naming question to the user exactly once per build — during Federation Init Phase 1, Promotion Phase 1, or Expansion Phase 1 — before any sub-squad is seeded. It is the same required question with the same wait-for-the-user gate the single-squad Init applies, and it is never resolved silently to "skip".
+2. **What is captured is a policy, not a name list.** The answer is one of the four paths above, plus any per-role names the user supplied. Recording choice 4 (skip) is a decision the user made; never treat an unasked question as choice 4.
+3. **Apply the policy to every sub-squad.** The federation coordinator passes the captured policy down with each sub-squad's Init, and the Squad Coordinator running with an inherited naming policy applies it rather than asking again.
+4. **Names are scoped to one roster.** Uniqueness is the (`Role`, `Member Name`) pair *within* a single `team.md`, so two sub-squads may both carry an `Alpha`. Under choice 2 the alias wordlist restarts at the top for each sub-squad.
+5. **A per-sub-squad override is allowed.** When the user wants different names for one sub-squad, capture them for that sub-squad only and leave the federation policy untouched.
+6. **Promotion preserves what exists.** A promoted single squad's `team.md` already carries its `Member Name` column; relocation never renames a member. Ask the naming question only for sub-squads the promotion additionally creates.
+7. **Unattended runs never ask.** A Watch Mode bootstrap has no user in the loop: it seeds the event sub-squad under the federation's captured policy, falling back to choice 4 (empty `Member Name`) when the federation has none. It never invents names and never blocks on a question it cannot ask.
+
 ## Cast Catalog
 
 The cast catalog is the default casting source and the canonical mapping between squad roles (members) and deployed HVE Core agents, keyed by each agent's exact `name:` frontmatter value. When a project has no `team.md`, the coordinator seeds the roster from this catalog.

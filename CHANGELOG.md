@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-07-28
+
+### Fixed
+
+- **Federation Init never asked how to name the members of each sub-squad.** The single-squad Init makes naming a numbered Phase 1 step with an explicit wait-for-the-user gate; the federation delegated it as three words (`propose/confirm the roster and naming`) buried inside a Phase 2 *Create* step, so a build wrote `team.md` with an empty `Member Name` column without the user ever seeing the choice. This is the same defect the approval-channel capture had before `0.10.12`. Naming is now **Federation Init Phase 1 step 5** with the four choices inlined and its own wait gate, and Phase 2 passes the captured policy down (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+  - New **ask-once-then-apply** contract: the policy is captured once at the federation level and applied per sub-squad rather than re-asked. Names are scoped to a single roster, so two sub-squads may each carry an `Alpha` and the alias wordlist restarts per sub-squad. Promotion preserves the adopted squad's existing names and asks only for sub-squads it additionally creates; Expansion states the inherited policy and offers an override; an unattended Watch Mode bootstrap never asks (`squad-src/.github/instructions/squad/squad-roster.instructions.md` *Naming in a Federation*).
+  - The Squad Coordinator accepts an inherited `naming=<policy>` input and skips its own naming step when the federation already captured one, mirroring the existing `notify` inheritance (`squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+- **Init proposals named roles but not the agents behind them.** A profile-based proposal listed `researcher`, `lead`, `tester` and left the concrete cast invisible until after the write, so whether the user saw `Codebase Profiler` or nothing depended on how verbose the running model felt. Both coordinators now name each role's resolved Primary agent in the proposal, which is what the custom-roster menu already required (`squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+- **The shipped Watch Mode workflow template had no model pin.** The live workflow in this repository pins `claude-sonnet-5`, but the template consumers copy invoked `copilot -p` with no `--model`, so every derived Watch Mode run fell back to `auto` — the precise condition the pin exists to prevent, in the one context where no human is watching for a coordinator that stopped dispatching. The template now carries the workflow-level `SQUAD_MODEL` env, a `workflow_dispatch` model override, and `--model "$RUN_MODEL"` on the CLI call (`squad-src/.github/skills/squad/squad-watch.workflow.yml`).
+
+### Changed
+
+- **The orchestrator model pin is removed.** `0.11.0` added a `model:` preference list to `Squad Coordinator` and `Squad Federation Coordinator` to keep `auto` from routing the two most instruction-heavy agents to the cheapest option. It solved the wrong half of the problem: frontmatter is honored **only by the VS Code host**, so it never reached the unattended path it was meant to protect, while in the interactive host it overrode the consumer's own model selection on the one agent a person invokes by hand. That contradicts the cost-first tier routing the squad exists to provide — `Model Tier` in `team.md` and the consumption ledger both assume the operator controls spend — and an interactive turn has a human present to notice a degraded run. Both orchestrators now declare no `model:` preference and state why.
+- **The model pin now lives only where nobody is watching.** Watch Mode passes `--model` to the Copilot CLI, which ignores agent frontmatter entirely, so the CI path is pinned by the repository owner rather than by the package. Per-role preference stays in the `Model Tier` column.
+
+[0.11.1]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.1
+
 ## [0.11.0] - 2026-07-28
 
 ### Fixed

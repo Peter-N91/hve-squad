@@ -64,6 +64,11 @@
 #   custom agents (`.github/agents`), instructions (`.github/instructions`), and
 #   skills, so the Squad Coordinator and cast are available without extra wiring.
 #
+#   The CLI does NOT read the `model:` frontmatter that the VS Code host honors, so
+#   the model is pinned here with `--model` from the workflow-level SQUAD_MODEL.
+#   Pin a frontier model: an unattended run has no human to notice a coordinator
+#   that stopped dispatching. See the SQUAD_MODEL comment below.
+#
 # Required permissions / secrets
 #   Built-in GITHUB_TOKEN scoped to contents:write, pull-requests:write, and
 #   issues:write (to open the draft PR and to comment when escalating). Copilot CLI
@@ -103,6 +108,10 @@ on:
       issue_number:
         description: "Issue number to run autopilot against (optional)"
         required: false
+      model:
+        description: "Override the pinned model for this run (blank = use the workflow default)"
+        required: false
+        default: ''
   push:
     branches:
       - 'release/**'              # adjust or remove
@@ -111,6 +120,29 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+
+env:
+  # Model pin for headless runs, scoped to THIS repository.
+  #
+  # A headless Copilot CLI run does NOT read the `model:` frontmatter that the
+  # VS Code host honors, so without this flag model selection falls to `auto` and
+  # routes the coordinator — the most instruction-heavy agent in the system, holding
+  # the dispatch contract, the roster, the routing table, and the two-level
+  # verification checklist — to whatever is cheapest. A coordinator that cannot hold
+  # the contract fills the gap by authoring deliverables inline instead of
+  # dispatching its cast, which is the exact failure this pin exists to prevent.
+  # Pin a frontier model here; do not pin a fast tier.
+  #
+  # Precedence in the CLI is: --model flag > COPILOT_MODEL env > ~/.copilot/settings.json.
+  # Only the flag is repo-scoped, because only the flag lives in this file — the
+  # settings file is per-user and per-machine, so it cannot express "in this project".
+  #
+  # The CLI takes exactly one model ID and fails if it is not enabled on the plan
+  # backing COPILOT_GITHUB_TOKEN; there is no fallback chain here. Confirm the ID
+  # available to you by running `copilot` interactively and typing `/model`. IDs are
+  # lowercase slugs (for example `claude-sonnet-5`, `gpt-5.4`), not the display names
+  # used in VS Code agent frontmatter.
+  SQUAD_MODEL: claude-sonnet-5
 
 concurrency:
   # One active run per target (idempotency). Do not cancel an in-flight run.
@@ -373,12 +405,19 @@ jobs:
           # The routed prompt (event payload embedded AS DATA) was written to a file
           # by the prepare step, so untrusted text never touches the command line.
           SQUAD_PROMPT_FILE: ${{ steps.prep.outputs.promptFile }}
+          # Empty on every trigger except a manual dispatch override. SQUAD_MODEL
+          # arrives from the workflow-level env block, so the fallback resolves in the
+          # shell rather than in an expression context.
+          MODEL_OVERRIDE: ${{ inputs.model }}
         run: |
           set -euo pipefail
           # Headless run. Auto-approve tools for unattended work; deny obviously
           # destructive shell commands as defense-in-depth. Merge protection is
           # enforced by branch protection; no deploy secrets are provided here.
+          RUN_MODEL="${MODEL_OVERRIDE:-$SQUAD_MODEL}"
+          echo "::notice::Running the squad on model '${RUN_MODEL}'."
           copilot -p "$(cat "$SQUAD_PROMPT_FILE")" \
+            --model "$RUN_MODEL" \
             --allow-all-tools \
             --deny-tool='shell(rm)'
 
