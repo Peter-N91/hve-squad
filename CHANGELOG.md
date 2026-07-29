@@ -5,6 +5,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.4] - 2026-07-29
+
+### Fixed
+
+- **The consumption ledger reported roughly one-fiftieth of what a run actually cost, and the drift was undetectable by design.** `consumption-rates.md` is seeded from a template only when the file is *missing*, so a table that exists in the wrong shape is used forever. A drifted table that priced every tier at one blended `~$0.005/1k` rate survived indefinitely, and with it three compounding errors: model choice had no effect on cost (an Opus dispatch and a Haiku lookup billed identically), there were no separate cached, cache-write, or output rates although output runs 5-15x input on every model, and every dispatch was recorded at a flat per-tier token constant so the ledger was really `dispatch_count × constant`. The Scribe now **shape-validates** the table — per-model rows with `Input`, `Cached`, `Cache write`, and `Output` columns, a tier-fallback table, a dispatch-size estimator, and a calibration block — and reseeds when the check fails, preserving the calibration block (`squad-src/.github/agents/squad/squad-scribe.agent.md`, `squad-src/.github/skills/squad/SKILL.md`).
+  - **A dispatch was priced as a single model call.** This was where the order of magnitude went. A dispatched agent runs an internal tool loop, and every turn resends the accumulated context, so cost scales with `internal_turns × average_context` — largely at the cached rate — not with one input-and-output pair. The new dispatch-size estimator models the loop explicitly, derives its inputs from what the dispatch actually reported (files read and their size, artifacts written, tool calls made, findings length), and records the `internal_turns` it assumed on every block.
+  - **Running the squad was free.** The coordinator's own turns and every Scribe write consumed tokens that no dispatch block covered. The ledger now carries an `orchestration` row.
+  - **Anthropic cache-write tokens were never billed.** Anthropic models charge a cache-write rate on top of cached input (Haiku 4.5 $1.25, Sonnet 4.6 $3.75, Opus 5 $6.25 per 1M); the rate had no column and no term in the formula.
+- **The ledger invented models that were never dispatched.** With no source of truth for what actually ran, `model` was filled from the tier-fallback table's "priced as" column — so an operator running Opus 5 everywhere saw roles attributed to Sonnet 4.6 or Haiku, with costs to match. Model identity is deterministic and readable, so it is now **resolved, never guessed**, through an explicit ladder, and `model` accepts only a resolved value or the literal `unknown` (`squad-src/.github/instructions/squad/squad-state.instructions.md` *Model Attribution*).
+  - **A tier is not a model.** `Model Tier` is a routing preference that never determines what ran and never becomes a model name. A dispatch that inherited a high-capability session model is now priced at that model's rates rather than its roster tier's — pricing an inherited frontier dispatch at a mid-tier fallback was a direct undercount. Tier rates apply only when `model` is `unknown`.
+  - **Attribution and pricing are now separate fields.** `model` records what ran; `priced_as` records the rate row used. They differ only on a fallback, and copying `priced_as` into `model` is explicitly prohibited in both the state instructions and the rate table itself.
+- **Unattended runs would have misattributed every model-pinned role.** The Watch Mode workflow passes `--model` to the Copilot CLI, which ignores agent `model:` frontmatter entirely, so in a headless run the pinned lightweight agents (Scribe, Reviewer, Cost Manager, Technical Writer) all execute on the one CLI model. Resolution is now host-aware: a `cli-pinned` rung takes precedence when `state.json` carries a `trigger` object, ahead of the frontmatter rung the VS Code host honors.
+
+### Added
+
+- **A calibration loop, so the estimate converges instead of staying wrong.** `consumption-rates.md` carries a `calibration_factor` — the running mean of `observed_credits / estimated_credits`, clamped to 0.25-10.0 — that multiplies every cost estimate. Hand the Scribe an `observed_credits` figure (the per-user `ai_credits_used` delta from the Copilot usage-metrics REST API) and it folds that run's ratio into the mean. Until one run is reconciled the factor stays at 1.00 and the ledger reads "uncalibrated".
+- **Real per-model rates**, verified against the GitHub Copilot "Models and pricing" documentation on 2026-07-29, covering the GPT-5.4 family, Claude Haiku 4.5 through Opus 5, Gemini 3.1 Pro, and GPT-5.5, with input, cached, cache-write, and output columns.
+- **`model_source` on every consumption block**, recording which rung resolved the model (`cli-pinned`, `operator-declared`, `agent-pinned`, `session-inherited`, or `unresolved`). This is what makes a legitimately pinned Haiku row distinguishable from a fabricated one — previously they looked identical.
+- **`currentRun.sessionModel` and `currentRun.modelOverrides` in `state.json`**, the recorded source of truth for inherited dispatches. The coordinator captures the session model at Init and restates it when the operator switches models; sub-squads inherit both from the federation root unless they set their own.
+
+### Changed
+
+- **`state.json` `schemaVersion` moves to `1.3` (squad) and `1.2` (federation).** Both additions are backward-compatible: the new fields default to empty and existing state stays valid.
+- **The per-dispatch consumption block gains six fields** — `model_source`, `priced_as`, `internal_turns`, `cache_write_tokens`, `cache_write_rate`, and a `basis` that now describes pricing only while `model_source` describes attribution. The `consumption.md` ledger gains matching `Model Source`, `Priced As`, `Turns`, and `Cache Wr` columns plus the `orchestration` row.
+- **The squad-versus-manual cost comparison is materially less flattering, and honest for the first time.** The old figure undercounted the squad while modelling the manual baseline generously. Pricing both sides through the same estimator puts the saving near 13%, resting on tier routing and reduced rework rather than a large raw-token advantage.
+
+### Upgrade note
+
+`cost-ceiling=$X` is not just reporting — it is wired to the Risk Gate in autonomous, autopilot, watch-mode, and federation runs. Because estimates now land roughly 50x higher, **any ceiling you already set will trip almost immediately** and halt runs that previously completed. The shipped default is unset, so a fresh install is unaffected; if you carry a value in `routing.md` or pass one to `/squad`, re-baseline it against a current `consumption.md` total before assuming the run is at fault (`squad-src/.github/instructions/squad/squad-autonomous.instructions.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.4"
+```
+
+[0.11.4]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.4
+
 ## [0.11.3] - 2026-07-29
 
 ### Changed

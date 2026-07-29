@@ -76,6 +76,7 @@ The autonomous loop honors an indicative per-turn spend cap. The cap is a placeh
 * When the dispatched roles' projected token spend (or the cost-manager's indicative estimate of the change's runtime cost) exceeds the cap, the coordinator escalates instead of running the next cycle.
 * The default cap is unset; consumers opt in by naming a value. An unset cap means the loop runs to its cycle-2 boundary or to a mandatory escalation, whichever fires first.
 * The cap is advisory at the model-spend level (no runtime metering ships with the package); it is enforceable at the change-cost level through the `cost-manager` charter (`.github/agents/squad/squad-cost-manager.agent.md`).
+* **Re-baseline an existing cap against the current estimator.** Cost estimates are produced by the dispatch-size estimator in `consumption-rates.md`, which prices a dispatch as an internal tool loop rather than a single model call. A cap chosen against an older, single-call estimate reads far too low against current figures and will fire the Risk Gate almost immediately. When a cap starts tripping on turns that previously passed, compare it against a current `consumption.md` run total before assuming the run is at fault.
 
 ## History Entries
 

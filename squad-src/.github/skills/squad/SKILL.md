@@ -97,7 +97,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 ### Handoff
 
-1. Hand each dispatched agent's request and outcome to the Squad Scribe, which appends them to `history/<agent>.md` (append-only) along with the per-dispatch consumption block (the model used plus estimated input, cached, and output token cost and credits), then rewrites the `consumption.md` ledger and updates the `state.json` `currentRun` totals. The consumption block is written for every dispatch, never conditionally: the coordinator always supplies at least the resolved role's model tier, and when it omits the payload the Scribe self-derives a `tier-default` estimate, so a history append never lands without its consumption block and the ledger never stays at its seed while dispatches have run. Every consumption figure is an estimate.
+1. Hand each dispatched agent's request and outcome to the Squad Scribe, which appends them to `history/<agent>.md` (append-only) along with the per-dispatch consumption block (the resolved model and how it was resolved, plus estimated input, cached, cache-write, and output token cost and credits), then rewrites the `consumption.md` ledger and updates the `state.json` `currentRun` totals. The consumption block is written for every dispatch, never conditionally: the coordinator resolves the model through the ladder in *Model Attribution* and passes it with the roster tier, and when it omits the payload the Scribe resolves the model itself — recording `unknown` and a `tier-default` price rather than inventing a model name — so a history append never lands without its consumption block and the ledger never stays at its seed while dispatches have run. Every consumption figure is an estimate.
 2. Synthesize the collected findings into a concise answer for the user.
 3. Escalate to the user — rather than acting — when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose.
 
@@ -435,13 +435,15 @@ Machine-readable squad status. Uses replace semantics — the coordinator overwr
 
 ```json
 {
-  "schemaVersion": "1.2",
+  "schemaVersion": "1.3",
   "updated": "",
   "turn": 0,
   "mode": "interactive",
   "activeRoles": [],
   "openEscalations": [],
   "currentRun": {
+    "sessionModel": "",
+    "modelOverrides": {},
     "estCostUsd": 0,
     "estCreditsTotal": 0
   },
@@ -470,27 +472,28 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 
 # Squad Consumption Ledger (Run: <run-id>)
 
-| Role      | Member | Agent   | Model   | Tier   | In Tokens | Cached | Out Tokens | Est. Cost (USD) | Est. Credits |
-|-----------|--------|---------|---------|--------|-----------|--------|------------|-----------------|--------------|
-| <role>    |        | <agent> | <model> | <tier> | 0         | 0      | 0          | 0.0000          | 0.00         |
-| **Total** |        |         |         |        | **0**     | **0**  | **0**      | **$0.00**       | **0.00**     |
+| Role          | Member | Agent         | Model   | Model Source | Priced As | Tier   | Turns | In Tokens | Cached | Cache Wr | Out Tokens | Est. Cost (USD) | Est. Credits | Basis     |
+| ------------- | ------ | ------------- | ------- | ------------ | --------- | ------ | ----- | --------- | ------ | -------- | ---------- | --------------- | ------------ | --------- |
+| <role>        |        | <agent>       | <model> | <source>     | <model>   | <tier> | 0     | 0         | 0      | 0        | 0          | 0.0000          | 0.00         | estimated |
+| orchestration |        | <coord+scribe>| <model> | <source>     | <model>   | mixed  | 0     | 0         | 0      | 0        | 0          | 0.0000          | 0.00         | estimated |
+| **Total**     |        |               |         |              |           |        | **0** | **0**     | **0**  | **0**    | **0**      | **$0.00**       | **0.00**     |           |
 
-> Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API (optional post-hoc reconciliation). Token rates come from `consumption-rates.md` (observed <date>). 1 AI credit = $0.01 USD.
+> Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API. `Model` is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md` and is never invented — `unknown` where it could not be resolved. `Model Source` is `operator-declared`, `agent-pinned`, `session-inherited`, or `unresolved`; an `agent-pinned` row legitimately differs from the session model. `Priced As` is the rate row used and differs from `Model` only on a fallback. `Turns` is the estimated internal tool-loop turn count for the dispatch, because a dispatch is many model calls and not one. Token rates and the dispatch-size estimator come from `consumption-rates.md` (observed <date>). Calibration factor <factor> (<observations> reconciled run(s)). 1 AI credit = $0.01 USD.
 
 ## Cost Comparison (illustrative)
 
 This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** across <n> specialized agents, routing read-heavy roles to lightweight models and reserving high-output reasoning models only where needed. Reproducing the same outcome by manually prompting a single high-capability model across roughly <iterations> iterate-and-test turns is estimated at **$<manual-cost> (~<manual-credits> AI credits)**, a reduction of about <savings-pct>%.
 
-> Estimates only. Token rates change. See `consumption-rates.md` for current rates and methodology. Token counts and iteration counts are illustrative, not guarantees.
+> Estimates only. Token rates change. See `consumption-rates.md` for current rates, the dispatch-size estimator, and the calibration methodology. Token counts and iteration counts are illustrative, not guarantees.
 ```
 
 ### consumption-rates.md
 
-Single maintainable rate table that isolates volatile per-model token pricing from agent logic. Uses replace semantics. The Scribe seeds it from this template on first run when the file is missing; every rate cell ships as a `<verify>` placeholder until confirmed against the current GitHub Copilot "Models and pricing" docs (verify before commit). Because only this file holds token rates, a price change updates one table and never touches an agent prompt.
+Single maintainable rate table that isolates volatile per-model token pricing from agent logic, plus the dispatch-size estimator and the calibration factor. Uses replace semantics. The Scribe seeds it from this template when the file is missing **or when the existing file does not carry the required sections** (see the Scribe's Step 7 shape check), so a hand-edited or drifted table can never silently degrade every estimate. Because only this file holds token rates, a price change updates one table and never touches an agent prompt.
 
-```markdown
+````markdown
 ---
-description: "Maintainable per-model token-rate table and comparison methodology for squad consumption estimates"
+description: "Per-model token rates, dispatch-size estimator, and calibration factor for squad consumption estimates"
 ---
 
 # Consumption Rates (verify against the current GitHub Copilot "Models and pricing" docs)
@@ -498,27 +501,104 @@ description: "Maintainable per-model token-rate table and comparison methodology
 * Billing model: usage-based billing (UBB), token-metered, effective 2026-06-01.
 * Observed-on: <YYYY-MM-DD>. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
 * Credit conversion: 1 AI credit = $0.01 USD (fixed).
+* All rates are USD per 1M tokens. Anthropic models bill a separate cache-write rate on top of cached input; models without one leave the column at 0.
 
 ## Per-model token rates in USD per 1M tokens (volatile, verify before commit)
 
-| Model (as routed)   | Tier    | Input    | Cached   | Output   | Notes                      |
-|---------------------|---------|----------|----------|----------|----------------------------|
-| GPT-5.4 nano        | fast    | <verify> | <verify> | <verify> | lightweight, read-heavy    |
-| Claude Haiku 4.5    | fast    | <verify> | <verify> | <verify> | lightweight reasoning      |
-| Claude Sonnet 4.6   | default | <verify> | <verify> | <verify> | versatile                  |
-| Claude Opus 4.8     | default | <verify> | <verify> | <verify> | high-capability reasoning  |
-| (additional models) |         | <verify> | <verify> | <verify> | update when GitHub changes |
+| Model (as routed) | Tier     | Input | Cached | Cache write | Output | Notes                      |
+| ----------------- | -------- | ----- | ------ | ----------- | ------ | -------------------------- |
+| GPT-5.4 nano      | fast     | 0.20  | 0.02   | 0           | 1.25   | lightweight, read-heavy    |
+| GPT-5.4 mini      | fast     | 0.75  | 0.075  | 0           | 4.50   | lightweight                |
+| Claude Haiku 4.5  | fast     | 1.00  | 0.10   | 1.25        | 5.00   | lightweight reasoning      |
+| Claude Sonnet 4.6 | default  | 3.00  | 0.30   | 3.75        | 15.00  | versatile                  |
+| Claude Sonnet 5   | default  | 2.00  | 0.20   | 2.50        | 10.00  | versatile (promo pricing)  |
+| GPT-5.4           | default  | 2.50  | 0.25   | 0           | 15.00  | versatile                  |
+| Gemini 3.1 Pro    | default  | 2.00  | 0.20   | 0           | 12.00  | versatile                  |
+| Claude Opus 4.8   | extended | 5.00  | 0.50   | 6.25        | 25.00  | high-capability reasoning  |
+| Claude Opus 5     | extended | 5.00  | 0.50   | 6.25        | 25.00  | high-capability reasoning  |
+| GPT-5.5           | extended | 5.00  | 0.50   | 0           | 30.00  | high-capability reasoning  |
+| (additional)      |          |       |        |             |        | update when GitHub changes |
+
+## Tier fallback rates (used only when `basis: tier-default`)
+
+A tier is a routing preference, not a price. When the actual model is unknown, price the tier at its **most expensive member** rather than a blend: the observed failure mode of this ledger is undercounting, so the fallback is deliberately conservative-high and every row it produces is flagged `basis: tier-default`.
+
+The `Priced as` column below names a model for **pricing only**. Never write it into a consumption block's `model` field — that field records what actually ran and is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md`, or left as the literal `unknown`. Copying a `Priced as` name into `model` is exactly the fabrication that makes a ledger report spend against a model the operator never chose.
+
+| Tier     | Priced as        | Input | Cached | Cache write | Output |
+| -------- | ---------------- | ----- | ------ | ----------- | ------ |
+| fast     | Claude Haiku 4.5 | 1.00  | 0.10   | 1.25        | 5.00   |
+| default  | Claude Sonnet 4.6| 3.00  | 0.30   | 3.75        | 15.00  |
+| extended | Claude Opus 5    | 5.00  | 0.50   | 6.25        | 25.00  |
+
+## Dispatch-size estimator
+
+A dispatch is **not one model call**. A dispatched subagent runs an internal tool loop, and every internal turn resends the accumulated context. Input therefore scales with `internal_turns × average_context`, not with a single prompt-and-reply pair. Pricing a dispatch as one call is what makes a ledger read an order of magnitude below the bill.
+
+```text
+tokens(bytes)      = bytes / 4
+base_context       = agent prompt + auto-applied instructions + loaded skill content
+turn_1_input       = base_context + request
+turn_n_input       = turn_(n-1)_input + tool_result_tokens + prior_assistant_tokens
+gross_input        = Σ over internal_turns of turn_n_input
+output_tokens      = Σ over internal_turns of assistant tokens
+```
+
+Split `gross_input` across the billed rates. Turn 1 is fully uncached; on turns 2..n the carried-forward prefix is a cached read and only the new tool result is fresh input:
+
+```text
+cached_tokens      = gross_input × 0.80
+input_tokens       = gross_input × 0.20
+cache_write_tokens = base_context + new context introduced per turn   (Anthropic models only; 0 otherwise)
+```
+
+Estimate `internal_turns` and `base_context` from what the dispatch actually reported. Use these class defaults only when the dispatch reported nothing:
+
+| Dispatch class            | Internal turns | Base context |
+| ------------------------- | -------------- | ------------ |
+| Lookup / single-file read | 3              | 20,000       |
+| Research / file survey    | 12             | 40,000       |
+| Plan / synthesis          | 15             | 60,000       |
+| Implement / edit loop     | 35             | 60,000       |
+| Review / verification     | 18             | 50,000       |
+| Council member opinion    | 10             | 50,000       |
+| Scribe state write        | 4              | 15,000       |
+
+Observable proxies that override a class default whenever available: the number of files the agent reported reading and their byte size, the byte size of artifacts it wrote, the count of tool calls it reported, and the length of the findings it returned.
+
+## Orchestration overhead
+
+The coordinator's own turns and each Scribe write consume tokens too, and they are dispatches the ledger would otherwise never see. Record them as a single `orchestration` row per run: one coordinator turn per dispatch round at the coordinator's own model, plus one `Scribe state write` class dispatch per Scribe hand-off.
+
+## Cost formula
+
+```text
+raw_cost_usd = ( input_tokens       × input_rate
+               + cached_tokens      × cached_rate
+               + cache_write_tokens × cache_write_rate
+               + output_tokens      × output_rate ) / 1e6
+est_cost_usd = raw_cost_usd × calibration_factor
+est_credits  = est_cost_usd / 0.01
+```
+
+## Calibration
+
+```yaml
+calibration_factor: 1.00
+last_reconciled: never
+observations: 0
+```
+
+The factor is the running mean of `observed_credits / estimated_credits` across reconciled runs, clamped to the range 0.25-10.0. To reconcile: read the per-user aggregate `ai_credits_used` from the Copilot usage-metrics REST API immediately before and after a run, take the delta as `observed_credits`, divide by the run's `est_credits` total, fold that ratio into the mean, and rewrite this block. Until `observations` is at least 1 the factor stays 1.00 and the ledger carries an "uncalibrated" note.
 
 ## Comparison methodology (token terms)
 
-* `est_cost_usd = (input_tokens × input_rate + cached_tokens × cached_rate + output_tokens × output_rate) / 1e6`
-* `est_credits = est_cost_usd / 0.01`
 * `squad_cost = sum over dispatched roles of est_cost_usd`
-* `manual_baseline = expected_iterations × baseline_model_cost_per_turn`
+* `manual_baseline = expected_iterations × baseline_model_cost_per_turn`, where a manual turn is itself priced through the dispatch-size estimator rather than as a single call
 * `savings_pct = 1 - (squad_cost / manual_baseline)`
 
-All values are labeled estimated, and token counts are estimated because no per-dispatch telemetry exists. Optionally reconcile the run total against the per-user aggregate `ai_credits_used` from the usage-metrics REST API after the run.
-```
+All values are labeled estimated, and token counts are estimated because no per-dispatch telemetry exists.
+````
 
 ### Federation Seed Templates
 
@@ -582,7 +662,7 @@ Machine-readable federation status. Replace semantics — the Scribe overwrites 
 
 ```json
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "1.2",
   "updated": "",
   "turn": 0,
   "mode": "interactive",
@@ -590,15 +670,17 @@ Machine-readable federation status. Replace semantics — the Scribe overwrites 
   "activeSubSquads": [],
   "openEscalations": [],
   "currentRun": {
+    "sessionModel": "",
+    "modelOverrides": {},
     "estCostUsd": 0,
     "estCreditsTotal": 0
   }
 }
 ```
 
-`subSquads` lists every registered sub-squad name (mirroring `federation.md`); `activeSubSquads` lists the sub-squad(s) dispatched on the current turn. Each sub-squad keeps its own `state.json` under `members/<name>/` per `.github/instructions/squad/squad-state.instructions.md`.
+`subSquads` lists every registered sub-squad name (mirroring `federation.md`); `activeSubSquads` lists the sub-squad(s) dispatched on the current turn. `currentRun.sessionModel` and `currentRun.modelOverrides` are the federation-wide defaults a sub-squad inherits unless its own `state.json` sets them. Each sub-squad keeps its own `state.json` under `members/<name>/` per `.github/instructions/squad/squad-state.instructions.md`.
 
-`mode` and `currentRun` are additive fields for federation-level autopilot (`.github/instructions/squad/squad-federation-autopilot.instructions.md`). `mode` records the autonomy mode in effect for the current federation turn (`interactive` or `autopilot`); `currentRun` aggregates the estimated cost and credits summed across every sub-squad inner run of the current meta-run, so the federation-level cost ceiling reads one number. Both are backward-compatible — a federation that never runs autopilot leaves `mode` at `interactive` and `currentRun` at zero — so the `schemaVersion` bump from `1.0` to `1.1` keeps existing federation state valid.
+`mode` and `currentRun` are additive fields for federation-level autopilot (`.github/instructions/squad/squad-federation-autopilot.instructions.md`). `mode` records the autonomy mode in effect for the current federation turn (`interactive` or `autopilot`); `currentRun` aggregates the estimated cost and credits summed across every sub-squad inner run of the current meta-run, so the federation-level cost ceiling reads one number. All of these are backward-compatible — a federation that never runs autopilot leaves `mode` at `interactive` and `currentRun` at zero, and `sessionModel` / `modelOverrides` default to empty — so the `schemaVersion` bumps (`1.0` → `1.1` for autopilot, `1.1` → `1.2` for model attribution) keep existing federation state valid.
 
 #### history/autopilot-run-\<id>.md (federation root)
 

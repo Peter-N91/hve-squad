@@ -43,13 +43,15 @@ The Scribe seeds `state.json` on first run and overwrites it as the squad advanc
 
 ```json
 {
-  "schemaVersion": "1.2",
+  "schemaVersion": "1.3",
   "updated": "",
   "turn": 0,
   "mode": "interactive",
   "activeRoles": [],
   "openEscalations": [],
   "currentRun": {
+    "sessionModel": "",
+    "modelOverrides": {},
     "estCostUsd": 0,
     "estCreditsTotal": 0
   },
@@ -75,20 +77,72 @@ Squad runs estimate the model cost and AI-credit consumption of every dispatch s
 
 The Scribe records consumption in three places:
 
-* A per-dispatch consumption block appended to `history/<agent>.md` (append-only), one block per dispatch, with fields in this order: `model`, `model_tier`, `input_tokens`, `cached_tokens`, `output_tokens`, `input_rate`, `cached_rate`, `output_rate`, `est_cost_usd`, `est_credits`, `basis`.
-* The aggregated `consumption.md` ledger (replace via scribe), which mirrors roster order, lists every dispatched member with its model, tier, estimated tokens, estimated cost, and estimated credits, totals the run, and carries the cost-comparison line. This ledger is the common readme of members, models, and credits.
-* The `consumption-rates.md` per-model token-rate table (replace via scribe), the single maintainable source of input, cached, and output rates in USD per 1M tokens plus the comparison methodology. Volatile rate values use `<verify>` placeholders until confirmed against current billing documentation.
+* A per-dispatch consumption block appended to `history/<agent>.md` (append-only), one block per dispatch, with fields in this order: `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `input_rate`, `cached_rate`, `cache_write_rate`, `output_rate`, `est_cost_usd`, `est_credits`, `basis`.
+* The aggregated `consumption.md` ledger (replace via scribe), which mirrors roster order, lists every dispatched member with its resolved model, model source, tier, estimated turns and tokens, estimated cost, and estimated credits, adds an `orchestration` row for coordinator and Scribe overhead, totals the run, and carries the cost-comparison line. This ledger is the common readme of members, models, and credits.
+* The `consumption-rates.md` table (replace via scribe), the single maintainable source of per-model input, cached, cache-write, and output rates in USD per 1M tokens, plus the tier-fallback rates, the dispatch-size estimator, the calibration block, and the comparison methodology.
 
-The `basis` field records how a block was derived: `estimated` when the model is known and token counts are estimated from context and response size, or `tier-default` when the actual model is unknown and the roster Model Tier rates were used instead.
+Model attribution — which model each block reports and how it is resolved — is governed by [Model Attribution](#model-attribution) below.
+
+### Why a dispatch is not one model call
+
+A dispatched agent runs an internal tool loop, and every internal turn resends the accumulated context. Cost therefore scales with `internal_turns × average_context`, not with a single input-and-output pair, and the accumulated context is largely billed at the cheaper cached rate. Pricing a dispatch as one call is the single largest source of undercounting in this ledger, so the estimator in `consumption-rates.md` models the loop explicitly and every block records the `internal_turns` it assumed.
+
+**Orchestration counts** too: the coordinator's own turns and the Scribe's writes get their own ledger row, because they are real consumption that no dispatch block covers.
 
 The Scribe computes the cost and credit estimates from the rates in `consumption-rates.md`:
 
 ```text
-est_cost_usd = (input_tokens × input_rate + cached_tokens × cached_rate + output_tokens × output_rate) / 1e6
+raw_cost_usd = ( input_tokens       × input_rate
+               + cached_tokens      × cached_rate
+               + cache_write_tokens × cache_write_rate
+               + output_tokens      × output_rate ) / 1e6
+est_cost_usd = raw_cost_usd × calibration_factor
 est_credits  = est_cost_usd / 0.01
 ```
 
+### Calibration
+
+Estimates that are never checked stay wrong. `consumption-rates.md` carries a `calibration_factor` — the running mean of `observed_credits / estimated_credits` across reconciled runs, clamped to 0.25-10.0 — that multiplies every cost estimate. When the coordinator supplies an `observed_credits` figure (the per-user aggregate `ai_credits_used` delta read from the Copilot usage-metrics REST API across the run), the Scribe folds that run's ratio into the mean and stamps the calibration block. Until at least one run has been reconciled the factor stays at 1.00 and the ledger carries an "uncalibrated" note.
+
 Every numeric output carries an "estimated, not billed" disclaimer. These values support run planning and cost comparison, not invoicing.
+
+## Model Attribution
+
+The `model` field records **what actually ran**. It is resolved, never guessed. A ledger that reports a model the operator did not choose is worse than one that reports nothing, because it invites cost decisions based on a fiction.
+
+### Resolution ladder
+
+Resolve every dispatch's model by walking this ladder and stopping at the first hit. Record which rung produced the answer in `model_source`:
+
+1. **Headless CLI run** → `model_source: cli-pinned`. When the run is headless (a Watch Mode run, identifiable by the `trigger` object in `state.json`), the Copilot CLI takes its model from `--model` and **ignores agent `model:` frontmatter entirely**. That one model therefore applies to *every* agent in the run, including agents that pin a different one. Skip rung 3 in this case.
+2. **Operator declaration** → `model_source: operator-declared`. The operator stated the model for this run or this role, recorded in `state.json` `currentRun.modelOverrides`.
+3. **Agent-pinned** → `model_source: agent-pinned`. The dispatched agent's own file declares a `model:` list in frontmatter and the host honors it (the VS Code host does; the CLI does not); the runtime uses the first entry the operator's plan supports. Read the agent file rather than assuming.
+4. **Session-inherited** → `model_source: session-inherited`. The agent declares no `model:`, so it runs on the session model recorded in `state.json` `currentRun.sessionModel`.
+5. **Unresolved** → `model_source: unresolved`. None of the above is knowable, so `model` is the literal `unknown`.
+
+Rungs 1-4 are deterministic and require no inference: the host is knowable from state, the agent file is readable, and the session model is recorded state. Rung 5 is a genuine gap, and the only correct value for `model` there is the literal `unknown`.
+
+The host matters as much as the agent. The same roster produces different real models in the VS Code host (where a pinned agent runs its pinned model) and in a headless Watch Mode run (where `--model` flattens every agent onto one model). A ledger that ignores the host will misattribute every pinned role in every unattended run.
+
+### Never invent a model name
+
+* `model` is either a model the ladder resolved or the literal `unknown`. It is **never** derived from a tier, a rate row, a roster preference, or a plausible-sounding guess.
+* Never copy the tier-fallback table's "priced as" model into `model`. That table names a model for *pricing* purposes only; writing it into the attribution field is the fabrication this rule exists to prevent.
+* `priced_as` records the rate row actually used. It equals `model` whenever the resolved model has its own rate row, and differs only when `model` is `unknown` (priced at the tier fallback) or when the resolved model is missing from the rate table.
+* When `model` is `unknown`, the ledger row and the run summary say so plainly rather than presenting a confident-looking name.
+
+### A tier is not a model
+
+`team.md`'s `Model Tier` is a routing preference. It never determines what ran and never appears in `model`. Two consequences follow, and both are common sources of surprise:
+
+* An agent that pins `model:` in its frontmatter does **not** run on the operator's selected model *in a host that honors frontmatter*. The Squad Scribe, Squad Reviewer, Squad Cost Manager, and Squad Technical Writer pin a lightweight model by design, so an operator running a high-capability model everywhere will still see those roles attributed to the pinned lightweight model. That is correct, not a bug — `model_source: agent-pinned` is what makes it legible. In a headless Watch Mode run the same roles run on the `--model` pin instead, and are recorded as `cli-pinned`.
+* An agent that pins nothing runs on the operator's model. If the operator selected a high-capability model, that dispatch must be priced at that model's rates, not at its roster tier's rates. Pricing an inherited high-capability dispatch at a mid-tier fallback is a direct undercount.
+
+### Recording the session model
+
+`state.json` `currentRun.sessionModel` is the single source of truth for rung 3. The coordinator captures it at Init, restates it whenever the operator changes model mid-run, and passes it on every Scribe hand-off. `currentRun.modelOverrides` optionally maps a role or agent name to a model the operator declared explicitly. In a federation, a sub-squad inherits both from the federation root unless its own `state.json` sets them.
+
+`basis` describes pricing; `model_source` describes attribution. They are independent, and both are required on every block.
 
 ## State Ownership
 
