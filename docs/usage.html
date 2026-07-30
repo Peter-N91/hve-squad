@@ -270,6 +270,18 @@ gh issue edit 42 --add-label squad/auto</code></pre>
         <code>pull_request_target</code>).
       </p>
 
+      <h3>Optional: a New Issue template for <code>squad/auto</code></h3>
+      <p>
+        Hand-labeling works fine, but a repository can also add a <strong>New Issue</strong> form that
+        pre-applies the <code>squad/auto</code> label at creation, so filing a squad task is a single
+        step. Copy the reference form
+        <code>.github/skills/squad/squad-task.issue-template.yml</code> to
+        <code>.github/ISSUE_TEMPLATE/squad-task.yml</code>, review it, and commit it &mdash; this adds a
+        "Squad task" option to the repository's New Issue page with fields for the task, optional
+        acceptance criteria, and an optional profile hint. This is purely a convenience: it is entirely
+        optional, and an ordinary issue labeled by hand starts a run exactly the same way.
+      </p>
+
       <h3>Other triggers (beyond a new issue)</h3>
       <p>
         A new labeled issue is just the first entry in Watch Mode's <strong>event-to-intent map</strong>.

@@ -87,6 +87,8 @@ The package **ships no runtime**. A consumer supplies one, and the contract in t
 
 A reference trigger workflow ships as documentation only under the squad skill folder (alongside `github-approval-watcher.workflow.yml`) and never runs from the package; a consumer copies it into `.github/workflows/` deliberately.
 
+An optional reference GitHub Issue Form, `.github/skills/squad/squad-task.issue-template.yml`, ships alongside `squad-watch.workflow.yml` for the label gate specifically. Copied to `.github/ISSUE_TEMPLATE/squad-task.yml`, it adds a "Squad task" option to the repository's New Issue page that pre-applies the `squad/auto` label at creation — a convenience only, never a requirement: applying the label by hand to any ordinary issue starts a run just the same.
+
 ## Terminal Deliverable Contract
 
 A Watch Mode run's output is a **branch and a draft pull request** — never a direct merge or deploy.

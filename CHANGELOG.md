@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.5] - 2026-07-30
+
+### Added
+
+- **An optional reference GitHub Issue Form for Watch Mode.** `.github/skills/squad/squad-task.issue-template.yml` ships alongside `squad-watch.workflow.yml` (documentation only, never active from the package). Copied to `.github/ISSUE_TEMPLATE/squad-task.yml`, it adds a "Squad task" option to a consumer's New Issue page that pre-applies the `squad/auto` trigger label at creation — a convenience only, never a requirement: hand-labeling any ordinary issue still starts a run the same way. Documented in `squad-src/.github/instructions/squad/squad-watch-mode.instructions.md` (*Headless Runtime Requirement*) and `docs/usage.html` (*Optional: a New Issue template for `squad/auto`*).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.5"
+```
+
+[0.11.5]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.5
+
 ## [0.11.4] - 2026-07-29
 
 ### Fixed

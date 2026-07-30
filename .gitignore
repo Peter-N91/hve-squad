@@ -4,6 +4,8 @@ apm_modules/
 
 # Generated/copied orchestration assets (local only)
 .github/**
+!.github/ISSUE_TEMPLATE/
+!.github/ISSUE_TEMPLATE/**
 !.github/workflows/
 !.github/workflows/**
 !.github/pull_request_template.md
