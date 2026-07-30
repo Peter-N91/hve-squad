@@ -114,20 +114,21 @@ The `model` field records **what actually ran**. It is resolved, never guessed. 
 
 Resolve every dispatch's model by walking this ladder and stopping at the first hit. Record which rung produced the answer in `model_source`:
 
-1. **Headless CLI run** → `model_source: cli-pinned`. When the run is headless (a Watch Mode run, identifiable by the `trigger` object in `state.json`), the Copilot CLI takes its model from `--model` and **ignores agent `model:` frontmatter entirely**. That one model therefore applies to *every* agent in the run, including agents that pin a different one. Skip rung 3 in this case.
-2. **Operator declaration** → `model_source: operator-declared`. The operator stated the model for this run or this role, recorded in `state.json` `currentRun.modelOverrides`.
-3. **Agent-pinned** → `model_source: agent-pinned`. The dispatched agent's own file declares a `model:` list in frontmatter and the host honors it (the VS Code host does; the CLI does not); the runtime uses the first entry the operator's plan supports. Read the agent file rather than assuming.
-4. **Session-inherited** → `model_source: session-inherited`. The agent declares no `model:`, so it runs on the session model recorded in `state.json` `currentRun.sessionModel`.
-5. **Unresolved** → `model_source: unresolved`. None of the above is knowable, so `model` is the literal `unknown`.
+1. **Headless CLI run** → `model_source: cli-pinned`. When the run is headless (a Watch Mode run, identifiable by the `trigger` object in `state.json`), the Copilot CLI takes its model from `--model` and **ignores agent `model:` frontmatter entirely**. That one model therefore applies to *every* agent in the run, including agents that pin a different one. Skip rungs 3 and 4 in this case.
+2. **Operator declaration** → `model_source: operator-declared`. The user volunteered a model for this run or this role, recorded in `state.json` `currentRun.modelOverrides`. Never prompted for; recorded only when offered.
+3. **Dispatch-reported** → `model_source: dispatch-reported`. The dispatched agent stated the model it ran on in its own response. This is the strongest signal on the ladder and outranks frontmatter, because frontmatter lists *preferences* while the runtime picks the first entry the plan actually supports — only the dispatch knows which one it got.
+4. **Agent-pinned** → `model_source: agent-pinned`. The dispatched agent's file declares a `model:` list and the host honors it (the VS Code host does; the CLI does not). Assume the first entry. Read the agent file rather than guessing.
+5. **Session-inherited** → `model_source: session-inherited`. The agent declares no `model:`, so it runs on the session model in `state.json` `currentRun.sessionModel`.
+6. **Unresolved** → `model_source: unresolved`. None of the above is knowable, so `model` is the literal `unknown`.
 
-Rungs 1-4 are deterministic and require no inference: the host is knowable from state, the agent file is readable, and the session model is recorded state. Rung 5 is a genuine gap, and the only correct value for `model` there is the literal `unknown`.
+Every rung is an observation or a file read — none requires asking the user, and none is a guess. Rung 6 should be vanishingly rare: reaching it means the dispatch reported nothing, the agent file was not read, and the session model was never recorded.
 
 The host matters as much as the agent. The same roster produces different real models in the VS Code host (where a pinned agent runs its pinned model) and in a headless Watch Mode run (where `--model` flattens every agent onto one model). A ledger that ignores the host will misattribute every pinned role in every unattended run.
 
 ### Never invent a model name
 
 * `model` is either a model the ladder resolved or the literal `unknown`. It is **never** derived from a tier, a rate row, a roster preference, or a plausible-sounding guess.
-* **`unresolved` is earned, not assumed.** Recording it requires having opened the dispatched agent's file and found no `model:` frontmatter, *and* having read `state.json` and found no usable `sessionModel`. Rungs 1-4 are readable facts, so a ledger where every row says `unresolved` while agents plainly pin models on disk means the ladder was never walked — a defect, not a gap.
+* **`unresolved` is earned, not assumed.** Recording it requires that the dispatch reported no model, the agent's file was opened and carried no `model:` frontmatter, *and* `state.json` held no usable `sessionModel`. Every rung is an observation or a file read, so a ledger where every row says `unresolved` while agents plainly pin models on disk means the ladder was never walked — a defect, not a gap.
 * Never copy the tier-fallback table's "priced as" model into `model`. That table names a model for *pricing* purposes only; writing it into the attribution field is the fabrication this rule exists to prevent.
 * `priced_as` records the rate row actually used. It equals `model` whenever the resolved model has its own rate row, and differs only when `model` is `unknown` (priced at the tier fallback) or when the resolved model is missing from the rate table.
 * When `model` is `unknown`, the ledger row and the run summary say so plainly rather than presenting a confident-looking name.
@@ -141,9 +142,21 @@ The host matters as much as the agent. The same roster produces different real m
 
 ### Recording the session model
 
-`state.json` `currentRun.sessionModel` is the single source of truth for rung 4. The coordinator captures it as a required Init step, restates it whenever the operator changes model mid-run, and passes it on every Scribe hand-off. `currentRun.modelOverrides` optionally maps a role or agent name to a model the operator declared explicitly. In a federation, a sub-squad inherits both from the federation root unless its own `state.json` sets them.
+`state.json` `currentRun.sessionModel` is the single source of truth for rung 5, and it is captured **automatically, never by asking**. The coordinator runs *on* the session model, so it records the model it is itself running on — an observation about itself, not a fact it needs from the user. It re-reports on every turn, so a mid-run model switch is picked up without anyone announcing it. `currentRun.modelOverrides` optionally maps a role or agent name to a model the user volunteered; it is never prompted for.
 
-**The literal string `unknown` is not a valid `sessionModel`.** The operator is always running *some* model and can say which, so this is a question to ask once, not a gap to record. Writing `unknown` here cascades: every agent that does not pin its own model falls through to `unresolved`, gets priced at a tier fallback, and is billed as a cheaper model than the one that actually ran. A ledger whose rows are uniformly `unresolved` is almost always this failure, not a genuine ambiguity.
+Adding a build question here would buy nothing: the answer is already in the coordinator's possession, and a squad that interrogates its operator about facts it can observe is a squad that gets skipped.
+
+**Normalize before recording.** A self-reported or dispatch-reported name is a display name and may not match a rate-table row exactly (`Claude Opus 5` versus `claude-opus-5`, or a version the table has not caught up with). Match case-insensitively, ignoring punctuation and a `(copilot)` suffix; when no exact row matches, fall to the nearest row in the same model family and note the substitution on the ledger. Record the reported name in `model` and the row actually charged in `priced_as`, so a stale rate table is visible rather than silently rounding attribution.
+
+**`auto` is a routing mode, not a model.** When the host is set to automatic model selection, record `sessionModel: auto` verbatim — never resolve it to a concrete model name, because under auto the host routes *per request*, so the model can differ between two dispatches in the same turn. A single run-level model is wrong by construction here.
+
+Auto changes which rungs can answer, and nothing else:
+
+* Rung 4 is unaffected. Agent `model:` frontmatter still wins over the picker, so pinned agents stay deterministic under auto exactly as they are under a fixed selection.
+* Rung 5 cannot resolve. `auto` names no model, so an unpinned dispatch must be answered by rung 3 — the dispatch's own report. Under auto that report is not merely the strongest signal, it is the **only** one, which is why every dispatch is asked for it.
+* A dispatch that reported nothing under auto falls to `unresolved` and is priced at its tier fallback. Flag those rows `auto-unreported` on the ledger and state plainly that they are the least trustworthy figures on the page: auto routes agentic tool loops toward capable models more often than cheap ones, so a tier fallback most likely understates them. The remedy is to get the report, not to guess a better number.
+
+**The literal string `unknown` is not a valid `sessionModel`.** It is a placeholder that cascades: every agent without its own pin falls through to `unresolved`, gets priced at a tier fallback, and is billed as a cheaper model than the one that actually ran. A ledger whose rows are uniformly `unresolved` is almost always this failure, not a genuine ambiguity. `auto` is the correct value when the host is routing; `unknown` never is.
 
 `basis` describes pricing; `model_source` describes attribution. They are independent, and both are required on every block. Each takes exactly one value from its own set — never a combined string such as `estimated, tier-default`.
 
