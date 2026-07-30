@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.7] - 2026-07-30
+
+Closes four loopholes in the `0.11.4` consumption work. The rate table and the resolution ladder shipped correctly, but each left the Scribe a legal path to the wrong answer — observed on a real `product` sub-squad run that reported **$2.58** against a true cost plausibly in the **$25-45** range.
+
+### Fixed
+
+- **The dispatch-size floors were written as fallbacks, so they were never applied.** `0.11.4` said to use the class defaults "only when the dispatch reported nothing." The Scribe always has *something* — the coordinator's summary — so it sized every dispatch from that summary and never reached the table. The result was derived average contexts of 8,000-13,000 tokens against class floors of 40,000-60,000, roughly **5-7x low on every row**. The class rows are now **floors, not fallbacks**: start at the floor, raise with what the dispatch reported, never record below it. A **validity check** makes the failure self-detecting — `gross_input / internal_turns` below the class `base_context` means the floor was skipped, and the numbers are raised and recomputed rather than written (`squad-src/.github/skills/squad/SKILL.md`, `squad-src/.github/agents/squad/squad-scribe.agent.md`).
+  - The reason the summary is the wrong ruler is now stated explicitly: it is a report *about* a dispatch, not the context the dispatch ran on. The Scribe never sees the dispatched agent's internal loop, and an agent's prompt plus auto-applied instructions already exceeds most floors before it reads a single file.
+- **`sessionModel` accepted the literal string `unknown`, and nothing required the coordinator to ask.** A squad ran a full autopilot pass with `"sessionModel": "unknown"` in `state.json`, so every agent without pinned frontmatter fell through to `unresolved` and was priced at a tier fallback — work that actually ran on Opus 5 billed as Sonnet 4.6, a **~1.7x undercount** compounding the sizing error. Capturing the session model is now a **required Init step** with its own wait gate, and writing `unknown` into the field to move past the question is prohibited: the operator is always running some model and can say which. A later turn that finds the field empty asks before dispatching instead of carrying the gap forward (`squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+- **`unresolved` was recorded without walking the ladder.** The same run marked all six rows `unresolved` while three of them dispatched agents that pin a model on disk — `Squad Researcher` and `Squad Lead` pin Claude Sonnet 5, and were billed as Haiku 4.5 and Sonnet 4.6 respectively. `unresolved` is now **earned, not assumed**: it requires having opened the agent file and found no `model:`, *and* having read `state.json` and found no usable `sessionModel`. Rungs 1-4 are readable facts, so a ledger of uniform `unresolved` rows is a defect rather than a gap.
+- **Ledger totals were estimated instead of added.** The observed run's total row was wrong in every column (In by 11,500, Cached by 37,000, Cache Wr by 7,500, Out by 938) while each individual row's cost math was correct, and the comparison prose quoted **$2.30** against a table total of **$2.58**. The Scribe now computes the total by summing the rows it just wrote and verifies before saving that each column equals its rows and that the prose figure is the same number as the table's. `basis` is also constrained to exactly one value — the run emitted the invalid combined `estimated, tier-default`.
+
+### Changed
+
+- **The shipped estimator template gained the `Growth/turn` and `Output/turn` columns its own formulas reference**, and the formula block moved to the closed form (`average_context`, `gross_input`, `cache_write_tokens`, `output_tokens`) already used by deployed rate files. The template previously published a two-column table that could not drive the calculation it documented (`squad-src/.github/skills/squad/SKILL.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.7"
+```
+
+[0.11.7]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.7
+
 ## [0.11.6] - 2026-07-30
 
 ### Changed

@@ -538,10 +538,8 @@ A dispatch is **not one model call**. A dispatched subagent runs an internal too
 ```text
 tokens(bytes)      = bytes / 4
 base_context       = agent prompt + auto-applied instructions + loaded skill content
-turn_1_input       = base_context + request
-turn_n_input       = turn_(n-1)_input + tool_result_tokens + prior_assistant_tokens
-gross_input        = Σ over internal_turns of turn_n_input
-output_tokens      = Σ over internal_turns of assistant tokens
+average_context    = base_context + growth_per_turn × (internal_turns - 1) / 2
+gross_input        = internal_turns × average_context
 ```
 
 Split `gross_input` across the billed rates. Turn 1 is fully uncached; on turns 2..n the carried-forward prefix is a cached read and only the new tool result is fresh input:
@@ -549,22 +547,25 @@ Split `gross_input` across the billed rates. Turn 1 is fully uncached; on turns 
 ```text
 cached_tokens      = gross_input × 0.80
 input_tokens       = gross_input × 0.20
-cache_write_tokens = base_context + new context introduced per turn   (Anthropic models only; 0 otherwise)
+cache_write_tokens = base_context + growth_per_turn × (internal_turns - 1)   (Anthropic models only; 0 otherwise)
+output_tokens      = internal_turns × output_per_turn
 ```
 
-Estimate `internal_turns` and `base_context` from what the dispatch actually reported. Use these class defaults only when the dispatch reported nothing:
+Estimate `internal_turns` and `base_context` from what the dispatch actually reported. These class rows are **floors, not fallbacks** — start here and raise, never start below:
 
-| Dispatch class            | Internal turns | Base context |
-| ------------------------- | -------------- | ------------ |
-| Lookup / single-file read | 3              | 20,000       |
-| Research / file survey    | 12             | 40,000       |
-| Plan / synthesis          | 15             | 60,000       |
-| Implement / edit loop     | 35             | 60,000       |
-| Review / verification     | 18             | 50,000       |
-| Council member opinion    | 10             | 50,000       |
-| Scribe state write        | 4              | 15,000       |
+| Dispatch class            | Internal turns | Base context | Growth/turn | Output/turn |
+| ------------------------- | -------------- | ------------ | ----------- | ----------- |
+| Lookup / single-file read | 3              | 20,000       | 3,000       | 800         |
+| Research / file survey    | 12             | 40,000       | 4,000       | 1,250       |
+| Plan / synthesis          | 15             | 60,000       | 4,000       | 2,000       |
+| Implement / edit loop     | 35             | 60,000       | 6,000       | 2,000       |
+| Review / verification     | 18             | 50,000       | 4,000       | 1,500       |
+| Council member opinion    | 10             | 50,000       | 4,000       | 1,500       |
+| Scribe state write        | 4              | 15,000       | 3,000       | 800         |
 
-Observable proxies that override a class default whenever available: the number of files the agent reported reading and their byte size, the byte size of artifacts it wrote, the count of tool calls it reported, and the length of the findings it returned.
+Observable proxies that raise a floor whenever available: the number of files the agent reported reading and their byte size, the byte size of artifacts it wrote, the count of tool calls it reported, and the length of the findings it returned.
+
+**Validity check.** After estimating, confirm `gross_input / internal_turns >= base_context` for the class. A derived average context below the floor means the dispatch was sized from the summary the coordinator handed over rather than from the dispatch's own context. That summary is a report *about* the dispatch, not the context the dispatch ran on — an agent's prompt plus its auto-applied instructions already exceeds most floors before it reads a single file. When the check fails, raise the numbers and recompute rather than recording the smaller figure.
 
 ## Orchestration overhead
 

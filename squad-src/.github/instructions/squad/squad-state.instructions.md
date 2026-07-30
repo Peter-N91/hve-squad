@@ -127,6 +127,7 @@ The host matters as much as the agent. The same roster produces different real m
 ### Never invent a model name
 
 * `model` is either a model the ladder resolved or the literal `unknown`. It is **never** derived from a tier, a rate row, a roster preference, or a plausible-sounding guess.
+* **`unresolved` is earned, not assumed.** Recording it requires having opened the dispatched agent's file and found no `model:` frontmatter, *and* having read `state.json` and found no usable `sessionModel`. Rungs 1-4 are readable facts, so a ledger where every row says `unresolved` while agents plainly pin models on disk means the ladder was never walked — a defect, not a gap.
 * Never copy the tier-fallback table's "priced as" model into `model`. That table names a model for *pricing* purposes only; writing it into the attribution field is the fabrication this rule exists to prevent.
 * `priced_as` records the rate row actually used. It equals `model` whenever the resolved model has its own rate row, and differs only when `model` is `unknown` (priced at the tier fallback) or when the resolved model is missing from the rate table.
 * When `model` is `unknown`, the ledger row and the run summary say so plainly rather than presenting a confident-looking name.
@@ -140,9 +141,19 @@ The host matters as much as the agent. The same roster produces different real m
 
 ### Recording the session model
 
-`state.json` `currentRun.sessionModel` is the single source of truth for rung 3. The coordinator captures it at Init, restates it whenever the operator changes model mid-run, and passes it on every Scribe hand-off. `currentRun.modelOverrides` optionally maps a role or agent name to a model the operator declared explicitly. In a federation, a sub-squad inherits both from the federation root unless its own `state.json` sets them.
+`state.json` `currentRun.sessionModel` is the single source of truth for rung 4. The coordinator captures it as a required Init step, restates it whenever the operator changes model mid-run, and passes it on every Scribe hand-off. `currentRun.modelOverrides` optionally maps a role or agent name to a model the operator declared explicitly. In a federation, a sub-squad inherits both from the federation root unless its own `state.json` sets them.
 
-`basis` describes pricing; `model_source` describes attribution. They are independent, and both are required on every block.
+**The literal string `unknown` is not a valid `sessionModel`.** The operator is always running *some* model and can say which, so this is a question to ask once, not a gap to record. Writing `unknown` here cascades: every agent that does not pin its own model falls through to `unresolved`, gets priced at a tier fallback, and is billed as a cheaper model than the one that actually ran. A ledger whose rows are uniformly `unresolved` is almost always this failure, not a genuine ambiguity.
+
+`basis` describes pricing; `model_source` describes attribution. They are independent, and both are required on every block. Each takes exactly one value from its own set — never a combined string such as `estimated, tier-default`.
+
+### Sizing a dispatch honestly
+
+The dispatch-class rows in `consumption-rates.md` are **floors, not fallbacks**. Start at the floor for the class and raise it with whatever the dispatch reported; never record below it.
+
+This matters because of what the Scribe can and cannot see. The Scribe receives a short summary *about* a dispatch, never the dispatch's own context, so sizing from the summary measures the wrong thing and always understates the run. An agent's prompt plus its auto-applied instructions already exceeds most floors before it reads a single file, which is why a derived `gross_input / internal_turns` below the class `base_context` is a reliable signal that the floor was skipped.
+
+Totals are computed by summing the rows, never estimated. The total row must equal its columns and the cost quoted in the comparison prose must be the same number as the table's total, because a ledger that disagrees with its own arithmetic discredits every figure on the page.
 
 ## State Ownership
 
