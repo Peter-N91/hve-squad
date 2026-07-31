@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.8] - 2026-07-31
+
+### Changed
+
+- Updated hve-core dependency pin to `e166dbc` (e166dbc3f00c77e99afdcd5e7be149cfafa0dbe4).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.8"
+```
+
+[0.11.8]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.8
+
 ## [0.11.7] - 2026-07-30
 
 Closes five loopholes in the `0.11.4` consumption work and makes model attribution fully automatic. The rate table and the resolution ladder shipped correctly, but each left the Scribe a legal path to the wrong answer — observed on a real `product` sub-squad run that reported **$2.58** against a true cost plausibly in the **$25-45** range.
