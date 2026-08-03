@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.12] - 2026-08-03
+
+### Added
+
+- **The squad could plan an Azure DevOps or Jira backlog but never write it, and the handoff dead-ended at the user.** `ADO Backlog Manager` and `Jira Backlog Manager` are `disable-model-invocation: true` entry points that `runSubagent` cannot reach, and the only dispatchable ADO agent (`AzDO PRD to WIT`) holds read-only tools by design, so the roster's `product-owner` row told the coordinator to escalate the tracker write and stop. A new **`Squad Backlog Executor`** charter closes that gap the same way `Squad Deployer` closed it for Azure: it takes a finalized `handoff.md`, previews every create, update, and link read-only, sanitizes internal tracking paths and planning IDs out of the outbound fields, searches the live tracker for probable duplicates, stops at the Impactful-Action Gate with the full preview and item count, and only then writes — against the resumable `handoff-logs.md` checkbox ledger, so a batch that fails at item 23 resumes instead of re-creating (`squad-src/.github/agents/squad/squad-backlog-executor.agent.md`).
+- **The new `backlog-executor` role is opt-in and belongs to no profile, not even `full`.** A tracker write is announced to a whole team by notifications, subscriptions, and webhooks the moment it lands, so the role never arrives by default. Instead the coordinator *offers* it: when a request matches a tracker-write pattern in a squad that does not carry the role, it proposes adding it — naming the tracker and project it would write to — and continues the turn on acceptance. This reuses the offer-on-demand path that already existed for `intake-validator`, now generalized as **Opt-In Roles** in the roster conventions (`squad-src/.github/instructions/squad/squad-roster.instructions.md`, `squad-src/.github/instructions/squad/squad-routing.instructions.md`).
+- A **Tracker-Write Gate** in the routing conventions: only `backlog-executor` writes to a tracker, a finalized handoff is a precondition, one approval covers one batch, and an unattended Watch Mode run completes the preview and stops because the Impactful-Action Gate never proceeds there (`squad-src/.github/instructions/squad/squad-routing.instructions.md`).
+- A **`tracker-write` capability with no fallback** — the only such row in the capability map. Every other capability is a read, where reaching the same data another way beats blocking; a write is not, so an absent ADO MCP or `jira` skill returns `blocked` rather than falling back to REST with a user-supplied PAT. Read access and write access stay separate grants (`squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md`).
+
+### Changed
+
+- Live issue-tracker writes are now named explicitly in the Impactful-Action Gate definitions carried by both coordinators and by the Watch Mode unattended-disposition table, rather than being covered only by the general "irreversible side effect" clause (`squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`, `squad-src/.github/instructions/squad/squad-watch-mode.instructions.md`).
+- The autopilot deliverable fan-out rule no longer cites `product-owner` as the role that creates work items in a live tracker; that role plans the backlog and stops at the handoff, and the gated write belongs to `backlog-executor` (`squad-src/.github/instructions/squad/squad-autopilot.instructions.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.12"
+```
+
+[0.11.12]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.12
+
 ## [0.11.11] - 2026-08-03
 
 ### Fixed
