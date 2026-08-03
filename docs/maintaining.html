@@ -179,7 +179,8 @@ flowchart TD
         <li><strong>Risk Gate</strong> &mdash; recorded, not blocking. Findings land in <code>decisions.md</code> and are reproduced in the PR body under <em>Blocking findings</em>; the PR stays a draft.</li>
         <li>
           <strong>Impactful-Action Gate</strong> &mdash; <strong>never proceeds</strong>. No merge, no
-          deploy, no force-push, no migration, no secret rotation, and no payload can change that. It
+          deploy, no force-push, no migration, no secret rotation, no write into a live issue tracker,
+          and no payload can change that. It
           is enforced three ways: the contract, the absence of any deployment credential on the runner,
           and branch protection on <code>main</code>.
         </li>

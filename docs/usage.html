@@ -598,7 +598,7 @@ flowchart TD
         </thead>
         <tbody>
           <tr><td><code>default</code></td><td>researcher, lead, developer, tester, scribe</td><td>General-purpose work; recommended starting point</td></tr>
-          <tr><td><code>full</code></td><td>all deployed roles</td><td>Complex, cross-cutting projects</td></tr>
+          <tr><td><code>full</code></td><td>all deployed roles except the opt-in <code>backlog-executor</code></td><td>Complex, cross-cutting projects</td></tr>
           <tr><td><code>security</code></td><td>researcher, lead, developer, tester, security, rai, fact-checker, scribe</td><td>Security, threat-modeling, responsible-AI focus</td></tr>
           <tr><td><code>design</code></td><td>researcher, lead, developer, tester, designer, scribe</td><td>UX/UI and product-design focus</td></tr>
           <tr><td><code>architecture</code></td><td>researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe</td><td>System design and architecture focus</td></tr>
@@ -613,6 +613,15 @@ flowchart TD
         specialist roles on top. Two further roles ship as addable extras and are seeded only in
         <code>full</code>: <code>challenger</code>, which pressure-tests a plan and checks it against the
         research it rests on, and <code>prompt-engineer</code>, which authors and reviews prompt artifacts.
+      </p>
+      <p>
+        One role is <strong>opt-in</strong> and appears in no profile at all, not even <code>full</code>:
+        <code>backlog-executor</code>, which writes work items into a live Azure DevOps or Jira project.
+        A tracker write reaches a whole team &mdash; notifications, subscriptions, and webhooks fire the
+        moment an item lands &mdash; so the squad never seeds that reach by default. Instead the
+        coordinator <em>offers</em> the role the first time you ask for a tracker write, naming the
+        tracker and project it would write to. Accept and it joins your team for good; decline and the
+        backlog plan is still yours to apply by hand. See <em>Backlog writes</em> below.
       </p>
 
       <h2>Azure execution layer</h2>
@@ -647,7 +656,7 @@ flowchart TD
         <code>azure-resource</code> capability, which prefers the official
         <code>@azure/mcp</code> server when configured and falls back to the <code>az</code> CLI
         and the Azure Resource Graph REST API automatically when it is not. The squad never
-        blocks on a missing MCP.
+        blocks on a missing MCP for a read capability like this one.
       </p>
       <p>
         To wire the Azure MCP server, merge the <code>azure</code> server entry from
@@ -656,6 +665,34 @@ flowchart TD
         <code>az login</code> (<code>DefaultAzureCredential</code>) — no stored secrets. You can
         ask the coordinator to scaffold this for you: <code>/squad request="merge the squad MCP
         template into my workspace"</code>.
+      </p>
+
+      <h2>Backlog writes (Azure DevOps and Jira)</h2>
+      <p>
+        The <code>product-owner</code> role plans a backlog and stops at a finalized handoff file. Turning
+        that plan into real work items is a separate, gated step owned by the opt-in
+        <code>backlog-executor</code> role &mdash; the same shape as the Azure Deployer: preview first,
+        approve, then write.
+      </p>
+      <ol>
+        <li><strong>Ask.</strong> With a planned backlog in hand, ask the squad to create the items (for example, <code>/squad request="create these work items in Azure DevOps"</code>).</li>
+        <li><strong>Accept the role.</strong> If your squad does not carry <code>backlog-executor</code>, the coordinator offers to add it and names the tracker and project it would write to.</li>
+        <li><strong>Review the preview.</strong> The role reads your handoff file and shows every item it would create or update &mdash; type, title, parent, target project, and the fields it would set &mdash; plus the total count. Nothing has been written yet.</li>
+        <li><strong>Check the warnings.</strong> It also searches the live tracker for items that already match and flags probable duplicates with their existing IDs, and it strips internal planning references out of the outbound text so no tracking paths or placeholder IDs land in your backlog.</li>
+        <li><strong>Approve.</strong> One approval covers one batch. Change the handoff, re-run, or target a different project and you get a fresh preview and a fresh approval.</li>
+      </ol>
+      <p>
+        Writes are recorded item by item in a log file next to your handoff, so a batch that fails
+        partway through resumes from the first unwritten item instead of creating duplicates. Nothing is
+        rolled back automatically &mdash; whatever landed is reported back to you.
+      </p>
+      <p>
+        Two limits are deliberate. Writing needs the Azure DevOps MCP server (or, for Jira, the
+        <code>jira</code> skill) configured; unlike the read capabilities, there is <strong>no
+        fallback</strong> &mdash; the role stops and tells you what is missing rather than reaching your
+        tracker by a route you never set up. And because a tracker write is an Impactful Action, an
+        unattended Watch Mode run produces the preview and stops there; the write always waits for a
+        person.
       </p>
 
       <h2>Modernization</h2>

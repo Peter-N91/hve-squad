@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Live issue-tracker writes are now named explicitly in the Impactful-Action Gate definitions carried by both coordinators and by the Watch Mode unattended-disposition table, rather than being covered only by the general "irreversible side effect" clause (`squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`, `squad-src/.github/instructions/squad/squad-watch-mode.instructions.md`).
 - The autopilot deliverable fan-out rule no longer cites `product-owner` as the role that creates work items in a live tracker; that role plans the backlog and stops at the handoff, and the gated write belongs to `backlog-executor` (`squad-src/.github/instructions/squad/squad-autopilot.instructions.md`).
+- The documentation site gained a **Backlog writes (Azure DevOps and Jira)** section walking the ask → accept the role → review the preview → check duplicates → approve sequence, plus the two deliberate limits (no MCP fallback, no unattended write). The `full` profile row no longer claims "all deployed roles" now that an opt-in role exists outside every profile, and the unattended Impactful-Action Gate list names tracker writes (`docs/usage.html`, `docs/maintaining.html`).
 
 ### Consumer install
 
