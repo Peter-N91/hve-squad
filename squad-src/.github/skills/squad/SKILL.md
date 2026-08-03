@@ -465,6 +465,8 @@ Watch Mode runs additionally carry an optional, additive `trigger` object record
 
 Scribe-aggregated ledger of squad members, the model each consumed, and estimated AI-credit cost; this is the common "members and credits" readme. Uses replace semantics: the Scribe rewrites it each turn, mirrors roster order, and recomputes the run total and the comparison line from `consumption-rates.md`. Every figure is an estimate, because no per-dispatch token telemetry exists (the runtime exposes only the per-user aggregate `ai_credits_used`); token counts are estimated and cost and credits are derived, never billed.
 
+The ledger is split into two narrower tables that both key on `Role` — one **Attribution** table (who ran, on what model) and one **Usage & Cost** table (what it cost) — instead of one 15-column table, because a table wide enough to need horizontal scrolling defeats the point of a ledger a consumer should be able to read at a glance.
+
 ```markdown
 ---
 description: "Squad consumption ledger: members, models, estimated tokens, cost, and AI credits"
@@ -472,13 +474,22 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 
 # Squad Consumption Ledger (Run: <run-id>)
 
-| Role          | Member | Agent         | Model   | Model Source | Priced As | Tier   | Turns | In Tokens | Cached | Cache Wr | Out Tokens | Est. Cost (USD) | Est. Credits | Basis     |
-| ------------- | ------ | ------------- | ------- | ------------ | --------- | ------ | ----- | --------- | ------ | -------- | ---------- | --------------- | ------------ | --------- |
-| <role>        |        | <agent>       | <model> | <source>     | <model>   | <tier> | 0     | 0         | 0      | 0        | 0          | 0.0000          | 0.00         | estimated |
-| orchestration |        | <coord+scribe>| <model> | <source>     | <model>   | mixed  | 0     | 0         | 0      | 0        | 0          | 0.0000          | 0.00         | estimated |
-| **Total**     |        |               |         |              |           |        | **0** | **0**     | **0**  | **0**    | **0**      | **$0.00**       | **0.00**     |           |
+## Attribution
 
-> Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API. `Model` is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md` and is never invented — `unknown` where it could not be resolved. `Model Source` is `cli-pinned`, `operator-declared`, `dispatch-reported`, `agent-pinned`, `session-inherited`, or `unresolved`; an `agent-pinned` row legitimately differs from the session model. `Priced As` is the rate row used and differs from `Model` only on a fallback. `Turns` is the estimated internal tool-loop turn count for the dispatch, because a dispatch is many model calls and not one. Token rates and the dispatch-size estimator come from `consumption-rates.md` (observed <date>). Calibration factor <factor> (<observations> reconciled run(s)). 1 AI credit = $0.01 USD.
+| Role          | Member | Agent          | Model   | Model Source | Priced As | Tier   |
+| ------------- | ------ | -------------- | ------- | ------------ | --------- | ------ |
+| <role>        |        | <agent>        | <model> | <source>     | <model>   | <tier> |
+| orchestration |        | <coord+scribe> | <model> | <source>     | <model>   | mixed  |
+
+## Usage & Cost
+
+| Role          | Turns | In Tokens | Cached | Cache Wr | Out Tokens | Est. Cost (USD) | Est. Credits | Basis     |
+| ------------- | ----- | --------- | ------ | -------- | ---------- | ---------------- | ------------ | --------- |
+| <role>        | 0     | 0         | 0      | 0        | 0          | 0.0000           | 0.00         | estimated |
+| orchestration | 0     | 0         | 0      | 0        | 0          | 0.0000           | 0.00         | estimated |
+| **Total**     | **0** | **0**     | **0**  | **0**    | **0**      | **$0.00**        | **0.00**     |           |
+
+> Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API. `Model` is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md` and is never invented — `unknown` where it could not be resolved. `Model Source` is `cli-pinned`, `operator-declared`, `dispatch-reported`, `agent-pinned`, `session-inherited`, or `unresolved`; an `agent-pinned` row legitimately differs from the session model. `Priced As` is the rate row used and differs from `Model` only on a fallback. `Turns` is the estimated internal tool-loop turn count for the dispatch, because a dispatch is many model calls and not one. The two tables share the same `Role` order so a row in one lines up with the same row in the other. Token rates and the dispatch-size estimator come from `consumption-rates.md` (observed <date>). Calibration factor <factor> (<observations> reconciled run(s)). 1 AI credit = $0.01 USD.
 
 ## Cost Comparison (illustrative)
 
@@ -525,11 +536,11 @@ A tier is a routing preference, not a price. When the actual model is unknown, p
 
 The `Priced as` column below names a model for **pricing only**. Never write it into a consumption block's `model` field — that field records what actually ran and is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md`, or left as the literal `unknown`. Copying a `Priced as` name into `model` is exactly the fabrication that makes a ledger report spend against a model the operator never chose.
 
-| Tier     | Priced as        | Input | Cached | Cache write | Output |
-| -------- | ---------------- | ----- | ------ | ----------- | ------ |
-| fast     | Claude Haiku 4.5 | 1.00  | 0.10   | 1.25        | 5.00   |
-| default  | Claude Sonnet 4.6| 3.00  | 0.30   | 3.75        | 15.00  |
-| extended | Claude Opus 5    | 5.00  | 0.50   | 6.25        | 25.00  |
+| Tier     | Priced as         | Input | Cached | Cache write | Output |
+| -------- | ----------------- | ----- | ------ | ----------- | ------ |
+| fast     | Claude Haiku 4.5  | 1.00  | 0.10   | 1.25        | 5.00   |
+| default  | Claude Sonnet 4.6 | 3.00  | 0.30   | 3.75        | 15.00  |
+| extended | Claude Opus 5     | 5.00  | 0.50   | 6.25        | 25.00  |
 
 ## Dispatch-size estimator
 
