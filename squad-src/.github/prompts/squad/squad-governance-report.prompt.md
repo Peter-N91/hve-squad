@@ -9,7 +9,7 @@ Parse squad state — decisions, history, consumption, and notifications — to 
 
 ## Inputs
 
-* ${input:output}: (Optional) Local filesystem path for the HTML file. Defaults to `docs/squad-governance-report-<YYYY-MM-DD>.html`.
+* ${input:outputPath}: (Optional) Local filesystem path for the HTML file. Defaults to `docs/squad-governance-report-<YYYY-MM-DD>.html`.
 * ${input:squad}: (Optional) In a federation, scope to a specific sub-squad. When omitted in a federation, aggregate across all sub-squads.
 * ${input:period:all}: (Optional, defaults to `all`) Time window to include. Accepted values: `all` (every entry), `30d` (last 30 days), `7d` (last 7 days). Filter by timestamp on verdict and history entries.
 
@@ -281,7 +281,7 @@ Pill-shaped badges with distinct colors per role:
 
 ### Step 5: Write and confirm
 
-Write the HTML to `${input:output}` (or the default path). Create the target directory if it does not exist.
+Write the HTML to `${input:outputPath}` (or the default path). Create the target directory if it does not exist.
 
 Report to the user:
 
