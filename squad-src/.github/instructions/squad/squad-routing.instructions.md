@@ -51,6 +51,7 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | requirements, BRD, PRD, user story, acceptance criteria | PRD Builder | confirm       | yes               |
 | journey map, persona, design thinking, empathize, ideate, problem statement | DT Coach | confirm | yes               |
 | roadmap, backlog, epic, sprint, refine, prioritize, story | Agile Coach | confirm    | no                |
+| create work items in ADO, push backlog to Azure DevOps, create Jira issues, apply the handoff, execute handoff, sync work items to the tracker | backlog-executor | confirm | no |
 | experiment, hypothesis, validate assumption, MVE, riskiest assumption | Experiment Designer | confirm | yes        |
 | presentation, deck, slides, executive summary, pitch | presenter    | confirm       | no                |
 | document, write up, summarize for stakeholders, readme | technical-writer | confirm  | no                |
@@ -71,6 +72,8 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 The seeded `routing.md` contains only the rules whose role exists in the project's `team.md`. When a profile (see *Squad Profiles* in `squad-roster.instructions.md`) seeds a subset of the cast, the Squad Scribe drops every routing row whose role is not on the seeded team. This keeps routing consistent with the chosen squad: the coordinator never matches a request to a role the project did not hire.
 
 When a request matches a pattern whose role is absent from the active roster, the coordinator escalates (see Escalation) and offers to add the role or switch profiles rather than dispatching a role that is not on the team.
+
+Two rows never survive the initial filter in most projects, because no profile seeds their role. `intake-validator` is seeded only by `product` and `full`, and `backlog-executor` is an **opt-in role** seeded by no profile at all (see *Opt-In Roles* in `squad-roster.instructions.md`). For these the escalation above is not a dead end but the designed entry point: the coordinator proposes adding the role, states what it would be able to do, and continues the turn on acceptance.
 
 ## Dispatch Rules
 
@@ -110,6 +113,18 @@ When any precondition is unmet, the coordinator dispatches the missing stage (or
 * When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the Scribe before any implementer dispatches.
 
 The gate enforces the council protocol from `.github/instructions/squad/squad-council.instructions.md` and the autonomous loop from `.github/instructions/squad/squad-autonomous.instructions.md` at routing time.
+
+### Tracker-Write Gate
+
+Before any role writes into a live issue tracker — creating, updating, linking, closing, or commenting on work items in Azure DevOps or Jira — the coordinator applies this gate. A tracker write is an impactful action: it is announced to a whole team by notifications, subscriptions, and webhooks the instant it lands, and no undo recalls that.
+
+* **Only `backlog-executor` writes.** `product-owner` plans the work items and stops at a finalized `handoff.md`. When a turn would have any other role write to a tracker, that is a routing error — re-route rather than allowing it.
+* **A finalized handoff is a precondition.** When none exists for the request, dispatch `product-owner` first. `backlog-executor` never plans the content it writes.
+* **The role is opt-in.** When the active roster does not carry `backlog-executor`, the coordinator proposes adding it (see *Opt-In Roles* in `squad-roster.instructions.md`), naming the tracker and project it would write to, rather than skipping the write or improvising it elsewhere.
+* **One approval covers one batch.** The Impactful-Action Gate fires once per handoff, and the gate payload carries the full preview, the item count, and any probable duplicates. A changed handoff, a re-run, or a different project needs a fresh preview and a fresh approval.
+* **Unattended runs never write.** In Watch Mode the Impactful-Action Gate never proceeds (`.github/instructions/squad/squad-watch-mode.instructions.md`), so the role completes its preview and stops. Report the preview as the outcome; do not report the write as pending indefinitely.
+
+The tracker-write gate is independent of the Implementation Gate: a backlog write needs no Council Verdict, but it always needs a human approval.
 
 ### Review Follow-Through
 

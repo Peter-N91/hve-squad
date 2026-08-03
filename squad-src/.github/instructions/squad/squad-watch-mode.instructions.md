@@ -109,7 +109,7 @@ Gates therefore resolve in one of three ways, and the split is not negotiable by
 | Stage transitions (research → plan → implement → review) | **Proceed.** These were never Human Gates in autopilot; they advance on artifact evidence as normal. |
 | Final-outcome validation | **Satisfied by the draft pull request.** The coordinator does not wait for an in-chat approval; it compiles the outcome into the PR body and opens the PR. The human validates by reviewing the PR. |
 | Risk Gate (`Stop` verdict, `Risk: High`, compliance finding, divergence, cost ceiling) | **Record, do not block.** The finding is written to the sub-squad `decisions.md` and reproduced verbatim in the PR body under a `Blocking findings` heading, and the PR stays a draft. A `Stop` verdict additionally stops the Implement stage, so the PR carries the research and plan plus the reason no implementation followed. |
-| Impactful-Action Gate (merge, deploy, push to a protected branch, schema migration, data deletion, destructive infrastructure operation, secret rotation) | **Never proceeds.** No exception, no payload override, no `unattended` flag. |
+| Impactful-Action Gate (merge, deploy, push to a protected branch, schema migration, data deletion, destructive infrastructure operation, secret rotation, live issue-tracker write) | **Never proceeds.** No exception, no payload override, no `unattended` flag. |
 
 The Impactful-Action Gate is absolute in the unattended path because the whole safety argument rests on it. It is enforced in three independent places, so a single failure — including a prompt-injection success — does not carry the action through:
 

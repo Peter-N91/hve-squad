@@ -1,6 +1,6 @@
 ---
 description: "Searches squad state and artifacts to answer a user's question or produce a focused document, then writes the result to a local file in the requested format without the user needing to read decision logs, history files, or routing tables directly"
-argument-hint: "request=... [format={md|html|pdf|docx}] [output=<path>] [squad=<name>]"
+argument-hint: "request=... [format={md|html|pdf|docx}] [outputPath=<path>] [squad=<name>]"
 ---
 
 # Squad Document
@@ -11,7 +11,7 @@ Search squad state — decisions, history, routing, roster, and any documentatio
 
 * ${input:request}: (Required) What the user wants to find or document — a question, a topic to summarize, or a document to generate. Inferred from the user prompt or conversation when not explicitly provided.
 * ${input:format:md}: (Optional, defaults to `md`) Output format. Accepted values: `md` (Markdown), `html` (self-contained HTML page), `pdf` (PDF via available tooling), `docx` (Word document via the `md-to-docx` skill). When a value is not recognized, fall back to `md` and inform the user.
-* ${input:output}: (Optional) Absolute or relative local filesystem path where the document should be saved. When omitted, write to `docs/squad-document-<YYYY-MM-DD>.<ext>` in the working directory.
+* ${input:outputPath}: (Optional) Absolute or relative local filesystem path where the document should be saved. When omitted, write to `docs/squad-document-<YYYY-MM-DD>.<ext>` in the working directory.
 * ${input:squad}: (Optional) In a federation, the registered sub-squad name to scope the search to (for example, `squad=product`). When omitted in a federation, search across all sub-squads. Ignored when the project uses a single squad.
 
 ## Workflow
@@ -56,7 +56,7 @@ Render the synthesized content in `${input:format}`:
 * **`pdf`** — attempt generation via an available PDF skill or tool. When PDF tooling is unavailable, fall back to `md`, write the Markdown file, and inform the user: "PDF generation is not available in this environment. The document was written as Markdown instead."
 * **`docx`** — convert the synthesized Markdown to a professionally formatted Word document using the `md-to-docx` skill. Write the Markdown to a temporary `.md` file, run the bundled conversion script (`node skills/md-to-docx/scripts/md-to-docx.mjs <input.md> <output.docx>`), and remove the temporary file after conversion succeeds. When Node.js or the `md-to-docx` skill is unavailable, fall back to `md` and inform the user.
 
-Write to `${input:output}` when provided. Otherwise, derive the filename as `docs/squad-document-<YYYY-MM-DD>.<ext>` (for example, `docs/squad-document-2026-08-01.md`). Create the target directory if it does not exist.
+Write to `${input:outputPath}` when provided. Otherwise, derive the filename as `docs/squad-document-<YYYY-MM-DD>.<ext>` (for example, `docs/squad-document-2026-08-01.md`). Create the target directory if it does not exist.
 
 ### Step 5: Confirm
 

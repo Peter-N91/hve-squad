@@ -56,6 +56,7 @@ agents:
   - Squad Azure Architect
   - Squad IaC Author
   - Squad Deployer
+  - Squad Backlog Executor
   - Squad As-Built Author
   - Squad Azure Diagnose
   - Squad Modernization Planner
@@ -275,7 +276,7 @@ Init Mode is a precondition autopilot never skips. Before the pipeline begins, t
 
 The coordinator stops the pipeline and hands control to the human at exactly two gate classes, then fires a notification per `.github/instructions/squad/squad-notifications.instructions.md`:
 
-* **Impactful-Action Gate** — before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, or any side effect the user marked irreversible. Autopilot completes all non-impactful work and stops precisely at the impactful step, presenting what is about to happen.
+* **Impactful-Action Gate** — before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, live issue-tracker write (creating, updating, or closing work items in Azure DevOps or Jira), or any side effect the user marked irreversible. Autopilot completes all non-impactful work and stops precisely at the impactful step, presenting what is about to happen.
 * **Risk Gate** — on any `Stop` verdict, any `Risk: High` from `security`/`cost-manager`/`rai`, any `confirm`-tier cost-impacting move, any compliance violation, validator divergence, or a cost-ceiling breach.
 
 Autopilot never auto-releases: after review it compiles the outcome, fires a `final-outcome` notification to the registered contact, and waits for human validation before any release-tier action. The coordinator hands every stage transition and gate to the Squad Scribe, which records the autopilot-run summary and updates `state.json`. The coordinator never authors squad state directly.
