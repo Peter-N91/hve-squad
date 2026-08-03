@@ -789,8 +789,10 @@ layouts:
           estimated input/cached/cache-write/output tokens, estimated cost, and estimated credits;
         </li>
         <li>
-          an aggregated <code>consumption.md</code> ledger of members, models, and credits, totaled
-          for the run, with a cost-comparison line against a single-model manual baseline;
+          an aggregated <code>consumption.md</code> ledger of members, models, and credits, split
+          into an <em>Attribution</em> table (who ran, on what model) and a <em>Usage &amp; Cost</em>
+          table (turns, tokens, cost, credits) that share the same row order, totaled for the run,
+          with a cost-comparison line against a single-model manual baseline;
         </li>
         <li>
           a <code>consumption-rates.md</code> per-model token-rate table &mdash; the single place to

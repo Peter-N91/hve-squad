@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.11] - 2026-08-03
+
+### Fixed
+
+- **The consumption ledger had grown to a single 15-column table, which is unreadable at the width it renders.** `Role, Member, Agent, Model, Model Source, Priced As, Tier, Turns, In Tokens, Cached, Cache Wr, Out Tokens, Est. Cost (USD), Est. Credits, Basis` accumulated across the `0.11.4`-`0.11.7` consumption work one column at a time, and no single change was large enough to notice. The markdown was structurally valid, so nothing flagged it; the defect was that a ledger a consumer is meant to read at a glance forced horizontal scrolling instead. `consumption.md` is now **two narrower tables that both key on `Role` in roster order**, so a row in one lines up with the same row in the other: **Attribution** (Role, Member, Agent, Model, Model Source, Priced As, Tier) records who ran on what, and **Usage & Cost** (Role, Turns, In Tokens, Cached, Cache Wr, Out Tokens, Est. Cost (USD), Est. Credits, Basis, plus the run-total row) records what it cost. No figure, rate, or calculation changed (`squad-src/.github/skills/squad/SKILL.md`, `squad-src/.github/agents/squad/squad-scribe.agent.md`, `squad-src/.github/instructions/squad/squad-state.instructions.md`).
+- The tier-fallback table in the shipped `consumption-rates.md` template had ragged cell padding, so the raw markdown was hard to read even where the rendered output was fine (`squad-src/.github/skills/squad/SKILL.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.11"
+```
+
+[0.11.11]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.11
+
 ## [0.11.10] - 2026-08-03
 
 ### Changed
