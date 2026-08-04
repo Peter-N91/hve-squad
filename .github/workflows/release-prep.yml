@@ -1,0 +1,125 @@
+name: Release Prep
+
+# Turns the fragments collected in .changes/unreleased/ into a release.
+#
+#   1. Invoke-ReleasePrep.ps1 resolves the new version from the highest `bump`
+#      across all pending fragments, prepends the assembled CHANGELOG section,
+#      writes the version into apm.yml, and deletes the fragments it consumed.
+#   2. Commits and pushes to main.
+#   3. Dispatches release.yml, which cuts the tag and the GitHub Release from
+#      the section this run just wrote.
+#
+# Triggers:
+#   push to main touching .changes/unreleased/**
+#     A merged pull request that carries a fragment releases immediately. This
+#     is the normal path; nobody has to remember to cut a release. A pull
+#     request with no fragment (the `skip-changelog` label) touches nothing here
+#     and releases nothing.
+#   workflow_dispatch
+#     Manual, and the only way to overrule the level the fragments resolved to
+#     or to pin an exact version.
+#
+# Step 3 is explicit because pushes authored by GITHUB_TOKEN do not trigger
+# other workflows — the same reason sync-hve-core.yml dispatches rather than
+# relying on release.yml's push trigger. Requires the SYNC_DEPS_TOKEN PAT with
+# Contents: read and write and Actions: read and write.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.changes/unreleased/**'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Release level. "fragments" honours what the pending fragments requested; pick minor only when this batch is a genuinely new idea.'
+        required: false
+        default: fragments
+        type: choice
+        options:
+          - fragments
+          - patch
+          - minor
+          - major
+      version:
+        description: 'Optional: exact version to release (e.g. 0.12.0). Overrides the bump choice.'
+        required: false
+        type: string
+      dry_run:
+        description: 'Print the assembled section and resolved version without committing'
+        required: false
+        default: false
+        type: boolean
+
+# Shared with sync-hve-core.yml: both push a release commit to main, and two of
+# them racing means one loses to a non-fast-forward.
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Assemble changelog and bump version
+    runs-on: ubuntu-latest
+    # The release commit itself deletes the fragments it consumed, which matches
+    # the path filter above. Without this guard that deletion re-triggers the run.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       !startsWith(github.event.head_commit.message, 'chore(release):'))
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: main
+
+      - name: Assemble release
+        id: prep
+        shell: pwsh
+        # Inputs arrive via env, never interpolated into the script body, so a
+        # crafted `version` value cannot break out into a command.
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          $prepArgs = @('-GitHubOutput')
+          if ($env:INPUT_VERSION) { $prepArgs += @('-Version', $env:INPUT_VERSION) }
+          elseif ($env:INPUT_BUMP -and $env:INPUT_BUMP -ne 'fragments') { $prepArgs += @('-Bump', $env:INPUT_BUMP) }
+          if ($env:INPUT_DRY_RUN -eq 'true') { $prepArgs += '-DryRun' }
+          ./scripts/Invoke-ReleasePrep.ps1 @prepArgs
+
+      - name: Commit and push
+        if: steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
+          NEW_VERSION: ${{ steps.prep.outputs.version }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git add apm.yml CHANGELOG.md .changes/unreleased
+          if git diff --cached --quiet; then
+            echo "::notice::Nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(release): $NEW_VERSION"
+          git push origin main
+          echo "::notice::Pushed release commit for v$NEW_VERSION"
+
+      - name: Trigger release
+        if: steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
+        run: |
+          gh workflow run release.yml --ref main
+          echo "::notice::Triggered release.yml for v${{ steps.prep.outputs.version }}"

@@ -319,3 +319,5 @@ includes: auto
 scripts:
   sync-deps: "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Update-ApmDependencies.ps1 -ApmFile apm.yml"
   install-sync: "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Update-ApmDependencies.ps1 -ApmFile apm.yml && apm install"
+  change: "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/New-ChangeFragment.ps1"
+  release-prep: "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Invoke-ReleasePrep.ps1"
