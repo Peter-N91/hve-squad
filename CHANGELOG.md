@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.14] - 2026-08-04
+
+### Added
+
+- **Contributor pull requests conflicted on `apm.yml` and `CHANGELOG.md` every time two landed together.** Version and changelog are now release outputs assembled on `main` from per-pull-request fragments under `.changes/unreleased/`, so nothing in a pull request touches shared release state (`scripts/New-ChangeFragment.ps1`, `scripts/Invoke-ReleasePrep.ps1`, `.github/workflows/pr-validation.yml`, `.github/workflows/release-prep.yml`).
+
+### Fixed
+
+- **The first Release Prep run failed with `Not found: -GitHubOutput`.** The workflow built its arguments as a PowerShell array and splatted it, but array splatting binds *positionally* — so the literal string `-GitHubOutput` landed in the script's first positional parameter, `-ApmFile`, and the existence check threw on a file by that name. The workflow now splats a hashtable, which binds by name (`.github/workflows/release-prep.yml`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.14"
+```
+
+[0.11.14]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.14
+
 ## [0.11.13] - 2026-08-04
 
 ### Changed
