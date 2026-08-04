@@ -91,10 +91,12 @@ jobs:
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          $prepArgs = @('-GitHubOutput')
-          if ($env:INPUT_VERSION) { $prepArgs += @('-Version', $env:INPUT_VERSION) }
-          elseif ($env:INPUT_BUMP -and $env:INPUT_BUMP -ne 'fragments') { $prepArgs += @('-Bump', $env:INPUT_BUMP) }
-          if ($env:INPUT_DRY_RUN -eq 'true') { $prepArgs += '-DryRun' }
+          # Hashtable, not array: array splatting binds positionally, so '-GitHubOutput'
+          # would land in the first positional parameter instead of setting the switch.
+          $prepArgs = @{ GitHubOutput = $true }
+          if ($env:INPUT_VERSION) { $prepArgs['Version'] = $env:INPUT_VERSION }
+          elseif ($env:INPUT_BUMP -and $env:INPUT_BUMP -ne 'fragments') { $prepArgs['Bump'] = $env:INPUT_BUMP }
+          if ($env:INPUT_DRY_RUN -eq 'true') { $prepArgs['DryRun'] = $true }
           ./scripts/Invoke-ReleasePrep.ps1 @prepArgs
 
       - name: Commit and push
