@@ -25,6 +25,13 @@
     Git ref to read hve-core from (branch, tag, or commit SHA). The ref is
     resolved to a concrete commit SHA, which is what every hve-core dependency is
     pinned to.
+
+    Defaults to the SHA already pinned in ApmFile, so regenerating the list after
+    adding a squad agent, skill, prompt, or instruction does not also move the
+    hve-core pin. Moving the pin is a separate, reviewed operation: the scheduled
+    sync workflow passes -Ref explicitly and runs Get-HveCoreCastDelta.ps1 first,
+    because a SHA move can silently break roster rows. Falls back to 'main' when
+    ApmFile holds no pin yet.
 .PARAMETER IncludeRoots
     Repository-relative roots under which files are discovered.
 .PARAMETER IncludeRegex
@@ -67,7 +74,7 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
-    [string]$Ref = 'main',
+    [string]$Ref,
 
     [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
@@ -419,6 +426,14 @@ function Update-ApmDependencyList {
 #region Main Execution
 if ($MyInvocation.InvocationName -ne '.') {
     try {
+        if (-not $Ref) {
+            $pinned = if (Test-Path -LiteralPath $ApmFile) {
+                [regex]::Match((Get-Content -LiteralPath $ApmFile -Raw), "$([regex]::Escape($RepoSlug))/[^#\s]+#(?<sha>[0-9a-f]{7,40})").Groups['sha'].Value
+            }
+            $Ref = if ($pinned) { $pinned } else { 'main' }
+            Write-Host "No -Ref supplied; staying on the pin already in $ApmFile ($Ref)." -ForegroundColor DarkGray
+        }
+
         Write-Host "Reading repository tree from $RepoSlug@$Ref..." -ForegroundColor Cyan
         $tree = Get-RepoTreePaths -Repository $RepoSlug -GitRef $Ref -Roots $IncludeRoots
         $paths = $tree.Paths

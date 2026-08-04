@@ -44,6 +44,9 @@
         <li><code>apm.lock.yaml</code>: resolved dependency lock file</li>
         <li><code>scripts/Update-ApmDependencies.ps1</code>: dependency generator</li>
         <li><code>scripts/Get-HveCoreCastDelta.ps1</code>: compares the deployable agent cast between two hve-core refs</li>
+        <li><code>scripts/New-ChangeFragment.ps1</code>: writes one change fragment for a pull request</li>
+        <li><code>scripts/Invoke-ReleasePrep.ps1</code>: assembles pending fragments into a CHANGELOG section and bumps <code>apm.yml</code></li>
+        <li><code>.changes/unreleased/</code>: pending change fragments, empty between releases</li>
         <li><code>squad-src/.github/</code>: locally authored squad source (agents, prompts, instructions, skills)</li>
         <li><code>apm_modules/</code>: installed dependencies (ignored by git)</li>
         <li><code>.github/</code>: generated/deployed local assets (ignored by git, except <code>.github/workflows/</code> if tracked)</li>
@@ -67,6 +70,8 @@
       <ul>
         <li><code>sync-deps</code> — regenerates <code>dependencies.apm</code> from HVE Core content.</li>
         <li><code>install-sync</code> — regenerates <code>dependencies.apm</code> and runs <code>apm install</code>.</li>
+        <li><code>change</code> — creates a change fragment under <code>.changes/unreleased/</code> for the current pull request.</li>
+        <li><code>release-prep</code> — assembles the pending fragments into a release: CHANGELOG section, version bump, fragments cleared.</li>
       </ul>
 
       <h2>Maintainer workflow</h2>
@@ -99,12 +104,13 @@ apm run install-sync</code></pre>
         <li><code>apm run sync-deps</code></li>
         <li><code>apm lock</code></li>
         <li><code>apm pack</code> (optional)</li>
+        <li><code>apm run release-prep</code> — or run the <strong>Release Prep</strong> workflow, which does the same thing and pushes.</li>
       </ol>
 
       <h2>How dependency generation works</h2>
       <p>The generator script:</p>
       <ul>
-        <li>Connects to <code>microsoft/hve-core</code> at a target ref (default: <code>main</code>)</li>
+        <li>Connects to <code>microsoft/hve-core</code> at a target ref (default: the SHA already pinned in <code>apm.yml</code>)</li>
         <li>Enumerates files under <code>.github/agents</code>, <code>.github/instructions</code>, <code>.github/prompts</code>, and <code>.github/skills</code></li>
         <li>Filters for markdown artifacts</li>
         <li>Rewrites only <code>dependencies.apm</code> in <code>apm.yml</code></li>
@@ -123,7 +129,7 @@ flowchart TD
     A["Cron 06:00 UTC<br/>sync-hve-core.yml"] --> B["Get-HveCoreCastDelta.ps1<br/>pinned SHA vs hve-core main"]
     B --> C{"Does squad-src still reference<br/>a removed or un-dispatched agent?"}
 
-    C -- "no (mechanical)" --> D["Bump pin + patch version<br/>CHANGELOG + push"]
+    C -- "no (mechanical)" --> D["Bump pin + assemble release<br/>from .changes fragments + push"]
     D --> E["release.yml<br/>tag + GitHub Release"]
 
     C -- "yes (breaking)" --> F["Open issue labeled squad/auto<br/>body = full adaptation brief"]
@@ -145,11 +151,13 @@ flowchart TD
 
       <h3>Path 1 &mdash; mechanical (no cast change)</h3>
       <p>
-        <code>sync-hve-core.yml</code> moves the pinned SHA, bumps the patch version, writes a
-        CHANGELOG line, pushes, and dispatches the release. Unchanged behavior, with one addition: it
-        runs the cast-delta script as a <strong>guard</strong> first. A SHA move cannot repoint a
-        roster row, and shipping it anyway releases a squad whose roles resolve to nothing &mdash;
-        which is exactly what happened in <code>0.10.11</code>.
+        <code>sync-hve-core.yml</code> moves the pinned SHA, then hands the version and the CHANGELOG
+        to <code>Invoke-ReleasePrep.ps1</code> &mdash; so the nightly sync also flushes whatever change
+        fragments contributors merged during the day, and the pin move is recorded as one more
+        <em>Changed</em> entry alongside them. It pushes and dispatches the release. One addition to the
+        older behavior: it runs the cast-delta script as a <strong>guard</strong> first. A SHA move
+        cannot repoint a roster row, and shipping it anyway releases a squad whose roles resolve to
+        nothing &mdash; which is exactly what happened in <code>0.10.11</code>.
       </p>
 
       <h3>Path 2 &mdash; adaptive (the cast changed)</h3>
@@ -166,6 +174,22 @@ flowchart TD
         Labeling that PR <code>squad/review</code> fires the same workflow again in sub-squad
         <code>pr-&lt;N&gt;</code>, routed to the tester role, which posts its findings as PR comments.
       </p>
+      <p>
+        The adaptation PR carries a <code>.changes/unreleased/</code> fragment with
+        <code>bump: minor</code>, because a cast change means the roster that ships is not the one
+        that shipped before. It does <em>not</em> edit <code>apm.yml</code> <code>version:</code> or
+        <code>CHANGELOG.md</code> &mdash; the same rule every contributor follows, and
+        <code>pr-validation.yml</code> enforces it here too. If a run forgets, the workflow writes a
+        placeholder patch fragment so the PR can still go green, marked
+        <code>PLACEHOLDER, rewrite before merging</code>.
+      </p>
+      <div class="callout">
+        <p>
+          Merging the adaptation pull request <strong>cuts the minor release by itself</strong>. The
+          fragment lands in <code>.changes/unreleased/</code> on <code>main</code>, which is the
+          trigger for <strong>Release Prep</strong>. Nothing else is required of you.
+        </p>
+      </div>
 
       <h3>How gates behave when nobody is watching</h3>
       <p>
@@ -320,15 +344,16 @@ flowchart TD
         <code>-Ref</code> resolves to (appended as <code>#&lt;sha&gt;</code>), so a published version keeps
         resolving the same files even after hve-core's <code>main</code> moves on. Without this, an
         unpinned path that hve-core later renames or removes makes the install fail for every consumer
-        of that version. Pass <code>-Ref &lt;hve-core-ref&gt;</code> to pin against a specific hve-core
-        commit or tag (default: <code>main</code>).
+        of that version. With no <code>-Ref</code>, the script reuses the pin already in
+        <code>apm.yml</code>; pass <code>-Ref &lt;hve-core-ref&gt;</code> to move it to a specific
+        commit, tag, or branch.
       </p>
 
       <h2>Customization</h2>
       <p>You can tune generation behavior in <code>scripts/Update-ApmDependencies.ps1</code>:</p>
       <ul>
         <li><code>RepoSlug</code>: source repository</li>
-        <li><code>Ref</code>: branch/tag/commit to scan</li>
+        <li><code>Ref</code>: branch/tag/commit to scan. Defaults to the SHA already pinned in <code>apm.yml</code>, so a routine regeneration never moves the pin; pass it explicitly to move it.</li>
         <li><code>IncludeRoots</code>: folders included in discovery</li>
         <li><code>IncludeRegex</code>: file filter pattern</li>
         <li><code>SquadSourceRoot</code>: local squad source tree path</li>
@@ -336,38 +361,118 @@ flowchart TD
         <li><code>SquadRef</code>: optional release tag/commit that pins the squad self-references</li>
       </ul>
 
+      <h2>Change fragments</h2>
+      <p>
+        Version and changelog are <strong>release outputs</strong>, not things a pull request edits.
+        A version line is a single line and the newest changelog heading is a single position, so two
+        pull requests that both touch them always conflict &mdash; and the second one to merge silently
+        reuses a version number the first already claimed. Moving a target branch does not help: two
+        pull requests bumping to the same number on a <code>develop</code> branch conflict identically.
+        The fix is to take the shared state out of the pull request entirely.
+      </p>
+      <p>
+        Each pull request instead adds <strong>one new file</strong> under
+        <code>.changes/unreleased/</code>, generated by <code>apm run change</code>. Two pull requests
+        adding two differently named files never conflict. The format is documented in
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/.changes/README.md">.changes/README.md</a>
+        and repeated for contributors on the <a href="contributing.html">Contributing</a> page.
+      </p>
+      <p><code>pr-validation.yml</code> makes the rule mechanical rather than a review comment:</p>
+      <ul>
+        <li>Editing <code>CHANGELOG.md</code> in a pull request fails the check.</li>
+        <li>Changing the <code>version:</code> line in <code>apm.yml</code> fails the check.</li>
+        <li>
+          Moving the <code>microsoft/hve-core</code> pin fails the check, unless the branch is a Watch
+          Mode adaptation branch (<code>squad/issue-*</code>). Editing <code>dependencies:</code> is
+          otherwise fine &mdash; a contributor adding a skill has to, via <code>apm run sync-deps</code>,
+          which stays on the current pin by default. The check is the backstop for an explicit
+          <code>-Ref main</code> that skips the cast-delta guard; its message names the SHA to pass
+          instead.
+        </li>
+        <li>A pull request with no new fragment fails, unless it carries the <code>skip-changelog</code> label. That label also skips the version bump, because the version is resolved from fragments &mdash; a pull request contributing no fragment contributes no bump.</li>
+        <li>Every pending fragment is parsed with <code>Invoke-ReleasePrep.ps1 -DryRun</code>, so a malformed one is caught in the pull request rather than at release time.</li>
+      </ul>
+      <p>
+        It runs on <code>pull_request</code>, not <code>pull_request_target</code>: fork pull requests
+        get a read-only token and no secrets, and nothing in the check needs either. Create the
+        <code>skip-changelog</code> label before relying on the escape hatch.
+      </p>
+
+      <h3>Who decides the release level</h3>
+      <p>
+        The version level tracks <strong>ideas, not artifacts</strong>. <code>0.10.0</code> was
+        federation and <code>0.11.0</code> was the hve-core attachment rework, because each introduced
+        a concept that did not exist before. Every agent, skill, role, and instruction added
+        <em>underneath</em> one of those ideas is a patch, however many files it touches. A contributor
+        who adds a squad role to federation is extending an idea that already ships.
+      </p>
+      <p>
+        A fragment's <code>bump</code> is a <em>suggestion</em>, and because merging releases
+        immediately, <strong>the pull request is where you overrule it</strong>. Two things make that
+        easy:
+      </p>
+      <ul>
+        <li>
+          <code>pr-validation.yml</code> writes the outcome into the check's job summary &mdash;
+          <em>Version: 0.11.12 -&gt; 0.12.0 (minor)</em> &mdash; so a minor can never slip past you
+          unnoticed.
+        </li>
+        <li>
+          Disagree? Open the fragment in the pull request's <strong>Files changed</strong> tab, click
+          the pencil, change <code>bump: minor</code> to <code>bump: patch</code>, and commit. One line,
+          no checkout. Fork pull requests allow this by default (<em>Allow edits by maintainers</em>).
+        </li>
+      </ul>
+      <p>
+        The release-time overrides still exist for the batch you assemble yourself, and for anything
+        that reached <code>main</code> without a release:
+      </p>
+      <pre><code>pwsh -File scripts/Invoke-ReleasePrep.ps1 -Bump minor -DryRun   # this batch adds up to a new idea
+pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, overrides everything</code></pre>
+      <p>
+        The <strong>Release Prep</strong> workflow exposes the same choice as a <code>bump</code>
+        dropdown, defaulting to <code>fragments</code>. The script prints <em>&ldquo;Bump override:
+        fragments resolved to X, releasing as Y&rdquo;</em> whenever you overrule them, so the decision
+        is visible in the run log.
+      </p>
+
       <h2>Release process</h2>
       <p>
         Releases use a tag-based flow on top of the default branch (<code>main</code>). The tag is the
         release artifact consumers install with <code>apm install "Peter-N91/hve-squad#vX.Y.Z"</code>.
+        You do not choose the version number by hand &mdash; the highest <code>bump</code> among the
+        pending fragments selects it.
       </p>
-      <ol>
-        <li>
-          Cut a release branch from <code>main</code>:
-          <pre><code>git checkout main
-git pull
-git checkout -b release/vX.Y.Z</code></pre>
-        </li>
-        <li>
-          Update version metadata:
-          <ul>
-            <li>Bump <code>version:</code> in <code>apm.yml</code> to <code>X.Y.Z</code>.</li>
-            <li>Add a <code>## [X.Y.Z]</code> section to <code>CHANGELOG.md</code> describing the changes.</li>
-            <li>Regenerate the dependency list pinned to this release: <code>pwsh -File scripts/Update-ApmDependencies.ps1 -Ref main -SquadRef vX.Y.Z</code>. This pins every hve-core entry to <code>main</code>'s commit SHA and the squad self-references to <code>vX.Y.Z</code>. Then refresh the lockfile with <code>apm lock</code>.</li>
-          </ul>
-        </li>
-        <li>Open a PR into <code>main</code> titled <code>release: vX.Y.Z</code> (the PR template fills in the checklist).</li>
-        <li>
-          After the PR is merged, tag the merge commit on <code>main</code> and push the tag:
-          <pre><code>git checkout main
-git pull
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
-git push origin vX.Y.Z</code></pre>
-        </li>
-        <li>(Optional) Publish a GitHub Release for the tag.</li>
-      </ol>
       <p>
-        Avoid a long-lived <code>release</code> branch. Only create <code>release/vX.Y.z</code> from an
+        <strong>The normal path needs nothing from you.</strong> Merging a pull request that carries a
+        fragment pushes it to <code>.changes/unreleased/</code> on <code>main</code>, which triggers
+        <strong>Release Prep</strong>. That run resolves the version, prepends the CHANGELOG section
+        with the consumer-install block and the link reference, writes <code>version:</code> into
+        <code>apm.yml</code>, deletes the fragments it consumed, commits
+        <code>chore(release): X.Y.Z</code>, and dispatches <code>release.yml</code> to cut the tag and
+        the GitHub Release. A pull request with no fragment (the <code>skip-changelog</code> label)
+        touches nothing and releases nothing.
+      </p>
+      <p>
+        Run <strong>Release Prep</strong> manually only to overrule the level, to pin an exact version,
+        or to flush fragments that reached <code>main</code> without triggering it. Tick <em>dry run</em>
+        first to see the resolved version and the assembled section without committing anything.
+      </p>
+      <p>To do it locally instead:</p>
+      <pre><code>apm run release-prep                        # resolve version, assemble, write
+pwsh -File scripts/Invoke-ReleasePrep.ps1 -DryRun           # preview only
+pwsh -File scripts/Invoke-ReleasePrep.ps1 -Bump minor       # overrule the fragments
+pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0    # force an exact version</code></pre>
+      <p>
+        Before a release that also re-pins dependencies, regenerate the list first:
+        <code>pwsh -File scripts/Update-ApmDependencies.ps1 -Ref main -SquadRef vX.Y.Z</code> pins every
+        hve-core entry to <code>main</code>'s commit SHA and the squad self-references to
+        <code>vX.Y.Z</code>. Refresh the lockfile with <code>apm lock</code>. Because
+        <code>-SquadRef</code> names a tag that does not exist yet, verify <code>apm install</code>
+        from a fresh clone of the tag after it is pushed, not from the working tree.
+      </p>
+      <p>
+        Avoid a long-lived <code>release</code> branch. Only create <code>release/vX.Y.Z</code> from an
         existing tag when you need to patch an older version after newer work has landed on
         <code>main</code>.
       </p>
