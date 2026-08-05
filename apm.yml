@@ -312,6 +312,7 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-watch-mode.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad-document.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad-federation.prompt.md
+    - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad-governance-report.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad-learn.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/skills/azure-scaffold
