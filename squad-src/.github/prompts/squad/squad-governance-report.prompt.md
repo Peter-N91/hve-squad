@@ -1,6 +1,6 @@
 ---
 description: "Reads squad state artifacts and generates a self-contained HTML governance dashboard with 7 sections covering governance gates, council verdicts, cost, role dispatches, compliance, timeline, and key outcomes"
-argument-hint: "[output=<path>] [squad=<name>] [period={all|30d|7d}]"
+argument-hint: "[outputPath=<path>] [squad=<name>] [period={all|30d|7d}]"
 ---
 
 # Squad Governance Report
