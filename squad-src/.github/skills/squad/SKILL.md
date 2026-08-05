@@ -43,10 +43,12 @@ The coordinator runs four stages each turn: **init**, **route**, **decide**, and
 
 A profile is a curated subset of the cast tailored to a kind of project. The coordinator seeds only the profile's members into `team.md`, and the routing table is filtered to those roles. The `scribe` role is always included (the single writer of squad state), and so is the **methodology spine** (`researcher`, `lead`, `developer`, `tester`) that runs the Research → Plan → Implement → Review cycle in every profile; the `intake-validator` role is seeded into the `product` and `full` profiles and can be added to any roster. Profiles are defined canonically in `.github/instructions/squad/squad-roster.instructions.md`; the catalog below mirrors them.
 
+One catalog role — `backlog-executor`, which writes work items into a live Azure DevOps or Jira project — is **opt-in** and appears in no profile, not even `full`, because a tracker write reaches a whole team's backlog. The coordinator offers to add it the first time a request needs a tracker write, and adds it only on the user's say-so. See *Opt-In Roles* in the roster conventions.
+
 | Profile        | Members                                                                                                                       | Use When                                                                                     |
 |----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | `default`      | researcher, lead, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |
-| `full`         | researcher, lead, developer, tester, challenger, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, prompt-engineer, intake-validator, scribe | Complex, cross-cutting projects that need every discipline                                  |
+| `full`         | researcher, lead, developer, tester, challenger, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, rai, designer, fact-checker, cost-manager, modernizer, prompt-engineer, intake-validator, scribe | Complex, cross-cutting projects that need every discipline except the opt-in roles |
 | `security`     | researcher, lead, developer, tester, security, rai, fact-checker, scribe                                                      | Security, threat-modeling, and responsible-AI focus                                          |
 | `design`       | researcher, lead, developer, tester, designer, scribe                                                                         | UX/UI and product-design focus                                                               |
 | `architecture` | researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe                                        | System design and architecture focus                                                         |
@@ -171,7 +173,7 @@ The coordinator hands these templates to the Squad Scribe on first run, after th
 
 ### team.md
 
-Seeded from the confirmed profile's members; the template below shows the `full` profile (the entire cast catalog). For other profiles, only the profile's rows are written. The `Member Name` column is populated from the Init Mode naming step: it may be empty for roles the user chose not to name, and it must be unique within a `Role` when two rows share the same role. The role-to-agent relationship is many-to-many: each role names one **Primary** agent the coordinator dispatches by default plus optional **Alternate** agents it resolves to per the cast catalog's Selection Cue (see `squad-roster.instructions.md`). The `devrel` role has no deployed HVE Core agent and no backing skill, so it stays unselectable until one exists.
+Seeded from the confirmed profile's members; the template below shows the `full` profile. For other profiles, only the profile's rows are written. The `Member Name` column is populated from the Init Mode naming step: it may be empty for roles the user chose not to name, and it must be unique within a `Role` when two rows share the same role. The role-to-agent relationship is many-to-many: each role names one **Primary** agent the coordinator dispatches by default plus optional **Alternate** agents it resolves to per the cast catalog's Selection Cue (see `squad-roster.instructions.md`). The `devrel` role has no deployed HVE Core agent and no backing skill, so it stays unselectable until one exists. The opt-in `backlog-executor` role is absent from every profile and is appended to `team.md` only when the user accepts the coordinator's offer to add it.
 
 ```markdown
 ---
@@ -465,6 +467,8 @@ Watch Mode runs additionally carry an optional, additive `trigger` object record
 
 Scribe-aggregated ledger of squad members, the model each consumed, and estimated AI-credit cost; this is the common "members and credits" readme. Uses replace semantics: the Scribe rewrites it each turn, mirrors roster order, and recomputes the run total and the comparison line from `consumption-rates.md`. Every figure is an estimate, because no per-dispatch token telemetry exists (the runtime exposes only the per-user aggregate `ai_credits_used`); token counts are estimated and cost and credits are derived, never billed.
 
+The ledger is split into two narrower tables that both key on `Role` — one **Attribution** table (who ran, on what model) and one **Usage & Cost** table (what it cost) — instead of one 15-column table, because a table wide enough to need horizontal scrolling defeats the point of a ledger a consumer should be able to read at a glance.
+
 ```markdown
 ---
 description: "Squad consumption ledger: members, models, estimated tokens, cost, and AI credits"
@@ -472,13 +476,22 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 
 # Squad Consumption Ledger (Run: <run-id>)
 
-| Role          | Member | Agent         | Model   | Model Source | Priced As | Tier   | Turns | In Tokens | Cached | Cache Wr | Out Tokens | Est. Cost (USD) | Est. Credits | Basis     |
-| ------------- | ------ | ------------- | ------- | ------------ | --------- | ------ | ----- | --------- | ------ | -------- | ---------- | --------------- | ------------ | --------- |
-| <role>        |        | <agent>       | <model> | <source>     | <model>   | <tier> | 0     | 0         | 0      | 0        | 0          | 0.0000          | 0.00         | estimated |
-| orchestration |        | <coord+scribe>| <model> | <source>     | <model>   | mixed  | 0     | 0         | 0      | 0        | 0          | 0.0000          | 0.00         | estimated |
-| **Total**     |        |               |         |              |           |        | **0** | **0**     | **0**  | **0**    | **0**      | **$0.00**       | **0.00**     |           |
+## Attribution
 
-> Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API. `Model` is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md` and is never invented — `unknown` where it could not be resolved. `Model Source` is `cli-pinned`, `operator-declared`, `dispatch-reported`, `agent-pinned`, `session-inherited`, or `unresolved`; an `agent-pinned` row legitimately differs from the session model. `Priced As` is the rate row used and differs from `Model` only on a fallback. `Turns` is the estimated internal tool-loop turn count for the dispatch, because a dispatch is many model calls and not one. Token rates and the dispatch-size estimator come from `consumption-rates.md` (observed <date>). Calibration factor <factor> (<observations> reconciled run(s)). 1 AI credit = $0.01 USD.
+| Role          | Member | Agent          | Model   | Model Source | Priced As | Tier   |
+| ------------- | ------ | -------------- | ------- | ------------ | --------- | ------ |
+| <role>        |        | <agent>        | <model> | <source>     | <model>   | <tier> |
+| orchestration |        | <coord+scribe> | <model> | <source>     | <model>   | mixed  |
+
+## Usage & Cost
+
+| Role          | Turns | In Tokens | Cached | Cache Wr | Out Tokens | Est. Cost (USD) | Est. Credits | Basis     |
+| ------------- | ----- | --------- | ------ | -------- | ---------- | ---------------- | ------------ | --------- |
+| <role>        | 0     | 0         | 0      | 0        | 0          | 0.0000           | 0.00         | estimated |
+| orchestration | 0     | 0         | 0      | 0        | 0          | 0.0000           | 0.00         | estimated |
+| **Total**     | **0** | **0**     | **0**  | **0**    | **0**      | **$0.00**        | **0.00**     |           |
+
+> Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API. `Model` is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md` and is never invented — `unknown` where it could not be resolved. `Model Source` is `cli-pinned`, `operator-declared`, `dispatch-reported`, `agent-pinned`, `session-inherited`, or `unresolved`; an `agent-pinned` row legitimately differs from the session model. `Priced As` is the rate row used and differs from `Model` only on a fallback. `Turns` is the estimated internal tool-loop turn count for the dispatch, because a dispatch is many model calls and not one. The two tables share the same `Role` order so a row in one lines up with the same row in the other. Token rates and the dispatch-size estimator come from `consumption-rates.md` (observed <date>). Calibration factor <factor> (<observations> reconciled run(s)). 1 AI credit = $0.01 USD.
 
 ## Cost Comparison (illustrative)
 
@@ -525,11 +538,11 @@ A tier is a routing preference, not a price. When the actual model is unknown, p
 
 The `Priced as` column below names a model for **pricing only**. Never write it into a consumption block's `model` field — that field records what actually ran and is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md`, or left as the literal `unknown`. Copying a `Priced as` name into `model` is exactly the fabrication that makes a ledger report spend against a model the operator never chose.
 
-| Tier     | Priced as        | Input | Cached | Cache write | Output |
-| -------- | ---------------- | ----- | ------ | ----------- | ------ |
-| fast     | Claude Haiku 4.5 | 1.00  | 0.10   | 1.25        | 5.00   |
-| default  | Claude Sonnet 4.6| 3.00  | 0.30   | 3.75        | 15.00  |
-| extended | Claude Opus 5    | 5.00  | 0.50   | 6.25        | 25.00  |
+| Tier     | Priced as         | Input | Cached | Cache write | Output |
+| -------- | ----------------- | ----- | ------ | ----------- | ------ |
+| fast     | Claude Haiku 4.5  | 1.00  | 0.10   | 1.25        | 5.00   |
+| default  | Claude Sonnet 4.6 | 3.00  | 0.30   | 3.75        | 15.00  |
+| extended | Claude Opus 5     | 5.00  | 0.50   | 6.25        | 25.00  |
 
 ## Dispatch-size estimator
 

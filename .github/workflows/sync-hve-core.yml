@@ -23,10 +23,12 @@ name: Sync and Adapt
 #        - clones microsoft/hve-core at that exact SHA
 #        - rewrites all microsoft/hve-core entries with the new SHA
 #        - leaves squad entries pointing at the default upstream slug
-#   6. Bumps the patch version in apm.yml.
-#   7. Prepends a CHANGELOG entry for the new version.
-#   8. Commits apm.yml and CHANGELOG.md and pushes to main.
-#   9. Dispatches release.yml to cut the tag and GitHub Release
+#   6. Runs Invoke-ReleasePrep.ps1, which resolves the new version from any
+#      change fragments contributors merged since the last release, adds this
+#      SHA move as one more Changed entry, prepends the CHANGELOG section, and
+#      writes the version into apm.yml.
+#   7. Commits apm.yml, CHANGELOG.md, and the consumed fragments, then pushes to main.
+#   8. Dispatches release.yml to cut the tag and GitHub Release
 #      (required because GITHUB_TOKEN-authored pushes do not trigger workflows).
 #
 # No local hve-core mirror involved — all content is referenced directly
@@ -56,8 +58,10 @@ on:
         type: boolean
         default: false
 
+# Shared with release-prep.yml: both push a release commit to main, and two of
+# them racing means one loses to a non-fast-forward.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-main
   cancel-in-progress: false
 
 permissions:
@@ -208,8 +212,18 @@ jobs:
               '   default routing table in `squad-routing.instructions.md` to match.',
               `6. Run \`pwsh scripts/Update-ApmDependencies.ps1 -Ref ${to}\` so \`apm.yml\` pins the`,
               '   new SHA and picks up any new charter files.',
-              '7. Bump the **minor** version in `apm.yml` — a cast change is not a patch — and',
-              '   prepend a Keep a Changelog entry naming the rename map and any new charters.',
+              '7. Record the change as a **fragment**, not as an edit to `apm.yml` `version:` or',
+              '   `CHANGELOG.md` — CI rejects a pull request that touches either, because both are',
+              '   release outputs assembled on `main`. A cast change is a **minor**: the roster',
+              '   that ships is not the one that shipped before. Run:',
+              '',
+              '   ```powershell',
+              '   pwsh scripts/New-ChangeFragment.ps1 -Type Changed -Bump minor `',
+              `     -Title 'adapt squad cast to hve-core ${short}' \``,
+              "     -Body '- **...name the rename map and any new charters here...**'",
+              '   ```',
+              '',
+              '   Write the body as it should read in the release notes. See `.changes/README.md`.',
               '8. Update any documentation that names a changed agent, role, or path. Search',
               '   `docs/`, `README.md`, and `CONTRIBUTING.md` for every old name in the rename map.',
               '   A rename that lands in `squad-src/` but not in the docs leaves a reader following',
@@ -233,9 +247,16 @@ jobs:
               '- [ ] No Primary or Alternate sets `disable-model-invocation: true`',
               '- [ ] Any new thin charter runs a real hve-core skill and declares a Deliverable Root',
               '- [ ] `apm.yml` pins `' + to + '` and lists any new charter files',
-              '- [ ] Version bumped as a minor release, CHANGELOG entry written',
+              '- [ ] A `.changes/unreleased/` fragment exists with `bump: minor`',
+              '- [ ] `apm.yml` `version:` and `CHANGELOG.md` are untouched',
               '- [ ] Docs naming a changed agent or role are updated, or the PR states that none do',
               '- [ ] `Get-HveCoreCastDelta.ps1` reports a non-breaking verdict',
+              '',
+              '## After merge',
+              '',
+              'Nothing further is required. The fragment this pull request adds lands in',
+              '`.changes/unreleased/` on `main`, which triggers **Release Prep**: it assembles the',
+              'CHANGELOG section, bumps `apm.yml` to the minor, and cuts the tag and GitHub Release.',
               '',
               '## Cast delta',
               '',
@@ -266,54 +287,22 @@ jobs:
           [[ "${{ inputs.dry_run }}" == "true" ]] && ARGS+=(-DryRun)
           pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
 
-      # ── Bump patch version in apm.yml ─────────────────────────────────────
-      - name: Bump patch version
+      # ── Assemble the release from pending change fragments ────────────────
+      #    Invoke-ReleasePrep.ps1 owns the version and the CHANGELOG. It resolves
+      #    the bump from whatever fragments contributors have merged since the
+      #    last release, appends this SHA move as one more Changed entry, and
+      #    clears the fragments it consumed. -AllowEmpty lets a pure pin move
+      #    still ship as a patch when no fragments are pending.
+      - name: Assemble release
         if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
         id: bump
+        shell: pwsh
+        env:
+          HVE_CORE_SHORT_SHA: ${{ steps.latest.outputs.short_sha }}
+          HVE_CORE_SHA: ${{ steps.latest.outputs.sha }}
         run: |
-          CURRENT=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          NEW_VER="$MAJOR.$MINOR.$((PATCH + 1))"
-          sed -i "s/^version: .*/version: $NEW_VER/" apm.yml
-          echo "version=$NEW_VER" >> "$GITHUB_OUTPUT"
-          echo "Bumped $CURRENT → $NEW_VER"
-
-      # ── Prepend CHANGELOG entry ────────────────────────────────────────────
-      - name: Update CHANGELOG
-        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
-        run: |
-          NEW_VERSION="${{ steps.bump.outputs.version }}"
-          TODAY=$(date -u +%Y-%m-%d)
-          SHORT_SHA="${{ steps.latest.outputs.short_sha }}"
-          FULL_SHA="${{ steps.latest.outputs.sha }}"
-          REPO="${{ github.repository }}"
-          cat > /tmp/changelog_entry.md <<EOF
-          ## [$NEW_VERSION] - $TODAY
-
-          ### Changed
-
-          - Updated hve-core dependency pin to \`$SHORT_SHA\` ($FULL_SHA).
-
-          ### Consumer install
-
-          Pin to this version:
-
-          \`\`\`powershell
-          apm install "$REPO#v$NEW_VERSION"
-          \`\`\`
-
-          [$NEW_VERSION]: https://github.com/$REPO/releases/tag/v$NEW_VERSION
-
-          EOF
-          awk 'BEGIN{done=0}
-               /^## \[/ {
-                 if (!done) {
-                   while ((getline line < "/tmp/changelog_entry.md") > 0) print line;
-                   done=1
-                 }
-               }
-               { print }' CHANGELOG.md > CHANGELOG.tmp
-          mv CHANGELOG.tmp CHANGELOG.md
+          $entry = "- Updated hve-core dependency pin to ``$env:HVE_CORE_SHORT_SHA`` ($env:HVE_CORE_SHA)."
+          ./scripts/Invoke-ReleasePrep.ps1 -AllowEmpty -GitHubOutput -ExtraEntry $entry
 
       # ── Commit and push ───────────────────────────────────────────────────
       - name: Commit and push
@@ -325,7 +314,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
-          git add apm.yml CHANGELOG.md
+          git add apm.yml CHANGELOG.md .changes/unreleased
           if ! git diff --cached --quiet; then
             git commit -m "chore(release): bump to ${{ steps.bump.outputs.version }} with hve-core@${{ steps.latest.outputs.short_sha }}"
             git push origin main

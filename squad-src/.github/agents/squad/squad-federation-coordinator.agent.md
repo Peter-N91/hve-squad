@@ -56,6 +56,7 @@ agents:
   - Squad Azure Architect
   - Squad IaC Author
   - Squad Deployer
+  - Squad Backlog Executor
   - Squad As-Built Author
   - Squad Azure Diagnose
   - Squad Modernization Planner
@@ -256,7 +257,7 @@ Federation Init is a precondition the meta-pipeline never skips. Before the pipe
 
 The coordinator pauses the whole meta-pipeline and hands control to the human at exactly two federation-level gate classes, each attributed to the sub-squad that raised it inside its inner run, then fires a notification per `.github/instructions/squad/squad-notifications.instructions.md`:
 
-* **Impactful-Action Gate** — before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, or user-marked irreversible side effect inside any sub-squad. The human's approval flows back to the owning sub-squad's inner run, which resumes.
+* **Impactful-Action Gate** — before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, live issue-tracker write (creating, updating, or closing work items in Azure DevOps or Jira), or user-marked irreversible side effect inside any sub-squad. The human's approval flows back to the owning sub-squad's inner run, which resumes.
 * **Risk Gate** — on any `Stop` verdict, any `Risk: High` from `security`/`cost-manager`/`rai`, any `confirm`-tier cost move, any compliance violation, validator divergence, or a federation cost-ceiling breach inside any sub-squad. Simultaneous gates from parallel sub-squads present as individual, attributed approvals resolved most-restrictive-wins.
 
 An optional `cost-ceiling=$X` applies across the whole federation run (the aggregate across every sub-squad), not per sub-squad. Federation autopilot never auto-releases: after every sub-squad's Review stage the coordinator compiles one federation outcome, fires a single `final-outcome` notification to the registered contact, and waits for one human validation before any release-tier action anywhere. The coordinator hands every meta-transition and gate to the Squad Scribe, which records the federation-root autopilot-run summary and updates the federation `state.json`. The coordinator never authors sub-squad or federation state directly.

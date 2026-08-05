@@ -17,6 +17,7 @@ The coordinator passes a capability hint to each dispatched role when the role n
 |--------------------|----------------------------------------------|---------------------------------------------------------------------------------|
 | diagram-rendering  | A draw.io MCP server when one is configured  | Render Mermaid in chat; or author Mermaid in repository markdown                |
 | ADO query          | `@azure-devops/mcp` (Microsoft official)     | Squad Researcher against the Azure DevOps REST API with a user-supplied PAT  |
+| tracker-write      | `@azure-devops/mcp` (ADO) or the `jira` skill (Jira) | **None.** The role returns `blocked` — see *No Fallback for Writes* below   |
 | Azure-pricing      | `msftnadavbh/AzurePricingMCP` community server | Squad Researcher against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
 | azure-resource     | `@azure/mcp` (official Azure MCP server)      | Squad Researcher against the Azure CLI (`az`) and the Azure Resource Graph / Resource Manager REST APIs using the user's `az login` context |
 | architecture-docs  | `microsoft-docs` MCP when configured         | Squad Researcher against `learn.microsoft.com` via web fetch                 |
@@ -28,6 +29,14 @@ The "Preferred MCP" column names the server the role tries first. The "Non-MCP F
 The `github-issue` capability backs the remote approval channel in `.github/instructions/squad/squad-notifications.instructions.md`. Its fallback chain is `github` MCP → `gh` CLI → in-chat: on a headless VM an authenticated `gh` CLI is sufficient and the MCP is not required, and when neither is available the squad degrades to an in-chat approval (the user simply cannot approve remotely).
 
 The `azure-resource` capability backs the squad's Azure governance discovery, as-built inventory, and diagnose roles. It reads Azure control-plane data such as policy assignments, Resource Graph results, and Azure Monitor logs through `@azure/mcp`, and falls back to the `az` CLI and the Azure Resource Graph and Resource Manager REST APIs under the user's `az login` context when that MCP is absent. All reads on this path are non-destructive.
+
+### No Fallback for Writes
+
+`tracker-write` is the one capability with no fallback, and the exception is deliberate. Every other row in the map is a **read**, so a fallback that reaches the same data by another route is strictly better than blocking. A write is not: falling back would mean creating real work items in a real team's backlog through a path the user never configured, and the failure mode of guessing wrong is unrecallable rather than merely unhelpful.
+
+So when the ADO MCP is absent for `tracker=ado`, or the `jira` skill is unavailable for `tracker=jira`, the role returns `blocked` naming the missing capability. It does not fall back to the Azure DevOps REST API with a user-supplied PAT, even though the `ADO query` row permits exactly that for reads. Read access and write access are separate grants, and the squad never promotes one into the other.
+
+The *Graceful Degradation* rule below therefore does not apply to `tracker-write`; the escalation path in its last paragraph does.
 
 ## Capability Hint Contract
 

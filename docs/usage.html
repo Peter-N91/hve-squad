@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Usage — hve-squad</title>
-  <meta name="description" content="Run the squad: inputs, profiles, autonomy modes, remote approval, first-run Init Mode, and federation of sub-squads." />
+  <meta name="description" content="Run the squad: inputs, profiles, autonomy modes, remote approval, first-run Init Mode, federation of sub-squads, and branded PowerPoint decks." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <link rel="stylesheet" href="assets/style.css" />
 </head>
@@ -16,7 +16,6 @@
         <a href="index.html">Home</a>
         <a href="getting-started.html">Getting Started</a>
         <a href="usage.html" class="active">Usage</a>
-        <a href="ppt-templates.html">PPT Templates</a>
         <a href="demo.html">Demo</a>
         <a href="maintaining.html">Maintaining</a>
         <a href="troubleshooting.html">Troubleshooting</a>
@@ -664,7 +663,7 @@ flowchart TD
         </thead>
         <tbody>
           <tr><td><code>default</code></td><td>researcher, lead, developer, tester, scribe</td><td>General-purpose work; recommended starting point</td></tr>
-          <tr><td><code>full</code></td><td>all deployed roles</td><td>Complex, cross-cutting projects</td></tr>
+          <tr><td><code>full</code></td><td>all deployed roles except the opt-in <code>backlog-executor</code></td><td>Complex, cross-cutting projects</td></tr>
           <tr><td><code>security</code></td><td>researcher, lead, developer, tester, security, rai, fact-checker, scribe</td><td>Security, threat-modeling, responsible-AI focus</td></tr>
           <tr><td><code>design</code></td><td>researcher, lead, developer, tester, designer, scribe</td><td>UX/UI and product-design focus</td></tr>
           <tr><td><code>architecture</code></td><td>researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe</td><td>System design and architecture focus</td></tr>
@@ -679,6 +678,15 @@ flowchart TD
         specialist roles on top. Two further roles ship as addable extras and are seeded only in
         <code>full</code>: <code>challenger</code>, which pressure-tests a plan and checks it against the
         research it rests on, and <code>prompt-engineer</code>, which authors and reviews prompt artifacts.
+      </p>
+      <p>
+        One role is <strong>opt-in</strong> and appears in no profile at all, not even <code>full</code>:
+        <code>backlog-executor</code>, which writes work items into a live Azure DevOps or Jira project.
+        A tracker write reaches a whole team &mdash; notifications, subscriptions, and webhooks fire the
+        moment an item lands &mdash; so the squad never seeds that reach by default. Instead the
+        coordinator <em>offers</em> the role the first time you ask for a tracker write, naming the
+        tracker and project it would write to. Accept and it joins your team for good; decline and the
+        backlog plan is still yours to apply by hand. See <em>Backlog writes</em> below.
       </p>
 
       <h2>Azure execution layer</h2>
@@ -713,7 +721,7 @@ flowchart TD
         <code>azure-resource</code> capability, which prefers the official
         <code>@azure/mcp</code> server when configured and falls back to the <code>az</code> CLI
         and the Azure Resource Graph REST API automatically when it is not. The squad never
-        blocks on a missing MCP.
+        blocks on a missing MCP for a read capability like this one.
       </p>
       <p>
         To wire the Azure MCP server, merge the <code>azure</code> server entry from
@@ -722,6 +730,34 @@ flowchart TD
         <code>az login</code> (<code>DefaultAzureCredential</code>) — no stored secrets. You can
         ask the coordinator to scaffold this for you: <code>/squad request="merge the squad MCP
         template into my workspace"</code>.
+      </p>
+
+      <h2>Backlog writes (Azure DevOps and Jira)</h2>
+      <p>
+        The <code>product-owner</code> role plans a backlog and stops at a finalized handoff file. Turning
+        that plan into real work items is a separate, gated step owned by the opt-in
+        <code>backlog-executor</code> role &mdash; the same shape as the Azure Deployer: preview first,
+        approve, then write.
+      </p>
+      <ol>
+        <li><strong>Ask.</strong> With a planned backlog in hand, ask the squad to create the items (for example, <code>/squad request="create these work items in Azure DevOps"</code>).</li>
+        <li><strong>Accept the role.</strong> If your squad does not carry <code>backlog-executor</code>, the coordinator offers to add it and names the tracker and project it would write to.</li>
+        <li><strong>Review the preview.</strong> The role reads your handoff file and shows every item it would create or update &mdash; type, title, parent, target project, and the fields it would set &mdash; plus the total count. Nothing has been written yet.</li>
+        <li><strong>Check the warnings.</strong> It also searches the live tracker for items that already match and flags probable duplicates with their existing IDs, and it strips internal planning references out of the outbound text so no tracking paths or placeholder IDs land in your backlog.</li>
+        <li><strong>Approve.</strong> One approval covers one batch. Change the handoff, re-run, or target a different project and you get a fresh preview and a fresh approval.</li>
+      </ol>
+      <p>
+        Writes are recorded item by item in a log file next to your handoff, so a batch that fails
+        partway through resumes from the first unwritten item instead of creating duplicates. Nothing is
+        rolled back automatically &mdash; whatever landed is reported back to you.
+      </p>
+      <p>
+        Two limits are deliberate. Writing needs the Azure DevOps MCP server (or, for Jira, the
+        <code>jira</code> skill) configured; unlike the read capabilities, there is <strong>no
+        fallback</strong> &mdash; the role stops and tells you what is missing rather than reaching your
+        tracker by a route you never set up. And because a tracker write is an Impactful Action, an
+        unattended Watch Mode run produces the preview and stops there; the write always waits for a
+        person.
       </p>
 
       <h2>Modernization</h2>
@@ -738,6 +774,110 @@ flowchart TD
         implementation, and cross-domain phases route through the council before any code changes.
       </p>
 
+      <h2>Branded PowerPoint decks</h2>
+      <p>
+        The <code>presenter</code> role (seeded by the <code>product</code> and <code>full</code>
+        profiles) generates decks from your content. Give it your branded <code>.pptx</code> once and
+        every deck inherits your slide masters, layouts, theme colors, and fonts. The branding rule
+        ships with hve-squad and switches on by itself &mdash; you never copy a file, edit a config, or
+        restate the template on each request.
+      </p>
+      <p>
+        When you ask for a deck, the coordinator dispatches the <strong>PowerPoint Subagent</strong>,
+        which runs the <code>powerpoint</code> skill's <code>build_deck.py</code>. Branding is applied
+        through the <code>--template</code> flag (PowerShell <code>-TemplatePath</code>): the build
+        inherits the template's <strong>slide masters, layouts, and theme</strong>, discards the
+        template's own example slides, then adds only the slides defined in your content.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>The template is everything.</strong> A polished deck comes from a well-built
+          template far more than from the generator. Spend your effort on the master and layouts in
+          PowerPoint, and the squad fills them in consistently.
+        </p>
+      </div>
+
+      <h3>1 &mdash; Prepare a branded template</h3>
+      <p>Open PowerPoint, build a 16:9 template, and save it as a <code>.pptx</code> with:</p>
+      <ul>
+        <li>
+          <strong>Slide Masters</strong> carrying your backgrounds, logo placement, and footer &mdash;
+          set under <em>View &rarr; Slide Master</em>.
+        </li>
+        <li>
+          <strong>Named layouts</strong> the builder maps onto, at minimum <code>Title Slide</code>,
+          <code>Title and Content</code>, and <code>Section Header</code>.
+        </li>
+        <li>
+          <strong>Theme colors and fonts</strong> defined in the theme
+          (<em>Slide Master &rarr; Colors / Fonts</em>) so <code>@theme_name</code> references resolve
+          to your brand palette.
+        </li>
+      </ul>
+      <p>
+        You do not need to leave example slides in the file &mdash; a <code>--template</code> build
+        discards them and keeps only the masters, layouts, and theme.
+      </p>
+
+      <h3>2 &mdash; Put it in a stable place</h3>
+      <p>The template lives at a fixed path so the squad always knows where to find it:</p>
+      <pre><code>.github/brand/pptx-brand-template.pptx</code></pre>
+      <p>
+        You do not have to create that folder yourself. If you just hand the squad your
+        <code>.pptx</code> (or point it at one), it offers to save a copy there for you.
+      </p>
+
+      <h3>3 &mdash; It applies automatically</h3>
+      <p>
+        hve-squad ships the branding instruction as part of the package, so on <code>apm install</code>
+        it lands at <code>.github/instructions/pptx-brand-template.instructions.md</code> and switches
+        on by itself. Its <code>applyTo</code> matches <code>**/.copilot-tracking/ppt/**</code>, so the
+        PowerPoint Subagent reads it every time it works on a deck &mdash; using your template as
+        <code>--template</code> for full rebuilds and <code>--source</code> for partial ones. If no
+        template is present yet, the builder does not quietly fall back to a plain deck: it asks
+        whether you have a branded <code>.pptx</code> and offers to save it for you.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>Full rebuild vs. partial rebuild.</strong> <code>--template</code> creates a new
+          deck and keeps only masters, layouts, and theme &mdash; use it for new decks and full
+          regenerations. To update a few slides in an existing deck, the builder uses
+          <code>--source</code> with <code>--slides</code> instead. Never combine the two: with both,
+          <code>--template</code> wins and every slide not listed is lost.
+        </p>
+      </div>
+
+      <h3>4 &mdash; Align content with the template <span style="font-weight:400;font-size:0.7em;opacity:0.7;">(optional, technical)</span></h3>
+      <p>
+        You can skip this &mdash; the squad handles it for you. For tighter control, declare the
+        template and map layout names in <code>content/global/style.yaml</code>:
+      </p>
+      <pre><code>template:
+  path: ".github/brand/pptx-brand-template.pptx"
+  preserve_dimensions: true
+layouts:
+  title:   "Title Slide"
+  content: "Title and Content"
+  section: "Section Header"</code></pre>
+      <p>
+        Then in each slide's <code>content.yaml</code>, reference colors with <code>@theme_name</code>
+        rather than hardcoded hex values, so every slide adapts to whatever theme the template defines.
+      </p>
+
+      <h3>5 &mdash; Always validate</h3>
+      <p>
+        The PowerPoint skill's validation pass is what turns a correct deck into a polished one. It
+        runs geometric checks (margins, overflow, spacing) and optional vision checks (overlaps,
+        contrast, alignment, leftover placeholders), then loops back to fix issues. Let it iterate
+        rather than accepting the first build &mdash; that loop is the difference between "it
+        generated" and "it looks great."
+      </p>
+      <p>
+        After that, a request as simple as
+        <code>/squad request="build a 6-slide overview deck for the booking service"</code> produces an
+        on-brand deck without any per-request template wiring.
+      </p>
+
       <h2>Run cost ledger</h2>
       <p>
         Each run estimates the model cost and AI-credit consumption of every dispatch so a project
@@ -751,8 +891,10 @@ flowchart TD
           estimated input/cached/cache-write/output tokens, estimated cost, and estimated credits;
         </li>
         <li>
-          an aggregated <code>consumption.md</code> ledger of members, models, and credits, totaled
-          for the run, with a cost-comparison line against a single-model manual baseline;
+          an aggregated <code>consumption.md</code> ledger of members, models, and credits, split
+          into an <em>Attribution</em> table (who ran, on what model) and a <em>Usage &amp; Cost</em>
+          table (turns, tokens, cost, credits) that share the same row order, totaled for the run,
+          with a cost-comparison line against a single-model manual baseline;
         </li>
         <li>
           a <code>consumption-rates.md</code> per-model token-rate table &mdash; the single place to
@@ -782,9 +924,9 @@ flowchart TD
           <div class="dir">← Back</div>
           <div class="ttl">Getting Started</div>
         </a>
-        <a class="next" href="ppt-templates.html">
+        <a class="next" href="demo.html">
           <div class="dir">Next →</div>
-          <div class="ttl">PPT Templates</div>
+          <div class="ttl">Demo</div>
         </a>
       </div>
     </div>
