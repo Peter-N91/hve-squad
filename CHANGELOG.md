@@ -5,6 +5,58 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.15] - 2026-08-05
+
+### Changed
+
+- Updated hve-core dependency pin to `197afb8` (197afb8962a24ab84a4d49dd8ef112eb8a7302cf).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.15"
+```
+
+[0.11.15]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.15
+
+## [0.11.14] - 2026-08-04
+
+### Added
+
+- **Contributor pull requests conflicted on `apm.yml` and `CHANGELOG.md` every time two landed together.** Version and changelog are now release outputs assembled on `main` from per-pull-request fragments under `.changes/unreleased/`, so nothing in a pull request touches shared release state (`scripts/New-ChangeFragment.ps1`, `scripts/Invoke-ReleasePrep.ps1`, `.github/workflows/pr-validation.yml`, `.github/workflows/release-prep.yml`).
+
+### Fixed
+
+- **The first Release Prep run failed with `Not found: -GitHubOutput`.** The workflow built its arguments as a PowerShell array and splatted it, but array splatting binds *positionally* — so the literal string `-GitHubOutput` landed in the script's first positional parameter, `-ApmFile`, and the existence check threw on a file by that name. The workflow now splats a hashtable, which binds by name (`.github/workflows/release-prep.yml`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.14"
+```
+
+[0.11.14]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.14
+
+## [0.11.13] - 2026-08-04
+
+### Changed
+
+- Updated hve-core dependency pin to `fa27dfd` (fa27dfd2c03f7dd231cdf3455e6d0760f94b4454).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.13"
+```
+
+[0.11.13]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.13
+
 ## [0.11.12] - 2026-08-03
 
 ### Added

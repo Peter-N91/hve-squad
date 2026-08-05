@@ -1,0 +1,117 @@
+name: PR Validation
+
+# Keeps release state out of pull requests.
+#
+# apm.yml's `version:` line and CHANGELOG.md's newest heading are single-line
+# shared state: two concurrent pull requests that both touch them always
+# conflict, and the second one to merge silently reuses a version number the
+# first already claimed. So neither is editable in a pull request. Contributors
+# add a uniquely named fragment under .changes/unreleased/ instead, and the
+# release workflow assembles version + changelog from those fragments on main.
+#
+# Runs on `pull_request`, not `pull_request_target`: fork pull requests get a
+# read-only token and no secrets, and nothing here needs either.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  release-state:
+    name: Release state and change fragment
+    runs-on: ubuntu-latest
+    # No actor is exempt. Release automation pushes straight to main and never opens
+    # a pull request, while Watch Mode does open one and must carry a fragment like
+    # any other contribution.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Compute diff against base
+        id: diff
+        # checkout leaves HEAD at the PR's merge commit, so diffing from the base
+        # SHA yields exactly this pull request's changes. Using the SHA the event
+        # supplies avoids a second fetch, which on a fetch-depth:0 clone would
+        # mark the repository shallow and break the comparison.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          git diff --name-only "$BASE_SHA" HEAD > /tmp/changed.txt
+          echo "Changed files:"
+          cat /tmp/changed.txt
+
+      - name: Reject edits to release state
+        env:
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        run: |
+          FAILED=0
+          if grep -qx 'CHANGELOG.md' /tmp/changed.txt; then
+            echo "::error file=CHANGELOG.md::CHANGELOG.md is a release output. Add a fragment under .changes/unreleased/ instead — run 'apm run change'. See .changes/README.md."
+            FAILED=1
+          fi
+          if git diff "$BASE_SHA" HEAD -- apm.yml | grep -qE '^[+-]version:'; then
+            echo "::error file=apm.yml::Do not bump apm.yml version. The release workflow resolves it from pending change fragments."
+            FAILED=1
+          fi
+          exit $FAILED
+
+      # Moving the pin is Sync and Adapt's job, because only that workflow runs the
+      # cast-delta guard first. A pull request that moves it — usually an accident of
+      # running `apm run sync-deps` with its default -Ref main — reaches main with no
+      # check that the roster still resolves to agents the new revision ships.
+      - name: Reject an unreviewed hve-core pin move
+        if: ${{ !startsWith(github.head_ref, 'squad/issue-') }}
+        env:
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        run: |
+          PIN_RE='microsoft/hve-core/[^#]+#[0-9a-f]+'
+          BASE_PIN=$(git show "$BASE_SHA:apm.yml" | grep -m1 -oE "$PIN_RE" | sed 's/.*#//' || true)
+          HEAD_PIN=$(grep -m1 -oE "$PIN_RE" apm.yml | sed 's/.*#//' || true)
+          if [[ -n "$BASE_PIN" && -n "$HEAD_PIN" && "$BASE_PIN" != "$HEAD_PIN" ]]; then
+            echo "::error file=apm.yml::This PR moves the hve-core pin from ${BASE_PIN:0:7} to ${HEAD_PIN:0:7}. Only the Sync and Adapt workflow may do that, because it runs the cast-delta guard first. To regenerate dependencies without moving the pin, run: pwsh -File scripts/Update-ApmDependencies.ps1 -Ref $BASE_PIN"
+            exit 1
+          fi
+
+      - name: Require a change fragment
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+        env:
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        run: |
+          if ! git diff --name-only --diff-filter=A "$BASE_SHA" HEAD \
+               | grep -qE '^\.changes/unreleased/.+\.md$'; then
+            echo "::error::No change fragment found. Run 'apm run change' to create one under .changes/unreleased/, or apply the 'skip-changelog' label if this PR changes nothing a consumer would notice."
+            exit 1
+          fi
+
+      - name: Validate pending fragments
+        shell: pwsh
+        run: |
+          $out = ./scripts/Invoke-ReleasePrep.ps1 -DryRun *>&1 | Out-String
+          Write-Host $out
+          $verdict = ($out -split "`r?`n" | Where-Object { $_ -match '^(Version:|No pending fragments)' } | Select-Object -First 1)
+          if (-not $verdict) { $verdict = 'No release impact.' }
+          @(
+            '## Release impact of merging this PR'
+            ''
+            '```'
+            $verdict.Trim()
+            '```'
+            ''
+            'Merging to `main` releases this immediately. Wrong level? Edit the `bump:` line'
+            'in the fragment from the Files changed tab before merging.'
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY

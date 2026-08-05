@@ -52,10 +52,83 @@
       <ol>
         <li>Fork the repository.</li>
         <li>Create a branch for your change.</li>
+        <li>Add a change fragment with <code>apm run change</code>.</li>
         <li>Open a pull request against the default branch.</li>
         <li>A maintainer reviews, requests changes when needed, and merges.</li>
       </ol>
       <p>Consumers receive the merged change the next time they run <code>apm run sync-deps</code>.</p>
+
+      <h2>Recording your change</h2>
+      <p>
+        Do not edit <code>CHANGELOG.md</code> and do not bump <code>version:</code> in
+        <code>apm.yml</code>. Both are release outputs, assembled on the default branch when a release
+        is cut, and CI rejects a pull request that touches either.
+      </p>
+      <p>
+        The reason is mechanical. A version line is a single line and the newest changelog heading is a
+        single position, so two pull requests that both touch them always conflict &mdash; and the
+        second one to merge silently reuses a version number the first already claimed. Instead every
+        pull request adds <strong>one new file</strong> under <code>.changes/unreleased/</code>. Two
+        pull requests adding two differently named files never conflict.
+      </p>
+      <pre><code>apm run change</code></pre>
+      <p>The script asks four things and writes the file for you:</p>
+      <ul>
+        <li><strong>Type</strong> &mdash; the Keep a Changelog section your entry belongs to: <code>Added</code>, <code>Changed</code>, <code>Deprecated</code>, <code>Removed</code>, <code>Fixed</code>, or <code>Security</code>.</li>
+        <li><strong>Bump</strong> &mdash; how the version should move. This tracks <strong>ideas, not artifacts</strong>, so most changes are <code>patch</code>.</li>
+        <li><strong>Title</strong> &mdash; a short phrase, used only to name the file.</li>
+        <li><strong>Entry</strong> &mdash; the changelog text itself, written the way it should read in the release notes.</li>
+      </ul>
+
+      <h3>Choosing the bump</h3>
+      <table>
+        <thead>
+          <tr><th>Value</th><th>Use when</th><th>In this repo</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>major</code></td>
+            <td>A consumer must change something to keep working.</td>
+            <td>Not used yet.</td>
+          </tr>
+          <tr>
+            <td><code>minor</code></td>
+            <td>A genuinely new idea, or a change that materially changes how the package is used.</td>
+            <td><code>0.10.0</code> introduced federation. <code>0.11.0</code> reworked hve-core attachment.</td>
+          </tr>
+          <tr>
+            <td><code>patch</code></td>
+            <td>Everything else, <strong>including new agents, skills, prompts, instructions, and roles that extend an idea that already shipped</strong>.</td>
+            <td>A new squad role under federation. A new OWASP skill. A wording fix.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Adding an agent is not a minor. Adding the <em>concept</em> the agent belongs to is. Ten agents
+        that all serve one idea that already ships are ten patches, not ten minors. When in doubt choose
+        <code>patch</code> &mdash; the maintainer sees the resolved level on the pull request check and
+        corrects the line before merging, and raising is cheap while an accidental minor is permanent.
+      </p>
+      <p>You end up with a file like <code>.changes/unreleased/20260804-roster-row-resolves-to-nothing.md</code>:</p>
+      <pre><code>---
+bump: patch
+type: Fixed
+---
+
+- **A roster Primary pointed at an agent hve-core no longer ships.** Repointed it to ...</code></pre>
+      <p>
+        Write the entry as markdown bullets starting with <code>- </code>, because the release step
+        copies them verbatim. Lead with a bold sentence naming the problem, then say what changed, then
+        cite the file paths in backticks. Commit the fragment with the rest of your change. One fragment
+        per idea &mdash; a pull request doing two unrelated things adds two fragments.
+      </p>
+      <p>
+        Merging your pull request <strong>releases it</strong>: the fragment landing on the default
+        branch is what assembles the CHANGELOG section, resolves the new version from the highest
+        <code>bump</code> among all pending fragments, writes it into <code>apm.yml</code>, and cuts the
+        tag. The full format reference lives in
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/.changes/README.md">.changes/README.md</a>.
+      </p>
 
       <h2>Proposing a shared learning</h2>
       <p>
