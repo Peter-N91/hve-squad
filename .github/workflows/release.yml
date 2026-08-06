@@ -9,6 +9,7 @@ name: Release
 #                       to already contain an entry for that version.
 on:
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Maintainer-only manual release; the version override is validated as semver before use.
     inputs:
       version:
         description: 'Optional: override version in apm.yml (e.g. 0.9.0). Leave blank to release the version already in apm.yml.'
@@ -56,8 +57,14 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          NEW_VER="${{ inputs.version }}"
+          NEW_VER="$INPUT_VERSION"
+          # Reject anything that isn't a plain semver, so it can't break out of the sed below.
+          if [[ ! "$NEW_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid version override '$NEW_VER'. Expected semver like 1.2.3."
+            exit 1
+          fi
           CURRENT=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
           if [[ "$CURRENT" == "$NEW_VER" ]]; then
             echo "::notice::apm.yml already at $NEW_VER — no commit needed."

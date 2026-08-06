@@ -31,6 +31,7 @@ on:
     paths:
       - '.changes/unreleased/**'
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Maintainer-only manual dispatch; inputs are passed through env, never interpolated into shell.
     inputs:
       bump:
         description: 'Release level. "fragments" honours what the pending fragments requested; pick minor only when this batch is a genuinely new idea.'
