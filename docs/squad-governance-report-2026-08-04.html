@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Squad Governance Report — contoso-platform — 2026-08-04</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f8f9fb;
+      color: #1e293b;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1e2a4a, #2d3a6a, #3a4a8a);
+      padding: 2.5rem 2rem 2rem;
+    }
+    header .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.025em;
+    }
+    header .subtitle {
+      font-size: 0.9rem;
+      color: rgba(255,255,255,0.8);
+      margin-top: 0.35rem;
+    }
+    header .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+    header .stat {
+      text-align: center;
+      padding: 0.75rem 0.5rem;
+      background: rgba(255,255,255,0.06);
+      border-radius: 8px;
+    }
+    header .stat .value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+    }
+    header .stat .label {
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 0.2rem;
+    }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 3rem;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: #fff;
+      border: 1px solid #e9edf3;
+      border-radius: 12px;
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    /* ── Section headers ── */
+    .section-header {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 3px solid transparent;
+      border-image: linear-gradient(90deg, #3b82f6, #8b5cf6) 1;
+    }
+
+    .section-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 0.75rem;
+      margin-top: 1.25rem;
+    }
+    .section-label:first-child { margin-top: 0; }
+
+    /* ── Grid layouts ── */
+    .grid-2 {
+      display: grid;
+      gap: 1.25rem;
+    }
+    @media (min-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+
+    /* ── Summary cards ── */
+    .summary-card {
+      background: #f8fafc;
+      border: 1px solid #eef1f6;
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      text-align: center;
+    }
+    .summary-card .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .summary-card .label {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: #64748b;
+      margin-top: 0.25rem;
+    }
+    .summary-card .badge-status {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      margin-top: 0.35rem;
+    }
+    .badge-green { background: #dcfce7; color: #166534; }
+    .badge-amber { background: #fef3c7; color: #92400e; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+    .badge-gray { background: #f1f5f9; color: #64748b; }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+
+    /* ── Donut chart ── */
+    .donut-container {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+    }
+    .donut {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .donut::after {
+      content: '';
+      position: absolute;
+      top: 28px; left: 28px;
+      width: 84px; height: 84px;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .donut-center {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #334155;
+    }
+    .legend {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.85rem;
+      color: #475569;
+    }
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .legend-dot.go { background: #86efac; }
+    .legend-dot.cond { background: #fde68a; }
+    .legend-dot.stop { background: #fca5a5; }
+    .legend-value {
+      font-weight: 600;
+      color: #1e293b;
+      margin-left: auto;
+      padding-left: 1rem;
+    }
+    .conditions-counter {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+      color: #92400e;
+      margin-top: 1rem;
+    }
+    .conditions-counter strong { font-size: 1.1rem; }
+
+    /* ── Tables ── */
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 0.82rem;
+    }
+    thead th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #475569;
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      border-bottom: 2px solid #e9edf3;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    tbody td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+    }
+    tbody tr:hover td { background: #f8fafc; }
+    tbody tr:last-child td { border-bottom: none; }
+    .row-total td {
+      font-weight: 700;
+      background: #f0f4ff;
+      border-top: 2px solid #e2e8f0;
+      color: #1e293b;
+    }
+    .row-overhead td {
+      color: #64748b;
+      font-style: italic;
+    }
+    .cost-note {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-top: 0.75rem;
+    }
+
+    /* ── Role badges ── */
+    .role-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+    }
+    .role-researcher { background: #dbeafe; color: #1e40af; }
+    .role-lead { background: #dcfce7; color: #166534; }
+    .role-developer { background: #ffedd5; color: #9a3412; }
+    .role-tester { background: #fce7f3; color: #9d174d; }
+    .role-architect { background: #ede9fe; color: #5b21b6; }
+    .role-azure-architect { background: #e0f2fe; color: #0369a1; }
+    .role-iac-author { background: #fef3c7; color: #92400e; }
+    .role-deployer { background: #fee2e2; color: #991b1b; }
+    .role-security { background: #fef2f2; color: #991b1b; }
+    .role-cost-manager { background: #f0fdf4; color: #166534; }
+    .role-scribe { background: #f1f5f9; color: #475569; }
+
+    /* ── Tier badges ── */
+    .tier-auto { background: #dcfce7; color: #166534; }
+    .tier-confirm { background: #fef3c7; color: #92400e; }
+    .tier-gated { background: #fee2e2; color: #991b1b; }
+
+    /* ── Cost bars ── */
+    .cost-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 1.25rem;
+    }
+    .cost-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .cost-bar-label {
+      font-size: 0.78rem;
+      color: #475569;
+      width: 110px;
+      flex-shrink: 0;
+      text-align: right;
+      font-weight: 500;
+    }
+    .cost-bar-track {
+      flex: 1;
+      height: 24px;
+      background: #f1f5f9;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .cost-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+    }
+    .cost-bar-amount {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #334155;
+      width: 55px;
+    }
+
+    /* ── Dispatch summary badges ── */
+    .dispatch-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
+    .dispatch-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #f8fafc;
+      border: 1px solid #e9edf3;
+      border-radius: 8px;
+      padding: 0.5rem 0.85rem;
+      font-size: 0.8rem;
+      color: #334155;
+    }
+    .dispatch-badge .db-value {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    /* ── Compliance checklist ── */
+    .compliance-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .compliance-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 0.85rem;
+      background: #f8fafc;
+      border-radius: 8px;
+      border: 1px solid #eef1f6;
+      font-size: 0.82rem;
+    }
+    .compliance-item .status {
+      font-weight: 600;
+      font-size: 0.78rem;
+    }
+    .status-pass { color: #166534; }
+    .status-na { color: #64748b; }
+    .status-fail { color: #991b1b; }
+
+    /* ── Timeline ── */
+    .timeline {
+      position: relative;
+      padding-left: 1.75rem;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 4px;
+      bottom: 4px;
+      width: 2px;
+      background: #e2e8f0;
+      border-radius: 1px;
+    }
+    .tl-entry {
+      position: relative;
+      padding: 0.65rem 0 0.65rem 1.25rem;
+      margin-left: -1.75rem;
+      padding-left: 2.75rem;
+    }
+    .tl-entry::before {
+      content: '';
+      position: absolute;
+      left: 1.53rem;
+      top: 1rem;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #60a5fa;
+      border: 2px solid #fff;
+      z-index: 1;
+    }
+    .tl-time {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+    .tl-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #1e293b;
+      margin-top: 0.1rem;
+    }
+    .tl-detail {
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-top: 0.15rem;
+    }
+
+    /* ── Outcomes ── */
+    .outcome-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .outcome-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .outcome-badge .ob-value {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    /* ── Footer ── */
+    footer {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 2rem;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      border-top: 1px solid #e9edf3;
+    }
+    footer strong { color: #64748b; }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ Header ═══ -->
+  <header>
+    <div class="header-inner">
+      <h1>Squad Governance Report</h1>
+      <div class="subtitle">Federation · Sub-squad: azure · Period: 2026-07-05 to 2026-08-04 (30 days)</div>
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="value">18</div>
+          <div class="label">Coordination Turns</div>
+        </div>
+        <div class="stat">
+          <div class="value">34</div>
+          <div class="label">Role Dispatches</div>
+        </div>
+        <div class="stat">
+          <div class="value">$7.43</div>
+          <div class="label">Est. Cost (calibrated 1–15)</div>
+        </div>
+        <div class="stat">
+          <div class="value">~284k</div>
+          <div class="label">Total Tokens</div>
+        </div>
+        <div class="stat">
+          <div class="value">5</div>
+          <div class="label">Human Gates Fired</div>
+        </div>
+        <div class="stat">
+          <div class="value">1</div>
+          <div class="label">Escalations</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- ═══ Section 1: Governance Gates ═══ -->
+    <div class="card">
+      <div class="section-header">1. Governance Gates</div>
+      <div class="grid-4">
+        <div class="summary-card">
+          <div class="value" style="color:#334155;">8</div>
+          <div class="label">Council Verdicts</div>
+        </div>
+        <div class="summary-card">
+          <div class="value" style="color:#334155;">6</div>
+          <div class="label">Intake Readiness Checks</div>
+        </div>
+        <div class="summary-card">
+          <div class="value" style="color:#166534;">5 / 5</div>
+          <div class="label">Human Gates Passed</div>
+          <span class="badge-status badge-green">All passed</span>
+        </div>
+        <div class="summary-card">
+          <div class="value" style="color:#334155;">1</div>
+          <div class="label">Escalations</div>
+        </div>
+      </div>
+
+      <p class="section-label">Human Gate Log</p>
+      <table>
+        <thead>
+          <tr><th>Turn</th><th>Date</th><th>Gate Type</th><th>Action</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>4</td><td>2026-07-12</td><td>Impactful-Action Gate</td>
+            <td>Deploy landing-zone network (hub VNet + peering)</td>
+            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
+          </tr>
+          <tr>
+            <td>7</td><td>2026-07-18</td><td>Impactful-Action Gate</td>
+            <td>Apply Key Vault RBAC policy assignment</td>
+            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
+          </tr>
+          <tr>
+            <td>10</td><td>2026-07-23</td><td>Human Gate</td>
+            <td>Database schema migration (add partition key)</td>
+            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
+          </tr>
+          <tr>
+            <td>14</td><td>2026-07-30</td><td>Impactful-Action Gate</td>
+            <td>Deploy Container Apps revision (prod slot swap)</td>
+            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
+          </tr>
+          <tr>
+            <td>17</td><td>2026-08-03</td><td>Impactful-Action Gate</td>
+            <td>Enable diagnostic settings on all resources</td>
+            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══ Section 2: Council Verdicts ═══ -->
+    <div class="card">
+      <div class="section-header">2. Council Verdicts</div>
+
+      <div class="donut-container">
+        <!-- 5 Go (225deg), 2 Go-With-Conditions (90deg), 1 Stop (45deg) -->
+        <div class="donut" style="background: conic-gradient(#86efac 0deg 225deg, #fde68a 225deg 315deg, #fca5a5 315deg 360deg);">
+          <div class="donut-center">8</div>
+        </div>
+        <div class="legend">
+          <div class="legend-item">
+            <span class="legend-dot go"></span>
+            Go
+            <span class="legend-value">5 (62%)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot cond"></span>
+            Go-With-Conditions
+            <span class="legend-value">2 (25%)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot stop"></span>
+            Stop
+            <span class="legend-value">1 (13%)</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="section-label">Findings by Role</p>
+      <table>
+        <thead>
+          <tr><th>Role</th><th>Approve</th><th>Conditional</th><th>Concern</th><th>Block</th><th>Risk: High</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Azure Architect</td><td>6</td><td>1</td><td>1</td><td>0</td><td>0</td></tr>
+          <tr><td>Security</td><td>5</td><td>2</td><td>0</td><td>1</td><td>1</td></tr>
+          <tr><td>Cost Manager</td><td>7</td><td>1</td><td>0</td><td>0</td><td>0</td></tr>
+          <tr><td>Architect</td><td>6</td><td>1</td><td>1</td><td>0</td><td>0</td></tr>
+        </tbody>
+      </table>
+
+      <div class="conditions-counter">
+        <strong>2</strong> conditions outstanding from Go-With-Conditions verdicts
+      </div>
+    </div>
+
+    <div class="grid-2">
+
+      <!-- ═══ Section 3: Cost Breakdown ═══ -->
+      <div class="card">
+        <div class="section-header">3. Cost Breakdown</div>
+
+        <p class="section-label">Cost by Role (calibrated turns 1–15)</p>
+        <div class="cost-bars">
+          <div class="cost-bar-row">
+            <span class="cost-bar-label">Developer</span>
+            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:72%; background: linear-gradient(90deg, #fb923c, #f97316);"></div></div>
+            <span class="cost-bar-amount">$2.14</span>
+          </div>
+          <div class="cost-bar-row">
+            <span class="cost-bar-label">Azure Architect</span>
+            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:54%; background: linear-gradient(90deg, #38bdf8, #0ea5e9);"></div></div>
+            <span class="cost-bar-amount">$1.61</span>
+          </div>
+          <div class="cost-bar-row">
+            <span class="cost-bar-label">IaC Author</span>
+            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:40%; background: linear-gradient(90deg, #fbbf24, #f59e0b);"></div></div>
+            <span class="cost-bar-amount">$1.18</span>
+          </div>
+          <div class="cost-bar-row">
+            <span class="cost-bar-label">Security</span>
+            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:28%; background: linear-gradient(90deg, #f87171, #ef4444);"></div></div>
+            <span class="cost-bar-amount">$0.83</span>
+          </div>
+          <div class="cost-bar-row">
+            <span class="cost-bar-label">Researcher</span>
+            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:22%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
+            <span class="cost-bar-amount">$0.65</span>
+          </div>
+          <div class="cost-bar-row">
+            <span class="cost-bar-label">Cost Manager</span>
+            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:14%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
+            <span class="cost-bar-amount">$0.41</span>
+          </div>
+        </div>
+
+        <p class="section-label">Cost by Model Tier</p>
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Role Usage</th><th>Token Share</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>claude-sonnet-4</td><td>Developer, Azure Architect, IaC Author, Security</td><td>68%</td></tr>
+            <tr><td>gpt-4o</td><td>Researcher, Cost Manager, Lead</td><td>22%</td></tr>
+            <tr><td>gpt-4o-mini</td><td>Scribe, Tester</td><td>10%</td></tr>
+          </tbody>
+        </table>
+        <p class="cost-note">Calibrated turns 1–15. Turns 16–18 pending calibration; not included in totals.</p>
+      </div>
+
+      <!-- ═══ Section 4: Role Dispatch Activity ═══ -->
+      <div class="card">
+        <div class="section-header">4. Role Dispatch Activity</div>
+
+        <table>
+          <thead>
+            <tr><th>Role</th><th>Agent</th><th>Dispatches</th><th>Model</th><th>Key Activities</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="role-badge role-developer">Developer</span></td>
+              <td>squad-developer</td><td>8</td><td>claude-sonnet-4</td>
+              <td>API endpoints, auth middleware, container config</td>
+            </tr>
+            <tr>
+              <td><span class="role-badge role-azure-architect">Azure Architect</span></td>
+              <td>squad-azure-architect</td><td>6</td><td>claude-sonnet-4</td>
+              <td>HLD/LLD, landing zone, AVM module selection</td>
+            </tr>
+            <tr>
+              <td><span class="role-badge role-iac-author">IaC Author</span></td>
+              <td>squad-iac-author</td><td>5</td><td>claude-sonnet-4</td>
+              <td>Bicep modules, parameter files, what-if validation</td>
+            </tr>
+            <tr>
+              <td><span class="role-badge role-researcher">Researcher</span></td>
+              <td>squad-researcher</td><td>4</td><td>gpt-4o</td>
+              <td>AVM docs, WAF review, pricing research</td>
+            </tr>
+            <tr>
+              <td><span class="role-badge role-security">Security</span></td>
+              <td>squad-security</td><td>4</td><td>claude-sonnet-4</td>
+              <td>Threat model, RBAC review, network segmentation</td>
+            </tr>
+            <tr>
+              <td><span class="role-badge role-tester">Tester</span></td>
+              <td>squad-tester</td><td>3</td><td>gpt-4o-mini</td>
+              <td>Integration tests, IaC what-if review</td>
+            </tr>
+            <tr>
+              <td><span class="role-badge role-cost-manager">Cost Manager</span></td>
+              <td>squad-cost-manager</td><td>2</td><td>gpt-4o</td>
+              <td>WAF Cost findings, SKU recommendations</td>
+            </tr>
+            <tr>
+              <td><span class="role-badge role-lead">Lead</span></td>
+              <td>squad-lead</td><td>2</td><td>gpt-4o</td>
+              <td>Implementation planning, task sequencing</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="dispatch-summary">
+          <div class="dispatch-badge"><span class="db-value">8</span> Distinct Roles</div>
+          <div class="dispatch-badge"><span class="db-value">34</span> Total Dispatches</div>
+          <div class="dispatch-badge" style="border-color:#dcfce7;"><span class="db-value" style="color:#166534;">97%</span> Success Rate</div>
+          <div class="dispatch-badge"><span class="db-value" style="color:#166534;">1</span> Failed</div>
+        </div>
+      </div>
+
+    </div><!-- end grid-2 -->
+
+    <!-- ═══ Section 5: Risk & Compliance ═══ -->
+    <div class="card">
+      <div class="section-header">5. Risk &amp; Compliance</div>
+
+      <div class="grid-2">
+        <div>
+          <p class="section-label">Autonomy Tier Distribution</p>
+          <table>
+            <thead>
+              <tr><th>Tier</th><th>Dispatches</th><th>Outcome</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="role-badge tier-auto">auto</span></td>
+                <td>22</td>
+                <td>All successful — no confirmation needed</td>
+              </tr>
+              <tr>
+                <td><span class="role-badge tier-confirm">confirm</span></td>
+                <td>7</td>
+                <td>User approved all 7</td>
+              </tr>
+              <tr>
+                <td><span class="role-badge tier-gated">gated</span></td>
+                <td>5</td>
+                <td>Human gate required — all passed</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <p class="section-label">Compliance Indicators</p>
+          <div class="compliance-list">
+            <div class="compliance-item">
+              <span>Artifact evidence for all dispatches</span>
+              <span class="status status-pass">✓ 34/34</span>
+            </div>
+            <div class="compliance-item">
+              <span>Test verification on code changes</span>
+              <span class="status status-pass">✓ 8/8</span>
+            </div>
+            <div class="compliance-item">
+              <span>Cost logged for calibrated turns</span>
+              <span class="status status-pass">✓ 15/15</span>
+            </div>
+            <div class="compliance-item">
+              <span>Impactful actions gated</span>
+              <span class="status status-pass">✓ 4/4</span>
+            </div>
+            <div class="compliance-item">
+              <span>Notifications sent</span>
+              <span class="status status-pass">✓ 5/5</span>
+            </div>
+            <div class="compliance-item">
+              <span>Open escalations</span>
+              <span class="status status-pass">✓ 0 open</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Section 6: Activity Timeline ═══ -->
+    <div class="card">
+      <div class="section-header">6. Activity Timeline</div>
+
+      <div class="timeline">
+        <div class="tl-entry">
+          <span class="tl-time">2026-08-03 · Turn 18</span>
+          <div class="tl-title">Enable diagnostic settings on all resources</div>
+          <div class="tl-detail">Deployer → deployed diagnostic settings to 12 resources via Bicep</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-08-02 · Turn 17</span>
+          <div class="tl-title">As-Built documentation generated</div>
+          <div class="tl-detail">As-Built Author → resource inventory, compliance matrix, operations runbook</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-30 · Turn 14</span>
+          <div class="tl-title">Container Apps revision deployed (prod)</div>
+          <div class="tl-detail">Deployer → slot swap after what-if passed. Human gate approved.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-28 · Turn 13</span>
+          <div class="tl-title">Council Verdict — container-apps-deploy (Go)</div>
+          <div class="tl-detail">All roles approved. Security validated network policies.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-26 · Turn 11</span>
+          <div class="tl-title">Council Verdict — api-auth-layer (Go-With-Conditions)</div>
+          <div class="tl-detail">Security: conditional (add token rotation). 1 condition outstanding.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-23 · Turn 10</span>
+          <div class="tl-title">Database schema migration</div>
+          <div class="tl-detail">Developer → added partition key to Cosmos DB container. Human gate approved.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-21 · Turn 9</span>
+          <div class="tl-title">Council Verdict — cosmos-partitioning (Stop)</div>
+          <div class="tl-detail">Security blocked: cross-partition queries expose tenant data. Escalated.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-18 · Turn 7</span>
+          <div class="tl-title">Key Vault RBAC policy applied</div>
+          <div class="tl-detail">IaC Author → Bicep deployment. Deployer → what-if confirmed, human gate passed.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-15 · Turn 6</span>
+          <div class="tl-title">Council Verdict — keyvault-rbac (Go)</div>
+          <div class="tl-detail">All roles approved. Cost Manager confirmed no budget impact.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-12 · Turn 4</span>
+          <div class="tl-title">Landing-zone network deployed</div>
+          <div class="tl-detail">IaC Author + Deployer → hub VNet, peering, NSG rules. Human gate approved.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-10 · Turn 3</span>
+          <div class="tl-title">Council Verdict — landing-zone-network (Go)</div>
+          <div class="tl-detail">All roles approved. Azure Architect validated AVM module selection.</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-08 · Turn 2</span>
+          <div class="tl-title">HLD and LLD produced</div>
+          <div class="tl-detail">Azure Architect → high-level design, low-level design with AVM modules</div>
+        </div>
+        <div class="tl-entry">
+          <span class="tl-time">2026-07-05 · Turn 1</span>
+          <div class="tl-title">Research phase completed</div>
+          <div class="tl-detail">Researcher → AVM documentation, WAF pillars, pricing tiers analyzed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Section 7: Key Outcomes This Period ═══ -->
+    <div class="card">
+      <div class="section-header">7. Key Outcomes This Period</div>
+
+      <div class="outcome-badges">
+        <div class="outcome-badge badge-green"><span class="ob-value">3</span> Azure Deployments</div>
+        <div class="outcome-badge badge-blue"><span class="ob-value">2</span> GitHub Issues Created</div>
+        <div class="outcome-badge badge-blue"><span class="ob-value">14</span> Tests (from 3 suites)</div>
+        <div class="outcome-badge badge-blue"><span class="ob-value">27</span> Files Created/Modified</div>
+      </div>
+
+      <p class="section-label">Delivered Capabilities</p>
+      <table>
+        <thead>
+          <tr><th>Capability</th><th>Type</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Landing-zone hub network with peering</td>
+            <td>Infrastructure</td>
+            <td><span class="role-badge badge-green">Deployed</span></td>
+          </tr>
+          <tr>
+            <td>Key Vault with RBAC policy</td>
+            <td>Infrastructure</td>
+            <td><span class="role-badge badge-green">Deployed</span></td>
+          </tr>
+          <tr>
+            <td>Container Apps (API + Worker)</td>
+            <td>Application</td>
+            <td><span class="role-badge badge-green">Deployed</span></td>
+          </tr>
+          <tr>
+            <td>Cosmos DB with tenant-isolated partitioning</td>
+            <td>Data</td>
+            <td><span class="role-badge badge-green">Shipped</span></td>
+          </tr>
+          <tr>
+            <td>Diagnostic settings (all resources)</td>
+            <td>Observability</td>
+            <td><span class="role-badge badge-green">Deployed</span></td>
+          </tr>
+          <tr>
+            <td>API auth middleware (JWT + token rotation)</td>
+            <td>Application</td>
+            <td><span class="role-badge badge-amber">In Progress</span></td>
+          </tr>
+          <tr>
+            <td>As-Built documentation &amp; runbook</td>
+            <td>Documentation</td>
+            <td><span class="role-badge badge-green">Complete</span></td>
+          </tr>
+          <tr>
+            <td>WAF Cost Optimization findings</td>
+            <td>Governance</td>
+            <td><span class="role-badge badge-blue">Planned</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- end container -->
+
+  <!-- ═══ Footer ═══ -->
+  <footer>
+    <strong>Grounding sources:</strong> .copilot-tracking/squad/members/azure/decisions.md, history/*.md, consumption.md, notifications.md, state.json<br>
+    <strong>Sub-squad:</strong> azure (federation member) · <strong>Profile:</strong> azure<br>
+    <strong>Report generated by:</strong> /squad-governance-report squad=azure period=30d — CSS-only, no JavaScript, self-contained.<br>
+    <strong>Calibration:</strong> Turns 1–15 calibrated, turns 16–18 pending. Cost figures derived from calibrated turns only.
+  </footer>
+
+</body>
+</html>

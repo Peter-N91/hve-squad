@@ -5,6 +5,54 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.17] - 2026-08-05
+
+### Added
+
+- **Squad governance health required reading individual state artifacts.** Added the `/squad-governance-report` prompt in `squad-src/.github/prompts/squad/squad-governance-report.prompt.md` to generate a self-contained HTML governance dashboard.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.17"
+```
+
+[0.11.17]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.17
+
+## [0.11.16] - 2026-08-05
+
+### Added
+
+- **Squad artifacts required manual discovery before producing focused documents.** Added the `/squad-document` prompt in `squad-src/.github/prompts/squad/squad-document.prompt.md` to search grounded squad state and export Markdown, HTML, PDF, or DOCX output.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.16"
+```
+
+[0.11.16]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.16
+
+## [0.11.15] - 2026-08-05
+
+### Changed
+
+- Updated hve-core dependency pin to `197afb8` (197afb8962a24ab84a4d49dd8ef112eb8a7302cf).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.11.15"
+```
+
+[0.11.15]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.11.15
+
 ## [0.11.14] - 2026-08-04
 
 ### Added
