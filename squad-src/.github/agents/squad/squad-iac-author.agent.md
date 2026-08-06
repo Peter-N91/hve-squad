@@ -56,6 +56,8 @@ Read these on first use of a turn and honor them throughout.
 1. Compile the SKU and resource list and emit a `cost-manager` handoff so an indicative estimate precedes any deploy.
 2. Validate statically only: `az bicep build` / `bicep lint` for Bicep, or `terraform init -backend=false && terraform validate` plus `terraform fmt -check` for Terraform. Do not run `what-if`, `plan`, `create`, or `apply` — that is the deployer's role.
 
+Two registered opt-in skills belong to this role and are read when present. `update-avm-modules-in-bicep` carries the AVM version-refresh workflow when the task is to bring existing Bicep up to current module versions. `import-infrastructure-as-code` carries the reverse direction, generating AVM-based Terraform from live Azure resources. Both are opt-in, so when one is absent, do the work from this charter's own steps and say in the response which skill would have deepened it.
+
 ## Required Protocol
 
 1. Author IaC only. Never deploy, run `what-if`/`plan`, or run `create`/`apply`. Emit a `Squad Deployer` handoff instead.

@@ -11,6 +11,17 @@ Federation reuses every existing squad mechanism unchanged. Each sub-squad is an
 
 Routing across sub-squads is decided here and in `meta-routing.md`; routing *within* a sub-squad is unchanged (`squad-routing.instructions.md`). Roster and persistence rules are unchanged (`squad-roster.instructions.md`, `squad-state.instructions.md`).
 
+## When a Pack Is the Answer Instead
+
+Federation and packs both add capability a single profile does not carry, and the two are easy to confuse. The separating rule lives in *Pack or Federation* in `squad-roster.instructions.md`; the short form is that **one piece of work needing extra expertise is a profile plus a pack, and two streams of work with separate deliverables and owners is a federation.**
+
+Two consequences matter before anyone builds a federation to solve a capability gap:
+
+* **A federation does not reach a technology vertical any faster than a plain squad does.** A sub-squad is seeded from a profile, so a vertical arrives on it by applying the pack, exactly as on any other roster. Building a sub-squad named after a vertical still requires the pack, and adds a duplicated methodology spine, a second state tree, and a second consumption ledger for no additional reach.
+* **Splitting one piece of work across two sub-squads splits its record.** Each sub-squad keeps its own `decisions.md`, `history/`, and deliverable roots rebased under `members/<name>/`, so two halves of one decision are taken in two councils that never met. A pack keeps those roles in one turn, one council, one plan, and one review.
+
+Federate when the sub-squads own genuinely separate outcomes — a business team's discovery work beside an architecture team's infrastructure build, or Watch Mode giving each triggering event its own sub-squad and its own pull request. Do not federate to obtain a role.
+
 ## Squad Root (`squadRoot`)
 
 A squad's state lives under a **squad root**. The root is parameterized:
@@ -122,7 +133,7 @@ The registry is the durable list of sub-squads the Federation Coordinator can ro
 | Column      | Meaning                                                                                              |
 |-------------|------------------------------------------------------------------------------------------------------|
 | Sub-squad   | Unique name, lower-kebab-case (for example, `product`, `azure`); also the `members/<name>/` directory |
-| Profile     | The profile the sub-squad was seeded from (`default`, `full`, `security`, `design`, `architecture`, `azure`, `product`) or `custom` |
+| Profile     | The profile the sub-squad was seeded from (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`) or `custom`, followed by any applied packs in `+pack` form (for example, `azure +power-platform`) |
 | Kind        | `in-repo` (state under `members/<name>/`) — `repo` is reserved for the deferred multi-repo federation |
 | Location    | `members/<name>/` for an `in-repo` sub-squad                                                          |
 | Owner       | Optional human or team label (for example, `business-team`, `architects`)                            |

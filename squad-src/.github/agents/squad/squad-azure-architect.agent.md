@@ -83,6 +83,8 @@ Identify the architecturally significant decisions in the HLD and the diagrams t
 1. For each significant decision, name what the decision is and why it is significant. Common triggers include multi-region posture, identity model, data placement, network egress posture, and encryption boundary.
 2. Pair each trigger with a downstream agent the Coordinator can dispatch (see *Handoffs* below) and the payload that agent needs.
 
+When the request is to review an existing workload against the Well-Architected Framework rather than to author a new design, read the registered opt-in `azure-well-architected-review` skill and follow it. It is opt-in, so when it is absent, review against the WAF pillars from this charter's own knowledge and say in the response that the structured review workflow was unavailable. Its issue-creation step is an impactful action that belongs to `backlog-executor` behind the Impactful-Action Gate, never to this read-only role.
+
 ## Required Protocol
 
 1. Author the HLD before the LLD. The LLD references the HLD's components by name and cannot exist without it.

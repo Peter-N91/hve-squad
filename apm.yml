@@ -275,6 +275,12 @@ dependencies:
     - microsoft/hve-core/.github/skills/shared/backlog-templates#fa27dfd2c03f7dd231cdf3455e6d0760f94b4454
     - microsoft/hve-core/.github/skills/shared/pr-reference#fa27dfd2c03f7dd231cdf3455e6d0760f94b4454
     - microsoft/hve-core/.github/skills/shared/telemetry-foundations#fa27dfd2c03f7dd231cdf3455e6d0760f94b4454
+    - github/awesome-copilot/skills/azure-pricing#9db369d00f121542e1c99fd9b6cd6f707bade765
+    - github/awesome-copilot/skills/gdpr-compliant#9db369d00f121542e1c99fd9b6cd6f707bade765
+    - github/awesome-copilot/skills/markdown-to-html#9db369d00f121542e1c99fd9b6cd6f707bade765
+    - github/awesome-copilot/skills/md-to-docx#9db369d00f121542e1c99fd9b6cd6f707bade765
+    - github/awesome-copilot/skills/microsoft-agent-framework#9db369d00f121542e1c99fd9b6cd6f707bade765
+    - github/awesome-copilot/skills/semantic-kernel#9db369d00f121542e1c99fd9b6cd6f707bade765
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-asbuilt-author.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-azure-architect.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-azure-diagnose.agent.md
@@ -288,12 +294,16 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-implementor.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-lead.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-modernization-planner.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-observability-planner.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-performance-planner.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-prompt-engineer.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-researcher.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-reviewer.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-risk-manager.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-scribe.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-sql-migration-advisor.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-technical-writer.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-vulnerability-manager.agent.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/pptx-brand-template.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autonomous.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autopilot.instructions.md

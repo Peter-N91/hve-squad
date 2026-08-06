@@ -27,6 +27,22 @@ microsoft/hve-core
   Third-Party Attribution section. See the hve-core THIRD-PARTY-NOTICES file for
   full details: https://github.com/microsoft/hve-core/blob/main/THIRD-PARTY-NOTICES
 
+github/awesome-copilot
+  https://github.com/github/awesome-copilot
+  Licensed under the MIT License.
+
+  Selected resources from this collection are declared in `apm.yml`, pinned to
+  an exact commit, and fetched at install time. Their source is not reproduced
+  in this repository. The squad roster records which resources are referenced,
+  what each was verified against, and under which tier it arrives; see the
+  External Cast section of
+  `squad-src/.github/instructions/squad/squad-roster.instructions.md`.
+
+  This collection is community-contributed and its resources are authored by
+  third-party developers rather than by the collection's maintainers. Each
+  referenced resource passes the roster's verification gate before it is
+  declared, and re-verification is required whenever its pin moves.
+
 --------------------------------------------------------------------------------
 Trademark notice
 --------------------------------------------------------------------------------

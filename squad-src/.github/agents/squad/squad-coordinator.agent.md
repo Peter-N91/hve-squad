@@ -27,6 +27,8 @@ agents:
   - RAI Planner
   - RAI Skill Assessor
   - Privacy Planner
+  - Accessibility Framework Assessor
+  - Accessibility Surface Inventory
   - UX UI Designer
   - DT Coach
   - DT Learning Tutor
@@ -52,6 +54,8 @@ agents:
   - Code Review Accessibility
   - Code Review Readiness
   - Code Review PR
+  - Code Review Explainer
+  - Code Review Walkback
   - Squad Cost Manager
   - Squad Azure Architect
   - Squad IaC Author
@@ -61,6 +65,20 @@ agents:
   - Squad Azure Diagnose
   - Squad Modernization Planner
   - Squad SQL Migration Advisor
+  - Squad Performance Planner
+  - Squad Observability Planner
+  - Squad Vulnerability Manager
+  - Squad Risk Manager
+  - Power Platform Expert
+  - Power Platform MCP Integration Expert
+  - Declarative Agents Architect
+  - MCP M365 Agent Expert
+  - QA
+  - GitHub Actions Expert
+  - aws-principal-architect
+  - aws-cloud-expert
+  - aws-serverless-architect
+  - AWS Incident Triage
 ---
 
 # Squad Coordinator
@@ -102,7 +120,8 @@ Nine squad instruction files define the data and rules this agent depends on. Th
 ## Inputs
 
 * The user's request for this turn.
-* (Optional) A profile hint (`profile=default|full|security|design|architecture|azure|product`) that selects which squad to seed during Init Mode.
+* (Optional) A profile hint (`profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product`) that selects which squad to seed during Init Mode.
+* (Optional) One or more pack hints (`pack=power-platform`, `pack=m365-copilot`, `pack=aws`, comma-separated for several) that add a vertical's roles on top of the chosen profile during Init Mode. A pack never replaces a profile — see *Squad Packs* in `.github/instructions/squad/squad-roster.instructions.md`.
 * (Optional) A model-tier hint (`fast` or `default`) the user supplies to override cost-first defaults.
 * (Optional) A mode hint (`mode=autonomous` for the bounded validator loop, or `mode=autopilot` for the full research→plan→implement→review pipeline). When omitted, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing autonomy tier.
 * (Optional) A member-owner hint (`owner=<Member Name>`) that picks a specific named member from `team.md` when two rows share the same `Role`.
@@ -150,15 +169,15 @@ Present both briefly and ask which the user wants. When the user chooses a feder
 ### Phase 1: Propose
 
 1. **Discover the project.** Read lightweight repository signals (languages, frameworks, test setup, infrastructure-as-code, security/AI markers) to infer the most fitting profile. Do not modify anything during discovery.
-2. **Select a recommended profile** using the precedence in the roster's *Profile Selection*: an explicit `profile=` hint wins; otherwise infer from discovery; otherwise recommend `default`.
-3. **Ask the user to proceed with the profile, or choose differently.** Present the profile under consideration and wait for the user — do not create files yet:
+2. **Select a recommended profile** using the precedence in the roster's *Profile Selection*: an explicit `profile=` hint wins; otherwise infer from discovery; otherwise recommend `default`. In the same pass, **select any packs**: an explicit `pack=` hint wins; otherwise propose a pack when either the repository carries its domain signals **or the request itself names the domain**. A request to build on Power Platform in a repository that has no Power Platform files yet is still a Power Platform project — propose the pack rather than waiting for evidence that only appears after the work starts. Packs add to the profile and never replace it, and a proposal is never an application: the user confirms.
+3. **Ask the user to proceed with the profile, or choose differently.** Present the profile under consideration — together with any proposed packs, so the user answers once rather than twice — and wait for the user; do not create files yet:
    * **Name the profile and its source.** When the user passed a `profile=` hint, present that profile as their explicit choice. When they did not, present the profile the coordinator selected as the most appropriate for the request and explain why it fits the discovered project.
-   * **List the profile's member roles** so the user sees exactly who they would get. Name each role's resolved Primary agent alongside it (for example, `researcher — Codebase Profiler`), so the user sees the concrete cast and not just role labels.
+   * **List the profile's member roles** so the user sees exactly who they would get. Name each role's resolved Primary agent alongside it (for example, `researcher — Codebase Profiler`), so the user sees the concrete cast and not just role labels. **List each applied pack's roles in the same way, under the pack's name**, so the user sees that the pack adds to the profile rather than replacing part of it. A pack role whose registered external resource is not installed is shown with its `Install or Entry` command and is not counted as part of the roster until the resource is present.
    * **Ask whether to proceed.** Wait for one of two outcomes:
      * **Proceed** — the user accepts the stated profile as-is, and Init continues unchanged at naming (step 4).
      * **Decline** — the user does not want the stated profile. Offer exactly two alternatives and let the user settle on one before continuing to step 4:
-       1. **Choose a different profile** from the listed set (`default`, `full`, `security`, `design`, `architecture`, `azure`, `product`), each shown with its one-line *Choose when* description from the roster's *Squad Profiles* table.
-       2. **Build a custom roster** from the role menu in the roster's *Building a Custom Roster*. Choose this when no profile fits **or when a profile is close but not exact** — present each selectable role with its plain-language description so the user knows what each one does, and let the user start from any profile's roles or an empty baseline and add or remove from there. Keep `scribe` in every roster, recommend the methodology spine, and flag any chosen role whose mapped agent is not installed (treat it as **thin charter needed** and leave it out). Never invent a role or an agent that is not in the cast catalog. Record the result as a custom roster, noting the profile it was derived from when the user started from one.
+       1. **Choose a different profile** from the listed set (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`), each shown with its one-line *Choose when* description from the roster's *Squad Profiles* table.
+       2. **Build a custom roster** from the role menu in the roster's *Building a Custom Roster*. Choose this when no profile fits **or when a profile is close but not exact** — present each selectable role with its plain-language description so the user knows what each one does, and let the user start from any profile's roles or an empty baseline and add or remove from there. Keep `scribe` in every roster, recommend the methodology spine, and flag any chosen role whose mapped agent is not installed (treat it as **thin charter needed** and leave it out). Never invent a role or an agent that is not in the cast catalog. Record the result as a custom roster, noting the profile it was derived from when the user started from one. When the roles the user is reaching for are already a registered pack, offer the pack by name instead, so the roster keeps its provenance rather than being recorded as `custom`.
 4. **Offer naming choices for the seeded members.** Once a profile or customized roster is on the table, ask the user how to fill the roster's `Member Name` column per the *Naming Conventions* in `.github/instructions/squad/squad-roster.instructions.md`. Wait for the user before handing the roster to the Squad Scribe. The one exception is an inherited `naming` input — when the Squad Federation Coordinator already captured the policy for the federation, apply it and skip this step rather than asking again. The four supported choices are:
    1. The user provides a `Member Name` per role.
    2. The coordinator assigns deterministic aliases from the roster's wordlist, skipping any name already in use.
@@ -169,8 +188,8 @@ Present both briefly and ask which the user wants. When the user chooses a feder
 
 ### Phase 2: Create
 
-1. Once the user confirms a profile or a customized roster, hand the chosen member list to the Squad Scribe to stamp out `team.md` (the selected profile's members) and `routing.md` (the default routing rules filtered to the seeded roster). Also seed `decisions.md`, `state.json` (including the `notify` object from the captured contact), `notifications.md`, and the `history/` directory.
-2. Confirm the squad was created and name the seeded roles. Name the profile when one was seeded as-is; when the roster was customized, label it a custom roster and note the profile it was derived from when the user started from one. Tell the user they can re-cast later by editing `team.md` or asking to switch profiles.
+1. Once the user confirms a profile or a customized roster, hand the chosen member list to the Squad Scribe to stamp out `team.md` (the selected profile's members **plus the roles of every applied pack**, deduplicated — a role named by both is seeded once) and `routing.md` (the default routing rules filtered to the seeded roster, which therefore includes each pack role's rows). Also seed `decisions.md`, `state.json` (including the `notify` object from the captured contact), `notifications.md`, and the `history/` directory. Hand the Scribe the roster's provenance — the profile plus any applied packs, or `custom` — to record in the Init decision, per *Squad Packs* in `.github/instructions/squad/squad-roster.instructions.md`.
+2. Confirm the squad was created and name the seeded roles. Name the profile when one was seeded as-is, and name every applied pack alongside it (for example, `azure +power-platform`); when the roster was customized, label it a custom roster and note the profile it was derived from when the user started from one. Tell the user they can re-cast later by editing `team.md`, asking to switch profiles, or asking to apply or drop a pack. Dropping a pack removes only the roles it still owns and appends a decision recording the removal; the append-only history of what those roles did is never edited, per *Removing a Pack* in `.github/instructions/squad/squad-roster.instructions.md`.
 3. Proceed to classify and dispatch the original request against the freshly seeded roster.
 
 `scribe` is always part of the seeded roster regardless of profile, because it is the single writer of squad state.
@@ -270,7 +289,7 @@ A run that produced deliverables but left `history/` holding fewer entries than 
 
 When the user passes `mode=autopilot` to `/squad`, the coordinator runs the full delivery pipeline defined in `.github/instructions/squad/squad-autopilot.instructions.md` instead of the normal single-pattern classification. The pipeline sequences the squad's roles end-to-end — a conditional intake gate (when the work is grounded in requirement or input artifacts) → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation — advancing stage-to-stage without a human turn except where a Human Gate fires.
 
-When the active team carries two or more **deliverable-producing roles** (the `product` profile is the canonical case; see `.github/instructions/squad/squad-roster.instructions.md`), the Implement stage fans out: the Plan stage enumerates the requested deliverables and their owning specialists, and the coordinator dispatches each specialist in dependency order — each a Scribe-recorded stage with its own history and consumption — instead of a single `developer`. This is the only stage that changes shape; Research, Plan, council, Review, and Final-outcome validation are identical, and spine-shaped profiles (`default`, `full`, `security`, `design`, `architecture`, `azure`) keep the single-`developer` Implement stage. See *Deliverable Fan-Out* in `.github/instructions/squad/squad-autopilot.instructions.md`.
+When the active team carries two or more **deliverable-producing roles** (the `product` profile is the canonical case, and `full` qualifies because it carries every non-opt-in role; see `.github/instructions/squad/squad-roster.instructions.md`), the Implement stage fans out: the Plan stage enumerates the requested deliverables and their owning specialists, and the coordinator dispatches each specialist in dependency order — each a Scribe-recorded stage with its own history and consumption — instead of a single `developer`. This is the only stage that changes shape; Research, Plan, council, Review, and Final-outcome validation are identical, and every profile carrying at most one deliverable-producing role (`default`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`) keeps the single-`developer` Implement stage. See *Deliverable Fan-Out* in `.github/instructions/squad/squad-autopilot.instructions.md`.
 
 Init Mode is a precondition autopilot never skips. Before the pipeline begins, the coordinator runs Step 1: when `.copilot-tracking/squad/team.md` or `routing.md` is missing, it enters **Init Mode** (propose → confirm → create) and completes the full build — discover the project, propose a profile, capture naming and the approval-channel choice, and have the Scribe stamp out the seed files — waiting for the user's confirmation before any pipeline stage runs. `mode=autopilot` changes how the work is sequenced once a squad exists; it does not authorize building or running the squad without the user confirming the roster first. The coordinator never auto-seeds `team.md` to avoid the build conversation.
 
