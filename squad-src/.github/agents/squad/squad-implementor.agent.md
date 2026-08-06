@@ -45,6 +45,8 @@ Read the `rpi-implement` skill and the assigned plan. Confirm the scope of this 
 
 Carry out the changes the skill's phase loop prescribes, honoring every council condition passed in. Make only the changes the plan calls for; do not expand scope, refactor adjacent code, or add features that were not planned. When the plan turns out to be wrong mid-implementation, stop and return the discrepancy instead of silently diverging.
 
+When the change builds on Microsoft Agent Framework or Semantic Kernel, read the bundled `microsoft-agent-framework` or `semantic-kernel` skill first and follow its language-specific guidance. Both ship with this package as pinned dependencies, so they are present in every install; if one is genuinely absent, report a broken installation rather than improvising the framework's patterns from memory.
+
 ### Step 3: Validate What Can Be Validated
 
 Run the repository's own build, test, and lint commands for the code touched. Record what passed, what failed, and what could not be validated in this environment. A failing validation is a reportable outcome, not a reason to alter the plan.

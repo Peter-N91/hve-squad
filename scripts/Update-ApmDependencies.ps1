@@ -10,13 +10,18 @@
 .DESCRIPTION
     Clones the hve-core repository for a ref, filters files under selected
     .github folders, then enumerates the locally authored squad source tree, and
-    rewrites only the dependencies.apm list. hve-core entries are listed first;
-    squad entries are appended afterwards.
+    rewrites only the dependencies.apm list. hve-core entries are listed first,
+    external cast entries next, and squad entries last.
 
     Every hve-core entry is pinned to the exact commit SHA that the requested ref
     resolves to (appended as '#<sha>'), so the generated manifest stays
     reproducible for downstream consumers even after hve-core's default branch
     moves on. Squad self-references are pinned to -SquadRef when provided.
+
+    External cast entries come from a curated allowlist rather than a directory
+    sweep, because the upstream repository publishes hundreds of resources and
+    the squad bundles only the few its roster casts. They are pinned the same way
+    hve-core entries are.
 .PARAMETER ApmFile
     Path to apm.yml to update.
 .PARAMETER RepoSlug
@@ -48,6 +53,20 @@
     appended as '#<ref>'. Use the release tag you are about to cut (for example
     v0.8.0): commit the manifest, then create that tag on the same commit. When
     omitted, squad entries are left unpinned.
+.PARAMETER ExternalRepoSlug
+    Repository slug (owner/repo) hosting the external cast resources the roster
+    bundles. See the External Cast section of squad-roster.instructions.md.
+.PARAMETER ExternalResourcePaths
+    Curated, repository-relative paths of the external resources to emit. This is
+    deliberately an explicit allowlist and not a directory sweep: the upstream
+    repository publishes hundreds of resources, the roster bundles only the ones
+    it casts, and those paths carry no '.github/' prefix. Adding a bundled
+    resource means adding its path here. Pass an empty array to emit none.
+.PARAMETER ExternalRef
+    Git ref to pin external cast entries to. Defaults to the SHA already pinned
+    in ApmFile for ExternalRepoSlug, so regenerating does not silently advance
+    third-party content; falls back to 'main' when no pin exists yet. Moving this
+    pin re-triggers the roster's verification gate for every affected row.
 .PARAMETER DryRun
     If set, prints generated dependencies without updating apm.yml.
 .EXAMPLE
@@ -99,6 +118,25 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$SquadRef,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateNotNullOrEmpty()]
+    [string]$ExternalRepoSlug = 'github/awesome-copilot',
+
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyCollection()]
+    [string[]]$ExternalResourcePaths = @(
+        'skills/azure-pricing',
+        'skills/gdpr-compliant',
+        'skills/microsoft-agent-framework',
+        'skills/semantic-kernel',
+        'skills/markdown-to-html',
+        'skills/md-to-docx'
+    ),
+
+    [Parameter(Mandatory = $false)]
+    [ValidateNotNullOrEmpty()]
+    [string]$ExternalRef,
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun
@@ -355,6 +393,68 @@ function Build-SquadDependencyList {
     return @($selected | Sort-Object -Unique | ForEach-Object { "$Repository/$_$refSuffix" })
 }
 
+function Get-RemoteCommit {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Repository,
+
+        [Parameter(Mandatory = $true)]
+        [string]$GitRef
+    )
+
+    # A 40-character SHA is already a commit; ls-remote would not resolve it.
+    if ($GitRef -match '^[0-9a-f]{40}$') {
+        return $GitRef
+    }
+
+    $remote = "https://github.com/$Repository.git"
+    $output = & git ls-remote $remote $GitRef 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to resolve $Repository@$GitRef via git ls-remote: $output"
+    }
+
+    $sha = @($output) |
+        Where-Object { $_ -match '^(?<sha>[0-9a-f]{40})\s' } |
+        ForEach-Object { $Matches['sha'] } |
+        Select-Object -First 1
+
+    if ([string]::IsNullOrWhiteSpace($sha)) {
+        throw "git ls-remote returned no commit for $Repository@$GitRef."
+    }
+
+    return $sha
+}
+
+function Build-ExternalDependencyList {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [string[]]$ResourcePaths,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Repository,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Ref
+    )
+
+    # External cast resources are named explicitly rather than discovered. The
+    # upstream layout has no '.github/' prefix, so the sweep-and-filter approach
+    # the hve-core and squad builders use does not apply here.
+    $normalized = @(
+        $ResourcePaths |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            ForEach-Object { $_.Replace('\', '/').Trim('/') } |
+            Sort-Object -Unique
+    )
+
+    return @($normalized | ForEach-Object { "$Repository/$_#$Ref" })
+}
+
 function Update-ApmDependencyList {
     [CmdletBinding()]
     [OutputType([void])]
@@ -466,8 +566,30 @@ if ($MyInvocation.InvocationName -ne '.') {
             Write-Host "Squad source root '$SquadSourceRoot' not found; skipping squad enumeration." -ForegroundColor Yellow
         }
 
-        # hve-core entries remain first; squad entries are appended afterwards.
-        $allDeps = @($deps + $squadDeps)
+        $externalDeps = @()
+        if ($ExternalResourcePaths -and $ExternalResourcePaths.Count -gt 0) {
+            if (-not $ExternalRef) {
+                $externalPinned = if (Test-Path -LiteralPath $ApmFile) {
+                    [regex]::Match((Get-Content -LiteralPath $ApmFile -Raw), "$([regex]::Escape($ExternalRepoSlug))/[^#\s]+#(?<sha>[0-9a-f]{7,40})").Groups['sha'].Value
+                }
+                $ExternalRef = if ($externalPinned) { $externalPinned } else { 'main' }
+                Write-Host "No -ExternalRef supplied; staying on the pin already in $ApmFile ($ExternalRef)." -ForegroundColor DarkGray
+            }
+
+            Write-Host "Resolving external cast source $ExternalRepoSlug@$ExternalRef..." -ForegroundColor Cyan
+            $externalCommit = Get-RemoteCommit -Repository $ExternalRepoSlug -GitRef $ExternalRef
+            $externalDeps = Build-ExternalDependencyList -ResourcePaths $ExternalResourcePaths -Repository $ExternalRepoSlug -Ref $externalCommit
+            if ($null -eq $externalDeps) {
+                $externalDeps = @()
+            }
+            Write-Host "Found $($externalDeps.Count) external cast dependencies pinned to $externalCommit." -ForegroundColor Green
+        }
+        else {
+            Write-Host 'No external cast resources configured; skipping external enumeration.' -ForegroundColor Yellow
+        }
+
+        # hve-core entries remain first, external cast next, squad entries last.
+        $allDeps = @($deps + $externalDeps + $squadDeps)
 
         if ($DryRun) {
             Write-Host "hve-core dependencies ($($deps.Count)):" -ForegroundColor Cyan

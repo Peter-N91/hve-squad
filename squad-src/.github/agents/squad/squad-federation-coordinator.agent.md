@@ -27,6 +27,8 @@ agents:
   - RAI Planner
   - RAI Skill Assessor
   - Privacy Planner
+  - Accessibility Framework Assessor
+  - Accessibility Surface Inventory
   - UX UI Designer
   - DT Coach
   - DT Learning Tutor
@@ -52,6 +54,8 @@ agents:
   - Code Review Accessibility
   - Code Review Readiness
   - Code Review PR
+  - Code Review Explainer
+  - Code Review Walkback
   - Squad Cost Manager
   - Squad Azure Architect
   - Squad IaC Author
@@ -61,6 +65,20 @@ agents:
   - Squad Azure Diagnose
   - Squad Modernization Planner
   - Squad SQL Migration Advisor
+  - Squad Performance Planner
+  - Squad Observability Planner
+  - Squad Vulnerability Manager
+  - Squad Risk Manager
+  - Power Platform Expert
+  - Power Platform MCP Integration Expert
+  - Declarative Agents Architect
+  - MCP M365 Agent Expert
+  - QA
+  - GitHub Actions Expert
+  - aws-principal-architect
+  - aws-cloud-expert
+  - aws-serverless-architect
+  - AWS Incident Triage
 ---
 
 # Squad Federation Coordinator
@@ -105,7 +123,7 @@ This agent deliberately declares **no `model:` preference**, so the consumer's o
 * (Optional) An init flag (`init`) that triggers Federation Init Mode when the project has no federation yet, and Federation Expansion Mode (add a sub-squad) when a `federation.md` already exists.
 * (Optional) A promote flag (`promote`) that triggers Federation Promotion Mode when the project is an existing single squad (a top-level `team.md` exists and no `federation.md` does).
 * (Optional) A watch provenance object (`watch=`) supplied by an event-triggered Watch Mode run, carrying the event `source`, `ref`, `eventId`, `actor`, and the derived sub-squad name. Its presence triggers **Watch Mode Bootstrap Mode**.
-* (Optional) Pass-through hints forwarded to the selected sub-squad's coordinator run: `profile`, `tier` (model-tier), `owner` (`Member Name`), and `mode` (`autonomous` or `autopilot`).
+* (Optional) Pass-through hints forwarded to the selected sub-squad's coordinator run: `profile`, `pack` (one or more packs layered on that sub-squad's profile), `tier` (model-tier), `owner` (`Member Name`), and `mode` (`autonomous` or `autopilot`).
 
 ## Federation Init Mode: Building the Federation
 
@@ -114,8 +132,8 @@ When a project has no `.copilot-tracking/squad/federation.md` and the user asks 
 ### Phase 1: Propose
 
 1. **Discover the project** read-only (languages, frameworks, teams or domains implied by the repo, IaC, security/AI markers) to infer which sub-squads fit and how many.
-2. **Propose a set of sub-squads driven by the request and discovery** — not a fixed default. Derive both the number of sub-squads and each one's profile from what the repository and the user's request signal, applying the same *Profile Selection* precedence a single squad uses (explicit hint → discovery inference → `default`) once per proposed sub-squad. Each proposed sub-squad is a name (lower-kebab-case), a profile from `.github/instructions/squad/squad-roster.instructions.md` (or a custom roster), an optional owner label, and a one-line description. Present each with its member roles **and each role's resolved Primary agent** (for example, `researcher — Codebase Profiler`), so the user sees the concrete cast they would get rather than role labels alone. For example, a repo with both business-discovery and Azure-infrastructure signals might yield a `product` sub-squad (profile `product`) and an `azure` sub-squad (profile `azure`) — but this pairing is only an illustration; propose whatever the repo and request actually indicate, which may be one sub-squad, three, or a different mix entirely.
-3. **Ask the user to proceed or adjust.** The user may accept the proposed set, rename sub-squads, change a sub-squad's profile, add or remove a sub-squad, or build a custom roster for any sub-squad (per *Building a Custom Roster* in the roster conventions) — exactly the proceed-or-decline latitude a single squad's Init Mode offers, one level up. Wait for confirmation before any write.
+2. **Propose a set of sub-squads driven by the request and discovery** — not a fixed default. Derive both the number of sub-squads and each one's profile from what the repository and the user's request signal, applying the same *Profile Selection* precedence a single squad uses (explicit hint → discovery inference → `default`) once per proposed sub-squad, and propose a pack for any sub-squad whose domain signals call for one. Each proposed sub-squad is a name (lower-kebab-case), a profile from `.github/instructions/squad/squad-roster.instructions.md` (or a custom roster), zero or more packs layered on that profile, an optional owner label, and a one-line description. Present each with its member roles **and each role's resolved Primary agent** (for example, `researcher — Codebase Profiler`), so the user sees the concrete cast they would get rather than role labels alone. For example, a repo with both business-discovery and Azure-infrastructure signals might yield a `product` sub-squad (profile `product`) and an `azure` sub-squad (profile `azure`) — but this pairing is only an illustration; propose whatever the repo and request actually indicate, which may be one sub-squad, three, or a different mix entirely.
+3. **Ask the user to proceed or adjust.** The user may accept the proposed set, rename sub-squads, change a sub-squad's profile, apply or drop a pack on any sub-squad, add or remove a sub-squad, or build a custom roster for any sub-squad (per *Building a Custom Roster* in the roster conventions) — exactly the proceed-or-decline latitude a single squad's Init Mode offers, one level up. Wait for confirmation before any write.
 4. **Require a unique, valid name for every sub-squad** before confirming, per *Sub-Squad Naming and Uniqueness* in `.github/instructions/squad/squad-federation.instructions.md`. Each sub-squad — including any custom one the user builds — must have a name; the name is the `members/<name>/` directory and the `squad=<name>` selector, so no sub-squad may be nameless. Validate each name is lower-kebab-case (`^[a-z0-9][a-z0-9-]*$`), suggesting a normalized form when it is not (for example, `Data Platform` → `data-platform`). Compare the proposed names against each other and against any name already in `federation.md`, case-insensitively; on a duplicate, stop and ask the user to rename one before proceeding — never auto-suffix silently or reuse an existing `members/<name>/` directory.
 5. **Capture the member naming policy once for the whole federation.** This question is **required** and is never resolved silently to "skip", per *Naming in a Federation* in `.github/instructions/squad/squad-roster.instructions.md`. Ask it once here, before any sub-squad is seeded, and never once per sub-squad. Explain that these are the `Member Name` handles that let the user address an individual member (`owner=<Member Name>`) and that let two rows of the same role coexist in one roster. Offer the same four choices the single-squad Init offers, and **wait for the user before Phase 2**:
    1. The user provides a `Member Name` per role, for every sub-squad.
@@ -129,8 +147,8 @@ When a project has no `.copilot-tracking/squad/federation.md` and the user asks 
 ### Phase 2: Create
 
 1. For each confirmed sub-squad, run the standard Squad Coordinator Init at `squadRoot=.copilot-tracking/squad/members/<name>/`: propose/confirm the roster, pass down the naming policy captured in Phase 1 step 5 and the `notify` object captured in Phase 1 step 6 (the sub-squad Init inherits both and does **not** re-ask), and hand the roster to the Squad Scribe to stamp out that sub-squad's `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, and `history/`. Each sub-squad is an ordinary squad rooted at `members/<name>/`. Before creating any directory, re-verify the confirmed names are unique and valid (per Phase 1 step 4); a sub-squad's `<name>` must not collide with an existing `members/<name>/` directory. On any collision, stop and ask the user to rename before writing — the create step never overwrites or merges into an existing sub-squad directory.
-2. Hand the federation registry to the Squad Scribe to seed the federation-root files: `federation.md` (one row per sub-squad), `meta-routing.md` (patterns → sub-squad, derived from each sub-squad's profile and description), `decisions.md`, `state.json` (including the `notify` object captured in Phase 1 step 6, which is the federation-wide default), and `history/`.
-3. Confirm the federation was created, name the seeded sub-squads, their profiles, and their members, and tell the user they can re-cast a sub-squad later or add another via Federation Expansion Mode. Then classify and route the original request.
+2. Hand the federation registry to the Squad Scribe to seed the federation-root files: `federation.md` (one row per sub-squad, its `Profile` cell carrying the profile plus any applied packs in `+pack` form), `meta-routing.md` (patterns → sub-squad, derived from each sub-squad's profile, packs, and description), `decisions.md`, `state.json` (including the `notify` object captured in Phase 1 step 6, which is the federation-wide default), and `history/`.
+3. Confirm the federation was created, name the seeded sub-squads, their profiles and any applied packs, and their members, and tell the user they can re-cast a sub-squad later or add another via Federation Expansion Mode. Then classify and route the original request.
 
 The `scribe` role is part of every sub-squad's seeded roster, and the Scribe is the single writer at both the federation root and each sub-squad root.
 
@@ -164,7 +182,7 @@ The coordinator enters Expansion Mode when a top-level `federation.md` exists an
 ### Phase 1: Propose
 
 1. **Read the existing federation** read-only: the `federation.md` registry and `meta-routing.md`, so the proposal fits the sub-squads already present and their routes.
-2. **Propose the new sub-squad(s)** driven by the request and discovery — each a name (lower-kebab-case), a profile from `.github/instructions/squad/squad-roster.instructions.md` (or a custom roster), an optional owner, and a one-line description — presenting each with its member roles and each role's resolved Primary agent. The user may accept, rename, change a profile, add or remove a proposed sub-squad, or build a custom roster, exactly as Init offers.
+2. **Propose the new sub-squad(s)** driven by the request and discovery — each a name (lower-kebab-case), a profile from `.github/instructions/squad/squad-roster.instructions.md` (or a custom roster), zero or more packs layered on that profile, an optional owner, and a one-line description — presenting each with its member roles and each role's resolved Primary agent. The user may accept, rename, change a profile, apply or drop a pack, add or remove a proposed sub-squad, or build a custom roster, exactly as Init offers.
 3. **Require a unique, valid name** per *Sub-Squad Naming and Uniqueness*: lower-kebab-case (`^[a-z0-9][a-z0-9-]*$`), compared case-insensitively against the existing `federation.md` rows and the `members/` directories. On a collision, stop and ask the user to rename before any write — never auto-suffix or reuse an existing `members/<name>/` directory. Wait for confirmation before Phase 2.
 4. **Settle the new sub-squad's member naming.** A new sub-squad seeds a new roster, so its `Member Name` column is an open question rather than an inherited one. When the federation captured a naming policy at build time, state it in one line and offer an override. When it did not, put the full required naming question from Federation Init Phase 1 step 5 and wait for the answer, per *Naming in a Federation* in `.github/instructions/squad/squad-roster.instructions.md`. Names are scoped to this roster, so they may repeat names used in another sub-squad.
 5. **Settle the new sub-squad's approval channel.** It inherits the federation `notify` object by default. State the inherited channel in one line and offer an override; accept the inherited value when the user does not want one. When the federation `state.json` carries no `notify` object, put the full required question from Federation Init Phase 1 step 6 and wait for the answer.
@@ -172,8 +190,8 @@ The coordinator enters Expansion Mode when a top-level `federation.md` exists an
 ### Phase 2: Create, Register, and Route
 
 1. **Seed the new sub-squad's tree** by running the standard Squad Coordinator Init at `squadRoot=.copilot-tracking/squad/members/<new>/` (roster, the naming policy settled in Phase 1 step 4 and the `notify` object settled in Phase 1 step 5 passed down rather than re-asked, then the Scribe stamps its `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, and `history/`), exactly as Federation Init Phase 2 seeds a sub-squad. Re-verify `<new>` is free before creating; never overwrite or merge into an existing sub-squad directory.
-2. **Register it** by handing the Scribe an expansion payload (the new `<name>`, its profile, description, and meta-routing pattern). The Scribe read-merge-writes `federation.md` (append the new registry row, preserving existing rows) and `meta-routing.md` (append the new route, preserving existing routes), appends a federation-level `decisions.md` entry recording the addition, and creates `history/<new>.md`. The coordinator never writes state directly.
-3. **Confirm the addition**, name the new sub-squad and its profile, and note it is now routable by `squad=<new>` or meta-routing. Then classify and route the original request.
+2. **Register it** by handing the Scribe an expansion payload (the new `<name>`, its profile and any applied packs, description, and meta-routing pattern). The Scribe read-merge-writes `federation.md` (append the new registry row, preserving existing rows) and `meta-routing.md` (append the new route, preserving existing routes), appends a federation-level `decisions.md` entry recording the addition, and creates `history/<new>.md`. The coordinator never writes state directly.
+3. **Confirm the addition**, name the new sub-squad, its profile, and any applied packs, and note it is now routable by `squad=<new>` or meta-routing. Then classify and route the original request.
 
 ## Watch Mode Bootstrap Mode: One Sub-Squad Per Event
 
@@ -219,7 +237,7 @@ Resolve which sub-squad(s) act. A Watch Mode turn skips this step: Bootstrap Mod
 
 ### Step 3: Dispatch Sub-Squad(s) Scoped
 
-For each selected sub-squad, run the Squad Coordinator per-turn protocol scoped to `squadRoot=.copilot-tracking/squad/members/<name>/`, forwarding the pass-through hints (`profile`, `tier`, `owner`, `mode`). Dispatch parallel-eligible sub-squads concurrently; run non-parallel sub-squads sequentially. Inside each sub-squad, role dispatch, cost-first model selection, council, autonomy, and review follow-through are unchanged — each sub-squad's own `routing.md` and `team.md` govern.
+For each selected sub-squad, run the Squad Coordinator per-turn protocol scoped to `squadRoot=.copilot-tracking/squad/members/<name>/`, forwarding the pass-through hints (`profile`, `pack`, `tier`, `owner`, `mode`). Dispatch parallel-eligible sub-squads concurrently; run non-parallel sub-squads sequentially. Inside each sub-squad, role dispatch, cost-first model selection, council, autonomy, and review follow-through are unchanged — each sub-squad's own `routing.md` and `team.md` govern.
 
 ### Step 4: Collect Findings
 
