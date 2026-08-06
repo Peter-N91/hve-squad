@@ -1,0 +1,47 @@
+name: Zizmor Actions Security Scan
+on:
+  workflow_dispatch:
+  push:
+    branches: ["dev", "main"]
+    paths:
+      - ".github/workflows/**"
+  pull_request:
+    branches: ["dev", "main"]
+  schedule:
+    - cron: "30 4 * * 1"
+permissions: {}
+
+concurrency:
+  group: zizmor-${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  zizmor:
+    name: Zizmor Actions Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # to checkout code
+      actions: read # to read workflow run status
+      security-events: write # to upload SARIF results to security tab
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install zizmor
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
+        with:
+          enable-cache: false
+
+      - name: Run zizmor (SARIF)
+        run: uvx zizmor --format sarif .github/workflows/ > results.sarif || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload SARIF file
+        if: (!cancelled())
+        uses: github/codeql-action/upload-sarif@e12f0178983d466f2f6028f5cc7a6d786fd97f4b # v4.31.4
+        with:
+          sarif_file: ${{ github.workspace }}/results.sarif
+          category: zizmor-scan
