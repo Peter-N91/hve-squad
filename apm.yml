@@ -1,5 +1,5 @@
 name: hve-squad
-version: 0.12.0
+version: 0.12.1
 description: APM package for hve-core and squad together
 author: Peter-N91
 # Which agent platforms to deploy to.
