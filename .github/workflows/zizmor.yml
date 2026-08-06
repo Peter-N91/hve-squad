@@ -2,7 +2,7 @@ name: Zizmor Actions Security Scan
 on:
   workflow_dispatch:
   push:
-    branches: ["dev", "main"]
+    branches: ["dev", "main", "jmservera/security-review"]
     paths:
       - ".github/workflows/**"
   pull_request:

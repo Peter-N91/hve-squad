@@ -5,7 +5,7 @@ name: "CodeQL Advanced"
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main","jmservera/security-review"]
     paths:
       - '.github/workflows/codeql.yml'
       - '**/*.py'
