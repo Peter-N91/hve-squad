@@ -48,7 +48,7 @@ on:
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
-    # checkov:skip=CKV_GHA_7:Maintainer-only manual dispatch; boolean toggles only, no shell interpolation.
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); inputs are typed boolean and only compared as strings.
     inputs:
       force:
         description: 'Force update even if hve-core SHA is already current'
