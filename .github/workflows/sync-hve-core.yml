@@ -332,7 +332,8 @@ jobs:
         if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
+          RELEASE_VERSION: ${{ steps.bump.outputs.version }}
         run: |
           gh workflow run release.yml --ref main
-          echo "::notice::Triggered release.yml for v${{ steps.bump.outputs.version }}"
+          echo "::notice::Triggered release.yml for v${RELEASE_VERSION}"
 
