@@ -3,4 +3,4 @@ bump: patch
 type: Security
 ---
 
-- This patch is suppressing some security warnings from the action files detected by Checkov. Dismissed as false positives as the parameters are correctly checked for validity. Also, some information has been added to the security actions to provide additional details in the action overview.
+- Improve Checkov and Zizmor scan summaries with severity counts and details about accepted findings. Justified Checkov suppressions are filtered from GitHub Code Scanning while the full results remain available, and Zizmor SARIF output is retained as a downloadable artifact.
