@@ -60,16 +60,50 @@ jobs:
           {
             echo "### Checkov scan"
             echo ""
-            echo "See the job log for the full report. This check is blocking (Phase C):"
+            if [[ -f checkov-results.sarif ]]; then
+              jq -r '
+                [.runs[].results[]] as $all
+                | ($all | map(select((.suppressions // []) | length > 0))) as $suppressed
+                | ($all | map(select((.suppressions // []) | length == 0))) as $open
+                | "| Level | Count |",
+                  "| --- | ---: |",
+                  "| Errors | \($open | map(select(.level == "error")) | length) |",
+                  "| Warnings | \($open | map(select(.level == "warning")) | length) |",
+                  "| Notes | \($open | map(select(.level == "note")) | length) |",
+                  "| Suppressed | \($suppressed | length) |",
+                  "",
+                  (if ($suppressed | length) > 0 then
+                     "<details><summary>Suppressed findings</summary>",
+                     "",
+                     "| Rule | Location | Justification |",
+                     "| --- | --- | --- |",
+                     ($suppressed[] | "| \(.ruleId) | \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) | \(.suppressions[0].justification | gsub("\\|"; "\\|") | gsub("\\s+"; " ")) |"),
+                     "",
+                     "</details>"
+                   else empty end)
+              ' checkov-results.sarif
+            else
+              echo "Checkov produced no SARIF output — see the job log."
+            fi
+            echo ""
+            echo "See the job log for the full report. This check is blocking:"
             echo "new misconfigurations fail the build; accepted findings carry a"
             echo "justified inline \`# checkov:skip=<id>:<reason>\`."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Drop suppressed results before upload
+        if: always()
+        # Code scanning ignores the SARIF `suppressions` property, so an inline
+        # `# checkov:skip` would still surface as an open alert. Strip them here.
+        run: |
+          jq '(.runs[].results) |= map(select((.suppressions // []) | length == 0))' \
+            checkov-results.sarif > checkov-code-scanning.sarif
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
         with:
-          sarif_file: checkov-results.sarif
+          sarif_file: checkov-code-scanning.sarif
           category: checkov
 
       - name: Upload SARIF as artifact
