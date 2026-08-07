@@ -106,16 +106,18 @@ jobs:
       # ── Skip if already up to date ────────────────────────────────────────
       - name: Check if update is needed
         id: check
+        env:
+          CURRENT: ${{ steps.current.outputs.sha }}
+          LATEST: ${{ steps.latest.outputs.sha }}
+          LATEST_SHORT: ${{ steps.latest.outputs.short_sha }}
+          FORCE: ${{ inputs.force }}
         run: |
-          CURRENT="${{ steps.current.outputs.sha }}"
-          LATEST="${{ steps.latest.outputs.sha }}"
-          FORCE="${{ inputs.force }}"
           if [[ "$CURRENT" == "$LATEST" && "$FORCE" != "true" ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "apm.yml already pinned to ${{ steps.latest.outputs.short_sha }} — nothing to do."
+            echo "apm.yml already pinned to ${LATEST_SHORT} — nothing to do."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "Update needed: ${CURRENT:-<none>} → ${{ steps.latest.outputs.short_sha }}"
+            echo "Update needed: ${CURRENT:-<none>} → ${LATEST_SHORT}"
           fi
 
       # ── Refuse to bump when the upstream agent cast changed ───────────────
@@ -128,9 +130,11 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         id: castguard
         shell: pwsh
+        env:
+          LATEST_SHA: ${{ steps.latest.outputs.sha }}
         run: |
           ./scripts/Get-HveCoreCastDelta.ps1 `
-            -ToRef '${{ steps.latest.outputs.sha }}' `
+            -ToRef $env:LATEST_SHA `
             -MarkdownPath 'hve-core-cast-delta.md' `
             -GitHubOutput
           Get-Content hve-core-cast-delta.md | Add-Content -Path $env:GITHUB_STEP_SUMMARY
@@ -276,16 +280,22 @@ jobs:
 
       - name: Summarize the handoff
         if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'true'
+        env:
+          LATEST_SHORT: ${{ steps.latest.outputs.short_sha }}
+          ISSUE_NUMBER: ${{ steps.raise.outputs.issue }}
         run: |
-          echo "::warning::hve-core@${{ steps.latest.outputs.short_sha }} changes the agent cast. Mechanical bump refused; issue #${{ steps.raise.outputs.issue }} hands the upgrade to Watch Mode."
+          echo "::warning::hve-core@${LATEST_SHORT} changes the agent cast. Mechanical bump refused; issue #${ISSUE_NUMBER} hands the upgrade to Watch Mode."
 
       # ── Regenerate apm.yml at the new SHA ────────────────────────────────
       #    Script clones microsoft/hve-core at the SHA, rewrites all entries,
       - name: Regenerate apm.yml dependencies
         if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true'
+        env:
+          LATEST_SHA: ${{ steps.latest.outputs.sha }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          ARGS=(-Ref "${{ steps.latest.outputs.sha }}")
-          [[ "${{ inputs.dry_run }}" == "true" ]] && ARGS+=(-DryRun)
+          ARGS=(-Ref "$LATEST_SHA")
+          [[ "$DRY_RUN" == "true" ]] && ARGS+=(-DryRun)
           pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
 
       # ── Assemble the release from pending change fragments ────────────────
@@ -310,6 +320,8 @@ jobs:
         if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
+          NEW_VERSION: ${{ steps.bump.outputs.version }}
+          LATEST_SHORT: ${{ steps.latest.outputs.short_sha }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -317,9 +329,9 @@ jobs:
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git add apm.yml CHANGELOG.md .changes/unreleased
           if ! git diff --cached --quiet; then
-            git commit -m "chore(release): bump to ${{ steps.bump.outputs.version }} with hve-core@${{ steps.latest.outputs.short_sha }}"
+            git commit -m "chore(release): bump to ${NEW_VERSION} with hve-core@${LATEST_SHORT}"
             git push origin main
-            echo "::notice::Pushed release bump to v${{ steps.bump.outputs.version }} (hve-core@${{ steps.latest.outputs.short_sha }})"
+            echo "::notice::Pushed release bump to v${NEW_VERSION} (hve-core@${LATEST_SHORT})"
           else
             echo "::notice::No changes after regeneration — nothing to commit."
           fi

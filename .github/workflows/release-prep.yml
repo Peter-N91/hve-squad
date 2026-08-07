@@ -123,6 +123,7 @@ jobs:
         if: steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
+          NEW_VERSION: ${{ steps.prep.outputs.version }}
         run: |
           gh workflow run release.yml --ref main
-          echo "::notice::Triggered release.yml for v${{ steps.prep.outputs.version }}"
+          echo "::notice::Triggered release.yml for v${NEW_VERSION}"

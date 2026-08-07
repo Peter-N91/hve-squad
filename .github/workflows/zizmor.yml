@@ -35,9 +35,10 @@ jobs:
           enable-cache: false
 
       - name: Run zizmor (SARIF)
-        run: uvx zizmor --format sarif .github/workflows/ > results.sarif || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ZIZMOR_VERSION: '1.29.0'
+        run: uvx "zizmor==${ZIZMOR_VERSION}" --format sarif .github/workflows/ > results.sarif || true
 
       - name: Upload SARIF file
         if: (!cancelled())
