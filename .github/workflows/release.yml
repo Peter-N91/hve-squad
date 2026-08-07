@@ -90,8 +90,9 @@ jobs:
       # ── Guard: skip if tag already exists (e.g. re-run, stale push) ──────
       - name: Check if tag already exists
         id: tag_check
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          TAG="${{ steps.version.outputs.tag }}"
           if git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $2}' | grep -qx "refs/tags/$TAG"; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Tag $TAG already exists — skipping release."
@@ -103,8 +104,9 @@ jobs:
       - name: Extract CHANGELOG entry
         if: steps.tag_check.outputs.exists == 'false'
         id: changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           # Matches lines like "## [0.8.2] - 2026-06-17"
           NOTES=$(awk -v ver="$VERSION" \
             'BEGIN{found=0}
@@ -121,11 +123,13 @@ jobs:
         if: steps.tag_check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          DRAFT: ${{ inputs.draft }}
         run: |
           ARGS=(
-            "${{ steps.version.outputs.tag }}"
-            --title "${{ steps.version.outputs.tag }}"
+            "$TAG"
+            --title "$TAG"
             --notes-file /tmp/release_notes.md
           )
-          [[ "${{ inputs.draft }}" == "true" ]] && ARGS+=(--draft)
+          [[ "$DRAFT" == "true" ]] && ARGS+=(--draft)
           gh release create "${ARGS[@]}"
