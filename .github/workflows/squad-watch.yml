@@ -72,6 +72,7 @@ on:
   pull_request:
     types: [labeled]
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual test trigger (write access required); inputs are used only in the concurrency key and passed via env.
     inputs:
       issue_number:
         description: 'Issue number to run autopilot against (for testing the loop by hand)'
@@ -302,6 +303,9 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          # The squad runs with --allow-all-tools on attacker-authored issue content;
+          # keep the token out of .git/config so a prompt-injected run can't read it.
+          persist-credentials: false
           ref: ${{ steps.prep.outputs.kind == 'pull_request' && github.event.pull_request.head.sha || '' }}
 
       - name: Set up Node.js
@@ -352,6 +356,7 @@ jobs:
           BRANCH: ${{ steps.prep.outputs.branch }}
           SUB_SQUAD: ${{ steps.prep.outputs.subSquad }}
           ISSUE: ${{ steps.prep.outputs.target }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           git add -A
@@ -373,6 +378,8 @@ jobs:
           fi
 
           git commit -m "chore: address #${ISSUE} via squad watch mode"
+          # Checkout no longer persists credentials, so authenticate the push explicitly.
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           git push origin "$BRANCH"
 
           BODY="$RUNNER_TEMP/pr-body.md"
