@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.5] - 2026-08-07
+
+### Security
+
+- **Hardened GitHub Actions workflows** against script injection, excessive permissions, and unpinned tooling.
+    * Refactored squad-watch.yml to separate untrusted content processing from privileged repository mutations.
+    * Restricted the Copilot interpretation job to read-only permissions and moved patch application, PR creation, review posting, and escalation into independently scoped jobs.
+    * Replaced the broad sync token with a dedicated COPILOT_GITHUB_TOKEN for Copilot CLI authentication.
+    * Passed dynamic workflow values through environment variables instead of interpolating expressions directly into shell and PowerShell scripts.
+    * Pinned the Copilot CLI to 1.0.78 and zizmor to 1.29.0 for reproducible execution.
+    * Added short-lived artifact handoffs for generated patches and PR review content.
+    * Preserved automated draft PR creation, no-change notifications, unauthorized-trigger escalation, and failure reporting under the new privilege-separated design.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.12.5"
+```
+
+[0.12.5]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.12.5
+
 ## [0.12.4] - 2026-08-07
 
 ### Security
