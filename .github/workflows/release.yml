@@ -9,7 +9,7 @@ name: Release
 #                       to already contain an entry for that version.
 on:
   workflow_dispatch:
-    # checkov:skip=CKV_GHA_7:Manual release trigger (write access required); the version override is validated as semver before use.    
+    # checkov:skip=CKV_GHA_7:Manual release trigger (write access required); the version override is validated as semver before use.
     inputs:
       version:
         description: 'Optional: override version in apm.yml (e.g. 0.9.0). Leave blank to release the version already in apm.yml.'
