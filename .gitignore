@@ -52,3 +52,5 @@ apm_modules/
 !.copilot-tracking/squad/members/pr-*/**
 
 knowledge-docs/
+
+docs/planning/
