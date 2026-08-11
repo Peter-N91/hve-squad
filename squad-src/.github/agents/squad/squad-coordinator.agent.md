@@ -262,6 +262,8 @@ Gather each agent's structured response. Keep this turn lean: extract the decisi
 
 Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`. The scribe appends to `.copilot-tracking/squad/decisions.md` and `.copilot-tracking/squad/history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`. The coordinator does not write these files directly.
 
+Hand the turn's **state advance** on the same call: the mode in effect, the roles dispatched, and any escalation the turn raised or resolved, so the Scribe's Step 12 moves `state.json` forward with the logs it just appended. `state.json` is seeded at Init and is otherwise only as current as the last turn that advanced it, so a turn that appends a decision and leaves the status document behind makes every later turn read a squad that never moved.
+
 Always hand a consumption payload alongside the decision and history payloads so the Scribe can attribute each dispatch's estimated cost — this is mandatory, not best-effort, and it is part of a complete dispatch record (see *Dispatch Discipline* above). For every dispatched agent this turn supply:
 
 * **The resolved model and its source.** Resolve it through the ladder in *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md`: the headless `--model` pin, then a user-volunteered override, then the model the dispatch itself reported, then the agent's own `model:` frontmatter, then the session model. Pass `model` and `model_source` together. Never pass a model name you did not resolve — no tier-derived name, no plausible guess. `unknown` is always preferable to a fabricated attribution, because a ledger that names a model the operator never chose invites cost decisions based on a fiction.
@@ -286,6 +288,8 @@ Before returning any answer that reports a stage as run, verify it mechanically 
 1. the role's domain artifact on disk, at the role's `Deliverable Root` from `team.md` (see *Deliverable Roots* in `.github/instructions/squad/squad-roster.instructions.md`);
 2. a `history/<agent>.md` entry written by the Scribe;
 3. the per-dispatch consumption block on that entry.
+
+Then confirm once for the turn that `state.json` advanced: its `updated` and `turn` moved and its `activeRoles` name the roles dispatched. A `decisions.md` that grew while `state.json` did not is a partial hand-off in Step 5, not a completed turn.
 
 **Verification is an act, not an assertion.** List the directory and read the file. Never report a path the turn did not actually enumerate — a fabricated "verified" path is worse than an admitted gap, because it makes an empty run look complete. Quote the confirmed paths in the Step 6 synthesis so the user can open them; if a path cannot be quoted from something read this turn, it is not verified.
 

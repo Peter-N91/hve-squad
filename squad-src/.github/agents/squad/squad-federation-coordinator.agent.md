@@ -250,6 +250,8 @@ Gather each sub-squad's synthesized result. Keep the turn lean: extract the deci
 
 Hand the turn's federation-level decision and history payload to the Squad Scribe, scoped to the federation root (`.copilot-tracking/squad/`). The Scribe appends the cross-squad routing decision and rationale to the federation `decisions.md` and a per-sub-squad entry to `history/<sub-squad>.md`, each referencing the sub-squad's own decision entries so the two levels stay linked. Each sub-squad's own state (its `decisions.md`, `history/<agent>.md`, and consumption ledger under `members/<name>/`) is written by the Scribe during that sub-squad's scoped run. The coordinator never writes state directly.
 
+**The federation `state.json` advances on the same hand-off, not only on an autopilot meta-run.** Include the fields the turn changed — the sub-squad(s) that ran, the mode in effect, any escalation the run surfaced, and the cost totals summed across the sub-squads that ran — so the Scribe's Step 12 advances the federation status alongside the log it just appended. A federation whose `decisions.md` grows every turn while its `state.json` still reads `turn: 0` is reporting a squad that never moved, and the two files are read together by every later turn.
+
 ### Step 6: Synthesize and Escalate
 
 Synthesize the sub-squads' results into a concise answer, attributing outcomes to the sub-squad that produced them. Escalate to the user when routing was ambiguous, when a target sub-squad's roster is missing a required role, or when a sub-squad escalated its own turn.
@@ -259,12 +261,14 @@ Synthesize the sub-squads' results into a concise answer, attributing outcomes t
 Before reporting any sub-squad as done, verify both levels mechanically — never rely on the sub-squad's returned summary alone. For **each** sub-squad routed this turn, confirm:
 
 1. the sub-squad's inner-run proof-of-dispatch is satisfied — each stage it ran left its domain artifact at the rebased `Deliverable Root` under `members/<name>/` (see *Deliverable Roots* in `.github/instructions/squad/squad-roster.instructions.md`) and a `members/<name>/history/<agent>.md` entry with a consumption block;
-2. the federation-level `history/<sub-squad>.md` entry was written by the Scribe and references the sub-squad's own decision entries.
+2. the federation-level `history/<sub-squad>.md` entry was written by the Scribe and references the sub-squad's own decision entries;
+3. the federation `state.json` advanced this turn — its `updated` and `turn` moved and its `activeRoles` name the sub-squad(s) that ran.
 
 **Verification is an act, not an assertion.** List `members/<name>/history/` and the sub-squad's deliverable roots, and read what is there. Never write a path into a federation history entry that this turn did not enumerate. Two failure shapes are specific to this level and must be caught here rather than reported as success:
 
 * **Invented paths.** A federation history entry that cites a deliverable at a path which does not exist on disk. Cross-check every cited path before the Scribe writes the entry.
 * **A thin inner history.** `members/<name>/history/` holding fewer per-agent entries than the roles the inner run claims to have dispatched. That means the sub-squad's coordinator worked inline instead of dispatching, and the run is not complete no matter how finished the deliverables look.
+* **A federation root that only grows its decision log.** `decisions.md` carrying entries for turns that `state.json` never counted, or a federation root with no `history/` directory at all after routed turns. Both mean the federation-level hand-off in Step 5 was partial: the decision was appended and the per-sub-squad history and status advance were dropped.
 
 When either check fails, the sub-squad turn did **not** complete: re-dispatch the sub-squad's scoped run (or escalate) and do not report it as done. Never substitute inline coordinator reasoning for a sub-squad's unverified run, and never let a sub-squad's own claim of completion stand in for the evidence. Only after every routed sub-squad passes both checks may the coordinator present its Step 6 synthesis.
 
