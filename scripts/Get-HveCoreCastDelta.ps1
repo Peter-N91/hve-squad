@@ -260,9 +260,10 @@ function Get-SquadReferenceCount {
         'prompt' { "$escaped\.prompt\.md|/$escaped(?![\w-])" }
     }
 
-    # -Include against a directory path is inconsistent across platforms and silently
-    # matched nothing on the Linux runner, turning a breaking delta into a clean release.
-    $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File |
+    # -Force is load-bearing: every squad-src file lives under `.github/`, which Linux
+    # treats as hidden, and Get-ChildItem skips hidden entries without it. Windows has no
+    # such rule, so the scan matched everything locally and nothing on the runner.
+    $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File -Force |
             Where-Object { $_.Extension -in '.md', '.yml' })
 
     if ($files.Count -eq 0) {
