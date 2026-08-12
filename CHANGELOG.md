@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-08-12
+
+### Changed
+
+- **hve-core 3d681c9 renamed the whole `product-owner` backlog cast.** `ADO Backlog Manager`, `AzDO PRD to WIT`, `GitHub Backlog Manager`, `Jira Backlog Manager`, `Jira PRD to WIT`, `Agile Coach`, and `Product Manager Advisor` no longer ship. `product-owner` now resolves to the new dispatchable `Functional Planner` (PRD-to-work-item-hierarchy planning across Azure DevOps, GitHub, and Jira), keeping `Issue Triage Agent` as its single-issue-triage alternate. `intake-validator` now defaults to `PRD Quality Reviewer` instead of the retired advisory agent. `Squad Backlog Executor` now runs the HVE Core `backlog-execute` skill and also writes to GitHub, alongside Azure DevOps and Jira, through the new `ADO Backlog Executor`, `GitHub Backlog Executor`, and `Jira Backlog Executor` agents (`squad-src/.github/instructions/squad/squad-roster.instructions.md`, `squad-src/.github/instructions/squad/squad-routing.instructions.md`, `squad-src/.github/skills/squad/SKILL.md`, `squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-backlog-executor.agent.md`). `apm.yml` now pins hve-core `3d681c92ff25fc307778f545446b54cf9b26a057`.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.13.0"
+```
+
+[0.13.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.13.0
+
 ## [0.12.11] - 2026-08-12
 
 ### Fixed
