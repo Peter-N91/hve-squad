@@ -53,7 +53,7 @@ The Federation plan meta-stage orders sub-squads before any inner run starts:
 * **Parallel when independent.** Sub-squads with no declared dependency between them are marked parallel-eligible and may run their inner autopilot runs concurrently when the runtime supports concurrent dispatch. Sequential execution is the default; parallel runs only when the sub-squads are explicitly independent.
 * **Confirmed at the first gate.** The coordinator proposes the inferred order and confirms it with the user at the build or first gate rather than assuming it silently.
 
-Cross-sub-squad handoff of a producer's deliverables to a downstream sub-squad flows through the producer sub-squad's recorded artifacts under `members/<producer>/`, which the downstream sub-squad's inner run consumes as research input.
+Cross-sub-squad handoff of a producer's deliverables to a downstream sub-squad flows through the producer sub-squad's recorded artifacts under `members/<producer>/`, which the downstream sub-squad's inner run consumes as research input. The mechanism is not implicit discovery: the coordinator resolves the producer's artifact paths, verifies them on disk, and hands them to the consumer as read-only inputs, per *Cross-Sub-Squad Handoff* in `.github/instructions/squad/squad-federation.instructions.md`. A meta-stage whose producer artifact is missing stops the pipeline rather than letting the consumer re-derive it.
 
 ## Federation Human Gates
 

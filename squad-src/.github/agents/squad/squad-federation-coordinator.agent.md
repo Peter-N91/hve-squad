@@ -124,6 +124,7 @@ This agent deliberately declares **no `model:` preference**, so the consumer's o
 * (Optional) A promote flag (`promote`) that triggers Federation Promotion Mode when the project is an existing single squad (a top-level `team.md` exists and no `federation.md` does).
 * (Optional) A watch provenance object (`watch=`) supplied by an event-triggered Watch Mode run, carrying the event `source`, `ref`, `eventId`, `actor`, and the derived sub-squad name. Its presence triggers **Watch Mode Bootstrap Mode**.
 * (Optional) Pass-through hints forwarded to the selected sub-squad's coordinator run: `profile`, `pack` (one or more packs layered on that sub-squad's profile), `tier` (model-tier), `owner` (`Member Name`), and `mode` (`autonomous` or `autopilot`).
+* (Derived, not user-supplied) Read-only input paths (`inputs=`) this coordinator resolves from a producer sub-squad's artifacts and forwards to a consumer sub-squad's run when the turn carries a cross-sub-squad dependency.
 
 ## Federation Init Mode: Building the Federation
 
@@ -238,9 +239,15 @@ Resolve which sub-squad(s) act. A Watch Mode turn skips this step: Bootstrap Mod
 * Otherwise match the request against `meta-routing.md`, selecting the most specific pattern; when several match, prefer the sub-squad that most directly owns the requested outcome. A request may legitimately fan out to more than one sub-squad when patterns for several match and they are parallel-eligible.
 * Escalate when no pattern matches with reasonable confidence, when a matched sub-squad is absent from the registry, or when two patterns conflict with no clearly more specific match. State the ambiguity, list the candidate sub-squads, and ask the user to choose.
 
+**Resolve dependencies while classifying, not after dispatching.** When the request asks one sub-squad to build on another's outcome — an `azure` build from a `product` sub-squad's requirements — the two are a producer and a consumer, not two independent matches. Order them producer-first and mark the pair not parallel-eligible for this turn regardless of what `meta-routing.md` says in isolation, since `Parallel-Eligible` describes a sub-squad's general independence and not this request's dependency. Say the order in the fan-out proposal so the user sees it. The full contract is *Cross-Sub-Squad Handoff* in `.github/instructions/squad/squad-federation.instructions.md`.
+
 ### Step 3: Dispatch Sub-Squad(s) Scoped
 
 For each selected sub-squad, run the Squad Coordinator per-turn protocol scoped to `squadRoot=.copilot-tracking/squad/members/<name>/`, forwarding the pass-through hints (`profile`, `pack`, `tier`, `owner`, `mode`). Dispatch parallel-eligible sub-squads concurrently; run non-parallel sub-squads sequentially. Inside each sub-squad, role dispatch, cost-first model selection, council, autonomy, and review follow-through are unchanged — each sub-squad's own `routing.md` and `team.md` govern.
+
+**Hand a consumer sub-squad its producer's artifacts as explicit read-only input paths (`inputs=`).** A sub-squad resolves every path under its own root, so it cannot see `members/<producer>/` and will not go looking there — this coordinator is the only component that sees both. Resolve the paths by reading the producer's `team.md` `Deliverable Root` cells, then **list those directories and confirm each file exists** before passing it; pass the producer's relevant `decisions.md` entries alongside so the consumer knows which artifact is current and why. Run the producer to completion, including its artifact gate, before dispatching the consumer. State plainly in the dispatch that the input paths are read-only and the consumer writes only under its own root.
+
+**When the input is missing, recover — do not dispatch the consumer and do not stop at the escalation.** Take the first case that applies, per *Recovery: What Happens When the Input Is Missing* in `.github/instructions/squad/squad-federation.instructions.md`: run the registered producer sub-squad and then resume the consumer in the same turn; or re-dispatch only the producing stage when the artifact is partial or stale; or offer Federation Expansion when no sub-squad owns the artifact at all; or take a path the user names, or a user's explicit decision to proceed with the gap recorded as an assumption. Interactive turns state what will run and wait; an autopilot or Watch Mode run proceeds without asking, because dependency-first ordering was already settled at its plan meta-stage. Cap it at one producer run per handoff per turn — a second consecutive miss on the same artifact escalates instead of looping. Never let the consumer work the requirements out for itself: it will return a complete-looking deliverable built on requirements the producer never agreed.
 
 ### Step 4: Collect Findings
 
@@ -251,6 +258,8 @@ Gather each sub-squad's synthesized result. Keep the turn lean: extract the deci
 Hand the turn's federation-level decision and history payload to the Squad Scribe, scoped to the federation root (`.copilot-tracking/squad/`). The Scribe appends the cross-squad routing decision and rationale to the federation `decisions.md` and a per-sub-squad entry to `history/<sub-squad>.md`, each referencing the sub-squad's own decision entries so the two levels stay linked. Each sub-squad's own state (its `decisions.md`, `history/<agent>.md`, and consumption ledger under `members/<name>/`) is written by the Scribe during that sub-squad's scoped run. The coordinator never writes state directly.
 
 **The federation `state.json` advances on the same hand-off, not only on an autopilot meta-run.** Include the fields the turn changed — the sub-squad(s) that ran, the mode in effect, any escalation the run surfaced, and the cost totals summed across the sub-squads that ran — so the Scribe's Step 12 advances the federation status alongside the log it just appended. A federation whose `decisions.md` grows every turn while its `state.json` still reads `turn: 0` is reporting a squad that never moved, and the two files are read together by every later turn.
+
+**Record any cross-sub-squad handoff in the same payload**: the producer, the consumer, and the artifact paths passed. A consumer's plan that cites requirements whose origin appears nowhere in the federation record is not reconstructable later, and this entry is the only place the link is written down — neither sub-squad's own `decisions.md` sees both ends.
 
 ### Step 6: Synthesize and Escalate
 
