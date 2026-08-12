@@ -75,7 +75,7 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
-    [string]$SquadSourceRoot = 'squad-src',
+    [string]$SquadSourceRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) 'squad-src'),
 
     [Parameter(Mandatory = $false)]
     [string]$MarkdownPath,
@@ -241,7 +241,7 @@ function Get-SquadReferenceCount {
     )
 
     if (-not (Test-Path -LiteralPath $Root)) {
-        return [pscustomobject]@{ Count = 0; Files = @() }
+        throw "Squad source root '$Root' not found. The cross-check cannot run, and a guard that cannot read what it guards must not report a non-breaking verdict."
     }
 
     $escaped = [regex]::Escape($AgentName)
@@ -260,13 +260,21 @@ function Get-SquadReferenceCount {
         'prompt' { "$escaped\.prompt\.md|/$escaped(?![\w-])" }
     }
 
-    $hits = Get-ChildItem -LiteralPath $Root -Recurse -File -Include '*.md', '*.yml' -ErrorAction SilentlyContinue |
-        Select-String -Pattern $pattern -AllMatches -ErrorAction SilentlyContinue
+    # -Include against a directory path is inconsistent across platforms and silently
+    # matched nothing on the Linux runner, turning a breaking delta into a clean release.
+    $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File |
+            Where-Object { $_.Extension -in '.md', '.yml' })
 
-    $files = @($hits | ForEach-Object { $_.Path } | Sort-Object -Unique)
+    if ($files.Count -eq 0) {
+        throw "Squad source root '$Root' contains no .md or .yml files. Refusing to report zero references from an empty scan."
+    }
+
+    $hits = $files | Select-String -Pattern $pattern -AllMatches
+
+    $matchedFiles = @($hits | ForEach-Object { $_.Path } | Sort-Object -Unique)
     return [pscustomobject]@{
         Count = @($hits).Count
-        Files = $files
+        Files = $matchedFiles
     }
 }
 

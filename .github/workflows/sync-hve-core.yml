@@ -126,6 +126,12 @@ jobs:
       #    that happens the bump is refused and the run raises a labeled issue
       #    instead, which is what starts the squad through Watch Mode. Shipping the
       #    SHA anyway would release a squad whose roles resolve to nothing.
+      #
+      #    Every downstream bump step gates on `is_breaking == 'false'`, never on
+      #    `!= 'true'`. The negative form is also satisfied by an empty or unset
+      #    output, so a guard that crashed or never ran would read as a guard that
+      #    passed — which is exactly how 0.12.9 shipped a cast the squad no longer
+      #    resolves. Only an explicit `false` may release.
       - name: Guard against a breaking cast delta
         if: steps.check.outputs.skip != 'true'
         id: castguard
@@ -289,7 +295,7 @@ jobs:
       # ── Regenerate apm.yml at the new SHA ────────────────────────────────
       #    Script clones microsoft/hve-core at the SHA, rewrites all entries,
       - name: Regenerate apm.yml dependencies
-        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false'
         env:
           LATEST_SHA: ${{ steps.latest.outputs.sha }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -305,7 +311,7 @@ jobs:
       #    clears the fragments it consumed. -AllowEmpty lets a pure pin move
       #    still ship as a patch when no fragments are pending.
       - name: Assemble release
-        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
         id: bump
         shell: pwsh
         env:
@@ -317,7 +323,7 @@ jobs:
 
       # ── Commit and push ───────────────────────────────────────────────────
       - name: Commit and push
-        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
           NEW_VERSION: ${{ steps.bump.outputs.version }}
@@ -341,7 +347,7 @@ jobs:
       # dispatch release.yml explicitly. It will read the new version from
       # apm.yml and cut the tag + GitHub Release.
       - name: Trigger release
-        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking != 'true' && inputs.dry_run != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
           RELEASE_VERSION: ${{ steps.bump.outputs.version }}
