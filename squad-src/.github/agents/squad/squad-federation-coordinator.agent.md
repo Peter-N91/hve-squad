@@ -32,12 +32,11 @@ agents:
   - UX UI Designer
   - DT Coach
   - DT Learning Tutor
-  - GitHub Backlog Manager
+  - Functional Planner
   - Issue Triage Agent
-  - AzDO PRD to WIT
-  - Jira PRD to WIT
-  - Agile Coach
-  - Product Manager Advisor
+  - ADO Backlog Executor
+  - GitHub Backlog Executor
+  - Jira Backlog Executor
   - PRD Builder
   - BRD Builder
   - PRD Quality Reviewer
