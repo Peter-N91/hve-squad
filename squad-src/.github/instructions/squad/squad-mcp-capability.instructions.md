@@ -17,7 +17,7 @@ The coordinator passes a capability hint to each dispatched role when the role n
 |--------------------|----------------------------------------------|---------------------------------------------------------------------------------|
 | diagram-rendering  | A draw.io MCP server when one is configured  | Render Mermaid in chat; or author Mermaid in repository markdown                |
 | ADO query          | `@azure-devops/mcp` (Microsoft official)     | Squad Researcher against the Azure DevOps REST API with a user-supplied PAT  |
-| tracker-write      | `@azure-devops/mcp` (ADO) or the `jira` skill (Jira) | **None.** The role returns `blocked` — see *No Fallback for Writes* below   |
+| tracker-write      | `@azure-devops/mcp` (ADO), `github` MCP (GitHub), or the `jira` skill (Jira) | **None.** The role returns `blocked` — see *No Fallback for Writes* below   |
 | Azure-pricing      | `msftnadavbh/AzurePricingMCP` community server | Squad Researcher against the Azure Retail Prices REST API (`https://prices.azure.com/api/retail/prices`) |
 | azure-resource     | `@azure/mcp` (official Azure MCP server)      | Squad Researcher against the Azure CLI (`az`) and the Azure Resource Graph / Resource Manager REST APIs using the user's `az login` context |
 | architecture-docs  | `microsoft-docs` MCP when configured         | Squad Researcher against `learn.microsoft.com` via web fetch                 |

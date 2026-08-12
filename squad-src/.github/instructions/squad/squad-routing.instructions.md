@@ -55,7 +55,7 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | design, UX, UI, wireframe, journey, interaction design | UX UI Designer     | confirm       | yes               |
 | requirements, BRD, PRD, user story, acceptance criteria | PRD Builder | confirm       | yes               |
 | journey map, persona, design thinking, empathize, ideate, problem statement | DT Coach | confirm | yes               |
-| roadmap, backlog, epic, sprint, refine, prioritize, story | Agile Coach | confirm    | no                |
+| roadmap, backlog, epic, sprint, prioritize, story, PRD to work items, work item hierarchy | product-owner | confirm    | no                |
 | create work items in ADO, push backlog to Azure DevOps, create Jira issues, apply the handoff, execute handoff, sync work items to the tracker | backlog-executor | confirm | no |
 | GitLab merge request, GitLab pipeline, GitLab issue, open an MR | product-owner    | escalate      | no                |
 | experiment, hypothesis, validate assumption, MVE, riskiest assumption | Experiment Designer | confirm | yes        |

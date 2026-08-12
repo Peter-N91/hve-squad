@@ -1,0 +1,6 @@
+---
+bump: minor
+type: Changed
+---
+
+- **hve-core 3d681c9 renamed the whole `product-owner` backlog cast.** `ADO Backlog Manager`, `AzDO PRD to WIT`, `GitHub Backlog Manager`, `Jira Backlog Manager`, `Jira PRD to WIT`, `Agile Coach`, and `Product Manager Advisor` no longer ship. `product-owner` now resolves to the new dispatchable `Functional Planner` (PRD-to-work-item-hierarchy planning across Azure DevOps, GitHub, and Jira), keeping `Issue Triage Agent` as its single-issue-triage alternate. `intake-validator` now defaults to `PRD Quality Reviewer` instead of the retired advisory agent. `Squad Backlog Executor` now runs the HVE Core `backlog-execute` skill and also writes to GitHub, alongside Azure DevOps and Jira, through the new `ADO Backlog Executor`, `GitHub Backlog Executor`, and `Jira Backlog Executor` agents (`squad-src/.github/instructions/squad/squad-roster.instructions.md`, `squad-src/.github/instructions/squad/squad-routing.instructions.md`, `squad-src/.github/skills/squad/SKILL.md`, `squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`, `squad-src/.github/agents/squad/squad-backlog-executor.agent.md`). `apm.yml` now pins hve-core `3d681c92ff25fc307778f545446b54cf9b26a057`.

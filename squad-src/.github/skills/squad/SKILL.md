@@ -127,7 +127,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 The intake gate is the operator's pre-work readiness check on the inputs a turn builds on. It is conditional: the coordinator runs it only when the turn's work is grounded in requirement or input artifacts (a PRD, BRD, specification, requirements document, user story, design document, transcript, or a user-referenced input file) and advances toward a plan, a build, or a deliverable. When no input grounds the work, the gate is a no-op. The full protocol lives in `.github/instructions/squad/squad-intake-gate.instructions.md`; the operator's view is:
 
-1. The coordinator dispatches `intake-validator` (seeded in the `product` and `full` profiles and addable to any roster, resolved by input type per the roster Selection Cue: PRD → PRD Quality Reviewer, BRD → BRD Quality Reviewer, otherwise Product Manager Advisor) to assess the inputs for completeness, clarity, testability, consistency, and scope boundaries. When the active roster lacks `intake-validator`, the coordinator offers to add it rather than skipping the check.
+1. The coordinator dispatches `intake-validator` (seeded in the `product` and `full` profiles and addable to any roster, resolved by input type per the roster Selection Cue: PRD → PRD Quality Reviewer, BRD → BRD Quality Reviewer, otherwise the default PRD Quality Reviewer) to assess the inputs for completeness, clarity, testability, consistency, and scope boundaries. When the active roster lacks `intake-validator`, the coordinator offers to add it rather than skipping the check.
 2. The validator returns a verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`) with its blocking and non-blocking gaps and any clarifying questions.
 3. The Squad Scribe appends a single `## Intake Readiness Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
 4. On `Ready` or `Ready-With-Gaps`, downstream planning and implementation proceed (non-blocking gaps carried as recorded assumptions). On `Not-Ready`, the coordinator runs the bounded auto-remediation loop — dispatch `analyst` or `product-owner` to fill the blocking gaps, then re-validate; capped at two cycles — and escalates when a gap needs a human decision, the cap is reached with blocking gaps open, or the blocking-gap set stops shrinking.
@@ -231,13 +231,13 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 | observability   | Eta-2       | Squad Observability Planner  | —                                                      | runSubagent / task | default                 | .copilot-tracking/observability-plans/ |
 | modernizer      | Rho         | Squad Modernization Planner  | Squad SQL Migration Advisor                            | runSubagent / task | default                 | .copilot-tracking/plans/              |
 | prompt-engineer | Sigma       | Squad Prompt Engineer        | Evaluation Dataset Creator, Vally Test Author          | runSubagent / task | default                 | .copilot-tracking/prompts/            |
-| analyst         | Omega       | PRD Builder                  | BRD Builder, Product Manager Advisor, Meeting Analyst  | runSubagent / task | default                 | .copilot-tracking/plans/              |
-| product-owner   | Alpha-2     | GitHub Backlog Manager       | Issue Triage Agent, Agile Coach                        | runSubagent / task | default                 | .copilot-tracking/plans/              |
+| analyst         | Omega       | PRD Builder                  | BRD Builder, Meeting Analyst                           | runSubagent / task | default                 | .copilot-tracking/plans/              |
+| product-owner   | Alpha-2     | Functional Planner           | Issue Triage Agent                                     | runSubagent / task | default                 | .copilot-tracking/plans/              |
 | presenter       | Tau         | PowerPoint Subagent          | —                                                      | runSubagent / task | default                 | .copilot-tracking/ppt/<date>/<slug>/  |
 | technical-writer | Upsilon    | Squad Technical Writer       | —                                                      | runSubagent / task | fast                    | docs/                                 |
 | experimenter    | Beta-2      | Experiment Designer          | —                                                      | runSubagent / task | default                 | .copilot-tracking/plans/              |
 | data-scientist  | Gamma-2     | DS Gen Data Spec             | DS Gen Jupyter Notebook, DS Gen Streamlit Dashboard    | runSubagent / task | default                 | outputs/                              |
-| intake-validator |            | Product Manager Advisor      | PRD Quality Reviewer, BRD Quality Reviewer             | runSubagent / task | fast                    | —                                     |
+| intake-validator |            | PRD Quality Reviewer         | BRD Quality Reviewer                                   | runSubagent / task | fast                    | —                                     |
 | scribe          |             | Squad Scribe                 | —                                                      | runSubagent / task | fast                    | (squad state)                         |
 | devrel          |             | —                            | —                                                      | —                  | — (no backing skill)    | —                                     |
 ```
@@ -271,7 +271,7 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | design, UX, UI, wireframe, journey, interaction design | UX UI Designer          | confirm       | yes               |
 | requirements, BRD, PRD, user story, acceptance criteria | PRD Builder                 | confirm       | yes               |
 | journey map, persona, design thinking, empathize, ideate, problem statement | DT Coach | confirm | yes           |
-| roadmap, backlog, epic, sprint, refine, prioritize, story | Agile Coach               | confirm       | no                |
+| roadmap, backlog, epic, sprint, prioritize, story, PRD to work items, work item hierarchy | product-owner | confirm    | no                |
 | create work items in ADO, push backlog to Azure DevOps, create Jira issues, apply the handoff, execute handoff, sync work items to the tracker | backlog-executor | confirm | no |
 | GitLab merge request, GitLab pipeline, GitLab issue, open an MR | product-owner        | escalate      | no                |
 | experiment, hypothesis, validate assumption, MVE, riskiest assumption | Experiment Designer | confirm | yes         |

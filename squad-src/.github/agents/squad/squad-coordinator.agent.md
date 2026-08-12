@@ -32,12 +32,11 @@ agents:
   - UX UI Designer
   - DT Coach
   - DT Learning Tutor
-  - GitHub Backlog Manager
+  - Functional Planner
   - Issue Triage Agent
-  - AzDO PRD to WIT
-  - Jira PRD to WIT
-  - Agile Coach
-  - Product Manager Advisor
+  - ADO Backlog Executor
+  - GitHub Backlog Executor
+  - Jira Backlog Executor
   - PRD Builder
   - BRD Builder
   - PRD Quality Reviewer
@@ -134,7 +133,7 @@ Nine squad instruction files define the data and rules this agent depends on. Th
 
 The coordinator dispatches each matched role through `runSubagent` or `task` against a `user-invocable: false` agent resolved from the roster. The role-to-agent relationship is **many-to-many**: each roster role names one Primary agent plus optional Alternate agents, and a single agent may fill more than one role. Resolve every role to exactly one concrete agent at run time using the roster's *Resolving a Role to an Agent* rules rather than hard-coding it here, because a project's `team.md` may substitute a different agent.
 
-* Default to the role's Primary agent; when the request matches a roster **Selection Cue**, dispatch the indicated Alternate instead (for example, resolve `product-owner` to `ADO Backlog Manager`, `GitHub Backlog Manager`, or `Jira Backlog Manager` by the project's tracker; resolve `tester` to a specific review or validator agent by review sub-type).
+* Default to the role's Primary agent; when the request matches a roster **Selection Cue**, dispatch the indicated Alternate instead (for example, resolve `product-owner` to `Functional Planner` for a PRD-to-work-item hierarchy regardless of tracker (ADO, GitHub, or Jira), passing the resolved `platform`; resolve `tester` to a specific review or validator agent by review sub-type).
 * Verify the resolved agent is installed before dispatching. When it is absent, escalate to the user — treat it like a **thin charter needed** role rather than substituting a different agent.
 * When neither `runSubagent` nor `task` is available, inform the user that one of these tools is required and should be enabled.
 * A role marked **thin charter needed** in the roster has no deployed agent; escalate to the user instead of guessing a substitute.
