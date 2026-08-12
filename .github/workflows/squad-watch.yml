@@ -404,6 +404,13 @@ jobs:
           MODEL_OVERRIDE: ${{ inputs.model }}
         run: |
           set -euo pipefail
+          # Fail on the missing secret rather than on the CLI's generic "Authentication
+          # failed", which reads like an expired token and sends you looking at the PAT
+          # you do have instead of the one you never created.
+          if [[ -z "${COPILOT_GITHUB_TOKEN}" ]]; then
+            echo "::error::Secret COPILOT_GITHUB_TOKEN is not set. Watch Mode needs a dedicated fine-grained PAT with the 'Copilot Requests' permission; see *Required configuration* at the top of this workflow. GH_TOKEN and SYNC_DEPS_TOKEN cannot substitute for it."
+            exit 1
+          fi
           RUN_MODEL="${MODEL_OVERRIDE:-$SQUAD_MODEL}"
           echo "::notice::Running the squad on model '${RUN_MODEL}'."
           copilot -p "$(cat "$SQUAD_PROMPT_FILE")" \
@@ -461,9 +468,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ needs.interpret.outputs.target }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh issue comment "$ISSUE" --body "Watch Mode ran but produced no changes. Run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # --repo is required: this step runs before the conditional checkout, so gh has
+          # no git remote to infer from and would exit 'not a git repository'.
+          gh issue comment "$ISSUE" --repo "$REPO" --body "Watch Mode ran but produced no changes. Run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Checkout
         if: needs.interpret.outputs.hasChanges == 'true'
@@ -610,7 +620,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ needs.interpret.outputs.target }}
+          REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh issue comment "$ISSUE" \
+          # --repo is required: this job never checks out, so gh has no git remote to infer
+          # from and would exit 'not a git repository' - silently losing the escalation on
+          # exactly the runs that most need to reach a human.
+          gh issue comment "$ISSUE" --repo "$REPO" \
             --body "Watch Mode run failed. This needs a human. Run log: ${RUN_URL}"
