@@ -5,6 +5,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.10] - 2026-08-12
+
+### Fixed
+
+- **The cast guard could not see `squad-src/` on the runner, because Linux hides dot-directories.**
+  Every file in `squad-src/` lives under `.github/`, and a dot-prefixed entry is hidden on Linux, so
+  the `Get-ChildItem -Recurse` behind the reference cross-check never descended past `squad-src/`
+  and found zero references to anything. Windows has no dot-file convention, so the identical scan
+  matched all 53 files on a developer machine — which is why `v0.12.9` shipped a pin that removed
+  the entire `product-owner` cast while the guard reported `non-breaking`, and why nobody could
+  reproduce it locally. The scan now passes `-Force`
+  (`scripts/Get-HveCoreCastDelta.ps1`).
+- **The fail-closed guard did its job on first contact.** The preceding release turned the silent
+  zero into a hard stop, and the next manual run failed at the guard with `contains no .md or .yml
+  files` instead of quietly releasing. That failure is what identified the real cause; a guard that
+  refuses to answer when it cannot read its input is worth more than one that guesses.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.12.10"
+```
+
+[0.12.10]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.12.10
+
 ## [0.12.9] - 2026-08-12
 
 ### Fixed
