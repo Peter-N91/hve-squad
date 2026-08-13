@@ -279,6 +279,7 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autonomous.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autopilot.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-council.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-discovery-gate.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-federation-autopilot.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-federation.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-intake-gate.instructions.md

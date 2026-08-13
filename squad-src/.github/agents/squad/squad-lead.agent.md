@@ -32,6 +32,7 @@ This charter exists because the HVE Core planning capability ships as the `rpi-p
 
 * The request being planned, and the research artifacts it is grounded in.
 * The dispatching team's roster, so deliverables are assigned only to roles that exist.
+* (Optional) The discovery brief, whose chosen direction, scope boundaries, and success measure the plan must stay inside.
 * (Optional) The Intake Readiness Verdict, whose recorded assumptions the plan must carry forward.
 * (Optional) Council conditions from a `Go-With-Conditions` verdict that constrain the plan.
 * (Optional) A squad-root path (`squadRoot`) identifying which squad or sub-squad dispatched this work.
@@ -44,7 +45,7 @@ Read the `rpi-plan` skill and every research artifact cited for this run. When t
 
 ### Step 2: Author the Plan
 
-Produce the plan per the skill's structure, writing it under `.copilot-tracking/plans/`. Sequence the work into numbered phases with explicit success criteria per phase. Carry forward every assumption recorded by the intake gate and every council condition supplied.
+Produce the plan per the skill's structure, writing it under `.copilot-tracking/plans/`. Sequence the work into numbered phases with explicit success criteria per phase. Carry forward every assumption recorded by the intake gate and every council condition supplied, and keep the plan inside the scope boundaries the discovery brief set when one exists.
 
 ### Step 3: Enumerate the Deliverables
 

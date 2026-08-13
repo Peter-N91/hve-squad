@@ -14,10 +14,11 @@ metadata:
 
 The squad is a user-invocable Squad Coordinator that dispatches a reusable cast of deployed HVE Core agents in parallel and persists roster, routing, decisions, and per-agent history under `.copilot-tracking/squad/`. There is no separate runtime: every squad verb is a thin convention over an existing HVE Core mechanism.
 
-This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements ten instruction files that auto-apply when squad state is touched:
+This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. It complements eleven instruction files that auto-apply when squad state is touched:
 
 * `.github/instructions/squad/squad-roster.instructions.md` — roster schema and cast catalog.
 * `.github/instructions/squad/squad-routing.instructions.md` — routing table and escalation rules.
+* `.github/instructions/squad/squad-discovery-gate.instructions.md` — opt-in pre-work discovery gate, scoped to the `product` and `full` profiles, that brainstorms a brief when a turn has no requirement or input artifact to build on, with depth tiers, an offer-once rule, an unattended-run prohibition, and the Discovery Verdict schema.
 * `.github/instructions/squad/squad-intake-gate.instructions.md` — conditional pre-work intake gate that validates requirement and input artifacts before planning or implementation, with a bounded auto-remediation loop and the Intake Readiness Verdict schema.
 * `.github/instructions/squad/squad-state.instructions.md` — state layout, single-writer ownership, and tool-to-mechanism mapping.
 * `.github/instructions/squad/squad-council.instructions.md` — pre-implementation council protocol with parallel dispatch, most-restrictive-wins synthesis, and the Council Verdict schema.
@@ -123,6 +124,18 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 2. Synthesize the collected findings into a concise answer for the user.
 3. Escalate to the user — rather than acting — when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose.
 
+### Discovery Gate Procedure
+
+The discovery gate is the operator's brainstorming session for work that has nothing written down yet. It fires on the exact inverse of the intake gate's trigger: no requirement or input artifact is in scope, the turn advances toward a plan or deliverable, and the request states a goal rather than a settled task. It is **opt-in and offered, never automatic** — validation can be automatic, ideation cannot, because the value of a brainstorm is the human's ideas — and it is **scoped to the `product` and `full` profiles**, the only rosters that carry the roles it dispatches. The full protocol lives in `.github/instructions/squad/squad-discovery-gate.instructions.md`; the operator's view is:
+
+1. In a `product` or `full` squad the coordinator either honors a `discovery=quick|standard|deep|skip` input on `/squad`, or asks once per topic and waits. A declined offer is recorded and never re-asked for that topic; the input still works afterwards. In every other profile the gate is silent — no offer, no escalation — though an explicit `discovery=` is still honored with one combined escalation naming the roles it must add.
+2. The chosen depth decides who runs: `quick` dispatches `analyst`; `standard` dispatches `designer` (resolved to `DT Coach`) then `analyst`; `deep` adds `challenger` and `experimenter` before the write-up. `deep` needs `challenger`, which only `full` seeds, so a `product` squad is offered the role or `standard` instead.
+3. **The dispatched roles interview you.** Each puts its questions through the question tool one at a time and waits, the same discipline `Squad SQL Migration Advisor` follows. A role that cannot reach you returns its questions rather than inventing the answers — the session stops instead of banking a brief built from guesses.
+4. Only `analyst` writes a file: the brief, landing in the `analyst` Deliverable Root as `<date>-<topic-id>-brief.md`. It carries the problem, why now, scope boundaries, the success measure, the options considered **with the reason each was discarded**, the chosen direction, assumptions, and open questions.
+5. The Squad Scribe appends a single `## Discovery Verdict <timestamp> <topic-id>` entry to `decisions.md`, including on a `skip`. The coordinator does not write the verdict or the brief.
+6. The brief is itself a requirement artifact, so the **intake gate** then assesses it — resolved to an agent other than the one that wrote it, so the check is independent. The two gates are a chain, not a loop: a `Not-Ready` brief runs intake's own remediation loop and never re-opens discovery.
+7. The gate is **never available on an unattended path**. In Watch Mode the triggering issue or pull-request body becomes the input artifact and the intake gate assesses it instead, so an unattended run stays gated by validation rather than ungated.
+
 ### Intake Gate Procedure
 
 The intake gate is the operator's pre-work readiness check on the inputs a turn builds on. It is conditional: the coordinator runs it only when the turn's work is grounded in requirement or input artifacts (a PRD, BRD, specification, requirements document, user story, design document, transcript, or a user-referenced input file) and advances toward a plan, a build, or a deliverable. When no input grounds the work, the gate is a no-op. The full protocol lives in `.github/instructions/squad/squad-intake-gate.instructions.md`; the operator's view is:
@@ -131,7 +144,7 @@ The intake gate is the operator's pre-work readiness check on the inputs a turn 
 2. The validator returns a verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`) with its blocking and non-blocking gaps and any clarifying questions.
 3. The Squad Scribe appends a single `## Intake Readiness Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
 4. On `Ready` or `Ready-With-Gaps`, downstream planning and implementation proceed (non-blocking gaps carried as recorded assumptions). On `Not-Ready`, the coordinator runs the bounded auto-remediation loop — dispatch `analyst` or `product-owner` to fill the blocking gaps, then re-validate; capped at two cycles — and escalates when a gap needs a human decision, the cap is reached with blocking gaps open, or the blocking-gap set stops shrinking.
-5. The verdict gates downstream dispatch and runs ahead of the Council and Implementation gates; a non-stale `Ready` verdict for the same unchanged inputs is reused rather than re-run.
+5. The verdict gates downstream dispatch and runs ahead of the Council and Implementation gates, and behind the discovery gate when one ran; a non-stale `Ready` verdict for the same unchanged inputs is reused rather than re-run.
 
 ### Council Procedure
 
@@ -160,7 +173,7 @@ The opt-in `auto-validated` tier lets a council validate a developer's output on
 The opt-in `mode=autopilot` runs the full delivery pipeline end-to-end, stopping for the human only at impactful actions and final-outcome validation. The full protocol lives in `.github/instructions/squad/squad-autopilot.instructions.md`; the operator's view is:
 
 1. The user opts in per turn by passing `mode=autopilot` to `/squad`. Without that input, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing tier.
-2. The coordinator sequences the pipeline: a conditional intake gate (when the work is grounded in requirement or input artifacts) → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn. For a profile that carries two or more deliverable-producing roles (`product` and `full`), the implement stage fans out across the owning specialists — the plan enumerates the deliverables and the coordinator dispatches each specialist in dependency order, each a Scribe-recorded stage — instead of a single `developer`; every other profile keeps the single-build implement stage.
+2. The coordinator sequences the pipeline: an opt-in discovery gate (offered before the pipeline starts when nothing is written down yet) → a conditional intake gate (when the work is grounded in requirement or input artifacts) → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn. For a profile that carries two or more deliverable-producing roles (`product` and `full`), the implement stage fans out across the owning specialists — the plan enumerates the deliverables and the coordinator dispatches each specialist in dependency order, each a Scribe-recorded stage — instead of a single `developer`; every other profile keeps the single-build implement stage.
 3. The pipeline stops only at two Human Gate classes: an **Impactful-Action Gate** (deploy, `git push`/force-push, PR merge, schema migration, data deletion, destructive infra ops, secret rotation, or any user-marked irreversible action) and a **Risk Gate** (any `Stop` verdict, `Risk: High` from security/cost/RAI, `confirm`-tier cost move, compliance violation, validator divergence, or cost-ceiling breach).
 4. Autopilot never auto-releases: after review it fires a `final-outcome` notification to the registered contact and waits for human validation before any release-tier action.
 5. The Scribe writes a per-run summary to `history/autopilot-run-<id>.md` (append-only by topic-id) and the notification records to `notifications.md`.
@@ -262,6 +275,7 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | write tests, add test coverage, run the tests, test plan, test case, edge case, boundary case, hostile input, reproduce the bug, regression test, flaky test, exploratory testing | qa-engineer | confirm | no |
 | challenge, pressure-test, poke holes, devil's advocate, what could go wrong | challenger | auto | yes         |
 | author prompt, write agent file, refactor instructions, analyse skill | prompt-engineer | confirm | no         |
+| brainstorm, ideate, shape this idea, explore options, what should we build, help me think through, we want to, kick off a brief | designer, analyst | confirm | no |
 | validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
 | security, threat, vulnerability, STRIDE    | Security Planner             | confirm       | yes               |
 | supply chain, SBOM, SLSA, provenance, OpenSSF Scorecard, Sigstore, signed release, dependency pinning | supply-chain | confirm | yes         |
@@ -312,7 +326,7 @@ description: "Append-only log of squad decisions and their rationale"
 
 # Squad Decisions
 
-Entries are appended below in chronological order. Each entry records the decision, its rationale, the turn it was made on, and a reference to an ADR when the decision is architecturally significant. Council Verdicts use the `## Council Verdict <timestamp> <topic-id>` heading and the schema in `.github/instructions/squad/squad-council.instructions.md`. Prior entries are never edited or removed.
+Entries are appended below in chronological order. Each entry records the decision, its rationale, the turn it was made on, and a reference to an ADR when the decision is architecturally significant. Council Verdicts use the `## Council Verdict <timestamp> <topic-id>` heading and the schema in `.github/instructions/squad/squad-council.instructions.md`; Discovery Verdicts and Intake Readiness Verdicts use their own headings and schemas from `.github/instructions/squad/squad-discovery-gate.instructions.md` and `.github/instructions/squad/squad-intake-gate.instructions.md`. Prior entries are never edited or removed.
 
 <!-- Append new decision entries below this line. -->
 

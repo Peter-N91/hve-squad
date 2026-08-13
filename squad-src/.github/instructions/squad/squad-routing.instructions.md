@@ -46,6 +46,7 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | write tests, add test coverage, run the tests, test plan, test case, edge case, boundary case, hostile input, reproduce the bug, regression test, flaky test, exploratory testing | qa-engineer | confirm | no |
 | challenge, pressure-test, poke holes, devil's advocate, what could go wrong | challenger | auto | yes               |
 | author prompt, write agent file, refactor instructions, analyse skill | prompt-engineer | confirm | no               |
+| brainstorm, ideate, shape this idea, explore options, what should we build, help me think through, we want to, kick off a brief | designer, analyst | confirm | no |
 | validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
 | security, threat, vulnerability, STRIDE    | Security Planner       | confirm       | yes               |
 | supply chain, SBOM, SLSA, provenance, OpenSSF Scorecard, Sigstore, signed release, dependency pinning | supply-chain | confirm | yes               |
@@ -86,8 +87,9 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 
 ### Rows That Need a Word of Explanation
 
-Twelve default rows do not mean quite what their keywords suggest:
+Thirteen default rows do not mean quite what their keywords suggest:
 
+* **The brainstorm row is the discovery gate's front door, not a separate capability.** It names `designer, analyst` because those are the roles the gate dispatches, and matching it runs the gate's offer rather than dispatching them directly. The row is seeded only into `product` and `full`, the profiles the gate is scoped to; elsewhere it is filtered out and a brainstorm-shaped request falls through to the `design, UX, UI` row or the `requirements, BRD, PRD` row. It does not overlap either of those even where all three are present: design work assumes a decided direction, and requirements authoring produces the full document a brief later grows into. When the request already names an input artifact, the intake gate owns it and this row does not match.
 * **`tester` and `qa-engineer` split on read versus write.** `tester` reads a change — a diff, or an implementation against a plan — and never authors or runs a test. `qa-engineer` writes the tests, runs them, and reports reproducible defects. "Review this change" is `tester`; "write tests for this" or "why does this break on empty input" is `qa-engineer`. The row is `confirm` and non-parallel because it writes files into the project's own test tree, which is a code change like any other.
 * **`release-engineer` builds the pipeline; it never runs a deployment.** Authoring and hardening a workflow, pinning actions, moving CI to OIDC, cutting build minutes, defining environments and approvals, and writing the rollout and rollback plan all land here. The moment the request is "deploy this to Azure", it is `deployer` behind the Impactful-Action Gate, and the moment it is "write the Bicep", it is `iac-author`. Its Azure DevOps reach is pipelines, builds, repos, and artifacts; work items stay with `product-owner` and `backlog-executor`.
 * **The two AWS rows mirror the Azure pair and never cross into it.** `aws-architect` designs and authors, `aws-diagnose` triages a live incident read-only. Neither reasons about Azure and neither is reached by the Azure keywords; a workload spanning both clouds needs both roles, which is exactly why AWS is a pack that layers onto any profile rather than a profile competing with `azure`.
@@ -108,7 +110,7 @@ The seeded `routing.md` contains only the rules whose role exists in the project
 
 When a request matches a pattern whose role is absent from the active roster, the coordinator escalates (see Escalation) and offers to add the role or switch profiles rather than dispatching a role that is not on the team.
 
-Ten rows never survive the initial filter in most projects, because no profile seeds their role. `intake-validator` is seeded only by `product` and `full`, and `backlog-executor` is an **opt-in role** seeded by no profile at all (see *Opt-In Roles* in `squad-roster.instructions.md`). The `pp-architect` and `pp-connector` rows belong to the `power-platform` **pack**, the `m365-agent-architect` and `m365-agent-integrator` rows to the `m365-copilot` pack, and the `aws-architect` and `aws-diagnose` rows to the `aws` pack; a pack is by definition never part of a profile (see *Squad Packs* in the same file). `qa-engineer` and `release-engineer` belong to no pack but are opt-in for the same underlying reason: their Primaries are registered **opt-in** external agents, and a registered-but-uninstalled role is never seeded. For all ten the escalation above is not a dead end but the designed entry point: the coordinator proposes adding the role — or, for a pack role, applying the whole pack — states what it would be able to do, names the install command and prerequisites its registered resources need, and continues the turn on acceptance.
+Eleven rows never survive the initial filter in most projects, because no profile seeds their role. `intake-validator` is seeded only by `product` and `full`, and `backlog-executor` is an **opt-in role** seeded by no profile at all (see *Opt-In Roles* in `squad-roster.instructions.md`). The `pp-architect` and `pp-connector` rows belong to the `power-platform` **pack**, the `m365-agent-architect` and `m365-agent-integrator` rows to the `m365-copilot` pack, and the `aws-architect` and `aws-diagnose` rows to the `aws` pack; a pack is by definition never part of a profile (see *Squad Packs* in the same file). `qa-engineer` and `release-engineer` belong to no pack but are opt-in for the same underlying reason: their Primaries are registered **opt-in** external agents, and a registered-but-uninstalled role is never seeded. For all ten the escalation above is not a dead end but the designed entry point: the coordinator proposes adding the role — or, for a pack role, applying the whole pack — states what it would be able to do, names the install command and prerequisites its registered resources need, and continues the turn on acceptance.
 
 ## Dispatch Rules
 
@@ -116,6 +118,22 @@ Ten rows never survive the initial filter in most projects, because no profile s
 * Dispatch all parallel-eligible roles for a turn concurrently; run non-parallel roles (such as planning and implementation) sequentially.
 * Resolve every matched role through the roster before dispatch. If a role maps to **thin charter needed**, escalate rather than guessing a substitute.
 * Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles.
+
+### Discovery Gate
+
+Before dispatching any planning-, implementation-, or deliverable-producing role whose work is **not grounded in any requirement or input artifact**, the coordinator offers the discovery gate defined in `.github/instructions/squad/squad-discovery-gate.instructions.md`. The gate is opt-in and profile-scoped: it fires only when (1) the active roster is `product` or `full`, (2) no requirement or input artifact is in scope, (3) the turn advances toward a plan, a build, or a deliverable, and (4) the request states a goal rather than a settled task — and then only when the user accepts the offer or supplied a `discovery=` input. The gate is offered rather than run automatically because validation can be automatic and ideation cannot; an unattended run never reaches it.
+
+When it fires:
+
+* The coordinator dispatches the chosen depth's roles in order — `analyst` for `quick`; `designer` then `analyst` for `standard`; `designer`, then `challenger` and `experimenter`, then `analyst` for `deep`. Each role interviews the user one question per turn through the question tool and returns findings; the Scribe appends a `## Discovery Verdict` to `decisions.md`.
+* Only `analyst` writes a file: the brief, landing in the `analyst` Deliverable Root as `<date>-<topic-id>-brief.md`.
+* The brief is a requirement artifact, so the **intake gate** then fires on it and assesses it, resolving `intake-validator` to an agent other than the brief's author.
+* A declined offer is recorded as a `Depth: skip` verdict and is never re-offered for the same topic; the user can still reach the gate through the `discovery=` input.
+* `deep` in a `product` squad needs `challenger`, which only `full` seeds, so the coordinator offers to add it or to run `standard` instead rather than silently dropping it.
+
+**Outside `product` and `full` the gate is silent** — no offer is made, and a matching request falls through to the normal routing rows. Those profiles do not carry `analyst`, so offering would open with a question and follow it with a second one asking to add a role the profile deliberately excludes. This is where the two gates differ on purpose: the intake gate *escalates* in a squad that lacks its role, because inputs that exist should not go unvalidated, while the discovery gate stays quiet, because an unrequested brainstorm is not a skipped check. An explicit `discovery=` input is still honored anywhere, with one combined escalation naming the roles it must add.
+
+The discovery gate and the intake gate fire on inverse triggers and can never both fire on the same inputs. Discovery runs first and produces what intake then validates.
 
 ### Intake Gate
 
@@ -129,7 +147,7 @@ When it fires:
 * A non-stale `Ready` verdict for the same unchanged inputs is reused rather than re-run.
 * When the active roster does not carry `intake-validator` (profiles other than `product` and `full`), the coordinator escalates and offers to add the role rather than skipping the check.
 
-The intake gate runs ahead of the Implementation Gate: ready inputs precede research and planning, which in turn precede implementation.
+The intake gate runs ahead of the Implementation Gate: ready inputs precede research and planning, which in turn precede implementation. It runs behind the discovery gate, which produces the inputs when there were none.
 
 ### Implementation Gate
 

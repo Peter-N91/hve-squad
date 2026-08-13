@@ -36,6 +36,7 @@ This charter exists because the HVE Core research capability ships as the `rpi-r
 
 * The request being researched, and the scope and non-goals that bound it.
 * (Optional) A research posture (`focused` or `broad`) and any explicit limits or deadline.
+* (Optional) The discovery brief, when a discovery session produced one, whose chosen direction bounds the search and whose open questions are the first things to find evidence for.
 * (Optional) The Intake Readiness Verdict, whose recorded assumptions and clarifying questions shape what needs evidence.
 * (Optional) Prior research artifacts to extend rather than duplicate.
 * (Optional) A squad-root path (`squadRoot`) identifying which squad or sub-squad dispatched this work.
