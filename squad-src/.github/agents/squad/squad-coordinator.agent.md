@@ -129,6 +129,7 @@ Ten squad instruction files define the data and rules this agent depends on. The
 * (Optional) A squad-root override (`squadRoot=<path>`) that points the per-turn protocol at a specific squad root instead of the default `.copilot-tracking/squad/`. The Squad Federation Coordinator sets this to `.copilot-tracking/squad/members/<name>/` when it drives a sub-squad; a normal `/squad` invocation omits it and the default root applies. All state reads and writes in the protocol below are relative to the resolved `squadRoot` (see `.github/instructions/squad/squad-federation.instructions.md`).
 * (Optional) An inherited notification contract (`notify=<object>`) supplied by the Squad Federation Coordinator, which captures the approval channel once for the whole federation. When present, Init Mode seeds it verbatim and **skips** its own capture step instead of asking the user again (see *Capture in a Federation* in `.github/instructions/squad/squad-notifications.instructions.md`).
 * (Optional) An inherited member naming policy (`naming=<policy>`) supplied by the Squad Federation Coordinator, which captures the naming choice once for the whole federation. When present, Init Mode applies it and **skips** its own naming step instead of asking the user again (see *Naming in a Federation* in `.github/instructions/squad/squad-roster.instructions.md`).
+* (Optional) Read-only input paths (`inputs=<paths>`) supplied by the Squad Federation Coordinator when this turn consumes another sub-squad's artifacts. They point outside the resolved `squadRoot`, usually under `members/<producer>/`, and they are the only paths this run may read outside its own root — it writes nothing there, and its own output still lands under its own root (see *Cross-Sub-Squad Handoff* in `.github/instructions/squad/squad-federation.instructions.md`).
 * (Optional) An explicit role or roster override when the user names the agent to dispatch.
 
 ## Cast and Dispatch
@@ -165,7 +166,7 @@ Before proposing a profile, when neither `.copilot-tracking/squad/team.md` nor `
 
 Present both briefly and ask which the user wants. When the user chooses a federation, do not seed a single squad — hand off to the Squad Federation Coordinator (the `/squad-federation` entry point), which runs Federation Init Mode (propose → confirm → create) per `.github/instructions/squad/squad-federation.instructions.md`. When the user chooses a single squad, or does not want the extra choice, continue with Phase 1 unchanged. This offer is skippable: a user who just wants to get going keeps the single-squad default.
 
-**Growing an existing single squad into a federation (promotion).** The single-squad-or-federation offer above fires only on a fresh project (no `team.md` yet). When a project already has a top-level `team.md` and the user asks to move to a federation, do not re-run Init and do not migrate anything yourself: offer to hand off to `/squad-federation promote`, which adopts the existing squad into a federation as its first sub-squad by relocating its state intact (per *Promotion: Single Squad → Federation* in `.github/instructions/squad/squad-federation.instructions.md`). Promotion is the recommended path when a single-squad project grows into the multi-team or multi-domain shape a federation serves.
+**Growing an existing single squad into a federation (promotion).** The single-squad-or-federation offer above fires only on a fresh project (no `team.md` yet). When a project already has a top-level `team.md` and the user asks to move to a federation, do not re-run Init and do not migrate anything yourself: offer to hand off to `/squad-federation promote`, which adopts the existing squad into a federation as its first sub-squad by relocating its state and its pre-promotion deliverables intact (per *Promotion: Single Squad → Federation* in `.github/instructions/squad/squad-federation.instructions.md`). Promotion is the recommended path when a single-squad project grows into the multi-team or multi-domain shape a federation serves.
 
 ### Phase 1: Propose
 
@@ -245,6 +246,10 @@ Resolve each matched role to exactly one concrete agent (Primary, or an Alternat
 
 Ask every dispatch to close its response with two facts the consumption ledger cannot otherwise observe: **the model it ran on** and **how many internal tool calls it made**. The dispatched agent is the only party that knows either — the coordinator sees a summary, never the agent's internal loop — so a self-report is ground truth where everything else is inference. This matters most when `sessionModel` is `auto`: the host then routes per request, so the dispatch's own report is the only way to know what actually ran. Carry both into the Step 5 consumption payload.
 
+**State each dispatch's write path explicitly, read from its own roster row.** Pass the `Deliverable Root` cell of the row just resolved and require the agent to write there, because a dispatched agent knows its role's default root from its own instructions and will fall back to it otherwise — which in a federation lands the artifact at the repository-root tracking path instead of under `members/<name>/`. The roster cell is the running value and it wins over any default: a root the user edited by hand takes effect on this dispatch with no reseed, and the Step 7 gate then looks for the artifact at that same cell. `docs/` and `outputs/` stay at the repository root at every squad root.
+
+**Forward any `inputs=` paths to the roles that need them, and say they are read-only.** A dispatched agent resolves paths under the squad root it was given, so a producer sub-squad's artifact is invisible to it unless this coordinator names the file. Pass the paths to the consuming roles — typically `researcher`, `lead`, and the implementing specialist — and state that the run reads them and writes nothing there. Never let a role re-derive content that an input path already carries: a re-derived requirement looks like an original one and silently forks the two sub-squads' understanding of the same work.
+
 When the matched row is the **council** row (the row whose roles are `architect, security, cost-manager, product-owner, rai (optional)`), follow the council protocol from `.github/instructions/squad/squad-council.instructions.md`:
 
 1. Dispatch all default council roles in a single parallel batch through `runSubagent` or `task`. Add the `rai` role when the request involves AI/ML behavior, agent autonomy, training data, or regulated-data handling.
@@ -262,6 +267,8 @@ Gather each agent's structured response. Keep this turn lean: extract the decisi
 ### Step 5: Hand State to the Squad Scribe
 
 Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`. The scribe appends to `.copilot-tracking/squad/decisions.md` and `.copilot-tracking/squad/history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`. The coordinator does not write these files directly.
+
+Hand the turn's **state advance** on the same call: the mode in effect, the roles dispatched, and any escalation the turn raised or resolved, so the Scribe's Step 13 moves `state.json` forward with the logs it just appended. `state.json` is seeded at Init and is otherwise only as current as the last turn that advanced it, so a turn that appends a decision and leaves the status document behind makes every later turn read a squad that never moved.
 
 Always hand a consumption payload alongside the decision and history payloads so the Scribe can attribute each dispatch's estimated cost — this is mandatory, not best-effort, and it is part of a complete dispatch record (see *Dispatch Discipline* above). For every dispatched agent this turn supply:
 
@@ -287,6 +294,8 @@ Before returning any answer that reports a stage as run, verify it mechanically 
 1. the role's domain artifact on disk, at the role's `Deliverable Root` from `team.md` (see *Deliverable Roots* in `.github/instructions/squad/squad-roster.instructions.md`);
 2. a `history/<agent>.md` entry written by the Scribe;
 3. the per-dispatch consumption block on that entry.
+
+Then confirm once for the turn that `state.json` advanced: its `updated` and `turn` moved and its `activeRoles` name the roles dispatched. A `decisions.md` that grew while `state.json` did not is a partial hand-off in Step 5, not a completed turn.
 
 **Verification is an act, not an assertion.** List the directory and read the file. Never report a path the turn did not actually enumerate — a fabricated "verified" path is worse than an admitted gap, because it makes an empty run look complete. Quote the confirmed paths in the Step 6 synthesis so the user can open them; if a path cannot be quoted from something read this turn, it is not verified.
 

@@ -5,6 +5,127 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] - 2026-08-13
+
+### Fixed
+
+- **A federated sub-squad's artifacts could still be created outside the member.** The *Deliverable
+  Roots* table is now explicitly `squadRoot`-relative, and the Scribe resolves each root against the
+  `squadRoot` it was handed **at seed time** before writing it into the roster — so a sub-squad's
+  `team.md` reads `.copilot-tracking/squad/members/product/plans/` rather than the bare
+  `.copilot-tracking/plans/`, and its research, plans, PRDs, changes, and reviews are created inside
+  the member. Federation Init and Expansion verify the seeded roster before moving on, and a
+  promotion rebases the relocated roster's cells so every role keeps pointing at its own relocated
+  artifacts. `docs/` and `outputs/` remain the two exceptions and stay at the repository root
+  (`squad-src/.github/instructions/squad/squad-roster.instructions.md`,
+  `squad-src/.github/agents/squad/squad-scribe.agent.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+- **Editing a role's `Deliverable Root` in `team.md` had no defined effect.** The roster cell is now
+  the running value and the table is only the seed-time default: the coordinator states each
+  dispatch's write path from the row it just resolved, the Artifact Gate looks for the artifact at
+  that same cell, and a roster refresh preserves an edited cell instead of normalizing it back. A
+  consumer pointing a role at their own directory therefore takes effect on the very next dispatch
+  with no reseed (`squad-src/.github/instructions/squad/squad-roster.instructions.md`,
+  `squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/agents/squad/squad-researcher.agent.md`).
+- **`/squad-document` is unaffected by the rebasing and now reads the squad's deliverables.** Its
+  default output stays at the repository-root `docs/`, which the rebasing rule already exempts, and
+  that exemption is stated where the path is derived so a future change does not rebase it under a
+  sub-squad. Its search step also resolves the `Deliverable Root` paths from `team.md` rather than
+  assuming the repository-root tracking paths, so a federated run grounds on the sub-squad's own
+  artifacts (`squad-src/.github/prompts/squad/squad-document.prompt.md`).
+
+- **Promoting a single squad to a federation left the squad's own work behind and could delete it.**
+  Promotion moved only the state tree, so every artifact produced before the promotion —
+  `brd-sessions/`, `plans/`, `details/`, `research/`, `changes/` — stayed at the repository-root
+  tracking paths while the roster's deliverable roots had already rebased under `members/<name>/`.
+  Promotion now relocates those directories too, enumerated from disk rather than from the
+  *Deliverable Roots* lookup table (which names the roots the cast writes today, not every directory
+  a session produced) and confirmed with the user in Phase 1; `docs/` and `outputs/` stay at the
+  repository root, and a Watch Mode promotion moves everything under `.copilot-tracking/` except
+  `squad/` and records the list in its decision entry
+  (`squad-src/.github/instructions/squad/squad-federation.instructions.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`,
+  `squad-src/.github/agents/squad/squad-scribe.agent.md`).
+- **A promotion could clear the source before writing the destination, then report it could not find
+  the files to move.** Every move is now an explicit **copy → verify → delete-source** sequence, per
+  file: write the destination, read it back, and only then remove the source. Nothing at the source
+  is removed, cleared, or truncated before its verified destination copy exists, and a failed
+  destination write stops the promotion with the source intact — a partially relocated tree is
+  recoverable and a deleted source is not
+  (`squad-src/.github/instructions/squad/squad-federation.instructions.md` *Copy, Verify, Then
+  Delete*, `squad-src/.github/agents/squad/squad-scribe.agent.md` Step 10).
+- **A promotion produced no consumption accounting, so the new federation reported a zero-cost first
+  turn over a sub-squad carrying a populated ledger.** The Scribe now runs its consumption step for a
+  promotion payload scoped to the relocated sub-squad root, rewrites `members/<name>/consumption.md`
+  from the relocated history, and seeds the federation `state.json` `currentRun` totals from that
+  ledger's total row. The Federation Coordinator verifies the relocation by reading
+  `members/<name>/` back before confirming, rather than asserting success
+  (`squad-src/.github/agents/squad/squad-scribe.agent.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+
+- **`state.json` was seeded at Init and then never advanced.** No Scribe step touched `updated`,
+  `turn`, `mode`, `activeRoles`, or `openEscalations`, so a squad appended decisions and history
+  every turn beside a status document still reading `turn: 0` — and in a federation, a routed turn
+  left the federation's own `state.json` untouched entirely. A new Scribe **Step 12** advances the
+  file on every turn that writes anything, as a read-modify-write that carries `schemaVersion`,
+  `notify`, `trigger`, `currentRun.sessionModel`, and `currentRun.modelOverrides` forward instead of
+  resetting them, and leaves the cost totals to the consumption step. Both coordinators now hand the
+  advance on the same call that appends the logs, and both verify it before reporting the turn done
+  (`squad-src/.github/agents/squad/squad-scribe.agent.md`,
+  `squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`,
+  `squad-src/.github/instructions/squad/squad-state.instructions.md`).
+- **A federation root never got its `history/` directory.** The Scribe's history step defines the
+  file as `history/<agent>.md` for a dispatched agent and requires a paired consumption block, so a
+  federation-level entry — which names a sub-squad, not an agent, and whose cost is already recorded
+  in that sub-squad's own ledger — fell outside the step and was silently dropped. The step now
+  covers it explicitly as the one history append that stands alone, the federation coordinator's
+  completion checklist catches a root that only grows its decision log, and the federation
+  conventions state exactly which files a healthy federation root holds and which are legitimately
+  absent (`squad-src/.github/agents/squad/squad-scribe.agent.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`,
+  `squad-src/.github/instructions/squad/squad-federation.instructions.md`).
+
+- **A federated sub-squad could not reach another's work, and nothing said how it should.** A run
+  scoped to `members/azure/` resolves every path under its own root, so a `product` sub-squad's PRD
+  at `members/product/plans/` was invisible to it — and a sub-squad's inner run never reads
+  federation-level state, so the federation `decisions.md` was not a discovery mechanism either. The
+  only prior mention of a handoff was one line in the federation autopilot instructions, with no
+  mechanism and nothing for an interactive turn. A new *Cross-Sub-Squad Handoff* contract makes the
+  Squad Federation Coordinator — the only component that sees both roots — resolve the producer's
+  artifacts from its `team.md` deliverable roots, **verify each file on disk** rather than infer it,
+  and hand them to the consumer as explicit read-only `inputs=` paths. The producer runs to
+  completion first, the pair is not parallel-eligible for that turn, the consumer never writes across
+  the boundary, and the handoff is recorded in the federation `decisions.md` so a two-sub-squad
+  outcome stays reconstructable (`squad-src/.github/instructions/squad/squad-federation.instructions.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`,
+  `squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/instructions/squad/squad-federation-autopilot.instructions.md`).
+- **A missing upstream artifact had no defined recovery.** Stopping is the safety property, not the
+  outcome, and a consumer left to work the requirements out for itself returns a complete-looking
+  deliverable built on requirements the producer never agreed — a divergence nothing in the output
+  reveals. A new recovery ladder mirrors the bounded auto-remediation loop of the intake gate rather
+  than inventing a second vocabulary: run the registered producer and **resume the consumer in the
+  same turn**, or re-dispatch only the producing stage when the artifact is partial or stale, or
+  offer Federation Expansion when no sub-squad owns the artifact, or take a user-supplied path or a
+  user's explicit decision to proceed with the gap recorded as an assumption. Interactive turns state
+  what will run and wait; autopilot and Watch Mode proceed unasked, because dependency-first ordering
+  was already settled at the plan meta-stage. The loop is capped at one producer run per handoff per
+  turn, and every recovery dispatch is a Scribe-recorded stage with its own consumption block
+  (`squad-src/.github/instructions/squad/squad-federation.instructions.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.13.2"
+```
+
+[0.13.2]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.13.2
+
 ## [0.13.1] - 2026-08-13
 
 ### Changed

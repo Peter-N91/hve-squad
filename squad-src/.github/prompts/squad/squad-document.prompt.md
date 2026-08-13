@@ -34,6 +34,7 @@ Read the scoped squad state files and collect content relevant to `${input:reque
 * `routing.md` — request-to-role routing patterns.
 * `state.json` — current squad status and configuration.
 * `consumption.md` — usage and cost tracking.
+* The squad's own deliverables at the `Deliverable Root` paths listed in `team.md` — research, plans, changes, reviews, and session artifacts. Read the roots from the roster rather than assuming the repository-root tracking paths: in a federation they resolve under `members/<name>/`, and a consumer may have edited a cell.
 * Files under `docs/` — existing project documentation.
 
 Filter and rank by relevance to the request. When in federation mode without a `${input:squad}` scope, prefix findings with the sub-squad name they came from.
@@ -57,6 +58,8 @@ Render the synthesized content in `${input:format}`:
 * **`docx`** — convert the synthesized Markdown to a professionally formatted Word document using the `md-to-docx` skill. Write the Markdown to a temporary `.md` file, run the bundled conversion script (`node skills/md-to-docx/scripts/md-to-docx.mjs <input.md> <output.docx>`), and remove the temporary file after conversion succeeds. When Node.js or the `md-to-docx` skill is unavailable, fall back to `md` and inform the user.
 
 Write to `${input:outputPath}` when provided. Otherwise, derive the filename as `docs/squad-document-<YYYY-MM-DD>.<ext>` (for example, `docs/squad-document-2026-08-01.md`). Create the target directory if it does not exist.
+
+The default output stays at the repository-root `docs/` in a federation too. `docs/` and `outputs/` are exempt from the deliverable-root rebasing that puts a sub-squad's other artifacts under `members/<name>/`, so a generated document is a repository-wide output regardless of which sub-squad it summarizes — never rebase this path under a sub-squad root.
 
 ### Step 5: Confirm
 
