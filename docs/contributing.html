@@ -134,9 +134,46 @@ type: Fixed
         The exact tag is on the
         <a href="https://github.com/Peter-N91/hve-squad/releases">Releases page</a>, marked as a
         pre-release. It is a channel rather than a fixed point: the tag moves on every merge, and it is
-        renamed when a <code>minor</code> fragment lands midweek. Pin a released version for anything
+        renamed when a <code>minor</code> fragment lands. Pin a released version for anything
         you depend on. The full format reference lives in
         <a href="https://github.com/Peter-N91/hve-squad/blob/main/.changes/README.md">.changes/README.md</a>.
+      </p>
+
+      <h2>Shipping a fix without shipping everything else</h2>
+      <p>
+        A release ships a <strong>commit</strong>, not a selection of fragments. The tag is cut from the
+        branch head, so a release from the default branch contains everything merged into it, whatever
+        the CHANGELOG happens to list. Choosing which fragments to consume changes the release notes,
+        not the code. That leaves two cases, and only the second needs anything unusual.
+      </p>
+      <p>
+        <strong>The default branch is shippable.</strong> A maintainer dispatches Release Prep and your
+        fix goes out with everything else pending, as one version. If a pending fragment asked for
+        <code>minor</code>, that version is a minor &mdash; and it still contains your patch, so
+        consumers get the fix. This is almost always the right answer.
+      </p>
+      <p>
+        <strong>The default branch holds something that must not ship yet.</strong> Then a release from
+        it would carry that work out alongside the fix, so the fix has to come from somewhere that does
+        not contain it: a hotfix branch cut off the last release tag.
+      </p>
+      <pre><code>git switch --detach v0.14.0
+git switch -c hotfix/v0.14.1
+# apply the fix, then record it
+apm run change            # Type: Fixed, Bump: patch
+git push -u origin hotfix/v0.14.1</code></pre>
+      <p>
+        A maintainer then dispatches <strong>Release Prep</strong> with <code>ref</code> set to the
+        hotfix branch. It assembles the CHANGELOG from that branch's fragments only, bumps
+        <code>apm.yml</code> to <code>0.14.1</code>, and cuts the tag from that branch. The rolling
+        pre-release on the default branch is left alone, because the batch it describes is still
+        pending. The hotfix branch is then merged back with the <code>release-merge-back</code> label,
+        which is what allows that pull request to carry the release state Release Prep already wrote.
+      </p>
+      <p>
+        A hotfix released after a higher version does not steal the <strong>Latest</strong> badge: the
+        release workflow compares versions and declines it when the tag is lower than the current
+        latest.
       </p>
 
       <h2>Proposing a shared learning</h2>

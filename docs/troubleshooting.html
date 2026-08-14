@@ -168,6 +168,9 @@ $env:PATH = "C:\Program Files\Graphviz\bin;$env:PATH"</code></pre>
         <li>Releases follow <a href="https://semver.org/">Semantic Versioning</a>.</li>
         <li>See <a href="https://github.com/Peter-N91/hve-squad/blob/main/CHANGELOG.md">CHANGELOG.md</a> for what is included in each version.</li>
         <li>Consumers can pin to a tagged version, for example <code>apm install "Peter-N91/hve-squad#vX.Y.z"</code>.</li>
+        <li>Releases are cut by hand when the pending work is judged ready, not on a schedule.</li>
+        <li>Between releases, everything already merged is installable from a rolling pre-release: <code>apm install "Peter-N91/hve-squad#vX.Y.z-pre"</code>. That tag moves on every merge, so it is for testing rather than for anything you depend on. A pre-release never shows as <strong>Latest</strong>.</li>
+        <li>Installing with no ref at all resolves to the default branch, not to the latest release, and APM warns about the drift. Always pin.</li>
       </ul>
 
       <h2>Notes</h2>
