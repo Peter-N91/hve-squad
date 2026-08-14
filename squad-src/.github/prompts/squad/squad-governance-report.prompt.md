@@ -35,6 +35,8 @@ Read the scoped state files and extract structured data:
 
 Parse `## Council Verdict` entries. For each: `timestamp`, `topic-id`, `Verdict` (Go / Go-With-Conditions / Stop), per-role findings (role, verdict label, risk label, blocking issues, conditions), `Permits Implementation Dispatch`, `Conditions Outstanding`.
 
+Parse `## Discovery Verdict` entries. For each: `timestamp`, `topic-id`, `Opt-In` (offer-accepted / explicit-input / offer-declined), `Depth` (quick / standard / deep / skip), `Roles Dispatched`, `Brief`, and the count of options recorded as discarded.
+
 Parse `## Intake Readiness Verdict` entries. For each: `timestamp`, `topic-id`, `Verdict` (Ready / Ready-With-Gaps / Not-Ready), `Remediation Cycles`.
 
 #### From `history/<agent>.md` files
@@ -81,6 +83,7 @@ Scan dispatch entries for: files created or modified (count), tests run and resu
 | Metric | Computation |
 |--------|-------------|
 | Council verdict count | Count of Council Verdict entries in period (0 = "Not activated") |
+| Discovery session count | Count of Discovery Verdict entries in period whose `Depth` is not `skip` (0 = "Not activated"); report declines separately so an offered-and-declined gate is not read as an unused one |
 | Intake check count | Count of Intake Readiness Verdict entries in period (0 = "Not activated") |
 | Human gates passed | Passed ÷ fired |
 | Cost by role | est_cost_usd grouped by role, sorted descending |

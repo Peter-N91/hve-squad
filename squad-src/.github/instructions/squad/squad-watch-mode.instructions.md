@@ -25,6 +25,8 @@ Watch Mode is not a fourth autonomy mode. It is a **trigger** in front of the ex
 
 A Watch Mode run **is** an autopilot run with four additions: an event-driven opt-in, a headless runtime, a pull-request terminal deliverable, and an event-scoped federation sub-squad that holds the run's state. It reuses the autopilot pipeline, the council, the proof-of-dispatch rule, the consumption ledger, and the `github-issue` approval channel unchanged. Setting Watch Mode never waives the autopilot Human Gates.
 
+There is exactly one autopilot stage a Watch Mode run does **not** reach: the **discovery gate** at stage 0a (`.github/instructions/squad/squad-discovery-gate.instructions.md`). That gate is an offer a human answers, and an unattended run has nobody to answer it — so no offer is made, a `discovery=` argument in an event payload is ignored and the reason recorded, and the triggering payload (the issue or pull-request body, read as data) becomes the run's input artifact instead. The **intake gate** at stage 0b then assesses that payload, so an unattended run is still gated at the front of the pipeline: by validation, which an agent can perform alone, rather than by ideation, which it cannot.
+
 ## Opt-In Surface
 
 Watch Mode never acts on every event. A run starts only when the event is **explicitly opted in** through one of these gates:
