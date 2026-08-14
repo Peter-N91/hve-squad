@@ -41,10 +41,7 @@ agents:
   - BRD Builder
   - PRD Quality Reviewer
   - BRD Quality Reviewer
-  - DS Gen Data Spec
-  - DS Gen Jupyter Notebook
-  - DS Gen Streamlit Dashboard
-  - DS Test Streamlit Dashboard
+  - Squad Data Scientist
   - Experiment Designer
   - PowerPoint Subagent
   - Code Review Functional
