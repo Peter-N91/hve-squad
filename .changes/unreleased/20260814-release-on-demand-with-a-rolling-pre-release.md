@@ -1,0 +1,10 @@
+---
+bump: minor
+type: Changed
+---
+
+- **Every merge cut a release.** A fragment landing on `main` assembled the CHANGELOG, bumped `apm.yml`, and tagged immediately, and the daily hve-core sync cut a release of its own on top, so a quiet week still produced several versions and nothing was ever installed before it shipped. Releasing is now a deliberate act: `.github/workflows/release-prep.yml` runs on manual dispatch only, ships everything pending as one version at the highest `bump` any fragment asked for, and nothing goes out on a timer.
+- **Merged work is now installable before it ships.** `.github/workflows/preview.yml` keeps a single GitHub pre-release in sync with `main`, tagged with the version the pending fragments resolve to (`v0.15.0-pre`) and force-moved on every merge, so a change can be installed and tested the moment it lands. It only reads: no fragment is consumed, no version is bumped, and `CHANGELOG.md` is untouched. A quick fix can ship as soon as it is verified there, while a larger change sits in preview until it is ready.
+- **The hve-core sync queues instead of releasing.** `.github/workflows/sync-hve-core.yml` now records a pin move as a change fragment and pushes it, leaving the release to a maintainer. The cast-delta guard and the Watch Mode handoff are unchanged.
+- **A fix can ship without shipping what is not ready.** A release carries a commit, so a tag cut from the default branch contains everything merged into it. `release-prep.yml` and `release.yml` accept a `ref` input, which lets a hotfix be cut off the last release tag and released on its own, leaving the pending batch and its preview untouched. `release.yml` also declines the Latest badge when the version it is cutting is lower than the current latest, and `pr-validation.yml` accepts a `release-merge-back` label so the hotfix can be merged back with the release state Release Prep already wrote.
+- **`Invoke-ReleasePrep.ps1` gained `-SectionOutFile` and `-InstallRef`** so the preview can render the pending release notes and point the install snippet at the preview tag without consuming anything.

@@ -23,13 +23,13 @@ name: Sync and Adapt
 #        - clones microsoft/hve-core at that exact SHA
 #        - rewrites all microsoft/hve-core entries with the new SHA
 #        - leaves squad entries pointing at the default upstream slug
-#   6. Runs Invoke-ReleasePrep.ps1, which resolves the new version from any
-#      change fragments contributors merged since the last release, adds this
-#      SHA move as one more Changed entry, prepends the CHANGELOG section, and
-#      writes the version into apm.yml.
-#   7. Commits apm.yml, CHANGELOG.md, and the consumed fragments, then pushes to main.
-#   8. Dispatches release.yml to cut the tag and GitHub Release
-#      (required because GITHUB_TOKEN-authored pushes do not trigger workflows).
+#   6. Records the pin move as a change fragment under .changes/unreleased/,
+#      exactly as a contributor would.
+#   7. Commits apm.yml and the fragment, then pushes to main.
+#
+# It no longer cuts a release. The fragment reaches testers within minutes as
+# part of the rolling pre-release (preview.yml) and reaches consumers when a
+# maintainer dispatches release-prep.yml.
 #
 # No local hve-core mirror involved — all content is referenced directly
 # from microsoft/hve-core at a pinned commit SHA.
@@ -266,8 +266,9 @@ jobs:
               '## After merge',
               '',
               'Nothing further is required. The fragment this pull request adds lands in',
-              '`.changes/unreleased/` on `main`, which triggers **Release Prep**: it assembles the',
-              'CHANGELOG section, bumps `apm.yml` to the minor, and cuts the tag and GitHub Release.',
+              '`.changes/unreleased/` on `main`, where **Rolling Preview** publishes it as an',
+              'installable pre-release within minutes. It ships to consumers when a maintainer',
+              'dispatches **Release Prep**.',
               '',
               '## Cast delta',
               '',
@@ -304,54 +305,45 @@ jobs:
           [[ "$DRY_RUN" == "true" ]] && ARGS+=(-DryRun)
           pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
 
-      # ── Assemble the release from pending change fragments ────────────────
-      #    Invoke-ReleasePrep.ps1 owns the version and the CHANGELOG. It resolves
-      #    the bump from whatever fragments contributors have merged since the
-      #    last release, appends this SHA move as one more Changed entry, and
-      #    clears the fragments it consumed. -AllowEmpty lets a pure pin move
-      #    still ship as a patch when no fragments are pending.
-      - name: Assemble release
+      # ── Record the pin move as a change fragment ─────────────────────────
+      #    A pin move is a change like any other, so it queues the same way a
+      #    contributor's does: as a fragment. It becomes installable within
+      #    minutes through the rolling pre-release and ships to consumers with
+      #    the next dispatched release. This step used to assemble and ship a
+      #    release of its own, which is why a week with no contributions could
+      #    still cut a release every morning.
+      - name: Record the pin move
         if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
-        id: bump
         shell: pwsh
         env:
           HVE_CORE_SHORT_SHA: ${{ steps.latest.outputs.short_sha }}
           HVE_CORE_SHA: ${{ steps.latest.outputs.sha }}
         run: |
-          $entry = "- Updated hve-core dependency pin to ``$env:HVE_CORE_SHORT_SHA`` ($env:HVE_CORE_SHA)."
-          ./scripts/Invoke-ReleasePrep.ps1 -AllowEmpty -GitHubOutput -ExtraEntry $entry
+          $body = "- Updated hve-core dependency pin to ``$env:HVE_CORE_SHORT_SHA`` ($env:HVE_CORE_SHA)."
+          ./scripts/New-ChangeFragment.ps1 -Type Changed -Bump patch -Force `
+            -Title "sync hve-core $env:HVE_CORE_SHORT_SHA" `
+            -Body $body
 
       # ── Commit and push ───────────────────────────────────────────────────
       - name: Commit and push
         if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
-          NEW_VERSION: ${{ steps.bump.outputs.version }}
           LATEST_SHORT: ${{ steps.latest.outputs.short_sha }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
-          git add apm.yml CHANGELOG.md .changes/unreleased
+          git add apm.yml .changes/unreleased
           if ! git diff --cached --quiet; then
-            git commit -m "chore(release): bump to ${NEW_VERSION} with hve-core@${LATEST_SHORT}"
+            # Deliberately not a `chore(release):` message: that prefix is how
+            # preview.yml recognises the release commit and skips it, and this
+            # commit must reach the preview so the pin move becomes installable.
+            git commit -m "chore(deps): sync hve-core to ${LATEST_SHORT}"
             git push origin main
-            echo "::notice::Pushed release bump to v${NEW_VERSION} (hve-core@${LATEST_SHORT})"
+            echo "::notice::Queued hve-core@${LATEST_SHORT} for the next release."
           else
             echo "::notice::No changes after regeneration — nothing to commit."
           fi
-
-      # ── Dispatch release workflow ───────────────────────────────────────────
-      # GITHUB_TOKEN-authored pushes do not trigger other workflows, so we
-      # dispatch release.yml explicitly. It will read the new version from
-      # apm.yml and cut the tag + GitHub Release.
-      - name: Trigger release
-        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
-          RELEASE_VERSION: ${{ steps.bump.outputs.version }}
-        run: |
-          gh workflow run release.yml --ref main
-          echo "::notice::Triggered release.yml for v${RELEASE_VERSION}"
 

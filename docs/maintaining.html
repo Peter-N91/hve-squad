@@ -151,13 +151,13 @@ flowchart TD
 
       <h3>Path 1 &mdash; mechanical (no cast change)</h3>
       <p>
-        <code>sync-hve-core.yml</code> moves the pinned SHA, then hands the version and the CHANGELOG
-        to <code>Invoke-ReleasePrep.ps1</code> &mdash; so the nightly sync also flushes whatever change
-        fragments contributors merged during the day, and the pin move is recorded as one more
-        <em>Changed</em> entry alongside them. It pushes and dispatches the release. One addition to the
-        older behavior: it runs the cast-delta script as a <strong>guard</strong> first. A SHA move
-        cannot repoint a roster row, and shipping it anyway releases a squad whose roles resolve to
-        nothing &mdash; which is exactly what happened in <code>0.10.11</code>.
+        <code>sync-hve-core.yml</code> moves the pinned SHA and records the move as a change fragment,
+        exactly as a contributor would &mdash; so the pin move queues alongside whatever contributors
+        merged that day and ships with the next release someone cuts, instead of cutting a release of
+        its own every morning. It pushes and stops there. One addition to the older behavior: it runs
+        the cast-delta script as a <strong>guard</strong> first. A SHA move cannot repoint a roster row,
+        and shipping it anyway releases a squad whose roles resolve to nothing &mdash; which is exactly
+        what happened in <code>0.10.11</code>.
       </p>
 
       <h3>Path 2 &mdash; adaptive (the cast changed)</h3>
@@ -185,9 +185,10 @@ flowchart TD
       </p>
       <div class="callout">
         <p>
-          Merging the adaptation pull request <strong>cuts the minor release by itself</strong>. The
-          fragment lands in <code>.changes/unreleased/</code> on <code>main</code>, which is the
-          trigger for <strong>Release Prep</strong>. Nothing else is required of you.
+          Merging the adaptation pull request <strong>queues the minor release by itself</strong>. The
+          fragment lands in <code>.changes/unreleased/</code> on <code>main</code>, where
+          <strong>Rolling Preview</strong> publishes it as an installable pre-release within minutes.
+          It ships to consumers with the next release you cut.
         </p>
       </div>
 
@@ -444,19 +445,33 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
         pending fragments selects it.
       </p>
       <p>
-        <strong>The normal path needs nothing from you.</strong> Merging a pull request that carries a
-        fragment pushes it to <code>.changes/unreleased/</code> on <code>main</code>, which triggers
-        <strong>Release Prep</strong>. That run resolves the version, prepends the CHANGELOG section
-        with the consumer-install block and the link reference, writes <code>version:</code> into
-        <code>apm.yml</code>, deletes the fragments it consumed, commits
-        <code>chore(release): X.Y.Z</code>, and dispatches <code>release.yml</code> to cut the tag and
-        the GitHub Release. A pull request with no fragment (the <code>skip-changelog</code> label)
-        touches nothing and releases nothing.
+        <strong>Releases are cut by hand.</strong> Merging a pull request that carries a fragment
+        pushes it to <code>.changes/unreleased/</code> on <code>main</code> and releases nothing.
+        Nothing releases on a timer either. When the pending batch is ready, you dispatch
+        <strong>Release Prep</strong>, which ships it as one version: it resolves the level, prepends
+        the CHANGELOG section with the consumer-install block and the link reference, writes
+        <code>version:</code> into <code>apm.yml</code>, deletes the fragments it consumed, commits
+        <code>chore(release): X.Y.Z</code>, dispatches <code>release.yml</code> to cut the tag and the
+        GitHub Release, and retires the pre-release.
       </p>
       <p>
-        Run <strong>Release Prep</strong> manually only to overrule the level, to pin an exact version,
-        or to flush fragments that reached <code>main</code> without triggering it. Tick <em>dry run</em>
-        first to see the resolved version and the assembled section without committing anything.
+        That makes releasing a judgement about readiness rather than a date. A quick fix ships as soon
+        as you have verified it in the preview; a larger change sits in preview until it is ready, and
+        anything merged in the meantime rides along with it.
+      </p>
+      <p>
+        <strong>Between releases, <code>main</code> is installable.</strong> Every merge triggers
+        <strong>Rolling Preview</strong>, which renders the pending fragments into a single GitHub
+        pre-release tagged with the version they resolve to (<code>v0.15.0-pre</code>) and force-moves
+        that tag to the new head. It only reads: no fragment is consumed, no version is bumped, and
+        <code>CHANGELOG.md</code> is untouched. Exactly one pre-release is open at a time, so when a
+        <code>minor</code> fragment lands the old one is deleted and the new name takes over.
+        A pull request with no fragment (the <code>skip-changelog</code> label) contributes no bump.
+      </p>
+      <p>
+        Tick <em>dry run</em> when you dispatch to see the resolved version and the assembled section
+        without committing anything. Use the <code>bump</code> and <code>version</code> inputs to
+        overrule the level the fragments resolved to or to pin an exact number.
       </p>
       <p>To do it locally instead:</p>
       <pre><code>apm run release-prep                        # resolve version, assemble, write

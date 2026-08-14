@@ -13,7 +13,7 @@ hve-squad gets better when a durable fix found in one environment reaches every 
 4. Open a pull request against the default branch.
 5. A maintainer reviews, requests changes when needed, and merges.
 
-Consumers receive the merged change the next time they run `apm run sync-deps`.
+Merging publishes the change to the rolling pre-release within minutes, so it can be installed and tested straight away (see [Testing before a release](#testing-before-a-release)). It reaches consumers pinned to a released version when a maintainer cuts the next release, which happens when the pending work is judged ready rather than on a schedule.
 
 ## Recording your change
 
@@ -44,7 +44,7 @@ The script asks four things and writes the file for you:
 
 Adding an agent is not a minor. Adding the *concept* the agent belongs to is. Ten agents that all serve one idea that already ships are ten patches, not ten minors. When in doubt choose `patch` — the maintainer sees the resolved level on the pull request check and corrects the line before merging, and raising is cheap while an accidental minor is permanent.
 
-Merging your pull request releases it: the fragment landing on the default branch is what assembles the CHANGELOG section, bumps the version, and cuts the tag.
+Merging your pull request does not release it. The fragment waits in `.changes/unreleased/` with everything else already merged, and a maintainer cuts a release when that batch is ready — which may be the same hour for a quick fix, or later for something that needs time in testing. In the meantime your change is installable from the rolling pre-release, which is rebuilt on every merge — see [Testing before a release](#testing-before-a-release).
 
 If you prefer to skip the prompts, pass the values directly:
 
@@ -69,6 +69,49 @@ Write the entry as markdown bullets starting with `- `, because the release step
 
 A pull request that changes nothing a consumer would notice can carry the `skip-changelog` label instead, which a maintainer applies. That skips the version bump too: the version is resolved from fragments at release time, so a pull request that contributes no fragment contributes no bump.
 
+The full format reference lives in [.changes/README.md](.changes/README.md).
+
+## Testing before a release
+
+Releases are cut by hand when the pending work is judged ready, so merging is no longer the moment a change reaches consumers. What merging does reach is the **rolling pre-release**: one GitHub pre-release, rebuilt on every merge to the default branch, tagged with the version the pending fragments currently resolve to.
+
+Install it into a scratch project to try the merged batch before it ships:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.14.0-pre" --target copilot
+```
+
+The exact tag is on the [Releases page](https://github.com/Peter-N91/hve-squad/releases), marked as a pre-release. Two things follow from how it is built:
+
+* **The tag moves.** Re-run the install to pick up the newest build. It is a channel, not a fixed point, so it is for testing rather than for anything you depend on.
+* **The name can change.** The tag tracks the resolved version, so a `minor` fragment landing midweek renames the pre-release from `v0.13.4-pre` to `v0.14.0-pre` and the old one is deleted.
+
+Nothing about the preview consumes a fragment or writes to `CHANGELOG.md`. The release is assembled from the same fragments the preview rendered, so what you tested is what ships.
+
+## Shipping a fix without shipping everything else
+
+A release ships a **commit**, not a selection of fragments. The tag is cut from the branch head, so a release from the default branch contains everything merged into it, whatever the CHANGELOG happens to list. Choosing which fragments to consume changes the release notes, not the code.
+
+That leaves two cases, and only the second one needs anything unusual.
+
+**The default branch is shippable.** Dispatch Release Prep. Your fix goes out along with everything else pending, as one version. If a pending fragment asked for `minor`, that version is a minor — and it still contains your patch, so consumers get the fix. This is almost always the right answer, and the version number is not worth optimising.
+
+**The default branch holds something that must not ship yet.** Then a release from it would carry that work out with your fix, so the fix has to come from somewhere that does not contain it: a hotfix branch cut off the last release tag.
+
+```powershell
+git switch --detach v0.14.0
+git switch -c hotfix/v0.14.1
+# apply the fix, then record it
+apm run change            # Type: Fixed, Bump: patch
+git push -u origin hotfix/v0.14.1
+```
+
+Dispatch **Release Prep** with `ref` set to `hotfix/v0.14.1`. It assembles the CHANGELOG from that branch's fragments only, bumps `apm.yml` to `0.14.1`, and cuts the tag from that branch. The rolling pre-release on the default branch is left alone, because the batch it describes is still pending.
+
+Then merge the hotfix branch back so the fix is not lost on the next release, and label that pull request `release-merge-back`. The label is what allows it to carry the `CHANGELOG.md` section and the version bump that Release Prep already wrote, both of which a normal pull request is rejected for touching.
+
+A hotfix released after a higher version does not steal the **Latest** badge: the release workflow compares versions and declines it when the tag is lower than the current latest.
+
 ## Adding an agent, skill, prompt, or instruction
 
 New squad content lives under `squad-src/.github/{agents,skills,prompts,instructions}/`, and `apm.yml` carries a generated list of every file the package ships. After adding your files, regenerate that list:
@@ -78,8 +121,6 @@ apm run sync-deps
 ```
 
 That rewrites `dependencies:` in `apm.yml` to include your new files, and commits are expected to contain it. It deliberately does **not** move the `microsoft/hve-core` pin: with no `-Ref`, the script stays on whatever SHA `apm.yml` already names. Moving that pin re-points the entire package at a different upstream revision, which is a separate reviewed operation owned by the scheduled sync workflow, and CI rejects a pull request that does it.
-
-The full format reference lives in [.changes/README.md](.changes/README.md).
 
 ## Proposing a shared learning
 

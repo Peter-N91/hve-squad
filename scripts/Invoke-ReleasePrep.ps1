@@ -47,10 +47,19 @@
     Print the assembled section and resolved version without writing anything.
 .PARAMETER GitHubOutput
     Append 'version', 'previous_version', and 'has_changes' to $env:GITHUB_OUTPUT.
+.PARAMETER SectionOutFile
+    Also write the assembled section to this path. Honoured under -DryRun, which
+    is how the rolling pre-release renders the notes for the release currently
+    accumulating on main without consuming the fragments.
+.PARAMETER InstallRef
+    Tag the consumer-install snippet and link reference point at. Defaults to
+    'v<newVersion>'. The pre-release passes its own rolling tag.
 .EXAMPLE
     ./scripts/Invoke-ReleasePrep.ps1
 .EXAMPLE
     ./scripts/Invoke-ReleasePrep.ps1 -DryRun
+.EXAMPLE
+    ./scripts/Invoke-ReleasePrep.ps1 -DryRun -SectionOutFile notes.md -InstallRef v0.14.0-pre
 .EXAMPLE
     ./scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0
 .EXAMPLE
@@ -99,7 +108,15 @@ param(
     [switch]$DryRun,
 
     [Parameter(Mandatory = $false)]
-    [switch]$GitHubOutput
+    [switch]$GitHubOutput,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateNotNullOrEmpty()]
+    [string]$SectionOutFile,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateNotNullOrEmpty()]
+    [string]$InstallRef
 )
 
 $ErrorActionPreference = 'Stop'
@@ -194,8 +211,13 @@ function New-ChangelogSection {
         [pscustomobject[]]$Fragments,
 
         [Parameter(Mandatory = $false)]
-        [string]$Additional
+        [string]$Additional,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Ref
     )
+
+    if (-not $Ref) { $Ref = "v$NewVersion" }
 
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("## [$NewVersion] - $Date")
@@ -219,10 +241,10 @@ function New-ChangelogSection {
     $lines.Add('Pin to this version:')
     $lines.Add('')
     $lines.Add('```powershell')
-    $lines.Add("apm install `"$RepoSlug#v$NewVersion`"")
+    $lines.Add("apm install `"$RepoSlug#$Ref`"")
     $lines.Add('```')
     $lines.Add('')
-    $lines.Add("[$NewVersion]: https://github.com/$RepoSlug/releases/tag/v$NewVersion")
+    $lines.Add("[$NewVersion]: https://github.com/$RepoSlug/releases/tag/$Ref")
     $lines.Add('')
 
     return ($lines -join "`n")
@@ -279,7 +301,11 @@ if ($changelog -match "(?m)^## \[$([regex]::Escape($newVersion))\]") {
     throw "CHANGELOG.md already documents $newVersion. Pass -Version to target a different release."
 }
 
-$section = New-ChangelogSection -NewVersion $newVersion -Date $ReleaseDate -Fragments $fragments -Additional $ExtraEntry
+$section = New-ChangelogSection -NewVersion $newVersion -Date $ReleaseDate -Fragments $fragments -Additional $ExtraEntry -Ref $InstallRef
+
+if ($SectionOutFile) {
+    Set-Content -LiteralPath $SectionOutFile -Value $section -Encoding utf8NoBOM
+}
 
 Write-Host "Version:   $currentVersion -> $newVersion ($resolvedBump)" -ForegroundColor Cyan
 Write-Host "Fragments: $($fragments.Count)" -ForegroundColor Cyan
