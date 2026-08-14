@@ -61,6 +61,17 @@ See [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html
 - See [CHANGELOG.md](CHANGELOG.md) for what is included in each version.
 - Consumers can pin to a tagged version, for example `apm install "Peter-N91/hve-squad#vX.Y.z"`.
 
+Releases are cut by hand, when the pending work is judged ready rather than on a schedule.
+Between releases, everything already merged is installable from a rolling pre-release tagged
+with the version it is going to become:
+
+```powershell
+apm install "Peter-N91/hve-squad#vX.Y.z-pre" --target copilot
+```
+
+That tag moves on every merge, so re-run the command to pick up the newest build. Use it
+to try a fix before it ships; pin a released version for anything you depend on.
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -55,7 +55,11 @@ jobs:
           echo "Changed files:"
           cat /tmp/changed.txt
 
+      # Exempt only the hotfix merge-back, which carries a release that already
+      # happened on another branch: its CHANGELOG section and version bump were
+      # written by Release Prep, not by hand, and main needs both.
       - name: Reject edits to release state
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'release-merge-back') }}
         env:
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
         run: |
@@ -88,7 +92,7 @@ jobs:
           fi
 
       - name: Require a change fragment
-        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') && !contains(github.event.pull_request.labels.*.name, 'release-merge-back') }}
         env:
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
         run: |
@@ -112,6 +116,7 @@ jobs:
             $verdict.Trim()
             '```'
             ''
-            'Merging to `main` releases this immediately. Wrong level? Edit the `bump:` line'
-            'in the fragment from the Files changed tab before merging.'
+            'Merging does not release. It publishes to the rolling pre-release, and this'
+            'version ships when a maintainer dispatches Release Prep. Wrong level? Edit the'
+            '`bump:` line in the fragment from the Files changed tab before merging.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY

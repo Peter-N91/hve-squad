@@ -10,14 +10,23 @@ name: Release Prep
 #      the section this run just wrote.
 #
 # Triggers:
-#   push to main touching .changes/unreleased/**
-#     A merged pull request that carries a fragment releases immediately. This
-#     is the normal path; nobody has to remember to cut a release. A pull
-#     request with no fragment (the `skip-changelog` label) touches nothing here
-#     and releases nothing.
-#   workflow_dispatch
-#     Manual, and the only way to overrule the level the fragments resolved to
-#     or to pin an exact version.
+#   workflow_dispatch (only)
+#     Releasing is a decision, not a timer. Fragments accumulate on main and stay
+#     installable through the rolling pre-release for as long as they need to,
+#     so a quick fix can ship the moment it is verified and a larger change can
+#     sit in preview until it is ready. Nothing releases until someone runs this.
+#
+# Merging does not release. A merged fragment lands in .changes/unreleased/ and
+# is picked up by preview.yml, which keeps one rolling pre-release in sync with
+# main so the pending batch can be installed and tested before this workflow
+# ships it. Whatever is pending on the released ref is what goes out, as one
+# version, at the highest `bump` any pending fragment asked for.
+#
+# The `ref` input exists because a release ships a *commit*, not a selection of
+# fragments: a tag cut from main contains everything merged into main, whatever
+# the CHANGELOG says. So when main holds work that must not ship yet, a fix is
+# released from a hotfix branch cut off the last release tag instead. See the
+# hotfix section in CONTRIBUTING.md.
 #
 # Step 3 is explicit because pushes authored by GITHUB_TOKEN do not trigger
 # other workflows — the same reason sync-hve-core.yml dispatches rather than
@@ -25,11 +34,6 @@ name: Release Prep
 # Contents: read and write and Actions: read and write.
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.changes/unreleased/**'
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); inputs are passed through env and never interpolated into the pwsh script body.
     inputs:
@@ -52,6 +56,11 @@ on:
         required: false
         default: false
         type: boolean
+      ref:
+        description: 'Branch to release from. Leave as main unless cutting a hotfix off a release tag.'
+        required: false
+        default: main
+        type: string
 
 # Shared with sync-hve-core.yml: both push a release commit to main, and two of
 # them racing means one loses to a non-fast-forward.
@@ -66,12 +75,6 @@ jobs:
   prepare:
     name: Assemble changelog and bump version
     runs-on: ubuntu-latest
-    # The release commit itself deletes the fragments it consumed, which matches
-    # the path filter above. Without this guard that deletion re-triggers the run.
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' &&
-       !startsWith(github.event.head_commit.message, 'chore(release):'))
     permissions:
       contents: write
       actions: write
@@ -80,7 +83,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-          ref: main
+          ref: ${{ inputs.ref }}
 
       - name: Assemble release
         id: prep
@@ -105,6 +108,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
           NEW_VERSION: ${{ steps.prep.outputs.version }}
+          REF: ${{ inputs.ref }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -116,14 +120,42 @@ jobs:
             exit 0
           fi
           git commit -m "chore(release): $NEW_VERSION"
-          git push origin main
-          echo "::notice::Pushed release commit for v$NEW_VERSION"
+          git push origin "HEAD:${REF}"
+          echo "::notice::Pushed release commit for v$NEW_VERSION to ${REF}"
 
+      # Dispatched from main so the workflow definition is always the current one,
+      # with the ref to tag passed as an input. A hotfix branch cut off an old
+      # release tag carries that tag's copy of release.yml, which may predate the
+      # ref input entirely.
       - name: Trigger release
         if: steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
           NEW_VERSION: ${{ steps.prep.outputs.version }}
+          REF: ${{ inputs.ref }}
         run: |
-          gh workflow run release.yml --ref main
-          echo "::notice::Triggered release.yml for v${NEW_VERSION}"
+          gh workflow run release.yml --ref main -f ref="$REF"
+          echo "::notice::Triggered release.yml for v${NEW_VERSION} on ${REF}"
+
+      # The fragments this run consumed are what the pre-release was rendering,
+      # so it now describes a release that has shipped. preview.yml skips the
+      # release commit, so nobody else will clear it.
+      #
+      # A hotfix released off another branch consumed only that branch's
+      # fragments; main's batch is still pending, so its preview must survive.
+      - name: Retire the rolling pre-release
+        if: steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true && inputs.ref == 'main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mapfile -t found < <(
+            gh release list --limit 100 --json tagName,isPrerelease \
+              --jq '.[] | select(.isPrerelease) | .tagName' \
+              | grep -E -- '-pre$' || true
+          )
+          for stale in "${found[@]}"; do
+            if [[ -n "$stale" ]]; then
+              echo "::notice::Retiring pre-release $stale"
+              gh release delete "$stale" --yes --cleanup-tag
+            fi
+          done

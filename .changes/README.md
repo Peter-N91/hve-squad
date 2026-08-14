@@ -53,8 +53,18 @@ One fragment per idea. A pull request that does two unrelated things adds two fr
 
 ## What happens at release
 
-Merging a pull request that carries a fragment releases it. The fragment landing on `main` triggers the Release Prep workflow, which reads every pending fragment, resolves the new version from the highest `bump`, groups the bodies by `type`, prepends the assembled section to `CHANGELOG.md` with the standard consumer-install block and link reference, writes the new `version:` into `apm.yml`, deletes the fragments it consumed, and cuts the tag and GitHub Release.
+Merging a pull request that carries a fragment does not release it. The fragment lands in `.changes/unreleased/` and waits there with everything else merged that week.
 
-Because merging releases immediately, the pull request is where a wrong `bump` gets corrected. The PR check reports the version the merge would produce, and the maintainer can edit the `bump:` line directly in the pull request. `-Bump` and `-Version` overrides on `Invoke-ReleasePrep.ps1` remain for batches assembled by hand.
+Two workflows read that directory:
 
-`.changes/unreleased/` is empty between releases. That is the expected steady state.
+**Rolling Preview** runs on every merge to `main`. It renders the pending fragments into a single GitHub pre-release, named for the version they currently resolve to, and force-moves that pre-release's tag to the new head. Nothing is consumed and no file is written — the preview only reads. The result is one installable ref that always reflects what `main` currently adds up to:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.14.0-pre"
+```
+
+**Release Prep** runs only when a maintainer dispatches it. It reads every pending fragment, resolves the new version from the highest `bump`, groups the bodies by `type`, prepends the assembled section to `CHANGELOG.md` with the standard consumer-install block and link reference, writes the new `version:` into `apm.yml`, deletes the fragments it consumed, cuts the tag and GitHub Release, and retires the pre-release. Nothing releases on a timer.
+
+Releasing is therefore a decision about readiness, not a date. A quick fix can ship as soon as it is verified in the preview; a larger change can sit in preview for as long as it needs. Whatever is pending when the workflow is dispatched goes out together, as one version, at the highest `bump` any pending fragment asked for. The pull request is still where a wrong `bump` gets corrected — the PR check reports the version the batch currently resolves to, and the maintainer can edit the `bump:` line directly in the pull request. `-Bump` and `-Version` overrides on `Invoke-ReleasePrep.ps1` remain for batches assembled by hand.
+
+`.changes/unreleased/` is empty from a release until the next merge. That is the expected steady state.

@@ -1,0 +1,155 @@
+name: Rolling Preview
+
+# Every merge to main refreshes a single pre-release instead of cutting a new one.
+#
+# The release that main is currently accumulating exists continuously as one
+# GitHub pre-release, named for the version the pending fragments resolve to
+# (v0.14.0-pre). Every merge re-renders its notes from .changes/unreleased/ and
+# force-moves its tag to the new head, so testers always have one installable ref:
+#
+#   apm install "Peter-N91/hve-squad#v0.14.0-pre"
+#
+# Nothing here consumes a fragment, edits CHANGELOG.md, or bumps apm.yml. Those
+# stay release outputs, written only when release-prep.yml is dispatched by hand.
+# This workflow only ever reads, which is why it can run on every single merge.
+#
+# The tag name tracks the resolved version, so a minor fragment landing midweek
+# renames the pre-release from v0.13.4-pre to v0.14.0-pre. The stale one is
+# deleted so exactly one pre-release is open at any time.
+#
+# GITHUB_TOKEN is enough here: unlike release-prep.yml and sync-hve-core.yml,
+# nothing downstream needs to be triggered by what this workflow pushes.
+
+on:
+  push:
+    branches:
+      - main
+
+# Only the newest head matters — an in-flight preview for a commit that is
+# already superseded is wasted work, so this cancels rather than queues.
+concurrency:
+  group: preview-main
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    name: Refresh rolling pre-release
+    runs-on: ubuntu-latest
+    # The release commit consumes the fragments this preview renders, and the
+    # pre-release is deleted by that same run. Reacting to it would rebuild a
+    # preview for a release that just shipped.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # ── Resolve what main currently adds up to ────────────────────────────
+      #    -DryRun writes nothing and consumes nothing. It only reports the
+      #    version the pending fragments resolve to.
+      - name: Resolve pending release
+        id: pending
+        shell: pwsh
+        run: ./scripts/Invoke-ReleasePrep.ps1 -DryRun -GitHubOutput
+
+      - name: Compute preview tag
+        id: tag
+        env:
+          VERSION: ${{ steps.pending.outputs.version }}
+        run: echo "tag=v${VERSION}-pre" >> "$GITHUB_OUTPUT"
+
+      # ── Retire pre-releases that no longer match ──────────────────────────
+      #    Covers the rename case (a minor fragment landed midweek) and the case
+      #    where a release consumed the fragments, leaving nothing pending. With
+      #    nothing pending there is no resolved version, so the tag to keep is a
+      #    name no release can have and every pre-release is retired — the
+      #    preview closes itself rather than advertising a shipped release.
+      - name: Remove superseded pre-releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: ${{ steps.tag.outputs.tag }}
+        run: |
+          mapfile -t found < <(
+            gh release list --limit 100 --json tagName,isPrerelease \
+              --jq '.[] | select(.isPrerelease) | .tagName' \
+              | grep -E -- '-pre$' || true
+          )
+          for stale in "${found[@]}"; do
+            if [[ -n "$stale" && "$stale" != "$KEEP" ]]; then
+              echo "::notice::Removing superseded pre-release $stale"
+              gh release delete "$stale" --yes --cleanup-tag
+            fi
+          done
+
+      - name: Report nothing pending
+        if: steps.pending.outputs.has_changes != 'true'
+        run: |
+          echo "::notice::No fragments pending in .changes/unreleased — nothing to preview."
+          echo "No pending fragments. The latest release is still the newest installable ref." \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Render the pre-release body ───────────────────────────────────────
+      #    Second pass now that the tag is known, so the install snippet inside
+      #    the notes points at the preview tag rather than the unreleased version.
+      - name: Render notes
+        if: steps.pending.outputs.has_changes == 'true'
+        shell: pwsh
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.pending.outputs.version }}
+        run: |
+          ./scripts/Invoke-ReleasePrep.ps1 -DryRun -SectionOutFile 'preview-notes.md' -InstallRef $env:TAG
+
+          $banner = @(
+            '> **Rolling preview — not a release.**'
+            "> Rebuilt on every merge to ``main``. Ships as ``v$env:VERSION`` when a maintainer cuts the release."
+            '> The tag moves, so re-run the install command to pick up the newest build.'
+            ''
+          )
+          $body = ($banner -join "`n") + (Get-Content -LiteralPath 'preview-notes.md' -Raw)
+          Set-Content -LiteralPath 'preview-body.md' -Value $body -Encoding utf8NoBOM
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $body
+
+      # ── Move the tag, then publish or refresh the pre-release ─────────────
+      - name: Move preview tag
+        if: steps.pending.outputs.has_changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git tag -f "$TAG" "$SHA"
+          git push --force origin "refs/tags/$TAG"
+
+      - name: Publish or refresh pre-release
+        if: steps.pending.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "$TAG (rolling preview)" \
+              --notes-file preview-body.md \
+              --prerelease
+            echo "::notice::Refreshed pre-release $TAG"
+          else
+            gh release create "$TAG" \
+              --title "$TAG (rolling preview)" \
+              --notes-file preview-body.md \
+              --prerelease \
+              --target "$SHA"
+            echo "::notice::Opened pre-release $TAG"
+          fi

@@ -20,6 +20,11 @@ on:
         required: false
         default: false
         type: boolean
+      ref:
+        description: 'Branch to cut the tag from. Leave as main unless releasing a hotfix branch.'
+        required: false
+        default: main
+        type: string
   push:
     branches:
       - main
@@ -51,6 +56,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+          ref: ${{ inputs.ref || 'main' }}
 
       # ── Manual dispatch only: bump apm.yml version if requested ─────────
       - name: Bump apm.yml version (manual override)
@@ -58,6 +64,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_VERSION: ${{ inputs.version }}
+          REF: ${{ inputs.ref || 'main' }}
         run: |
           NEW_VER="$INPUT_VERSION"
           # Reject anything that isn't a plain semver, so it can't break out of the sed below.
@@ -76,7 +83,7 @@ jobs:
               "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
             git add apm.yml
             git commit -m "chore(release): bump to $NEW_VER"
-            git push origin main
+            git push origin "HEAD:${REF}"
           fi
 
       # ── Resolve version ──────────────────────────────────────────────────
@@ -124,12 +131,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
           DRAFT: ${{ inputs.draft }}
         run: |
           ARGS=(
             "$TAG"
             --title "$TAG"
             --notes-file /tmp/release_notes.md
+            --target "$GITHUB_SHA"
           )
           [[ "$DRAFT" == "true" ]] && ARGS+=(--draft)
+
+          # A hotfix cut off an older line is newer by date but lower by version,
+          # and GitHub would otherwise hand it the Latest badge over the release
+          # that supersedes it.
+          CURRENT_LATEST=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || true)
+          if [[ -n "$CURRENT_LATEST" ]]; then
+            HIGHEST=$(printf '%s\n%s\n' "${CURRENT_LATEST#v}" "$VERSION" | sort -V | tail -1)
+            if [[ "$HIGHEST" != "$VERSION" ]]; then
+              ARGS+=(--latest=false)
+              echo "::notice::$TAG is lower than the current latest ($CURRENT_LATEST) — not marking it latest."
+            fi
+          fi
+
           gh release create "${ARGS[@]}"

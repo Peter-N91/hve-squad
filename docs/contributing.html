@@ -123,10 +123,19 @@ type: Fixed
         per idea &mdash; a pull request doing two unrelated things adds two fragments.
       </p>
       <p>
-        Merging your pull request <strong>releases it</strong>: the fragment landing on the default
-        branch is what assembles the CHANGELOG section, resolves the new version from the highest
-        <code>bump</code> among all pending fragments, writes it into <code>apm.yml</code>, and cuts the
-        tag. The full format reference lives in
+        Merging your pull request <strong>does not release it</strong>. The fragment waits in
+        <code>.changes/unreleased/</code> with everything else already merged, and a maintainer cuts a
+        release when that batch is ready &mdash; the same hour for a quick fix, or later for something
+        that needs time in testing. In the meantime the merge is published to the
+        <strong>rolling pre-release</strong>, so your change is installable and testable within minutes:
+      </p>
+      <pre><code>apm install "Peter-N91/hve-squad#v0.15.0-pre" --target copilot</code></pre>
+      <p>
+        The exact tag is on the
+        <a href="https://github.com/Peter-N91/hve-squad/releases">Releases page</a>, marked as a
+        pre-release. It is a channel rather than a fixed point: the tag moves on every merge, and it is
+        renamed when a <code>minor</code> fragment lands midweek. Pin a released version for anything
+        you depend on. The full format reference lives in
         <a href="https://github.com/Peter-N91/hve-squad/blob/main/.changes/README.md">.changes/README.md</a>.
       </p>
 
