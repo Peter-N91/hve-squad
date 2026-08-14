@@ -134,6 +134,13 @@ targets:
       </p>
       <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
       <p>
+        To try something that has been merged but not released yet, install the rolling pre-release
+        instead &mdash; <code>apm install "Peter-N91/hve-squad#vX.Y.z-pre"</code>. Its exact tag is on
+        the <a href="https://github.com/Peter-N91/hve-squad/releases">Releases page</a>, marked as a
+        pre-release. The tag moves on every merge, so use it to test and pin a released version for
+        anything you depend on.
+      </p>
+      <p>
         <code>apm install</code> re-flattens the package into <code>.github/</code>. Your squad
         <strong>state</strong> under <code>.copilot-tracking/squad/</code> is created per-project and
         is never packaged, so re-installing does not overwrite your roster, routing, decisions, or

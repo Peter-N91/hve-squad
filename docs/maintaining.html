@@ -472,9 +472,31 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
         Tick <em>dry run</em> when you dispatch to see the resolved version and the assembled section
         without committing anything. Use the <code>bump</code> and <code>version</code> inputs to
         overrule the level the fragments resolved to or to pin an exact number.
+      </Do not keep a long-lived <code>release</code> branch. Cut a short-lived
+        <code>hotfix/vX.Y.Z</code> branch off an existing tag only when <code>main</code> holds work
+        that must not ship yet and a fix cannot wait for it &mdash; a release ships a commit, so a tag
+        cut from <code>main</code> carries that pending work out with the fix.
       </p>
-      <p>To do it locally instead:</p>
-      <pre><code>apm run release-prep                        # resolve version, assemble, write
+      <pre><code>git switch --detach v0.14.0
+git switch -c hotfix/v0.14.1
+# apply the fix, then record it
+apm run change            # Type: Fixed, Bump: patch
+git push -u origin hotfix/v0.14.1</code></pre>
+      <p>
+        Dispatch <strong>Release Prep</strong> with <code>ref</code> set to <code>hotfix/v0.14.1</code>.
+        It consumes only that branch's fragments, bumps <code>apm.yml</code> there, and cuts the tag
+        from that branch; <code>release.yml</code> receives the same ref and tags the commit it checked
+        out. The rolling pre-release is deliberately <em>not</em> retired, because the batch it
+        describes is still pending on <code>main</code>.
+      </p>
+      <p>
+        Merge the branch back afterwards so the fix survives the next release, and label that pull
+        request <code>release-merge-back</code>. That label is the only exemption to the
+        <code>CHANGELOG.md</code> and <code>version:</code> guards in <code>pr-validation.yml</code>,
+        and it exists precisely because Release Prep &mdash; not a human &mdash; wrote both. If a
+        higher version has already shipped, the release workflow compares versions and passes
+        <code>--latest=false</code>, so the hotfix does not take the <strong>Latest</strong> badge from
+        the release that supersedes itrelease-prep                        # resolve version, assemble, write
 pwsh -File scripts/Invoke-ReleasePrep.ps1 -DryRun           # preview only
 pwsh -File scripts/Invoke-ReleasePrep.ps1 -Bump minor       # overrule the fragments
 pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0    # force an exact version</code></pre>
