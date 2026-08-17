@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] - 2026-08-17
+
+### Changed
+
+- **The discovery gate shipped with no consumer documentation.** The usage guide now covers it as a
+  sibling of the intake gate — the inverse triggers that chain a brainstorm into a validation, why it
+  is offered rather than automatic, the four trigger conditions, the `quick`/`standard`/`deep`/`skip`
+  depth tiers, and why it stays silent outside the `product` and `full` profiles while the intake gate
+  escalates. The `discovery=` and `owner=` inputs are documented for the first time (`docs/usage.html`,
+  `docs/index.html`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.15.1"
+```
+
+[0.15.1]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.15.1
+
 ## [0.15.0] - 2026-08-17
 
 ### Added
