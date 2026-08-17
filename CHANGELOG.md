@@ -5,6 +5,44 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-08-17
+
+### Added
+
+- **The squad had a front door for weak inputs and none for absent ones.** The intake gate validates requirement artifacts when they exist; a request with nothing written down went straight into research on framing nobody examined. The new opt-in **discovery gate** (`squad-src/.github/instructions/squad/squad-discovery-gate.instructions.md`) fires on the inverse trigger — no input artifact, a goal rather than a settled task — and produces a brief the intake gate then validates. The two gates chain rather than loop.
+- **It is offered, never automatic, and never unattended.** Validation can be automatic because assessing a document is something an agent does alone; ideation cannot, because the value of a brainstorm is the human's ideas. The coordinator asks once per topic and honours a `discovery=quick|standard|deep|skip` input on `/squad` and `/squad-federation`. On a Watch Mode or headless run no offer is made, a `discovery=` argument is ignored, and the triggering payload becomes the intake gate's input instead.
+- **The offer is scoped to the `product` and `full` profiles**, the only rosters carrying the roles the gate dispatches — `analyst` writes the brief at every depth and no other profile seeds it. Elsewhere the gate is silent rather than escalating, which is the deliberate difference from `intake-validator`: an input that exists and goes unvalidated is a skipped check worth interrupting for, while an unrequested brainstorm is not. An explicit `discovery=` is still honoured on any roster, with one combined escalation naming the roles it must add.
+- **The dispatched roles interview the user rather than answering for them.** Each puts its questions through the question tool one at a time and waits, the same discipline `Squad SQL Migration Advisor` already follows here. A role that cannot reach the user returns its outstanding questions instead of inventing the answers, and the session stops — a brief built from an agent's assumptions is the failure the gate exists to prevent.
+- **Depth tiers scale the session to the decision** and introduce no new role: `quick` dispatches `analyst`; `standard` adds `designer` (resolved to `DT Coach`) for How-Might-We framing and divergent ideation; `deep` adds `challenger` and `experimenter`. Only `analyst` writes a file — the brief, in the existing `analyst` Deliverable Root — so one session leaves one artifact.
+- **The discarded options are recorded with their reasons.** The Squad Scribe writes a `## Discovery Verdict` to `decisions.md` (including on a decline, which is what stops the gate re-offering), carrying the framing, every option considered with why it was chosen or discarded, objections, the riskiest assumption, and the open questions research inherits.
+- **Federation asks the question once and applies it per qualifying sub-squad**, the same ask-once contract that already governs member naming and the approval channel. Each `product` or `full` sub-squad still runs its own session and writes its own brief and verdict under its own root; sub-squads on other profiles run unchanged, and the federation plan meta-stage never brainstorms on a sub-squad's behalf.
+
+### Changed
+
+- **The published docs did not describe how a fix ships without shipping everything else.** Added the hotfix procedure, the `ref` release input, and the `release-merge-back` label to the contributing and maintaining pages, and documented the rolling pre-release channel on getting started and troubleshooting.
+
+- **Every merge cut a release.** A fragment landing on `main` assembled the CHANGELOG, bumped `apm.yml`, and tagged immediately, and the daily hve-core sync cut a release of its own on top, so a quiet week still produced several versions and nothing was ever installed before it shipped. Releasing is now a deliberate act: `.github/workflows/release-prep.yml` runs on manual dispatch only, ships everything pending as one version at the highest `bump` any fragment asked for, and nothing goes out on a timer.
+- **Merged work is now installable before it ships.** `.github/workflows/preview.yml` keeps a single GitHub pre-release in sync with `main`, tagged with the version the pending fragments resolve to (`v0.15.0-pre`) and force-moved on every merge, so a change can be installed and tested the moment it lands. It only reads: no fragment is consumed, no version is bumped, and `CHANGELOG.md` is untouched. A quick fix can ship as soon as it is verified there, while a larger change sits in preview until it is ready.
+- **The hve-core sync queues instead of releasing.** `.github/workflows/sync-hve-core.yml` now records a pin move as a change fragment and pushes it, leaving the release to a maintainer. The cast-delta guard and the Watch Mode handoff are unchanged.
+- **A fix can ship without shipping what is not ready.** A release carries a commit, so a tag cut from the default branch contains everything merged into it. `release-prep.yml` and `release.yml` accept a `ref` input, which lets a hotfix be cut off the last release tag and released on its own, leaving the pending batch and its preview untouched. `release.yml` also declines the Latest badge when the version it is cutting is lower than the current latest, and `pr-validation.yml` accepts a `release-merge-back` label so the hotfix can be merged back with the release state Release Prep already wrote.
+- **`Invoke-ReleasePrep.ps1` gained `-SectionOutFile` and `-InstallRef`** so the preview can render the pending release notes and point the install snippet at the preview tag without consuming anything.
+
+- Updated hve-core dependency pin to `2a333df` (2a333df05cc5aa85d2dc9db834958b717c888bf9).
+
+- Updated hve-core dependency pin to `c91c782` (c91c7823188fef4d1ca7558c1c868b05be3aa3c2).
+
+- Updated hve-core dependency pin to `26b9712` (26b97122e19d6ff271b0b6f0401c92bb12eda03b).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.15.0"
+```
+
+[0.15.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.15.0
+
 ## [0.14.0] - 2026-08-14
 
 ### Changed
