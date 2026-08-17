@@ -2,9 +2,7 @@
 name: Squad Technical Writer
 description: "Non-user-invocable squad documentation author that runs the documentation skill to author and maintain project documentation for a squad deliverable"
 user-invocable: false
-model:
-  - Claude Haiku 4.5 (copilot)
-  - GPT-5.4 mini (copilot)
+model: Claude Haiku 4.5 (copilot)
 ---
 
 # Squad Technical Writer

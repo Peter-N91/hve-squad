@@ -2,9 +2,7 @@
 name: Squad Observability Planner
 description: "Non-user-invocable squad observability planner that designs trace, metric, and log instrumentation against the telemetry-foundations vocabulary and returns an instrumentation plan with its PII handling"
 user-invocable: false
-model:
-  - Claude Sonnet 5 (copilot)
-  - GPT-5.6 Terra (copilot)
+model: Claude Sonnet 5 (copilot)
 ---
 
 # Squad Observability Planner

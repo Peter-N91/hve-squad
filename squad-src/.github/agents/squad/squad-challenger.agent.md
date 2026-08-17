@@ -2,9 +2,7 @@
 name: Squad Challenger
 description: "Non-user-invocable squad devil's advocate that pressure-tests plans, assumptions, and proposals through the rpi-challenger and rpi-plan-critique skills and returns severity-graded objections"
 user-invocable: false
-model:
-  - Claude Sonnet 5 (copilot)
-  - GPT-5.6 Terra (copilot)
+model: Claude Sonnet 5 (copilot)
 ---
 
 # Squad Challenger

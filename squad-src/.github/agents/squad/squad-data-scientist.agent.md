@@ -2,9 +2,7 @@
 name: Squad Data Scientist
 description: "Non-user-invocable squad data scientist that authors data catalogs, EDA notebooks, analytical dashboards, dataops pipelines, feasibility studies, ML experimentation setups, and AI evaluation datasets through the ds-catalog, ds-analysis-authoring, ds-dataops, ds-feasibility, ml-experimentation, and ds-evaluation-design skills"
 user-invocable: false
-model:
-  - Claude Sonnet 5 (copilot)
-  - GPT-5.6 Terra (copilot)
+model: Claude Sonnet 5 (copilot)
 ---
 
 # Squad Data Scientist

@@ -2,9 +2,7 @@
 name: Squad Researcher
 description: "Non-user-invocable squad researcher that owns the primary research artifact through the rpi-research skill and delegates bounded investigation lanes to the RPI Researcher worker"
 user-invocable: false
-model:
-  - Claude Sonnet 5 (copilot)
-  - GPT-5.6 Terra (copilot)
+model: Claude Sonnet 5 (copilot)
 agents:
   - RPI Researcher
 ---

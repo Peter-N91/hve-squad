@@ -2,9 +2,7 @@
 name: Squad Prompt Engineer
 description: "Non-user-invocable squad prompt engineer that authors, refactors, and analyses prompt artifacts through the prompt-builder, prompt-refactor, and prompt-analyze skills, and designs AI evaluation datasets through the ds-evaluation-design skill"
 user-invocable: false
-model:
-  - Claude Sonnet 5 (copilot)
-  - GPT-5.6 Terra (copilot)
+model: Claude Sonnet 5 (copilot)
 ---
 
 # Squad Prompt Engineer
