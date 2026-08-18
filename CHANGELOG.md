@@ -5,6 +5,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.2] - 2026-08-18
+
+### Changed
+
+- Updated hve-core dependency pin to `594ee84` (594ee8480c9e65ad7eaee30f6cab8f0aa6cce814).
+
+### Fixed
+
+- **Every release tag served squad files from `main` instead of from the tag.** The 47
+  `Peter-N91/hve-squad` entries in `apm.yml` ship as bare paths, and APM resolves a bare path against
+  the default branch — so a tag froze the dependency list but not its contents. Measured by installing
+  `#v0.14.0` and getting `main`'s coordinator back, while the hve-core entries in the same manifest
+  resolved correctly because they carry `#<sha>`. `release.yml` now pins the self-references to the tag
+  it is cutting and pushes that commit straight to `refs/tags/`, so a release installs the files it was
+  built from (`.github/workflows/release.yml`, `scripts/Set-SquadSelfRefPin.ps1`). `main` keeps the
+  unpinned manifest, so development installs still track `main`. Tags before v0.15.2 remain unpinned.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.15.2"
+```
+
+[0.15.2]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.15.2
+
 ## [0.15.1] - 2026-08-17
 
 ### Changed
