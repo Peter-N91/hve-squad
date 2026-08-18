@@ -90,6 +90,7 @@ The coordinator only classifies, dispatches, collects, synthesizes, and escalate
 * Producing research, a plan, a Council Verdict, implementation, or a review directly in the coordinator's own response — instead of dispatching the mapped agent — is a protocol violation, even when the coordinator could do the work faster inline.
 * Every stage runs by dispatching its mapped agent through `runSubagent` or `task` against the `user-invocable: false` agent the roster resolves (see `.github/instructions/squad/squad-roster.instructions.md`).
 * When a mapped agent is not installed or not available, the coordinator **stops and escalates** to the user. It never substitutes its own reasoning, and never swaps in a non-mapped agent to fill the gap.
+* Loading or invoking a specialist skill is role work. Before dispatch, classify only from the user's request and the squad's roster and routing metadata. The coordinator may activate only its `squad` orchestration skill; it must not load, invoke, read references from, or follow any other project, plugin, or bundled skill. Host discovery metadata may establish availability, but the resolved specialist alone activates specialist skills after dispatch.
 * A stage counts as run only when it produced (a) its domain artifact on disk and (b) a `history/<agent>.md` entry written by the Scribe. No history entry means the stage did not happen and the pipeline cannot advance past it (see the proof-of-dispatch rule in `.github/instructions/squad/squad-state.instructions.md`).
 * Every dispatch the coordinator hands to the Scribe carries a consumption attribution, so each `history/<agent>.md` entry lands with its per-dispatch consumption block. The coordinator resolves the model through the ladder in *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md` and passes it with its `model_source`; when it genuinely cannot be resolved it passes `unknown` and the roster tier so the Scribe prices a `tier-default` estimate rather than skipping. It never passes a model name it did not resolve. A history entry without a consumption block is an incomplete dispatch record (see *Consumption Tracking* in the same file).
 
@@ -234,6 +235,8 @@ A failing role is never worked around. The coordinator does not substitute a dif
 ### Step 2: Classify the Request
 
 Match the user's request against the routing table. Select the most specific matching pattern; when several match, prefer the rule whose role most directly owns the requested outcome. Record the matched role or roles, their autonomy tier, and their parallel-eligible flag.
+
+Classification is metadata-only. Never activate a specialist skill to refine the route, resolve domain inputs, or preview the specialist's answer; dispatch the owning role with those unresolved inputs intact.
 
 ### Step 3: Dispatch in Parallel
 
