@@ -37,7 +37,8 @@ The procedure is split across the reference files below so that each agent loads
 | [gates-and-modes.md](references/gates-and-modes.md)           | Discovery, intake, council gates; autonomous, autopilot, notification modes    |
 | [federation.md](references/federation.md)                     | Federation layout, detection precedence, and federation modes                  |
 | [scribe-procedure.md](references/scribe-procedure.md)         | The Squad Scribe write procedure — Scribe only                                 |
-| [seed-templates.md](references/seed-templates.md)             | First-run state templates                                                      |
+| [entry-schemas.md](references/entry-schemas.md)               | Recurring write shapes: decision and verdict entries, history, state.json      |
+| [seed-templates.md](references/seed-templates.md)             | First-run state templates: team.md and routing.md                              |
 | [consumption.md](references/consumption.md)                   | Consumption ledger templates and the cost estimator                            |
 | [federation-templates.md](references/federation-templates.md) | Federation-root seed templates                                                 |
 

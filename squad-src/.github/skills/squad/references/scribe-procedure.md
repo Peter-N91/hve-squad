@@ -42,7 +42,7 @@ Append each dispatch record to `history/<agent>.md`, creating the file with its 
 
 **A federation-level history payload names a sub-squad, not an agent.** The file is the federation root's `history/<sub-squad>.md`, and the entry records which sub-squad ran, the request it handled, and a reference to that sub-squad's own decision entries so the two levels stay linked. It carries **no** consumption block: that dispatch's cost is recorded once, in the sub-squad's own ledger, and pairing a block here would double-count it. This is the only history append that stands alone, and it is the file most often missing from a federation root — an empty federation `history/` after routed turns means the per-sub-squad entries were never written, not that there was nothing to record.
 
-Verdict entries (Council, Intake Readiness, Discovery) are appended to `decisions.md` using the exact schema in the matching instruction file, listed in *Seed Templates* below:
+Verdict entries (Council, Intake Readiness, Discovery) are appended to `decisions.md` using the exact schema in the matching instruction file, stamped into the shapes in [entry-schemas.md](entry-schemas.md):
 
 * **Council Verdict** — `squad-council.instructions.md`. `Verdict` is exactly `Go`, `Go-With-Conditions`, or `Stop`.
 * **Intake Readiness Verdict** — `squad-intake-gate.instructions.md`. `Verdict` is exactly `Ready`, `Ready-With-Gaps`, or `Not-Ready`.

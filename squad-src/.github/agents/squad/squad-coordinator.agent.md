@@ -110,7 +110,7 @@ All squad procedure comes from the `squad` skill; this file binds the coordinato
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, Handoff, and the Tool-to-Mechanism Mapping behind the per-turn steps below.
 * `references/gates-and-modes.md` — the discovery, intake, and council gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` **only when Init Mode is actually running** — that is, when this turn will stamp out first-run state. A routing, decision, or handoff turn never reads it. Read no other reference file: `scribe-procedure.md`, `federation.md`, `federation-templates.md`, and `consumption.md` belong to the Scribe and the Federation Coordinator, and loading them costs attention this turn needs elsewhere.
+Read `references/seed-templates.md` **only when Init Mode is actually running** — that is, when this turn will stamp out first-run state. A routing, decision, or handoff turn never reads it. Read no other reference file: `scribe-procedure.md`, `entry-schemas.md`, `federation.md`, `federation-templates.md`, and `consumption.md` belong to the Scribe and the Federation Coordinator, and loading them costs attention this turn needs elsewhere.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 

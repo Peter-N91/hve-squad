@@ -7,8 +7,9 @@ type: Changed
   YAML array the Copilot CLI rejects outright.** An over-cap profile is why a selected coordinator
   could answer as a plain model, and a `model:` array makes an agent fail to load entirely. The
   coordinator, federation coordinator, and Scribe now bind to the `squad` skill through a named Skill
-  Reference Contract and fit the cap; `squad` SKILL.md was split into nine topic reference files so
-  each agent loads only its own role's procedure; and every `model:` is now a single string
+  Reference Contract and fit the cap; `squad` SKILL.md was split into ten topic reference files so
+  each agent loads only its own role's procedure, and the Scribe reads the seeding, consumption, and
+  federation files only when the turn's payload writes them; and every `model:` is now a single string
   (`squad-src/.github/agents/squad/`, `squad-src/.github/skills/squad/references/`).
 - **The Model Attribution ladder described host behavior that measurement contradicted.** A valid
   frontmatter pin beats `--model`, an unentitled pin is substituted silently on the dispatch path with

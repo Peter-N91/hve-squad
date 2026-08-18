@@ -12,7 +12,7 @@ metadata:
 
 ## Federation Seed Templates
 
-The Squad Federation Coordinator hands these templates to the Squad Scribe when it creates a federation (after the user confirms the sub-squad set in Federation Init Mode). They stay consistent with `.github/instructions/squad/squad-federation.instructions.md`: `federation.md`, `meta-routing.md`, and the federation `state.json` use replace semantics; the federation `decisions.md` and `history/<sub-squad>.md` are append-only. Each `members/<name>/` sub-squad is seeded with the ordinary `team.md`, `routing.md`, `decisions.md`, `state.json`, and `history/` templates in [seed-templates.md](seed-templates.md), rooted at `members/<name>/`.
+The Squad Federation Coordinator hands these templates to the Squad Scribe when it creates a federation (after the user confirms the sub-squad set in Federation Init Mode). They stay consistent with `.github/instructions/squad/squad-federation.instructions.md`: `federation.md`, `meta-routing.md`, and the federation `state.json` use replace semantics; the federation `decisions.md` and `history/<sub-squad>.md` are append-only. Each `members/<name>/` sub-squad is seeded with the ordinary `team.md` and `routing.md` templates in [seed-templates.md](seed-templates.md) plus the `decisions.md`, `state.json`, and `history/` shapes in [entry-schemas.md](entry-schemas.md), rooted at `members/<name>/`.
 
 ### federation.md
 

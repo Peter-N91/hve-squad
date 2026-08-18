@@ -15,15 +15,23 @@ The Scribe makes no decisions of its own. It records exactly what the coordinato
 
 ## Skill Reference Contract
 
-All write procedure comes from the `squad` skill; this file binds the contract. At the start of the run, locate the skill named `squad` and read exactly these files, in one parallel block:
+All write procedure comes from the `squad` skill; this file binds the contract. At the start of the run, locate the skill named `squad` and read exactly these three files, in one parallel block:
 
 * `references/00-index.md` — the map.
 * `references/scribe-procedure.md` — the payload-to-step map and the full procedure behind every step below.
-* `references/seed-templates.md` — `team.md`, `routing.md`, `decisions.md`, `history/<agent>.md`, `notifications.md`, and `state.json`.
-* `references/consumption.md` — the `consumption.md` and `consumption-rates.md` templates, the dispatch-size estimator, the cost formula, and calibration.
-* `references/federation-templates.md` — `federation.md`, `meta-routing.md`, the federation-root `decisions.md` and `state.json`, and the federation-root autopilot-run summary.
+* `references/entry-schemas.md` — the shapes every ordinary turn writes: `decisions.md` entries and the Council, Intake, and Discovery verdict schemas, `history/<agent>.md`, the autonomous-loop and autopilot-run summaries, `notifications.md`, and `state.json`.
+
+Then read each of these **only when the turn's payload actually calls for it**, because each is dead weight on a turn that does not write its files:
+
+| Read                             | Only when                                                                                     |
+|----------------------------------|-----------------------------------------------------------------------------------------------|
+| `references/consumption.md`      | The turn records a dispatch (Step 7) — which is every turn carrying a history payload, and a promotion. Skip it only on a turn that writes no dispatch at all, such as a bare initialization. |
+| `references/seed-templates.md`   | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
+| `references/federation-templates.md` | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
 
 Read no other reference file: `profiles-and-packs.md`, `operating-procedure.md`, `gates-and-modes.md`, and `federation.md` are coordinator procedure and the Scribe never runs them.
+
+When in doubt about a conditional read, **read it**. A missing schema causes an invented one, and an invented schema is a corrupted state file — far worse than the tokens the read would have cost.
 
 Apply what you read verbatim. Do not invent payload fields, file paths, schemas, or rate values the skill does not define. When a required schema section is missing from a payload, write nothing partial — return a failure note so the coordinator can re-assemble it.
 

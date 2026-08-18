@@ -21,11 +21,12 @@ Read this file first, then read only the reference files your role names in its 
 | [gates-and-modes.md](gates-and-modes.md)           | A gate or autonomy mode is in play: discovery, intake, council, autopilot |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |
 | [scribe-procedure.md](scribe-procedure.md)         | Writing squad state, Scribe only: every payload-to-step rule and contract |
-| [seed-templates.md](seed-templates.md)             | Stamping first-run state: team, routing, decisions, history, state.json   |
+| [entry-schemas.md](entry-schemas.md)               | Any ordinary write turn: decision and verdict entries, history, state.json |
+| [seed-templates.md](seed-templates.md)             | Stamping first-run state, Init only: `team.md` and `routing.md`           |
 | [consumption.md](consumption.md)                   | Recording or estimating cost: ledger templates and the estimator          |
 | [federation-templates.md](federation-templates.md) | Creating or expanding a federation: registry, meta-routing, root files    |
 
-The coordinators read `seed-templates.md` and `federation-templates.md` only to verify deliverable roots during Init or a federation change; the Scribe reads them end to end because it writes them.
+The Scribe reads `00-index.md`, `scribe-procedure.md`, and `entry-schemas.md` on every turn, and reads `consumption.md`, `seed-templates.md`, and `federation-templates.md` only when the turn's payload writes their files. The coordinators read `seed-templates.md` and `federation-templates.md` only to verify deliverable roots during Init or a federation change.
 
 ## Companion instruction files
 
