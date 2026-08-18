@@ -1,15 +1,19 @@
 ---
 name: sql-migration-advisor
-description: "Recommends the best path to migrate a SQL Server environment to Azure. Runs a short guided interview, then scores and recommends a target (SQL VM, AVS, SQL MI, SQL DB, Fabric SQL DB, Arc SQL MI, container or Arc in-place), a method (MI Link, LRS, backup/restore, DAG, DMS, replication, BACPAC, Fabric Migration Assistant), a downtime class, blockers and remediations, cost levers (AHB, ESU) and the Microsoft program fit (Cloud Accelerate Factory, SQL in a Day). Trigger when the user wants to migrate or modernize SQL Server to Azure, asks for the best or recommended migration path, target or tool, or says 'migrer SQL Server', 'migrate SQL Server', 'SQL to Azure' or 'SQL in a Day'."
+description: "Legacy compatibility fallback for SQL Server-to-Azure migration recommendations in HVE Squad. Use only when the preferred `recommend-migration-path` skill from the `sql-migration-advisor` plugin is unavailable. Runs a guided interview and recommends a target, method, downtime class, blockers, remediations, cost levers and Microsoft program fit. It cannot produce the plugin's prerequisite readiness plan."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "2.0"
-  last_updated: "2026-07-07"
+  last_updated: "2026-08-18"
   skill_based_on: "fredgis/sql-migration-advisor (MIT)"
 ---
 
 # SQL Migration Advisor — best path to Azure
+
+> **Compatibility fallback.** `Squad SQL Migration Advisor` prefers the upstream
+> `recommend-migration-path` plugin skill. Use this bundled copy only when that skill is unavailable,
+> and do not use it to produce a prerequisite readiness plan.
 
 Help the user choose the **best migration path** for a SQL Server environment by
 running a **short guided interview** and then producing a **grounded, deterministic
