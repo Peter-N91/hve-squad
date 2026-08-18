@@ -125,7 +125,33 @@ jobs:
           fi
           printf '%s' "$NOTES" > /tmp/release_notes.md
 
-      # ── Create GitHub Release (also creates the tag) ────────────
+      # ── Pin squad self-references, then tag that commit ──────────────────
+      #    The 47 Peter-N91/hve-squad entries in apm.yml ship as bare paths, and
+      #    APM resolves a bare path against the default branch. Without this step a
+      #    tag freezes the dependency *list* but not its *contents*: installing
+      #    '#v0.14.0' was measured returning main's coordinator, while the hve-core
+      #    entries in the same manifest resolved correctly because they carry '#<sha>'.
+      #
+      #    The manifest cannot name its own tag before the tag exists, so the pin
+      #    lands in a commit pushed straight to refs/tags and never to main. main
+      #    keeps the unpinned manifest, so development installs still track main.
+      - name: Pin squad self-references and create the tag
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          pwsh -File scripts/Set-SquadSelfRefPin.ps1 -ApmFile apm.yml -Ref "$TAG"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git add apm.yml
+          git commit -m "chore(release): pin squad self-references to $TAG"
+          git push origin "HEAD:refs/tags/$TAG"
+          echo "::notice::Tagged $TAG at a pinned manifest; main is unchanged."
+
+      # ── Create GitHub Release (the tag already exists) ────────────
       - name: Create GitHub Release
         if: steps.tag_check.outputs.exists == 'false'
         env:
@@ -138,7 +164,6 @@ jobs:
             "$TAG"
             --title "$TAG"
             --notes-file /tmp/release_notes.md
-            --target "$GITHUB_SHA"
           )
           [[ "$DRAFT" == "true" ]] && ARGS+=(--draft)
 

@@ -75,7 +75,7 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | diagnose, troubleshoot, resource health, why is resource failing, investigate deployed, policy check, incident, outage, sev1, sev2, on-call, postmortem, root cause | azure-diagnose | auto | yes |
 | validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |
 | modernize, upgrade framework, migrate, port legacy, .NET upgrade, Java migration, dependency upgrade, containerize | modernizer | confirm | no |
-| sql migration, database migration, schema migration, data migration, sql server to azure, downtime migration plan, cutover strategy | modernizer | confirm | no |
+| sql migration, database migration, schema migration, data migration, sql server to azure, migration prerequisites, migration readiness checklist, downtime migration plan, cutover strategy | modernizer | confirm | no |
 | re-platform, rewrite, port to, rebuild in, cross-stack rewrite, Node to .NET, React to Angular, convert to another language | modernizer | confirm | no |
 | Power Platform, Power Apps, canvas app, model-driven app, Power Automate, cloud flow, Dataverse, Power Pages, Copilot Studio, DLP policy, Power Platform environment, solution ALM | pp-architect | confirm | yes |
 | custom connector, connector certification, apiDefinition.swagger.json, apiProperties.json, script.csx, paconn, MCP connector, Copilot Studio MCP, agentic protocol | pp-connector | confirm | no |
