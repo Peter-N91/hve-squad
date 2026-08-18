@@ -72,6 +72,15 @@
           coordinator's cost-first defaults.
         </li>
         <li>
+          <code>discovery=quick|standard|deep|skip</code> &mdash; runs the discovery gate at that
+          depth without being asked, or skips it. See <em>Discovery gate</em> below.
+        </li>
+        <li>
+          <code>owner=&lt;Member Name&gt;</code> &mdash; picks a specific named member when two rows in
+          <code>team.md</code> share the same <code>Role</code> (for example <code>owner=Beta</code>
+          when the roster has two <code>developer</code> rows).
+        </li>
+        <li>
           <code>mode=autonomous|autopilot</code> — the autonomy mode for this turn. Omit it to run
           interactively, approving each step.
         </li>
@@ -79,6 +88,7 @@
       <pre><code>/squad request="threat-model the auth service" profile=security
 /squad request="design the approvals app" profile=architecture pack=power-platform
 /squad request="summarize the data layer" tier=fast
+/squad request="reduce onboarding drop-off" discovery=standard
 /squad request="build the booking service end to end" mode=autopilot</code></pre>
 
       <figure class="video-figure">
@@ -124,6 +134,107 @@
         choose at build time (interactive mode pings you at every step instead).
       </p>
 
+      <h2>Discovery gate &mdash; when there is nothing written down yet</h2>
+      <p>
+        Two gates run ahead of the work, and they fire on <strong>opposite</strong> triggers. The
+        discovery gate fires when there is <strong>no</strong> input artifact and <em>produces</em>
+        one; the intake gate fires when there <strong>is</strong> one and <em>validates</em> it. The
+        brief a discovery session writes is itself an input artifact, so it flows straight into the
+        intake gate.
+      </p>
+      <pre><code>no input artifact  →  discovery gate  →  brief  →  intake gate  →  research → plan → implement → review
+   input artifact  →                              intake gate  →  research → plan → implement → review</code></pre>
+
+      <div class="callout">
+        <p>
+          <strong>Validation can be automatic. Ideation cannot.</strong> The intake gate fires on its
+          own because assessing an artifact is something an agent can do alone. Discovery is offered
+          rather than automatic, because the value of a brainstorm is <em>your</em> ideas and context.
+          An automatic discovery gate would be AI brainstorming with itself and handing you a
+          confident brief nobody agreed to.
+        </p>
+      </div>
+
+      <h3>When you are offered it</h3>
+      <p>The coordinator offers the gate only when all four hold:</p>
+      <ul>
+        <li>The roster is <code>product</code> or <code>full</code> &mdash; those are the only profiles that seed <code>analyst</code>, which writes the brief.</li>
+        <li>No PRD, BRD, spec, story, design doc, transcript, or file you pointed at grounds the turn.</li>
+        <li>The turn advances toward a plan, a build, or a deliverable &mdash; not a question or a lookup.</li>
+        <li>The request states a <strong>goal</strong> (<em>reduce onboarding drop-off</em>) rather than a settled <strong>task</strong> (<em>add a retry to the webhook client</em>).</li>
+      </ul>
+      <p>
+        In every other profile the gate is <strong>silent</strong> &mdash; no offer, normal routing.
+        That is the deliberate difference from the intake gate, which escalates when its role is
+        missing: inputs that exist should not go unvalidated, but a brainstorm nobody asked for is not
+        a check being skipped. You are asked <strong>once per topic</strong>; declining is recorded and
+        never re-offered.
+      </p>
+      <p>
+        Passing <code>discovery=</code> always works, on any profile and even after you declined. It is
+        a command rather than an offer, so a non-<code>product</code> squad will name the roles it must
+        add and ask once before running.
+      </p>
+
+      <h3>Depth tiers</h3>
+      <table>
+        <thead>
+          <tr><th>Depth</th><th>Roles dispatched, in order</th><th>Produces</th><th>Use when</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>quick</code> (default)</td>
+            <td>analyst</td>
+            <td>brief</td>
+            <td>The goal is clear; only scope, users, and the success measure need settling.</td>
+          </tr>
+          <tr>
+            <td><code>standard</code></td>
+            <td>designer → analyst</td>
+            <td>framing, solution themes, brief</td>
+            <td>The problem itself is open and several directions are worth exploring first.</td>
+          </tr>
+          <tr>
+            <td><code>deep</code></td>
+            <td>designer → challenger + experimenter → analyst</td>
+            <td>framing, themes, objections, riskiest assumption, brief</td>
+            <td>The direction is expensive or hard to reverse and deserves a pressure-test and a cheap test.</td>
+          </tr>
+          <tr>
+            <td><code>skip</code></td>
+            <td>none</td>
+            <td>a <code>Depth: skip</code> verdict recording the declination</td>
+            <td>You do not want a session, or the framing is already settled elsewhere.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>deep</code> needs <code>challenger</code>, which only <code>full</code> seeds. Choosing it
+        in a <code>product</code> squad prompts the coordinator to add the role or run
+        <code>standard</code> instead &mdash; it never silently drops a role from a tier you chose.
+      </p>
+
+      <h3>What you get</h3>
+      <p>
+        The dispatched roles <strong>interview you</strong>, one question at a time, and stop rather
+        than guess when they cannot reach you. Only the analyst writes a file: a short brief at
+        <code>&lt;date&gt;-&lt;topic-id&gt;-brief.md</code> in the analyst's deliverable root, carrying
+        the problem, why now, scope boundaries, the success measure, the options considered, the chosen
+        direction, assumptions, and open questions. A <code>## Discovery Verdict</code> lands in
+        <code>decisions.md</code> alongside it.
+      </p>
+      <p>
+        The <strong>discarded options</strong> are the part worth protecting. A brainstorm's durable
+        value is not the idea that won — that survives on its own — but the record of what was
+        rejected and why, which is what stops the squad relitigating the same directions three turns
+        later.
+      </p>
+      <p>
+        The gate never runs on an <strong>unattended</strong> path. There is nobody there to answer the
+        offer, so the triggering payload becomes the input artifact and the intake gate assesses that
+        instead.
+      </p>
+
       <h2>Requirements intake gate</h2>
       <p>
         When a run is grounded in requirement or input artifacts &mdash; a PRD, BRD, spec, user
@@ -139,6 +250,12 @@
         escalates to you when a gap needs a human decision. When no input artifact grounds the run,
         the gate is a silent no-op. It ships with the <code>product</code> and <code>full</code>
         profiles; other profiles are offered the role when a run turns out to be requirements-driven.
+      </p>
+      <p>
+        When the input is a brief the discovery gate just produced, the validator is resolved to a
+        <strong>different</strong> agent than the one that wrote it &mdash; the PRD Quality Reviewer
+        checking a PRD Builder brief, for instance. A gate that validates its own output is a
+        formality, not a check.
       </p>
 
       <h2>Approving remotely (unattended / VM runs)</h2>
@@ -420,7 +537,7 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
 
       <h2>Finding the details behind a gate</h2>
       <p>
-        When the squad pauses at a gate — an intake-readiness or council verdict, an impactful action, or the final
+        When the squad pauses at a gate — a discovery, intake-readiness, or council verdict, an impactful action, or the final
         outcome — the chat message stays deliberately short so it does not bury the conversation.
         The full reasoning lives in <code>.copilot-tracking/squad/decisions.md</code>, which is
         <strong>append-only</strong>: a new <code>## Council Verdict</code> entry is inserted in the
