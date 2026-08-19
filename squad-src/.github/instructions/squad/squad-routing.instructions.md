@@ -127,7 +127,7 @@ Before dispatching any planning-, implementation-, or deliverable-producing role
 
 When it fires:
 
-* The coordinator dispatches the chosen depth's roles in order — `analyst` for `quick`; `designer` then `analyst` for `standard`; `designer`, then `challenger` and `experimenter`, then `analyst` for `deep`. Each role interviews the user one question per turn through the question tool and returns findings; the Scribe appends a `## Discovery Verdict` to `decisions.md`.
+* The coordinator dispatches the chosen depth's roles in order — `analyst` for `quick`; `designer` then `analyst` for `standard`; `designer`, then `challenger` and `experimenter`, then `analyst` for `deep`. Each role interviews the user one question per turn — through the host's question tool where one exists, otherwise in the response text — and returns findings; the Scribe appends a `## Discovery Verdict` to `decisions.md`.
 * Only `analyst` writes a file: the brief, landing in the `analyst` Deliverable Root as `<date>-<topic-id>-brief.md`.
 * The brief is a requirement artifact, so the **intake gate** then fires on it and assesses it, resolving `intake-validator` to an agent other than the brief's author.
 * A declined offer is recorded as a `Depth: skip` verdict and is never re-offered for the same topic; the user can still reach the gate through the `discovery=` input.

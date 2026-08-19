@@ -74,3 +74,13 @@ type: Fixed
   named, and a stale id reads as a healthy ledger for a squad that only ever seeded. Rewriting the id is
   now an explicit obligation of the ledger rewrite
   (`squad-src/.github/skills/squad/references/scribe-procedure.md`).
+- **The gates' interview discipline named a VS Code-only tool as its mechanism.**
+  The discovery gate rests on dispatched roles interviewing the user one question at a time, and the
+  contract specified `vscode_askQuestions` — which the Copilot CLI and the app do not ship. On two of the
+  three hosts the gate therefore fell through to its own exception path, and a run banked assumptions
+  instead of asking. The discipline is now stated as the rule and the mechanism as the host detail:
+  use the question tool where one exists, otherwise return the question and let the coordinator ask it in
+  the response text. That is the normal path outside VS Code, not a degraded one, and it is now a listed
+  known host limit (`squad-src/.github/instructions/squad/squad-discovery-gate.instructions.md`,
+  `squad-src/.github/instructions/squad/squad-routing.instructions.md`,
+  `squad-src/.github/skills/squad/references/gates-and-modes.md`, `docs/usage.html`).

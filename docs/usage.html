@@ -1302,6 +1302,14 @@ layouts:
           <strong><code>${input:…}</code> substitution is VS Code-only.</strong> The agents restate
           their inputs in plain parameter names for that reason.
         </li>
+        <li>
+          <strong>There is no question tool outside VS Code.</strong> The discovery and intake gates
+          interview you one question at a time, and in VS Code that runs through
+          <code>vscode_askQuestions</code>. The Copilot CLI and the app ship no equivalent, so the
+          dispatched role returns its question and the coordinator asks it in the response text
+          instead. The discipline is the same on every host: an unanswered blocking question stops
+          the turn rather than becoming a recorded assumption.
+        </li>
       </ul>
 
       <h3>Fixed model versus auto</h3>
