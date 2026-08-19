@@ -197,6 +197,11 @@ try { $config.Run.FailOnNullOrEmptyForEach = $false } catch { }
 
 $result = Invoke-Pester -Configuration $config
 
-if ($result.FailedCount -gt 0) {
+# A discovery failure yields zero tests and zero failures, which reads as success to
+# anything checking only the failure count. Treat an empty run as a failure.
+if ($result.FailedCount -gt 0 -or $result.TotalCount -eq 0 -or $result.Result -ne 'Passed') {
+    if ($result.TotalCount -eq 0) {
+        Write-Error 'No tests ran. Discovery failed, or the container was filtered to nothing.' -ErrorAction Continue
+    }
     exit 1
 }

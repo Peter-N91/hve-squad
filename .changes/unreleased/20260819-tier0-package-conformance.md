@@ -16,3 +16,12 @@ type: Added
   file a branch adds as missing. Tier 0's source mode installs the manifest, then overlays the
   branch's `squad-src/` on top, which is the tree that branch would deliver once merged
   (`tests/tier0/Invoke-Tier0Tests.ps1`).
+
+- **Nothing verified the state a squad run leaves behind.** A Tier 1 state contract now asserts the
+  files Init seeds, the shape of `state.json`, dispatch history as proof a stage ran, and the
+  consumption ledger's arithmetic — that every cost follows from its tokens and rates, that rates
+  match `consumption-rates.md`, and that the run total is the sum of every recorded block rather than
+  of the latest turn alone. The runs are nondeterministic; the assertions are not, because they read
+  files. A self-check generates a schema-correct fixture and then mutates it once per rule, requiring
+  the contract to catch each break — a suite that cannot fail is not evidence
+  (`tests/tier1/`).
