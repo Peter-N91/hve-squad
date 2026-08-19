@@ -24,6 +24,20 @@ Both runs install the package from a published ref into a scratch directory and 
 
 Tier 0 is deterministic and free. Tier 1 asserts on **state artifacts on disk**, never on prose, which is what makes it stable despite model nondeterminism. Tier 2 is the only tier that judges wording, and it starts advisory until the noise floor is known.
 
+## Running the suites
+
+| Command | Spends requests | What it does |
+|---|---|---|
+| `./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot .` | no | Static conformance of the tree this branch would deliver |
+| `./tests/tier0/Invoke-Tier0Tests.ps1 -Ref v0.16.0` | no | Static conformance of a published ref, as a consumer receives it |
+| `./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck` | no | Mutation controls proving the state contract can fail |
+| `./tests/tier1/Invoke-Tier1Tests.ps1 -SquadRoot <path>` | no | State contract against an existing squad tree |
+| `./tests/tier1/Invoke-Tier1LiveRun.ps1 -Ref v0.16.0` | **yes** | Provisions fixtures, drives real turns, then applies the state contract |
+| `./tests/tier2/Invoke-Tier2Tests.ps1` | no | Drift controls proving the comparator can fail |
+| `./tests/tier2/Compare-SquadRun.ps1 -ObservationRoot ./tests/tier1/results` | no | Scores a completed Tier 1 run against the golden baselines |
+
+The live harness needs `COPILOT_GITHUB_TOKEN`, the `apm` CLI, and a pinned `@github/copilot`. Everything else needs only Pester 5.7.1.
+
 ## Verified parity evidence
 
 Checked directly while writing this plan, comparing `origin/main` (`de7feef`, 0.15.3) against the branch:
@@ -436,6 +450,24 @@ Advisory until the noise floor is measured. For the same fixture and the same re
 * Is the synthesized answer materially equivalent?
 
 Report the score in the job summary. Promote to blocking only after enough runs to distinguish drift from ordinary variance.
+
+### How it is measured
+
+Each Tier 1 scenario emits an `observation.json` reduced from files on disk, never from the run's prose: roles from the per-agent history resolved through `team.md`, deliverables from `git status` against the fixture baseline with the state directory excluded, and gate verdicts from the `## Council Verdict` and `## Intake Readiness Verdict` entries the Scribe stamps into `decisions.md`.
+
+Deliverables compare as `root` plus extension, not as filenames. The topic slug in a filename is the model's to choose, so comparing it would score ordinary wording variance as drift; the root is the roster's promise and must not move.
+
+The answer dimension is the only judged one, and it is off by default. When it is skipped its weight is redistributed rather than counted as zero, so a skipped judge cannot silently fail a candidate. A judge that times out or returns nothing parseable reports "not judged" for the same reason — a broken judge is not evidence of drift.
+
+| ID | Assertion |
+|---|---|
+| SEM-01 | A scenario with no baseline is reported as unbaselined, never as a failure |
+| SEM-02 | Rescoring a freshly captured baseline against its own run yields 1.0 |
+| SEM-03 | A dropped or added role moves the routing score and is named in the report |
+| SEM-04 | A deliverable that moved root, or stopped being produced, moves the deliverables score |
+| SEM-05 | A deliverable renamed at the same root and type does **not** move the score |
+| SEM-06 | A flipped or dropped gate verdict moves the gates score |
+| SEM-07 | The latest attempt is the one scored, so a scenario that passed on retry is judged on the run that counts |
 
 ## Intended deltas from `main` to `0.16.0`
 

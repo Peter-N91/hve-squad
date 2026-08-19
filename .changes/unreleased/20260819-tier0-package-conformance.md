@@ -25,3 +25,23 @@ type: Added
   files. A self-check generates a schema-correct fixture and then mutates it once per rule, requiring
   the contract to catch each break — a suite that cannot fail is not evidence
   (`tests/tier1/`).
+
+- **The state contract had no live run to assert against.** A Tier 1 harness now provisions a
+  scratch repository per scenario, installs the package into it, copies a tiny fixture on top, and
+  drives real headless Copilot CLI turns before handing the resulting tree to the state contract.
+  Scenarios cover Init, an ordinary routing turn, and promotion from a single squad to a federation
+  with a cross-sub-squad handoff. The model is pinned because a headless run does not read the
+  `model:` frontmatter the editor honors and results are otherwise incomparable; every turn carries a
+  timeout, and a failed scenario is retried once with both attempts kept, so a flake is
+  distinguishable from a regression
+  (`tests/tier1/Invoke-Tier1LiveRun.ps1`, `tests/tier1/scenarios/`, `tests/fixtures/`,
+  `.github/workflows/tier1-behavior.yml`).
+
+- **A squad can write a valid tree while quietly routing to a different cast.** Neither Tier 0 nor
+  Tier 1 can see that. Tier 2 now reduces each run to four deterministic facts — which roles ran,
+  which deliverable types landed at which roots, which gates fired with which verdict, and what the
+  run answered — and scores them against a golden baseline captured from a known-good release. Only
+  the answer is prose, and it is judged only when asked for. The tier is advisory until the noise
+  floor across repeat runs is measured, because a gate that blocks on unmeasured variance gets turned
+  off. Its comparator carries its own drift controls
+  (`tests/tier2/`, `.github/workflows/tier2-semantic.yml`).

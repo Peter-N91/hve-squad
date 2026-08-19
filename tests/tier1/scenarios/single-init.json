@@ -1,0 +1,13 @@
+{
+  "id": "single-init",
+  "description": "A squad initializes into a repository that has none, and seeds exactly the eager state files.",
+  "fixture": "minimal-app",
+  "squadRootGlob": ".copilot-tracking/squad",
+  "expectDispatches": false,
+  "turns": [
+    {
+      "id": "init",
+      "prompt": "Act as the Squad Coordinator for this repository. Run squad Init only: detect that no squad exists, seed the squad state under .copilot-tracking/squad/, and select a roster appropriate for this codebase. Do not route or dispatch any role this turn, and do not produce any deliverable. Report the profile you chose and the files you seeded."
+    }
+  ]
+}

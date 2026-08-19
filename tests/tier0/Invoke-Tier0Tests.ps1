@@ -78,86 +78,28 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+Import-Module (Join-Path $PSScriptRoot '..' 'lib' 'SquadInstall.psm1') -Force
+
 $installLog = $null
 
-function Copy-SquadSource {
-    <#
-    .SYNOPSIS
-        Overlays a working copy's squad-src/ onto an installed tree, matching APM's layout.
-    #>
-    param(
-        [string]$From,
-        [string]$To
-    )
-
-    # APM flattens agents, prompts, and instructions; skills keep their directory.
-    $flat = @{
-        'agents'       = '.github/agents'
-        'prompts'      = '.github/prompts'
-        'instructions' = '.github/instructions'
-    }
-
-    foreach ($kind in $flat.Keys) {
-        $source = Join-Path $From ".github/$kind"
-        if (-not (Test-Path -LiteralPath $source)) { continue }
-
-        $destination = Join-Path $To $flat[$kind]
-        New-Item -ItemType Directory -Path $destination -Force | Out-Null
-        Get-ChildItem -LiteralPath $source -Recurse -File -Filter '*.md' |
-            Copy-Item -Destination $destination -Force
-    }
-
-    $skillSource = Join-Path $From '.github/skills'
-    if (Test-Path -LiteralPath $skillSource) {
-        $skillDestination = Join-Path $To '.agents/skills'
-        New-Item -ItemType Directory -Path $skillDestination -Force | Out-Null
-        Get-ChildItem -LiteralPath $skillSource -Directory |
-            Copy-Item -Destination $skillDestination -Recurse -Force
-    }
-}
-
 if ($PSCmdlet.ParameterSetName -ne 'Installed') {
-    if (-not (Get-Command apm -ErrorAction SilentlyContinue)) {
-        throw "The 'apm' CLI was not found on PATH. Install it, or re-run with -PackageRoot against an already-installed tree."
-    }
-
     if (-not $ScratchRoot) {
         $ScratchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "hve-squad-tier0-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
     }
 
-    New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
-    $installLog = Join-Path $ScratchRoot 'install.log'
-
     if ($PSCmdlet.ParameterSetName -eq 'Source') {
         $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
-        Copy-Item -LiteralPath (Join-Path $SourceRoot 'apm.yml') -Destination $ScratchRoot -Force
-        $installArgs = @()
         Write-Host "Installing the manifest from $SourceRoot into $ScratchRoot" -ForegroundColor Cyan
+        $install = Install-SquadPackage -Destination $ScratchRoot -SourceRoot $SourceRoot -Target $Target
+        Write-Host "Overlaid squad-src/ from $SourceRoot" -ForegroundColor Cyan
     }
     else {
-        $installArgs = @("$Package#$Ref")
         Write-Host "Installing $Package#$Ref into $ScratchRoot" -ForegroundColor Cyan
+        $install = Install-SquadPackage -Destination $ScratchRoot -Ref $Ref -Package $Package -Target $Target
     }
 
-    Push-Location $ScratchRoot
-    try {
-        # Both streams are captured: the unpinned-reference warning PKG-01 asserts on
-        # is emitted to stderr.
-        & apm install @installArgs --target $Target *>&1 | Tee-Object -FilePath $installLog
-        if ($LASTEXITCODE -ne 0) {
-            throw "apm install failed with exit code $LASTEXITCODE. See $installLog."
-        }
-    }
-    finally {
-        Pop-Location
-    }
-
-    if ($PSCmdlet.ParameterSetName -eq 'Source') {
-        Write-Host "Overlaying squad-src/ from $SourceRoot" -ForegroundColor Cyan
-        Copy-SquadSource -From (Join-Path $SourceRoot 'squad-src') -To $ScratchRoot
-    }
-
-    $PackageRoot = $ScratchRoot
+    $installLog = $install.InstallLog
+    $PackageRoot = $install.Root
 }
 
 $PackageRoot = (Resolve-Path -LiteralPath $PackageRoot).Path
