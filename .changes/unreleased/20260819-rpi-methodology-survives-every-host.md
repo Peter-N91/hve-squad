@@ -53,3 +53,24 @@ type: Fixed
   coordinator with the new gate procedures included
   (`squad-src/.github/agents/squad/squad-coordinator.agent.md`,
   `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+- **The `orchestration` ledger row had no storage, so it reset on every rewrite.**
+  The Scribe rewrites `consumption.md` from the consumption blocks recorded in `history/*.md`, and the
+  `orchestration` row is defined as the sum of every recorded orchestration block — but no step ever said
+  to write one. With nothing to read back, the row could only reflect the turn in hand, so a run
+  under-reported its own overhead by every turn that came before. Orchestration now appends a
+  `#### Consumption — Orchestration` block to `history/Squad Scribe.md`, which is also why the Scribe was
+  missing from `history/` altogether
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/skills/squad/references/consumption.md`).
+- **The history filename convention contradicted itself, so hosts named the same file differently.**
+  `entry-schemas.md` mandated the agent's display name (`history/Squad Researcher.md`) while the promotion
+  procedure wrote `history/scribe.md`, and one host produced `squad-scribe.md`. A renamed file reads as a
+  missing entry and drops that agent from every later ledger rewrite. The rule is now stated once,
+  verbatim-display-name, and hoisted into the always-on floor so it binds before any reference file loads
+  (`squad-src/.github/skills/squad/references/entry-schemas.md`,
+  `squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+- **A ledger could stay headed `Run: init-001` while history held dispatch records.**
+  Moving off the seed state was implied by "the seed note must not remain" but the run id itself was never
+  named, and a stale id reads as a healthy ledger for a squad that only ever seeded. Rewriting the id is
+  now an explicit obligation of the ledger rewrite
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`).

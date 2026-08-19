@@ -28,6 +28,8 @@ All squad state lives under a **squad root**: `.copilot-tracking/squad/` for a s
 | `consumption.md`       | Member, model, and credit ledger            | Replace via Scribe |
 | `consumption-rates.md` | Per-model token-rate table                  | Replace via Scribe |
 
+`<agent>` is the agent's `name:` frontmatter value **verbatim** — spaces and capitalization intact, as in `history/BRD Builder.md`. Never slugify, lowercase, or substitute the role id; a renamed file reads as a missing entry and drops that agent from every later ledger rewrite.
+
 Detection precedence: `federation.md` present means federation; otherwise `team.md` present means a single squad; otherwise the squad is not initialized and Init Mode runs. Squad state is runtime-created and is never packaged with the squad source.
 
 ## The Squad Scribe Is the Single Writer

@@ -107,7 +107,7 @@ Autopilot removes the human turn between stages; it does not remove the stages. 
 
 Do not advance from stage N to stage N+1 until both are confirmed on disk for stage N: the required artifact at the owning role's `Deliverable Root`, and a `history/<agent>.md` entry carrying its consumption block. When either is absent, re-dispatch the owning role or fire the Risk Gate — never advance on assumed completion. Quote only paths this run actually enumerated. For a fan-out run, apply the check per deliverable before Review begins.
 
-**Count the history entries at the end of the run.** The number of `history/<agent>.md` entries must be at least the number of stages and deliverables the run claims. A run that produced polished deliverables and left one or two history files did not dispatch its cast — it authored them inline. Report that as a failed run rather than a completed one.
+**Count the history entries at the end of the run.** The number of `history/<agent>.md` entries must be at least the number of stages and deliverables the run claims — counting the dispatched agents' files, not `Squad Scribe.md` or the `autopilot-run-*` and `autonomous-loop-*` summaries. A run that produced polished deliverables and left one or two history files did not dispatch its cast — it authored them inline. Report that as a failed run rather than a completed one.
 
 ## Notification Procedure
 
