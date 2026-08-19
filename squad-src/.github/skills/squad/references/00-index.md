@@ -18,7 +18,7 @@ Read this file first, then read only the reference files your role names in its 
 |----------------------------------------------------|---------------------------------------------------------------------------|
 | [profiles-and-packs.md](profiles-and-packs.md)     | Seeding or amending a roster: profile choice, packs, which roles exist    |
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
-| [gates-and-modes.md](gates-and-modes.md)           | A gate or autonomy mode is in play: discovery, intake, council, autopilot |
+| [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |
 | [scribe-procedure.md](scribe-procedure.md)         | Writing squad state, Scribe only: every payload-to-step rule and contract |
 | [entry-schemas.md](entry-schemas.md)               | Any ordinary write turn: decision and verdict entries, history, state.json |

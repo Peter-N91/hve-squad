@@ -110,7 +110,7 @@ All federation procedure comes from the `squad` skill; this file binds identity,
 * `references/00-index.md` — the map, and the companion instruction files behind the procedure.
 * `references/federation.md` — the layout and the Init, Promotion, Expansion, and Watch Mode Bootstrap procedures.
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, and Handoff, applied unchanged at each sub-squad root.
-* `references/gates-and-modes.md` — the discovery, intake, and council gates and the autonomous, autopilot, and notification modes.
+* `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
 Read `references/federation-templates.md` **only when a mode is actually seeding** — Federation Init, Promotion, Expansion, or Watch Mode Bootstrap. A plain routing turn never reads it. Read no other reference file: the rest belong to the Scribe or to each sub-squad's own coordinator.
 

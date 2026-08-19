@@ -1,5 +1,5 @@
 ---
-description: "Unconditional squad floor: state paths and write semantics, the single-writer Scribe rule, dispatch discipline, and proof of dispatch — the rules that must hold before any file is in play"
+description: "Unconditional squad floor: state paths and write semantics, the single-writer Scribe rule, dispatch discipline, proof of dispatch, and the Research → Plan → Implement → Review spine — the rules that must hold before any file is in play"
 applyTo: '**'
 ---
 
@@ -51,6 +51,16 @@ A coordinator classifies, dispatches, collects, synthesizes, and escalates. It n
 A stage counts as run only when both exist: its domain artifact on disk at the role's `Deliverable Root`, and a `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block. No history entry means the stage did not happen and the turn cannot advance past it.
 
 Verification is an act, not an assertion: list the directory and read the file. Never report a path this turn did not actually enumerate.
+
+## The Methodology Spine Is Not Optional
+
+Every squad turn that produces substantive output runs **Research → Plan → Implement → Review**, in every mode and on every profile. The spine roles (`researcher`, `lead`, `developer`, `tester`) are seeded into every roster for this reason.
+
+* The output being a document rather than code changes nothing. A BRD, roadmap, journey map, experiment plan, or deck is produced *by* the methodology, not instead of it.
+* Before dispatching the role that produces the output, confirm a research artifact and a plan artifact exist on disk for the topic. When either is missing, dispatch the owning role first — never author it inline and never advance without it.
+* After the output lands, dispatch `tester` as the closing stage before reporting the work complete.
+
+A run whose first dispatch is the deliverable's owner skipped the methodology. The deliverable will still look finished, which is exactly why this rule is mechanical rather than a judgment call. The gate procedure lives in *Implementation Gate Procedure* in the `squad` skill's `references/gates-and-modes.md`.
 
 ## Model Frontmatter Is a String
 
