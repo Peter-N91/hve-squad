@@ -64,10 +64,11 @@
 #   custom agents (`.github/agents`), instructions (`.github/instructions`), and
 #   skills, so the Squad Coordinator and cast are available without extra wiring.
 #
-#   The CLI does NOT read the `model:` frontmatter that the VS Code host honors, so
-#   the model is pinned here with `--model` from the workflow-level SQUAD_MODEL.
-#   Pin a frontier model: an unattended run has no human to notice a coordinator
-#   that stopped dispatching. See the SQUAD_MODEL comment below.
+#   The CLI DOES read the `model:` frontmatter, and a valid pin outranks `--model`.
+#   SQUAD_MODEL therefore sets the session model, which applies to the coordinator and
+#   to every role that pins nothing; roles that pin a model keep it. Pin a frontier
+#   model: an unattended run has no human to notice a coordinator that stopped
+#   dispatching. See the SQUAD_MODEL comment below.
 #
 # Required permissions / secrets
 #   Built-in GITHUB_TOKEN scoped to contents:write, pull-requests:write, and

@@ -2,9 +2,7 @@
 name: Squad Backlog Executor
 description: "Writes planned work items into a live Azure DevOps, GitHub, or Jira backlog strictly behind the squad Impactful-Action Gate; defaults to a read-only preview and never writes without explicit human approval"
 user-invocable: false
-model:
-  - Claude Sonnet 5 (copilot)
-  - GPT-5.6 Terra (copilot)
+model: Claude Sonnet 5 (copilot)
 ---
 
 # Squad Backlog Executor
