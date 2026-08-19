@@ -116,16 +116,15 @@ The `model` field records **what actually ran**. It is resolved, never guessed. 
 
 Resolve every dispatch's model by walking this ladder and stopping at the first hit. Record which rung produced the answer in `model_source`:
 
-1. **Headless CLI run** → `model_source: cli-pinned`. When the run is headless (a Watch Mode run, identifiable by the `trigger` object in `state.json`), the Copilot CLI takes its model from `--model` and **ignores agent `model:` frontmatter entirely**. That one model therefore applies to *every* agent in the run, including agents that pin a different one. Skip rungs 3 and 4 in this case.
-2. **Operator declaration** → `model_source: operator-declared`. The user volunteered a model for this run or this role, recorded in `state.json` `currentRun.modelOverrides`. Never prompted for; recorded only when offered.
-3. **Dispatch-reported** → `model_source: dispatch-reported`. The dispatched agent stated the model it ran on in its own response. This is the strongest signal on the ladder and outranks frontmatter, because frontmatter lists *preferences* while the runtime picks the first entry the plan actually supports — only the dispatch knows which one it got.
-4. **Agent-pinned** → `model_source: agent-pinned`. The dispatched agent's file declares a `model:` list and the host honors it (the VS Code host does; the CLI does not). Assume the first entry. Read the agent file rather than guessing.
-5. **Session-inherited** → `model_source: session-inherited`. The agent declares no `model:`, so it runs on the session model in `state.json` `currentRun.sessionModel`.
-6. **Unresolved** → `model_source: unresolved`. None of the above is knowable, so `model` is the literal `unknown`.
+1. **Dispatch-reported** → `model_source: dispatch-reported`. The host named the model the dispatch actually ran on. Two forms count: the Copilot CLI prints it on the dispatch line as `AgentName(model-id)`, and an agent may state it in its own response. This is the strongest rung because it is an observation of what ran rather than a prediction of what should have run, and it is the only rung that detects a silent fallback.
+2. **Agent-pinned** → `model_source: agent-pinned`. The dispatched agent's file declares a `model:` string and **both hosts honor it under a fixed session model** — a pin outranks the session model, including a headless `--model`. Read the agent file rather than guessing. Treat this as a prediction, not an observation, because two conditions void it: an entitlement gap makes the host substitute the session model (silently, on the dispatch path), and an `auto` session lets the router override the pin outright. A row resolved here is trustworthy only while neither applies, which is precisely why rung 1 outranks it.
+3. **Operator declaration** → `model_source: operator-declared`. The user volunteered a model for this run or this role, recorded in `state.json` `currentRun.modelOverrides`. Never prompted for; recorded only when offered. It sits below the pin because a declaration states an intent the host does not enforce: an agent that pins a model runs that model regardless of what was declared for it.
+4. **Session model** → `model_source: session-inherited`, or `cli-pinned` when the run is headless (a Watch Mode run, identifiable by the `trigger` object in `state.json`) and the model came from `--model`. This rung answers only for agents that pin nothing. `--model` sets the session model; it does not override a pin.
+5. **Unresolved** → `model_source: unresolved`. None of the above is knowable, so `model` is the literal `unknown`.
 
-Every rung is an observation or a file read — none requires asking the user, and none is a guess. Rung 6 should be vanishingly rare: reaching it means the dispatch reported nothing, the agent file was not read, and the session model was never recorded.
+Every rung is an observation or a file read — none requires asking the user, and none is a guess. Rung 5 should be vanishingly rare: reaching it means the dispatch reported nothing, the agent file was not read, and the session model was never recorded.
 
-The host matters as much as the agent. The same roster produces different real models in the VS Code host (where a pinned agent runs its pinned model) and in a headless Watch Mode run (where `--model` flattens every agent onto one model). A ledger that ignores the host will misattribute every pinned role in every unattended run.
+The host reports what it ran; prefer that over inference. Measured against the Copilot CLI: a valid pin beats `--model`; an unresolvable pin on a directly invoked agent warns and falls back to the session model; an unresolvable pin on a *dispatched* agent falls back silently. A ledger built on frontmatter alone will therefore look correct and be wrong on exactly the runs where an account lacks the pinned model. Capturing the dispatch line is what closes that gap.
 
 ### Never invent a model name
 
@@ -139,12 +138,12 @@ The host matters as much as the agent. The same roster produces different real m
 
 `team.md`'s `Model Tier` is a routing preference. It never determines what ran and never appears in `model`. Two consequences follow, and both are common sources of surprise:
 
-* An agent that pins `model:` in its frontmatter does **not** run on the operator's selected model *in a host that honors frontmatter*. The Squad Scribe, Squad Reviewer, Squad Cost Manager, and Squad Technical Writer pin a lightweight model by design, so an operator running a high-capability model everywhere will still see those roles attributed to the pinned lightweight model. That is correct, not a bug — `model_source: agent-pinned` is what makes it legible. In a headless Watch Mode run the same roles run on the `--model` pin instead, and are recorded as `cli-pinned`.
+* An agent that pins `model:` in its frontmatter does **not** run on the operator's selected model, provided that selection is a fixed one. The Squad Scribe, Squad Reviewer, Squad Cost Manager, and Squad Technical Writer pin a lightweight model by design, so an operator running a high-capability model everywhere will still see those roles attributed to the pinned lightweight model. That is correct, not a bug — `model_source: agent-pinned` is what makes it legible. This holds in a headless Watch Mode run too: `--model` sets the session model for agents that pin nothing, and the pinned roles keep their pin. It does **not** hold under `auto`, where the router overrides the pin.
 * An agent that pins nothing runs on the operator's model. If the operator selected a high-capability model, that dispatch must be priced at that model's rates, not at its roster tier's rates. Pricing an inherited high-capability dispatch at a mid-tier fallback is a direct undercount.
 
 ### Recording the session model
 
-`state.json` `currentRun.sessionModel` is the single source of truth for rung 5, and it is captured **automatically, never by asking**. The coordinator runs *on* the session model, so it records the model it is itself running on — an observation about itself, not a fact it needs from the user. It re-reports on every turn, so a mid-run model switch is picked up without anyone announcing it. `currentRun.modelOverrides` optionally maps a role or agent name to a model the user volunteered; it is never prompted for.
+`state.json` `currentRun.sessionModel` is the single source of truth for rung 4, and it is captured **automatically, never by asking**. The coordinator runs *on* the session model, so it records the model it is itself running on — an observation about itself, not a fact it needs from the user. It re-reports on every turn, so a mid-run model switch is picked up without anyone announcing it. `currentRun.modelOverrides` optionally maps a role or agent name to a model the user volunteered; it is never prompted for.
 
 Adding a build question here would buy nothing: the answer is already in the coordinator's possession, and a squad that interrogates its operator about facts it can observe is a squad that gets skipped.
 
@@ -152,11 +151,14 @@ Adding a build question here would buy nothing: the answer is already in the coo
 
 **`auto` is a routing mode, not a model.** When the host is set to automatic model selection, record `sessionModel: auto` verbatim — never resolve it to a concrete model name, because under auto the host routes *per request*, so the model can differ between two dispatches in the same turn. A single run-level model is wrong by construction here.
 
-Auto changes which rungs can answer, and nothing else:
+Auto changes which rungs can answer:
 
-* Rung 4 is unaffected. Agent `model:` frontmatter still wins over the picker, so pinned agents stay deterministic under auto exactly as they are under a fixed selection.
-* Rung 5 cannot resolve. `auto` names no model, so an unpinned dispatch must be answered by rung 3 — the dispatch's own report. Under auto that report is not merely the strongest signal, it is the **only** one, which is why every dispatch is asked for it.
+* **Rung 2 cannot resolve under auto — measured.** The router overrides a frontmatter pin. A child pinned to `Claude Sonnet 5 (copilot)` ran on `gpt-5.6-luna` on repeated `--model auto` runs, while the same agent under a fixed session model ran on `claude-sonnet-5`. A pin is deterministic only under a fixed selection; under auto it is a preference the router may disregard.
+* Rung 4 cannot resolve. `auto` names no model, so it can never be copied into `model`.
+* **Rung 1 is therefore the only rung that can answer under auto**, for pinned and unpinned dispatches alike. Under auto the host's dispatch line is not merely the strongest signal, it is the only one, which is why every dispatch is asked for it.
 * A dispatch that reported nothing under auto falls to `unresolved` and is priced at its tier fallback. Flag those rows `auto-unreported` on the ledger and state plainly that they are the least trustworthy figures on the page: auto routes agentic tool loops toward capable models more often than cheap ones, so a tier fallback most likely understates them. The remedy is to get the report, not to guess a better number.
+
+**Auto voids the roster's cost control.** Every lightweight pin — Scribe, Reviewer, Cost Manager, Technical Writer — is advisory under auto, and the router's bias toward capable models on tool-heavy loops runs precisely opposite to the intent of those pins. A run that must honor its pins needs a fixed session model. Say so plainly when reporting cost for an auto run rather than presenting the roster's tiers as though they held.
 
 **The literal string `unknown` is not a valid `sessionModel`.** It is a placeholder that cascades: every agent without its own pin falls through to `unresolved`, gets priced at a tier fallback, and is billed as a cheaper model than the one that actually ran. A ledger whose rows are uniformly `unresolved` is almost always this failure, not a genuine ambiguity. `auto` is the correct value when the host is routing; `unknown` never is.
 

@@ -1216,6 +1216,108 @@ layouts:
         asking the coordinator to switch profiles.
       </p>
 
+      <h2>Running on other hosts</h2>
+      <p>
+        The squad ships both prompts and agents. <strong>Prompt files are a VS Code feature</strong> —
+        GitHub Copilot CLI and the GitHub Copilot app never read them. Every squad entry point
+        therefore also exists as an <strong>agent</strong>, and selecting the agent is the one
+        invocation model that works everywhere.
+      </p>
+
+      <table>
+        <thead>
+          <tr><th>Entry point</th><th>VS Code</th><th>Copilot CLI and Copilot app</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Run a squad</td>
+            <td><code>/squad request="…"</code></td>
+            <td>select the <strong>Squad Coordinator</strong> agent</td>
+          </tr>
+          <tr>
+            <td>Run a federation</td>
+            <td><code>/squad-federation request="…"</code></td>
+            <td>select the <strong>Squad Federation Coordinator</strong> agent</td>
+          </tr>
+          <tr>
+            <td>Search and export</td>
+            <td><code>/squad-document request="…"</code></td>
+            <td>select the <strong>Squad Document</strong> agent</td>
+          </tr>
+          <tr>
+            <td>Governance dashboard</td>
+            <td><code>/squad-governance-report</code></td>
+            <td>select the <strong>Squad Governance Report</strong> agent</td>
+          </tr>
+          <tr>
+            <td>Promote a learning</td>
+            <td><code>/squad-learn</code></td>
+            <td>select the <strong>Squad Learn</strong> agent</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        On the CLI you can select an agent interactively with <code>/agent</code>, or start a headless
+        run with <code>--agent</code>:
+      </p>
+      <pre><code>copilot --agent="Squad Coordinator" --prompt 'request="add input validation to the login form" profile=security'</code></pre>
+
+      <div class="callout">
+        <p>
+          <strong>Named parameters carry over.</strong> <code>request=</code>,
+          <code>profile=</code>, <code>pack=</code>, <code>tier=</code>, <code>mode=</code>,
+          <code>owner=</code>, <code>format=</code>, <code>period=</code> and the rest are parsed by
+          each agent's own <em>Inputs</em> section, not by the prompt file. Type them in the request
+          text and they work identically on every host.
+        </p>
+      </div>
+
+      <p>
+        The <code>squad</code> skill is also discovered on the CLI, so <code>/squad</code> loads the
+        squad operating procedure into whatever agent you are already talking to. That is not the same
+        as running the coordinator — select the agent when you want a real squad turn.
+      </p>
+
+      <h3>Known host limits</h3>
+      <ul>
+        <li>
+          <strong>Agent bodies are capped at 30,000 characters</strong> outside VS Code. Every squad
+          agent ships under that cap; the procedure lives in the <code>squad</code> skill and is
+          retrieved on demand rather than injected on every turn.
+        </li>
+        <li>
+          <strong><code>model:</code> must be a single string.</strong> VS Code also accepts a YAML
+          array; the CLI rejects the file outright and the agent never loads. Per-role model
+          preference belongs in the <code>Model Tier</code> column of <code>team.md</code>.
+        </li>
+        <li>
+          <strong>Path-scoped instructions load only on an <code>applyTo</code> match</strong> outside
+          VS Code, so an agent that has not yet touched squad state may run without them. The package
+          ships <code>squad-floor.instructions.md</code> scoped to <code>**</code> for that reason: it
+          carries dispatch discipline, the single-writer Scribe rule, the state paths, and proof of
+          dispatch, and applies regardless of which file is in play.
+        </li>
+        <li>
+          <strong><code>${input:…}</code> substitution is VS Code-only.</strong> The agents restate
+          their inputs in plain parameter names for that reason.
+        </li>
+      </ul>
+
+      <h3>Fixed model versus auto</h3>
+      <p>
+        Under automatic model selection the host routes each request itself and <strong>overrides a
+        subagent's pinned model</strong>: a role pinned to Sonnet can be measured running a different
+        model entirely. Frontmatter is a request, not a guarantee — an account that is not entitled to
+        a pinned model gets the session model substituted silently on the dispatch path.
+      </p>
+      <p>
+        The ledger therefore records what the <em>host reported</em> for each dispatch, not what the
+        roster asked for. When cost attribution matters, run with a fixed session model
+        (<code>--model &lt;id&gt;</code> on the CLI, or a pinned model in the VS Code picker) so the
+        roster's cost-first tiers actually take effect.
+      </p>
+
       <div class="pager">
         <a class="prev" href="getting-started.html">
           <div class="dir">← Back</div>
