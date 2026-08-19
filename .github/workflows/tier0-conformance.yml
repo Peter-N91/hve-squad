@@ -57,17 +57,19 @@ jobs:
         with:
           persist-credentials: false
 
-      # install-only: the suite drives apm itself, so it needs the CLI and nothing else.
+      # setup-only: the suite drives apm itself, so it needs the CLI and nothing else.
       - name: Install the APM CLI
         uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
         with:
-          install-only: 'true'
-          version: '0.18.0'
+          setup-only: 'true'
+          apm-version: '0.18.0'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Pinned to 5.x: Pester 6 changes -ForEach and configuration semantics, and this
+      # suite is authored and verified against 5.
       - name: Install Pester
         shell: pwsh
-        run: Install-Module Pester -MinimumVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
 
       - name: Run Tier 0
         shell: pwsh

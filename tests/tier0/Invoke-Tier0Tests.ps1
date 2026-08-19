@@ -191,6 +191,10 @@ if (-not $IncludeAdvisory) {
     $config.Filter.ExcludeTag = 'Advisory'
 }
 
+# An empty case set is a legitimate state - a package with no skill references claims
+# none - but Pester 6 treats it as an error by default.
+try { $config.Run.FailOnNullOrEmptyForEach = $false } catch { }
+
 $result = Invoke-Pester -Configuration $config
 
 if ($result.FailedCount -gt 0) {
