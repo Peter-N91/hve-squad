@@ -27,3 +27,29 @@ type: Fixed
   blocking question is put to the user — in the response text on a host with no question tool — instead of
   being converted into an assumption
   (`squad-src/.github/skills/squad/references/gates-and-modes.md`).
+- **The seeded `routing.md` differed per host because the canonical table mixed roles with agent names.**
+  Ten rows in a column headed `Role(s)` carried agent names (`Security Planner`, `UX UI Designer`,
+  `PRD Builder`, `DT Coach`, `Experiment Designer`, `System Architecture Reviewer`, `RAI Planner`,
+  `Finding Deep Verifier`, `Squad IaC Author`, `Squad Deployer`), so one host normalized them to role ids
+  and another copied them verbatim. An agent name there resolves to no `team.md` row, which silently drops
+  that row's `Member Name`, `Model Tier`, Selection Cues, and `Deliverable Root`. Every row now carries a
+  role id, and both the canonical table and the seed template say why
+  (`squad-src/.github/instructions/squad/squad-routing.instructions.md`,
+  `squad-src/.github/skills/squad/references/seed-templates.md`).
+- **A hand-edited `Deliverable Root` was ignored by any agent that builds its own output path.**
+  The `presenter` root moved to `ppt-prezi/` in `team.md` and the deck still landed in `ppt/`, because the
+  `powerpoint` pipeline derives `<date>/<deck-slug>/` itself and takes the parent as an argument — naming
+  the cell in the dispatch prose was not enough. The coordinator now passes the root *as the output
+  argument*, the roster records that some agents need it that way, and the brand-template instructions no
+  longer stop applying when the deck root is renamed
+  (`squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/instructions/squad/squad-roster.instructions.md`,
+  `squad-src/.github/instructions/squad/pptx-brand-template.instructions.md`).
+- **Both coordinators sat within 250 characters of the 30,000-character agent-body cap.**
+  Under that cap the body is truncated outside VS Code, so any addition would have silently cut the
+  closing sections — which is what makes the limit dangerous rather than merely tight. Sections that
+  restated the always-on floor, the Scribe's own consumption procedure, and the skill's gate references
+  were collapsed, leaving 1,519 characters of headroom on the coordinator and 813 on the federation
+  coordinator with the new gate procedures included
+  (`squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).

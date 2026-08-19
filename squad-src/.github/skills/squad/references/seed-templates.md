@@ -69,6 +69,8 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 
 Seeded from the default routing rules. Each rule points at a role that exists in `team.md`. The canonical rule set is *Default Routing Rules* in `.github/instructions/squad/squad-routing.instructions.md`; the table below mirrors it in full, and the instructions win on any difference. The Scribe drops every row whose role is not on the seeded team, so a narrow profile writes only its own subset.
 
+**The `Role(s)` column holds role ids, never agent names.** `team.md` is keyed on the role id, so the id is what carries the row's `Member Name`, `Model Tier`, Selection Cues, and `Deliverable Root`. Writing an agent name here resolves to no roster row and the dispatch silently loses all four — most visibly the output path, which then falls back to the agent's own default. Copy the ids below verbatim; the concrete agent is resolved at dispatch time.
+
 ```markdown
 ---
 description: "Squad routing: request patterns mapped to roles, autonomy tiers, and parallel eligibility"
@@ -87,29 +89,29 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | author prompt, write agent file, refactor instructions, analyse skill | prompt-engineer | confirm | no         |
 | brainstorm, ideate, shape this idea, explore options, what should we build, help me think through, we want to, kick off a brief | designer, analyst | confirm | no |
 | validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
-| security, threat, vulnerability, STRIDE    | Security Planner             | confirm       | yes               |
+| security, threat, vulnerability, STRIDE    | security                     | confirm       | yes               |
 | supply chain, SBOM, SLSA, provenance, OpenSSF Scorecard, Sigstore, signed release, dependency pinning | supply-chain | confirm | yes         |
 | CVE, vulnerability triage, VEX, OpenVEX, exploitability, is this CVE exploitable, advisory disposition, not affected | vuln-manager | confirm | yes |
 | privacy, personal data, PII, DPIA, GDPR, data subject, retention | privacy               | confirm       | yes               |
 | accessibility, a11y, WCAG, ARIA, screen reader, keyboard navigation, Section 508, EN 301 549, VPAT, conformance audit | accessibility | confirm | yes |
-| design, UX, UI, wireframe, journey, interaction design | UX UI Designer          | confirm       | yes               |
-| requirements, BRD, PRD, user story, acceptance criteria | PRD Builder                 | confirm       | yes               |
-| journey map, persona, design thinking, empathize, ideate, problem statement | DT Coach | confirm | yes           |
+| design, UX, UI, wireframe, journey, interaction design | designer                | confirm       | yes               |
+| requirements, BRD, PRD, user story, acceptance criteria | analyst                     | confirm       | yes               |
+| journey map, persona, design thinking, empathize, ideate, problem statement | designer | confirm | yes           |
 | roadmap, backlog, epic, sprint, prioritize, story, PRD to work items, work item hierarchy | product-owner | confirm    | no                |
 | create work items in ADO, push backlog to Azure DevOps, create Jira issues, apply the handoff, execute handoff, sync work items to the tracker | backlog-executor | confirm | no |
 | GitLab merge request, GitLab pipeline, GitLab issue, open an MR | product-owner        | escalate      | no                |
-| experiment, hypothesis, validate assumption, MVE, riskiest assumption | Experiment Designer | confirm | yes         |
+| experiment, hypothesis, validate assumption, MVE, riskiest assumption | experimenter        | confirm | yes         |
 | presentation, deck, slides, executive summary, pitch | presenter                    | confirm       | no                |
 | document, write up, summarize for stakeholders, readme | technical-writer           | confirm       | no                |
 | data profile, data dictionary, EDA, exploratory analysis, notebook, dashboard, dataset, Power BI, DAX, semantic model, star schema, report design, Fabric, Lakehouse, OneLake | data-scientist | confirm | no |
-| architecture, system design, components    | System Architecture Reviewer | auto          | yes               |
-| responsible AI, RAI, fairness, harm        | RAI Planner                  | confirm       | yes               |
-| verify finding, confirm claim, fact-check  | Finding Deep Verifier        | auto          | yes               |
+| architecture, system design, components    | architect                    | auto          | yes               |
+| responsible AI, RAI, fairness, harm        | rai                          | confirm       | yes               |
+| verify finding, confirm claim, fact-check  | fact-checker                 | auto          | yes               |
 | risk register, project risk, probability and impact, risk matrix, mitigation plan, contingency, what are the risks | risk-manager | confirm | yes |
 | SLO, SLA, error budget, latency budget, load test plan, capacity planning, performance target, throughput, soak test | performance | confirm | yes |
 | observability, instrumentation, telemetry design, spans, traces, metrics, structured logging, OpenTelemetry, what should we emit | observability | confirm | yes |
-| author IaC, write Bicep, write Terraform, convert LLD to infra, infrastructure as code | Squad IaC Author | confirm | no |
-| deploy, provision, what-if, terraform plan, terraform apply, az deployment | Squad Deployer | confirm | no |
+| author IaC, write Bicep, write Terraform, convert LLD to infra, infrastructure as code | iac-author | confirm | no |
+| deploy, provision, what-if, terraform plan, terraform apply, az deployment | deployer | confirm | no |
 | as-built, resource inventory, compliance matrix, operations runbook, DR plan, document deployed infrastructure | asbuilt-author | confirm | no |
 | diagnose, troubleshoot, resource health, why is resource failing, investigate deployed, policy check, incident, outage, sev1, sev2, on-call, postmortem, root cause | azure-diagnose | auto | yes |
 | validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |

@@ -1,6 +1,6 @@
 ---
 description: "Make the PowerPoint Builder always brand generated decks with the project's own .pptx template, and guide non-technical users to provide one — without any manual setup."
-applyTo: "**/.copilot-tracking/ppt/**, **/.copilot-tracking/squad/**/ppt/**"
+applyTo: "**/.copilot-tracking/ppt*/**, **/.copilot-tracking/squad/**/ppt*/**"
 ---
 
 # Brand Template for PowerPoint Builds

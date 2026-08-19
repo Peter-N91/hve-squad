@@ -230,17 +230,17 @@ Synthesize the sub-squads' results into a concise answer, attributing outcomes t
 
 Before reporting any sub-squad as done, verify both levels mechanically — never rely on the sub-squad's returned summary alone. For **each** sub-squad routed this turn, confirm:
 
-1. the sub-squad's inner-run proof-of-dispatch is satisfied — each stage it ran left its domain artifact at the rebased `Deliverable Root` under `members/<name>/` (see *Deliverable Roots* in `.github/instructions/squad/squad-roster.instructions.md`) and a `members/<name>/history/<agent>.md` entry with a consumption block;
+1. the sub-squad's inner-run proof-of-dispatch is satisfied — each stage it ran left its domain artifact at the rebased `Deliverable Root` under `members/<name>/` and a `members/<name>/history/<agent>.md` entry with a consumption block;
 2. the federation-level `history/<sub-squad>.md` entry was written by the Scribe and references the sub-squad's own decision entries;
 3. the federation `state.json` advanced this turn — its `updated` and `turn` moved and its `activeRoles` name the sub-squad(s) that ran.
 
-**Verification is an act, not an assertion.** List `members/<name>/history/` and the sub-squad's deliverable roots, and read what is there. Never write a path into a federation history entry that this turn did not enumerate. Two failure shapes are specific to this level and must be caught here rather than reported as success:
+**Verification is an act, not an assertion.** List `members/<name>/history/` and the sub-squad's deliverable roots, and read what is there. Three failure shapes are specific to this level and must be caught here rather than reported as success:
 
-* **Invented paths.** A federation history entry that cites a deliverable at a path which does not exist on disk. Cross-check every cited path before the Scribe writes the entry.
-* **A thin inner history.** `members/<name>/history/` holding fewer per-agent entries than the roles the inner run claims to have dispatched. That means the sub-squad's coordinator worked inline instead of dispatching, and the run is not complete no matter how finished the deliverables look.
-* **A federation root that only grows its decision log.** `decisions.md` carrying entries for turns that `state.json` never counted, or a federation root with no `history/` directory at all after routed turns. Both mean the federation-level hand-off in Step 5 was partial: the decision was appended and the per-sub-squad history and status advance were dropped.
+* **Invented paths.** A federation history entry citing a deliverable at a path that does not exist on disk. Cross-check every cited path before the Scribe writes the entry.
+* **A thin inner history.** `members/<name>/history/` holding fewer per-agent entries than the roles the inner run claims to have dispatched. The sub-squad's coordinator worked inline instead of dispatching, and the run is not complete no matter how finished the deliverables look.
+* **A federation root that only grows its decision log.** `decisions.md` carrying entries for turns `state.json` never counted, or no `history/` directory at all after routed turns. Both mean the Step 5 hand-off was partial.
 
-When either check fails, the sub-squad turn did **not** complete: re-dispatch the sub-squad's scoped run (or escalate) and do not report it as done. Never substitute inline coordinator reasoning for a sub-squad's unverified run, and never let a sub-squad's own claim of completion stand in for the evidence. Only after every routed sub-squad passes both checks may the coordinator present its Step 6 synthesis.
+When any check fails, the sub-squad turn did **not** complete: re-dispatch the scoped run or escalate. Never substitute inline reasoning for an unverified run, and never let a sub-squad's own claim of completion stand in for the evidence.
 
 ## Federation Autopilot Mode
 
