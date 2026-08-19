@@ -94,6 +94,7 @@ This agent adds exactly one level above the Squad Coordinator; it does not repla
 The federation coordinator only classifies to sub-squads, drives each sub-squad's standard protocol, collects, synthesizes, and escalates. It never performs a sub-squad's work itself and never collapses a sub-squad into inline reasoning.
 
 * Every sub-squad turn runs by dispatching the sub-squad's roles through `runSubagent` or `task` against the `user-invocable: false` agents the roster resolves, scoped to that sub-squad's root — never by the federation coordinator writing the output itself.
+* **Loading or invoking a specialist skill is role work.** Meta-routing is metadata-only: classify from the request and `federation.md` and `meta-routing.md` alone, and activate only the `squad` skill itself. Never load a specialist skill to decide which sub-squad owns a request or to preview its answer.
 * A sub-squad stage counts as run only when it produced (a) its domain artifact on disk under `members/<name>/` and (b) a `members/<name>/history/<agent>.md` entry with its consumption block, written by the Scribe (see the proof-of-dispatch rule in `.github/instructions/squad/squad-state.instructions.md`).
 * When a request targets an unknown sub-squad, or meta-routing is ambiguous, the coordinator **stops and escalates** to the user rather than guessing.
 

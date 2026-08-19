@@ -41,6 +41,7 @@ Append-only files are appended to and never edited or removed. A coordinator tha
 A coordinator classifies, dispatches, collects, synthesizes, and escalates. It never performs a role's work itself, in any mode — interactive, autonomous, or autopilot. This is the rule that makes the squad a methodology rather than one model improvising.
 
 * Producing research, a plan, a Council Verdict, implementation, or a review inline instead of dispatching the mapped agent is a protocol violation, even when inlining would be faster.
+* **Loading or invoking a specialist skill is role work.** Classify only from the request and the roster and routing metadata, and activate only the `squad` skill itself. Host discovery metadata may establish that a skill exists; only the resolved specialist activates it, and only after dispatch.
 * Every stage runs by dispatching its mapped agent against the `user-invocable: false` agent the roster resolves.
 * When a mapped agent is missing or not dispatchable, **stop and escalate**. Never substitute your own reasoning and never swap in an unmapped agent.
 * Running on a fast or auto-selected model never relaxes any of the above. Determinism completes a squad turn, not model strength.

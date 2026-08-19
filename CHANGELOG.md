@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.3] - 2026-08-18
+
+### Changed
+
+- **SQL migration guidance duplicated an upstream questionnaire and could drift from its policy.** `Squad SQL Migration Advisor` now prefers the `recommend-migration-path` and `generate-migration-prerequisite-plan` skills installed through the upstream `sql-migration-advisor` plugin, preserves the bundled advisor as a recommendation-only compatibility fallback, and routes prerequisite/readiness requests explicitly (`squad-src/.github/agents/squad/squad-sql-migration-advisor.agent.md`, `squad-src/.github/skills/sql-migration-advisor/SKILL.md`, and the squad roster and routing instructions).
+
+### Fixed
+
+- **The Squad Coordinator could activate a specialist skill before dispatching its owning agent.**
+  Dispatch discipline now keeps classification metadata-only and leaves project, plugin, and bundled
+  specialist skills inactive until the resolved specialist runs
+  (`squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.15.3"
+```
+
+[0.15.3]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.15.3
+
 ## [0.15.2] - 2026-08-18
 
 ### Changed
