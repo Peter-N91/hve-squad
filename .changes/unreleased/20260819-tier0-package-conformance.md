@@ -17,6 +17,13 @@ type: Added
   branch's `squad-src/` on top, which is the tree that branch would deliver once merged
   (`tests/tier0/Invoke-Tier0Tests.ps1`).
 
+- **That workaround still aborted on the branches most worth testing.** A branch that *adds* a
+  squad artifact makes `apm install` exit non-zero, and source mode threw before a single case
+  ran — so any additive branch reported nothing rather than a result. Source mode now tolerates
+  an install failure only when every unresolved reference names a file present in the working
+  copy, which is precisely the file the overlay is about to supply. A failure naming anything
+  else still aborts (`tests/lib/SquadInstall.psm1`).
+
 - **Nothing verified the state a squad run leaves behind.** A Tier 1 state contract now asserts the
   files Init seeds, the shape of `state.json`, dispatch history as proof a stage ran, and the
   consumption ledger's arithmetic — that every cost follows from its tokens and rates, that rates

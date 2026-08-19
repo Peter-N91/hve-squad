@@ -51,6 +51,50 @@ function Copy-SquadSource {
     }
 }
 
+function Assert-TolerableInstallFailure {
+    <#
+    .SYNOPSIS
+        Rethrows an install failure unless every error is a self-reference the overlay supplies.
+    .DESCRIPTION
+        A branch that ADDS a squad file cannot install: the manifest's self-references are
+        bare paths, APM resolves them against the default branch, and the new file is
+        reported missing. That is the failure source mode exists to work around, so
+        aborting on it would make every additive branch untestable — including the ones
+        most worth testing.
+
+        The tolerance is narrow on purpose. Each failure must name a file that exists in
+        the working copy, because that is the file the overlay is about to supply. A
+        failure naming anything else is a real one and still throws.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallLog,
+
+        [string]$SourceRoot
+    )
+
+    $generic = "apm install failed with exit code $LASTEXITCODE. See $InstallLog."
+    if (-not $SourceRoot) { throw $generic }
+
+    # APM wraps its output at the terminal width, so the log is flattened before matching.
+    $log = ((Get-Content -LiteralPath $InstallLog -Raw) -replace '\s+', ' ')
+
+    $missing = @([regex]::Matches($log, 'File not found: (?<path>\S+) in ') |
+            ForEach-Object { $_.Groups['path'].Value } | Sort-Object -Unique)
+    $failed = @([regex]::Matches($log, '\+- (?<package>\S+) -- ') |
+            ForEach-Object { $_.Groups['package'].Value } | Sort-Object -Unique)
+
+    if ($missing.Count -eq 0 -or $failed.Count -ne $missing.Count) { throw $generic }
+
+    $unexplained = @($missing | Where-Object { -not (Test-Path -LiteralPath (Join-Path $SourceRoot $_)) })
+    if ($unexplained.Count -gt 0) {
+        throw "$generic Not explained by the working copy: $($unexplained -join ', ')."
+    }
+
+    Write-Warning ("apm install reported {0} unresolvable self-reference(s); every one names a file this branch adds, and the overlay supplies them: {1}" -f $missing.Count, ($missing -join ', '))
+}
+
 function Install-SquadPackage {
     <#
     .SYNOPSIS
@@ -114,11 +158,15 @@ function Install-SquadPackage {
     Push-Location $Destination
     try {
         # Both streams are captured: the unpinned-reference warning PKG-01 asserts on is
-        # emitted to stderr. Tee passes its input through, so it is sent to the host
-        # rather than becoming part of this function's return value.
-        & apm install @installArgs --target $Target *>&1 | Tee-Object -FilePath $installLog | Out-Host
+        # emitted to stderr. Write-Host rather than Out-Host, so a caller redirecting the
+        # run still sees the log, and so the pass-through never joins the return value.
+        & apm install @installArgs --target $Target *>&1 |
+            Tee-Object -FilePath $installLog |
+            ForEach-Object { Write-Host $_ }
+
         if ($LASTEXITCODE -ne 0) {
-            throw "apm install failed with exit code $LASTEXITCODE. See $installLog."
+            $overlay = if ($PSCmdlet.ParameterSetName -eq 'Source') { $SourceRoot } else { '' }
+            Assert-TolerableInstallFailure -InstallLog $installLog -SourceRoot $overlay
         }
     }
     finally {
