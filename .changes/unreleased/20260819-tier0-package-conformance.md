@@ -26,6 +26,29 @@ type: Added
   the contract to catch each break — a suite that cannot fail is not evidence
   (`tests/tier1/`).
 
+- **Nothing exercised a real run.** A Tier 1 live harness now provisions a scratch repository
+  per scenario, installs the package into it, copies a small fixture over it, and drives real
+  headless turns before the state contract reads what was left behind. The model is pinned
+  because a headless run ignores the `model:` frontmatter the editor honors, every turn is
+  bounded, and a failed scenario is retried once with both attempts kept so a flake is
+  separable from a regression (`tests/tier1/Invoke-Tier1LiveRun.ps1`,
+  `tests/tier1/scenarios/`, `.github/workflows/tier1-behavior.yml`).
+
+- **A squad can write a valid tree while quietly routing to a different cast.** Tier 2 scores
+  each run against a golden baseline on four facts read from disk: the roles dispatched, the
+  deliverable roots and types produced, the gate verdicts recorded, and — only when asked —
+  whether the answer is materially equivalent. Deliverables compare as root and type rather
+  than filename, because the topic slug is the model's to choose while the root is the
+  roster's promise. Advisory until the noise floor across repeat runs is measured
+  (`tests/tier2/`, `.github/workflows/tier2-semantic.yml`).
+
+- **A release could be cut over a broken package.** The release workflow now runs Tier 0 twice:
+  once against the ref being released, and once against the tag it just pushed. Only the second
+  can assert that the tag pinned its own self-references, because that check needs a ref to
+  install — and a tag that freezes the dependency list but not its contents is the defect that
+  made earlier tags non-reproducible. A failure there leaves a tag but no Release
+  (`.github/workflows/release.yml`).
+
 - **The state contract had no live run to assert against.** A Tier 1 harness now provisions a
   scratch repository per scenario, installs the package into it, copies a tiny fixture on top, and
   drives real headless Copilot CLI turns before handing the resulting tree to the state contract.

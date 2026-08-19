@@ -58,6 +58,54 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.ref || 'main' }}
 
+      # ── Release gate ─────────────────────────────────────────────────────
+      #    Tier 0 runs twice, and the two runs assert different things.
+      #
+      #    Here, before the tag exists, it can only run in source mode against the
+      #    ref being released. That catches an undelivered agent, a roster naming
+      #    something that was never packaged, a body over the host cap.
+      #
+      #    After the tag is pushed it runs again in ref mode, which is the only mode
+      #    that can assert PKG-01 — that the tag pinned its own self-references. That
+      #    check is un-runnable before tagging, because there is no ref to install.
+      #
+      #    Tier 1 is deliberately NOT wired in yet. It spends Copilot requests and has
+      #    not yet run green twice in a row, and a release gate standing on a harness
+      #    that has never executed is a liability, not a safeguard. Promote it here on
+      #    the condition stated in tests/squad-behavior-contract.md, not before.
+      - name: Set up the conformance suite
+        id: suite
+        shell: bash
+        run: |
+          if [[ -f tests/tier0/Invoke-Tier0Tests.ps1 ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No Tier 0 suite on '${{ inputs.ref || 'main' }}' — this release is UNGATED. Expected on any line at or above 0.16.0."
+          fi
+
+      - name: Install the APM CLI
+        if: steps.suite.outputs.present == 'true'
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: 'true'
+          apm-version: '0.18.0'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Pester
+        if: steps.suite.outputs.present == 'true'
+        shell: pwsh
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Tier 0 conformance of the ref being released
+        if: steps.suite.outputs.present == 'true'
+        shell: pwsh
+        env:
+          # Unauthenticated resolution hits the GitHub rate limit and APM then waits on
+          # the reset rather than failing, which reads as a hung job.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Output Detailed
+
       # ── Manual dispatch only: bump apm.yml version if requested ─────────
       - name: Bump apm.yml version (manual override)
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
@@ -150,6 +198,18 @@ jobs:
           git commit -m "chore(release): pin squad self-references to $TAG"
           git push origin "HEAD:refs/tags/$TAG"
           echo "::notice::Tagged $TAG at a pinned manifest; main is unchanged."
+
+      # ── Verify the published ref before anyone can install it ────────────
+      #    A tag that froze the dependency list but not its contents is the defect
+      #    that made earlier tags non-reproducible, and it is invisible until the tag
+      #    exists. Failing here leaves a tag but no Release: recoverable, and loud.
+      - name: Tier 0 conformance of the published tag
+        if: steps.tag_check.outputs.exists == 'false' && steps.suite.outputs.present == 'true'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: ./tests/tier0/Invoke-Tier0Tests.ps1 -Ref $env:TAG -Output Detailed
 
       # ── Create GitHub Release (the tag already exists) ────────────
       - name: Create GitHub Release
