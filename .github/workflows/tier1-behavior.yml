@@ -247,6 +247,12 @@ jobs:
     needs: live
     # Runs even when a scenario failed: a partial comparison still names what drifted.
     if: ${{ always() && inputs.compare }}
+    # A nested job cannot request more than its caller holds, and the workflow-level
+    # grant above leaves everything but `contents` at none. Tier 2 reads the run's
+    # artifacts through the API, so it needs `actions: read` passed down explicitly.
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/tier2-semantic.yml
     with:
       artifact-pattern: tier1-*
