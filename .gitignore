@@ -54,3 +54,4 @@ apm_modules/
 knowledge-docs/
 
 docs/planning/
+tests/tier0/tier0-results.xml
