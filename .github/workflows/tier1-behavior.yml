@@ -172,6 +172,7 @@ jobs:
       # An exact version, not a floating tag, so the runtime the gate measures is
       # reviewed and reproducible.
       - name: Install pinned GitHub Copilot CLI
+        # zizmor: ignore[adhoc-packages] - the CLI ships only via npm and has no lockfile to install from; the exact pin above is the mitigation.
         run: npm install -g "@github/copilot@${COPILOT_CLI_VERSION}"
 
       # Pinned to 5.x: Pester 6 changes -ForEach and configuration semantics, and the

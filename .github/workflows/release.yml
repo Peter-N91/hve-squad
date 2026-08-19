@@ -76,12 +76,14 @@ jobs:
       - name: Set up the conformance suite
         id: suite
         shell: bash
+        env:
+          REF: ${{ inputs.ref || 'main' }}
         run: |
           if [[ -f tests/tier0/Invoke-Tier0Tests.ps1 ]]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No Tier 0 suite on '${{ inputs.ref || 'main' }}' — this release is UNGATED. Expected on any line at or above 0.16.0."
+            echo "::warning::No Tier 0 suite on '${REF}' — this release is UNGATED. Expected on any line at or above 0.16.0."
           fi
 
       - name: Install the APM CLI
