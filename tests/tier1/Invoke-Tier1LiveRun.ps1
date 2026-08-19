@@ -36,6 +36,12 @@
     Extra attempts per scenario after the first failure.
 .PARAMETER TimeoutMinutes
     Per-turn timeout. A hung turn must not stall a release.
+.PARAMETER ProvisionOnly
+    Build each scenario's workspace and stop before the first turn. Spends no Copilot
+    requests and needs no token; proves the install, overlay, fixture, and git baseline
+    work before a live run pays to discover otherwise.
+.EXAMPLE
+    ./Invoke-Tier1LiveRun.ps1 -SourceRoot . -ProvisionOnly
 .EXAMPLE
     ./Invoke-Tier1LiveRun.ps1 -SourceRoot . -Scenario single-init
 .EXAMPLE
@@ -59,7 +65,9 @@ param(
 
     [int]$Retries = 1,
 
-    [int]$TimeoutMinutes = 20
+    [int]$TimeoutMinutes = 20,
+
+    [switch]$ProvisionOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -67,14 +75,18 @@ Set-StrictMode -Version Latest
 
 Import-Module (Join-Path $PSScriptRoot 'SquadRun.psm1') -Force
 
-if (-not (Get-Command copilot -ErrorAction SilentlyContinue)) {
-    throw "The 'copilot' CLI was not found on PATH. Install @github/copilot at a pinned version first."
-}
+# Everything except the turns themselves is free, and a first live run that dies on a
+# provisioning bug after paying for three turns is the waste worth avoiding.
+if (-not $ProvisionOnly) {
+    if (-not (Get-Command copilot -ErrorAction SilentlyContinue)) {
+        throw "The 'copilot' CLI was not found on PATH. Install @github/copilot at a pinned version first."
+    }
 
-# Fail on the missing secret rather than on the CLI's generic authentication error,
-# which reads like an expired token and sends you looking at the wrong credential.
-if (-not $env:COPILOT_GITHUB_TOKEN) {
-    throw 'COPILOT_GITHUB_TOKEN is not set. Tier 1 needs a token carrying the Copilot Requests permission.'
+    # Fail on the missing secret rather than on the CLI's generic authentication error,
+    # which reads like an expired token and sends you looking at the wrong credential.
+    if (-not $env:COPILOT_GITHUB_TOKEN) {
+        throw 'COPILOT_GITHUB_TOKEN is not set. Tier 1 needs a token carrying the Copilot Requests permission.'
+    }
 }
 
 if (-not $ResultRoot) { $ResultRoot = Join-Path $PSScriptRoot 'results' }
@@ -123,67 +135,89 @@ foreach ($file in $scenarioFiles) {
                 New-SquadWorkspace -Destination $workspace -FixturePath $fixture -Ref $Ref
             }
 
-            foreach ($turn in $definition.turns) {
-                $transcript = Join-Path $attemptRoot "turn-$($turn.id).log"
-                $result = Invoke-SquadTurn -Workspace $install.Root -Prompt $turn.prompt -Model $Model `
-                    -TranscriptPath $transcript -TimeoutMinutes $TimeoutMinutes
-
-                $turnLog += [pscustomobject]@{
-                    id       = $turn.id
-                    exitCode = $result.ExitCode
-                    timedOut = $result.TimedOut
-                    seconds  = $result.Seconds
+            if ($ProvisionOnly) {
+                foreach ($expected in @('.github/agents/squad-coordinator.agent.md', '.agents/skills/squad/SKILL.md', 'README.md')) {
+                    if (-not (Test-Path -LiteralPath (Join-Path $install.Root $expected))) {
+                        $failures += "provisioned workspace is missing '$expected'"
+                    }
                 }
-                $answer = $result.Answer
 
-                Write-Host "  turn '$($turn.id)': exit $($result.ExitCode) in $($result.Seconds)s" -ForegroundColor DarkGray
-
-                if ($result.TimedOut) { $failures += "turn '$($turn.id)' exceeded $TimeoutMinutes minutes" }
-                elseif ($result.ExitCode -ne 0) { $failures += "turn '$($turn.id)' exited $($result.ExitCode): $($result.ErrorLog)" }
-
-                # A turn that never ran cannot leave the state the next turn assumes.
-                if ($failures) { break }
-            }
-
-            $squadRoots = @(Get-Item -Path (Join-Path $install.Root $definition.squadRootGlob) -ErrorAction SilentlyContinue |
-                    Where-Object { $_.PSIsContainer } | ForEach-Object { $_.FullName })
-
-            if ($squadRoots.Count -eq 0) {
-                $failures += "No squad root matched '$($definition.squadRootGlob)'. The run did not initialize, or it wrote state somewhere else."
-            }
-
-            $observation = Get-RunObservation -Workspace $install.Root -ScenarioId $definition.id `
-                -SquadRoot $squadRoots -Answer $answer -Metadata @{
-                model    = $Model
-                mode     = $install.Mode
-                ref      = $install.Ref
-                attempt  = $attempt
-                turns    = @($definition.turns | ForEach-Object { $_.id })
-            }
-
-            $observation | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $attemptRoot 'observation.json') -Encoding utf8NoBOM
-
-            # The state contract is the gate; the observation above only feeds Tier 2.
-            $contractArgs = @('-NoProfile', '-File', $contractRunner, '-Output', 'Detailed')
-            if (-not $definition.expectDispatches) { $contractArgs += '-InitOnly' }
-
-            foreach ($root in $squadRoots) {
-                $name = Split-Path $root -Leaf
-                & pwsh @contractArgs -SquadRoot $root 2>&1 |
-                    Tee-Object -FilePath (Join-Path $attemptRoot "contract-$name.log")
-
-                if ($LASTEXITCODE -ne 0) { $failures += "state contract failed for '$name'" }
-
-                $produced = Join-Path $PSScriptRoot 'tier1-results.xml'
-                if (Test-Path -LiteralPath $produced) {
-                    Move-Item -LiteralPath $produced -Destination (Join-Path $attemptRoot "contract-$name.xml") -Force
+                Push-Location $install.Root
+                try {
+                    $dirty = @(& git status --porcelain)
+                    if ($dirty.Count -gt 0) {
+                        $failures += "workspace is not clean before the first turn, so deliverable detection would report $($dirty.Count) pre-existing change(s)"
+                    }
                 }
-            }
+                finally {
+                    Pop-Location
+                }
 
-            # The state tree is the evidence for any failure, so keep it with the attempt.
-            foreach ($root in $squadRoots) {
-                $name = Split-Path $root -Leaf
-                Copy-Item -LiteralPath $root -Destination (Join-Path $attemptRoot "state-$name") -Recurse -Force
+                Write-Host "  provisioned $($install.Root)" -ForegroundColor DarkGray
+            }
+            else {
+                foreach ($turn in $definition.turns) {
+                    $transcript = Join-Path $attemptRoot "turn-$($turn.id).log"
+                    $result = Invoke-SquadTurn -Workspace $install.Root -Prompt $turn.prompt -Model $Model `
+                        -TranscriptPath $transcript -TimeoutMinutes $TimeoutMinutes
+
+                    $turnLog += [pscustomobject]@{
+                        id       = $turn.id
+                        exitCode = $result.ExitCode
+                        timedOut = $result.TimedOut
+                        seconds  = $result.Seconds
+                    }
+                    $answer = $result.Answer
+
+                    Write-Host "  turn '$($turn.id)': exit $($result.ExitCode) in $($result.Seconds)s" -ForegroundColor DarkGray
+
+                    if ($result.TimedOut) { $failures += "turn '$($turn.id)' exceeded $TimeoutMinutes minutes" }
+                    elseif ($result.ExitCode -ne 0) { $failures += "turn '$($turn.id)' exited $($result.ExitCode): $($result.ErrorLog)" }
+
+                    # A turn that never ran cannot leave the state the next turn assumes.
+                    if ($failures) { break }
+                }
+
+                $squadRoots = @(Get-Item -Path (Join-Path $install.Root $definition.squadRootGlob) -ErrorAction SilentlyContinue |
+                        Where-Object { $_.PSIsContainer } | ForEach-Object { $_.FullName })
+
+                if ($squadRoots.Count -eq 0) {
+                    $failures += "No squad root matched '$($definition.squadRootGlob)'. The run did not initialize, or it wrote state somewhere else."
+                }
+
+                $observation = Get-RunObservation -Workspace $install.Root -ScenarioId $definition.id `
+                    -SquadRoot $squadRoots -Answer $answer -Metadata @{
+                    model   = $Model
+                    mode    = $install.Mode
+                    ref     = $install.Ref
+                    attempt = $attempt
+                    turns   = @($definition.turns | ForEach-Object { $_.id })
+                }
+
+                $observation | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $attemptRoot 'observation.json') -Encoding utf8NoBOM
+
+                # The state contract is the gate; the observation above only feeds Tier 2.
+                $contractArgs = @('-NoProfile', '-File', $contractRunner, '-Output', 'Detailed')
+                if (-not $definition.expectDispatches) { $contractArgs += '-InitOnly' }
+
+                foreach ($root in $squadRoots) {
+                    $name = Split-Path $root -Leaf
+                    & pwsh @contractArgs -SquadRoot $root 2>&1 |
+                        Tee-Object -FilePath (Join-Path $attemptRoot "contract-$name.log")
+
+                    if ($LASTEXITCODE -ne 0) { $failures += "state contract failed for '$name'" }
+
+                    $produced = Join-Path $PSScriptRoot 'tier1-results.xml'
+                    if (Test-Path -LiteralPath $produced) {
+                        Move-Item -LiteralPath $produced -Destination (Join-Path $attemptRoot "contract-$name.xml") -Force
+                    }
+                }
+
+                # The state tree is the evidence for any failure, so keep it with the attempt.
+                foreach ($root in $squadRoots) {
+                    $name = Split-Path $root -Leaf
+                    Copy-Item -LiteralPath $root -Destination (Join-Path $attemptRoot "state-$name") -Recurse -Force
+                }
             }
         }
         catch {

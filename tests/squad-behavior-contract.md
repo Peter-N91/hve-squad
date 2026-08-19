@@ -32,6 +32,7 @@ Tier 0 is deterministic and free. Tier 1 asserts on **state artifacts on disk**,
 | `./tests/tier0/Invoke-Tier0Tests.ps1 -Ref v0.16.0` | no | Static conformance of a published ref, as a consumer receives it |
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck` | no | Mutation controls proving the state contract can fail |
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SquadRoot <path>` | no | State contract against an existing squad tree |
+| `./tests/tier1/Invoke-Tier1LiveRun.ps1 -SourceRoot . -ProvisionOnly` | no | Builds every scenario workspace and stops before the first turn |
 | `./tests/tier1/Invoke-Tier1LiveRun.ps1 -Ref v0.16.0` | **yes** | Provisions fixtures, drives real turns, then applies the state contract |
 | `./tests/tier2/Invoke-Tier2Tests.ps1` | no | Drift controls proving the comparator can fail |
 | `./tests/tier2/Compare-SquadRun.ps1 -ObservationRoot ./tests/tier1/results` | no | Scores a completed Tier 1 run against the golden baselines |
