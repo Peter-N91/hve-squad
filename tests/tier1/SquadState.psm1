@@ -129,6 +129,124 @@ function ConvertTo-LedgerNumber {
     return $null
 }
 
+function Get-LedgerDecimal {
+    <#
+    .SYNOPSIS
+        Counts the decimals a ledger cell displays.
+    .DESCRIPTION
+        The ledger prints role rows at four decimals and the run total at two, so a sum
+        compared at full precision fails on display rounding alone. Reading the printed
+        precision back keeps the comparison exact at whatever the ledger chose, instead
+        of widening a tolerance until real drift fits inside it. Two decimals is the
+        floor, so a total printed as a whole dollar cannot pass on rounding slack.
+    #>
+    param([string]$Value)
+
+    $clean = ($Value -replace '[*$,]', '').Trim()
+    if ($clean -match '^-?\d+\.(\d+)$') { return [math]::Max(2, $Matches[1].Length) }
+    return 2
+}
+
+function Get-MarkdownTable {
+    <#
+    .SYNOPSIS
+        Reads every markdown table in a document as rows keyed by their column headers.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Content = ''
+    )
+
+    $tables = @()
+    $header = $null
+    $rows = $null
+
+    foreach ($line in ($Content -split '\r?\n')) {
+        if ($line -notmatch '^\s*\|') {
+            if ($header) { $tables += , [pscustomobject]@{ Header = $header; Rows = $rows } }
+            $header = $null
+            $rows = $null
+            continue
+        }
+
+        # The delimiter row separates header from body and carries no data of its own.
+        if ($line -match '^\s*\|[\s\-:|]+\|\s*$') { continue }
+
+        $cells = @(($line.Trim().Trim('|') -split '\|') | ForEach-Object { $_.Trim().Trim('`').Trim() })
+
+        if (-not $header) {
+            $header = $cells
+            $rows = @()
+            continue
+        }
+
+        $row = [ordered]@{}
+        for ($i = 0; $i -lt $header.Count; $i++) {
+            $row[$header[$i]] = if ($i -lt $cells.Count) { $cells[$i] } else { '' }
+        }
+        $rows += , $row
+    }
+
+    if ($header) { $tables += , [pscustomobject]@{ Header = $header; Rows = $rows } }
+    $tables
+}
+
+function Get-RateTable {
+    <#
+    .SYNOPSIS
+        Reads the per-model and tier-fallback rate tables out of consumption-rates.md.
+    .DESCRIPTION
+        Tables are selected by column header and cells are read by header name, never by
+        position. The shipped table carries Tier and Notes columns around the four rate
+        columns, so a positional read lands on the wrong cells, and a model name like
+        'Claude Sonnet 4.6' does not survive a key pattern that forbids spaces. Selecting
+        on the four rate headers also keeps the dispatch-size estimator's class rows out:
+        they are five numeric-looking columns that a looser match would happily register
+        as a price.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Content = ''
+    )
+
+    $rates = @{}
+    if (-not $Content) { return $rates }
+
+    $rateColumns = @('Input', 'Cached', 'Cache write', 'Output')
+
+    foreach ($table in (Get-MarkdownTable -Content $Content)) {
+        if (@($rateColumns | Where-Object { $_ -notin $table.Header }).Count -gt 0) { continue }
+
+        # 'Priced as' names the rate row on the tier-fallback table, whose first column is
+        # the tier. Everywhere else the first column is the model itself.
+        $keyColumn = if ('Priced as' -in $table.Header) { 'Priced as' } else { $table.Header[0] }
+
+        foreach ($row in $table.Rows) {
+            $key = $row[$keyColumn]
+
+            # The per-model table is read first, so it stays authoritative over the
+            # tier-fallback duplicates of the same model.
+            if (-not $key -or $rates.ContainsKey($key)) { continue }
+
+            $numbers = @($rateColumns | ForEach-Object { ConvertTo-LedgerNumber $row[$_] })
+            if ($numbers -contains $null) { continue }
+
+            $rates[$key] = @{
+                input       = $numbers[0]
+                cached      = $numbers[1]
+                cache_write = $numbers[2]
+                output      = $numbers[3]
+            }
+        }
+    }
+
+    $rates
+}
+
 function Get-SquadStateModel {
     <#
     .SYNOPSIS
@@ -165,26 +283,28 @@ function Get-SquadStateModel {
 
     $ledgerContent = Read-Text 'consumption.md'
     $ratesContent = Read-Text 'consumption-rates.md'
+    $teamContent = Read-Text 'team.md'
 
-    # Only this file holds token rates, so every block's rates are checked against it.
-    $rates = @{}
-    if ($ratesContent) {
-        foreach ($line in ($ratesContent -split '\r?\n')) {
-            if ($line -notmatch '^\s*\|\s*`?([A-Za-z0-9._-]+)`?\s*\|') { continue }
-            $cells = @(($line.Trim().Trim('|') -split '\|') | ForEach-Object { $_.Trim().Trim('`') })
-            if ($cells.Count -lt 5) { continue }
-
-            $numbers = @($cells[1..4] | ForEach-Object { ConvertTo-LedgerNumber $_ })
-            if ($numbers -contains $null) { continue }
-
-            $rates[$cells[0]] = @{
-                input      = $numbers[0]
-                cached     = $numbers[1]
-                cache_write = $numbers[2]
-                output     = $numbers[3]
+    # The ledger rewrite matches a history file back to its roster row by file name, so
+    # the roster is what makes a basename legal. Alternates count: a dispatch can be
+    # routed to one and it writes its own history file.
+    $rosterAgents = @(
+        foreach ($table in (Get-MarkdownTable -Content $teamContent)) {
+            if ('Agent Name (Primary)' -notin $table.Header) { continue }
+            foreach ($row in $table.Rows) {
+                if ($row['Agent Name (Primary)']) { $row['Agent Name (Primary)'] }
+                if ('Alternate Agents' -in $table.Header) {
+                    foreach ($alternate in ($row['Alternate Agents'] -split ',')) {
+                        $trimmed = $alternate.Trim()
+                        if ($trimmed -and $trimmed -notmatch '^[-\u2014]$') { $trimmed }
+                    }
+                }
             }
         }
-    }
+    ) | Sort-Object -Unique
+
+    # Only this file holds token rates, so every block's rates are checked against it.
+    $rates = Get-RateTable -Content $ratesContent
 
     $calibration = 1.0
     $observations = 0
@@ -205,7 +325,8 @@ function Get-SquadStateModel {
         HistoryFiles     = $historyFiles
         HistoryNames     = @($historyFiles | ForEach-Object { $_.BaseName })
         State            = $stateJson
-        Team             = Read-Text 'team.md'
+        Team             = $teamContent
+        RosterAgents     = @($rosterAgents)
         Routing          = Read-Text 'routing.md'
         Decisions        = Read-Text 'decisions.md'
         Notifications    = Read-Text 'notifications.md'
@@ -227,4 +348,4 @@ function Get-SquadStateModel {
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-LedgerTable, ConvertTo-LedgerNumber
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-LedgerTable, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal

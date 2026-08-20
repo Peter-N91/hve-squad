@@ -9,10 +9,39 @@
 #   orchestration ( 4000 x 3.0 +                            1000 x 15.0) / 1e6 = 0.02700
 #   run total                                                                   = 0.09225
 # and est_credits is est_cost_usd / 0.01 throughout.
+#
+# The rate table is lifted from the shipped skill rather than written here. A
+# hand-written one drifted from the product's shape and the contract's reader was
+# tuned to the fixture instead of to the file a real squad seeds, so the self-check
+# stayed green while not one real rate could be read.
 
 #Requires -Version 7.4
 
 Set-StrictMode -Version Latest
+
+function Get-ShippedRateTemplate {
+    <#
+    .SYNOPSIS
+        Lifts the consumption-rates.md seed template out of the shipped squad skill.
+    #>
+    [CmdletBinding()]
+    param()
+
+    $reference = Join-Path $PSScriptRoot '..' '..' 'squad-src' '.github' 'skills' 'squad' 'references' 'consumption.md'
+    if (-not (Test-Path -LiteralPath $reference)) {
+        throw "The shipped consumption reference was not found at '$reference'."
+    }
+
+    $match = [regex]::Match(
+        (Get-Content -LiteralPath $reference -Raw),
+        '(?ms)^##\s+consumption-rates\.md\s*$.*?^````markdown\r?\n(?<body>.*?)\r?\n````\s*$')
+
+    if (-not $match.Success) {
+        throw "Could not extract the consumption-rates.md template from '$reference'."
+    }
+
+    $match.Groups['body'].Value
+}
 
 function New-SquadStateFixture {
     <#
@@ -39,11 +68,11 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 
 ## Members
 
-| Role        | Member Name | Agent Name (Primary) | Alternate Agents | Invocation  | Model Tier | Deliverable Root            |
-|-------------|-------------|----------------------|------------------|-------------|------------|-----------------------------|
-| researcher  |             | Squad Researcher     |                  | runSubagent | fast       | `.copilot-tracking/research/` |
-| lead        |             | Squad Lead           |                  | runSubagent | default    | `.copilot-tracking/plans/`    |
-| scribe      |             | Squad Scribe         |                  | runSubagent | fast       | `.copilot-tracking/squad/`    |
+| Role        | Member Name | Agent Name (Primary) | Alternate Agents | Selection Cue                                       | Invocation  | Model Tier | Deliverable Root            |
+|-------------|-------------|----------------------|------------------|-----------------------------------------------------|-------------|------------|-----------------------------|
+| researcher  |             | Squad Researcher     |                  | —                                                   | runSubagent | fast       | `.copilot-tracking/research/` |
+| lead        |             | Squad Lead           | RPI Planner      | revise one phase of an existing plan → RPI Planner  | runSubagent | default    | `.copilot-tracking/plans/`    |
+| scribe      |             | Squad Scribe         |                  | —                                                   | runSubagent | fast       | `.copilot-tracking/squad/`    |
 '@
 
     Set-Content -LiteralPath (Join-Path $root 'routing.md') -Encoding utf8NoBOM -Value @'
@@ -89,7 +118,7 @@ description: "Append-only log of notifications fired and their delivery channel"
   "activeRoles": [ "researcher" ],
   "openEscalations": [],
   "currentRun": {
-    "sessionModel": "claude-sonnet-5",
+    "sessionModel": "Claude Sonnet 4.6",
     "modelOverrides": {},
     "estCostUsd": 0.09225,
     "estCreditsTotal": 9.225
@@ -103,38 +132,7 @@ description: "Append-only log of notifications fired and their delivery channel"
 }
 '@
 
-    Set-Content -LiteralPath (Join-Path $root 'consumption-rates.md') -Encoding utf8NoBOM -Value @'
----
-description: "Per-model token rates, dispatch-size estimator, and calibration factor for squad consumption estimates"
----
-
-# Consumption Rates
-
-## Per-model token rates in USD per 1M tokens
-
-| Model           | Input | Cached | Cache write | Output |
-|-----------------|-------|--------|-------------|--------|
-| claude-sonnet-5 | 3.00  | 0.30   | 3.75        | 15.00  |
-| gpt-5.4         | 1.25  | 0.13   | 0.00        | 10.00  |
-
-## Tier fallback rates (used only when `basis: tier-default`)
-
-| Tier    | Priced as       |
-|---------|-----------------|
-| fast    | claude-sonnet-5 |
-| default | claude-sonnet-5 |
-
-## Dispatch-size estimator
-
-Token counts are estimated from dispatch class; no per-dispatch telemetry exists.
-
-## Calibration
-
-* calibration_factor: 1.00
-* observations: 0
-
-Uncalibrated: the factor stays 1.00 until at least one run is reconciled.
-'@
+    Set-Content -LiteralPath (Join-Path $root 'consumption-rates.md') -Encoding utf8NoBOM -Value (Get-ShippedRateTemplate)
 
     Set-Content -LiteralPath (Join-Path $root 'consumption.md') -Encoding utf8NoBOM -Value @'
 ---
@@ -147,8 +145,8 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 
 | Role          | Member | Agent                          | Model           | Model Source      | Priced As | Tier  |
 | ------------- | ------ | ------------------------------ | --------------- | ----------------- | --------- | ----- |
-| researcher    |        | Squad Researcher               | claude-sonnet-5 | dispatch-reported |           | fast  |
-| orchestration |        | Squad Coordinator + Squad Scribe | claude-sonnet-5 | session-inherited |           | mixed |
+| researcher    |        | Squad Researcher               | Claude Sonnet 4.6 | dispatch-reported |           | fast  |
+| orchestration |        | Squad Coordinator + Squad Scribe | Claude Sonnet 4.6 | session-inherited |           | mixed |
 
 ## Usage & Cost
 
@@ -156,12 +154,12 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 | ------------- | ----- | --------- | ------ | -------- | ---------- | --------------- | ------------ | --------- |
 | researcher    | 1     | 10000     | 5000   | 1000     | 2000       | 0.0653          | 6.53         | estimated |
 | orchestration | 1     | 4000      | 0      | 0        | 1000       | 0.0270          | 2.70         | estimated |
-| **Total**     | **2** | **14000** | **5000** | **1000** | **3000**   | **$0.0923**     | **9.23**     |           |
+| **Total**     | **2** | **14000** | **5000** | **1000** | **3000**   | **$0.09**       | **9.23**     |           |
 
 > Basis: estimated. No per-dispatch token telemetry exists.
 '@
 
-    Set-Content -LiteralPath (Join-Path $root 'history/squad-researcher.md') -Encoding utf8NoBOM -Value @'
+    Set-Content -LiteralPath (Join-Path $root 'history/Squad Researcher.md') -Encoding utf8NoBOM -Value @'
 ---
 description: "Append-only dispatch history for a single squad agent"
 ---
@@ -178,7 +176,7 @@ description: "Append-only dispatch history for a single squad agent"
 
 ```json
 {
-  "model": "claude-sonnet-5",
+  "model": "Claude Sonnet 4.6",
   "model_source": "dispatch-reported",
   "priced_as": "",
   "model_tier": "fast",
@@ -198,7 +196,7 @@ description: "Append-only dispatch history for a single squad agent"
 ```
 '@
 
-    Set-Content -LiteralPath (Join-Path $root 'history/squad-scribe.md') -Encoding utf8NoBOM -Value @'
+    Set-Content -LiteralPath (Join-Path $root 'history/Squad Scribe.md') -Encoding utf8NoBOM -Value @'
 ---
 description: "Append-only dispatch history for a single squad agent"
 ---
@@ -215,7 +213,7 @@ description: "Append-only dispatch history for a single squad agent"
 
 ```json
 {
-  "model": "claude-sonnet-5",
+  "model": "Claude Sonnet 4.6",
   "model_source": "session-inherited",
   "priced_as": "",
   "model_tier": "mixed",
@@ -238,4 +236,4 @@ description: "Append-only dispatch history for a single squad agent"
     $root
 }
 
-Export-ModuleMember -Function New-SquadStateFixture
+Export-ModuleMember -Function New-SquadStateFixture, Get-ShippedRateTemplate

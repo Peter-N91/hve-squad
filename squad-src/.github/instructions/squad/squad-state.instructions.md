@@ -35,6 +35,7 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 | `consumption-rates.md`| Per-model token-rate table (USD per 1M) plus the comparison methodology    | Replace via scribe   |
 
 * `decisions.md`, `notifications.md`, and the `history/<agent>.md` files are **append-only**. New entries are added to the end; prior entries are never edited or removed.
+* Init seeds `history/` as an empty directory. Each `history/<agent>.md` is created by the dispatch it records, in the same write as its first entry, because the file's presence is the proof that stage ran.
 * `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the coordinator overwrites as the squad advances. It carries the `notify` object (the captured notification contact) and the current `mode`.
 
 ### state.json Shape

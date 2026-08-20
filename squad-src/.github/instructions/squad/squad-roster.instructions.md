@@ -24,14 +24,15 @@ The `## Members` table uses these columns:
 | Role                 | The squad role name (for example, `lead`, `developer`, `tester`); roles may appear on more than one row when distinguished by `Member Name`                         |
 | Member Name          | Optional display name for an individual squad member; required only when two rows share the same `Role` (see *Naming Conventions* below)                            |
 | Agent Name (Primary) | The exact `name:` frontmatter value of the deployed HVE Core agent the role resolves to by default                                                                  |
-| Alternate Agents     | Optional comma-separated `name:` values the role may resolve to instead, chosen per the catalog cue                                                                 |
+| Alternate Agents     | Optional comma-separated `name:` values the role may resolve to instead, chosen per the row's `Selection Cue`                                                        |
+| Selection Cue        | Short condition naming which Alternate applies; `—` when the role has none. Seeded from this catalog so dispatch is a lookup rather than a recollection            |
 | Invocation           | How the coordinator dispatches the agent: `runSubagent`/`task` for non-user-facing roles                                                                            |
 | Model Tier           | Preferred cost tier: `fast` for read-heavy roles, `default` for reasoning-heavy roles                                                                               |
 | Deliverable Root     | The directory this role writes its artifact into, resolved per *Deliverable Roots* below; makes the Artifact Gate a lookup rather than an inference                 |
 
 Model Tier records a preference, not what actually ran, and it never becomes a model name. The concrete model for each dispatch is *resolved* — from an operator declaration, then the dispatched agent's own `model:` frontmatter, then the session model — and captured in the per-dispatch consumption block in `history/<agent>.md` alongside the `model_source` rung that produced it, then aggregated into `consumption.md`, never into `team.md`. Two consequences matter when reading a ledger: an agent that pins `model:` in its frontmatter does not run on the operator's selected model even when its roster tier suggests otherwise, and an agent that pins nothing runs on the operator's model and must be priced at that model's rates rather than its tier's. See *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md`.
 
-The `Agent Name (Primary)` column holds exactly one agent; the role always has a deterministic default. `Alternate Agents` is optional and may be empty for one-to-one roles. The uniqueness key for a row is the (`Role`, `Member Name`) pair, so two rows with the same `Role` are legal when their `Member Name` values differ. When `Member Name` is empty, only one row per `Role` is allowed and the coordinator dispatches that row whenever the role matches. The coordinator resolves the role to a single concrete agent at dispatch time using the *Resolving a Role to an Agent* rules below.
+The `Agent Name (Primary)` column holds exactly one agent; the role always has a deterministic default. `Alternate Agents` is optional and may be empty for one-to-one roles. `Selection Cue` carries the condition that picks an Alternate; it is seeded here rather than left to the catalog because the catalog is an `applyTo`-scoped instruction file and does not load on every host, while `team.md` is read on every turn. A roster written before this column existed simply has no cue, which resolves to the Primary. The uniqueness key for a row is the (`Role`, `Member Name`) pair, so two rows with the same `Role` are legal when their `Member Name` values differ. When `Member Name` is empty, only one row per `Role` is allowed and the coordinator dispatches that row whenever the role matches. The coordinator resolves the role to a single concrete agent at dispatch time using the *Resolving a Role to an Agent* rules below.
 
 ### Members Example
 
@@ -39,14 +40,14 @@ The `Agent Name (Primary)` column holds exactly one agent; the role always has a
 ```markdown
 ## Members
 
-| Role          | Member Name | Agent Name (Primary)   | Alternate Agents                                       | Invocation         | Model Tier | Deliverable Root           |
-|---------------|-------------|------------------------|--------------------------------------------------------|--------------------|------------|----------------------------|
-| lead          | Alpha       | Squad Lead             | RPI Planner                                            | runSubagent / task | default    | .copilot-tracking/plans/   |
-| developer     | Beta        | Squad Implementor      |                                                        | runSubagent / task | default    | .copilot-tracking/changes/ |
-| developer     | Gamma       | Squad Implementor      |                                                        | runSubagent / task | default    | .copilot-tracking/changes/ |
-| tester        | Delta       | Squad Reviewer         | Code Review Functional, Code Review Standards          | runSubagent / task | fast       | .copilot-tracking/reviews/ |
-| product-owner |             | Functional Planner     | Issue Triage Agent                                     | runSubagent / task | default  | .copilot-tracking/plans/   |
-| scribe        |             | Squad Scribe           |                                                        | runSubagent / task | fast       | (squad state)              |
+| Role          | Member Name | Agent Name (Primary)   | Alternate Agents                              | Selection Cue                                                             | Invocation         | Model Tier | Deliverable Root           |
+|---------------|-------------|------------------------|-----------------------------------------------|---------------------------------------------------------------------------|--------------------|------------|----------------------------|
+| lead          | Alpha       | Squad Lead             | RPI Planner                                   | revise one phase of an existing plan → RPI Planner                        | runSubagent / task | default    | .copilot-tracking/plans/   |
+| developer     | Beta        | Squad Implementor      |                                               | —                                                                         | runSubagent / task | default    | .copilot-tracking/changes/ |
+| developer     | Gamma       | Squad Implementor      |                                               | —                                                                         | runSubagent / task | default    | .copilot-tracking/changes/ |
+| tester        | Delta       | Squad Reviewer         | Code Review Functional, Code Review Standards | correctness diff → Code Review Functional; conventions diff → Code Review Standards | runSubagent / task | fast       | .copilot-tracking/reviews/ |
+| product-owner |             | Functional Planner     | Issue Triage Agent                            | single-issue triage → Issue Triage Agent                                  | runSubagent / task | default    | .copilot-tracking/plans/   |
+| scribe        |             | Squad Scribe           |                                               | —                                                                         | runSubagent / task | fast       | (squad state)              |
 ```
 <!-- </example-roster> -->
 
@@ -449,7 +450,7 @@ A shared agent is not a conflict: each role dispatches it with role-scoped conte
 The coordinator turns a matched role into exactly one concrete agent at dispatch time:
 
 1. **Default to the Primary agent** named in the role's `team.md` row (seeded from this catalog).
-2. **Apply the Selection Cue** — when the request matches a cue, dispatch the indicated Alternate instead of the Primary.
+2. **Apply the Selection Cue** — when the request matches the cue in the row's `Selection Cue` cell, dispatch the indicated Alternate instead of the Primary. **A cue must be read, not recalled.** When the row carries no cue, the cue does not match, or this catalog did not load, dispatch the Primary: an alternate chosen because it sounds adjacent to the request swaps the role's methodology without saying so, which is how a research stage runs a transcript miner against a document that is not a transcript.
 3. **Verify the agent is installed and dispatchable.** The resolved agent must be present in the project (its APM package deployed into `.github/agents/`) **and** must not set `disable-model-invocation: true`. Check both before dispatching, not after a silent no-op. When either check fails, escalate to the user — treat it the same as a **thin charter needed** role rather than silently substituting.
 4. **Apply the external cast when the role is backed by a registered resource.** Follow *Resolving an External Role* in the *External Cast* section: a registered **opt-in** agent that is not installed is an absent role, and the escalation names the exact `Install or Entry` value from its row. A **bundled** resource ships with the package and cannot be absent; a missing one is a broken installation rather than an absent role.
 5. **Record any non-primary resolution** through the Squad Scribe, so `history/<agent>.md` reflects the agent that actually ran and the cue that selected it.
