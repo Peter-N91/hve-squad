@@ -23,9 +23,12 @@ BeforeAll {
     }
 
     function Test-Contract {
-        param([string]$Root)
+        param([string]$Root, [switch]$InitOnly)
 
-        & pwsh -NoProfile -File $script:Runner -SquadRoot $Root -Output None *>$null
+        $arguments = @('-NoProfile', '-File', $script:Runner, '-SquadRoot', $Root, '-Output', 'None')
+        if ($InitOnly) { $arguments += '-InitOnly' }
+
+        & pwsh @arguments *>$null
         [pscustomobject]@{ Passed = $LASTEXITCODE -eq 0 }
     }
 
@@ -50,6 +53,12 @@ Describe 'The contract passes on a schema-correct tree' {
         $root = New-Fixture 'baseline'
         (Test-Contract $root).Passed | Should -BeTrue -Because 'a contract that cannot pass on a correct tree only reports noise'
     }
+
+    It 'passes an initialized tree that has not dispatched yet' {
+        $root = New-Fixture 'init-only'
+        Get-ChildItem -LiteralPath (Join-Path $root 'history') -Filter '*.md' -File | Remove-Item -Force
+        (Test-Contract -Root $root -InitOnly).Passed | Should -BeTrue -Because 'Init seeds the history directory and nothing inside it'
+    }
 }
 
 Describe 'The contract catches a broken tree' {
@@ -61,14 +70,14 @@ Describe 'The contract catches a broken tree' {
 
     It 'catches a history entry with no consumption block' {
         $root = New-Fixture 'no-block'
-        $path = Join-Path $root 'history/squad-researcher.md'
+        $path = Join-Path $root 'history/Squad Researcher.md'
         Set-Content -LiteralPath $path -Encoding utf8NoBOM -Value "# History: Squad Researcher`n`n## 2026-08-19T10:00:03Z Investigate`n`n* Turn: 1`n"
         (Test-Contract $root).Passed | Should -BeFalse -Because 'a history append and its block are inseparable'
     }
 
     It 'catches a reordered consumption block' {
         $root = New-Fixture 'reordered'
-        $path = Join-Path $root 'history/squad-researcher.md'
+        $path = Join-Path $root 'history/Squad Researcher.md'
         Edit-Fixture -Path $path `
             -Pattern '(?s)"model_source": "dispatch-reported",\s*\r?\n\s*"priced_as": "",' `
             -Replacement '"priced_as": "",' + "`n  " + '"model_source": "dispatch-reported",'
@@ -77,36 +86,62 @@ Describe 'The contract catches a broken tree' {
 
     It 'catches a token count that is not a bare number' {
         $root = New-Fixture 'not-bare'
-        Edit-Fixture -Path (Join-Path $root 'history/squad-researcher.md') `
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
             -Pattern '"input_tokens": 10000' -Replacement '"input_tokens": "~10,000 (estimated)"'
         (Test-Contract $root).Passed | Should -BeFalse -Because 'an unparseable field drops that dispatch out of every later aggregate'
     }
 
     It 'catches a cost that does not follow from its tokens and rates' {
         $root = New-Fixture 'bad-arithmetic'
-        Edit-Fixture -Path (Join-Path $root 'history/squad-researcher.md') `
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
             -Pattern '"est_cost_usd": 0.06525' -Replacement '"est_cost_usd": 0.5'
         (Test-Contract $root).Passed | Should -BeFalse
     }
 
     It 'catches a rate that drifts from consumption-rates.md' {
         $root = New-Fixture 'rate-drift'
-        Edit-Fixture -Path (Join-Path $root 'history/squad-researcher.md') `
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
             -Pattern '"input_rate": 3.0' -Replacement '"input_rate": 9.0'
         (Test-Contract $root).Passed | Should -BeFalse -Because 'only consumption-rates.md holds token rates'
     }
 
     It 'catches missing orchestration overhead' {
         $root = New-Fixture 'no-orchestration'
-        Remove-Item -LiteralPath (Join-Path $root 'history/squad-scribe.md') -Force
+        Remove-Item -LiteralPath (Join-Path $root 'history/Squad Scribe.md') -Force
         (Test-Contract $root).Passed | Should -BeFalse -Because 'without it the ledger omits the cost of running the squad itself'
     }
 
     It 'catches a run total that dropped an earlier role' {
         $root = New-Fixture 'dropped-role'
         Edit-Fixture -Path (Join-Path $root 'consumption.md') `
-            -Pattern '\*\*\$0\.0923\*\*' -Replacement '**$0.0270**'
+            -Pattern '\*\*\$0\.09\*\*' -Replacement '**$0.03**'
         (Test-Contract $root).Passed | Should -BeFalse -Because 'this is exactly the payload-only rewrite the Scribe procedure warns about'
+    }
+
+    It 'catches an orchestration row that skipped a recorded block' {
+        $root = New-Fixture 'partial-orchestration'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '\| 0\.0270 +\| 2\.70' -Replacement '| 0.0100          | 1.00'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'the row is the sum of every orchestration block, not the latest one'
+    }
+
+    It 'catches a history file named by role id instead of agent name' {
+        $root = New-Fixture 'slugified-history'
+        Move-Item -LiteralPath (Join-Path $root 'history/Squad Researcher.md') `
+            -Destination (Join-Path $root 'history/researcher.md')
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'the filename is how a later turn matches an entry back to its roster row'
+    }
+
+    It 'catches a rate table the contract cannot read' {
+        $root = New-Fixture 'unreadable-rates'
+        Edit-Fixture -Path (Join-Path $root 'consumption-rates.md') `
+            -Pattern '\| Cache write \|' -Replacement '| Cache-write |'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a table that does not parse makes every rate assertion vacuous'
+    }
+
+    It 'catches history files seeded before the first dispatch' {
+        $root = New-Fixture 'init-with-history'
+        (Test-Contract -Root $root -InitOnly).Passed | Should -BeFalse -Because 'a history file that predates its dispatch is indistinguishable from one that recorded it'
     }
 
     It 'catches an undocumented autonomy mode' {

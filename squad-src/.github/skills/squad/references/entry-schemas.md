@@ -98,7 +98,9 @@ Intake Readiness Verdict placeholder (Scribe stamps this shape when the intake g
 
 ## history/<agent>.md
 
-One append-only file per dispatched agent. Replace `<agent>` with the agent's `name:` frontmatter value **verbatim** — the display name, spaces and capitalization intact, as in `history/Squad Researcher.md` or `history/BRD Builder.md`. Never slugify it, never lowercase it, and never substitute the role id: the file name is how a later turn matches a history entry back to the roster row it came from, so `squad-researcher.md` and `researcher.md` both read as a missing entry and the ledger rewrite drops that agent. The header is created with the file; dispatch records are appended. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
+One append-only file per dispatched agent. Replace `<agent>` with the agent's `name:` frontmatter value **verbatim** — the display name, spaces and capitalization intact, as in `history/Squad Researcher.md` or `history/BRD Builder.md`. Never slugify it, never lowercase it, and never substitute the role id: the file name is how a later turn matches a history entry back to the roster row it came from, so `squad-researcher.md` and `researcher.md` both read as a missing entry and the ledger rewrite drops that agent. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
+
+**The file is created by the first dispatch to that agent, never before it.** Init seeds the `history/` directory and nothing inside it. A header-only file seeded for every roster member at Init destroys the one signal this directory exists to carry — a file's presence is the proof a stage ran — and turns "which roles have been dispatched" into a question the state can no longer answer. Create the file with its header at the moment the first entry is appended, in the same write.
 
 `history/Squad Scribe.md` follows the same naming rule but holds `#### Consumption — Orchestration` blocks rather than dispatch records, because the coordinator's own turns and the Scribe's writes need somewhere in `history/` for the ledger rewrite to read them back from. It is not a dispatched stage and is not counted as one.
 
@@ -112,10 +114,49 @@ description: "Append-only dispatch history for a single squad agent"
 Each entry records a request this agent handled, the findings or outcome it returned, and the turn it was dispatched on. Entries are appended in chronological order and never edited.
 
 <!-- Append new dispatch entries below this line. -->
+```
 
-<!--
-Autonomous-loop dispatch entry pattern (Scribe stamps this shape when mode=autonomous is in effect):
+**The heading is literally `# History: <agent>`.** Not the bare agent name, not a role-flavored rewrite of the description. A later turn locates a history file by that heading, and a file headed `# Squad Researcher` reads as a file with no header at all.
 
+Every appended dispatch entry uses exactly this shape. The `#### Consumption` heading is the container the ledger rewrite reads blocks back from, so its level and wording are fixed: an `###` heading, or a suffix like `#### Consumption — Research`, is unreadable and drops that dispatch out of every later aggregate. The only legal variant is `#### Consumption — Orchestration`, which marks an orchestration block rather than a dispatch.
+
+````markdown
+### <timestamp> <short title>
+
+* Turn: <n>
+* Request: <scoped request the agent received>
+* Deliverable: `<path>` (<size or word count>)
+* Outcome: <one-line summary>
+
+#### Consumption
+
+```json
+{
+  "model": "<resolved model or unknown>",
+  "model_source": "<dispatch-reported|agent-pinned|operator-declared|session-inherited|cli-pinned|unresolved>",
+  "priced_as": "<rate row used, when it differs from model>",
+  "model_tier": "<fast|default|extended>",
+  "internal_turns": 0,
+  "input_tokens": 0,
+  "cached_tokens": 0,
+  "cache_write_tokens": 0,
+  "output_tokens": 0,
+  "input_rate": 0,
+  "cached_rate": 0,
+  "cache_write_rate": 0,
+  "output_rate": 0,
+  "est_cost_usd": 0,
+  "est_credits": 0,
+  "basis": "<estimated|tier-default>"
+}
+```
+````
+
+Field order is contractual and every numeric field is a bare number. See *Consumption Accounting* in [scribe-procedure.md](scribe-procedure.md) for how each value is resolved and computed.
+
+An autonomous-loop cycle replaces the entry body above with the shape below and still carries its own `#### Consumption` block:
+
+```markdown
 ### <timestamp> autonomous-loop:<topic-id> cycle:<1|2>
 
 * Request: <scoped request the agent received>
@@ -124,7 +165,6 @@ Autonomous-loop dispatch entry pattern (Scribe stamps this shape when mode=auton
 * Conditions: <list-or-none>
 * Outcome: <one-line summary>
 * See: `.copilot-tracking/squad/history/autonomous-loop-<topic-id>.md`
--->
 ```
 
 ## history/autonomous-loop-<id>.md

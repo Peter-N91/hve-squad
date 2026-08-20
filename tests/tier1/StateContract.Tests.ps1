@@ -20,7 +20,9 @@ BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'SquadState.psm1') -Force
     $script:Model = Get-SquadStateModel -SquadRoot $SquadRoot
 
-    # Display rounding in the ledger is expected; drift is not.
+    # Display rounding in the ledger is expected; drift is not. Each figure is compared
+    # against the sum rounded to the precision that figure was printed at, rather than
+    # against a tolerance wide enough to hide a dropped role.
     $script:Tolerance = 0.001
 }
 
@@ -103,11 +105,27 @@ Describe 'SQ-10 Dispatch history is the proof a stage ran' -Skip:(-not $ExpectDi
         Get-Content -LiteralPath $File -Raw | Should -Match '(?m)^#\s+History:'
     }
 
+    # The file name is how a later turn matches an entry back to its roster row, so a
+    # slugified or role-id name reads as a missing entry and the rewrite drops the agent.
+    It '<Name> is named for a roster agent' -ForEach @($model.HistoryFiles |
+            Where-Object { $_.BaseName -notmatch '^(autonomous-loop|autopilot-run)-' } |
+            ForEach-Object { @{ Name = $_.Name; Agent = $_.BaseName } }) {
+        $script:Model.RosterAgents | Should -Contain $Agent -Because 'the roster is what makes a history file name resolvable'
+    }
+
     # SQ-14: the Scribe writes the history append and its block together, so a file with
     # entries but no block is an incomplete dispatch record.
     It '<Name> carries a consumption block' -ForEach @($model.HistoryFiles | ForEach-Object { @{ Name = $_.Name } }) {
         $blocks = @($script:Model.Blocks | Where-Object { $_.Source -eq $Name })
         $blocks.Count | Should -BeGreaterThan 0 -Because 'a history entry without its consumption block is an incomplete dispatch record'
+    }
+}
+
+# A history file is the proof a dispatch happened, so seeding one for every roster member
+# at Init destroys the signal every later turn and the ledger rewrite read it for.
+Describe 'SQ-09 Init leaves history empty' -Skip:$ExpectDispatches {
+    It 'creates no history file before the first dispatch' {
+        $script:Model.HistoryNames -join ', ' | Should -BeNullOrEmpty -Because 'a history file that predates its dispatch is indistinguishable from one that recorded it'
     }
 }
 
@@ -179,7 +197,7 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
     It 'the orchestration row equals the sum of every orchestration block' {
         $row = @($script:Model.UsageAndCost | Where-Object { $_[0] -eq 'orchestration' })[0]
         $expected = ($script:Model.OrchestrationBlocks | ForEach-Object { $_.Fields['est_cost_usd'] } | Measure-Object -Sum).Sum
-        [math]::Abs((ConvertTo-LedgerNumber $row[6]) - $expected) | Should -BeLessThan $script:Tolerance
+        [math]::Abs((ConvertTo-LedgerNumber $row[6]) - [math]::Round($expected, (Get-LedgerDecimal $row[6]))) | Should -BeLessThan $script:Tolerance
     }
 
     # The documented failure is a Scribe that rewrites from the turn's payload alone,
@@ -189,7 +207,7 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
         $total.Count | Should -Be 1 -Because 'the ledger carries a run-total row'
 
         $expected = ($script:Model.Blocks | ForEach-Object { $_.Fields['est_cost_usd'] } | Measure-Object -Sum).Sum
-        [math]::Abs((ConvertTo-LedgerNumber $total[0][6]) - $expected) | Should -BeLessThan $script:Tolerance -Because 'a ledger rewritten from one turn silently drops every earlier role'
+        [math]::Abs((ConvertTo-LedgerNumber $total[0][6]) - [math]::Round($expected, (Get-LedgerDecimal $total[0][6]))) | Should -BeLessThan $script:Tolerance -Because 'a ledger rewritten from one turn silently drops every earlier role'
     }
 
     It 'the ledger is not left at its seed while history shows dispatches' {
@@ -199,13 +217,20 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
 
     It 'state.json run totals match the ledger total' {
         $total = @($script:Model.UsageAndCost | Where-Object { $_[0] -match 'Total' })[0]
-        [math]::Abs($script:Model.State['currentRun']['estCostUsd'] - (ConvertTo-LedgerNumber $total[6])) | Should -BeLessThan $script:Tolerance
+        $ledger = ConvertTo-LedgerNumber $total[6]
+        [math]::Abs([math]::Round($script:Model.State['currentRun']['estCostUsd'], (Get-LedgerDecimal $total[6])) - $ledger) | Should -BeLessThan $script:Tolerance
     }
 }
 
 Describe 'CON The rates file passes its shape check' {
     It 'declares column <_>' -ForEach @('Input', 'Cached', 'Cache write', 'Output') {
         $script:Model.RatesContent | Should -Match $_
+    }
+
+    # A rate table the contract cannot read reports every block's rates as unknown, which
+    # reads as a squad failure when it is the reader that is broken.
+    It 'the per-model rate table is machine-readable' {
+        $script:Model.Rates.Keys.Count | Should -BeGreaterThan 0 -Because 'every rate assertion is vacuous against a table that did not parse'
     }
 
     It 'carries the tier fallback table' {

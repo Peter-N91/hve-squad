@@ -30,6 +30,8 @@ All squad state lives under a **squad root**: `.copilot-tracking/squad/` for a s
 
 `<agent>` is the agent's `name:` frontmatter value **verbatim** — spaces and capitalization intact, as in `history/BRD Builder.md`. Never slugify, lowercase, or substitute the role id; a renamed file reads as a missing entry and drops that agent from every later ledger rewrite.
 
+Init seeds `history/` **empty**. Each file inside it is created by the dispatch it records, so its presence is what proves that stage ran; a header-only file seeded per roster member at Init destroys that signal.
+
 Detection precedence: `federation.md` present means federation; otherwise `team.md` present means a single squad; otherwise the squad is not initialized and Init Mode runs. Squad state is runtime-created and is never packaged with the squad source.
 
 ## The Squad Scribe Is the Single Writer
@@ -51,6 +53,8 @@ A coordinator classifies, dispatches, collects, synthesizes, and escalates. It n
 ## Proof of Dispatch
 
 A stage counts as run only when both exist: its domain artifact on disk at the role's `Deliverable Root`, and a `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block. No history entry means the stage did not happen and the turn cannot advance past it.
+
+The consumption block is a `#### Consumption` heading followed by a fenced `json` block — level four, no suffix, bare numbers throughout. The only legal variant is `#### Consumption — Orchestration`. Any other heading is unreadable to the ledger rewrite, so the dispatch it records is spent and uncounted. Its `est_cost_usd` is derived from the tokens and rates in that same block and must reproduce from them; a figure that does not is fabricated and corrupts every aggregate above it.
 
 Verification is an act, not an assertion: list the directory and read the file. Never report a path this turn did not actually enumerate.
 
