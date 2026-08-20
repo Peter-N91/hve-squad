@@ -281,6 +281,17 @@ function Get-SquadStateModel {
 
     $blocks = @(foreach ($file in $historyFiles) { Get-ConsumptionBlock -Path $file.FullName })
 
+    # A template copied out of a line-numbered read view keeps the viewer's gutter, which
+    # leaves the file well formed to the eye and unparseable to everything downstream.
+    # Scoped to state files: a deliverable may legitimately open with a numbered list.
+    $numberedFiles = @(
+        foreach ($file in (@(Get-ChildItem -LiteralPath $SquadRoot -Filter '*.md' -File -ErrorAction SilentlyContinue) + $historyFiles)) {
+            $lines = @(Get-Content -LiteralPath $file.FullName -TotalCount 12 -ErrorAction SilentlyContinue)
+            $gutter = @($lines | Where-Object { $_ -match '^\s*\d+[.:]\s' })
+            if ($gutter.Count -ge 3) { $file.Name }
+        }
+    )
+
     $ledgerContent = Read-Text 'consumption.md'
     $ratesContent = Read-Text 'consumption-rates.md'
     $teamContent = Read-Text 'team.md'
@@ -324,6 +335,7 @@ function Get-SquadStateModel {
         HasHistoryDir    = Test-Path -LiteralPath $historyDirectory
         HistoryFiles     = $historyFiles
         HistoryNames     = @($historyFiles | ForEach-Object { $_.BaseName })
+        NumberedFiles    = @($numberedFiles)
         State            = $stateJson
         Team             = $teamContent
         RosterAgents     = @($rosterAgents)

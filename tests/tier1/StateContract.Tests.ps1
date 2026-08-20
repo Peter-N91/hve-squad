@@ -38,6 +38,12 @@ Describe 'SQ-01 Init seeds the eager state files' {
     It 'creates the history directory' {
         $script:Model.HasHistoryDir | Should -BeTrue
     }
+
+    # A file copied out of a line-numbered read view keeps the viewer's gutter, which reads
+    # as correct content to a human and parses as nothing at all to every later turn.
+    It 'writes no file carrying a read tool line-number gutter' {
+        $script:Model.NumberedFiles -join ', ' | Should -BeNullOrEmpty -Because 'line numbers belong to the viewer, not the file'
+    }
 }
 
 Describe 'SQ-03 state.json carries the documented shape' {

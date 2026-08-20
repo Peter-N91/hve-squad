@@ -40,6 +40,8 @@ Only the **Squad Scribe** writes squad state. Every other agent, including both 
 
 Append-only files are appended to and never edited or removed. A coordinator that edits `decisions.md`, `history/`, or `state.json` directly has broken the contract, even when the edit is correct.
 
+**Line numbers are never file content.** A read tool renders a `1.`, `2.`, `12:` gutter down the left margin so you can cite a line; it belongs to the viewer, not to the file. Copying a template out of a numbered view and writing it back with the gutter intact produces a file nothing downstream can parse — including this contract's own checks. Strip the numbering before writing, every time.
+
 ## Dispatch Discipline
 
 A coordinator classifies, dispatches, collects, synthesizes, and escalates. It never performs a role's work itself, in any mode — interactive, autonomous, or autopilot. This is the rule that makes the squad a methodology rather than one model improvising.
@@ -62,7 +64,17 @@ A roster row names one **Primary** agent and optionally some **Alternates**. The
 
 A stage counts as run only when both exist: its domain artifact on disk at the role's `Deliverable Root`, and a `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block. No history entry means the stage did not happen and the turn cannot advance past it.
 
-A history file's own heading is literally `# History: <agent>` — not the bare agent name, not a rewrite of the description. A later turn locates the file by that heading, so a file headed `# Squad Researcher` reads as a file with no heading at all and drops that agent from every ledger rewrite.
+A history file is created by the dispatch it records, with this preamble and nothing else above the first entry:
+
+```markdown
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: <agent>
+```
+
+The heading is literally `# History: <agent>` — not the bare agent name, not a rewrite of the description. A later turn locates the file by that heading, so a file headed `# Squad Researcher` reads as a file with no heading at all and drops that agent from every ledger rewrite. The file name is the agent's `name:` verbatim, so `history/Squad Scribe.md`, never `history/scribe.md`.
 
 Verification is an act, not an assertion: list the directory and read the file. Never report a path this turn did not actually enumerate.
 
@@ -95,7 +107,15 @@ The field names, their `snake_case` spelling, their order, and the set itself ar
 }
 ```
 
-Every numeric field is a bare number: `172800`, never `~172,800`, `"172800"`, or `172800 tokens`. `priced_as` is the rate row's own label from `consumption-rates.md`, spelled as that table spells it.
+Every numeric field is a bare number: `172800`, never `~172,800`, `"172800"`, or `172800 tokens`.
+
+Three rules keep the block parseable, and each one has been broken by a real run:
+
+* **The set is closed at sixteen.** Estimator working values — `dispatch_class`, `base_context`, `growth_per_turn`, `output_per_turn`, `gross_input_tokens` — are inputs you reason with, not fields you record. They belong in the entry prose above the block, never inside it.
+* **The rate fields are named `input_rate`, `cached_rate`, `cache_write_rate`, `output_rate`.** The unit is USD per 1M tokens and it lives in the contract, not in the field name; `input_rate_usd_per_1m` is a different field and reads as a missing one.
+* **`priced_as` is always present, and it is copied character-for-character from the rate table's `Model (as routed)` cell.** `Claude Sonnet 5`, never `claude-sonnet-5`. When no fallback happened it equals `model`; write it anyway, because the ledger prices from `priced_as` and a slug matches no row.
+
+Copy all four rates from that row as the row states them, even when the matching token count is zero. A rate is a property of the model; `cache_write_rate: 0` against a row that says `3.75` says the model is free to cache, which is false and makes the block irreproducible.
 
 **Derive `est_cost_usd`; never estimate it.** By the time this field is written its four token counts and four rates are already decided, so it has exactly one correct value and any other value is fabricated. Compute the four products separately, sum them, divide by `1e6`, then multiply by the `calibration_factor` from `consumption-rates.md`. Worked example at a factor of `1.00`; the block itself records bare numbers, the separators below are only for reading:
 
@@ -110,11 +130,13 @@ Every numeric field is a bare number: `172800`, never `~172,800`, `"172800"`, or
 
 `est_credits` is `est_cost_usd / 0.01`. Read the block back before moving on and confirm the recorded cost reproduces from the recorded tokens and rates: a block whose cost does not follow from its own numbers corrupts the run total, the `state.json` figures, and any autonomous-mode cost ceiling computed from them.
 
+Divide by `1e6` exactly once. The commonest corruption in this file is a factor-of-ten slip — a block summing to `113520` recorded as `1.17` rather than `0.11352` — which survives every other check because the block is otherwise well formed. Compare the digits of your sum against the digits of what you wrote before appending.
+
 ## Two Files the Ledger Reads Back
 
 `consumption-rates.md` is **copied verbatim** from the template in the `squad` skill's `references/consumption.md`, at Init and at every sub-squad seeding or federation promotion. It carries the per-model rate table, the tier-fallback table, the dispatch-size estimator, and the calibration block, and all four are load-bearing. A shortened, summarized, or hand-rewritten rate file leaves the Scribe pricing from a table that no longer contains what it needs.
 
-In `consumption.md`, the row covering the coordinator's and Scribe's own turns is labelled **`orchestration`** in both tables — never `scribe`, `coordinator`, or a split pair. It is derived from the `#### Consumption — Orchestration` blocks the same way every other row is derived from its dispatch blocks.
+In `consumption.md`, the row covering the coordinator's and Scribe's own turns is labelled **`orchestration`** in both tables — never `scribe`, `coordinator`, or a split pair. It is derived from the `#### Consumption — Orchestration` blocks the same way every other row is derived from its dispatch blocks, so the Scribe writes one such block into `history/Squad Scribe.md` on every turn it writes state, including Init. No block means no row — an `orchestration` row carrying a figure no block accounts for is invented, and a zero row hides the cost of running the squad.
 
 The ledger is rewritten from **every** block recorded for the run, not from this turn's. So a role that has never been dispatched carries no row at all rather than a row of zeros; the run total is the sum of every block in `history/`; the `Run:` id in the heading is the current run, not the one Init seeded; and `state.json`'s `currentRun` cost figures equal that same total. A ledger rewritten from one turn silently drops every earlier role while still looking complete.
 
