@@ -1,0 +1,21 @@
+{
+  "id": "federation-promotion",
+  "description": "A working single squad is promoted to a federation, and both the promoted sub-squad and a second one keep working afterwards.",
+  "fixture": "minimal-app",
+  "squadRootGlob": ".copilot-tracking/squad/members/*",
+  "expectDispatches": true,
+  "turns": [
+    {
+      "id": "init-and-run",
+      "prompt": "Act as the Squad Coordinator for this repository. Run squad Init, then take this request and route it as you normally would: research the concurrency gap the README records in reserve() and produce a short findings artifact. Keep the deliverable under one page."
+    },
+    {
+      "id": "promote",
+      "prompt": "Act as the Squad Federation Coordinator. Promote the existing single squad in this repository to a federation, moving its state under .copilot-tracking/squad/members/ as the promotion procedure specifies. Do not route any new work this turn. Report the sub-squad name you promoted into and the paths you moved."
+    },
+    {
+      "id": "cross-sub-squad",
+      "prompt": "Act as the Squad Federation Coordinator. Create a second sub-squad for the persistence layer, and have it build on the findings the first sub-squad already produced rather than re-researching them. Use the sanctioned cross-sub-squad handoff. Produce a short plan artifact and keep it under one page."
+    }
+  ]
+}

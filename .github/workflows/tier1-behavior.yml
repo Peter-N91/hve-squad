@@ -1,0 +1,262 @@
+name: Tier 1 Behavior
+
+# Live behavioral runs of the squad against fixture repositories.
+#
+# This is the only suite that spends Copilot requests, so it never runs on a pull
+# request. It runs on demand and as the release gate. See
+# tests/squad-behavior-contract.md for the cases, and Tier 0 for the static checks that
+# do gate every pull request.
+#
+# What makes it stable despite a nondeterministic runtime: nothing here asserts on the
+# run's prose. Every assertion reads a file the run wrote — the seeded state, the
+# per-agent history that is the proof a dispatch happened, and the arithmetic of the
+# consumption ledger. A model that words its answer differently must not fail this gate;
+# a model that skipped a dispatch must.
+#
+# Cost and time controls
+#   * the model is pinned, because results across runs are not comparable otherwise, and
+#     a headless run does not read the `model:` frontmatter the VS Code host honors
+#   * fixtures are deliberately tiny
+#   * every turn carries a timeout and every job carries one too
+#   * one automatic retry per scenario, with both attempts kept, so a flake is
+#     distinguishable from a regression
+#   * the concurrency group never cancels in flight — a cancelled run has already been
+#     paid for
+#
+# Required configuration
+#   Secret COPILOT_GITHUB_TOKEN — a dedicated fine-grained PAT carrying only the
+#   "Copilot Requests" permission. The built-in GITHUB_TOKEN does not carry Copilot
+#   access. See squad-watch.yml for the same requirement and the reasoning behind
+#   keeping this credential narrow.
+
+on:
+  # The state contract's own self-check spends nothing, so it gates every pull request
+  # that touches it. The live runs below never do.
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'tests/tier1/**'
+      - 'tests/lib/**'
+      - 'tests/fixtures/**'
+      - '.github/workflows/tier1-behavior.yml'
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Published ref to install and exercise. Blank runs this checkout in source mode.'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Model to pin for every turn.'
+        required: false
+        type: string
+        default: 'claude-sonnet-5'
+      compare:
+        description: 'Score the runs against the Tier 2 golden baselines.'
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      copilot-token:
+        description: 'PAT carrying the Copilot Requests permission.'
+        required: true
+  workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual trigger; inputs are passed via env and only reach harness arguments.
+    inputs:
+      ref:
+        description: 'Published ref to install. Leave blank to test this checkout in source mode.'
+        required: false
+        default: ''
+      model:
+        description: 'Model to pin for every turn.'
+        required: false
+        default: 'claude-sonnet-5'
+      compare:
+        description: 'Score the runs against the Tier 2 golden baselines.'
+        required: false
+        type: boolean
+        default: true
+      capture-baseline:
+        description: 'Capture these runs as the Tier 2 golden baselines instead of scoring them. Only ever from a known-good ref.'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  # Never cancel in flight: a cancelled run has already spent its Copilot requests.
+  group: tier1-${{ inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  COPILOT_CLI_VERSION: '1.0.78'
+  APM_VERSION: '0.18.0'
+
+jobs:
+  # Mutation controls for the state contract: each one breaks a schema-correct fixture
+  # in exactly one way and requires the contract to catch it. A suite that cannot fail
+  # reports success on a broken tree, which is worse than no suite.
+  selfcheck:
+    name: State contract self-check
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Run the self-check
+        shell: pwsh
+        run: ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Detailed
+
+  # Derived rather than hardcoded: a matrix list drifts silently, and a scenario that
+  # never runs is indistinguishable from one that passes.
+  discover:
+    name: Discover scenarios
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    outputs:
+      scenarios: ${{ steps.list.outputs.scenarios }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: List scenarios
+        id: list
+        shell: pwsh
+        run: |
+          $ids = @(Get-ChildItem ./tests/tier1/scenarios -Filter '*.json' | Sort-Object Name | ForEach-Object { $_.BaseName })
+          if ($ids.Count -eq 0) { throw 'No Tier 1 scenarios found.' }
+          "scenarios=$($ids | ConvertTo-Json -Compress -AsArray)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          Write-Host "Scenarios: $($ids -join ', ')"
+
+  live:
+    name: ${{ matrix.scenario }}
+    needs: discover
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJSON(needs.discover.outputs.scenarios) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # setup-only: the harness drives apm itself, once per scenario workspace.
+      - name: Install the APM CLI
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: 'true'
+          apm-version: ${{ env.APM_VERSION }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      # An exact version, not a floating tag, so the runtime the gate measures is
+      # reviewed and reproducible.
+      - name: Install pinned GitHub Copilot CLI
+        # zizmor: ignore[adhoc-packages] - the CLI ships only via npm and has no lockfile to install from; the exact pin above is the mitigation.
+        run: npm install -g "@github/copilot@${COPILOT_CLI_VERSION}"
+
+      # Pinned to 5.x: Pester 6 changes -ForEach and configuration semantics, and the
+      # state contract is authored and verified against 5.
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Run the scenario
+        shell: pwsh
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.copilot-token || secrets.COPILOT_GITHUB_TOKEN }}
+          # Unauthenticated resolution hits the GitHub rate limit and APM then waits on
+          # the reset rather than failing, which reads as a hung job.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_MODEL: ${{ inputs.model || 'claude-sonnet-5' }}
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          $common = @{
+            Scenario       = $env:SCENARIO
+            Model          = $env:INPUT_MODEL
+            ResultRoot     = './tests/tier1/results'
+            TimeoutMinutes = 20
+          }
+
+          if ($env:INPUT_REF) {
+            ./tests/tier1/Invoke-Tier1LiveRun.ps1 -Ref $env:INPUT_REF @common
+          }
+          else {
+            ./tests/tier1/Invoke-Tier1LiveRun.ps1 -SourceRoot . @common
+          }
+
+      # Uploaded on failure too: the state tree the run left behind is the only evidence
+      # that explains why a case failed.
+      - name: Upload run evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tier1-${{ matrix.scenario }}
+          path: tests/tier1/results
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Summarize
+        if: always()
+        shell: pwsh
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          $path = './tests/tier1/results/tier1-summary.json'
+          if (-not (Test-Path -LiteralPath $path)) {
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "### Tier 1 - $($env:SCENARIO)`n`nNo summary produced; the harness failed before any scenario completed."
+            return
+          }
+
+          $results = @(Get-Content -LiteralPath $path -Raw | ConvertFrom-Json)
+          $lines = @("### Tier 1 - $($env:SCENARIO)", '')
+          foreach ($result in $results) {
+            $verdict = if ($result.passed) { 'passed' } else { 'FAILED' }
+            $lines += "* **$verdict** after $($result.attempt) attempt(s)"
+            foreach ($turn in $result.turns) {
+              $lines += "  * turn ``$($turn.id)``: exit $($turn.exitCode), $($turn.seconds)s"
+            }
+            foreach ($failure in $result.failures) { $lines += "  * $failure" }
+          }
+
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($lines -join "`n")
+
+  semantic:
+    name: Tier 2 semantic comparison
+    needs: live
+    # Runs even when a scenario failed: a partial comparison still names what drifted.
+    if: ${{ always() && inputs.compare }}
+    # A nested job cannot request more than its caller holds, and the workflow-level
+    # grant above leaves everything but `contents` at none. Tier 2 reads the run's
+    # artifacts through the API, so it needs `actions: read` passed down explicitly.
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/tier2-semantic.yml
+    with:
+      artifact-pattern: tier1-*
+      capture-baseline: ${{ github.event_name == 'workflow_dispatch' && inputs.capture-baseline || false }}
+      model: ${{ inputs.model || 'claude-sonnet-5' }}
+    secrets:
+      copilot-token: ${{ secrets.COPILOT_GITHUB_TOKEN }}

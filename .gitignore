@@ -54,3 +54,9 @@ apm_modules/
 knowledge-docs/
 
 docs/planning/
+tests/tier0/tier0-results.xml
+tests/tier1/tier1-results.xml
+tests/tier1/tier1-selfcheck-results.xml
+tests/tier1/results/
+tests/tier2/tier2-selfcheck-results.xml
+tests/tier2/tier2-score.json

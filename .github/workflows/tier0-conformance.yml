@@ -1,0 +1,112 @@
+name: Tier 0 Conformance
+
+# Static conformance of the package a consumer actually receives.
+#
+# No model is invoked and no secret is read, so this can gate every pull request
+# as well as a release. See tests/squad-behavior-contract.md for the case list.
+#
+# Two modes, because a pull request branch cannot be installed:
+#   source mode (pull_request) — installs the manifest, then overlays the branch's
+#     squad-src/ on top. The manifest's self-references are bare paths, so APM
+#     resolves them against the default branch and every file a branch ADDS is
+#     reported missing; overlaying is what makes the branch testable at all.
+#   ref mode (workflow_call, workflow_dispatch) — installs a published ref exactly
+#     as a consumer would. This is the release gate, and the only mode that can
+#     assert the manifest pinned itself (PKG-01).
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'squad-src/**'
+      - 'apm.yml'
+      - 'tests/tier0/**'
+      - '.github/workflows/tier0-conformance.yml'
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Published ref to install and assert, for example v0.16.0.'
+        required: true
+        type: string
+  workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual trigger for testing a published ref; the input is passed via env and only ever reaches an apm install argument.
+    inputs:
+      ref:
+        description: 'Published ref to install. Leave blank to test this checkout in source mode.'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: tier0-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: Package conformance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # setup-only: the suite drives apm itself, so it needs the CLI and nothing else.
+      - name: Install the APM CLI
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: 'true'
+          apm-version: '0.18.0'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pinned to 5.x: Pester 6 changes -ForEach and configuration semantics, and this
+      # suite is authored and verified against 5.
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Run Tier 0
+        shell: pwsh
+        env:
+          # Unauthenticated resolution hits the GitHub rate limit and APM then waits
+          # on the reset rather than failing, which reads as a hung job.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          if ($env:INPUT_REF) {
+            ./tests/tier0/Invoke-Tier0Tests.ps1 -Ref $env:INPUT_REF -Output Detailed
+          }
+          else {
+            ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Output Detailed
+          }
+
+      - name: Summarize
+        if: always()
+        shell: pwsh
+        run: |
+          $path = 'tests/tier0/tier0-results.xml'
+          if (-not (Test-Path -LiteralPath $path)) {
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'Tier 0 produced no result file - the run failed before Pester started.'
+            return
+          }
+
+          [xml]$results = Get-Content -LiteralPath $path -Raw
+          $run = $results.'test-results'
+          $lines = @(
+            '## Tier 0 conformance'
+            ''
+            "Total **$($run.total)** &middot; failures **$($run.failures)** &middot; skipped **$($run.skipped)**"
+          )
+
+          $failed = @($results.SelectNodes('//test-case[@success="False" and @executed="True"]') | ForEach-Object { "- ``$($_.name)``" })
+          if ($failed) {
+            $lines += @('', '### Failing cases', '') + $failed
+          }
+
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($lines -join "`n")
