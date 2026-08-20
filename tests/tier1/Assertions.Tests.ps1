@@ -171,6 +171,14 @@ Describe 'The contract catches a broken tree' {
         (Test-Contract $root).Passed | Should -BeFalse -Because 'currentRun is a running total, not a scratchpad'
     }
 
+    It 'catches a file written with a read tool line-number gutter' {
+        $root = New-Fixture 'numbered-lines'
+        $path = Join-Path $root 'history/Squad Researcher.md'
+        $numbered = @(Get-Content -LiteralPath $path | ForEach-Object -Begin { $i = 0 } -Process { $i++; "$i. $_" })
+        Set-Content -LiteralPath $path -Value $numbered -Encoding utf8NoBOM
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a gutter that reads as content leaves the file parseable to nobody'
+    }
+
     It 'catches an undocumented autonomy mode' {
         $root = New-Fixture 'bad-mode'
         Edit-Fixture -Path (Join-Path $root 'state.json') `
