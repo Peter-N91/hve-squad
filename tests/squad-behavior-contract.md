@@ -77,7 +77,8 @@ Fixture: a small repository with no `.copilot-tracking/squad/` directory.
 | SQ-02 | `history/` contains **no** `<agent>.md` files yet | History is created lazily on first dispatch, never seeded empty |
 | SQ-03 | `state.json` parses and carries `schemaVersion`, `updated`, `turn`, `mode`, `activeRoles`, `openEscalations`, `currentRun.{sessionModel,modelOverrides,estCostUsd,estCreditsTotal}`, `notify.{approvalChannel,enabled,email,github.{handle,repo}}` | `entry-schemas.md` |
 | SQ-04 | `state.json` `mode` is one of `interactive`, `autonomous`, `autopilot`; `notify.approvalChannel` is one of `in-chat`, `github-issue`, `webhook` | `squad-state.instructions.md` |
-| SQ-05 | `team.md` contains a `## Members` table with columns `Role`, `Member Name`, `Agent Name (Primary)`, `Alternate Agents`, `Invocation`, `Model Tier`, `Deliverable Root` | `squad-roster.instructions.md`, Members Schema |
+| SQ-05 | `team.md` contains a `## Members` table with columns `Role`, `Member Name`, `Agent Name (Primary)`, `Alternate Agents`, `Selection Cue`, `Invocation`, `Model Tier`, `Deliverable Root` | `squad-roster.instructions.md`, Members Schema |
+| SQ-05a | Every row carries a `Selection Cue` value — the condition that picks an Alternate, or `—` when the role has none. The cast catalog is `applyTo`-scoped and does not load on every host, so a roster listing alternates without their cue leaves resolution to a guess | `squad-roster.instructions.md`, Members Schema |
 | SQ-06 | Every `Agent Name (Primary)` value in `team.md` matches a delivered agent `name:` | Ties runtime roster to PKG-02 |
 | SQ-07 | `routing.md` contains columns `Pattern / Keyword`, `Role(s)`, `Autonomy Tier`, `Parallel-Eligible`; every `Autonomy Tier` is `auto`, `confirm`, or `escalate` | `squad-routing.instructions.md` |
 | SQ-08 | Every `Role(s)` value in `routing.md` resolves to a `Role` in `team.md` | Unroutable role means a dead branch |
@@ -94,12 +95,14 @@ Precondition: an initialized squad. Action: one request that routes to at least 
 | SQ-10c | Each dispatch entry records the request the agent received, the findings or outcome it returned, and the turn it was dispatched on | `entry-schemas.md`, history schema |
 | SQ-10d | The history file carries its `# History: <agent>` heading and description frontmatter when created | `entry-schemas.md` |
 | SQ-11 | Each dispatch entry is followed by a `#### Consumption` heading (or `#### Consumption — Orchestration`) and a fenced `json` block | `scribe-procedure.md` Step 6 |
+| SQ-11a | Those two headings take **no** suffix. `### Consumption`, `#### Consumption Block`, `#### Consumption — Research`, and `#### Consumption — Orchestration (Turn 1)` are all unreadable to the ledger rewrite | `scribe-procedure.md` Step 6 |
 | SQ-12 | That JSON block carries exactly these keys in this order: `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `input_rate`, `cached_rate`, `cache_write_rate`, `output_rate`, `est_cost_usd`, `est_credits`, `basis` | `scribe-procedure.md` Step 6 |
 | SQ-13 | Every numeric field in that block is a bare number — no thousands separators, no `~`, no units, no parenthetical qualifiers | `scribe-procedure.md` Step 6; the ledger rewrite reparses these |
 | SQ-14 | **No history entry exists without its consumption block** | `squad-state.instructions.md`, Proof of Dispatch |
 | SQ-15 | `decisions.md` grew, and its pre-turn content is byte-identical as a prefix of its post-turn content | Append-only; catches silent rewrites |
 | SQ-16 | `consumption.md` contains two separate tables, `## Attribution` and `## Usage & Cost`, never merged into one wide table, each with an `orchestration` row and the latter with a `**Total**` row | `consumption.md` reference |
 | SQ-17 | Roles appear in `consumption.md` in roster order, and every dispatched role appears | `scribe-procedure.md` Step 8 |
+| SQ-17a | **No idle rows.** A role with no consumption block recorded has no row at all, not a zero row. Seeding the roster as zero rows makes a ledger that never advanced look populated | `scribe-procedure.md` Step 8 |
 | SQ-18 | `state.json` `turn` incremented by exactly one, `updated` changed, `activeRoles` equals the set of roles dispatched this turn | `scribe-procedure.md` Step 13 |
 | SQ-19 | `state.json` was written **last** — its `updated` is at or after every timestamp written this turn | `scribe-procedure.md` Step 13 |
 

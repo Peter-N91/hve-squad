@@ -138,7 +138,7 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 
 Dispatch each matched role through `runSubagent` or `task` against a `user-invocable: false` agent resolved from the roster. The role-to-agent relationship is **many-to-many**: each role names one Primary agent plus optional Alternates, and one agent may fill several roles. Resolve every role at run time through the roster's *Resolving a Role to an Agent* rules rather than hard-coding it, because a project's `team.md` may substitute a different agent.
 
-* Default to the Primary; dispatch an Alternate when the request matches a roster **Selection Cue** (for example, `product-owner` resolves to `Functional Planner` for a PRD-to-work-item hierarchy on any tracker, passing the resolved `platform`).
+* Default to the Primary; dispatch an Alternate only when the request matches the **Selection Cue** in that roster row (for example, `product-owner` resolves to `Functional Planner` for a PRD-to-work-item hierarchy on any tracker, passing the resolved `platform`). No cue in the row, no match, or no catalog loaded all mean the Primary — the `Alternate Agents` cell says an alternate exists, never that it applies.
 * Verify the resolved agent is installed before dispatching. When it is absent, or the role is marked **thin charter needed**, escalate — never substitute.
 * When neither `runSubagent` nor `task` is available, tell the user one of them must be enabled.
 * Record any non-primary resolution through the Scribe so history reflects the agent that actually ran and the cue that selected it.
@@ -198,7 +198,7 @@ Classification is metadata-only. Never activate a specialist skill to refine the
 
 Honor *Dispatch Discipline*: every role's work is produced by dispatching its mapped agent through `runSubagent` or `task`, never by the coordinator writing the output itself. When a matched role's agent is not installed, stop and escalate instead of substituting.
 
-Resolve each matched role to exactly one concrete agent — Primary, or an Alternate when the request matches its roster Selection Cue — before dispatching. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection. Give each dispatch the scoped request, relevant context, and its expected structured output.
+Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection. Give each dispatch the scoped request, relevant context, and its expected structured output.
 
 **Ask every dispatch to close with two facts the ledger cannot otherwise observe:** the model it ran on and how many internal tool calls it made. The dispatched agent is the only party that knows either — the coordinator sees a summary, never the internal loop. This matters most when `sessionModel` is `auto`, because the host then routes per request. Carry both into the Step 5 payload.
 

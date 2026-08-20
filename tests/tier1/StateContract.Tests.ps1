@@ -57,6 +57,20 @@ Describe 'SQ-03 state.json carries the documented shape' {
         $script:Model.State['notify'].Keys | Should -Contain $_
     }
 
+    # An invented key is not harmless: this file is read by machine, so a run that parks
+    # per-turn data here produces a file that looks informative and answers nothing.
+    It 'declares no key outside the documented set' {
+        $documented = @('schemaVersion', 'updated', 'turn', 'mode', 'activeRoles', 'openEscalations', 'currentRun', 'notify', 'trigger')
+        $extra = @($script:Model.State.Keys | Where-Object { $_ -notin $documented })
+        $extra -join ', ' | Should -BeNullOrEmpty -Because 'the state.json key set is closed apart from the optional Watch Mode trigger'
+    }
+
+    It 'currentRun declares no key outside the documented set' {
+        $documented = @('sessionModel', 'modelOverrides', 'estCostUsd', 'estCreditsTotal')
+        $extra = @($script:Model.State['currentRun'].Keys | Where-Object { $_ -notin $documented })
+        $extra -join ', ' | Should -BeNullOrEmpty -Because 'currentRun is a running total, not a scratchpad for per-turn figures'
+    }
+
     It 'mode is a documented value' {
         $script:Model.Modes | Should -Contain $script:Model.State['mode']
     }
@@ -71,7 +85,7 @@ Describe 'SQ-05 The roster carries its documented columns' {
         $script:Model.Team | Should -Match '(?m)^##\s+Members\s*$'
     }
 
-    It 'declares column <_>' -ForEach @('Role', 'Member Name', 'Agent Name \(Primary\)', 'Alternate Agents', 'Invocation', 'Model Tier', 'Deliverable Root') {
+    It 'declares column <_>' -ForEach @('Role', 'Member Name', 'Agent Name \(Primary\)', 'Alternate Agents', 'Selection Cue', 'Invocation', 'Model Tier', 'Deliverable Root') {
         $script:Model.Team | Should -Match $_
     }
 }
@@ -213,6 +227,17 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
     It 'the ledger is not left at its seed while history shows dispatches' {
         $total = @($script:Model.UsageAndCost | Where-Object { $_[0] -match 'Total' })[0]
         (ConvertTo-LedgerNumber $total[6]) | Should -BeGreaterThan 0
+    }
+
+    # A roster seeded as zero rows makes a ledger that never advanced look populated, and
+    # buries the one real row among eleven that only restate the roster.
+    It 'carries no row for a role that was never dispatched' {
+        $idle = @($script:Model.UsageAndCost |
+                Where-Object { $_[0] -notmatch 'Total' } |
+                Where-Object { (ConvertTo-LedgerNumber $_[6]) -eq 0 } |
+                ForEach-Object { $_[0] })
+
+        $idle -join ', ' | Should -BeNullOrEmpty -Because 'a role with no consumption block has no row, not a zero row'
     }
 
     It 'state.json run totals match the ledger total' {

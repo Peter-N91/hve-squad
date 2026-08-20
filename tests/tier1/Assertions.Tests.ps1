@@ -39,6 +39,10 @@ BeforeAll {
         $updated = $content -replace $Pattern, $Replacement
         if ($updated -eq $content) { throw "Mutation did not change $Path - the pattern '$Pattern' no longer matches the fixture." }
         Set-Content -LiteralPath $Path -Value $updated -Encoding utf8NoBOM -NoNewline
+
+        # A plain function collects surplus positional arguments into $args rather than
+        # failing, so an unparenthesised '-Replacement a + b' silently binds only 'a'.
+        if ($args.Count -gt 0) { throw "Edit-Fixture received $($args.Count) unbound argument(s); parenthesise the concatenated replacement." }
     }
 }
 
@@ -80,7 +84,7 @@ Describe 'The contract catches a broken tree' {
         $path = Join-Path $root 'history/Squad Researcher.md'
         Edit-Fixture -Path $path `
             -Pattern '(?s)"model_source": "dispatch-reported",\s*\r?\n\s*"priced_as": "",' `
-            -Replacement '"priced_as": "",' + "`n  " + '"model_source": "dispatch-reported",'
+            -Replacement ('"priced_as": "",' + "`n  " + '"model_source": "dispatch-reported",')
         (Test-Contract $root).Passed | Should -BeFalse -Because 'the ledger rewrite reads these blocks positionally'
     }
 
@@ -142,6 +146,29 @@ Describe 'The contract catches a broken tree' {
     It 'catches history files seeded before the first dispatch' {
         $root = New-Fixture 'init-with-history'
         (Test-Contract -Root $root -InitOnly).Passed | Should -BeFalse -Because 'a history file that predates its dispatch is indistinguishable from one that recorded it'
+    }
+
+    It 'catches a roster that lists alternates without their cue' {
+        $root = New-Fixture 'no-selection-cue'
+        Edit-Fixture -Path (Join-Path $root 'team.md') `
+            -Pattern '\| Selection Cue\s+' -Replacement '| Alternate Cue '
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'knowing an alternate exists is not knowing when it applies'
+    }
+
+    It 'catches a ledger row for a role that was never dispatched' {
+        $root = New-Fixture 'idle-role-row'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '(?m)^\| orchestration \| 1 ' `
+            -Replacement "| lead          | 0     | 0         | 0      | 0        | 0          | 0.0000          | 0.00         | estimated |`n| orchestration | 1 "
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a zero row makes a stale ledger look populated'
+    }
+
+    It 'catches per-turn figures parked in state.json' {
+        $root = New-Fixture 'state-scratchpad'
+        Edit-Fixture -Path (Join-Path $root 'state.json') `
+            -Pattern '"estCreditsTotal": 9.225' `
+            -Replacement ('"estCreditsTotal": 9.225,' + "`n    " + '"turn1_consumption": { "tokens": "moderate" }')
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'currentRun is a running total, not a scratchpad'
     }
 
     It 'catches an undocumented autonomy mode' {

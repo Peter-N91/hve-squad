@@ -50,6 +50,14 @@ A coordinator classifies, dispatches, collects, synthesizes, and escalates. It n
 * When a mapped agent is missing or not dispatchable, **stop and escalate**. Never substitute your own reasoning and never swap in an unmapped agent.
 * Running on a fast or auto-selected model never relaxes any of the above. Determinism completes a squad turn, not model strength.
 
+## Resolving a Role to an Agent
+
+A roster row names one **Primary** agent and optionally some **Alternates**. The Primary is what the role dispatches; an Alternate is a documented exception, never a preference.
+
+* **Dispatch the Primary unless a Selection Cue you actually read matches the request.** The cue lives in the roster row's `Selection Cue` cell, seeded at Init from the cast catalog. Reading the `Alternate Agents` cell tells you an alternate exists, not when to use it.
+* **No cue in hand means the Primary.** A roster with no `Selection Cue` column, a cue that does not match, or a cue table you could not load all resolve the same way: dispatch the Primary. Picking the alternate that sounds closest to the request is a guess, and it silently swaps the methodology the role was cast for.
+* **Record any non-primary resolution** through the Scribe, naming the cue that selected it, so the history entry explains why that agent ran.
+
 ## Proof of Dispatch
 
 A stage counts as run only when both exist: its domain artifact on disk at the role's `Deliverable Root`, and a `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block. No history entry means the stage did not happen and the turn cannot advance past it.
@@ -57,6 +65,8 @@ A stage counts as run only when both exist: its domain artifact on disk at the r
 The consumption block is a `#### Consumption` heading followed by a fenced `json` block — level four, no suffix, bare numbers throughout. The only legal variant is `#### Consumption — Orchestration`. Any other heading is unreadable to the ledger rewrite, so the dispatch it records is spent and uncounted. Its `est_cost_usd` is derived from the tokens and rates in that same block and must reproduce from them; a figure that does not is fabricated and corrupts every aggregate above it.
 
 Verification is an act, not an assertion: list the directory and read the file. Never report a path this turn did not actually enumerate.
+
+**A stage recorded as complete in `state.json` but absent from `history/` did not run.** The history file is the evidence; a status field is a claim about it. Autonomous and autopilot runs remove the human turn between stages, not this check — when the file is missing, stop at that stage and escalate rather than advancing on the strength of the claim.
 
 ## The Methodology Spine Is Not Optional
 

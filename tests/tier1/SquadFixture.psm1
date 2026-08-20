@@ -68,11 +68,11 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 
 ## Members
 
-| Role        | Member Name | Agent Name (Primary) | Alternate Agents | Invocation  | Model Tier | Deliverable Root            |
-|-------------|-------------|----------------------|------------------|-------------|------------|-----------------------------|
-| researcher  |             | Squad Researcher     |                  | runSubagent | fast       | `.copilot-tracking/research/` |
-| lead        |             | Squad Lead           |                  | runSubagent | default    | `.copilot-tracking/plans/`    |
-| scribe      |             | Squad Scribe         |                  | runSubagent | fast       | `.copilot-tracking/squad/`    |
+| Role        | Member Name | Agent Name (Primary) | Alternate Agents | Selection Cue                                       | Invocation  | Model Tier | Deliverable Root            |
+|-------------|-------------|----------------------|------------------|-----------------------------------------------------|-------------|------------|-----------------------------|
+| researcher  |             | Squad Researcher     |                  | —                                                   | runSubagent | fast       | `.copilot-tracking/research/` |
+| lead        |             | Squad Lead           | RPI Planner      | revise one phase of an existing plan → RPI Planner  | runSubagent | default    | `.copilot-tracking/plans/`    |
+| scribe      |             | Squad Scribe         |                  | —                                                   | runSubagent | fast       | `.copilot-tracking/squad/`    |
 '@
 
     Set-Content -LiteralPath (Join-Path $root 'routing.md') -Encoding utf8NoBOM -Value @'

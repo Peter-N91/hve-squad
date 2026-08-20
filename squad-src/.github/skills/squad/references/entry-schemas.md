@@ -118,7 +118,7 @@ Each entry records a request this agent handled, the findings or outcome it retu
 
 **The heading is literally `# History: <agent>`.** Not the bare agent name, not a role-flavored rewrite of the description. A later turn locates a history file by that heading, and a file headed `# Squad Researcher` reads as a file with no header at all.
 
-Every appended dispatch entry uses exactly this shape. The `#### Consumption` heading is the container the ledger rewrite reads blocks back from, so its level and wording are fixed: an `###` heading, or a suffix like `#### Consumption — Research`, is unreadable and drops that dispatch out of every later aggregate. The only legal variant is `#### Consumption — Orchestration`, which marks an orchestration block rather than a dispatch.
+Every appended dispatch entry uses exactly this shape. The `#### Consumption` heading is the container the ledger rewrite reads blocks back from, so its level and wording are fixed and it takes **no suffix**: `### Consumption`, `#### Consumption Block`, `#### Consumption — Research`, and `#### Consumption — Orchestration (Turn 1)` are all unreadable and drop that dispatch out of every later aggregate. The only legal variant is `#### Consumption — Orchestration`, which marks an orchestration block rather than a dispatch. Turn and timestamp belong in the entry heading above the block or inside the JSON, never appended to the heading.
 
 ````markdown
 ### <timestamp> <short title>
@@ -244,6 +244,8 @@ Each entry records a notification the squad fired: when, to whom, the trigger, t
 ## state.json
 
 Machine-readable squad status. Uses replace semantics — the coordinator overwrites it (through the Squad Scribe) as the squad advances.
+
+**The key set below is closed.** Write these keys and no others, at both levels: every one of `schemaVersion`, `updated`, `turn`, `mode`, `activeRoles`, `openEscalations`, `currentRun`, and `notify` is present on every write, and `currentRun` always carries `sessionModel`, `modelOverrides`, `estCostUsd`, and `estCreditsTotal`. This file is read by machine — the cost ceiling, the resume path, and the notification channel all look for exact keys — so a run that invents `status`, `completedDispatches`, or a `timestamp` beside `updated` produces a file that looks informative and answers none of the questions the squad asks it. `currentRun` is a running total, not a scratchpad: per-turn figures live in the turn's consumption block, never as a `turn9_review_consumption` object parked here, and never as a word like `"moderate"` where a number belongs.
 
 ```json
 {
