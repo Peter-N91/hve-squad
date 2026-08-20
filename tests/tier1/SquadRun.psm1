@@ -82,6 +82,30 @@ function New-SquadWorkspace {
     $install
 }
 
+function ConvertTo-ProcessArgument {
+    <#
+    .SYNOPSIS
+        Quotes one argument so a joined argument string survives as a single token.
+    .DESCRIPTION
+        Start-Process concatenates its argument list with spaces and does no quoting of
+        its own, so any argument holding whitespace has to carry its own quotes. The
+        backslash doubling follows the Windows argv rules, which PowerShell also applies
+        when it tokenizes the string on Unix.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Value
+    )
+
+    if ($Value -ne '' -and $Value -notmatch '[\s"]') { return $Value }
+
+    $escaped = $Value -replace '(\\*)"', '$1$1\"'
+    $escaped = $escaped -replace '(\\+)$', '$1$1'
+    '"' + $escaped + '"'
+}
+
 function Invoke-SquadTurn {
     <#
     .SYNOPSIS
@@ -112,12 +136,14 @@ function Invoke-SquadTurn {
     $errorPath = [System.IO.Path]::ChangeExtension($TranscriptPath, '.err.log')
     $started = Get-Date
 
+    # Start-Process joins its argument list with spaces, so the prompt has to arrive
+    # already quoted or the CLI reads each word as a separate argument.
     $arguments = @(
-        '-p', $Prompt
-        '--model', $Model
+        '-p', (ConvertTo-ProcessArgument $Prompt)
+        '--model', (ConvertTo-ProcessArgument $Model)
         '--allow-all-tools'
-        '--deny-tool', 'shell(rm)'
-    )
+        '--deny-tool', (ConvertTo-ProcessArgument 'shell(rm)')
+    ) -join ' '
 
     $process = Start-Process -FilePath 'copilot' -ArgumentList $arguments `
         -WorkingDirectory $Workspace -NoNewWindow -PassThru `
