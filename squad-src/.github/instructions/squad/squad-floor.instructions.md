@@ -1,5 +1,5 @@
 ---
-description: "Unconditional squad floor: state paths and write semantics, the single-writer Scribe rule, dispatch discipline, proof of dispatch, and the Research → Plan → Implement → Review spine — the rules that must hold before any file is in play"
+description: "Unconditional squad floor: state paths and write semantics, the single-writer Scribe rule, dispatch discipline, proof of dispatch, the literal consumption block and its derivation, and the Research → Plan → Implement → Review spine — the rules that must hold before any file is in play"
 applyTo: '**'
 ---
 
@@ -7,7 +7,7 @@ applyTo: '**'
 
 This file carries only the squad rules that must hold before any file is in play. It is scoped to `**` deliberately: every other squad instruction file is gated on `**/.copilot-tracking/squad/**`, so a freshly dispatched agent that has not yet touched squad state runs without them — which is exactly when these rules matter most.
 
-Everything else — profiles, routing, gates, seed templates, the consumption ledger — lives in the `squad` skill and the instruction files named at the bottom, and is read on demand. This is a floor, not a copy.
+Everything else — profiles, routing, gates, seed templates, the ledger procedure — lives in the `squad` skill and the instruction files named at the bottom, and is read on demand. This is a floor, not a copy. The one exception is the consumption block below: it is reproduced literally here because a dispatch that guesses its shape is unreadable to every aggregate above it, and the file that defines it does not load until squad state is already in play.
 
 ## When This Applies
 
@@ -62,11 +62,61 @@ A roster row names one **Primary** agent and optionally some **Alternates**. The
 
 A stage counts as run only when both exist: its domain artifact on disk at the role's `Deliverable Root`, and a `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block. No history entry means the stage did not happen and the turn cannot advance past it.
 
-The consumption block is a `#### Consumption` heading followed by a fenced `json` block — level four, no suffix, bare numbers throughout. The only legal variant is `#### Consumption — Orchestration`. Any other heading is unreadable to the ledger rewrite, so the dispatch it records is spent and uncounted. Its `est_cost_usd` is derived from the tokens and rates in that same block and must reproduce from them; a figure that does not is fabricated and corrupts every aggregate above it.
+A history file's own heading is literally `# History: <agent>` — not the bare agent name, not a rewrite of the description. A later turn locates the file by that heading, so a file headed `# Squad Researcher` reads as a file with no heading at all and drops that agent from every ledger rewrite.
 
 Verification is an act, not an assertion: list the directory and read the file. Never report a path this turn did not actually enumerate.
 
 **A stage recorded as complete in `state.json` but absent from `history/` did not run.** The history file is the evidence; a status field is a claim about it. Autonomous and autopilot runs remove the human turn between stages, not this check — when the file is missing, stop at that stage and escalate rather than advancing on the strength of the claim.
+
+## The Consumption Block Is Literal
+
+Every dispatch entry carries a `#### Consumption` heading followed by a fenced `json` block — level four, no suffix. The only legal variant is `#### Consumption — Orchestration`, which the coordinator's and Scribe's own turns are recorded under in `history/Squad Scribe.md`. Any other heading is unreadable to the ledger rewrite, so the dispatch it records is spent and uncounted.
+
+The field names, their `snake_case` spelling, their order, and the set itself are contractual. Copy this shape; do not translate it into camelCase, drop the four rate fields, or add fields of your own:
+
+```json
+{
+  "model": "<resolved model or unknown>",
+  "model_source": "<dispatch-reported|agent-pinned|operator-declared|session-inherited|cli-pinned|unresolved>",
+  "priced_as": "<rate row used, when it differs from model>",
+  "model_tier": "<fast|default|extended>",
+  "internal_turns": 0,
+  "input_tokens": 0,
+  "cached_tokens": 0,
+  "cache_write_tokens": 0,
+  "output_tokens": 0,
+  "input_rate": 0,
+  "cached_rate": 0,
+  "cache_write_rate": 0,
+  "output_rate": 0,
+  "est_cost_usd": 0,
+  "est_credits": 0,
+  "basis": "<estimated|tier-default>"
+}
+```
+
+Every numeric field is a bare number: `172800`, never `~172,800`, `"172800"`, or `172800 tokens`. `priced_as` is the rate row's own label from `consumption-rates.md`, spelled as that table spells it.
+
+**Derive `est_cost_usd`; never estimate it.** By the time this field is written its four token counts and four rates are already decided, so it has exactly one correct value and any other value is fabricated. Compute the four products separately, sum them, divide by `1e6`, then multiply by the `calibration_factor` from `consumption-rates.md`. Worked example at a factor of `1.00`; the block itself records bare numbers, the separators below are only for reading:
+
+```text
+ 57600 ×  3.00  =  172800
+230400 ×  0.30  =   69120
+ 95200 ×  3.75  =  357000
+ 15000 × 15.00  =  225000
+                  -------
+                   823920  / 1e6  =  est_cost_usd 0.82392  ->  est_credits 82.39
+```
+
+`est_credits` is `est_cost_usd / 0.01`. Read the block back before moving on and confirm the recorded cost reproduces from the recorded tokens and rates: a block whose cost does not follow from its own numbers corrupts the run total, the `state.json` figures, and any autonomous-mode cost ceiling computed from them.
+
+## Two Files the Ledger Reads Back
+
+`consumption-rates.md` is **copied verbatim** from the template in the `squad` skill's `references/consumption.md`, at Init and at every sub-squad seeding or federation promotion. It carries the per-model rate table, the tier-fallback table, the dispatch-size estimator, and the calibration block, and all four are load-bearing. A shortened, summarized, or hand-rewritten rate file leaves the Scribe pricing from a table that no longer contains what it needs.
+
+In `consumption.md`, the row covering the coordinator's and Scribe's own turns is labelled **`orchestration`** in both tables — never `scribe`, `coordinator`, or a split pair. It is derived from the `#### Consumption — Orchestration` blocks the same way every other row is derived from its dispatch blocks.
+
+The ledger is rewritten from **every** block recorded for the run, not from this turn's. So a role that has never been dispatched carries no row at all rather than a row of zeros; the run total is the sum of every block in `history/`; the `Run:` id in the heading is the current run, not the one Init seeded; and `state.json`'s `currentRun` cost figures equal that same total. A ledger rewritten from one turn silently drops every earlier role while still looking complete.
 
 ## The Methodology Spine Is Not Optional
 
