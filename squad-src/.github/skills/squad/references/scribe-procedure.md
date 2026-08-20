@@ -22,7 +22,7 @@ Every path below is relative to the resolved `squadRoot`. The default `.copilot-
 |--------------------------------|------|-----------------------------------------------------------|-----------------------|
 | decision                       | 1    | `decisions.md`                                            | append-only           |
 | history                        | 2    | `history/<agent>.md`                                      | append-only           |
-| initialization                 | 3    | `team.md`, `routing.md`, `decisions.md`, `state.json`     | replace-on-request    |
+| initialization                 | 3    | `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, `history/` | replace-on-request |
 | memory                         | 4    | `/memories/repo/squad-<agent>.md`                         | memory tool           |
 | Council Verdict                | 5    | `decisions.md`                                            | append-only           |
 | autonomous-loop summary        | 6    | `history/autonomous-loop-<id>.md`                         | append-only by id     |
@@ -40,6 +40,8 @@ Append decisions and their rationale to the end of `decisions.md`; never edit or
 
 Append each dispatch record to `history/<agent>.md`, creating the file with its agent heading when absent. A history append and its consumption block are inseparable — never append a dispatch record without also writing its block.
 
+**Inseparable means write both, never skip both.** When the rate table is missing or fails its shape check, seed it (Step 7.1) and carry on; when the model will not resolve, record `unknown` and price at the tier fallback. Neither is a reason to leave the history append unwritten. A silent dispatch record is indistinguishable from a stage that never ran, so the run fails its own proof-of-dispatch check over a missing file the Scribe was able to create.
+
 **A federation-level history payload names a sub-squad, not an agent.** The file is the federation root's `history/<sub-squad>.md`, and the entry records which sub-squad ran, the request it handled, and a reference to that sub-squad's own decision entries so the two levels stay linked. It carries **no** consumption block: that dispatch's cost is recorded once, in the sub-squad's own ledger, and pairing a block here would double-count it. This is the only history append that stands alone, and it is the file most often missing from a federation root — an empty federation `history/` after routed turns means the per-sub-squad entries were never written, not that there was nothing to record.
 
 Verdict entries (Council, Intake Readiness, Discovery) are appended to `decisions.md` using the exact schema in the matching instruction file, stamped into the shapes in [entry-schemas.md](entry-schemas.md):
@@ -55,6 +57,8 @@ The autonomous-loop summary uses the shape in `squad-autonomous.instructions.md`
 ### Initialization and Deliverable Roots
 
 Create `team.md` from the coordinator-confirmed roster — the chosen profile's members, not the full cast catalog — and `routing.md` from the default routing rules filtered to that roster, dropping any routing row whose role is not on the seeded team. Always include the `scribe` role. Include the `Member Name` column whenever the coordinator supplies names, leaving cells empty for unnamed roles; two rows sharing a `Role` are legal only when each has a unique `Member Name`. Both files use replace semantics — write them only when missing or on an explicit refresh.
+
+**Seed the whole state tree, including both consumption files.** Init creates `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `history/`, **`consumption.md`**, and **`consumption-rates.md`** — the last two from the templates in [consumption.md](consumption.md), the ledger at its seed state and the rate table at current rates. They are squad state like every other file here, not artifacts that appear once someone happens to write a cost. Leaving them to be created lazily by the first consumption write is how a run reaches turn nine with a populated `history/` and no ledger at all: the rate table is the only source of token rates, so a Scribe that finds it missing cannot price a dispatch, and the block it cannot write takes the history append down with it.
 
 **Resolve each row's `Deliverable Root` against the `squadRoot` in hand before writing it.** The lookup table in *Deliverable Roots* (`squad-roster.instructions.md`) states roots relative to `squadRoot`, so seeding a sub-squad writes `members/<name>/plans/` into the `lead` row, not `.copilot-tracking/plans/`. Copying the table's literal paths into a sub-squad roster points every role at the repository root and puts its whole run outside its own sub-squad. `docs/` and `outputs/` are the two exceptions and are written unprefixed at every root.
 

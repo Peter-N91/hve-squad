@@ -123,7 +123,7 @@ The Squad Federation Coordinator runs Expansion when a top-level `federation.md`
 ### Steps
 
 1. **Propose the new sub-squad(s).** Each is a unique lower-kebab-case name, a profile (or a custom roster), an optional owner, and a one-line description, proposed from the repo and request exactly as Init proposes a sub-squad. Validate each name per *Sub-Squad Naming and Uniqueness*, comparing it against the existing `federation.md` rows and the `members/` directories.
-2. **Seed the new sub-squad's tree** under `members/<new>/` via the standard Squad Coordinator Init scoped to that root (its `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, and `history/`), exactly as Federation Init Phase 2 seeds each sub-squad.
+2. **Seed the new sub-squad's tree** under `members/<new>/` via the standard Squad Coordinator Init scoped to that root (its `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/`), exactly as Federation Init Phase 2 seeds each sub-squad.
 3. **Register it (Scribe-performed, preserve-on-replace).** `federation.md` and `meta-routing.md` use replace semantics, so the Scribe **read-merge-writes** them: it appends the new sub-squad's registry row to `federation.md` and its pattern → sub-squad route to `meta-routing.md`, preserving every existing row and route. It appends a federation-level `decisions.md` entry recording the addition and creates `history/<new>.md`. Existing sub-squad rows, routes, decisions, and history are never edited or removed.
 
 ### Guards

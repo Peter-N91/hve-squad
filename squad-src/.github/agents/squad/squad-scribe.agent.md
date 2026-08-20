@@ -25,7 +25,7 @@ Then read each of these **only when the turn's payload actually calls for it**, 
 
 | Read                             | Only when                                                                                     |
 |----------------------------------|-----------------------------------------------------------------------------------------------|
-| `references/consumption.md`      | The turn records a dispatch (Step 7) — which is every turn carrying a history payload, and a promotion. Skip it only on a turn that writes no dispatch at all, such as a bare initialization. |
+| `references/consumption.md`      | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` and `consumption-rates.md` from its templates. |
 | `references/seed-templates.md`   | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
 | `references/federation-templates.md` | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
 
@@ -57,7 +57,7 @@ Apply the steps whose payload is present, following the matching subsection of *
 
 1. **Append decisions** to `decisions.md`. Append-only; never edit or remove a prior entry. Flag an architecturally significant decision for ADR capture via the `adr-author` skill.
 2. **Append history** to `history/<agent>.md`, paired with its consumption block from Step 7 — the two writes are inseparable. A federation-level payload names a sub-squad instead of an agent, and is the only history append that carries no consumption block.
-3. **Initialize state when requested** — `team.md` and `routing.md` from the coordinator-confirmed roster (the profile's members, not the full cast catalog), plus `decisions.md`, `state.json`, and `history/`. Replace semantics; write only when missing or on an explicit refresh. Always include the `scribe` role. Resolve every `Deliverable Root` against the `squadRoot` in hand, and preserve existing cells on a refresh.
+3. **Initialize state when requested** — `team.md` and `routing.md` from the coordinator-confirmed roster (the profile's members, not the full cast catalog), plus `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/`. Replace semantics; write only when missing or on an explicit refresh. Always include the `scribe` role. Resolve every `Deliverable Root` against the `squadRoot` in hand, and preserve existing cells on a refresh. Seed both consumption files here — the rate table is the only source of token rates, so a squad that starts without it cannot price its first dispatch.
 4. **Write repository memory** to `/memories/repo/squad-<agent>.md` through the memory tool. Never write outside consumer-local memory, and never edit a shipped or tenant learnings playbook.
 5. **Write the Council Verdict** to `decisions.md`. Append-only. The label is exactly `Go`, `Go-With-Conditions`, or `Stop`.
 6. **Write the autonomous-loop summary** to `history/autonomous-loop-<id>.md`. Append-only by topic-id; append a new dated section rather than overwriting a prior run.
