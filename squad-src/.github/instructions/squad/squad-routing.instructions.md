@@ -35,7 +35,9 @@ The routing table uses these columns:
 
 ## Default Routing Rules
 
-The coordinator seeds `routing.md` with these defaults. Each rule references a real deployed HVE Core agent through its squad role. Adjust per project, but keep every rule pointing at an agent that exists in the roster.
+The coordinator seeds `routing.md` with these defaults. Adjust per project, but keep every rule pointing at a role that exists in the roster.
+
+**The `Role(s)` column holds role ids, never agent names.** A role id is what `team.md` is keyed on, so it is what carries the row's `Member Name`, `Model Tier`, Selection Cues, and — the one that bites hardest — its `Deliverable Root`. An agent name in this column resolves to no roster row, so the dispatch silently loses all four and the agent falls back to its own default output path. Seed and hand-edit this column with role ids only; the roster's *Resolving a Role to an Agent* rules pick the concrete agent at dispatch time, which is also how a Selection Cue can route the same role to an Alternate.
 
 | Pattern / Keyword                          | Role(s)                | Autonomy Tier | Parallel-Eligible |
 |--------------------------------------------|------------------------|---------------|-------------------|
@@ -48,29 +50,29 @@ The coordinator seeds `routing.md` with these defaults. Each rule references a r
 | author prompt, write agent file, refactor instructions, analyse skill | prompt-engineer | confirm | no               |
 | brainstorm, ideate, shape this idea, explore options, what should we build, help me think through, we want to, kick off a brief | designer, analyst | confirm | no |
 | validate requirements, requirements readiness, requirements complete, requirements clear, intake check, are the requirements ready | intake-validator | auto | yes |
-| security, threat, vulnerability, STRIDE    | Security Planner       | confirm       | yes               |
+| security, threat, vulnerability, STRIDE    | security               | confirm       | yes               |
 | supply chain, SBOM, SLSA, provenance, OpenSSF Scorecard, Sigstore, signed release, dependency pinning | supply-chain | confirm | yes               |
 | CVE, vulnerability triage, VEX, OpenVEX, exploitability, is this CVE exploitable, advisory disposition, not affected | vuln-manager | confirm | yes         |
 | privacy, personal data, PII, DPIA, GDPR, data subject, retention | privacy         | confirm       | yes               |
 | accessibility, a11y, WCAG, ARIA, screen reader, keyboard navigation, Section 508, EN 301 549, VPAT, conformance audit | accessibility | confirm | yes           |
-| design, UX, UI, wireframe, journey, interaction design | UX UI Designer     | confirm       | yes               |
-| requirements, BRD, PRD, user story, acceptance criteria | PRD Builder | confirm       | yes               |
-| journey map, persona, design thinking, empathize, ideate, problem statement | DT Coach | confirm | yes               |
+| design, UX, UI, wireframe, journey, interaction design | designer           | confirm       | yes               |
+| requirements, BRD, PRD, user story, acceptance criteria | analyst            | confirm       | yes               |
+| journey map, persona, design thinking, empathize, ideate, problem statement | designer | confirm | yes               |
 | roadmap, backlog, epic, sprint, prioritize, story, PRD to work items, work item hierarchy | product-owner | confirm    | no                |
 | create work items in ADO, push backlog to Azure DevOps, create Jira issues, apply the handoff, execute handoff, sync work items to the tracker | backlog-executor | confirm | no |
 | GitLab merge request, GitLab pipeline, GitLab issue, open an MR | product-owner    | escalate      | no                |
-| experiment, hypothesis, validate assumption, MVE, riskiest assumption | Experiment Designer | confirm | yes        |
+| experiment, hypothesis, validate assumption, MVE, riskiest assumption | experimenter | confirm | yes        |
 | presentation, deck, slides, executive summary, pitch | presenter    | confirm       | no                |
 | document, write up, summarize for stakeholders, readme | technical-writer | confirm  | no                |
 | data profile, data dictionary, EDA, exploratory analysis, notebook, dashboard, dataset, Power BI, DAX, semantic model, star schema, report design, Fabric, Lakehouse, OneLake | data-scientist | confirm | no |
-| architecture, system design, components    | System Architecture Reviewer | auto    | yes               |
-| responsible AI, RAI, fairness, harm        | RAI Planner            | confirm       | yes               |
-| verify finding, confirm claim, fact-check  | Finding Deep Verifier  | auto          | yes               |
+| architecture, system design, components    | architect              | auto          | yes               |
+| responsible AI, RAI, fairness, harm        | rai                    | confirm       | yes               |
+| verify finding, confirm claim, fact-check  | fact-checker           | auto          | yes               |
 | risk register, project risk, probability and impact, risk matrix, mitigation plan, contingency, what are the risks | risk-manager | confirm | yes            |
 | SLO, SLA, error budget, latency budget, load test plan, capacity planning, performance target, throughput, soak test | performance | confirm | yes           |
 | observability, instrumentation, telemetry design, spans, traces, metrics, structured logging, OpenTelemetry, what should we emit | observability | confirm | yes |
-| author IaC, write Bicep, write Terraform, convert LLD to infra, infrastructure as code | Squad IaC Author | confirm | no |
-| deploy, provision, what-if, terraform plan, terraform apply, az deployment | Squad Deployer | confirm | no |
+| author IaC, write Bicep, write Terraform, convert LLD to infra, infrastructure as code | iac-author | confirm | no |
+| deploy, provision, what-if, terraform plan, terraform apply, az deployment | deployer | confirm | no |
 | as-built, resource inventory, compliance matrix, operations runbook, DR plan, document deployed infrastructure | asbuilt-author | confirm | no |
 | diagnose, troubleshoot, resource health, why is resource failing, investigate deployed, policy check, incident, outage, sev1, sev2, on-call, postmortem, root cause | azure-diagnose | auto | yes |
 | validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |
@@ -125,7 +127,7 @@ Before dispatching any planning-, implementation-, or deliverable-producing role
 
 When it fires:
 
-* The coordinator dispatches the chosen depth's roles in order — `analyst` for `quick`; `designer` then `analyst` for `standard`; `designer`, then `challenger` and `experimenter`, then `analyst` for `deep`. Each role interviews the user one question per turn through the question tool and returns findings; the Scribe appends a `## Discovery Verdict` to `decisions.md`.
+* The coordinator dispatches the chosen depth's roles in order — `analyst` for `quick`; `designer` then `analyst` for `standard`; `designer`, then `challenger` and `experimenter`, then `analyst` for `deep`. Each role interviews the user one question per turn — through the host's question tool where one exists, otherwise in the response text — and returns findings; the Scribe appends a `## Discovery Verdict` to `decisions.md`.
 * Only `analyst` writes a file: the brief, landing in the `analyst` Deliverable Root as `<date>-<topic-id>-brief.md`.
 * The brief is a requirement artifact, so the **intake gate** then fires on it and assesses it, resolving `intake-validator` to an agent other than the brief's author.
 * A declined offer is recorded as a `Depth: skip` verdict and is never re-offered for the same topic; the user can still reach the gate through the `discovery=` input.
