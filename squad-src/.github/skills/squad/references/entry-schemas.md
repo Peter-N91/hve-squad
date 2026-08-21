@@ -144,7 +144,7 @@ Every appended dispatch entry uses exactly this shape. The `#### Consumption` he
 
 * Turn: <n>
 * Request: <scoped request the agent received>
-* Deliverable: `<path>` (<size or word count>)
+* Deliverable: `<the role's Deliverable Root cell, extended verbatim, plus the filename>` (<size or word count>)
 * Outcome: <one-line summary>
 
 #### Consumption

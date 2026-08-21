@@ -89,6 +89,7 @@ The `Deliverable Root` cell of the role's `team.md` row is where that role's art
 * **Write there, or stop and escalate.** A role that cannot use the root it was given says so; it never substitutes a path it prefers. Roles quietly falling back to their habitual folder leave a roster whose every cell is a lie and give the operator no way to steer output at all.
 * **A `<date>` or `<slug>` segment is a directory, not a filename prefix.** `.copilot-tracking/research/<date>/` means `.copilot-tracking/research/2026-08-21/topic.md`, never `.copilot-tracking/research/2026-08-21-topic.md`.
 * **The entry's `Deliverable:` path is the artifact's real path** — resolved, confirmed to exist by listing it, and under that role's root.
+* **Write the path the way the root is written.** The `Deliverable:` path extends the `Deliverable Root` cell verbatim, so `.copilot-tracking/squad/members/persistence/plans/` yields `.copilot-tracking/squad/members/persistence/plans/2026-08-21-plan.md` — never `members/persistence/plans/2026-08-21-plan.md`. A path shortened to whatever the writer's working directory happened to be cannot be resolved by anyone reading the entry later, and a path that cannot be resolved is not evidence that the file exists.
 * **A stage that wrote no file did not run.** `Deliverable: N/A`, `inline verdict`, `no artifact written`, and an entry with no `Deliverable:` line at all are the same statement: this stage produced nothing the next one can read. A role whose output is a judgment writes that judgment to a file at its Deliverable Root — a verdict that exists only in a chat turn is gone when the turn ends, and the gate that depends on it has nothing to open.
 
 A promotion rebases the roster's roots but **cannot rebase the entries**. History is append-only, so a `Deliverable:` path recorded before a promotion still names the pre-promotion location while the file now sits under `members/<name>/`. Resolve it through the relocation the promotion recorded; never edit the entry to match. An edited history file has broken a stronger rule than the one it repaired.
@@ -164,7 +165,17 @@ The ledger is rewritten from **every** block recorded for the run, not from this
 
 Credits are `est_cost_usd / 0.01`. Read the row back and confirm the cost reproduces from its own four token columns and that row's rates. Divide by `1e6` exactly once — the commonest corruption here is a factor-of-ten slip, a row summing to `113520` written as `1.17` rather than `0.11352`, which survives every other check because the row is otherwise well formed. Compare the digits of your sum against the digits of what you wrote.
 
+**Show the arithmetic in the file.** Under the Usage & Cost table, a `### Derivation` block carries one line per row — the four products written out, their sum, the divide, and the result — and a final line summing the column. Doing the multiplication in your head and writing only the answer is how a row arrives at a cost its own tokens do not support, which is the single most common defect this ledger has. Written-out products cost four numbers and make the mistake visible to the next reader instead of leaving a plausible total nobody can check:
+
+```text
+lead             9600 × 2.00 +  38400 × 0.20 +  14400 × 2.50 +  3600 × 10.00 =  98880 / 1e6 = 0.0989
+orchestration    6800 × 2.00 +  27200 × 0.20 +  10800 × 2.50 +  2400 × 10.00 =  70040 / 1e6 = 0.0700
+                                                                                     total = 0.1689
+```
+
 **The total row is computed, never carried.** Sum every column down the rows the rewrite just wrote — turns, all four token columns, cost, and credits — and write those sums. A total carried over from the previous rewrite, or summed across the rows you happened to be looking at, disagrees with the table printed directly above it. The commonest form drops the one short row belonging to a role dispatched on an earlier turn, which is also the row least likely to be missed by eye.
+
+**The total's cost cell is a bare four-decimal number, like every row above it** — `0.2151`, never `$0.22`. A currency symbol and two decimals turn the one figure `state.json` is reconciled against into a rounded string, so the ledger and the run totals disagree by construction and every later comparison inherits the gap.
 
 ## The Methodology Spine Is Not Optional
 
