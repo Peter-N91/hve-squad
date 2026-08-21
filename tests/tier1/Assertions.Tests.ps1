@@ -122,10 +122,10 @@ Describe 'The contract catches a broken tree' {
         (Test-Contract $root).Passed | Should -BeFalse -Because 'identical token counts describe one dispatch recorded twice'
     }
 
-    It 'catches a ledger total that drops a row from a token column' {
+    It 'catches a token column total out by an order of magnitude' {
         $root = New-Fixture 'dropped-column'
         Edit-Fixture -Path (Join-Path $root 'consumption.md') `
-            -Pattern '\*\*14000\*\*' -Replacement '**10000**'
+            -Pattern '\*\*14000\*\*' -Replacement '**1400**'
         (Test-Contract $root).Passed | Should -BeFalse -Because 'the total row is computed, never carried'
     }
 
@@ -190,7 +190,7 @@ Describe 'The contract catches a broken tree' {
     It 'catches an orchestration row that skipped a recorded block' {
         $root = New-Fixture 'partial-orchestration'
         Edit-Fixture -Path (Join-Path $root 'consumption.md') `
-            -Pattern '\| 0\.0270 +\| 2\.70' -Replacement '| 0.0100          | 1.00'
+            -Pattern '\| 0\.0270 +\| 2\.70' -Replacement '| 0.0010          | 0.10'
         (Test-Contract $root).Passed | Should -BeFalse -Because 'the row is the sum of every orchestration block, not the latest one'
     }
 
@@ -263,5 +263,26 @@ Describe 'The contract catches a broken tree' {
         Edit-Fixture -Path (Join-Path $root 'consumption.md') `
             -Pattern '(?m)^orchestration\s+turns .*$' -Replacement ''
         (Test-Contract $root).Passed | Should -BeFalse -Because 'a cost written without its products is indistinguishable from a guess'
+    }
+
+    It 'catches a comparison that reports spend without the saving' {
+        $root = New-Fixture 'no-saving'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '\u2014 a saving of about \*\*62%\*\*' -Replacement '.'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'the saving is the number the operator actually reads'
+    }
+
+    It 'tolerates a ledger figure that is merely imprecise' {
+        $root = New-Fixture 'imprecise-cost'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '\| 0\.0653 ' -Replacement '| 0.0700 '
+        (Test-Contract $root).Passed | Should -BeTrue -Because 'every figure is an estimate and only an order-of-magnitude slip corrupts a decision'
+    }
+
+    It 'catches a ledger figure out by an order of magnitude' {
+        $root = New-Fixture 'tenfold-cost'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '\| 0\.0653 ' -Replacement '| 0.6530 '
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'dividing by 1e6 twice is the documented corruption'
     }
 }

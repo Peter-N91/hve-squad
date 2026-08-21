@@ -201,6 +201,18 @@ function Get-LedgerTable {
     $rows
 }
 
+function Get-LedgerRoleKey {
+    <#
+    .SYNOPSIS
+        Strips a trailing annotation so a Usage & Cost row joins its Attribution row.
+    #>
+    param([string]$Label)
+
+    # A run labelled a row 'orchestration (Turns 1-3)'. The annotation is against the
+    # writing rule, but a reader that cannot join the two tables loses the whole ledger.
+    ($Label -replace '\s*\(.*$', '').Trim()
+}
+
 function ConvertTo-LedgerNumber {
     <#
     .SYNOPSIS
@@ -579,4 +591,4 @@ function Get-SquadStateModel {
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal

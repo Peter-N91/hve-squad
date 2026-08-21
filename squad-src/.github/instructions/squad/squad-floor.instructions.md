@@ -177,6 +177,8 @@ orchestration  turns 15+4=19   6800 × 2.00 +  27200 × 0.20 +  10800 × 2.50 + 
 
 **The total's cost cell is a bare four-decimal number, like every row above it** — `0.2151`, never `$0.22`. A currency symbol and two decimals turn the one figure `state.json` is reconciled against into a rounded string, so the ledger and the run totals disagree by construction and every later comparison inherits the gap.
 
+**The Cost Comparison section is required, and it names three figures**: what this run cost, what the manual baseline would have cost, and the saving as a percentage. The baseline is `expected_iterations × baseline_model_cost_per_turn` with a manual turn priced through the same dispatch-size estimator, and the section states the iteration count and the baseline model it assumed so a reader can disagree with the assumption rather than only with the answer. A per-turn or per-phase breakdown may be added; it never replaces the comparison. This is the one figure an operator actually reads, so a section that reports only what was spent has dropped the only number that answers *why run a squad at all*.
+
 ## The Methodology Spine Is Not Optional
 
 Every squad turn that produces substantive output runs **Research → Plan → Implement → Review**, in every mode and on every profile. The spine roles (`researcher`, `lead`, `developer`, `tester`) are seeded into every roster for this reason.

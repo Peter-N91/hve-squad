@@ -181,6 +181,12 @@ orchestration  turns 1       4000 × 3.00 +      0 × 0.30 +      0 × 3.75 +  1
 ```
 
 > Basis: estimated. No per-dispatch token telemetry exists.
+
+## Cost Comparison (illustrative)
+
+This run consumed an estimated **$0.0923 (~9.23 AI credits)** across 1 specialized agent. Reproducing the same outcome by manually prompting Claude Sonnet 4.6 across roughly 6 iterate-and-test turns, each priced through the same dispatch-size estimator, is estimated at **$0.2400 (~24.00 AI credits)** — a saving of about **62%**.
+
+> Estimates only. Token rates change.
 '@
 
     Set-Content -LiteralPath (Join-Path $root 'history/Squad Researcher.md') -Encoding utf8NoBOM -Value @'

@@ -52,7 +52,9 @@ orchestration  turns 0+0=0    0 × 0.00 +      0 × 0.00 +      0 × 0.00 +     
 
 ## Cost Comparison (illustrative)
 
-This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** across <n> specialized agents, routing read-heavy roles to lightweight models and reserving high-output reasoning models only where needed. Reproducing the same outcome by manually prompting a single high-capability model across roughly <iterations> iterate-and-test turns is estimated at **$<manual-cost> (~<manual-credits> AI credits)**, a reduction of about <savings-pct>%.
+This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** across <n> specialized agents, routing read-heavy roles to lightweight models and reserving high-output reasoning models only where needed. Reproducing the same outcome by manually prompting <baseline-model> across roughly <iterations> iterate-and-test turns, each priced through the same dispatch-size estimator, is estimated at **$<manual-cost> (~<manual-credits> AI credits)** — a saving of about **<savings-pct>%**.
+
+<optional per-phase or per-dispatch breakdown, added below the comparison and never in place of it>
 
 > Estimates only. Token rates change. See `consumption-rates.md` for current rates, the dispatch-size estimator, and the calibration methodology. Token counts and iteration counts are illustrative, not guarantees.
 ````
