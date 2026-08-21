@@ -221,10 +221,11 @@ foreach ($file in $scenarioFiles) {
 
                 # Deliverables land beside the squad root, not inside it, so capturing only
                 # the squad root leaves every artifact the contract reconciles against
-                # unavailable to anyone reading the uploaded results.
+                # unavailable to anyone reading the uploaded results. The destination keeps
+                # the dot-prefixed name so a captured tree replays against the same resolver.
                 $tracking = Join-Path $install.Root '.copilot-tracking'
                 if (Test-Path -LiteralPath $tracking) {
-                    Copy-Item -LiteralPath $tracking -Destination (Join-Path $attemptRoot 'tracking') -Recurse -Force
+                    Copy-Item -LiteralPath $tracking -Destination (Join-Path $attemptRoot '.copilot-tracking') -Recurse -Force
                 }
             }
         }

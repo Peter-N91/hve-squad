@@ -99,15 +99,14 @@ function Get-DeliverableEntry {
     $raw = Get-Content -LiteralPath $Path -Raw
     foreach ($line in [regex]::Matches($raw, '(?m)^\s*\*\s*Deliverable:\s*(?<value>.+)$')) {
         foreach ($token in [regex]::Matches($line.Groups['value'].Value, '`(?<path>[^`]+)`')) {
-            $candidate = $token.Groups['path'].Value.Trim()
-
-            # Trailing prose inside the same span, as in `path` (~3,200 words).
-            $candidate = ($candidate -split '\s+')[0].TrimEnd(',', ';')
+            # Never split on whitespace: an agent's name carries spaces, so
+            # 'history/Squad Researcher.md' would truncate to 'history/Squad'.
+            $candidate = $token.Groups['path'].Value.Trim().TrimEnd(',', ';', '.')
             if (-not $candidate) { continue }
 
-            # An entry may summarize a fan-out as `history/*.md`. A glob names a set, not
-            # an artifact, and cannot be listed to prove anything exists.
-            if ($candidate -match '[*?]') { continue }
+            # An entry may summarize a fan-out as `history/*.md` or `root/{a.md,b.md}`.
+            # Either names a set, not an artifact, and cannot be listed to prove one exists.
+            if ($candidate -match '[*?{}]') { continue }
 
             [pscustomobject]@{
                 Source = Split-Path $Path -Leaf
@@ -414,7 +413,14 @@ function Get-SquadStateModel {
         return $null
     }
 
-    $declared = @(foreach ($file in $historyFiles) { Get-DeliverableEntry -Path $file.FullName })
+    # The Scribe's own entries name the state files a turn wrote, not a deliverable, and
+    # they cite them across roots - a sub-squad turn names federation-root files and vice
+    # versa. It is not a dispatched stage, so proof of dispatch does not apply to it.
+    $declared = @(
+        foreach ($file in ($historyFiles | Where-Object { $_.BaseName -ne 'Squad Scribe' })) {
+            Get-DeliverableEntry -Path $file.FullName
+        }
+    )
 
     $deliverables = @(
         foreach ($entry in $declared) {

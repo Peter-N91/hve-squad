@@ -58,5 +58,6 @@ type: Fixed
   never uploaded with the results. A squad writing immaculate ledgers about work it never did would
   have passed green. The contract gains `SQ-12` (deliverable exists, sits under its role's root, and
   leaves nothing unclaimed) plus assertions for tier coherence, copied sizing, and column-wise ledger
-  totals; the harness now captures the whole `.copilot-tracking/` tree. The mutation self-check grows
+  totals; the harness now captures the whole `.copilot-tracking/` tree under that same name, so an
+  uploaded result replays against the same path resolver the run used. The mutation self-check grows
   from 20 cases to 26, one per new rule (`tests/tier1/`).
