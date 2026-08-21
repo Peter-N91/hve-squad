@@ -153,6 +153,13 @@ Describe 'SQ-09 Init leaves history empty' -Skip:$ExpectDispatches {
 # A role that falls back to the path convention in its own agent definition makes every
 # cell in that column a lie, and the operator's customization silently does nothing.
 Describe 'SQ-12 The Deliverable Root is binding' -Skip:(-not $ExpectDispatches) {
+    # 'Deliverable: N/A - inline verdict, no review artifact written' declares no path, so
+    # the existence check below has nothing to reject and the stage reports complete
+    # having produced nothing a later gate can read.
+    It 'every dispatch entry names an artifact' {
+        $script:Model.ArtifactlessEntries -join '; ' | Should -BeNullOrEmpty -Because 'a stage that wrote no file did not run'
+    }
+
     It 'every declared deliverable exists on disk' {
         $missing = @($script:Model.Deliverables | Where-Object { -not $_.Resolved } | ForEach-Object { "$($_.Source) -> $($_.Path)" })
         $missing -join '; ' | Should -BeNullOrEmpty -Because 'a Deliverable path is verified by listing it, never asserted'

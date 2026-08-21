@@ -81,6 +81,40 @@ function Get-ConsumptionBlock {
     }
 }
 
+function Get-HistoryEntry {
+    <#
+    .SYNOPSIS
+        Splits a history file into its dispatch entries.
+    .DESCRIPTION
+        Entries are the level-2 and level-3 headings; the consumption block's own heading
+        is level four and is deliberately not one. An entry that names no artifact is the
+        gap this exists to expose: 'Deliverable: N/A - inline verdict' produces no path
+        for the existence check to reject, so the stage reports complete having written
+        nothing at all.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $raw = Get-Content -LiteralPath $Path -Raw
+    $headings = @([regex]::Matches($raw, '(?m)^#{2,3}[ \t]+(?<title>.+)$'))
+
+    for ($index = 0; $index -lt $headings.Count; $index++) {
+        $start = $headings[$index].Index
+        $end = if ($index + 1 -lt $headings.Count) { $headings[$index + 1].Index } else { $raw.Length }
+        $body = $raw.Substring($start, $end - $start)
+
+        [pscustomobject]@{
+            Source       = Split-Path $Path -Leaf
+            Agent        = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+            Title        = $headings[$index].Groups['title'].Value.Trim()
+            NamesArtifact = [bool]([regex]::Match($body, '(?m)^\s*\*\s*Deliverable:.*`[^`]+`')).Success
+        }
+    }
+}
+
 function Get-DeliverableEntry {
     <#
     .SYNOPSIS
@@ -99,15 +133,14 @@ function Get-DeliverableEntry {
     $raw = Get-Content -LiteralPath $Path -Raw
     foreach ($line in [regex]::Matches($raw, '(?m)^\s*\*\s*Deliverable:\s*(?<value>.+)$')) {
         foreach ($token in [regex]::Matches($line.Groups['value'].Value, '`(?<path>[^`]+)`')) {
-            $candidate = $token.Groups['path'].Value.Trim()
-
-            # Trailing prose inside the same span, as in `path` (~3,200 words).
-            $candidate = ($candidate -split '\s+')[0].TrimEnd(',', ';')
+            # Never split on whitespace: an agent's name carries spaces, so
+            # 'history/Squad Researcher.md' would truncate to 'history/Squad'.
+            $candidate = $token.Groups['path'].Value.Trim().TrimEnd(',', ';', '.')
             if (-not $candidate) { continue }
 
-            # An entry may summarize a fan-out as `history/*.md`. A glob names a set, not
-            # an artifact, and cannot be listed to prove anything exists.
-            if ($candidate -match '[*?]') { continue }
+            # An entry may summarize a fan-out as `history/*.md` or `root/{a.md,b.md}`.
+            # Either names a set, not an artifact, and cannot be listed to prove one exists.
+            if ($candidate -match '[*?{}]') { continue }
 
             [pscustomobject]@{
                 Source = Split-Path $Path -Leaf
@@ -414,7 +447,32 @@ function Get-SquadStateModel {
         return $null
     }
 
-    $declared = @(foreach ($file in $historyFiles) { Get-DeliverableEntry -Path $file.FullName })
+    # The Scribe's own entries name the state files a turn wrote, not a deliverable, and
+    # they cite them across roots - a sub-squad turn names federation-root files and vice
+    # versa. It is not a dispatched stage, so proof of dispatch does not apply to it.
+    # Loop and run summaries are per-run rollups rather than dispatch records.
+    #
+    # A federation root's history/ names sub-squads rather than agents: those entries
+    # record which sub-squad a turn routed to and carry a Reference, not a Deliverable.
+    # The dispatch records for that turn live under the sub-squad's own root.
+    $isFederationRoot = Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md')
+
+    $dispatchHistory = @(
+        if (-not $isFederationRoot) {
+            $historyFiles | Where-Object {
+                $_.BaseName -ne 'Squad Scribe' -and $_.BaseName -notmatch '^(autonomous-loop|autopilot-run)-'
+            }
+        }
+    )
+
+    $declared = @(foreach ($file in $dispatchHistory) { Get-DeliverableEntry -Path $file.FullName })
+    $entries = @(foreach ($file in $dispatchHistory) { Get-HistoryEntry -Path $file.FullName })
+
+    $artifactlessEntries = @(
+        foreach ($entry in $entries) {
+            if (-not $entry.NamesArtifact) { "$($entry.Source): $($entry.Title)" }
+        }
+    )
 
     $deliverables = @(
         foreach ($entry in $declared) {
@@ -498,6 +556,7 @@ function Get-SquadStateModel {
         AgentRoots       = $agentRoots
         RoleRoots        = $roleRoots
         Deliverables     = @($deliverables)
+        ArtifactlessEntries = @($artifactlessEntries)
         OrphanArtifacts  = @($orphanArtifacts)
         Routing          = Read-Text 'routing.md'
         Decisions        = Read-Text 'decisions.md'
@@ -520,4 +579,4 @@ function Get-SquadStateModel {
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-LedgerTable, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal
