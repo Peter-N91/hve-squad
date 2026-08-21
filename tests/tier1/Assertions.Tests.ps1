@@ -79,6 +79,13 @@ Describe 'The contract catches a broken tree' {
         (Test-Contract $root).Passed | Should -BeFalse -Because 'a Deliverable path is verified by listing it, never asserted'
     }
 
+    It 'catches an entry that declares no artifact at all' {
+        $root = New-Fixture 'inline-verdict'
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
+            -Pattern '(?m)^\* Deliverable: .+$' -Replacement '* Deliverable: N/A - inline findings, no artifact written'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a stage that wrote no file did not run'
+    }
+
     It 'catches a role that wrote outside its Deliverable Root' {
         $root = New-Fixture 'strayed-deliverable'
         $stray = Join-Path (Split-Path (Split-Path $root -Parent) -Parent) '.copilot-tracking/details'
