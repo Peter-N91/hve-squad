@@ -170,7 +170,15 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 | ------------- | ----- | --------- | ------ | -------- | ---------- | --------------- | ------------ | --------- |
 | researcher    | 1     | 10000     | 5000   | 1000     | 2000       | 0.0653          | 6.53         | estimated |
 | orchestration | 1     | 4000      | 0      | 0        | 1000       | 0.0270          | 2.70         | estimated |
-| **Total**     | **2** | **14000** | **5000** | **1000** | **3000**   | **$0.09**       | **9.23**     |           |
+| **Total**     | **2** | **14000** | **5000** | **1000** | **3000**   | **0.0923**      | **9.23**     |           |
+
+### Derivation
+
+```text
+researcher      10000 × 3.00 +   5000 × 0.30 +   1000 × 3.75 +  2000 × 15.00 =  65250 / 1e6 = 0.0653
+orchestration    4000 × 3.00 +      0 × 0.30 +      0 × 3.75 +  1000 × 15.00 =  27000 / 1e6 = 0.0270
+                                                                                    total = 0.0923
+```
 
 > Basis: estimated. No per-dispatch token telemetry exists.
 '@

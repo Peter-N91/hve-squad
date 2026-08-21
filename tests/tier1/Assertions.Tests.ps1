@@ -183,7 +183,7 @@ Describe 'The contract catches a broken tree' {
     It 'catches a run total that dropped an earlier role' {
         $root = New-Fixture 'dropped-role'
         Edit-Fixture -Path (Join-Path $root 'consumption.md') `
-            -Pattern '\*\*\$0\.09\*\*' -Replacement '**$0.03**'
+            -Pattern '\*\*0\.0923\*\*' -Replacement '**0.0270**'
         (Test-Contract $root).Passed | Should -BeFalse -Because 'this is exactly the payload-only rewrite the Scribe procedure warns about'
     }
 
@@ -256,5 +256,12 @@ Describe 'The contract catches a broken tree' {
         Edit-Fixture -Path (Join-Path $root 'state.json') `
             -Pattern '"estCostUsd": 0.09225' -Replacement '"estCostUsd": 0'
         (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'catches a priced row whose arithmetic the ledger never shows' {
+        $root = New-Fixture 'unshown-derivation'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '(?m)^orchestration\s+4000 .*$' -Replacement ''
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a cost written without its products is indistinguishable from a guess'
     }
 }
