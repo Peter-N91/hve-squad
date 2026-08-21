@@ -218,6 +218,14 @@ foreach ($file in $scenarioFiles) {
                     $name = Split-Path $root -Leaf
                     Copy-Item -LiteralPath $root -Destination (Join-Path $attemptRoot "state-$name") -Recurse -Force
                 }
+
+                # Deliverables land beside the squad root, not inside it, so capturing only
+                # the squad root leaves every artifact the contract reconciles against
+                # unavailable to anyone reading the uploaded results.
+                $tracking = Join-Path $install.Root '.copilot-tracking'
+                if (Test-Path -LiteralPath $tracking) {
+                    Copy-Item -LiteralPath $tracking -Destination (Join-Path $attemptRoot 'tracking') -Recurse -Force
+                }
             }
         }
         catch {

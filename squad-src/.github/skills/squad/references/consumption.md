@@ -137,6 +137,8 @@ The row is an aggregate, not the storage. Each turn's orchestration figures are 
 
 ## Cost formula
 
+Cost is derived **once per ledger row**, never in a history block. Sum the role's blocks into the four token columns, then take the rates from the row `priced_as` names in `consumption-rates.md`:
+
 ```text
 raw_cost_usd = ( input_tokens       × input_rate
                + cached_tokens      × cached_rate
@@ -145,6 +147,8 @@ raw_cost_usd = ( input_tokens       × input_rate
 est_cost_usd = raw_cost_usd × calibration_factor
 est_credits  = est_cost_usd / 0.01
 ```
+
+A rate is a property of the model, so it belongs to the one file that lists models. Copying it into every block restates the same fact once per dispatch and gives it that many chances to be restated wrong, and a cost stored beside its own inputs is a second copy of a number the inputs already determine.
 
 ## Calibration
 

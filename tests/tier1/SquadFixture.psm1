@@ -4,7 +4,8 @@
 # Generates a schema-correct squad state tree, and mutates it.
 #
 # Every number below is internally consistent so the arithmetic cases have something
-# true to verify against:
+# true to verify against. Cost lives only in the ledger, derived per row from that
+# row's tokens and the rates of the model its Attribution row names:
 #   researcher    (10000 x 3.0 + 5000 x 0.3 + 1000 x 3.75 + 2000 x 15.0) / 1e6 = 0.06525
 #   orchestration ( 4000 x 3.0 +                            1000 x 15.0) / 1e6 = 0.02700
 #   run total                                                                   = 0.09225
@@ -58,6 +59,21 @@ function New-SquadStateFixture {
 
     $root = Join-Path $Path '.copilot-tracking/squad'
     New-Item -ItemType Directory -Path (Join-Path $root 'history') -Force | Out-Null
+
+    # The artifact the researcher entry declares. Proof of dispatch is the entry and the
+    # file together, so a fixture without the file cannot exercise either direction of
+    # the Deliverable Root reconciliation.
+    $research = Join-Path $Path '.copilot-tracking/research'
+    New-Item -ItemType Directory -Path $research -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $research '2026-08-19-login-validation.md') -Encoding utf8NoBOM -Value @'
+---
+description: "Research: login validation path"
+---
+
+# Login Validation Path
+
+Input reaches the validator through a single entry point.
+'@
 
     Set-Content -LiteralPath (Join-Path $root 'team.md') -Encoding utf8NoBOM -Value @'
 ---
@@ -143,10 +159,10 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 
 ## Attribution
 
-| Role          | Member | Agent                          | Model           | Model Source      | Priced As | Tier  |
-| ------------- | ------ | ------------------------------ | --------------- | ----------------- | --------- | ----- |
-| researcher    |        | Squad Researcher               | Claude Sonnet 4.6 | dispatch-reported |           | fast  |
-| orchestration |        | Squad Coordinator + Squad Scribe | Claude Sonnet 4.6 | session-inherited |           | mixed |
+| Role          | Member | Agent                          | Model           | Model Source      | Priced As         | Tier    |
+| ------------- | ------ | ------------------------------ | --------------- | ----------------- | ----------------- | ------- |
+| researcher    |        | Squad Researcher               | Claude Sonnet 4.6 | dispatch-reported | Claude Sonnet 4.6 | default |
+| orchestration |        | Squad Coordinator + Squad Scribe | Claude Sonnet 4.6 | session-inherited | Claude Sonnet 4.6 | default |
 
 ## Usage & Cost
 
@@ -170,6 +186,7 @@ description: "Append-only dispatch history for a single squad agent"
 
 * Turn: 1
 * Request: Investigate how login input is validated today.
+* Deliverable: `.copilot-tracking/research/2026-08-19-login-validation.md` (410 words)
 * Outcome: Wrote `.copilot-tracking/research/2026-08-19-login-validation.md`.
 
 #### Consumption
@@ -178,19 +195,13 @@ description: "Append-only dispatch history for a single squad agent"
 {
   "model": "Claude Sonnet 4.6",
   "model_source": "dispatch-reported",
-  "priced_as": "",
-  "model_tier": "fast",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
   "internal_turns": 1,
   "input_tokens": 10000,
   "cached_tokens": 5000,
   "cache_write_tokens": 1000,
   "output_tokens": 2000,
-  "input_rate": 3.0,
-  "cached_rate": 0.3,
-  "cache_write_rate": 3.75,
-  "output_rate": 15.0,
-  "est_cost_usd": 0.06525,
-  "est_credits": 6.525,
   "basis": "estimated"
 }
 ```
@@ -207,6 +218,7 @@ description: "Append-only dispatch history for a single squad agent"
 
 * Turn: 1
 * Request: Record the researcher dispatch and advance state.
+* Deliverable: `.copilot-tracking/squad/consumption.md`
 * Outcome: Appended history, rewrote the ledger, advanced `state.json`.
 
 #### Consumption — Orchestration
@@ -215,19 +227,13 @@ description: "Append-only dispatch history for a single squad agent"
 {
   "model": "Claude Sonnet 4.6",
   "model_source": "session-inherited",
-  "priced_as": "",
-  "model_tier": "mixed",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
   "internal_turns": 1,
   "input_tokens": 4000,
   "cached_tokens": 0,
   "cache_write_tokens": 0,
   "output_tokens": 1000,
-  "input_rate": 3.0,
-  "cached_rate": 0.3,
-  "cache_write_rate": 3.75,
-  "output_rate": 15.0,
-  "est_cost_usd": 0.027,
-  "est_credits": 2.7,
   "basis": "estimated"
 }
 ```

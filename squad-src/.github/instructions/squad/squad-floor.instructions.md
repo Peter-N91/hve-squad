@@ -1,5 +1,5 @@
 ---
-description: "Unconditional squad floor: state paths and write semantics, the single-writer Scribe rule, dispatch discipline, proof of dispatch, the literal consumption block and its derivation, and the Research → Plan → Implement → Review spine — the rules that must hold before any file is in play"
+description: "Unconditional squad floor: state paths and write semantics, the single-writer Scribe rule, dispatch discipline, proof of dispatch and the binding Deliverable Root, the literal consumption block, cost derived only in the ledger, and the Research → Plan → Implement → Review spine — the rules that must hold before any file is in play"
 applyTo: '**'
 ---
 
@@ -80,29 +80,39 @@ Verification is an act, not an assertion: list the directory and read the file. 
 
 **A stage recorded as complete in `state.json` but absent from `history/` did not run.** The history file is the evidence; a status field is a claim about it. Autonomous and autopilot runs remove the human turn between stages, not this check — when the file is missing, stop at that stage and escalate rather than advancing on the strength of the claim.
 
+**Every dispatch is handed over, one payload per dispatch, as it returns.** The Scribe writes what it is given and cannot record a dispatch nobody mentioned. Assembling the run's history at the end from memory reliably drops the stages that ran earliest — leaving their artifact on disk with no history entry, no ledger row, and no `activeRoles` membership, so `state.json` agrees with the ledger and neither agrees with what happened.
+
+### The Deliverable Root Is Binding
+
+The `Deliverable Root` cell of the role's `team.md` row is where that role's artifact goes. It is an operator declaration, not a default, and it **overrides any path convention carried in the dispatched agent's own definition** — `.copilot-tracking/details/`, `docs/`, or wherever that agent writes when it runs outside a squad.
+
+* **Write there, or stop and escalate.** A role that cannot use the root it was given says so; it never substitutes a path it prefers. Roles quietly falling back to their habitual folder leave a roster whose every cell is a lie and give the operator no way to steer output at all.
+* **A `<date>` or `<slug>` segment is a directory, not a filename prefix.** `.copilot-tracking/research/<date>/` means `.copilot-tracking/research/2026-08-21/topic.md`, never `.copilot-tracking/research/2026-08-21-topic.md`.
+* **The entry's `Deliverable:` path is the artifact's real path** — resolved, confirmed to exist by listing it, and under that role's root.
+
+A promotion rebases the roster's roots but **cannot rebase the entries**. History is append-only, so a `Deliverable:` path recorded before a promotion still names the pre-promotion location while the file now sits under `members/<name>/`. Resolve it through the relocation the promotion recorded; never edit the entry to match. An edited history file has broken a stronger rule than the one it repaired.
+
+Reconcile both directions before reporting a run complete: every `Deliverable:` path names a file that exists, and every file under a role's Deliverable Root is claimed by some history entry. **An unclaimed artifact is a dispatch nobody recorded** — stop and escalate rather than reporting the run complete, because that stage is missing from the ledger, from `activeRoles`, and from every cost figure derived from them.
+
 ## The Consumption Block Is Literal
 
 Every dispatch entry carries a `#### Consumption` heading followed by a fenced `json` block — level four, no suffix. The only legal variant is `#### Consumption — Orchestration`, which the coordinator's and Scribe's own turns are recorded under in `history/Squad Scribe.md`. Any other heading is unreadable to the ledger rewrite, so the dispatch it records is spent and uncounted.
 
-The field names, their `snake_case` spelling, their order, and the set itself are contractual. Copy this shape; do not translate it into camelCase, drop the four rate fields, or add fields of your own:
+**A block records what was consumed, never what it cost.** Rates and money live in `consumption.md` and `consumption-rates.md` and appear nowhere else. A rate is a property of the model, so copying it into every block asserts one fact a dozen times and gives it a dozen chances to be asserted wrong; a cost stored beside the tokens it derives from is a second copy of a number that already exists, and the two can disagree. Record the tokens here and price them once, in the ledger.
+
+The field names, their `snake_case` spelling, their order, and the set itself are contractual. Copy this shape; do not translate it into camelCase, and do not add fields of your own:
 
 ```json
 {
   "model": "<resolved model or unknown>",
   "model_source": "<dispatch-reported|agent-pinned|operator-declared|session-inherited|cli-pinned|unresolved>",
-  "priced_as": "<rate row used, when it differs from model>",
+  "priced_as": "<rate row this dispatch prices from>",
   "model_tier": "<fast|default|extended>",
   "internal_turns": 0,
   "input_tokens": 0,
   "cached_tokens": 0,
   "cache_write_tokens": 0,
   "output_tokens": 0,
-  "input_rate": 0,
-  "cached_rate": 0,
-  "cache_write_rate": 0,
-  "output_rate": 0,
-  "est_cost_usd": 0,
-  "est_credits": 0,
   "basis": "<estimated|tier-default>"
 }
 ```
@@ -111,26 +121,11 @@ Every numeric field is a bare number: `172800`, never `~172,800`, `"172800"`, or
 
 Three rules keep the block parseable, and each one has been broken by a real run:
 
-* **The set is closed at sixteen.** Estimator working values — `dispatch_class`, `base_context`, `growth_per_turn`, `output_per_turn`, `gross_input_tokens` — are inputs you reason with, not fields you record. They belong in the entry prose above the block, never inside it.
-* **The rate fields are named `input_rate`, `cached_rate`, `cache_write_rate`, `output_rate`.** The unit is USD per 1M tokens and it lives in the contract, not in the field name; `input_rate_usd_per_1m` is a different field and reads as a missing one.
-* **`priced_as` is always present, and it is copied character-for-character from the rate table's `Model (as routed)` cell.** `Claude Sonnet 5`, never `claude-sonnet-5`. When no fallback happened it equals `model`; write it anyway, because the ledger prices from `priced_as` and a slug matches no row.
+* **The set is closed at ten.** Estimator working values — `dispatch_class`, `base_context`, `growth_per_turn`, `output_per_turn`, `gross_input_tokens` — are inputs you reason with, not fields you record. Neither are `turn` and `task`, which belong in the entry prose. Nothing priced belongs here either: `input_rate`, `cached_rate`, `cache_write_rate`, `output_rate`, `est_cost_usd`, and `est_credits` were all fields once and are now the ledger's alone.
+* **`priced_as` is always present, and it is copied character-for-character from the rate table's `Model (as routed)` cell.** `Claude Sonnet 5`, never `claude-sonnet-5`. When no fallback happened it equals `model`; write it anyway, because it is the only thing that tells the ledger which row to price this dispatch from, and a slug matches no row.
+* **`model_tier` is the `Tier` cell of that same row.** Not the roster's `Model Tier` for the role, and not a judgment about how heavy the dispatch felt.
 
-Copy all four rates from that row as the row states them, even when the matching token count is zero. A rate is a property of the model; `cache_write_rate: 0` against a row that says `3.75` says the model is free to cache, which is false and makes the block irreproducible.
-
-**Derive `est_cost_usd`; never estimate it.** By the time this field is written its four token counts and four rates are already decided, so it has exactly one correct value and any other value is fabricated. Compute the four products separately, sum them, divide by `1e6`, then multiply by the `calibration_factor` from `consumption-rates.md`. Worked example at a factor of `1.00`; the block itself records bare numbers, the separators below are only for reading:
-
-```text
- 57600 ×  3.00  =  172800
-230400 ×  0.30  =   69120
- 95200 ×  3.75  =  357000
- 15000 × 15.00  =  225000
-                  -------
-                   823920  / 1e6  =  est_cost_usd 0.82392  ->  est_credits 82.39
-```
-
-`est_credits` is `est_cost_usd / 0.01`. Read the block back before moving on and confirm the recorded cost reproduces from the recorded tokens and rates: a block whose cost does not follow from its own numbers corrupts the run total, the `state.json` figures, and any autonomous-mode cost ceiling computed from them.
-
-Divide by `1e6` exactly once. The commonest corruption in this file is a factor-of-ten slip — a block summing to `113520` recorded as `1.17` rather than `0.11352` — which survives every other check because the block is otherwise well formed. Compare the digits of your sum against the digits of what you wrote before appending.
+**Size each dispatch from that dispatch.** Two blocks carrying identical token counts describe one dispatch recorded twice, not two dispatches that happened to consume the same amount to the last thousand tokens. When the numbers you are about to write match a block already in `history/`, the sizing was copied — re-derive it from the dispatch actually in hand.
 
 ## Two Files the Ledger Reads Back
 
@@ -138,7 +133,37 @@ Divide by `1e6` exactly once. The commonest corruption in this file is a factor-
 
 In `consumption.md`, the row covering the coordinator's and Scribe's own turns is labelled **`orchestration`** in both tables — never `scribe`, `coordinator`, or a split pair. It is derived from the `#### Consumption — Orchestration` blocks the same way every other row is derived from its dispatch blocks, so the Scribe writes one such block into `history/Squad Scribe.md` on every turn it writes state, including Init. No block means no row — an `orchestration` row carrying a figure no block accounts for is invented, and a zero row hides the cost of running the squad.
 
+An orchestration entry takes the same prose shape a dispatch entry takes. The turn number and the work it covers go in these fields, because the block's field set is closed at ten and neither is in it — with no prose slot to hold them they leak into the JSON and break the block:
+
+```markdown
+### <timestamp> <what this turn wrote>
+
+* Turn: <n>
+* Request: <what the coordinator handed over>
+* Deliverable: <the state files this turn wrote>
+* Outcome: <one line>
+
+#### Consumption — Orchestration
+```
+
+The ten-field block follows that heading, fenced as `json`, exactly as a dispatch entry's does.
+
 The ledger is rewritten from **every** block recorded for the run, not from this turn's. So a role that has never been dispatched carries no row at all rather than a row of zeros; the run total is the sum of every block in `history/`; the `Run:` id in the heading is the current run, not the one Init seeded; and `state.json`'s `currentRun` cost figures equal that same total. A ledger rewritten from one turn silently drops every earlier role while still looking complete.
+
+**This file is the only place cost is derived.** For each row, sum that role's blocks into the four token columns, then look up the rates once from the row `priced_as` names in `consumption-rates.md`. Compute the four products separately, sum them, divide by `1e6`, then multiply by the `calibration_factor`. Worked example at a factor of `1.00`; the separators are only for reading:
+
+```text
+ 57600 ×  3.00  =  172800
+230400 ×  0.30  =   69120
+ 95200 ×  3.75  =  357000
+ 15000 × 15.00  =  225000
+                  -------
+                   823920  / 1e6  =  0.82392 USD  ->  82.39 credits
+```
+
+Credits are `est_cost_usd / 0.01`. Read the row back and confirm the cost reproduces from its own four token columns and that row's rates. Divide by `1e6` exactly once — the commonest corruption here is a factor-of-ten slip, a row summing to `113520` written as `1.17` rather than `0.11352`, which survives every other check because the row is otherwise well formed. Compare the digits of your sum against the digits of what you wrote.
+
+**The total row is computed, never carried.** Sum every column down the rows the rewrite just wrote — turns, all four token columns, cost, and credits — and write those sums. A total carried over from the previous rewrite, or summed across the rows you happened to be looking at, disagrees with the table printed directly above it. The commonest form drops the one short row belonging to a role dispatched on an earlier turn, which is also the row least likely to be missed by eye.
 
 ## The Methodology Spine Is Not Optional
 

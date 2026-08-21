@@ -80,7 +80,7 @@ Squad runs estimate the model cost and AI-credit consumption of every dispatch s
 
 The Scribe records consumption in three places:
 
-* A per-dispatch consumption block appended to `history/<agent>.md` (append-only), one block per dispatch, written as an `#### Consumption` heading followed by a fenced `json` block, with fields in this order: `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `input_rate`, `cached_rate`, `cache_write_rate`, `output_rate`, `est_cost_usd`, `est_credits`, `basis`. Numeric fields are bare numbers. The container is fixed rather than free-form because these blocks are the source the aggregated ledger is rebuilt from.
+* A per-dispatch consumption block appended to `history/<agent>.md` (append-only), one block per dispatch, written as an `#### Consumption` heading followed by a fenced `json` block, with fields in this order: `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Numeric fields are bare numbers. The container is fixed rather than free-form because these blocks are the source the aggregated ledger is rebuilt from. **The block records consumption, not cost**: rates and money live in the two files below and nowhere else, and `priced_as` is what carries the pricing decision forward to the ledger.
 * The aggregated `consumption.md` ledger (replace via scribe), which mirrors roster order and splits into two role-aligned tables so it stays readable at a glance: an **Attribution** table (resolved model, model source, tier) and a **Usage & Cost** table (estimated turns, tokens, cost, credits, basis), each adding an `orchestration` row for coordinator and Scribe overhead, the second totaling the run and carrying the cost-comparison line. This ledger is the common readme of members, models, and credits. **The file replaces, but its rows accumulate**: each rewrite is derived from every consumption block recorded in `history/*.md` for the run, summed per role, never from the current turn's dispatches alone. Deriving it from the turn in hand drops every earlier role while leaving its history entry intact, and the result still totals correctly — which is why the coordinator's Step 1 reconcile counts ledger rows against history entries rather than checking that the ledger is merely populated.
 * The `consumption-rates.md` table (replace via scribe), the single maintainable source of per-model input, cached, cache-write, and output rates in USD per 1M tokens, plus the tier-fallback rates, the dispatch-size estimator, the calibration block, and the comparison methodology.
 
@@ -92,7 +92,7 @@ A dispatched agent runs an internal tool loop, and every internal turn resends t
 
 **Orchestration counts** too: the coordinator's own turns and the Scribe's writes get their own ledger row, because they are real consumption that no dispatch block covers.
 
-The Scribe computes the cost and credit estimates from the rates in `consumption-rates.md`:
+The Scribe computes the cost and credit estimates **once per ledger row**, from that role's summed token columns and the rates of the row `priced_as` names in `consumption-rates.md`. No history block carries a rate or a cost:
 
 ```text
 raw_cost_usd = ( input_tokens       × input_rate

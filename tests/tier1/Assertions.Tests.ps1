@@ -72,6 +72,56 @@ Describe 'The contract catches a broken tree' {
         (Test-Contract $root).Passed | Should -BeFalse
     }
 
+    It 'catches a deliverable that was never written' {
+        $root = New-Fixture 'phantom-deliverable'
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
+            -Pattern '2026-08-19-login-validation\.md` \(410 words\)' -Replacement '2026-08-19-login-never-written.md` (410 words)'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a Deliverable path is verified by listing it, never asserted'
+    }
+
+    It 'catches a role that wrote outside its Deliverable Root' {
+        $root = New-Fixture 'strayed-deliverable'
+        $stray = Join-Path (Split-Path (Split-Path $root -Parent) -Parent) '.copilot-tracking/details'
+        New-Item -ItemType Directory -Path $stray -Force | Out-Null
+        Move-Item -LiteralPath (Join-Path (Split-Path $root -Parent) 'research/2026-08-19-login-validation.md') `
+            -Destination (Join-Path $stray '2026-08-19-login-validation.md') -Force
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
+            -Pattern '`\.copilot-tracking/research/2026-08-19-login-validation\.md` \(410 words\)' `
+            -Replacement '`.copilot-tracking/details/2026-08-19-login-validation.md` (410 words)'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'the roster root overrides the path convention in the agent own definition'
+    }
+
+    # The stage ran and left its artifact, but the coordinator never handed the dispatch
+    # over, so state and ledger agree with each other and with nothing that happened.
+    It 'catches an artifact no history entry claims' {
+        $root = New-Fixture 'orphan-artifact'
+        Set-Content -Encoding utf8NoBOM -Value "# Plan`n" `
+            -LiteralPath (New-Item -ItemType File -Force -Path (Join-Path (Split-Path $root -Parent) 'plans/2026-08-19-login-plan.md')).FullName
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'an unclaimed artifact is a dispatch nobody recorded'
+    }
+
+    It 'catches a model_tier that does not match the priced_as row' {
+        $root = New-Fixture 'tier-mismatch'
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
+            -Pattern '"model_tier": "default"' -Replacement '"model_tier": "fast"'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a fast tier beside a default rate row prices one model and reports another'
+    }
+
+    It 'catches a dispatch sized from another dispatch numbers' {
+        $root = New-Fixture 'copied-sizing'
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Scribe.md') `
+            -Pattern '(?s)"internal_turns": 1,\s*\r?\n\s*"input_tokens": 4000,\s*\r?\n\s*"cached_tokens": 0,\s*\r?\n\s*"cache_write_tokens": 0,\s*\r?\n\s*"output_tokens": 1000,' `
+            -Replacement ('"internal_turns": 1,' + "`n  " + '"input_tokens": 10000,' + "`n  " + '"cached_tokens": 5000,' + "`n  " + '"cache_write_tokens": 1000,' + "`n  " + '"output_tokens": 2000,')
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'identical token counts describe one dispatch recorded twice'
+    }
+
+    It 'catches a ledger total that drops a row from a token column' {
+        $root = New-Fixture 'dropped-column'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '\*\*14000\*\*' -Replacement '**10000**'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'the total row is computed, never carried'
+    }
+
     It 'catches a history entry with no consumption block' {
         $root = New-Fixture 'no-block'
         $path = Join-Path $root 'history/Squad Researcher.md'
@@ -83,8 +133,8 @@ Describe 'The contract catches a broken tree' {
         $root = New-Fixture 'reordered'
         $path = Join-Path $root 'history/Squad Researcher.md'
         Edit-Fixture -Path $path `
-            -Pattern '(?s)"model_source": "dispatch-reported",\s*\r?\n\s*"priced_as": "",' `
-            -Replacement ('"priced_as": "",' + "`n  " + '"model_source": "dispatch-reported",')
+            -Pattern '(?s)"model_source": "dispatch-reported",\s*\r?\n\s*"priced_as": "Claude Sonnet 4.6",' `
+            -Replacement ('"priced_as": "Claude Sonnet 4.6",' + "`n  " + '"model_source": "dispatch-reported",')
         (Test-Contract $root).Passed | Should -BeFalse -Because 'the ledger rewrite reads these blocks positionally'
     }
 
@@ -95,18 +145,26 @@ Describe 'The contract catches a broken tree' {
         (Test-Contract $root).Passed | Should -BeFalse -Because 'an unparseable field drops that dispatch out of every later aggregate'
     }
 
-    It 'catches a cost that does not follow from its tokens and rates' {
+    It 'catches a ledger cost that does not follow from its tokens and rates' {
         $root = New-Fixture 'bad-arithmetic'
-        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
-            -Pattern '"est_cost_usd": 0.06525' -Replacement '"est_cost_usd": 0.5'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '0\.0653' -Replacement '0.5000'
         (Test-Contract $root).Passed | Should -BeFalse
     }
 
-    It 'catches a rate that drifts from consumption-rates.md' {
+    It 'catches a priced_as that names no rate row' {
         $root = New-Fixture 'rate-drift'
         Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
-            -Pattern '"input_rate": 3.0' -Replacement '"input_rate": 9.0'
-        (Test-Contract $root).Passed | Should -BeFalse -Because 'only consumption-rates.md holds token rates'
+            -Pattern '"priced_as": "Claude Sonnet 4.6"' -Replacement '"priced_as": "claude-sonnet-4-6"'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'only consumption-rates.md holds token rates and a slug matches no row'
+    }
+
+    It 'catches a rate row swapped under a ledger row' {
+        $root = New-Fixture 'ledger-rate-swap'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern 'dispatch-reported \| Claude Sonnet 4\.6 \| default' `
+            -Replacement 'dispatch-reported | Claude Haiku 4.5  | fast   '
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'the row is priced from the model its Attribution row names'
     }
 
     It 'catches missing orchestration overhead' {
