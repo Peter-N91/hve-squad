@@ -22,15 +22,6 @@ type: Fixed
   `Deliverable:` path names a file that exists, and every artifact under a role's Deliverable Root is
   claimed by some history entry. An unclaimed artifact is a stop, not a warning.
 
-- **A stage could report itself complete having written nothing.** A live run recorded
-  `Deliverable: N/A — inline verdict, no review artifact file written` twice, and the review stage
-  passed every check: an entry that names no path leaves the existence check with nothing to reject.
-  The floor now states that `N/A`, `inline verdict`, `no artifact written`, and a missing
-  `Deliverable:` line are the same statement — the stage produced nothing the next one can read — and
-  that a role whose output is a judgment writes that judgment to a file at its Deliverable Root. A
-  verdict that exists only in a chat turn is gone when the turn ends, and the gate depending on it
-  has nothing to open.
-
 - **A consumption block could price one model and report another.** The same run recorded a block
   carrying Claude Sonnet 5's four rate fields, a `model_tier` of `fast`, and a cost derived at Claude
   Sonnet 4.6's rates — internally contradictory and reproducible by nobody. The floor now fixes
@@ -65,9 +56,7 @@ type: Fixed
   The contract asserted no deliverable existed on disk, and the live harness captured only the squad
   root — so a scenario's research artifact, which lands beside that root rather than inside it, was
   never uploaded with the results. A squad writing immaculate ledgers about work it never did would
-  have passed green. The contract gains `SQ-12` (every dispatch entry names an artifact, that
-  artifact exists, it sits under its role's root, and nothing under a root is left unclaimed) plus
-  assertions for tier coherence, copied sizing, and column-wise ledger
-  totals; the harness now captures the whole `.copilot-tracking/` tree under that same name, so an
-  uploaded result replays against the same path resolver the run used. The mutation self-check grows
+  have passed green. The contract gains `SQ-12` (deliverable exists, sits under its role's root, and
+  leaves nothing unclaimed) plus assertions for tier coherence, copied sizing, and column-wise ledger
+  totals; the harness now captures the whole `.copilot-tracking/` tree. The mutation self-check grows
   from 20 cases to 26, one per new rule (`tests/tier1/`).
