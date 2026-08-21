@@ -104,6 +104,25 @@ One append-only file per dispatched agent. Replace `<agent>` with the agent's `n
 
 `history/Squad Scribe.md` follows the same naming rule but holds `#### Consumption — Orchestration` blocks rather than dispatch records, because the coordinator's own turns and the Scribe's writes need somewhere in `history/` for the ledger rewrite to read them back from. It is not a dispatched stage and is not counted as one.
 
+An orchestration entry uses the dispatch entry shape below with the `#### Consumption — Orchestration` heading in place of `#### Consumption`, and `Deliverable:` naming the state files that turn wrote:
+
+````markdown
+### <timestamp> <what this turn wrote>
+
+* Turn: <n>
+* Request: <what the coordinator handed over>
+* Deliverable: <the state files this turn wrote>
+* Outcome: <one line>
+
+#### Consumption — Orchestration
+
+```json
+{ ... the same sixteen fields, in the same order ... }
+```
+````
+
+Write every one of those four prose fields. The turn number and the work the turn covered have no field in the block — the set is closed at sixteen — so an entry that omits the prose leaves them nowhere to go and they leak into the JSON as `turn` and `task`, which breaks the field-order contract and drops the block out of the ledger rewrite.
+
 ```markdown
 ---
 description: "Append-only dispatch history for a single squad agent"

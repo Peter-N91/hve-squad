@@ -81,6 +81,60 @@ function Get-ConsumptionBlock {
     }
 }
 
+function Get-DeliverableEntry {
+    <#
+    .SYNOPSIS
+        Extracts the `* Deliverable:` paths every history entry declares.
+    .DESCRIPTION
+        Only backticked tokens are read. An entry writes its path in backticks and its
+        size in plain prose, so reading unquoted words would register '(~5,000 words)'
+        as a file. A single entry may legitimately name several paths.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $raw = Get-Content -LiteralPath $Path -Raw
+    foreach ($line in [regex]::Matches($raw, '(?m)^\s*\*\s*Deliverable:\s*(?<value>.+)$')) {
+        foreach ($token in [regex]::Matches($line.Groups['value'].Value, '`(?<path>[^`]+)`')) {
+            $candidate = $token.Groups['path'].Value.Trim()
+
+            # Trailing prose inside the same span, as in `path` (~3,200 words).
+            $candidate = ($candidate -split '\s+')[0].TrimEnd(',', ';')
+            if (-not $candidate) { continue }
+
+            # An entry may summarize a fan-out as `history/*.md`. A glob names a set, not
+            # an artifact, and cannot be listed to prove anything exists.
+            if ($candidate -match '[*?]') { continue }
+
+            [pscustomobject]@{
+                Source = Split-Path $Path -Leaf
+                Agent  = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+                Path   = $candidate -replace '\\', '/'
+            }
+        }
+    }
+}
+
+function Get-DeliverableTail {
+    <#
+    .SYNOPSIS
+        Strips the tracking prefix and any sub-squad root from a deliverable path.
+    .DESCRIPTION
+        History is append-only, so a promotion cannot rewrite the paths already recorded
+        in it. An entry written before a promotion still reads
+        '.copilot-tracking/research/x.md' while the file now sits under
+        'members/<name>/researches/'. Comparing tails makes both forms equal, so the
+        contract reports a role that wrote to the wrong folder without also reporting
+        every entry a promotion left behind.
+    #>
+    param([string]$Path)
+
+    ($Path -replace '^\./', '') -replace '^\.copilot-tracking/(squad/members/[^/]+/)?', ''
+}
+
 function Get-LedgerTable {
     <#
     .SYNOPSIS
@@ -240,6 +294,7 @@ function Get-RateTable {
                 cached      = $numbers[1]
                 cache_write = $numbers[2]
                 output      = $numbers[3]
+                tier        = if ('Tier' -in $table.Header) { $row['Tier'] } else { $null }
             }
         }
     }
@@ -317,6 +372,107 @@ function Get-SquadStateModel {
     # Only this file holds token rates, so every block's rates are checked against it.
     $rates = Get-RateTable -Content $ratesContent
 
+    # The Deliverable Root cell is an operator declaration, not a default: a role writes
+    # there or it escalates. Roots are resolved against the project root first and the
+    # squad root second, because a federation sub-squad's roots are rebased under its own.
+    $projectRoot = $SquadRoot
+    if (($SquadRoot -replace '\\', '/') -match '^(?<base>.*?)/?\.copilot-tracking(/|$)') {
+        $projectRoot = if ($Matches['base']) { $Matches['base'] } else { '.' }
+    }
+
+    $agentRoots = @{}
+    $roleRoots = @{}
+    foreach ($table in (Get-MarkdownTable -Content $teamContent)) {
+        if ('Deliverable Root' -notin $table.Header -or 'Agent Name (Primary)' -notin $table.Header) { continue }
+        foreach ($row in $table.Rows) {
+            # '—' and '(squad state)' are declarations that the role owns no artifact root.
+            $root = ($row['Deliverable Root'] -replace '`', '').Trim() -replace '\\', '/'
+            if ($root -notmatch '/') { continue }
+
+            if ('Role' -in $table.Header -and $row['Role']) { $roleRoots[$row['Role']] = $root }
+            foreach ($agent in @($row['Agent Name (Primary)']) + @(
+                    if ('Alternate Agents' -in $table.Header) { $row['Alternate Agents'] -split ',' }
+                )) {
+                $name = "$agent".Trim()
+                if ($name -and $name -notmatch '^[-\u2014]$') { $agentRoots[$name] = $root }
+            }
+        }
+    }
+
+    function Resolve-Deliverable {
+        param([string]$Relative)
+        # The tail attempt resolves a path recorded before a promotion moved the file.
+        foreach ($candidate in @(
+                (Join-Path $projectRoot $Relative)
+                (Join-Path $SquadRoot $Relative)
+                (Join-Path $SquadRoot (Get-DeliverableTail $Relative))
+            )) {
+            # Get-Item, not Resolve-Path: only FileInfo.FullName expands an 8.3 short path,
+            # and the orphan scan compares against FileInfo.FullName.
+            if (Test-Path -LiteralPath $candidate) { return (Get-Item -LiteralPath $candidate).FullName }
+        }
+        return $null
+    }
+
+    $declared = @(foreach ($file in $historyFiles) { Get-DeliverableEntry -Path $file.FullName })
+
+    $deliverables = @(
+        foreach ($entry in $declared) {
+            $resolved = Resolve-Deliverable $entry.Path
+            $root = if ($agentRoots.ContainsKey($entry.Agent)) { $agentRoots[$entry.Agent] } else { $null }
+
+            # Compared as tails, not as written: a promotion rebases the roster's roots
+            # but cannot edit the append-only entries that predate it.
+            $declaredPath = Get-DeliverableTail $entry.Path
+            $prefix = (Get-DeliverableTail (($root -split '<')[0])).TrimEnd('/')
+
+            [pscustomobject]@{
+                Source     = $entry.Source
+                Agent      = $entry.Agent
+                Path       = $entry.Path
+                Resolved   = $resolved
+                Root       = $root
+                UnderRoot  = -not $root -or $declaredPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
+            }
+        }
+    )
+
+    # An artifact under a role's root that no entry claims is a dispatch nobody recorded.
+    # Scoped to markdown at most one directory below the root's literal prefix: deeper
+    # trees are working directories whose scratch files are legitimately unclaimed.
+    $claimed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($item in ($deliverables | Where-Object { $_.Resolved })) { [void]$claimed.Add($item.Resolved) }
+
+    $stateRoot = if (Test-Path -LiteralPath $SquadRoot) { (Get-Item -LiteralPath $SquadRoot).FullName } else { $SquadRoot }
+
+    $orphanArtifacts = @(
+        foreach ($root in (@($roleRoots.Values) | Sort-Object -Unique)) {
+            if ($root -notmatch '\.copilot-tracking/') { continue }
+            $literal = (($root -split '<')[0]).TrimEnd('/')
+
+            foreach ($base in (@($projectRoot, $SquadRoot) | Sort-Object -Unique)) {
+                $directory = Join-Path $base $literal
+                if (-not (Test-Path -LiteralPath $directory)) { continue }
+
+                # The scribe's root is the squad root itself. Squad state is written by the
+                # Scribe rather than claimed by a history entry, so scanning it would report
+                # every state file as an orphan. Enumeration runs from the normalized path so
+                # both sides of the claimed-set comparison survive an 8.3 short path.
+                $resolved = (Get-Item -LiteralPath $directory).FullName
+                if ($resolved -eq $stateRoot -or $resolved.StartsWith($stateRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { continue }
+
+                $scan = @(Get-ChildItem -LiteralPath $resolved -Filter '*.md' -File -ErrorAction SilentlyContinue)
+                foreach ($child in @(Get-ChildItem -LiteralPath $resolved -Directory -ErrorAction SilentlyContinue)) {
+                    $scan += @(Get-ChildItem -LiteralPath $child.FullName -Filter '*.md' -File -ErrorAction SilentlyContinue)
+                }
+
+                foreach ($file in $scan) {
+                    if (-not $claimed.Contains($file.FullName)) { $file.FullName }
+                }
+            }
+        }
+    ) | Sort-Object -Unique
+
     $calibration = 1.0
     $observations = 0
     if ($ratesContent) {
@@ -339,6 +495,10 @@ function Get-SquadStateModel {
         State            = $stateJson
         Team             = $teamContent
         RosterAgents     = @($rosterAgents)
+        AgentRoots       = $agentRoots
+        RoleRoots        = $roleRoots
+        Deliverables     = @($deliverables)
+        OrphanArtifacts  = @($orphanArtifacts)
         Routing          = Read-Text 'routing.md'
         Decisions        = Read-Text 'decisions.md'
         Notifications    = Read-Text 'notifications.md'
@@ -360,4 +520,4 @@ function Get-SquadStateModel {
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-LedgerTable, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-LedgerTable, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal

@@ -59,6 +59,21 @@ function New-SquadStateFixture {
     $root = Join-Path $Path '.copilot-tracking/squad'
     New-Item -ItemType Directory -Path (Join-Path $root 'history') -Force | Out-Null
 
+    # The artifact the researcher entry declares. Proof of dispatch is the entry and the
+    # file together, so a fixture without the file cannot exercise either direction of
+    # the Deliverable Root reconciliation.
+    $research = Join-Path $Path '.copilot-tracking/research'
+    New-Item -ItemType Directory -Path $research -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $research '2026-08-19-login-validation.md') -Encoding utf8NoBOM -Value @'
+---
+description: "Research: login validation path"
+---
+
+# Login Validation Path
+
+Input reaches the validator through a single entry point.
+'@
+
     Set-Content -LiteralPath (Join-Path $root 'team.md') -Encoding utf8NoBOM -Value @'
 ---
 description: "Squad roster: roles and the deployed HVE Core agents that fill them"
@@ -143,10 +158,10 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 
 ## Attribution
 
-| Role          | Member | Agent                          | Model           | Model Source      | Priced As | Tier  |
-| ------------- | ------ | ------------------------------ | --------------- | ----------------- | --------- | ----- |
-| researcher    |        | Squad Researcher               | Claude Sonnet 4.6 | dispatch-reported |           | fast  |
-| orchestration |        | Squad Coordinator + Squad Scribe | Claude Sonnet 4.6 | session-inherited |           | mixed |
+| Role          | Member | Agent                          | Model           | Model Source      | Priced As         | Tier    |
+| ------------- | ------ | ------------------------------ | --------------- | ----------------- | ----------------- | ------- |
+| researcher    |        | Squad Researcher               | Claude Sonnet 4.6 | dispatch-reported | Claude Sonnet 4.6 | default |
+| orchestration |        | Squad Coordinator + Squad Scribe | Claude Sonnet 4.6 | session-inherited | Claude Sonnet 4.6 | default |
 
 ## Usage & Cost
 
@@ -170,6 +185,7 @@ description: "Append-only dispatch history for a single squad agent"
 
 * Turn: 1
 * Request: Investigate how login input is validated today.
+* Deliverable: `.copilot-tracking/research/2026-08-19-login-validation.md` (410 words)
 * Outcome: Wrote `.copilot-tracking/research/2026-08-19-login-validation.md`.
 
 #### Consumption
@@ -178,8 +194,8 @@ description: "Append-only dispatch history for a single squad agent"
 {
   "model": "Claude Sonnet 4.6",
   "model_source": "dispatch-reported",
-  "priced_as": "",
-  "model_tier": "fast",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
   "internal_turns": 1,
   "input_tokens": 10000,
   "cached_tokens": 5000,
@@ -207,6 +223,7 @@ description: "Append-only dispatch history for a single squad agent"
 
 * Turn: 1
 * Request: Record the researcher dispatch and advance state.
+* Deliverable: `.copilot-tracking/squad/consumption.md`
 * Outcome: Appended history, rewrote the ledger, advanced `state.json`.
 
 #### Consumption — Orchestration
@@ -215,8 +232,8 @@ description: "Append-only dispatch history for a single squad agent"
 {
   "model": "Claude Sonnet 4.6",
   "model_source": "session-inherited",
-  "priced_as": "",
-  "model_tier": "mixed",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
   "internal_turns": 1,
   "input_tokens": 4000,
   "cached_tokens": 0,

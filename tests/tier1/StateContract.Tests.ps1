@@ -149,6 +149,29 @@ Describe 'SQ-09 Init leaves history empty' -Skip:$ExpectDispatches {
     }
 }
 
+# The Deliverable Root cell is the only place an operator can steer where output lands.
+# A role that falls back to the path convention in its own agent definition makes every
+# cell in that column a lie, and the operator's customization silently does nothing.
+Describe 'SQ-12 The Deliverable Root is binding' -Skip:(-not $ExpectDispatches) {
+    It 'every declared deliverable exists on disk' {
+        $missing = @($script:Model.Deliverables | Where-Object { -not $_.Resolved } | ForEach-Object { "$($_.Source) -> $($_.Path)" })
+        $missing -join '; ' | Should -BeNullOrEmpty -Because 'a Deliverable path is verified by listing it, never asserted'
+    }
+
+    It 'every declared deliverable sits under its role Deliverable Root' {
+        $strayed = @($script:Model.Deliverables | Where-Object { -not $_.UnderRoot } | ForEach-Object { "$($_.Source) -> $($_.Path) not under $($_.Root)" })
+        $strayed -join '; ' | Should -BeNullOrEmpty -Because 'the roster root overrides the path convention in the agent own definition'
+    }
+
+    # The documented failure is a stage whose artifact is on disk while the coordinator
+    # never handed the dispatch over, so it has no history entry, no ledger row, and no
+    # activeRoles membership - state and ledger agree with each other and with nothing else.
+    It 'no artifact under a Deliverable Root is left unclaimed' {
+        $orphans = @($script:Model.OrphanArtifacts | ForEach-Object { Split-Path $_ -Leaf })
+        $orphans -join '; ' | Should -BeNullOrEmpty -Because 'an unclaimed artifact is a dispatch nobody recorded'
+    }
+}
+
 Describe 'SQ-11 Consumption blocks carry the contractual shape' -Skip:(-not $ExpectDispatches) {
     It '<Source> block parses as JSON' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; ParseError = $_.ParseError } }) {
         $ParseError | Should -BeNullOrEmpty -Because 'the ledger rewrite reparses these blocks and can only re-derive what it can parse'
@@ -196,6 +219,31 @@ Describe 'CON Per-dispatch arithmetic is derivable' -Skip:(-not $ExpectDispatche
     It '<Source> model_source and basis are documented values' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
         $script:Model.ModelSources | Should -Contain $Fields['model_source']
         $script:Model.Bases | Should -Contain $Fields['basis'] -Because 'basis is exactly one value, never a combined one'
+    }
+
+    # One row, one block: a block reading model_tier 'fast' beside a 'default' rate row
+    # prices one model and reports another, and the mismatch is what a cost priced at the
+    # tier-fallback rates while recording the resolved model's rates leaves behind.
+    It '<Source> model_tier is the tier of the priced_as row' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
+        $priced = if ($Fields['priced_as']) { $Fields['priced_as'] } else { $Fields['model'] }
+        $tier = $script:Model.Rates[$priced]['tier']
+        if (-not $tier) { Set-ItResult -Skipped -Because 'the rate table declares no Tier column' }
+
+        $Fields['model_tier'] | Should -Be $tier
+    }
+
+    # A copied block reproduces perfectly from its own fields, so every arithmetic check
+    # passes and the figure is still fiction.
+    It 'no two dispatches are sized from the same numbers' {
+        $duplicated = @($script:Model.Blocks |
+                Group-Object -Property { @(
+                        $_.Fields['internal_turns'], $_.Fields['input_tokens'], $_.Fields['cached_tokens']
+                        $_.Fields['cache_write_tokens'], $_.Fields['output_tokens']
+                    ) -join '/' } |
+                Where-Object { $_.Count -gt 1 } |
+                ForEach-Object { $_.Name })
+
+        $duplicated -join '; ' | Should -BeNullOrEmpty -Because 'identical token counts describe one dispatch recorded twice'
     }
 }
 
@@ -250,6 +298,23 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
         $total = @($script:Model.UsageAndCost | Where-Object { $_[0] -match 'Total' })[0]
         $ledger = ConvertTo-LedgerNumber $total[6]
         [math]::Abs([math]::Round($script:Model.State['currentRun']['estCostUsd'], (Get-LedgerDecimal $total[6])) - $ledger) | Should -BeLessThan $script:Tolerance
+    }
+
+    # The total row is computed, never carried. The documented failure drops the one short
+    # row belonging to a role dispatched on an earlier turn - which is also the row least
+    # likely to be missed by eye, and the cost column alone does not surface it.
+    It 'the <Column> total equals the sum of the rows above it' -ForEach @(
+        @{ Column = 'Turns'; Index = 1 }
+        @{ Column = 'In Tokens'; Index = 2 }
+        @{ Column = 'Cached'; Index = 3 }
+        @{ Column = 'Cache Wr'; Index = 4 }
+        @{ Column = 'Out Tokens'; Index = 5 }
+    ) {
+        $rows = @($script:Model.UsageAndCost | Where-Object { $_[0] -notmatch 'Total' })
+        $total = @($script:Model.UsageAndCost | Where-Object { $_[0] -match 'Total' })[0]
+
+        $expected = ($rows | ForEach-Object { ConvertTo-LedgerNumber $_[$Index] } | Measure-Object -Sum).Sum
+        ConvertTo-LedgerNumber $total[$Index] | Should -Be $expected -Because 'a total summed over the rows you happened to be looking at disagrees with the table above it'
     }
 }
 
