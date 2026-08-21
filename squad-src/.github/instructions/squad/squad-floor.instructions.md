@@ -87,7 +87,7 @@ Verification is an act, not an assertion: list the directory and read the file. 
 The `Deliverable Root` cell of the role's `team.md` row is where that role's artifact goes. It is an operator declaration, not a default, and it **overrides any path convention carried in the dispatched agent's own definition** — `.copilot-tracking/details/`, `docs/`, or wherever that agent writes when it runs outside a squad.
 
 * **Write there, or stop and escalate.** A role that cannot use the root it was given says so; it never substitutes a path it prefers. Roles quietly falling back to their habitual folder leave a roster whose every cell is a lie and give the operator no way to steer output at all.
-* **A `<date>` or `<slug>` segment is a directory, not a filename prefix.** `.copilot-tracking/research/<date>/` means `.copilot-tracking/research/2026-08-21/topic.md`, never `.copilot-tracking/research/2026-08-21-topic.md`.
+* **A `<date>` or `<slug>` segment is a directory, not a filename prefix.** `.copilot-tracking/research/<date>/` means `.copilot-tracking/research/2026-08-21/topic.md`, never `.copilot-tracking/research/2026-08-21-topic.md`. **Substitute it; never write the angle brackets.** A path recorded as `.copilot-tracking/research/<date>/findings.md` names a directory literally called `<date>`, so the file it points at is not the file that was written and the existence check has nothing to find.
 * **The entry's `Deliverable:` path is the artifact's real path** — resolved, confirmed to exist by listing it, and under that role's root.
 * **Write the path the way the root is written.** The `Deliverable:` path extends the `Deliverable Root` cell verbatim, so `.copilot-tracking/squad/members/persistence/plans/` yields `.copilot-tracking/squad/members/persistence/plans/2026-08-21-plan.md` — never `members/persistence/plans/2026-08-21-plan.md`. A path shortened to whatever the writer's working directory happened to be cannot be resolved by anyone reading the entry later, and a path that cannot be resolved is not evidence that the file exists.
 * **A stage that wrote no file did not run.** `Deliverable: N/A`, `inline verdict`, `no artifact written`, and an entry with no `Deliverable:` line at all are the same statement: this stage produced nothing the next one can read. A role whose output is a judgment writes that judgment to a file at its Deliverable Root — a verdict that exists only in a chat turn is gone when the turn ends, and the gate that depends on it has nothing to open.
@@ -152,7 +152,7 @@ The ten-field block follows that heading, fenced as `json`, exactly as a dispatc
 
 The ledger is rewritten from **every** block recorded for the run, not from this turn's. So a role that has never been dispatched carries no row at all rather than a row of zeros; the run total is the sum of every block in `history/`; the `Run:` id in the heading is the current run, not the one Init seeded; and `state.json`'s `currentRun` cost figures equal that same total. A ledger rewritten from one turn silently drops every earlier role while still looking complete.
 
-**This file is the only place cost is derived.** For each row, sum that role's blocks into the four token columns, then look up the rates once from the row `priced_as` names in `consumption-rates.md`. Compute the four products separately, sum them, divide by `1e6`, then multiply by the `calibration_factor`. Worked example at a factor of `1.00`; the separators are only for reading:
+**This file is the only place cost is derived.** For each row, sum that role's blocks into the `Turns` column and the four token columns — **five columns, not four** — then look up the rates once from the row `priced_as` names in `consumption-rates.md`. `Turns` accumulates exactly as the token columns do: a role dispatched twice with `internal_turns` of `15` and `4` carries `19`, never `4`. Only the four token columns are priced, which is why the fifth is the one most often left at the last block's value. Compute the four products separately, sum them, divide by `1e6`, then multiply by the `calibration_factor`. Worked example at a factor of `1.00`; the separators are only for reading:
 
 ```text
  57600 ×  3.00  =  172800
@@ -165,17 +165,19 @@ The ledger is rewritten from **every** block recorded for the run, not from this
 
 Credits are `est_cost_usd / 0.01`. Read the row back and confirm the cost reproduces from its own four token columns and that row's rates. Divide by `1e6` exactly once — the commonest corruption here is a factor-of-ten slip, a row summing to `113520` written as `1.17` rather than `0.11352`, which survives every other check because the row is otherwise well formed. Compare the digits of your sum against the digits of what you wrote.
 
-**Show the arithmetic in the file.** Under the Usage & Cost table, a `### Derivation` block carries one line per row — the four products written out, their sum, the divide, and the result — and a final line summing the column. Doing the multiplication in your head and writing only the answer is how a row arrives at a cost its own tokens do not support, which is the single most common defect this ledger has. Written-out products cost four numbers and make the mistake visible to the next reader instead of leaving a plausible total nobody can check:
+**Show the arithmetic in the file.** Under the Usage & Cost table, a `### Derivation` block carries one line per row — the row's turn sum written as an addition, then the four products, their sum, the divide, and the result — and a final line summing the cost column. Doing the arithmetic in your head and writing only the answers is how a row arrives at a cost its own tokens do not support and a turn count its own blocks do not support, which are the two commonest defects this ledger has. Written-out terms cost a few numbers and make the mistake visible to the next reader instead of leaving a plausible total nobody can check:
 
 ```text
-lead             9600 × 2.00 +  38400 × 0.20 +  14400 × 2.50 +  3600 × 10.00 =  98880 / 1e6 = 0.0989
-orchestration    6800 × 2.00 +  27200 × 0.20 +  10800 × 2.50 +  2400 × 10.00 =  70040 / 1e6 = 0.0700
-                                                                                     total = 0.1689
+lead           turns 4         9600 × 2.00 +  38400 × 0.20 +  14400 × 2.50 +  3600 × 10.00 =  98880 / 1e6 = 0.0989
+orchestration  turns 15+4=19   6800 × 2.00 +  27200 × 0.20 +  10800 × 2.50 +  2400 × 10.00 =  70040 / 1e6 = 0.0700
+                                                                                            total = 0.1689
 ```
 
 **The total row is computed, never carried.** Sum every column down the rows the rewrite just wrote — turns, all four token columns, cost, and credits — and write those sums. A total carried over from the previous rewrite, or summed across the rows you happened to be looking at, disagrees with the table printed directly above it. The commonest form drops the one short row belonging to a role dispatched on an earlier turn, which is also the row least likely to be missed by eye.
 
 **The total's cost cell is a bare four-decimal number, like every row above it** — `0.2151`, never `$0.22`. A currency symbol and two decimals turn the one figure `state.json` is reconciled against into a rounded string, so the ledger and the run totals disagree by construction and every later comparison inherits the gap.
+
+**The Cost Comparison section is required, and it names three figures**: what this run cost, what the manual baseline would have cost, and the saving as a percentage. The baseline is `expected_iterations × baseline_model_cost_per_turn` with a manual turn priced through the same dispatch-size estimator, and the section states the iteration count and the baseline model it assumed so a reader can disagree with the assumption rather than only with the answer. A per-turn or per-phase breakdown may be added; it never replaces the comparison. This is the one figure an operator actually reads, so a section that reports only what was spent has dropped the only number that answers *why run a squad at all*.
 
 ## The Methodology Spine Is Not Optional
 

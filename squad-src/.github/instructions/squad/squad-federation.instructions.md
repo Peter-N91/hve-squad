@@ -94,6 +94,8 @@ Every move in steps 2 and 4 is a **copy → verify → delete-source** sequence,
 
 Deleting first is the one failure mode this contract exists to prevent: a relocation that clears the source and then cannot find the files to move has destroyed append-only decision and history logs that no later step can reconstruct. When a destination write fails, stop and escalate with the source still intact; a partially relocated tree with an intact source is recoverable, and a deleted source is not.
 
+**Every destination path is written from the project root, including the parent directories the move creates**, and the promotion creates nothing outside `.copilot-tracking/squad/`. `.copilot-tracking/squad/members/<name>/plans/` is the whole path, not a segment to append to wherever the last step was working. The observed failure created its destinations from inside `.copilot-tracking/` and left `.copilot-tracking/.copilot-tracking/squad/members/<name>/` behind — empty, so no file was lost and no step reported a failure, while the tree gained a second tracking directory that every later path resolution has to step around. Before the promotion is confirmed, list `.copilot-tracking/` and remove anything the move created by accident, along with any directory the move emptied.
+
 ### Guards
 
 * **Idempotency.** When a top-level `federation.md` already exists, the project is already a federation — the coordinator does not promote; it routes the request (or runs Federation Init to add a sub-squad) instead.

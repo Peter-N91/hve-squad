@@ -201,6 +201,18 @@ function Get-LedgerTable {
     $rows
 }
 
+function Get-LedgerRoleKey {
+    <#
+    .SYNOPSIS
+        Strips a trailing annotation so a Usage & Cost row joins its Attribution row.
+    #>
+    param([string]$Label)
+
+    # A run labelled a row 'orchestration (Turns 1-3)'. The annotation is against the
+    # writing rule, but a reader that cannot join the two tables loses the whole ledger.
+    ($Label -replace '\s*\(.*$', '').Trim()
+}
+
 function ConvertTo-LedgerNumber {
     <#
     .SYNOPSIS
@@ -413,6 +425,16 @@ function Get-SquadStateModel {
         $projectRoot = if ($Matches['base']) { $Matches['base'] } else { '.' }
     }
 
+    # A move that joined a project-root-relative destination onto the tracking directory
+    # instead of the project root leaves an empty .copilot-tracking inside .copilot-tracking.
+    $trackingRoot = Join-Path $projectRoot '.copilot-tracking'
+    $nestedTracking = @(
+        if (Test-Path -LiteralPath $trackingRoot) {
+            Get-ChildItem -LiteralPath $trackingRoot -Recurse -Directory -Force -Filter '.copilot-tracking' -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.FullName }
+        }
+    )
+
     $agentRoots = @{}
     $roleRoots = @{}
     foreach ($table in (Get-MarkdownTable -Content $teamContent)) {
@@ -558,6 +580,7 @@ function Get-SquadStateModel {
         Deliverables     = @($deliverables)
         ArtifactlessEntries = @($artifactlessEntries)
         OrphanArtifacts  = @($orphanArtifacts)
+        NestedTracking   = @($nestedTracking)
         Routing          = Read-Text 'routing.md'
         Decisions        = Read-Text 'decisions.md'
         Notifications    = Read-Text 'notifications.md'
@@ -579,4 +602,4 @@ function Get-SquadStateModel {
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal
