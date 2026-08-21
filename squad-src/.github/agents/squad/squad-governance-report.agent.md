@@ -46,7 +46,7 @@ Parse `## Intake Readiness Verdict` entries. For each: `timestamp`, `topic-id`, 
 
 #### From `history/<agent>.md` files
 
-For each dispatch entry: role, agent name, model, `est_cost_usd`, `est_credits`, token counts, short summary of key activities performed, outcome (success / failure / escalation).
+For each dispatch entry: role, agent name, model, `internal_turns`, token counts, short summary of key activities performed, outcome (success / failure / escalation). History blocks carry no cost — read every money figure from `consumption.md` instead, and attribute it by role rather than per dispatch.
 
 Identify escalation events and their trigger reasons.
 
@@ -172,7 +172,7 @@ Status: "✓ PASSED" (green) or "✗ BLOCKED" (red).
 | Model | Role Usage | Token Share |
 |-------|-----------|-------------|
 
-* **Per-Turn Cost Trend** — horizontal bars or dot chart showing est_cost_usd per calibrated turn.
+* **Per-Turn Cost Trend** — horizontal bars or dot chart showing estimated cost per calibrated turn, priced from each turn's blocks at that block's `priced_as` rates. Cost is not recorded per turn anywhere, so derive it here or omit the chart; never present a per-turn figure the ledger cannot reproduce.
 
 #### Section 4: Role Dispatch Activity
 

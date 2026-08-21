@@ -4,7 +4,8 @@
 # Generates a schema-correct squad state tree, and mutates it.
 #
 # Every number below is internally consistent so the arithmetic cases have something
-# true to verify against:
+# true to verify against. Cost lives only in the ledger, derived per row from that
+# row's tokens and the rates of the model its Attribution row names:
 #   researcher    (10000 x 3.0 + 5000 x 0.3 + 1000 x 3.75 + 2000 x 15.0) / 1e6 = 0.06525
 #   orchestration ( 4000 x 3.0 +                            1000 x 15.0) / 1e6 = 0.02700
 #   run total                                                                   = 0.09225
@@ -201,12 +202,6 @@ description: "Append-only dispatch history for a single squad agent"
   "cached_tokens": 5000,
   "cache_write_tokens": 1000,
   "output_tokens": 2000,
-  "input_rate": 3.0,
-  "cached_rate": 0.3,
-  "cache_write_rate": 3.75,
-  "output_rate": 15.0,
-  "est_cost_usd": 0.06525,
-  "est_credits": 6.525,
   "basis": "estimated"
 }
 ```
@@ -239,12 +234,6 @@ description: "Append-only dispatch history for a single squad agent"
   "cached_tokens": 0,
   "cache_write_tokens": 0,
   "output_tokens": 1000,
-  "input_rate": 3.0,
-  "cached_rate": 0.3,
-  "cache_write_rate": 3.75,
-  "output_rate": 15.0,
-  "est_cost_usd": 0.027,
-  "est_credits": 2.7,
   "basis": "estimated"
 }
 ```

@@ -14,12 +14,12 @@
 
 Set-StrictMode -Version Latest
 
-# Field order is contractual: the ledger rewrite reparses these blocks.
+# Field order is contractual: the ledger rewrite reparses these blocks. Rates and money
+# are deliberately absent - a block records consumption, the ledger prices it.
 $script:ConsumptionFields = @(
     'model', 'model_source', 'priced_as', 'model_tier', 'internal_turns'
     'input_tokens', 'cached_tokens', 'cache_write_tokens', 'output_tokens'
-    'input_rate', 'cached_rate', 'cache_write_rate', 'output_rate'
-    'est_cost_usd', 'est_credits', 'basis'
+    'basis'
 )
 
 $script:ModelSources = @('dispatch-reported', 'agent-pinned', 'operator-declared', 'session-inherited', 'cli-pinned', 'unresolved')

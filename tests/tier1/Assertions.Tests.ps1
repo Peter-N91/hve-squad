@@ -145,18 +145,26 @@ Describe 'The contract catches a broken tree' {
         (Test-Contract $root).Passed | Should -BeFalse -Because 'an unparseable field drops that dispatch out of every later aggregate'
     }
 
-    It 'catches a cost that does not follow from its tokens and rates' {
+    It 'catches a ledger cost that does not follow from its tokens and rates' {
         $root = New-Fixture 'bad-arithmetic'
-        Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
-            -Pattern '"est_cost_usd": 0.06525' -Replacement '"est_cost_usd": 0.5'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '0\.0653' -Replacement '0.5000'
         (Test-Contract $root).Passed | Should -BeFalse
     }
 
-    It 'catches a rate that drifts from consumption-rates.md' {
+    It 'catches a priced_as that names no rate row' {
         $root = New-Fixture 'rate-drift'
         Edit-Fixture -Path (Join-Path $root 'history/Squad Researcher.md') `
-            -Pattern '"input_rate": 3.0' -Replacement '"input_rate": 9.0'
-        (Test-Contract $root).Passed | Should -BeFalse -Because 'only consumption-rates.md holds token rates'
+            -Pattern '"priced_as": "Claude Sonnet 4.6"' -Replacement '"priced_as": "claude-sonnet-4-6"'
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'only consumption-rates.md holds token rates and a slug matches no row'
+    }
+
+    It 'catches a rate row swapped under a ledger row' {
+        $root = New-Fixture 'ledger-rate-swap'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern 'dispatch-reported \| Claude Sonnet 4\.6 \| default' `
+            -Replacement 'dispatch-reported | Claude Haiku 4.5  | fast   '
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'the row is priced from the model its Attribution row names'
     }
 
     It 'catches missing orchestration overhead' {

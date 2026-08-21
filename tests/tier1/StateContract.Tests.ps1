@@ -188,32 +188,12 @@ Describe 'SQ-11 Consumption blocks carry the contractual shape' -Skip:(-not $Exp
     }
 }
 
-Describe 'CON Per-dispatch arithmetic is derivable' -Skip:(-not $ExpectDispatches) {
-    It '<Source> est_cost_usd matches tokens times rates' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
-        $raw = (
-            $Fields['input_tokens'] * $Fields['input_rate'] +
-            $Fields['cached_tokens'] * $Fields['cached_rate'] +
-            $Fields['cache_write_tokens'] * $Fields['cache_write_rate'] +
-            $Fields['output_tokens'] * $Fields['output_rate']
-        ) / 1e6
-
-        $expected = $raw * $script:Model.Calibration
-        [math]::Abs($Fields['est_cost_usd'] - $expected) | Should -BeLessThan $script:Tolerance -Because "expected $expected from the documented derivation"
-    }
-
-    It '<Source> est_credits is est_cost_usd over 0.01' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
-        [math]::Abs($Fields['est_credits'] - ($Fields['est_cost_usd'] / 0.01)) | Should -BeLessThan 0.01
-    }
-
-    It '<Source> rates match consumption-rates.md' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
+Describe 'CON Per-dispatch blocks resolve to a rate row' -Skip:(-not $ExpectDispatches) {
+    # The block carries no rate and no cost, so the whole of its pricing contribution is
+    # priced_as: a value that matches no row leaves the ledger unable to price the role.
+    It '<Source> priced_as names a row in consumption-rates.md' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
         $priced = if ($Fields['priced_as']) { $Fields['priced_as'] } else { $Fields['model'] }
         $script:Model.Rates.Keys | Should -Contain $priced -Because 'only consumption-rates.md holds token rates'
-
-        $row = $script:Model.Rates[$priced]
-        $Fields['input_rate'] | Should -Be $row['input']
-        $Fields['cached_rate'] | Should -Be $row['cached']
-        $Fields['cache_write_rate'] | Should -Be $row['cache_write']
-        $Fields['output_rate'] | Should -Be $row['output']
     }
 
     It '<Source> model_source and basis are documented values' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
@@ -221,9 +201,6 @@ Describe 'CON Per-dispatch arithmetic is derivable' -Skip:(-not $ExpectDispatche
         $script:Model.Bases | Should -Contain $Fields['basis'] -Because 'basis is exactly one value, never a combined one'
     }
 
-    # One row, one block: a block reading model_tier 'fast' beside a 'default' rate row
-    # prices one model and reports another, and the mismatch is what a cost priced at the
-    # tier-fallback rates while recording the resolved model's rates leaves behind.
     It '<Source> model_tier is the tier of the priced_as row' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
         $priced = if ($Fields['priced_as']) { $Fields['priced_as'] } else { $Fields['model'] }
         $tier = $script:Model.Rates[$priced]['tier']
@@ -232,7 +209,7 @@ Describe 'CON Per-dispatch arithmetic is derivable' -Skip:(-not $ExpectDispatche
         $Fields['model_tier'] | Should -Be $tier
     }
 
-    # A copied block reproduces perfectly from its own fields, so every arithmetic check
+    # A copied block reproduces perfectly from its own fields, so every other check
     # passes and the figure is still fiction.
     It 'no two dispatches are sized from the same numbers' {
         $duplicated = @($script:Model.Blocks |
@@ -264,8 +241,16 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
 
     It 'the orchestration row equals the sum of every orchestration block' {
         $row = @($script:Model.UsageAndCost | Where-Object { $_[0] -eq 'orchestration' })[0]
-        $expected = ($script:Model.OrchestrationBlocks | ForEach-Object { $_.Fields['est_cost_usd'] } | Measure-Object -Sum).Sum
-        [math]::Abs((ConvertTo-LedgerNumber $row[6]) - [math]::Round($expected, (Get-LedgerDecimal $row[6]))) | Should -BeLessThan $script:Tolerance
+        foreach ($column in @(
+                @{ Index = 1; Field = 'internal_turns' }
+                @{ Index = 2; Field = 'input_tokens' }
+                @{ Index = 3; Field = 'cached_tokens' }
+                @{ Index = 4; Field = 'cache_write_tokens' }
+                @{ Index = 5; Field = 'output_tokens' }
+            )) {
+            $expected = ($script:Model.OrchestrationBlocks | ForEach-Object { $_.Fields[$column.Field] } | Measure-Object -Sum).Sum
+            ConvertTo-LedgerNumber $row[$column.Index] | Should -Be $expected -Because "the $($column.Field) column is the sum of the orchestration blocks"
+        }
     }
 
     # The documented failure is a Scribe that rewrites from the turn's payload alone,
@@ -274,8 +259,39 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
         $total = @($script:Model.UsageAndCost | Where-Object { $_[0] -match 'Total' })
         $total.Count | Should -Be 1 -Because 'the ledger carries a run-total row'
 
-        $expected = ($script:Model.Blocks | ForEach-Object { $_.Fields['est_cost_usd'] } | Measure-Object -Sum).Sum
-        [math]::Abs((ConvertTo-LedgerNumber $total[0][6]) - [math]::Round($expected, (Get-LedgerDecimal $total[0][6]))) | Should -BeLessThan $script:Tolerance -Because 'a ledger rewritten from one turn silently drops every earlier role'
+        foreach ($column in @(
+                @{ Index = 1; Field = 'internal_turns' }
+                @{ Index = 2; Field = 'input_tokens' }
+                @{ Index = 3; Field = 'cached_tokens' }
+                @{ Index = 4; Field = 'cache_write_tokens' }
+                @{ Index = 5; Field = 'output_tokens' }
+            )) {
+            $expected = ($script:Model.Blocks | ForEach-Object { $_.Fields[$column.Field] } | Measure-Object -Sum).Sum
+            ConvertTo-LedgerNumber $total[0][$column.Index] | Should -Be $expected -Because 'a ledger rewritten from one turn silently drops every earlier role'
+        }
+    }
+
+    # Cost exists in exactly one place now, so this is the only check that recomputes it.
+    It 'every row cost derives from its own tokens and its priced_as rates' {
+        $priced = @{}
+        foreach ($row in $script:Model.Attribution) { $priced[$row[0]] = $row[5] }
+
+        foreach ($row in @($script:Model.UsageAndCost | Where-Object { $_[0] -notmatch 'Total' })) {
+            $key = $priced[$row[0]]
+            $script:Model.Rates.Keys | Should -Contain $key -Because "the Attribution row for '$($row[0])' must name a rate row"
+
+            $rates = $script:Model.Rates[$key]
+            $raw = (
+                (ConvertTo-LedgerNumber $row[2]) * $rates['input'] +
+                (ConvertTo-LedgerNumber $row[3]) * $rates['cached'] +
+                (ConvertTo-LedgerNumber $row[4]) * $rates['cache_write'] +
+                (ConvertTo-LedgerNumber $row[5]) * $rates['output']
+            ) / 1e6
+
+            $expected = [math]::Round($raw * $script:Model.Calibration, (Get-LedgerDecimal $row[6]))
+            [math]::Abs((ConvertTo-LedgerNumber $row[6]) - $expected) | Should -BeLessThan $script:Tolerance -Because "expected $expected for '$($row[0])' from the documented derivation"
+            [math]::Abs((ConvertTo-LedgerNumber $row[7]) - ((ConvertTo-LedgerNumber $row[6]) / 0.01)) | Should -BeLessThan 0.01
+        }
     }
 
     It 'the ledger is not left at its seed while history shows dispatches' {

@@ -117,11 +117,11 @@ An orchestration entry uses the dispatch entry shape below with the `#### Consum
 #### Consumption — Orchestration
 
 ```json
-{ ... the same sixteen fields, in the same order ... }
+{ ... the same ten fields, in the same order ... }
 ```
 ````
 
-Write every one of those four prose fields. The turn number and the work the turn covered have no field in the block — the set is closed at sixteen — so an entry that omits the prose leaves them nowhere to go and they leak into the JSON as `turn` and `task`, which breaks the field-order contract and drops the block out of the ledger rewrite.
+Write every one of those four prose fields. The turn number and the work the turn covered have no field in the block — the set is closed at ten — so an entry that omits the prose leaves them nowhere to go and they leak into the JSON as `turn` and `task`, which breaks the field-order contract and drops the block out of the ledger rewrite.
 
 ```markdown
 ---
@@ -153,25 +153,19 @@ Every appended dispatch entry uses exactly this shape. The `#### Consumption` he
 {
   "model": "<resolved model or unknown>",
   "model_source": "<dispatch-reported|agent-pinned|operator-declared|session-inherited|cli-pinned|unresolved>",
-  "priced_as": "<rate row used, when it differs from model>",
+  "priced_as": "<rate row this dispatch prices from>",
   "model_tier": "<fast|default|extended>",
   "internal_turns": 0,
   "input_tokens": 0,
   "cached_tokens": 0,
   "cache_write_tokens": 0,
   "output_tokens": 0,
-  "input_rate": 0,
-  "cached_rate": 0,
-  "cache_write_rate": 0,
-  "output_rate": 0,
-  "est_cost_usd": 0,
-  "est_credits": 0,
   "basis": "<estimated|tier-default>"
 }
 ```
 ````
 
-Field order is contractual and every numeric field is a bare number. See *Consumption Accounting* in [scribe-procedure.md](scribe-procedure.md) for how each value is resolved and computed.
+Field order is contractual and every numeric field is a bare number. The block records consumption only: rates, `est_cost_usd`, and `est_credits` are the ledger's, and `priced_as` is what tells it which rate row to use. See *Consumption Accounting* in [scribe-procedure.md](scribe-procedure.md) for how each value is resolved and how the ledger prices them.
 
 An autonomous-loop cycle replaces the entry body above with the shape below and still carries its own `#### Consumption` block:
 
