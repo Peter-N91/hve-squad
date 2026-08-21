@@ -302,7 +302,8 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
     }
 
     # A cost computed silently and written as one number is indistinguishable from a guess,
-    # so the four products are written into the file where a reader can check them.
+    # so the four products are written into the file where a reader can check them. Zero rows
+    # are left to the assertion that rejects them outright rather than reported twice.
     It 'the ledger shows its arithmetic for every priced row' {
         $derivation = [regex]::Match($script:Model.Ledger, '(?ms)^###\s+Derivation\s*$(?<body>.*?)(?=^#{2,3}\s|\z)')
         $derivation.Success | Should -BeTrue -Because 'a Derivation block under Usage & Cost is what makes the cost rule checkable'
@@ -310,6 +311,7 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
         $shown = $derivation.Groups['body'].Value
         $unshown = @(
             foreach ($row in @($script:Model.UsageAndCost | Where-Object { $_[0] -notmatch 'Total' })) {
+                if ((ConvertTo-LedgerNumber $row[6]) -eq 0) { continue }
                 if ($shown -notmatch ('(?m)^\s*' + [regex]::Escape($row[0]) + '\s')) { $row[0] }
             }
         )

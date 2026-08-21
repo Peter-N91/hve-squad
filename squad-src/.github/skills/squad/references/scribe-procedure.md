@@ -97,7 +97,7 @@ Write a consumption block for **every** dispatch recorded in the history append 
    * **Attribution** — one row per dispatched role with its resolved model, `model_source`, `priced_as` when it differs, and tier, plus the `orchestration` row.
    * **Usage & Cost** — the same roles in the same order with estimated internal turns, token counts, `est_cost_usd`, `est_credits`, and `basis`, plus the `orchestration` row and a run-total row.
 
-   **This file is the only place cost is derived.** For each row, sum that role's blocks into the four token columns, then look up the rates **once** from the row `priced_as` names in `consumption-rates.md`:
+   **This file is the only place cost is derived.** For each row, sum that role's blocks into the `Turns` column and the four token columns — **five columns, not four** — then look up the rates **once** from the row `priced_as` names in `consumption-rates.md`. `Turns` accumulates exactly as the token columns do: a role dispatched twice with `internal_turns` of `15` and `4` carries `19`, never `4`. Only the four token columns feed the cost, which is why the fifth is the column most often left sitting at the last block's value.
 
    ```text
    raw_cost_usd = ( in_tokens        × input_rate
@@ -124,9 +124,9 @@ Write a consumption block for **every** dispatch recorded in the history append 
    **Write the products into the file, in a `### Derivation` block under the Usage & Cost table** — one line per row carrying the four products, their sum, the divide, and the result, then a final line summing the cost column. This is the step that makes the rule above enforceable rather than aspirational: a cost computed silently and written as a single number is indistinguishable from a guess, and a live run priced a `lead` row at `0.1428` against tokens that derive to `0.0989` with nothing in the file to reveal it.
 
    ```text
-   lead             9600 × 2.00 +  38400 × 0.20 +  14400 × 2.50 +  3600 × 10.00 =  98880 / 1e6 = 0.0989
-   orchestration    6800 × 2.00 +  27200 × 0.20 +  10800 × 2.50 +  2400 × 10.00 =  70040 / 1e6 = 0.0700
-                                                                                        total = 0.1689
+   lead           turns 4         9600 × 2.00 +  38400 × 0.20 +  14400 × 2.50 +  3600 × 10.00 =  98880 / 1e6 = 0.0989
+   orchestration  turns 15+4=19   6800 × 2.00 +  27200 × 0.20 +  10800 × 2.50 +  2400 × 10.00 =  70040 / 1e6 = 0.0700
+                                                                                              total = 0.1689
    ```
 
    **The run-total row carries a bare four-decimal cost, matching the rows above it** — `0.1689`, never `$0.17`. That cell is what `state.json`'s run totals are reconciled against, so rounding it to a currency string makes the two disagree by construction.

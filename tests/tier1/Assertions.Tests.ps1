@@ -261,7 +261,7 @@ Describe 'The contract catches a broken tree' {
     It 'catches a priced row whose arithmetic the ledger never shows' {
         $root = New-Fixture 'unshown-derivation'
         Edit-Fixture -Path (Join-Path $root 'consumption.md') `
-            -Pattern '(?m)^orchestration\s+4000 .*$' -Replacement ''
+            -Pattern '(?m)^orchestration\s+turns .*$' -Replacement ''
         (Test-Contract $root).Passed | Should -BeFalse -Because 'a cost written without its products is indistinguishable from a guess'
     }
 }
