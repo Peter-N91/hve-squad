@@ -61,6 +61,12 @@ Describe 'SQ-01 Init seeds the eager state files' {
     It 'writes no file carrying a read tool line-number gutter' {
         $script:Model.NumberedFiles -join ', ' | Should -BeNullOrEmpty -Because 'line numbers belong to the viewer, not the file'
     }
+
+    # A promotion that created its destinations from inside the tracking directory rather
+    # than the project root leaves .copilot-tracking/.copilot-tracking/ behind it.
+    It 'writes no tracking directory inside the tracking directory' {
+        $script:Model.NestedTracking -join ', ' | Should -BeNullOrEmpty -Because 'a state path is written from the project root, so it can never contain .copilot-tracking twice'
+    }
 }
 
 Describe 'SQ-03 state.json carries the documented shape' {

@@ -285,4 +285,10 @@ Describe 'The contract catches a broken tree' {
             -Pattern '\| 0\.0653 ' -Replacement '| 0.6530 '
         (Test-Contract $root).Passed | Should -BeFalse -Because 'dividing by 1e6 twice is the documented corruption'
     }
+
+    It 'catches a tracking directory nested inside the tracking directory' {
+        $root = New-Fixture 'nested-tracking'
+        New-Item -ItemType Directory -Force -Path (Join-Path (Split-Path $root -Parent) '.copilot-tracking/squad/members/product/plans') | Out-Null
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a state path is written from the project root and can never contain .copilot-tracking twice'
+    }
 }
