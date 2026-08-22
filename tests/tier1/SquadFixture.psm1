@@ -180,7 +180,7 @@ orchestration  turns 1       4000 × 3.00 +      0 × 0.30 +      0 × 3.75 +  1
                                                                                               total = 0.0923
 ```
 
-> Basis: estimated. No per-dispatch token telemetry exists.
+> Basis: estimated. No per-dispatch token telemetry exists. Calibration factor 1.00 (0 reconciled runs).
 
 ## Cost Comparison (illustrative)
 
