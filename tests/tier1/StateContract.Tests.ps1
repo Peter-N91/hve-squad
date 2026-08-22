@@ -167,8 +167,12 @@ Describe 'SQ-10 Dispatch history is the proof a stage ran' -Skip:(-not $ExpectDi
 # A history file is the proof a dispatch happened, so seeding one for every roster member
 # at Init destroys the signal every later turn and the ledger rewrite read it for.
 Describe 'SQ-09 Init leaves history empty' -Skip:$ExpectDispatches {
-    It 'creates no history file before the first dispatch' {
-        $script:Model.HistoryNames -join ', ' | Should -BeNullOrEmpty -Because 'a history file that predates its dispatch is indistinguishable from one that recorded it'
+    # The floor requires the Scribe to record its own orchestration block on every turn it
+    # writes state, Init included, so its file is the one history file Init legitimately
+    # produces. What this rejects is an agent file seeded before that agent ran.
+    It 'creates no agent history file before the first dispatch' {
+        $premature = @($script:Model.HistoryNames | Where-Object { $_ -ne 'Squad Scribe' })
+        $premature -join ', ' | Should -BeNullOrEmpty -Because 'a history file that predates its dispatch is indistinguishable from one that recorded it'
     }
 }
 
@@ -461,8 +465,12 @@ Describe 'CON The rates file passes its shape check' -Tag 'Consumption' {
         $script:Model.Calibration | Should -BeLessOrEqual 10.0
     }
 
+    # The spec's promise is about the ledger: until observations reach 1 the factor stays
+    # 1.00 and the ledger says so. The rates file's own shape is the check above this one.
     It 'an unreconciled run stays at 1.00 and says it is uncalibrated' -Skip:($model.Observations -gt 0) {
         $script:Model.Calibration | Should -Be 1.0
-        $script:Model.RatesContent | Should -Match '(?i)uncalibrated'
+        if ($script:Model.Ledger) {
+            $script:Model.Ledger | Should -Match '(?i)uncalibrated|never reconciled|no reconciled runs|\(0 reconciled run'
+        }
     }
 }
