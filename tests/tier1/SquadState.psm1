@@ -105,14 +105,49 @@ function Get-HistoryEntry {
         $start = $headings[$index].Index
         $end = if ($index + 1 -lt $headings.Count) { $headings[$index + 1].Index } else { $raw.Length }
         $body = $raw.Substring($start, $end - $start)
+        $declared = @(
+            foreach ($line in [regex]::Matches($body, '(?m)^\s*\*\s*Deliverable:\s*(?<value>.+)$')) {
+                Get-DeliverablePathToken $line.Groups['value'].Value
+            }
+        )
 
         [pscustomobject]@{
-            Source       = Split-Path $Path -Leaf
-            Agent        = [System.IO.Path]::GetFileNameWithoutExtension($Path)
-            Title        = $headings[$index].Groups['title'].Value.Trim()
-            NamesArtifact = [bool]([regex]::Match($body, '(?m)^\s*\*\s*Deliverable:.*`[^`]+`')).Success
+            Source        = Split-Path $Path -Leaf
+            Agent         = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+            Title         = $headings[$index].Groups['title'].Value.Trim()
+            NamesArtifact = $declared.Count -gt 0
         }
     }
+}
+
+function Get-DeliverablePathToken {
+    <#
+    .SYNOPSIS
+        Reads the paths one `* Deliverable:` value names.
+    .DESCRIPTION
+        Backticked tokens are read first, because an entry writes its path in backticks
+        and its size in plain prose and reading unquoted words would register
+        '(~5,000 words)' as a file. When nothing was backticked, one bare path is
+        accepted: a live run wrote its artifact to the right root and named it correctly
+        without the backticks, and rejecting that reports a missing deliverable for a
+        file sitting on disk. The bare form must still look like a path, so
+        'N/A - inline verdict, no artifact written' stays rejected.
+    #>
+    param([string]$Value)
+
+    $tokens = @([regex]::Matches($Value, '`(?<path>[^`]+)`') | ForEach-Object { $_.Groups['path'].Value })
+
+    if (-not $tokens) {
+        $bare = ($Value -split '\s\(')[0].Trim().TrimEnd(',', ';', '.')
+        if ($bare -match '/' -and $bare -match '\.[A-Za-z0-9]{1,5}$') { $tokens = @($bare) }
+    }
+
+    # Never split on whitespace: an agent's name carries spaces, so
+    # 'history/Squad Researcher.md' would truncate to 'history/Squad'. A fan-out
+    # summarized as 'history/*.md' or 'root/{a.md,b.md}' names a set, not an artifact.
+    @($tokens |
+        ForEach-Object { $_.Trim().TrimEnd(',', ';', '.') } |
+        Where-Object { $_ -and $_ -notmatch '[*?{}]' })
 }
 
 function Get-DeliverableEntry {
@@ -120,9 +155,8 @@ function Get-DeliverableEntry {
     .SYNOPSIS
         Extracts the `* Deliverable:` paths every history entry declares.
     .DESCRIPTION
-        Only backticked tokens are read. An entry writes its path in backticks and its
-        size in plain prose, so reading unquoted words would register '(~5,000 words)'
-        as a file. A single entry may legitimately name several paths.
+        A single entry may legitimately name several paths. See Get-DeliverablePathToken
+        for what counts as a path.
     #>
     [CmdletBinding()]
     param(
@@ -132,16 +166,7 @@ function Get-DeliverableEntry {
 
     $raw = Get-Content -LiteralPath $Path -Raw
     foreach ($line in [regex]::Matches($raw, '(?m)^\s*\*\s*Deliverable:\s*(?<value>.+)$')) {
-        foreach ($token in [regex]::Matches($line.Groups['value'].Value, '`(?<path>[^`]+)`')) {
-            # Never split on whitespace: an agent's name carries spaces, so
-            # 'history/Squad Researcher.md' would truncate to 'history/Squad'.
-            $candidate = $token.Groups['path'].Value.Trim().TrimEnd(',', ';', '.')
-            if (-not $candidate) { continue }
-
-            # An entry may summarize a fan-out as `history/*.md` or `root/{a.md,b.md}`.
-            # Either names a set, not an artifact, and cannot be listed to prove one exists.
-            if ($candidate -match '[*?{}]') { continue }
-
+        foreach ($candidate in (Get-DeliverablePathToken $line.Groups['value'].Value)) {
             [pscustomobject]@{
                 Source = Split-Path $Path -Leaf
                 Agent  = [System.IO.Path]::GetFileNameWithoutExtension($Path)

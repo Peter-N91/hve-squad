@@ -25,7 +25,7 @@ BeforeAll {
     function Test-Contract {
         param([string]$Root, [switch]$InitOnly)
 
-        $arguments = @('-NoProfile', '-File', $script:Runner, '-SquadRoot', $Root, '-Output', 'None')
+        $arguments = @('-NoProfile', '-File', $script:Runner, '-SquadRoot', $Root, '-Output', 'None', '-Strict')
         if ($InitOnly) { $arguments += '-InitOnly' }
 
         & pwsh @arguments *>$null

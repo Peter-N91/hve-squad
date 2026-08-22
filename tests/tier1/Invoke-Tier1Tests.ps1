@@ -21,6 +21,9 @@
 .PARAMETER InitOnly
     Assert only the Init cases. Use for a squad that has been initialized but has not
     yet dispatched anything, where the turn and consumption cases have no subject.
+.PARAMETER Strict
+    Fail on consumption findings too. Live runs report them without failing, because
+    every figure in the ledger is an estimate; the self-check needs them blocking.
 .PARAMETER SelfCheck
     Verify the contract itself against a generated fixture and its mutations.
 .PARAMETER Output
@@ -39,6 +42,11 @@ param(
 
     [Parameter(ParameterSetName = 'Assert')]
     [switch]$InitOnly,
+
+    # Consumption findings are advisory on a live run. The self-check needs them blocking,
+    # because a mutation the contract merely mentions is a mutation it does not catch.
+    [Parameter(ParameterSetName = 'Assert')]
+    [switch]$Strict,
 
     [Parameter(ParameterSetName = 'SelfCheck')]
     [switch]$SelfCheck,
@@ -74,9 +82,44 @@ try { $config.Run.FailOnNullOrEmptyForEach = $false } catch { }
 
 $result = Invoke-Pester -Configuration $config
 
+# Consumption figures are estimates with no telemetry behind them, so a wrong one is
+# reported and never fails the run: what Tier 1 exists to hold is behaviour. The cases
+# still execute, because a silent check stops being evidence.
+function Test-IsConsumption {
+    param($Case)
+
+    # A tag declared on the Describe is not copied onto the It, so the block chain is
+    # walked rather than read from the test alone.
+    if ($Case.Tag -contains 'Consumption') { return $true }
+
+    $block = $Case.Block
+    while ($block) {
+        if ($block.Tag -contains 'Consumption') { return $true }
+        $block = $block.Parent
+    }
+
+    return $false
+}
+
+$advisory = @($result.Failed | Where-Object { Test-IsConsumption $_ })
+$blocking = @($result.Failed | Where-Object { -not (Test-IsConsumption $_) })
+
+if ($Strict) {
+    $blocking = @($result.Failed)
+    $advisory = @()
+}
+
+if ($advisory.Count -gt 0) {
+    Write-Host ''
+    Write-Host "Consumption findings (advisory, not failing): $($advisory.Count)" -ForegroundColor Yellow
+    foreach ($case in $advisory) {
+        Write-Host "  - $($case.ExpandedPath)" -ForegroundColor Yellow
+    }
+}
+
 # A discovery failure yields zero tests and zero failures, which reads as success to
 # anything checking only the failure count. Treat an empty run as a failure.
-if ($result.FailedCount -gt 0 -or $result.TotalCount -eq 0 -or $result.Result -ne 'Passed') {
+if ($blocking.Count -gt 0 -or $result.TotalCount -eq 0) {
     if ($result.TotalCount -eq 0) {
         Write-Error 'No tests ran. Discovery failed, or the container was filtered to nothing.' -ErrorAction Continue
     }

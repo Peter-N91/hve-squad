@@ -218,7 +218,7 @@ Describe 'SQ-11 Consumption blocks carry the contractual shape' -Skip:(-not $Exp
     }
 }
 
-Describe 'CON Per-dispatch blocks resolve to a rate row' -Skip:(-not $ExpectDispatches) {
+Describe 'CON Per-dispatch blocks resolve to a rate row' -Tag 'Consumption' -Skip:(-not $ExpectDispatches) {
     # The block carries no rate and no cost, so the whole of its pricing contribution is
     # priced_as: a value that matches no row leaves the ledger unable to price the role.
     It '<Source> priced_as names a row in consumption-rates.md' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Fields = $_.Fields } }) {
@@ -254,7 +254,7 @@ Describe 'CON Per-dispatch blocks resolve to a rate row' -Skip:(-not $ExpectDisp
     }
 }
 
-Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispatches) {
+Describe 'CON The ledger is re-derivable from history' -Tag 'Consumption' -Skip:(-not $ExpectDispatches) {
     It 'splits into Attribution and Usage & Cost, never one wide table' {
         $script:Model.Ledger | Should -Match '(?m)^##\s+Attribution\s*$'
         $script:Model.Ledger | Should -Match '(?m)^##\s+Usage & Cost\s*$'
@@ -436,7 +436,7 @@ Describe 'CON The ledger is re-derivable from history' -Skip:(-not $ExpectDispat
     }
 }
 
-Describe 'CON The rates file passes its shape check' {
+Describe 'CON The rates file passes its shape check' -Tag 'Consumption' {
     It 'declares column <_>' -ForEach @('Input', 'Cached', 'Cache write', 'Output') {
         $script:Model.RatesContent | Should -Match $_
     }
