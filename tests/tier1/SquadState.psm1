@@ -424,17 +424,22 @@ function Get-SquadStateModel {
     # The ledger rewrite matches a history file back to its roster row by file name, so
     # the roster is what makes a basename legal. Alternates count: a dispatch can be
     # routed to one and it writes its own history file.
+    $roleAgents = @{}
     $rosterAgents = @(
         foreach ($table in (Get-MarkdownTable -Content $teamContent)) {
             if ('Agent Name (Primary)' -notin $table.Header) { continue }
             foreach ($row in $table.Rows) {
-                if ($row['Agent Name (Primary)']) { $row['Agent Name (Primary)'] }
-                if ('Alternate Agents' -in $table.Header) {
-                    foreach ($alternate in ($row['Alternate Agents'] -split ',')) {
-                        $trimmed = $alternate.Trim()
-                        if ($trimmed -and $trimmed -notmatch '^[-\u2014]$') { $trimmed }
+                $names = @(
+                    if ($row['Agent Name (Primary)']) { $row['Agent Name (Primary)'] }
+                    if ('Alternate Agents' -in $table.Header) {
+                        foreach ($alternate in ($row['Alternate Agents'] -split ',')) {
+                            $trimmed = $alternate.Trim()
+                            if ($trimmed -and $trimmed -notmatch '^[-\u2014]$') { $trimmed }
+                        }
                     }
-                }
+                )
+                if ('Role' -in $table.Header -and $row['Role']) { $roleAgents[$row['Role']] = $names }
+                $names
             }
         }
     ) | Sort-Object -Unique
@@ -600,6 +605,7 @@ function Get-SquadStateModel {
         State            = $stateJson
         Team             = $teamContent
         RosterAgents     = @($rosterAgents)
+        RoleAgents       = $roleAgents
         AgentRoots       = $agentRoots
         RoleRoots        = $roleRoots
         Deliverables     = @($deliverables)

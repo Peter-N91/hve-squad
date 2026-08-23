@@ -228,6 +228,14 @@ Describe 'The contract catches a broken tree' {
         (Test-Contract $root).Passed | Should -BeFalse -Because 'a zero row makes a stale ledger look populated'
     }
 
+    It 'catches a priced ledger row whose agent left no history file' {
+        $root = New-Fixture 'invented-role-row'
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') `
+            -Pattern '(?m)^\| orchestration \| 1 ' `
+            -Replacement "| lead          | 4     | 20000     | 10000  | 0        | 4000       | 0.1230          | 12.30        | estimated |`n| orchestration | 1 "
+        (Test-Contract $root).Passed | Should -BeFalse -Because 'a plausible cost is what makes an invented row invisible to the zero-row check'
+    }
+
     It 'catches per-turn figures parked in state.json' {
         $root = New-Fixture 'state-scratchpad'
         Edit-Fixture -Path (Join-Path $root 'state.json') `
