@@ -1,6 +1,6 @@
 ---
-bump: minor
-type: Changed
+bump: patch
+type: Fixed
 ---
 
 - **A release now has to pass the behavioural suite before it can tag.** `v0.16.0` was cut on Tier 0
