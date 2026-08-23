@@ -1,6 +1,6 @@
 ---
-bump: minor
-type: Changed
+bump: patch
+type: Fixed
 ---
 
 - **Autopilot decided the Implement stage's shape from a list of seven role names.** Deliverable
