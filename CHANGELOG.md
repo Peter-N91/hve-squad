@@ -5,6 +5,109 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.1] - 2026-08-23
+
+### Added
+
+- **hve-squad can now build its own GitHub Copilot plugin distribution.** There was no repeatable way
+  to turn a released `hve-squad` tag into the tree `Peter-N91/hve-squad-plugin` ships — every prior
+  build was a manual, one-off assembly of `plugin.json`, `marketplace.json`, and `.mcp.json`, with no
+  guarantee that a later regeneration wouldn't silently drop hand-authored fields.
+
+  `scripts/Build-SquadPlugin.ps1` resolves either an immutable `-Ref <tag>` or a local `-SourceRoot`
+  dev build, and now owns `plugin.json`, `marketplace.json`, and `.mcp.json` generation end to end,
+  including an `-McpVersion` pin that reuses the existing `@hve-squad/mcp` version when omitted and
+  refuses to guess one when no prior pin exists. `.github/workflows/publish-plugin.yml` wraps the
+  generator in a manual (`workflow_dispatch`) cross-repo publish step, failing closed when
+  `HVE_SQUAD_PLUGIN_PUSH_TOKEN` is not configured rather than skipping the push silently.
+
+  `squad-src/.github/skills/squad/mcp-server.template.json` is updated to match: `@hve-squad/mcp` is
+  now published to npm, the template pins an exact version instead of a bare `@latest` reference, and
+  documents why the pin is a deliberate, separate action from a content rebuild.
+
+### Changed
+
+- **The release gate is Tier 0 only, and now says so.** The behaviour contract described Tier 1 as
+  the release gate and told the reader the suite would be wired in "once it is green twice in a row".
+  It never was, so a reader comparing `release.yml` against the contract found a gate the workflow
+  does not implement — and `v0.16.0` was cut on Tier 0 alone with nothing recording why.
+
+  Tier 1 and Tier 2 are operator-invoked by design. The contract now carries the reasoning: they cost
+  Copilot requests and about an hour per cut; two of the three dispatched runs before `0.16.0` failed
+  because the contract asserted something the source did not say, so a gate on that record blocks
+  releases for test defects; and the defect `0.16.0` actually shipped sits behind `mode=autopilot`,
+  which no scenario exercises, so the gate could not have caught it. The conditions that would change
+  the decision are written down next to it (`tests/squad-behavior-contract.md`).
+
+### Fixed
+
+- **A run reported ten dispatched roles over a `history/` holding two files.** An autopilot run on a
+  live repository produced research, a plan, an architecture, a council verdict, an IaC scaffold, a
+  cost model, a security review, a closing review, and a remediation — and left no
+  `history/<agent>.md` for any of the roles that supposedly produced them. The rule it broke is
+  stated in six files. Prose was not the missing ingredient, so three mechanisms replace it.
+
+  **The ledger's row set is now a function of `history/`, not of the payload.** The Scribe lists the
+  directory and writes that listing — one line per file with its block count — into the
+  `### Derivation` block *before* any row, then writes a row for each enumerated file and for nothing
+  else. A role that left no file gets no row, so the eleven-row ledger that hid the gap is no longer
+  writable. A payload naming a role the listing does not comes back as a discrepancy in the Scribe's
+  confirmation note (`scribe-procedure.md`).
+
+  **The autopilot run summary now reports the gap itself.** `## Stages` gains a `Dispatch Record`
+  column filled from `history/`, and a stage with no file carries `— none recorded`. Any such cell
+  forces `Outcome: incomplete (<n> stage(s) without a dispatch record)`. The Scribe is the only
+  writer of history, so it is the only participant that can say which stages actually ran — and the
+  coordinator's account of the run is exactly what cannot be trusted to say so
+  (`entry-schemas.md`, `scribe-procedure.md`).
+
+  **The per-stage gate is reachable again.** Autopilot now hands off to the Scribe once per stage
+  rather than once per pipeline, and `state.json` advances per stage. The observed run collapsed a
+  fan-out, a security review, a closing review, and a remediation into a single turn, which left no
+  point at which stage N's missing history entry could block stage N+1
+  (`squad-autopilot.instructions.md`, `squad-coordinator.agent.md`).
+
+- **The contract could not see an invented ledger row.** `carries no row for a role that was never
+  dispatched` only catches rows costed at zero, and every invented row in the observed run carried a
+  plausible figure. `every ledger row has a history file behind it` resolves each row through the
+  roster and requires one of its agents to hold a history file, which is the assertion that fails
+  that tree (`tests/tier1/StateContract.Tests.ps1`, `tests/tier1/SquadState.psm1`).
+
+- **Autopilot decided the Implement stage's shape from a list of seven role names.** Deliverable
+  fan-out engaged only when the roster carried two or more of `analyst`, `product-owner`, `designer`,
+  `experimenter`, `presenter`, `technical-writer`, `data-scientist` — which is `product` and `full`,
+  and nothing else. Every other profile was classified as a single `developer` build regardless of
+  what its roster actually owned.
+
+  An `azure` roster owns nine artifact roots. A live run produced a target architecture, an IaC
+  scaffold, a cost model, a security review, and a migration sequence — five specialist artifacts —
+  under a classification that says its plan is always a single build. It improvised a fan-out the
+  pipeline does not define, so none of the per-dispatch recording rules that belong to the fan-out
+  path applied: it reported ten stages and left no `history/<agent>.md` behind any of them.
+
+  Fan-out now engages when the plan's deliverable list names **two or more artifact-owning roles** —
+  a roster row whose `Deliverable Root` names a real path, counting every one except `researcher`,
+  `lead`, and `tester`, which own the Research, Plan, and Review stages instead. The test is read
+  off `team.md` rather than off a profile name, so a consumer who edited a root or hired an extra
+  specialist is judged on the roster they actually have. A plan naming one candidate stays the
+  unchanged single-`developer` shape, which is the ordinary case for `default`
+  (`squad-roster.instructions.md`, `squad-autopilot.instructions.md`, `gates-and-modes.md`,
+  `squad-coordinator.agent.md`, `squad-lead.agent.md`).
+
+  The narrower term **deliverable-producing role** survives and now names one thing only: the roles
+  whose output the Implementation Gate treats as the turn's substantive output alongside `developer`.
+  That gate is unchanged.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.16.1"
+```
+
+[0.16.1]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.16.1
+
 ## [0.16.0] - 2026-08-23
 
 ### Added
