@@ -254,7 +254,7 @@ When any of the three is missing, the stage did **not** happen: dispatch the own
 
 ## Autopilot Mode
 
-When the user passes `mode=autopilot`, run the full delivery pipeline from *Autopilot Procedure* in `references/gates-and-modes.md` instead of normal single-pattern classification: conditional intake gate → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn except where a gate fires. Implement is the one stage that changes shape: on a roster with two or more deliverable-producing roles it fans out across their owning specialists.
+When the user passes `mode=autopilot`, run the full delivery pipeline from *Autopilot Procedure* in `references/gates-and-modes.md` instead of normal single-pattern classification: conditional intake gate → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn except where a gate fires. Implement is the one stage that changes shape: when the plan's deliverable list names two or more artifact-owning roles, it fans out across their owning specialists.
 
 **Autopilot removes the human turn between stages, never the stages themselves.** Apply the *Artifact Gates* and the *Per-Stage Advance Checklist* from that same reference: each stage is gated on the prior stage's artifact existing on disk plus its `history/<agent>.md` entry, verified by listing the directory and reading the file. A plan the `lead` never wrote cannot have produced a deliverable list, so a run that opens with a specialist deliverable has skipped four stages rather than chosen a different shape.
 
