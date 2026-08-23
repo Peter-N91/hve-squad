@@ -19,8 +19,8 @@ Both runs install the package from a published ref into a scratch directory and 
 | Tier | What it is | LLM calls | Runs on |
 |---|---|---|---|
 | 0 | Static conformance of the installed package | none | every PR, and the release gate |
-| 1 | Live behavioral runs against fixture repos | yes | the release gate |
-| 2 | Semantic comparison against a golden baseline | yes | advisory at first |
+| 1 | Live behavioral runs against fixture repos | yes | the release gate, before the tag is cut |
+| 2 | Semantic comparison against a golden baseline | yes | inside every Tier 1 run, advisory |
 
 Tier 0 is deterministic and free. Tier 1 asserts on **state artifacts on disk**, never on prose, which is what makes it stable despite model nondeterminism. Tier 2 is the only tier that judges wording, and it starts advisory until the noise floor is known.
 
@@ -503,4 +503,5 @@ Triage aid: a difference in this list is expected and is **not** a regression.
 4. Add routing and role selection (RTE) and profile seeding (PRF). PRF is cheap and fully deterministic after Init. RTE-30 to RTE-37 are the methodology cases and are the strongest evidence that the refactor preserved the squad's character.
 5. Add the promotion, entrypoint, and gate cases. Promotion is the highest-value remaining group because it moves state.
 6. Merge PR #70, then run the whole suite against `v0.16.0-pre`. Triage every difference against the intended-deltas table.
-7. Wire the suite into the release workflow as a blocking job once it is green twice in a row.
+7. Wire the suite into the release workflow as a blocking job once it is green twice in a row. **Done** — `release.yml` runs Tier 1 in source mode in a `behavior` job that the `release` job depends on, so a red suite means no tag.
+8. Capture the Tier 2 golden baselines from the first release cut through that gate. Until a baseline exists per scenario, Tier 2 reports `unbaselined` and scores nothing, which is the state every release before `v0.16.0` shipped in.
