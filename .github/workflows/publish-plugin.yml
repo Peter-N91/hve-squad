@@ -14,6 +14,7 @@ name: Publish Plugin
 # result to hve-squad-plugin yourself, exactly as the Phase 2 build dispatch did.
 on:
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); the ref is validated with git rev-parse against an existing tag before the build step ever runs.
     inputs:
       ref:
         description: 'hve-squad tag to build from. Leave blank to use the latest tag (git describe --tags --abbrev=0).'
