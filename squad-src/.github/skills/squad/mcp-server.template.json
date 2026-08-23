@@ -18,9 +18,9 @@
 //   of every entry below.
 //
 // How to use
-//   1. Clone + build the server once (see the hve-squad-mcp README):
-//        git clone https://github.com/Peter-N91/hve-squad-mcp
-//        cd hve-squad-mcp && npm install && npm run build
+//   1. The server is published: https://www.npmjs.com/package/@hve-squad/mcp
+//      (no clone/build needed for Option A). For a local build instead, see
+//      Option B below.
 //   2. Open or create `.vscode/mcp.json` in your workspace.
 //   3. Copy the `servers` entry below into your file (merge with any servers
 //      you already have; do not replace entries you depend on).
@@ -29,12 +29,23 @@
 //   5. Reload VS Code so Copilot picks up the new server, then ask Copilot to
 //      "research X with the squad" — the squad_* tools become model-invocable.
 //
+// Version pinning
+//   Option A pins an EXACT published version (`@hve-squad/mcp@<version>`),
+//   never a bare `@hve-squad/mcp` (which npx would resolve to whatever is
+//   currently `@latest`, breaking reproducibility across installs run on
+//   different days). Bumping this pin is a deliberate, separate action from
+//   rebuilding the squad's agent content — the plugin generator
+//   (`Build-SquadPlugin.ps1`'s `-McpVersion`) follows the same rule: it never
+//   silently re-pins to a newer MCP release on an unrelated content rebuild.
+//
 // Execution model (Phase 0)
-//   DELEGATED. Each tool returns the Squad Coordinator persona, the matched
-//   routing row, and a framed dispatch request; VS Code's own agent host runs
-//   the runSubagent/task loop to dispatch the cast. The server calls no model
-//   and needs no credentials. The cloud surfaces (Copilot Studio, M365,
-//   Cowork) arrive in Phase 1 over remote Streamable HTTP + Entra auth.
+//   DELEGATED. Each tool returns a short paraphrase of the Coordinator's
+//   Dispatch Discipline plus the matched routing row and a framed dispatch
+//   request; VS Code's own agent host runs the runSubagent/task loop against
+//   the REAL, already-installed `.agent.md` personas — the server holds no
+//   bundled cast in this mode and calls no model. The cloud surfaces (Copilot
+//   Studio, M365, Cowork) use a separate, remote Streamable HTTP + Entra path
+//   (embedded execution), not this stdio wiring.
 //
 // Credentials
 //   None. stdio inherits the local user's trust; no token, secret, or API key
@@ -45,12 +56,13 @@
       // Phase 0: local stdio. The server runs as a child process of VS Code.
       "type": "stdio",
 
-      // Option A (published package): run via npx. Use this once the
-      // `squad-mcp` package is published to a registry your `npx` can reach.
+      // Option A (published package, pinned): run via npx, pinned to an
+      // exact tested version — never bare `@hve-squad/mcp`, which npx would
+      // resolve to whatever `@latest` happens to be at install time.
       "command": "npx",
       "args": [
         "-y",
-        "@hve-squad/mcp"
+        "@hve-squad/mcp@0.7.0"
       ]
 
       // Option B (local build, not published): run the compiled entrypoint

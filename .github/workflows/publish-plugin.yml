@@ -1,0 +1,110 @@
+name: Publish Plugin
+
+# Triggers:
+#   workflow_dispatch — builds the GitHub Copilot plugin distribution tree from
+#                       a resolved hve-squad tag (scripts/Build-SquadPlugin.ps1)
+#                       and pushes the result into the separate sibling
+#                       repository Peter-N91/hve-squad-plugin (ADR-0006).
+#
+# Manual-trigger only, deliberately: this workflow writes to a *different*
+# repository, which needs a cross-repo credential (HVE_SQUAD_PLUGIN_PUSH_TOKEN)
+# that this workflow does not provision — provisioning it is a user setup step
+# (see ADR-0006 and the Phase 2 changes record). Until that secret exists, the
+# manual fallback is to run scripts/Build-SquadPlugin.ps1 locally and push the
+# result to hve-squad-plugin yourself, exactly as the Phase 2 build dispatch did.
+on:
+  workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); the ref is validated with git rev-parse against an existing tag before the build step ever runs.
+    inputs:
+      ref:
+        description: 'hve-squad tag to build from. Leave blank to use the latest tag (git describe --tags --abbrev=0).'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build and publish the plugin tree
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout hve-squad
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # ── Fail closed ───────────────────────────────────────────────────────
+      #    A partial run that silently skipped the push would look successful
+      #    while leaving hve-squad-plugin stale. Refuse outright instead.
+      - name: Require the cross-repo push credential
+        env:
+          PUSH_TOKEN: ${{ secrets.HVE_SQUAD_PLUGIN_PUSH_TOKEN }}
+        run: |
+          if [[ -z "$PUSH_TOKEN" ]]; then
+            echo "::error::HVE_SQUAD_PLUGIN_PUSH_TOKEN is not set. This workflow needs a PAT or GitHub App installation token with write access to Peter-N91/hve-squad-plugin. Provisioning this secret is a user setup step (ADR-0006 / P02-T09) — this workflow does not create or store it, and refuses to run rather than silently skipping the push."
+            exit 1
+          fi
+
+      - name: Resolve the tag to build
+        id: tag
+        env:
+          REF_INPUT: ${{ inputs.ref }}
+        run: |
+          REF="$REF_INPUT"
+          if [[ -z "$REF" ]]; then
+            REF=$(git describe --tags --abbrev=0)
+          fi
+          if ! git rev-parse "refs/tags/$REF" >/dev/null 2>&1; then
+            echo "::error::Tag '$REF' does not exist in this repository."
+            exit 1
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout hve-squad-plugin
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: Peter-N91/hve-squad-plugin
+          token: ${{ secrets.HVE_SQUAD_PLUGIN_PUSH_TOKEN }}
+          path: hve-squad-plugin
+          fetch-depth: 0
+
+      - name: Build the plugin tree
+        shell: pwsh
+        env:
+          TAG: ${{ steps.tag.outputs.ref }}
+        run: ./scripts/Build-SquadPlugin.ps1 -Ref $env:TAG -OutputRoot "${{ github.workspace }}/hve-squad-plugin"
+
+      # ── Commit, tag, and push into hve-squad-plugin ───────────────────────
+      #    Re-running against a tag that produced no change is a no-op commit,
+      #    not a failure — the build is idempotent (Build-SquadPlugin.ps1).
+      - name: Commit, tag, and push hve-squad-plugin
+        working-directory: hve-squad-plugin
+        env:
+          TAG: ${{ steps.tag.outputs.ref }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "::notice::No changes to commit — hve-squad-plugin already matches $TAG."
+          else
+            git add -A
+            git commit -m "chore(build): regenerate plugin tree from hve-squad $TAG"
+          fi
+
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::notice::Tag $TAG already exists in hve-squad-plugin — skipping tag creation."
+          else
+            git tag "$TAG"
+          fi
+
+          git push origin HEAD:refs/heads/main
+          git push origin "refs/tags/$TAG"

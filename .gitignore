@@ -54,6 +54,7 @@ apm_modules/
 knowledge-docs/
 
 docs/planning/
+docs/architecture/
 tests/tier0/tier0-results.xml
 tests/tier1/tier1-results.xml
 tests/tier1/tier1-selfcheck-results.xml
