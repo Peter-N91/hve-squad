@@ -222,19 +222,21 @@ description: "Autopilot-run summary for topic <id>"
 * Topic: <one-line summary>
 * Opt-In: mode=autopilot
 * Cost Ceiling: <value or unset>
-* Outcome: completed (awaiting final validation) | escalated (<reason>) | stopped (<reason>)
+* Outcome: completed (awaiting final validation) | incomplete (<n> stage(s) without a dispatch record) | escalated (<reason>) | stopped (<reason>)
 
 ## Stages
 
-| Stage     | Role(s)     | Result                          | Gate Fired                 |
-|-----------|-------------|---------------------------------|----------------------------|
-| research  | <agent(s)>  | <one-line outcome>              | none                       |
-| plan      | <agent>     | <one-line outcome>              | none                       |
-| council   | <roles>     | <verdict-or-skipped>            | <none or Risk Gate reason> |
-| implement | <agent>     | <one-line outcome>              | <none or Impactful-Action> |
-| review    | <agent>     | <one-line outcome>              | none                       |
-| final     | coordinator | notified <recipient-or-in-chat> | Final-Outcome Validation   |
+| Stage     | Role(s)     | Dispatch Record              | Result                          | Gate Fired                 |
+|-----------|-------------|------------------------------|---------------------------------|----------------------------|
+| research  | <agent(s)>  | `history/<agent>.md`         | <one-line outcome>              | none                       |
+| plan      | <agent>     | `history/<agent>.md`         | <one-line outcome>              | none                       |
+| council   | <roles>     | `history/<agent>.md` each    | <verdict-or-skipped>            | <none or Risk Gate reason> |
+| implement | <agent>     | `history/<agent>.md`         | <one-line outcome>              | <none or Impactful-Action> |
+| review    | <agent>     | `history/<agent>.md`         | <one-line outcome>              | none                       |
+| final     | coordinator | n/a                          | notified <recipient-or-in-chat> | Final-Outcome Validation   |
 ```
+
+`Dispatch Record` names the history file the Scribe wrote for that stage, and is filled from `history/` rather than from the coordinator's account of the run. A stage with no such file carries the literal `— none recorded`, and any such cell forces the `incomplete` outcome above. This is the run's own report that its cast was not dispatched, written by the only participant that knows.
 
 In a deliverable fan-out run (the `product` profile), the single `implement` row expands into one row per deliverable (`implement: <deliverable>` with its owning agent).
 

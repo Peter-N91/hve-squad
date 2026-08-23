@@ -401,6 +401,27 @@ Describe 'CON The ledger is re-derivable from history' -Tag 'Consumption' -Skip:
         $idle -join ', ' | Should -BeNullOrEmpty -Because 'a role with no consumption block has no row, not a zero row'
     }
 
+    # The sharper form of the check above: an invented row carries a plausible cost, so
+    # the zero test cannot see it. The row set is a function of history/, and a run that
+    # priced eleven roles over a history directory holding two files recorded nine
+    # dispatches that never happened.
+    It 'every ledger row has a history file behind it' {
+        $unbacked = @(
+            foreach ($row in $script:Model.UsageAndCost) {
+                $role = Get-LedgerRoleKey $row[0]
+                if (-not $role -or $role -match 'Total' -or $role -eq 'orchestration') { continue }
+
+                $agents = @($script:Model.RoleAgents[$role])
+                if (-not $agents) { $agents = @($role) }
+                if (@($agents | Where-Object { $_ -in $script:Model.HistoryNames })) { continue }
+
+                $role
+            }
+        )
+
+        $unbacked -join ', ' | Should -BeNullOrEmpty -Because 'the ledger is derived from history/, so a row whose agent left no file prices a dispatch that did not happen'
+    }
+
     It 'state.json run totals track the ledger total' {
         $total = @($script:Model.UsageAndCost | Where-Object { $_[0] -match 'Total' })[0]
         $ledger = ConvertTo-LedgerNumber $total[6]

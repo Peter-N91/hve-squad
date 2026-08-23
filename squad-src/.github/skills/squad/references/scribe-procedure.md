@@ -27,7 +27,7 @@ Every path below is relative to the resolved `squadRoot`. The default `.copilot-
 | Council Verdict                | 5    | `decisions.md`                                            | append-only           |
 | autonomous-loop summary        | 6    | `history/autonomous-loop-<id>.md`                         | append-only by id     |
 | (always, per Step 2 dispatch)  | 7    | `history/<agent>.md` block, `consumption.md`, `state.json` | append / replace      |
-| federation autopilot-run       | 8    | federation-root `history/autopilot-run-<id>.md`           | append-only by id     |
+| autopilot-run summary          | 8    | `history/autopilot-run-<id>.md`, or federation root       | append-only by id     |
 | Intake Readiness Verdict       | 9    | `decisions.md`                                            | append-only           |
 | promotion                      | 10   | relocates the tree into `members/<name>/`                 | copy → verify → delete |
 | expansion                      | 11   | federation-root `federation.md`, `meta-routing.md`        | preserve-on-replace   |
@@ -96,6 +96,8 @@ Write a consumption block for **every** dispatch recorded in the history append 
 7. **Rewrite `consumption.md`** (replace semantics) as a per-role ledger mirroring roster order, split into the two narrower tables in the `consumption.md` template — never re-merged into one wide table:
    * **Attribution** — one row per dispatched role with its resolved model, `model_source`, `priced_as` when it differs, and tier, plus the `orchestration` row.
    * **Usage & Cost** — the same roles in the same order with estimated internal turns, token counts, `est_cost_usd`, `est_credits`, and `basis`, plus the `orchestration` row and a run-total row.
+
+   **Start by listing `history/`, and write that listing into the file before any row.** The set of rows is a function of the directory, not of the payload: open `history/`, enumerate every `*.md` file, count the `#### Consumption` blocks each one holds, and put one line per file at the top of the `### Derivation` block in the form `<file> — <n> block(s)`. Then write a row for each enumerated file and for nothing else. A role the coordinator says it dispatched, that left no file, gets **no row** — not a zero row, not an estimated one. The observed failure is a ledger carrying eleven roles and 141 turns over a `history/` holding two files, which reads as a complete run and is a record of ten dispatches that never happened; the enumeration is what makes that impossible to write down. When the coordinator's payload names a role the listing does not, write the ledger from the listing and return the discrepancy in the confirmation note so the coordinator must resolve it rather than discover it later.
 
    **This file is the only place cost is derived.** For each row, sum that role's blocks into the `Turns` column and the four token columns — **five columns, not four** — then look up the rates **once** from the row `priced_as` names in `consumption-rates.md`. `Turns` accumulates exactly as the token columns do: a role dispatched twice with `internal_turns` of `15` and `4` carries `19`, never `4`. Only the four token columns feed the cost, which is why the fifth is the column most often left sitting at the last block's value.
 
@@ -171,6 +173,14 @@ Register a newly seeded sub-squad into an existing federation, per *Expansion* (
 2. **Append the registry row (preserve-on-replace).** Read `federation.md`, add one row (`Sub-squad`, `Profile`, `Kind=in-repo`, `Location=members/<name>/`, optional `Owner`, `Description`), and rewrite preserving every existing row, its frontmatter, and its heading. Never edit or remove an existing row. For a Watch Mode expansion set `Owner=watch-mode` and write a `Description` naming the source ref and, once known, the terminal deliverable.
 3. **Append the meta-routing route (preserve-on-replace).** Read `meta-routing.md`, add one route row, and rewrite preserving every existing route. For a Watch Mode expansion the pattern is the narrow, ref-keyed event token (for example `watch: owner/repo#123`) with `Parallel-Eligible: no`, so an interactive keyword request can never route into an event sub-squad.
 4. **Record the addition and create history.** Append a federation-level decision entry recording the new sub-squad, its profile, and its route; create federation-root `history/<name>.md`. When the payload carries Watch Mode provenance, record the triggering event and the bootstrap action taken.
+
+### Autopilot-Run Summary
+
+Append the run summary to `history/autopilot-run-<id>.md` using the template in [entry-schemas.md](entry-schemas.md), append-only by topic-id. This runs at the single-squad root; a federation meta-run uses the section below instead.
+
+**Write the `Dispatch Record` column from `history/`, never from the coordinator's stage narrative.** For each stage row, name the `history/<agent>.md` file this run recorded for that stage's role. When no such file exists, the cell is the literal `— none recorded` and the row stands. The Scribe is the only writer of history, so it is the only participant that knows which stages actually left a record, and the coordinator's account of the run is exactly the thing that cannot be trusted to say so.
+
+**Then set `Outcome` from the column, not from the narrative.** When any row reads `— none recorded`, the outcome is `incomplete (<n> stage(s) without a dispatch record)` — never `completed`. A run whose deliverables look finished and whose cast left no history was authored inline rather than dispatched, and this is the line that says so in the document the human reads. Return the same count in the confirmation note.
 
 ### Federation Autopilot-Run Summary
 

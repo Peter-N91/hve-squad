@@ -50,6 +50,8 @@ Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches t
 
 The coordinator advances stage-to-stage by reading the prior stage's findings; it hands every stage transition to the Scribe, which records it in the autopilot-run history file and updates `state.json`.
 
+**One Scribe hand-off per stage — never one per pipeline.** Dispatch the stage's role, hand its findings to the Scribe, and only then read the stage's history entry and advance. Batching several stages into a single hand-off is what makes the *Per-Stage Advance Checklist* below unreachable: a turn that covers research, plan, architecture, council, three fan-out deliverables, a security review, a review, and a remediation has no point at which stage N's entry can be missing, because stage N and stage N+1 are the same write. The observed failure is a run whose Scribe recorded seven turns for ten stages and whose cast left no history at all. Under autopilot `state.json` advances per stage, so its `turn` counts stages rather than human turns.
+
 ## Deliverable Fan-Out (Specialist Profiles)
 
 Some profiles deliver their value through several distinct, specialist-owned artifacts rather than a single code or infrastructure build. The canonical case is the `product` profile, whose work spans requirements, a roadmap and backlog, an experiment, written documentation, and a stakeholder deck — each owned by a different **deliverable-producing role** (`analyst`, `product-owner`, `designer`, `experimenter`, `presenter`, `technical-writer`, `data-scientist`; defined in `.github/instructions/squad/squad-roster.instructions.md`). The fixed single-`developer` Implement stage cannot produce these, so autopilot fans the Implement stage out across the owning specialists.
@@ -91,6 +93,8 @@ For a **deliverable fan-out** run (see above), the single `implement` row expand
 Do not advance from stage N to stage N+1 until, for stage N, both are confirmed on disk: (a) the required artifact from the *Artifact Gates* table above, at the owning role's `Deliverable Root`, and (b) a `history/<agent>.md` entry with its consumption block. When either is absent, re-dispatch the owning role or fire the Risk Gate — never advance on assumed completion. State the confirmed evidence (the artifact path and the history entry) when reporting the stage, and quote only paths this run actually enumerated. For a deliverable fan-out run, apply this check per deliverable before the Review stage begins. This restates the Artifact Gates as a mechanical per-stage loop so a lighter model cannot skip a stage by narrating it as done.
 
 **Count the history entries.** At the end of the run, the number of `history/<agent>.md` entries must be at least the number of stages plus deliverables the run claims to have executed. A run that produced polished deliverables but left one or two history files did not dispatch its cast — it was authored inline, which is the *Dispatch Discipline* violation the pipeline exists to prevent. Report that as a failed run rather than a completed one.
+
+**The run summary reports the count whether or not anyone reads it.** The Scribe fills the `Dispatch Record` column of `history/autopilot-run-<id>.md` from `history/` rather than from the stage narrative, and any stage with no record forces the summary's `Outcome` to `incomplete (<n> stage(s) without a dispatch record)`. The coordinator may not report a run as completed over an `incomplete` summary. This is the check that survives a coordinator which skipped every other one.
 
 ## Human Gates
 
