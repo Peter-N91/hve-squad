@@ -5,6 +5,697 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-08-23
+
+### Added
+
+- **The squad ran in VS Code and had no entry point anywhere else.** `/squad-document`,
+  `/squad-governance-report`, and `/squad-learn` existed only as prompt files, which the Copilot CLI
+  and the Copilot app never read. All three now ship as agents selectable on any host, with their
+  prompts reduced to thin wrappers so VS Code keeps its slash-command ergonomics
+  (`squad-src/.github/agents/squad/`).
+- **A dispatched agent could run without the squad's non-negotiable rules.** Every squad instruction
+  file is gated on `**/.copilot-tracking/squad/**`, so an agent that had not yet touched squad state
+  ran without them. A new `squad-floor.instructions.md` is scoped `**` and carries dispatch
+  discipline, the single-writer Scribe rule, the state paths, and proof of dispatch on every turn
+  (`squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+- **Consumers discovered host limits by hitting them.** The usage guide now documents per-host
+  invocation, the agent-name convention, the four remaining host limits, and why a fixed session model
+  beats `auto` when cost attribution matters (`docs/usage.html`).
+
+- **Nothing checked that the package a consumer installs is internally consistent.** A Tier 0
+  conformance suite now asserts against the delivered tree: rosters resolve to delivered agents or
+  registered opt-in external ones, claimed skill references exist, agent bodies fit the host cap,
+  prompts bind to a real agent or a reserved host mode, the always-on floor ships with
+  `applyTo: '**'`, and every squad artifact is declared in `apm.yml`. It invokes no model and reads
+  no secret, so it gates pull requests as well as releases
+  (`tests/tier0/`, `.github/workflows/tier0-conformance.yml`, `tests/squad-behavior-contract.md`).
+
+- **A pull request branch cannot be installed, so it could not be tested.** The manifest's
+  self-references are bare paths, so APM resolves them against the default branch and reports every
+  file a branch adds as missing. Tier 0's source mode installs the manifest, then overlays the
+  branch's `squad-src/` on top, which is the tree that branch would deliver once merged
+  (`tests/tier0/Invoke-Tier0Tests.ps1`).
+
+- **That workaround still aborted on the branches most worth testing.** A branch that *adds* a
+  squad artifact makes `apm install` exit non-zero, and source mode threw before a single case
+  ran — so any additive branch reported nothing rather than a result. Source mode now tolerates
+  an install failure only when every unresolved reference names a file present in the working
+  copy, which is precisely the file the overlay is about to supply. A failure naming anything
+  else still aborts (`tests/lib/SquadInstall.psm1`).
+
+- **Nothing verified the state a squad run leaves behind.** A Tier 1 state contract now asserts the
+  files Init seeds, the shape of `state.json`, dispatch history as proof a stage ran, and the
+  consumption ledger's arithmetic — that every cost follows from its tokens and rates, that rates
+  match `consumption-rates.md`, and that the run total is the sum of every recorded block rather than
+  of the latest turn alone. The runs are nondeterministic; the assertions are not, because they read
+  files. A self-check generates a schema-correct fixture and then mutates it once per rule, requiring
+  the contract to catch each break — a suite that cannot fail is not evidence
+  (`tests/tier1/`).
+
+- **Nothing exercised a real run.** A Tier 1 live harness now provisions a scratch repository
+  per scenario, installs the package into it, copies a small fixture over it, and drives real
+  headless turns before the state contract reads what was left behind. The model is pinned
+  because a headless run ignores the `model:` frontmatter the editor honors, every turn is
+  bounded, and a failed scenario is retried once with both attempts kept so a flake is
+  separable from a regression (`tests/tier1/Invoke-Tier1LiveRun.ps1`,
+  `tests/tier1/scenarios/`, `.github/workflows/tier1-behavior.yml`).
+
+- **A squad can write a valid tree while quietly routing to a different cast.** Tier 2 scores
+  each run against a golden baseline on four facts read from disk: the roles dispatched, the
+  deliverable roots and types produced, the gate verdicts recorded, and — only when asked —
+  whether the answer is materially equivalent. Deliverables compare as root and type rather
+  than filename, because the topic slug is the model's to choose while the root is the
+  roster's promise. Advisory until the noise floor across repeat runs is measured
+  (`tests/tier2/`, `.github/workflows/tier2-semantic.yml`).
+
+- **A release could be cut over a broken package.** The release workflow now runs Tier 0 twice:
+  once against the ref being released, and once against the tag it just pushed. Only the second
+  can assert that the tag pinned its own self-references, because that check needs a ref to
+  install — and a tag that freezes the dependency list but not its contents is the defect that
+  made earlier tags non-reproducible. A failure there leaves a tag but no Release
+  (`.github/workflows/release.yml`).
+
+- **The state contract had no live run to assert against.** A Tier 1 harness now provisions a
+  scratch repository per scenario, installs the package into it, copies a tiny fixture on top, and
+  drives real headless Copilot CLI turns before handing the resulting tree to the state contract.
+  Scenarios cover Init, an ordinary routing turn, and promotion from a single squad to a federation
+  with a cross-sub-squad handoff. The model is pinned because a headless run does not read the
+  `model:` frontmatter the editor honors and results are otherwise incomparable; every turn carries a
+  timeout, and a failed scenario is retried once with both attempts kept, so a flake is
+  distinguishable from a regression
+  (`tests/tier1/Invoke-Tier1LiveRun.ps1`, `tests/tier1/scenarios/`, `tests/fixtures/`,
+  `.github/workflows/tier1-behavior.yml`).
+
+- **A squad can write a valid tree while quietly routing to a different cast.** Neither Tier 0 nor
+  Tier 1 can see that. Tier 2 now reduces each run to four deterministic facts — which roles ran,
+  which deliverable types landed at which roots, which gates fired with which verdict, and what the
+  run answered — and scores them against a golden baseline captured from a known-good release. Only
+  the answer is prose, and it is judged only when asked for. The tier is advisory until the noise
+  floor across repeat runs is measured, because a gate that blocks on unmeasured variance gets turned
+  off. Its comparator carries its own drift controls
+  (`tests/tier2/`, `.github/workflows/tier2-semantic.yml`).
+
+### Changed
+
+- **Three squad agents exceeded the 30,000-character host limit and fifteen declared `model:` as a
+  YAML array the Copilot CLI rejects outright.** An over-cap profile is why a selected coordinator
+  could answer as a plain model, and a `model:` array makes an agent fail to load entirely. The
+  coordinator, federation coordinator, and Scribe now bind to the `squad` skill through a named Skill
+  Reference Contract and fit the cap; `squad` SKILL.md was split into ten topic reference files so
+  each agent loads only its own role's procedure, and the Scribe reads the seeding, consumption, and
+  federation files only when the turn's payload writes them; and every `model:` is now a single string
+  (`squad-src/.github/agents/squad/`, `squad-src/.github/skills/squad/references/`).
+- **The Model Attribution ladder described host behavior that measurement contradicted.** A valid
+  frontmatter pin beats `--model`, an unentitled pin is substituted silently on the dispatch path with
+  no warning, and `auto` overrides a subagent's pin entirely. The ladder now leads with the
+  host-reported dispatch model, so the consumption ledger records what actually ran rather than what
+  was requested (`squad-src/.github/instructions/squad/squad-state.instructions.md`).
+
+- Updated hve-core dependency pin to `8d21777` (8d21777065f2f32fab4260c1366931e66f7bc51f).
+
+- Updated hve-core dependency pin to `5b2119e` (5b2119e3c924738b200ef31baaf4672a0e6938d8).
+
+- **The consumption block stored the same fact a dozen times and could store it wrong each
+  time.** Every per-dispatch block carried the four token rates and a derived `est_cost_usd` and
+  `est_credits` alongside its own token counts — so a rate that belongs to a model was restated once
+  per dispatch, and a cost fully determined by its own inputs was stored next to them where the two
+  could disagree. A live Copilot CLI run showed both failure modes in one turn: a block carrying
+  Claude Sonnet 5's rate fields whose cost had been derived at Claude Sonnet 4.6's rates, and an
+  orchestration block whose recorded cost was 2.2× what its own numbers produced.
+
+  The block is now ten fields and records consumption only — `model`, `model_source`, `priced_as`,
+  `model_tier`, `internal_turns`, the four token counts, and `basis`. `input_rate`, `cached_rate`,
+  `cache_write_rate`, `output_rate`, `est_cost_usd`, and `est_credits` are gone from `history/`
+  entirely. Cost is derived once per role in `consumption.md`, from that row's summed token columns
+  and the rates of the row `priced_as` names in `consumption-rates.md`, which remains the single
+  source of rates. `priced_as` is what carries the pricing decision from the dispatch to the ledger.
+
+  Four of the run's five consumption defect classes cease to exist rather than being caught later:
+  there is no rate field to copy wrongly, no rate to contradict a tier, no per-block divide to slip a
+  decimal on, and no second copy of a cost to disagree with the first. The arithmetic that remains
+  happens once per row in one table a reader can check at a glance. Nothing is lost — every role
+  still has its own cost row in `consumption.md`; it simply stops being written twice.
+
+  The Tier 1 contract moves with the shape: per-block assertions for rates, cost, and credits are
+  replaced by a per-ledger-row derivation check and a `priced_as` resolution check, and the run-total
+  and orchestration-row checks now reconcile the token columns against the blocks rather than
+  reconciling a cost against a cost. Mutation self-check 26 → 27
+  (`squad-src/.github/instructions/squad/squad-floor.instructions.md`,
+  `squad-src/.github/skills/squad/references/`, `tests/tier1/`).
+
+- Updated hve-core dependency pin to `c1935ab` (c1935ab6dcce15fd22c467a501e478ae61985be2).
+
+- **The ledger's arithmetic checks now measure orders of magnitude, not digits.** Every figure in
+  `consumption.md` is an estimate derived from a token-size model, because no per-dispatch telemetry
+  exists — so failing a run because a row said `0.1395` where its own tokens derive to `0.1301`
+  reported a defect nobody could act on and buried the ones that mattered. Row costs, column totals,
+  the orchestration row, the run total, and the `state.json` reconciliation are now compared within a
+  factor of three, which still rejects the documented corruption — a factor-of-ten slip from
+  dividing by `1e6` twice — while tolerating drift on a number that was estimated in the first place
+  (`tests/tier1/StateContract.Tests.ps1`).
+
+- **Structure stayed strict, because a missing row loses a role rather than mis-stating one.** A new
+  assertion requires a ledger row for every role that was dispatched, which is what a total silently
+  summed over the wrong rows used to be a proxy for. The reader also joins the two tables on the
+  role name with any trailing annotation stripped, so a row labelled `orchestration (Turns 1-3)`
+  still prices against its Attribution row instead of taking the whole ledger down with it.
+
+- **The Cost Comparison section is now required and must name the saving.** A live run replaced it
+  with a per-phase breakdown — reporting what was spent and dropping the only number that answers
+  why a squad was run at all. The section now states what the run cost, what the manual baseline
+  would have cost, and the saving as a percentage, along with the iteration count and baseline model
+  it assumed so a reader can disagree with the assumption rather than only with the answer. A
+  breakdown may be added below it and never in place of it
+  (`squad-src/.github/instructions/squad/squad-floor.instructions.md`,
+  `squad-src/.github/skills/squad/references/consumption.md`,
+  `squad-src/.github/skills/squad/references/scribe-procedure.md`).
+
+- **Consumption findings no longer fail a run; behaviour still does.** Every figure in the ledger is
+  an estimate produced by a token-size model with no telemetry behind it, so a run that stopped
+  because a `model_tier` read `fast` instead of `default`, or because two dispatches were sized from
+  the same numbers, reported an accounting nit at the same severity as a stage that produced no
+  artifact. The three `CON` groups — per-dispatch rate resolution, the ledger, and the rates file —
+  are now tagged `Consumption`: they still execute and still print, because a check nobody runs
+  stops being evidence, but they are reported as advisory and the run's exit code ignores them.
+  Everything else — proof of dispatch, the Deliverable Root, block shape, state.json, the roster and
+  routing tables — is unchanged and still blocking. `-Strict` restores the old behaviour and is what
+  the mutation self-check uses, because a mutation the contract merely mentions is one it does not
+  catch (`tests/tier1/Invoke-Tier1Tests.ps1`, `tests/tier1/StateContract.Tests.ps1`).
+
+- **The deliverable reader rejected a correct path for want of backticks.** A live run wrote both its
+  artifacts to the right roots and recorded
+  `* Deliverable: .copilot-tracking/reviews/2026-08-21-reserve-gap-findings-review.md` — resolvable,
+  accurate, and unbackticked. The reader accepted only backticked tokens, so proof of dispatch
+  reported a stage that wrote nothing, and the same two files then showed up as unclaimed artifacts:
+  one formatting slip, four findings, none of them real. When an entry backticks nothing, a single
+  bare path is now accepted provided it still looks like one — a separator and a file extension —
+  which keeps `N/A — inline verdict, no artifact written` rejected, since that is the case the rule
+  exists for (`tests/tier1/SquadState.psm1`).
+
+- Updated hve-core dependency pin to `b1cae50` (b1cae5059b6efedb406eef070d2981c201a5baed).
+
+### Fixed
+
+- **The specialist-skill rule bound the Squad Coordinator but not the Squad Federation Coordinator.**
+  The federation coordinator classifies too, so it could load a specialist skill to decide which
+  sub-squad owns a request — the same defect, one layer up. Meta-routing is now metadata-only, and the
+  rule moved into the always-on `squad-floor.instructions.md` so it binds every orchestrator rather
+  than being restated per agent (`squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`,
+  `squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+
+- **The Research → Plan → Implement → Review spine stopped running on the Copilot CLI and the app.**
+  The Implementation Gate, the review follow-through, and the autopilot artifact gates lived only in
+  `squad-routing.instructions.md` and `squad-autopilot.instructions.md`, both gated on
+  `applyTo: '**/.copilot-tracking/squad/**'`. Those files never auto-apply on the CLI or the app, and
+  apply in VS Code only once a squad-state path is already in context — so the coordinator classified a
+  request, dispatched the deliverable's owner, and skipped research, plan, council, and review while the
+  finished deliverable made the run look complete. The procedures now live in
+  `references/gates-and-modes.md`, which every coordinator reads by path on every turn and every host, and
+  the spine is restated in the always-on `squad-floor.instructions.md`
+  (`squad-src/.github/skills/squad/references/gates-and-modes.md`,
+  `squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+- **Step 3 of the coordinator promised four dispatch branches and listed three.**
+  The Implementation Gate branch was dropped when the agent was compacted, leaving no instruction to check
+  for research and plan artifacts before dispatching a producing role. The branch is restored, and it now
+  names the deliverable-producing roles explicitly so a BRD, roadmap, journey map, experiment plan, or deck
+  is treated as an output of the methodology rather than a shortcut around it
+  (`squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+- **An intake verdict could report outstanding blocking gaps and still permit dispatch.**
+  `Ready-With-Gaps` means zero blocking gaps, but that rule was only in the `applyTo`-gated intake
+  instructions, so a run recorded five blocking gaps as "riskiest assumptions" and proceeded. The label is
+  now decided by the blocking-gap count in the reference the coordinator always reads, and an unanswered
+  blocking question is put to the user — in the response text on a host with no question tool — instead of
+  being converted into an assumption
+  (`squad-src/.github/skills/squad/references/gates-and-modes.md`).
+- **The seeded `routing.md` differed per host because the canonical table mixed roles with agent names.**
+  Ten rows in a column headed `Role(s)` carried agent names (`Security Planner`, `UX UI Designer`,
+  `PRD Builder`, `DT Coach`, `Experiment Designer`, `System Architecture Reviewer`, `RAI Planner`,
+  `Finding Deep Verifier`, `Squad IaC Author`, `Squad Deployer`), so one host normalized them to role ids
+  and another copied them verbatim. An agent name there resolves to no `team.md` row, which silently drops
+  that row's `Member Name`, `Model Tier`, Selection Cues, and `Deliverable Root`. Every row now carries a
+  role id, and both the canonical table and the seed template say why
+  (`squad-src/.github/instructions/squad/squad-routing.instructions.md`,
+  `squad-src/.github/skills/squad/references/seed-templates.md`).
+- **A hand-edited `Deliverable Root` was ignored by any agent that builds its own output path.**
+  The `presenter` root moved to `ppt-prezi/` in `team.md` and the deck still landed in `ppt/`, because the
+  `powerpoint` pipeline derives `<date>/<deck-slug>/` itself and takes the parent as an argument — naming
+  the cell in the dispatch prose was not enough. The coordinator now passes the root *as the output
+  argument*, the roster records that some agents need it that way, and the brand-template instructions no
+  longer stop applying when the deck root is renamed
+  (`squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/instructions/squad/squad-roster.instructions.md`,
+  `squad-src/.github/instructions/squad/pptx-brand-template.instructions.md`).
+- **Both coordinators sat within 250 characters of the 30,000-character agent-body cap.**
+  Under that cap the body is truncated outside VS Code, so any addition would have silently cut the
+  closing sections — which is what makes the limit dangerous rather than merely tight. Sections that
+  restated the always-on floor, the Scribe's own consumption procedure, and the skill's gate references
+  were collapsed, leaving 1,519 characters of headroom on the coordinator and 813 on the federation
+  coordinator with the new gate procedures included
+  (`squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+- **The `orchestration` ledger row had no storage, so it reset on every rewrite.**
+  The Scribe rewrites `consumption.md` from the consumption blocks recorded in `history/*.md`, and the
+  `orchestration` row is defined as the sum of every recorded orchestration block — but no step ever said
+  to write one. With nothing to read back, the row could only reflect the turn in hand, so a run
+  under-reported its own overhead by every turn that came before. Orchestration now appends a
+  `#### Consumption — Orchestration` block to `history/Squad Scribe.md`, which is also why the Scribe was
+  missing from `history/` altogether
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/skills/squad/references/consumption.md`).
+- **The history filename convention contradicted itself, so hosts named the same file differently.**
+  `entry-schemas.md` mandated the agent's display name (`history/Squad Researcher.md`) while the promotion
+  procedure wrote `history/scribe.md`, and one host produced `squad-scribe.md`. A renamed file reads as a
+  missing entry and drops that agent from every later ledger rewrite. The rule is now stated once,
+  verbatim-display-name, and hoisted into the always-on floor so it binds before any reference file loads
+  (`squad-src/.github/skills/squad/references/entry-schemas.md`,
+  `squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+- **A ledger could stay headed `Run: init-001` while history held dispatch records.**
+  Moving off the seed state was implied by "the seed note must not remain" but the run id itself was never
+  named, and a stale id reads as a healthy ledger for a squad that only ever seeded. Rewriting the id is
+  now an explicit obligation of the ledger rewrite
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`).
+- **The gates' interview discipline named a VS Code-only tool as its mechanism.**
+  The discovery gate rests on dispatched roles interviewing the user one question at a time, and the
+  contract specified `vscode_askQuestions` — which the Copilot CLI and the app do not ship. On two of the
+  three hosts the gate therefore fell through to its own exception path, and a run banked assumptions
+  instead of asking. The discipline is now stated as the rule and the mechanism as the host detail:
+  use the question tool where one exists, otherwise return the question and let the coordinator ask it in
+  the response text. That is the normal path outside VS Code, not a degraded one, and it is now a listed
+  known host limit (`squad-src/.github/instructions/squad/squad-discovery-gate.instructions.md`,
+  `squad-src/.github/instructions/squad/squad-routing.instructions.md`,
+  `squad-src/.github/skills/squad/references/gates-and-modes.md`, `docs/usage.html`).
+
+- **A history file came back with the read tool's line-number gutter baked into it.** Every line of
+  `history/Squad Scribe.md` was written as `1. ---`, `2. description: ...`, `5. # History: Squad
+  Scribe` — the content was correct, the file was unparseable. The template had been copied out of a
+  numbered read view and written back with the numbering intact, which reads as correct to a human
+  and as nothing at all to every later turn. The floor now states that line numbers belong to the
+  viewer and are stripped before writing, and Tier 1 fails any state file whose opening lines carry a
+  gutter (`squad-src/.github/instructions/squad/squad-floor.instructions.md`,
+  `tests/tier1/SquadState.psm1`, `tests/tier1/StateContract.Tests.ps1`,
+  `tests/tier1/Assertions.Tests.ps1`).
+- **Estimator working values were leaking into the consumption block.** Blocks carried
+  `dispatch_class`, `base_context`, `growth_per_turn`, and `output_per_turn` alongside the sixteen
+  contractual fields. Those are inputs the Scribe reasons with, not fields it records. The floor now
+  says the set is closed at sixteen and names the four that leak.
+- **The rate fields were being renamed and zeroed.** One run wrote `input_rate_usd_per_1m` and its
+  three siblings, which read as four missing fields; another wrote `cache_write_rate: 0` against a
+  rate row that says `3.75`. The floor now fixes the four names, states that the unit lives in the
+  contract rather than the field name, and requires all four rates to be copied from the row as the
+  row states them even when the matching token count is zero.
+- **`priced_as` was omitted or written as a slug.** Blocks priced `claude-sonnet-5` against a table
+  whose row is `Claude Sonnet 5`, or dropped the field entirely and left the ledger pricing from
+  `model`. The floor now requires the field on every block, copied character-for-character from the
+  rate table's `Model (as routed)` cell, equal to `model` when no fallback happened.
+- **A factor-of-ten slip survived every other check.** A block summing to `113520` recorded
+  `est_cost_usd: 1.17` rather than `0.11352`; the block was otherwise perfectly formed. The floor now
+  calls out the single division by `1e6` and asks for a digit comparison before the block is
+  appended.
+- **The orchestration row kept appearing without a block behind it.** One ledger carried a zero
+  `orchestration` row, another a `0.0779` row, and neither had a single `#### Consumption —
+  Orchestration` block in `history/`. The floor now says the Scribe writes that block on every turn
+  it writes state, Init included, and that no block means no row.
+- **The literal history-file preamble is now in the floor.** Files were still headed `# Squad
+  Researcher` under invented descriptions like `"Dispatch history for Squad Researcher role"`,
+  because the heading rule was stated while the template it describes lived two files away. Both now
+  sit together in the one file that loads on every host.
+
+- **A squad seeded every state file except the two the consumption ledger needs.**
+  Init created `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, and
+  `history/`, and left `consumption.md` and `consumption-rates.md` to be created by whichever later
+  step first wrote a cost. Nothing guaranteed that step ever ran, so a squad could reach its fourth
+  stage with a full `decisions.md`, artifacts on disk, and no ledger and no rate table at all. The
+  rate table is the only source of token rates, so its absence also stopped the Scribe pricing a
+  dispatch — and because a history append and its consumption block are inseparable, the append it
+  could not pair was dropped too, leaving `history/Squad Researcher.md` and `history/Squad Lead.md`
+  sitting at their headers while research and plan artifacts existed beside them. Both files are now
+  part of the Init seed, in the coordinator's list, the Scribe's list, the payload-to-step map, and
+  federation expansion (`squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/agents/squad/squad-scribe.agent.md`,
+  `squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/skills/squad/references/operating-procedure.md`,
+  `squad-src/.github/instructions/squad/squad-federation.instructions.md`).
+- **"Inseparable" was read as permission to write neither.** The rule pairing a history append with
+  its consumption block is there to stop an unpriced dispatch, not to suppress the dispatch record
+  when pricing is unavailable. It now says which way to resolve: seed the rate table, or record
+  `unknown` at the tier fallback, and append either way. A silent history is indistinguishable from a
+  stage that never ran, so the run failed its own proof-of-dispatch check over a missing file the
+  Scribe was able to create (`squad-src/.github/skills/squad/references/scribe-procedure.md`).
+
+- **A role dispatched its Alternate instead of its Primary because the cue lived somewhere the host
+  never read.** A research request grounded in a stakeholder brief resolved to `Meeting Analyst`
+  rather than `Squad Researcher` — a plausible-looking alternate whose actual cue is
+  meeting-transcript mining. The roster's `Alternate Agents` cell says an alternate *exists*; the
+  condition that says when it *applies* lived only in the `applyTo`-scoped cast catalog, which does
+  not load on every host, so the coordinator had the menu without the rule. The swap is silent and it
+  is not cosmetic: the two agents run different methodologies. `team.md` now carries a `Selection
+  Cue` column seeded from the catalog, the way `Deliverable Root` already is, and the resolution rule
+  moved to the floor with an explicit fallback — no cue read means the Primary
+  (`squad-src/.github/instructions/squad/squad-floor.instructions.md`,
+  `squad-src/.github/instructions/squad/squad-roster.instructions.md`,
+  `squad-src/.github/skills/squad/references/seed-templates.md`,
+  `squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/agents/squad/squad-coordinator.agent.md`).
+- **A ten-turn run left its ledger frozen at turn one.** `consumption.md` was still headed
+  `Run: turn-001` with two priced rows and a $0.0298 total while `history/` held nine dispatch
+  records and `state.json` reported turn 10. The stale run id is the cheapest available proof that no
+  rewrite happened since, so the ledger step now compares it against the current turn before
+  finishing and treats a stale id as a failed write rather than a heading to patch
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`).
+- **The ledger seeded all thirteen roster roles as zero rows.** Eleven permanent zeros around one
+  real row make a ledger that never advanced look populated, which is the opposite of what the file
+  is for. A role with no consumption block now has no row at all
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`).
+- **`#### Consumption — Orchestration (Turn 1)` is unreadable, and nothing said so.** The suffix rule
+  named role-flavoured variants but not a turn marker, so the one orchestration block in the run was
+  spent and uncounted. Both legal headings now take no suffix of any kind, and the turn belongs in
+  the entry heading above the block (`squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/skills/squad/references/entry-schemas.md`).
+- **`state.json` collected invented keys and lost the documented ones.** A run wrote `squadMembers`,
+  `status`, `completedDispatches`, and a `timestamp` beside `updated`, dropped `schemaVersion` and
+  `notify` entirely, and replaced all four `currentRun` keys with a scratchpad holding
+  `"estimatedTokens": "moderate"`. With `estCostUsd` absent there is no machine-readable cost figure
+  for a cost ceiling to read. The key set is now stated as closed at both levels
+  (`squad-src/.github/skills/squad/references/entry-schemas.md`).
+- **A stage recorded as complete had no history file, and autopilot advanced anyway.**
+  `completedDispatches` claimed `Squad Implementor` finished on turn 4 with nothing in `history/`.
+  The history file is the evidence and a status field is a claim about it, so a missing file now
+  stops the stage in every mode (`squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+- **An autopilot run reached four open sign-off gates with no approval channel captured.** `notify`
+  was absent from `state.json` and `notifications.md` was empty, leaving the gates with no way to
+  reach anyone. Init now writes the `notify` object whatever the answer was — a decline is
+  `in-chat`/`enabled: false`, which is a recorded answer rather than an absent key — and writes the
+  Init decision that records the roster's provenance
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`).
+- **A mutation control was silently testing nothing.** `Edit-Fixture -Replacement 'a' + "b" + 'c'`
+  binds only `'a'`: a plain PowerShell function collects surplus positional arguments into `$args`
+  rather than failing, so the reordering control had been deleting a field instead of moving one.
+  The concatenations are parenthesised and `Edit-Fixture` now refuses unbound arguments
+  (`tests/tier1/Assertions.Tests.ps1`).
+- **Four new contract cases with mutation controls**: the roster must carry `Selection Cue`, the
+  ledger must carry no row for an undispatched role, and `state.json` must declare no key outside the
+  documented set at either level (`tests/tier1/StateContract.Tests.ps1`,
+  `tests/tier1/Assertions.Tests.ps1`, `tests/tier1/SquadFixture.psm1`,
+  `tests/squad-behavior-contract.md`).
+
+- **The consumption ledger reported costs that did not follow from its own numbers.** A dispatch
+  block recorded 57,600 input tokens at $3.00, 230,400 cached at $0.30, 95,200 cache-write at $3.75
+  and 15,000 output at $15.00, then set `est_cost_usd` to `4.869` where those figures derive
+  `0.82392` — a run priced at almost six times what it recorded. The same run priced one Scribe
+  block correctly and another at `0.0603` where its own tokens give `0.03912`, so the cost was being
+  computed on some blocks and guessed on others. `est_cost_usd` is now stated as derived rather than
+  estimated, with a worked example and a read-back check, because every figure above it — the run
+  total, the `state.json` totals, the savings claim, and any autonomous-mode cost ceiling — is
+  computed from it (`squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/agents/squad/squad-scribe.agent.md`,
+  `squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+- **The ledger rewrite skipped a block that was sitting on disk.** `history/Squad Scribe.md` carried
+  three orchestration blocks and the ledger's `orchestration` row was short by exactly the middle
+  one. The rule already said the row is the sum of every recorded block; what was missing was the act
+  of re-reading. The rewrite now enumerates the blocks on disk and confirms the count it folded in
+  matches, because a ledger built from the two blocks the turn happens to remember still adds up and
+  is still wrong (`squad-src/.github/skills/squad/references/scribe-procedure.md`).
+- **Consumption blocks were written under headings the ledger cannot read.** One run wrote
+  `### Consumption — Research` and `### Consumption — Review` instead of `#### Consumption`, and
+  headed history files `# Squad Researcher` instead of `# History: Squad Researcher`. Both shapes
+  were described in prose but neither appeared as a template in `entry-schemas.md`, the file an agent
+  reads to learn what a history file looks like. That file now carries the literal dispatch entry
+  with its consumption block, and the heading rule says what is not legal
+  (`squad-src/.github/skills/squad/references/entry-schemas.md`,
+  `squad-src/.github/skills/squad/references/scribe-procedure.md`).
+- **Init pre-created a history file for every roster member.** A squad seeded five header-only files
+  before dispatching anything, which makes an undispatched role indistinguishable from a dispatched
+  one and breaks the invariant the whole proof-of-dispatch check rests on. The seed lists said
+  `history/` and never said the directory stays empty; they do now
+  (`squad-src/.github/skills/squad/references/operating-procedure.md`,
+  `squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/skills/squad/references/entry-schemas.md`,
+  `squad-src/.github/instructions/squad/squad-floor.instructions.md`,
+  `squad-src/.github/instructions/squad/squad-state.instructions.md`,
+  `squad-src/.github/agents/squad/squad-coordinator.agent.md`,
+  `squad-src/.github/agents/squad/squad-scribe.agent.md`).
+- **Model attribution was wrong in both directions.** One run recorded `Claude Sonnet 4.6` as
+  `agent-pinned` for an agent whose file pins `Claude Sonnet 5`; another recorded `unresolved` for
+  the same agent, which the ladder only allows once that file has been opened and found to carry no
+  pin. Both failures are the same skipped step, so the ladder now says to open the agent's file
+  before writing either value and to copy the pinned name verbatim
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/agents/squad/squad-scribe.agent.md`).
+
+- **The consumption block's field names never reached the host that writes them.** A live single-turn
+  run recorded `modelSource`, `pricedAs`, `internalTurns`, `grossInputTokens`, and `estimatedCostUsd`,
+  invented `baseContext`, `growthPerTurn`, and `dispatchClass`, and omitted all four `*_rate` fields —
+  three of sixteen contractual names survived. The literal shape lived only in the `squad` skill's
+  `references/entry-schemas.md` and in `squad-state.instructions.md`, neither of which loads before
+  squad state is already in play. The sixteen-field JSON block is now reproduced verbatim in
+  `squad-floor.instructions.md`, the one file scoped to `**`, alongside the bare-number rule and the
+  instruction not to translate it into camelCase or add fields
+  (`squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+- **History files were headed with the bare agent name.** Files came back headed `# Squad Researcher`
+  rather than `# History: Squad Researcher` — the exact failure the schema file warns about, which
+  reads to a later turn as a file with no heading at all. The literal heading is now in the floor.
+- **Costs were still being judged rather than derived.** A promotion block recorded
+  `est_cost_usd: 0.047` where its own four token counts times its own four rates give `0.04224`, and
+  `state.json` carried one dispatch's cost as the whole run's. The floor already required the figure
+  to reproduce from the block; it now carries the four-product worked example that was stranded in
+  `references/scribe-procedure.md`, plus the rule that `currentRun`'s totals equal the ledger total.
+- **Promoted sub-squads got a hand-written rate table.** Federation promotion seeded a 957-byte
+  `consumption-rates.md` with four model rows and no tier-fallback table, no dispatch-size estimator,
+  and no calibration block, leaving the Scribe pricing from a table missing what it needs. The floor
+  now states that the file is copied verbatim from the skill template at Init and at every sub-squad
+  seeding or promotion, and that all four sections are load-bearing.
+- **The ledger kept its seed rows and its seed run id.** A turn-2 ledger still read
+  `Run: init-2026-08-20` and carried zero rows for `lead`, `developer`, and `orchestration`, and a
+  promoted ledger labelled its overhead row `scribe`. The floor now fixes `orchestration` as the row
+  label in both tables and states that the rewrite reads every block in `history/` — so an
+  undispatched role has no row rather than a zero row, and the total is the run's, not the turn's.
+
+- **The Tier 1 contract could not read a single real token rate.** The rate reader matched a model
+  name with `[A-Za-z0-9._-]+`, which excludes the space in `Claude Sonnet 4.6`, and then read the
+  four rate columns by position on a table that carries `Tier` and `Notes` around them. Fed the
+  shipped `consumption-rates.md` template it parsed zero rows, so every "rates match
+  consumption-rates.md" case compared against an empty collection and reported the squad broken when
+  the reader was. Tables are now selected by their column headers and cells read by name, which also
+  keeps the dispatch-size estimator's class rows — five numeric-looking columns — from registering as
+  prices (`tests/tier1/SquadState.psm1`).
+- **The self-check was validating the fixture, not the product.** `SquadFixture.psm1` wrote its own
+  five-column rate table with a hyphenated model name, so the reader passed 11 of 11 mutations while
+  being unable to read the file a real squad seeds. The fixture now lifts the rate table out of the
+  shipped skill, and a mutation breaks a column header to prove an unreadable table fails loudly
+  (`tests/tier1/SquadFixture.psm1`, `tests/tier1/Assertions.Tests.ps1`,
+  `tests/tier1/StateContract.Tests.ps1`).
+- **The run-total assertion could not pass on a correct ledger.** One tolerance of `0.001` was
+  applied to a total the template prints at two decimals, so a ledger summing to `2.04684` and
+  printing `$2.05` failed by `0.00316` for following its own template. Ledger figures are now
+  compared against the sum rounded to the precision the ledger printed, which is exact rather than
+  tolerant and still catches the dropped roles the case exists for
+  (`tests/tier1/SquadState.psm1`, `tests/tier1/StateContract.Tests.ps1`).
+- **Two squad rules had no assertion behind them.** History files were checked for a heading and a
+  consumption block but never for a name that resolves to a roster row, and nothing asserted that
+  Init leaves `history/` empty — so a squad that seeded a header-only file per member passed its
+  Init scenario and only failed a turn later, for a different reason. Both are now contract cases
+  with mutation controls (`tests/tier1/StateContract.Tests.ps1`, `tests/tier1/Assertions.Tests.ps1`).
+
+- **The Tier 1 behaviour harness could not start a squad turn.** `Start-Process` concatenates its
+  argument list with spaces and does no quoting of its own, so the scenario prompt reached the
+  Copilot CLI as a stream of separate words and every turn exited on `Invalid command format` in
+  under a second. The failure sat exactly in the gap the harness's own `-ProvisionOnly` mode skips,
+  which is why provisioning had passed on all three scenarios while no scenario had ever run a turn.
+  Arguments carrying whitespace now bring their own quotes, following the Windows argv rules
+  PowerShell also applies when it tokenizes the string on Unix (`tests/tier1/SquadRun.psm1`).
+
+- **A role wrote its artifact in the right place and then recorded a path nobody could resolve.** A
+  live federation run put the plan at the roster's declared root and logged
+  `Deliverable: members/persistence/plans/2026-08-21-persistence-layer-plan.md` — the same location
+  with `.copilot-tracking/squad/` shaved off the front, because that was the writer's working
+  directory at the time. Proof of dispatch turns on listing the path, so a path that resolves only
+  from one process's cwd is not evidence the file exists, and the reconciliation reported a missing
+  deliverable for a file sitting exactly where it belonged. The floor now requires the `Deliverable:`
+  path to extend the `Deliverable Root` cell verbatim, and the entry template names the root instead
+  of a bare `<path>` (`squad-src/.github/instructions/squad/squad-floor.instructions.md`,
+  `squad-src/.github/skills/squad/references/entry-schemas.md`).
+
+- **The Tier 1 evidence upload dropped the deliverables it was added to capture.** The harness copies
+  the tracking tree beside each attempt under its own dot-prefixed name so an uploaded result replays
+  against the same path resolver the run used, but `actions/upload-artifact` skips hidden paths unless
+  told otherwise — so every uploaded artifact carried the squad state and none of the files that state
+  points at, and a failed existence check could not be investigated from the artifact alone
+  (`.github/workflows/tier1-behavior.yml`).
+
+- **A stage could report itself complete having written nothing.** A live run recorded
+  `Deliverable: N/A — inline verdict, no review artifact file written` twice, and the review stage
+  passed every check: an entry that names no path leaves the existence check with nothing to reject,
+  so proof of dispatch was satisfied by a claim rather than by a file. The floor now states that
+  `N/A`, `inline verdict`, `no artifact written`, and a missing `Deliverable:` line are the same
+  statement — the stage produced nothing the next one can read — and that a role whose output is a
+  judgment writes that judgment to a file at its Deliverable Root. A verdict that exists only in a
+  chat turn is gone when the turn ends, and the gate depending on it has nothing to open. `SQ-12`
+  gains a per-entry assertion to match
+  (`squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+
+- **The Tier 1 deliverable reader truncated any path containing a space.** It split each backticked
+  token on whitespace to strip trailing prose, but the prose sits outside the backticks and an
+  agent's name carries spaces — so `history/Squad Researcher.md` became `history/Squad` and every
+  entry naming one failed the existence check it had just passed in review. Brace-expansion
+  summaries such as `members/default/{team.md,routing.md}` were read as one path for the same
+  reason. The reader no longer splits on whitespace and skips set notation alongside globs.
+
+- **Two file classes were read as dispatch records when they are not.** The Scribe's own entries
+  name the state files a turn wrote and cite them across federation roots, and a federation root's
+  `history/` names sub-squads rather than agents — recording a `Reference:` to where that turn's
+  dispatch records actually live. Neither is a dispatched stage, so proof of dispatch no longer
+  applies to either. The live harness also captures the tracking tree under its own dot-prefixed
+  name, so an uploaded result replays against the same path resolver the run used (`tests/tier1/`).
+
+- **Promotion left a second tracking directory inside the first.** A live promotion moved every
+  artifact correctly and then left `.copilot-tracking/.copilot-tracking/squad/members/<name>/` behind
+  it — three empty directories, so no file was lost and no step reported a failure. The move is
+  specified as copy → verify → delete-source per file and never said where destination paths are
+  rooted, so the parent directories were created from inside `.copilot-tracking/` rather than from
+  the project root. Promotion now states that every destination path is written from the project
+  root, that it creates nothing outside `.copilot-tracking/squad/`, and that the tracking root is
+  listed and cleared of anything the move created by accident before the promotion is confirmed.
+  The state contract rejects a nested tracking directory outright
+  (`squad-src/.github/instructions/squad/squad-federation.instructions.md`,
+  `squad-src/.github/skills/squad/references/scribe-procedure.md`,
+  `squad-src/.github/skills/squad/references/federation.md`,
+  `squad-src/.github/agents/squad/squad-federation-coordinator.agent.md`).
+
+- **The relocation mapping was recorded as its own placeholder.** The same promotion wrote one line
+  reading `.copilot-tracking/<type>/ → .copilot-tracking/squad/members/product/<type>/` where four
+  concrete lines belonged. That mapping is the only thing that makes a pre-promotion `Deliverable:`
+  path resolvable, because the entry holding it is append-only and moved unedited — and a
+  placeholder resolves exactly as much as the prose sentence the rule replaced. The step now says
+  `<dir>` stands for a directory you name and that four moved directories produce four lines.
+
+- **The ledger asserted costs its own numbers did not support.** A live run priced a `lead` row at
+  `0.1428` against tokens that derive to `0.0989` — a 44% overstatement — and priced `orchestration`
+  wrong in the same rewrite. The rule was already emphatic and the arithmetic was still wrong,
+  because it was done invisibly: four products, a sum, and a divide, collapsed into one number with
+  nothing in the file to check it against. The ledger now carries a `### Derivation` block under
+  Usage & Cost, one line per row, with the four products written out before the sum. Written
+  products cost four numbers and turn a silent miscalculation into a visible one, and the state
+  contract now rejects a priced row that has no derivation line
+  (`squad-src/.github/instructions/squad/squad-floor.instructions.md`,
+  `squad-src/.github/skills/squad/references/consumption.md`,
+  `squad-src/.github/skills/squad/references/scribe-procedure.md`).
+
+- **The run total rounded itself out of agreement with `state.json`.** The ledger template carried
+  `**$0.00**` in the total's cost cell while every row above it carried four decimals, so a run
+  totalling `0.2151` was written `$0.22` and the reconciliation against `state.json` failed by
+  construction — a gap every later comparison inherited. The total's cost cell is now a bare
+  four-decimal number matching the rows above it.
+
+- **The `Deliverable Root` column had no force, so customizing it did nothing.** A live Copilot CLI
+  run declared five roles' output locations in `team.md` and every one of the five wrote somewhere
+  else — four to `.copilot-tracking/details/`, the convention baked into their own agent
+  definitions, and the fifth collapsing a `<date>/` directory segment into a filename prefix. The
+  roster is the only place an operator can steer where a squad's output lands, and it was being read
+  as advisory. The floor now makes the cell binding: it overrides the path convention in the
+  dispatched agent's own definition, a `<date>` or `<slug>` segment is a directory rather than a
+  filename prefix, and a role that cannot use the root it was given escalates instead of choosing
+  one it prefers (`squad-src/.github/instructions/squad/squad-floor.instructions.md`).
+
+- **A stage produced its artifact and vanished from the record.** In the same run the `lead` role
+  wrote a 16 KB implementation plan that had no `history/Squad Lead.md`, no ledger row, no mention in
+  `decisions.md`, and no membership in `state.json`'s `activeRoles` — the coordinator assembled the
+  run's history at the end from memory and dropped the stage that had run earliest. `state.json` and
+  the ledger agreed with each other and with nothing that happened. Dispatches are now handed over
+  one payload at a time as each returns, and proof of dispatch reconciles both directions: every
+  `Deliverable:` path names a file that exists, and every artifact under a role's Deliverable Root is
+  claimed by some history entry. An unclaimed artifact is a stop, not a warning.
+
+- **A consumption block could price one model and report another.** The same run recorded a block
+  carrying Claude Sonnet 5's four rate fields, a `model_tier` of `fast`, and a cost derived at Claude
+  Sonnet 4.6's rates — internally contradictory and reproducible by nobody. The floor now fixes
+  `model_tier` to the `Tier` cell of the row `priced_as` names, and requires the rates recorded and
+  the rates multiplied by to be the same four from that one row. Two further guards join them: a
+  block whose token counts match one already in `history/` was sized by copying rather than from the
+  dispatch in hand, and the ledger's total row is summed down every column — turns and all four token
+  columns, not the cost column alone — because the row a carried-forward total drops is the short one
+  belonging to a role dispatched on an earlier turn.
+
+- **An orchestration entry had a block template but no entry template.** `entry-schemas.md` gave a
+  literal shape for a dispatch entry and only a sentence for an orchestration one, so the Scribe
+  improvised the surrounding prose and the turn number and task description leaked into the JSON as
+  `turn` and `task` — breaking the closed sixteen-field set and dropping the block out of the ledger
+  rewrite. Both the floor and the schema reference now carry the literal orchestration entry shape,
+  with the prose fields those two values belong in
+  (`squad-src/.github/skills/squad/references/entry-schemas.md`).
+
+- **A promotion left every artifact reference in `history/` pointing at nothing.** Federation
+  promotion moves the deliverables and rebases the roster's `Deliverable Root` cells, but the
+  `Deliverable:` paths already recorded in `history/` still name the pre-promotion locations — and
+  cannot simply be corrected, because those files are append-only and move byte-for-byte. The
+  promotion now records the relocation as one prefix mapping line per moved directory
+  (`.copilot-tracking/<dir>/ → .copilot-tracking/squad/members/<name>/<dir>/`) rather than as prose,
+  which is what makes a pre-promotion path resolvable again; the floor states that an entry is
+  resolved through that mapping and never edited to match. Path comparison in the Tier 1 contract is
+  correspondingly promotion-invariant, so a promoted squad reports the roles that wrote to the wrong
+  folder without also reporting every entry the promotion left behind
+  (`squad-src/.github/skills/squad/references/scribe-procedure.md`).
+
+- **The Tier 1 contract enforced none of the above, and the harness could not have shown it.**
+  The contract asserted no deliverable existed on disk, and the live harness captured only the squad
+  root — so a scenario's research artifact, which lands beside that root rather than inside it, was
+  never uploaded with the results. A squad writing immaculate ledgers about work it never did would
+  have passed green. The contract gains `SQ-12` (deliverable exists, sits under its role's root, and
+  leaves nothing unclaimed) plus assertions for tier coherence, copied sizing, and column-wise ledger
+  totals; the harness now captures the whole `.copilot-tracking/` tree. The mutation self-check grows
+  from 20 cases to 26, one per new rule (`tests/tier1/`).
+
+- **The ledger's `Turns` column was specified for one dispatch and asserted as a sum.** Every rule
+  about accumulation named "the four token columns", and the only definition of `Turns` described
+  "the turn count for the dispatch" — singular — so nothing told the Scribe that a role dispatched
+  twice at `15` and `4` carries `19`. One live run summed it and the next wrote `4`, because the
+  spec left the reading to chance while the state contract required one of them. `Turns` now
+  accumulates on the record exactly as the token columns do, in the floor, the Scribe procedure, and
+  the ledger template, and the `### Derivation` block carries each row's turn sum written out as an
+  addition beside its cost products — the fifth column is the one most often left at the last
+  block's value precisely because it is the one that does not feed the cost
+  (`squad-src/.github/instructions/squad/squad-floor.instructions.md`,
+  `squad-src/.github/skills/squad/references/consumption.md`,
+  `squad-src/.github/skills/squad/references/scribe-procedure.md`).
+
+- **A deliverable was recorded with its path placeholder unsubstituted.** A live run logged
+  `.copilot-tracking/research/<date>/concurrency-gap-reserve.md`, which names a directory literally
+  called `<date>` — so the path pointed at nothing, and the existence check failed for a file that
+  had been written correctly. The floor's `<date>`/`<slug>` rule now says to substitute the segment
+  and never write the angle brackets.
+
+- **The derivation check double-reported an existing defect.** A ledger seeded with zero rows for
+  roles that were never dispatched failed both the assertion that rejects those rows outright and
+  the new assertion that every priced row shows its arithmetic, naming the same roles twice and
+  making one defect read as two. The derivation check now skips rows carrying no cost and leaves
+  them to the assertion that exists to reject them (`tests/tier1/StateContract.Tests.ps1`).
+
+- **The contract failed Init for doing what the floor requires.** `SQ-09` asserted that Init leaves
+  `history/` empty, while the floor states that the Scribe writes an orchestration block into
+  `history/Squad Scribe.md` on every turn it writes state, **including Init**. Earlier runs happened
+  not to comply and the contradiction stayed hidden; the run that finally complied was failed for
+  it. The rule this protects is that no *agent* history file predates its dispatch — a seeded
+  `history/Squad Researcher.md` is the defect, and the Scribe's own record of the Init turn is not a
+  dispatch record. `SQ-09` now permits it and rejects everything else
+  (`tests/tier1/StateContract.Tests.ps1`).
+
+- **The calibration note was asserted against the wrong file.** The rule says that until the
+  calibration factor has been reconciled once, *the ledger* carries an uncalibrated note — and the
+  assertion searched `consumption-rates.md` for the word instead. Every seeded squad reported a
+  finding it could not have avoided, including one whose ledger said `Calibration factor 1.00 (0
+  reconciled runs)` in as many words. The check now reads the ledger, and the rates file's own shape
+  is left to the assertion that already covers it.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.16.0"
+```
+
+[0.16.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.16.0
+
 ## [0.15.3] - 2026-08-18
 
 ### Changed
