@@ -10,7 +10,7 @@ The suite runs twice against two different refs and the two results are compared
 
 1. **Baseline run — against `main`.** Establishes that the suite itself is correct. Every case must pass. A case that fails on `main` is a defect in the case, not in the product, and is fixed before proceeding.
 2. **Candidate run — against `v0.16.0-pre`.** Any case that passed on `main` and fails here is a regression introduced by the refactor. Any case that fails on both is a pre-existing gap. Any case that only exists for `0.16.0` is a new-feature check.
-3. **Release gate.** The candidate run must be green before the release workflow is allowed to tag.
+3. **Pre-release check.** The candidate run is expected green before a release is cut. It is run by hand, not by the release workflow — see *Why the release gate is Tier 0 only* below.
 
 Both runs install the package from a published ref into a scratch directory and exercise it there. They never test the working tree — testing the installed artifact is what catches packaging and reference-resolution defects.
 
@@ -19,10 +19,20 @@ Both runs install the package from a published ref into a scratch directory and 
 | Tier | What it is | LLM calls | Runs on |
 |---|---|---|---|
 | 0 | Static conformance of the installed package | none | every PR, and the release gate |
-| 1 | Live behavioral runs against fixture repos | yes | the release gate |
-| 2 | Semantic comparison against a golden baseline | yes | advisory at first |
+| 1 | Live behavioral runs against fixture repos | yes | on demand, by an operator |
+| 2 | Semantic comparison against a golden baseline | yes | inside every Tier 1 run, advisory |
 
 Tier 0 is deterministic and free. Tier 1 asserts on **state artifacts on disk**, never on prose, which is what makes it stable despite model nondeterminism. Tier 2 is the only tier that judges wording, and it starts advisory until the noise floor is known.
+
+### Why the release gate is Tier 0 only
+
+A release blocks on Tier 0 and on nothing else. Tier 1 and Tier 2 are dispatched by hand, before or after a cut, and their result is read rather than enforced. Three reasons, and each one is a fact about the suite rather than a preference:
+
+* **It costs Copilot requests and about an hour.** A release triggered by a push to `main` would spend both every time `apm.yml` or the CHANGELOG moves, including on a re-cut of a ref already exercised.
+* **It is nondeterministic, and its recent failures were its own.** Of the three dispatched runs before `0.16.0`, two failed — both because the contract asserted something the source did not say, not because the squad regressed. A gate standing on that record blocks releases for test defects.
+* **It would not have caught what `0.16.0` shipped.** The defect that reached a live `azure` run — ten claimed stages, no dispatch records — sits behind `mode=autopilot`, and no Tier 1 scenario runs autopilot. Gating on a suite that cannot see the failure class buys confidence it has not earned.
+
+What would change the decision: an autopilot scenario, a measured noise floor across repeat runs on one ref, and a stretch of dispatched runs whose failures are the product's rather than the harness's. Until then the suite's job is to find defects, which it does, and not to hold the tag.
 
 ## Running the suites
 
@@ -503,4 +513,6 @@ Triage aid: a difference in this list is expected and is **not** a regression.
 4. Add routing and role selection (RTE) and profile seeding (PRF). PRF is cheap and fully deterministic after Init. RTE-30 to RTE-37 are the methodology cases and are the strongest evidence that the refactor preserved the squad's character.
 5. Add the promotion, entrypoint, and gate cases. Promotion is the highest-value remaining group because it moves state.
 6. Merge PR #70, then run the whole suite against `v0.16.0-pre`. Triage every difference against the intended-deltas table.
-7. Wire the suite into the release workflow as a blocking job once it is green twice in a row.
+7. Add an autopilot scenario. It is the most expensive case in the suite and the only one that would see the failure class `0.16.0` shipped: a run that claims ten stages and leaves no `history/<agent>.md` behind any of them.
+8. Capture the Tier 2 golden baselines from a release known to be good. Until a baseline exists per scenario, Tier 2 reports `unbaselined` and scores nothing, which is the state every release up to and including `v0.16.0` shipped in.
+9. Reconsider wiring the suite into the release workflow, against the conditions in *Why the release gate is Tier 0 only*. Not before them.
