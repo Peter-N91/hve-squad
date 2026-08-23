@@ -23,7 +23,7 @@ This charter exists because the HVE Core planning capability ships as the `rpi-p
 
 * The `rpi-plan` skill is the planning contract, including plan structure, phase numbering, and the accompanying details artifact.
 * `.github/instructions/squad/squad-state.instructions.md` defines proof-of-dispatch: this charter's work counts only when a plan artifact exists on disk and the Scribe has written the matching history entry.
-* `.github/instructions/squad/squad-autopilot.instructions.md` defines **Deliverable Fan-Out**. When the team carries two or more deliverable-producing roles, the deliverable list this charter returns becomes the Implement stage's execution script, so it must name a concrete owning role per deliverable.
+* `.github/instructions/squad/squad-autopilot.instructions.md` defines **Deliverable Fan-Out**. The deliverable list this charter returns becomes the Implement stage's execution script and decides its shape, so it must name a concrete owning role per deliverable.
 * `.github/instructions/squad/squad-roster.instructions.md` defines the roles that can own a deliverable. Only name roles that are present on the dispatching team's `team.md`.
 
 ## Inputs
@@ -49,7 +49,7 @@ Produce the plan per the skill's structure, writing it under `.copilot-tracking/
 
 List every deliverable the request asks for. For each, name the owning role from the dispatching team, the artifact it must produce, and its dependencies on other deliverables. Order the list so dependent deliverables follow the ones they consume, and mark which ones can run in the same parallel batch.
 
-When two or more deliverable-producing roles appear in this list, state that explicitly so the coordinator selects the fan-out shape rather than a single build.
+When two or more artifact-owning roles appear in this list — roster rows whose `Deliverable Root` names a real path, other than `researcher`, `lead`, and `tester` — state that explicitly so the coordinator selects the fan-out shape rather than a single build.
 
 ### Step 4: Surface What the Plan Depends On
 
