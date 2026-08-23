@@ -17,7 +17,7 @@ on:
     # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); the ref is validated with git rev-parse against an existing tag before the build step ever runs.
     inputs:
       ref:
-        description: 'hve-squad tag to build from. Leave blank to use the latest tag (git describe --tags --abbrev=0).'
+        description: 'hve-squad tag to build from. Leave blank to use the highest released version tag (vX.Y.Z, pre-releases excluded).'
         required: false
         type: string
 
@@ -53,6 +53,14 @@ jobs:
             exit 1
           fi
 
+      # ── Why not `git describe --tags --abbrev=0` ─────────────────────────
+      #    Release tags here are cut on a "pin squad self-references" commit
+      #    one step past main (see release.yml) and never merged back, so the
+      #    latest release tag is NOT an ancestor of main's tip. `git describe`
+      #    only walks ancestors, so it silently resolves to some older tag
+      #    that does happen to sit in main's history — not the actual latest
+      #    release. Resolve by version-sorting release tag names instead,
+      #    which does not depend on ancestry at all.
       - name: Resolve the tag to build
         id: tag
         env:
@@ -60,7 +68,11 @@ jobs:
         run: |
           REF="$REF_INPUT"
           if [[ -z "$REF" ]]; then
-            REF=$(git describe --tags --abbrev=0)
+            REF=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+            if [[ -z "$REF" ]]; then
+              echo "::error::No release tag (vX.Y.Z) found in this repository."
+              exit 1
+            fi
           fi
           if ! git rev-parse "refs/tags/$REF" >/dev/null 2>&1; then
             echo "::error::Tag '$REF' does not exist in this repository."
