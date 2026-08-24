@@ -224,36 +224,52 @@ function Convert-AgentCitations {
         [string]$Content
     )
 
-    # Section 1c reverse-index: old squad-namespaced instruction file -> new plugin-tree target.
-    # Longer/more-specific names (e.g. federation-autopilot) are listed before their prefixes
-    # (federation) purely for readability; the trailing '.instructions.md' anchor already
-    # prevents 'squad-federation' from matching 'squad-federation-autopilot.instructions.md'.
-    $citationMap = [ordered]@{
-        'squad-mcp-capability'        = 'skills/squad/references/mcp-capability.md'
-        'squad-state'                 = 'skills/squad/references/scribe-procedure.md'
-        'squad-autonomous'            = 'skills/squad/references/gates-and-modes.md'
-        'squad-autopilot'             = 'skills/squad/references/gates-and-modes.md'
-        'squad-council'               = 'skills/squad/references/gates-and-modes.md'
-        'squad-roster'                = 'skills/squad/references/profiles-and-packs.md'
-        'squad-federation-autopilot'  = 'skills/squad/references/federation.md'
-        'squad-federation'            = 'skills/squad/references/federation.md'
-    }
+    # Section 1c reverse-index is now built at run time from the ported rules files
+    # ($script:RuleCitationMap, populated by Copy-InstructionRules). The distilled
+    # reference files stay the curated entry points; a citation resolves to the full
+    # ported rule text, which is what the citation meant in the package.
 
-    foreach ($name in $citationMap.Keys) {
+    # Every ported rules file is a citation target, so a new instruction file in squad-src
+    # becomes citable without editing a map here. A hand-maintained map is what let
+    # squad-routing.instructions.md ship with no destination at all: its Tracker-Write Gate
+    # simply did not exist in the plugin, and nothing failed to say so.
+    foreach ($name in $script:RuleCitationMap.Keys) {
         $pattern = '`(?:\.github/instructions/squad/)?' + [regex]::Escape($name) + '\.instructions\.md`'
-        $Content = $Content -replace $pattern, ('`' + $citationMap[$name] + '`')
+        $Content = $Content -replace $pattern, ('`' + $script:RuleCitationMap[$name] + '`')
+
+        # Bare (un-backticked) mentions, as used in prose and in 00-index.md's bullet list.
+        $barePattern = '(?<!`)\.github/instructions/squad/' + [regex]::Escape($name) + '\.instructions\.md(?!`)'
+        $Content = $Content -replace $barePattern, $script:RuleCitationMap[$name]
     }
 
     # squad-cost-manager.agent.md's parenthetical named its old source location; that
     # description is dead once the file no longer lives there in the plugin tree.
     $Content = $Content -replace ' \(authored under `squad-src/\.github/instructions/squad/`\)', ''
 
-    # squad-floor.instructions.md is INLINE-only (Section 4c): squad-coordinator.agent.md
-    # already restates the Dispatch-Discipline rule in its own words, so the citation is
-    # dropped rather than rewritten to a new path.
-    if ($FileName -eq 'squad-coordinator.agent.md') {
-        $Content = $Content -replace ', and `squad-floor\.instructions\.md` carries it in full\.', '.'
-    }
+    # Anything still addressed under .github/instructions/squad/ after the rewrite above is
+    # not a squad instruction file — the squad directory holds exactly the ported set. It is
+    # an hve-core instruction cited with a stray 'squad/' segment, and hve-core ships to the
+    # consumer through the hve-squad-hve-core marketplace entry, so the fix is the real path
+    # rather than a drop. Normalizing here keeps already-tagged refs publishable instead of
+    # failing the conformance gate over a typo the tag has already frozen.
+    $Content = [regex]::Replace(
+        $Content,
+        '\.github/instructions/squad/([a-z0-9-]+)\.instructions\.md',
+        { param($m) ".github/instructions/$($m.Groups[1].Value).instructions.md" }
+    )
+
+    # Directory-level prose survives the per-file citation rewrite above, and it is what
+    # told the coordinator its rules live under .github/instructions/squad/ in a plugin that
+    # ships no such directory. Point it at the ported rules instead.
+    $Content = $Content -replace `
+        'Eleven instruction files under `\.github/instructions/squad/` carry the data and rules behind that procedure', `
+        'Fifteen rule files under `skills/squad/references/rules/` carry the data and rules behind that procedure'
+    $Content = $Content -replace `
+        'All but `squad-floor` auto-apply through their `applyTo` pattern \*\*only where the host honors it and a squad-state path is already in context\*\* — which is why every rule that must hold unconditionally lives in the floor or in the reference files above, not in them\.', `
+        'In this plugin distribution they do not auto-apply at all — there is no instructions channel to apply them — so read the rule file that owns a decision before making it, and treat `rules/squad-floor.md` as unconditional.'
+    $Content = $Content -replace `
+        'The instruction files under `\.github/instructions/squad/` define the data behind that procedure\.', `
+        'The rule files under `skills/squad/references/rules/` define the data behind that procedure.'
 
     return $Content
 }
@@ -270,6 +286,9 @@ function Write-TextFile {
         [switch]$DryRun
     )
 
+    # Recorded even on a dry run: the conformance check compares intent, not disk.
+    $script:GeneratedPaths.Add((Resolve-OutputRelativePath -Path $Path)) | Out-Null
+
     if ($DryRun) {
         Write-Host "  [dry run] would write $Path" -ForegroundColor DarkGray
         return
@@ -280,6 +299,157 @@ function Write-TextFile {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
     Set-Content -LiteralPath $Path -Value $Content -Encoding utf8NoBOM -NoNewline
+}
+
+function Resolve-OutputRelativePath {
+    <#
+    .SYNOPSIS
+        Normalizes a written path to a forward-slashed path relative to
+        OutputRoot, so generated and on-disk trees compare on equal terms.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $root = [System.IO.Path]::GetFullPath($script:OutputRootResolved)
+    if ($full.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+        $full = $full.Substring($root.Length).TrimStart('\', '/')
+    }
+    return ($full -replace '\\', '/')
+}
+
+function Copy-InstructionRules {
+    <#
+    .SYNOPSIS
+        Ports every squad instruction file into skills/squad/references/rules/
+        and records the citation target for each.
+    .DESCRIPTION
+        The plugin surface has no .instructions.md channel: plugin.json declares
+        agents, skills, hooks, and mcpServers, and nothing applies an applyTo
+        glob. Distilling the rules by hand into a few reference files lost some
+        of them outright — squad-routing's Tracker-Write Gate and the roster's
+        "never self-fill an absent role" reached no plugin file at all, so the
+        squad dispatched an opt-in role that was not on the roster. Porting each
+        file wholesale removes the editorial step that dropped them, and makes a
+        new instruction file ship without anyone remembering to map it.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Source,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$OutputRoot,
+
+        [switch]$DryRun
+    )
+
+    $instructionPaths = @(
+        Get-SourceFileList -Source $Source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/instructions/squad' |
+            Where-Object { $_ -like '*.instructions.md' } | Sort-Object
+    )
+
+    if (-not $instructionPaths) {
+        throw "No instruction files found under squad-src/.github/instructions/squad at '$($Source.Ref)'. The plugin would ship with no rule content, which is the failure this port exists to prevent."
+    }
+
+    # Pass 1 registers every target before pass 2 rewrites, because these files cite each
+    # other: porting and rewriting in one loop leaves every forward reference dangling.
+    foreach ($relPath in $instructionPaths) {
+        $stem = (Split-Path -Path $relPath -Leaf) -replace '\.instructions\.md$', ''
+        $script:RuleCitationMap[$stem] = "skills/squad/references/rules/$stem.md"
+    }
+
+    foreach ($relPath in $instructionPaths) {
+        $leaf = Split-Path -Path $relPath -Leaf
+        $stem = $leaf -replace '\.instructions\.md$', ''
+        $content = Get-SourceFileContent -Source $Source -RepoRoot $RepoRoot -RelativePath $relPath
+
+        # Strip the YAML frontmatter: applyTo/description drive an instructions loader
+        # the plugin surface does not have, and leaving them implies an activation that
+        # never happens.
+        $body = $content -replace '(?s)^\uFEFF?---\r?\n.*?\r?\n---\r?\n', ''
+        $body = Convert-AgentCitations -FileName $leaf -Content $body
+        $header = "<!-- Ported from squad-src/.github/instructions/squad/$leaf by scripts/Build-SquadPlugin.ps1. Source of truth lives in hve-squad; do not hand-edit here. -->`n`n"
+
+        Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/references/rules/$stem.md") `
+            -Content ($header + $body) -DryRun:$DryRun
+    }
+
+    return $instructionPaths.Count
+}
+
+function Assert-PluginTreeConformance {
+    <#
+    .SYNOPSIS
+        Fails the build when the generated tree would ship a dangling citation
+        or a file no generator step authored.
+    .DESCRIPTION
+        Hard failure, not a warning: every defect this checks for is invisible
+        at run time. A citation pointing at a file that does not exist reads as
+        a working reference to the model, and a hand-written orphan under
+        skills/ looks identical to generated content while drifting from the
+        package it is supposed to mirror. A warning on a publish path nobody
+        reads line by line is the same as no check.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$OutputRoot
+    )
+
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $generated = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($p in $script:GeneratedPaths) { $generated.Add($p) | Out-Null }
+
+    # 1. No generated file may cite a squad instruction path that no longer ships.
+    # 2. No generated file may cite a skills/ target this run did not author.
+    foreach ($rel in $script:GeneratedPaths) {
+        if ($rel -notmatch '\.md$') { continue }
+        $abs = Join-Path $OutputRoot $rel
+        if (-not (Test-Path -LiteralPath $abs)) { continue }
+        $text = Get-Content -LiteralPath $abs -Raw
+        # HTML comments carry the generator's own provenance header, which names the source
+        # instruction path on purpose. It is not a citation the model is meant to follow.
+        $text = [regex]::Replace($text, '(?s)<!--.*?-->', '')
+
+        foreach ($m in [regex]::Matches($text, '\.github/instructions/squad/[a-z0-9-]+\.instructions\.md')) {
+            $problems.Add("$rel cites '$($m.Value)', which the plugin does not ship.") | Out-Null
+        }
+        foreach ($m in [regex]::Matches($text, 'skills/squad/references/[A-Za-z0-9/._-]+\.md')) {
+            if (-not $generated.Contains($m.Value)) {
+                $problems.Add("$rel cites '$($m.Value)', which no generator step authored.") | Out-Null
+            }
+        }
+    }
+
+    # 3. Nothing under agents/ or skills/ may exist that this run did not author:
+    #    a hand-written file there has no source of truth in hve-squad and drifts silently.
+    foreach ($dir in @('agents', 'skills')) {
+        $abs = Join-Path $OutputRoot $dir
+        if (-not (Test-Path -LiteralPath $abs)) { continue }
+        foreach ($file in Get-ChildItem -LiteralPath $abs -Recurse -File) {
+            $rel = Resolve-OutputRelativePath -Path $file.FullName
+            if (-not $generated.Contains($rel)) {
+                $problems.Add("$rel exists in the output tree but no generator step authored it (hand-written orphan: adopt it into squad-src or delete it).") | Out-Null
+            }
+        }
+    }
+
+    if ($problems.Count -gt 0) {
+        $detail = ($problems | Sort-Object -Unique | ForEach-Object { "  - $_" }) -join "`n"
+        throw "Plugin tree conformance failed with $($problems.Count) problem(s):`n$detail"
+    }
+
+    Write-Host "Conform: citations resolve and no unauthored files under agents/ or skills/" -ForegroundColor Green
 }
 
 function New-InvocationSkillContent {
@@ -446,6 +616,118 @@ metadata:
 
 Dispatch this request to the `Squad Learn` agent. This skill does not perform discovery or draft the PR itself — it only resolves which parameters to pass.
 '@
+
+        # The two below are plugin-only capabilities with no squad-src counterpart: they
+        # exist because the plugin surface differs from the apm one. They were hand-written
+        # straight into hve-squad-plugin and survived every rebuild unnoticed, which is the
+        # drift the conformance check now refuses.
+        'squad-doctor'              = @'
+---
+name: squad-doctor
+description: "Checks which hve-core-owned cast roles (security, RAI, privacy, accessibility, project-planning, design-thinking, coding-standards) are absent when only the hve-core Copilot plugin is installed, without an `apm install`. Use at squad Init, on request ('run squad-doctor', 'check for missing roles', 'what's not installed'), or any time a dispatch fails because a mapped Primary agent cannot be found."
+license: MIT
+metadata:
+  authors: "Peter-N91/hve-squad"
+---
+
+# Squad Doctor
+
+## Why This Exists
+
+Per `hve-squad`'s own architecture decision (the plugin deliberately does not
+vendor hve-core's domain content), the `hve-squad` plugin does **not** vendor
+hve-core's domain content. When a consumer installs only this plugin (no
+`apm install github/hve-core`, and no `hve-squad-hve-core` marketplace entry),
+the domain agents from seven areas are missing: **accessibility, security,
+privacy, RAI, project-planning, design-thinking, and coding-standards**. Most
+of the roster's cast catalog casts against agents in exactly those seven
+domains — so most roster rows resolve to an absent agent at dispatch time, and
+the roster's own rule is to **escalate rather than dispatch a partial squad**.
+This check makes that gap visible before a turn hits it, instead of failing
+mid-dispatch with an unexplained "agent not found."
+
+This check never vendors or duplicates hve-core's content (that would repeat
+the rejected alternative) — it only reports what is present versus what the
+roster expects.
+
+## Inputs
+
+None required. Optionally accepts **scope** (`all` default, or a single domain name) to narrow the report to one domain.
+
+## Flow
+
+1. **Enumerate dispatchable agents actually available in this session** — the set the coordinator could hand to `runSubagent`/`task` right now, by whatever discovery mechanism the host exposes (installed plugin agent listings, `apm install`-deployed `.github/agents/**`, or both).
+2. **Check each of the seven domains below against its representative Primary agent name(s).** A domain is reported **present** only when at least one of its named Primaries actually resolves; **absent** otherwise. Do not guess from a partial match — an agent whose name merely sounds similar does not count.
+
+   | Domain | Representative Primary agent name(s) to check for |
+   |---|---|
+   | `security` | `Security Planner`, `SSSC Planner`, `Skill Assessor`, `Supply Chain Skill Assessor`, `Finding Deep Verifier`, `Report Generator`, `CVE Analyzer` |
+   | `rai` | `RAI Planner`, `RAI Skill Assessor` |
+   | `privacy` | `Privacy Planner` |
+   | `accessibility` | `Accessibility Framework Assessor`, `Accessibility Surface Inventory` |
+   | `project-planning` | `PRD Builder`, `BRD Builder`, `Functional Planner`, `System Architecture Reviewer`, `ADR Creator`, `Meeting Analyst`, `UX UI Designer` |
+   | `design-thinking` | `DT Coach`, `DT Learning Tutor` |
+   | `coding-standards` | `Code Review Functional`, `Code Review Standards`, `Code Review Security`, `Code Review Accessibility` |
+
+3. **Report per-domain, not just an aggregate.** For each domain: `present` (name the resolved agent) or `absent`. Never report a domain `present` on the strength of the squad's own `squad-*` glue agents (`Squad Reviewer`, `Squad Lead`, etc.) — those dispatch *to* the domain's agents and are not a substitute for them being present.
+4. **Name the fix for every absent domain**, without vendoring the content itself: installing the `hve-squad-hve-core` marketplace entry (pinned to the commit this hve-squad release was validated against), or `apm install github/microsoft/hve-core` for an apm consumer, resolves all seven at once.
+5. **Cross-check the mapping's currency.** This table mirrors `skills/squad/references/rules/squad-roster.md`'s cast catalog as of this plugin's build. If the roster changes which Primary a role resolves to, this table drifts — note that possibility in the report rather than presenting the table as infallible.
+
+## Output
+
+A short per-domain table (`present`/`absent` + resolved agent name or the fix) plus a one-line summary count (`N of 7 domains present`). Never silently drop a domain from the report.
+
+## Invocation
+
+This is a mechanical inspection, not a role dispatch — perform it directly rather than routing to a specialist agent. It complements, and does not replace, `hooks/scripts/session-start-check.sh` (which only checks squad-state file resolution, not cast availability).
+'@
+
+        'squad-init-hooks'          = @'
+---
+name: squad-init-hooks
+description: "Writes the squad's hooks.json guards into the consuming repository's own .github/hooks/ so they also run under Copilot cloud agent, which only loads repository-level hook files and never a plugin's own hooks.json. Use when the user asks to enable squad hooks for the cloud agent, wants hooks to work on GitHub.com, or asks to run '/squad init' or 'squad-init-hooks'."
+license: MIT
+metadata:
+  authors: "Peter-N91/hve-squad"
+---
+
+# Squad Init Hooks
+
+## Why This Exists
+
+Per the GitHub Copilot hooks reference, a plugin's own `hooks.json` is loaded by **Copilot CLI only**. **Copilot cloud agent loads hook configuration exclusively from `.github/hooks/*.json` files committed in the cloned repository** — it never reads a plugin's `hooks.json`. So this plugin's guards (the Impactful-Action Gate, the append-only/single-writer backstop, the dispatch-time gates, the autonomous escalation check) run for a CLI or desktop-app session, but not for a Watch Mode run or any other cloud-agent job, unless a copy is committed at the repository level.
+
+This is a **single-purpose action**: it drops hook files into the consuming repository. It does nothing else — no roster seeding, no profile selection, no `team.md`/`routing.md` creation.
+
+## Inputs
+
+* **targetDir** (optional, defaults to `.github/hooks/`): where to write the hook configuration and its scripts in the consuming repository.
+* **force** (optional, defaults to `false`): when `true`, overwrite an existing `hve-squad.json`/`hve-squad/` drop from a prior run of this same skill. Never overwrites a file this skill did not itself create — see *Idempotency* below.
+
+## Flow
+
+1. **Read the plugin's own `hooks.json`** and its referenced scripts under `hooks/scripts/`.
+2. **Filter to the cloud-agent-relevant subset.** Per the hooks reference, Copilot cloud agent honors every event type this plugin uses (`sessionStart`, `preToolUse`, `postToolUse`, `subagentStop`, `userPromptSubmitted`) but **only the `bash` field on a command hook** — `powershell` entries are ignored, and the `command` cross-platform fallback field is honored when `bash` is absent. Every hook entry in this plugin already carries a `bash` script, so no entry is dropped for lacking one; the filtering step only means: do not expect the `.ps1` companions to do anything once copied into a cloud-agent context, and do not bother copying them there.
+3. **Write the hook configuration** to `<targetDir>/hve-squad.json`, with paths rewritten relative to the repository root (cloud agent's working directory is `/workspace` when a repository is cloned) rather than the plugin's own install directory.
+4. **Copy the bash scripts** (not the PowerShell companions) to `<targetDir>/hve-squad/*.sh`, preserving execute permissions where the filesystem supports it.
+5. **Report exactly what was written** — the hook file path, each script path, and a one-line note that this drop must be committed to take effect for cloud agent (an uncommitted local file is invisible to a cloud-agent job, which operates on the cloned repository, not the developer's working tree).
+
+## Idempotency
+
+* A top-level `"_generatedBy": "squad-init-hooks"` field is written into `hve-squad.json` so a re-run can recognize its own prior output.
+* Re-running without `force` when the marker is present and unchanged is a no-op that reports "already up to date."
+* Re-running when the target file exists **without** the marker (a human-authored `.github/hooks/hve-squad.json`, or a differently-named file that happens to collide) refuses to overwrite it and reports the conflict, asking the user to rename one side — the same no-clobber discipline the federation naming rule uses elsewhere in the squad.
+
+## What This Skill Does Not Do
+
+* It does not run `apm install` or seed any roster/profile state.
+* It does not enable Watch Mode itself — the two GitHub Actions workflows (`skills/squad/github-approval-watcher.workflow.yml`, `skills/squad/squad-watch.workflow.yml`) are a separate, explicit copy-and-commit step a consumer performs when they want Watch Mode's actual trigger and approval enforcement, not just its hooks-layer backstop.
+* It does not touch `.mcp.json` or any MCP server registration.
+
+## Invocation
+
+Perform this as a direct file-write action — it is a mechanical copy-and-rewrite, not a role dispatch.
+'@
     }
 }
 
@@ -473,7 +755,16 @@ if ($MyInvocation.InvocationName -ne '.') {
     Write-Host "Version: $($source.PluginVersion)" -ForegroundColor Cyan
     Write-Host ''
 
+    $script:OutputRootResolved = $OutputRoot
+    $script:GeneratedPaths = [System.Collections.Generic.List[string]]::new()
+    $script:RuleCitationMap = [ordered]@{}
+
     try {
+        # ── Rules: wholesale port of the squad instruction files (must precede agents,
+        #    which cite them through $script:RuleCitationMap) ──
+        $ruleCount = Copy-InstructionRules -Source $source -RepoRoot $RepoRoot -OutputRoot $OutputRoot -DryRun:$DryRun
+        Write-Host "Rules:   $ruleCount instruction files ported to skills/squad/references/rules/" -ForegroundColor Cyan
+
         # ── Agents: verbatim copy + citation rewrite + inline-fold (P02-T01/T02/T03) ──
         $agentPaths = Get-SourceFileList -Source $source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/agents/squad'
         $agentFiles = @($agentPaths | Where-Object { $_ -like '*.agent.md' })
@@ -507,8 +798,13 @@ if ($MyInvocation.InvocationName -ne '.') {
                     '## Companion hook rules and reference files'
                 $content = $content -replace `
                     'The `squad` skill complements eleven instruction files that auto-apply when squad state is touched\. Their `applyTo` globs only fire in a host that loads modular instructions, so a rule that must hold unconditionally belongs in a reference file above, not only here\.', `
-                    'In the plugin distribution, these rules no longer ship as `.instructions.md` files: deterministic enforcement moves to `hooks.json` and procedural/reference content moves into the reference files above. The bullets below are pending their P03 rewrite to cite the hook and reference-file targets directly.'
+                    'In the plugin distribution these rules do not ship as `.instructions.md` files, because the plugin surface has no instructions channel to apply them. Deterministic enforcement moves to `hooks.json`; the full rule text of every file below is ported verbatim under `references/rules/`, and the citations in this section resolve there. The distilled reference files above remain the curated entry points — read those first, and read `references/rules/` when you need the complete rule.'
             }
+
+            # Skill files cite the instruction files too (00-index.md names them by path),
+            # so they get the same rewrite the agents do — otherwise the index points at
+            # files the plugin does not ship.
+            $content = Convert-AgentCitations -FileName $subPath -Content $content
 
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/$subPath") -Content $content -DryRun:$DryRun
         }
@@ -615,6 +911,10 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
         }
         Write-TextFile -Path $mcpJsonPath -Content (($mcpManifest | ConvertTo-Json -Depth 10) + "`n") -DryRun:$DryRun
+
+        if (-not $DryRun) {
+            Assert-PluginTreeConformance -OutputRoot $OutputRoot
+        }
 
         Write-Host ''
         Write-Host "Build complete: $OutputRoot" -ForegroundColor Green
