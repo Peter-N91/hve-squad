@@ -535,6 +535,21 @@ if ($MyInvocation.InvocationName -ne '.') {
             -Content (($pluginManifest | ConvertTo-Json -Depth 10) + "`n") -DryRun:$DryRun
 
         # ── marketplace.json (P02-T07 scaffold, P04-T02-aware) ──
+        #    autoUpdate is deliberately absent: a consumer must receive the
+        #    hve-squad and hve-core entries as a matched pair (see below), and
+        #    an unattended update of one without the other reintroduces the
+        #    version skew the pinned hve-core entry exists to prevent.
+
+        # The hve-core entry ships the exact commit this hve-squad ref's apm.yml
+        # was validated against, so a consumer never resolves hve-core content
+        # newer than the routing and charters that reference it.
+        $apmYaml = Get-SourceFileContent -Source $source -RepoRoot $RepoRoot -RelativePath 'apm.yml'
+        $hveCoreSha = ([regex]::Match($apmYaml, 'microsoft/hve-core/[^\s#]+#([0-9a-f]{40})')).Groups[1].Value
+        if (-not $hveCoreSha) {
+            throw "Could not resolve the microsoft/hve-core commit pin from apm.yml at '$($source.Ref)'. The marketplace's hve-core entry must ship the exact validated commit, so refusing to emit an unpinned entry."
+        }
+        Write-Host "hve-core: pinning marketplace entry to $($hveCoreSha.Substring(0,7))" -ForegroundColor Cyan
+
         $marketplaceManifest = [ordered]@{
             name       = 'hve-squad-plugin'
             owner      = [ordered]@{ name = 'Peter-N91' }
@@ -542,7 +557,6 @@ if ($MyInvocation.InvocationName -ne '.') {
                 description = 'Marketplace for the hve-squad GitHub Copilot plugin, generated and release-gated from Peter-N91/hve-squad.'
                 version     = $source.PluginVersion
             }
-            autoUpdate = $true
             plugins    = @(
                 [ordered]@{
                     name        = 'hve-squad'
@@ -554,6 +568,18 @@ if ($MyInvocation.InvocationName -ne '.') {
                         ref    = 'main'
                     }
                     repository  = 'https://github.com/Peter-N91/hve-squad-plugin'
+                    license     = 'MIT'
+                }
+                [ordered]@{
+                    name        = 'hve-squad-hve-core'
+                    description = "microsoft/hve-core pinned to the exact commit validated against hve-squad $($source.PluginVersion)'s apm.yml (Sync and Adapt / cast-delta guard). Named distinctly from the official hve-core plugin so both can be registered side by side."
+                    version     = $source.PluginVersion
+                    source      = [ordered]@{
+                        source = 'github'
+                        repo   = 'microsoft/hve-core'
+                        sha    = $hveCoreSha
+                    }
+                    repository  = 'https://github.com/microsoft/hve-core'
                     license     = 'MIT'
                 }
             )

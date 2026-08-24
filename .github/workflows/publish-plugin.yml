@@ -20,6 +20,10 @@ on:
         description: 'hve-squad tag to build from. Leave blank to use the highest released version tag (vX.Y.Z, pre-releases excluded).'
         required: false
         type: string
+      mcp-version:
+        description: 'Optional: exact @hve-squad/mcp version to pin (e.g. 0.7.1). Leave blank to keep the pin already in hve-squad-plugin''s .mcp.json.'
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}
@@ -88,11 +92,23 @@ jobs:
           path: hve-squad-plugin
           fetch-depth: 0
 
+      # The generator re-derives the marketplace's hve-core pin from this tag's
+      # own apm.yml, so a release that moved the pin publishes the matching
+      # hve-squad-hve-core entry without anyone editing the manifest by hand.
+      # -McpVersion is the one axis that stays deliberate: omitted, the existing
+      # .mcp.json pin is reused rather than silently advanced.
       - name: Build the plugin tree
         shell: pwsh
         env:
           TAG: ${{ steps.tag.outputs.ref }}
-        run: ./scripts/Build-SquadPlugin.ps1 -Ref $env:TAG -OutputRoot "${{ github.workspace }}/hve-squad-plugin"
+          MCP_VERSION: ${{ inputs.mcp-version }}
+        run: |
+          $buildArgs = @{
+              Ref        = $env:TAG
+              OutputRoot = "${{ github.workspace }}/hve-squad-plugin"
+          }
+          if ($env:MCP_VERSION) { $buildArgs.McpVersion = $env:MCP_VERSION }
+          ./scripts/Build-SquadPlugin.ps1 @buildArgs
 
       # ── Commit, tag, and push into hve-squad-plugin ───────────────────────
       #    Re-running against a tag that produced no change is a no-op commit,
