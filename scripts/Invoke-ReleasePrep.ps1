@@ -120,6 +120,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 $script:SectionOrder = @('Added', 'Changed', 'Deprecated', 'Removed', 'Fixed', 'Security')
 $script:BumpRank = @{ patch = 1; minor = 2; major = 3 }

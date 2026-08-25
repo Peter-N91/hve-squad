@@ -91,6 +91,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 #region Functions
 
