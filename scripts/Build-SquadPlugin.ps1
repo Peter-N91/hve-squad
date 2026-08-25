@@ -869,7 +869,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 }
                 [ordered]@{
                     name        = 'hve-squad-hve-core'
-                    description = "microsoft/hve-core pinned to the exact commit validated against hve-squad $($source.PluginVersion)'s apm.yml (Sync and Adapt / cast-delta guard). Named distinctly from the official hve-core plugin so both can be registered side by side."
+                    description = "microsoft/hve-core pinned to the exact commit validated against hve-squad $($source.PluginVersion)'s apm.yml (Sync and Adapt / cast-delta guard). Install this INSTEAD OF the official hve-core plugin, not alongside it: the distinct name only prevents a name collision at install time, and registering both gives you a second, unpinned copy of every hve-core agent that squad roles can resolve to. Refresh it with uninstall-then-install; plugin update cannot see a new pin because the recorded version comes from upstream hve-core's own plugin.json."
                     version     = $source.PluginVersion
                     source      = [ordered]@{
                         source = 'github'
