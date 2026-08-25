@@ -17,7 +17,11 @@
   <a href="https://github.com/Peter-N91/hve-squad/actions/workflows/zizmor.yml"><img src="https://github.com/Peter-N91/hve-squad/actions/workflows/zizmor.yml/badge.svg" alt="Zizmor" /></a>
   <a href="https://github.com/Peter-N91/hve-squad/actions/workflows/checkov.yml"><img src="https://github.com/Peter-N91/hve-squad/actions/workflows/checkov.yml/badge.svg" alt="Checkov" /></a>
   <br />
-  <a href="https://scorecard.dev/viewer/?uri=github.com/Peter-N91/hve-squad"><img src="https://api.scorecard.dev/projects/github.com/Peter-N91/hve-squad/badge" alt="OpenSSF Scorecard" /></a>
+  <!-- The canonical api.scorecard.dev/badge endpoint redirects to shields.io's
+       ossf-scorecard route, which still reads the legacy api.securityscorecards.dev
+       mirror. That mirror has not ingested this repository, so the canonical badge
+       renders "invalid repo path". Read the score from the live API instead. -->
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Peter-N91/hve-squad"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.scorecard.dev%2Fprojects%2Fgithub.com%2FPeter-N91%2Fhve-squad&query=%24.score&label=openssf%20scorecard&suffix=%20%2F%2010&color=brightgreen" alt="OpenSSF Scorecard" /></a>
   <a href="https://www.bestpractices.dev/projects/14231"><img src="https://www.bestpractices.dev/projects/14231/badge" alt="OpenSSF Best Practices" /></a>
   <a href="https://github.com/Peter-N91/hve-squad/releases/latest"><img src="https://img.shields.io/github/v/release/Peter-N91/hve-squad?sort=semver" alt="Latest release" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/Peter-N91/hve-squad" alt="License" /></a>
