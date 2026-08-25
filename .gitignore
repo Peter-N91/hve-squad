@@ -9,6 +9,7 @@ apm_modules/
 !.github/workflows/
 !.github/workflows/**
 !.github/pull_request_template.md
+!.github/dependabot.yml
 .agents/
 
 # Agent tracking artifacts.
