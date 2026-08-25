@@ -63,6 +63,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 if (-not (Test-Path -LiteralPath $ApmFile)) {
     throw "Manifest not found: $ApmFile"

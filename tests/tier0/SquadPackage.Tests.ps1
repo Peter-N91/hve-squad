@@ -2,6 +2,17 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# False positive: Pester evaluates BeforeDiscovery in the discovery scope and the It
+# blocks that consume $model through -ForEach in the run scope. PSScriptAnalyzer
+# resolves neither, so it reports the assignment as unused.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'model',
+    Justification = 'Consumed by It -ForEach at discovery scope; PSScriptAnalyzer cannot resolve Pester scoping.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'PackageRoot',
+    Justification = 'Read inside BeforeDiscovery and BeforeAll, which PSScriptAnalyzer treats as unrelated scopes.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'InstallLog',
+    Justification = 'Read inside BeforeAll, which PSScriptAnalyzer treats as an unrelated scope.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'ExpectPinned',
+    Justification = 'Read inside BeforeAll, which PSScriptAnalyzer treats as an unrelated scope.')]
 param(
     [Parameter(Mandatory)]
     [string]$PackageRoot,

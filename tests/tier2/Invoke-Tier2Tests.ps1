@@ -30,7 +30,7 @@ $config.Output.Verbosity = $Output
 $config.TestResult.Enabled = $true
 $config.TestResult.OutputPath = Join-Path $PSScriptRoot 'tier2-selfcheck-results.xml'
 
-try { $config.Run.FailOnNullOrEmptyForEach = $false } catch { }
+try { $config.Run.FailOnNullOrEmptyForEach = $false } catch { Write-Debug 'FailOnNullOrEmptyForEach is a Pester 6 setting; Pester 5 has no such property and needs no opt-out.' }
 
 $result = Invoke-Pester -Configuration $config
 

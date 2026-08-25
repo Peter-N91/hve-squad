@@ -2,6 +2,10 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# False positive: $SourceRoot is read inside BeforeDiscovery and BeforeAll, which
+# PSScriptAnalyzer treats as scopes unrelated to the param block.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SourceRoot',
+    Justification = 'Read inside Pester BeforeDiscovery and BeforeAll blocks.')]
 param(
     [Parameter(Mandatory)]
     [string]$SourceRoot

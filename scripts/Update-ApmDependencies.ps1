@@ -143,6 +143,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 #region Functions
 function Get-LeadingSpaceCount {
@@ -289,7 +290,7 @@ function Build-DependencyList {
                 $_.StartsWith('.github/skills/', [StringComparison]::OrdinalIgnoreCase) -and
                 ([string]::Equals([System.IO.Path]::GetFileName($_), 'SKILL.md', [StringComparison]::OrdinalIgnoreCase))
             } |
-                ForEach-Object { (Split-Path -Path $_ -Parent).Replace('\', '/') } |
+            ForEach-Object { (Split-Path -Path $_ -Parent).Replace('\', '/') } |
             Sort-Object -Unique
     )
 
@@ -384,7 +385,7 @@ function Build-SquadDependencyList {
                 $_.StartsWith("$prefix/.github/skills/", [StringComparison]::OrdinalIgnoreCase) -and
                 ([string]::Equals([System.IO.Path]::GetFileName($_), 'SKILL.md', [StringComparison]::OrdinalIgnoreCase))
             } |
-                ForEach-Object { (Split-Path -Path $_ -Parent).Replace('\', '/') } |
+            ForEach-Object { (Split-Path -Path $_ -Parent).Replace('\', '/') } |
             Sort-Object -Unique
     )
 

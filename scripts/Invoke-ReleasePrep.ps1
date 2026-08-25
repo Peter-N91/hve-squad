@@ -120,6 +120,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 $script:SectionOrder = @('Added', 'Changed', 'Deprecated', 'Removed', 'Fixed', 'Security')
 $script:BumpRank = @{ patch = 1; minor = 2; major = 3 }
@@ -259,8 +260,8 @@ foreach ($required in @($ApmFile, $ChangelogFile)) {
 $fragmentFiles = @()
 if (Test-Path -LiteralPath $FragmentDir) {
     $fragmentFiles = @(Get-ChildItem -LiteralPath $FragmentDir -Filter '*.md' -File |
-        Where-Object { $_.Name -ne 'README.md' } |
-        Sort-Object Name)
+            Where-Object { $_.Name -ne 'README.md' } |
+            Sort-Object Name)
 }
 
 if (-not $fragmentFiles -and -not $AllowEmpty -and -not $Version) {
