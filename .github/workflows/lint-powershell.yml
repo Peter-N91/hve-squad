@@ -1,0 +1,171 @@
+# PSScriptAnalyzer lint for the PowerShell surface.
+#
+# PSScriptAnalyzer is the standard FLOSS linter for PowerShell. It runs over the
+# build scripts in scripts/ and the test suites in tests/, which together are the
+# only executable code this repository authors; squad-src/ is markdown assets.
+#
+# The gate blocks on Error severity. Warning and Information findings are
+# reported to the Security tab and the job summary so they stay visible without
+# holding a merge for a stylistic preference. Accepted rules are excluded in
+# PSScriptAnalyzerSettings.psd1 with a written justification, never silenced here.
+name: PSScriptAnalyzer Lint
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - '**/*.ps1'
+      - '**/*.psm1'
+      - '**/*.psd1'
+      - '.github/workflows/lint-powershell.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - '**/*.ps1'
+      - '**/*.psm1'
+      - '**/*.psd1'
+      - '.github/workflows/lint-powershell.yml'
+
+permissions: {}
+
+concurrency:
+  group: lint-powershell-${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # upload SARIF results to the Security tab
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      # Pinned so a new rule shipping in a minor release cannot turn a green
+      # branch red without a deliberate bump here.
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+
+          $findings = @()
+          foreach ($path in @('scripts', 'tests')) {
+            if (Test-Path -LiteralPath $path) {
+              $findings += Invoke-ScriptAnalyzer -Path $path -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+            }
+          }
+
+          # SARIF is generated inline rather than via the ConvertToSARIF module,
+          # which Microsoft archived.
+          $rules = $findings | Group-Object RuleName | ForEach-Object {
+            @{
+              id = $_.Name
+              shortDescription = @{ text = $_.Name }
+              help = @{ text = ($_.Group[0].Message) }
+            }
+          }
+
+          $levelMap = @{ Error = 'error'; Warning = 'warning'; Information = 'note' }
+
+          $results = $findings | ForEach-Object {
+            @{
+              ruleId = $_.RuleName
+              level = $levelMap[[string]$_.Severity]
+              message = @{ text = $_.Message }
+              locations = @(
+                @{
+                  physicalLocation = @{
+                    artifactLocation = @{ uri = ([string]$_.ScriptPath -replace [regex]::Escape($PWD.Path + [System.IO.Path]::DirectorySeparatorChar), '' -replace '\\', '/') }
+                    region = @{ startLine = [int]$_.Line; startColumn = [int]$_.Column }
+                  }
+                }
+              )
+            }
+          }
+
+          $sarif = @{
+            '$schema' = 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json'
+            version = '2.1.0'
+            runs = @(
+              @{
+                tool = @{
+                  driver = @{
+                    name = 'PSScriptAnalyzer'
+                    version = '1.25.0'
+                    informationUri = 'https://github.com/PowerShell/PSScriptAnalyzer'
+                    rules = @($rules)
+                  }
+                }
+                results = @($results)
+              }
+            )
+          }
+
+          $sarif | ConvertTo-Json -Depth 12 | Set-Content -Path results.sarif -Encoding utf8
+
+          $errors = @($findings | Where-Object { $_.Severity -eq 'Error' })
+          $warnings = @($findings | Where-Object { $_.Severity -eq 'Warning' })
+          $infos = @($findings | Where-Object { $_.Severity -eq 'Information' })
+
+          $summary = @()
+          $summary += '### PSScriptAnalyzer'
+          $summary += ''
+          $summary += '| Severity | Count |'
+          $summary += '| --- | ---: |'
+          $summary += "| Errors | $($errors.Count) |"
+          $summary += "| Warnings | $($warnings.Count) |"
+          $summary += "| Information | $($infos.Count) |"
+          $summary += ''
+
+          if ($findings.Count -gt 0) {
+            $summary += '<details><summary>Findings by rule</summary>'
+            $summary += ''
+            $summary += '| Rule | Severity | Count |'
+            $summary += '| --- | --- | ---: |'
+            $summary += $findings | Group-Object RuleName | Sort-Object Count -Descending | ForEach-Object {
+              "| $($_.Name) | $($_.Group[0].Severity) | $($_.Count) |"
+            }
+            $summary += ''
+            $summary += '</details>'
+          } else {
+            $summary += 'No findings.'
+          }
+
+          $summary += ''
+          $summary += 'The gate blocks on Error only. Accepted rules are excluded in `PSScriptAnalyzerSettings.psd1` with a written justification.'
+          $summary -join "`n" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+          foreach ($e in $errors) {
+            Write-Host "::error file=$($e.ScriptPath),line=$($e.Line)::$($e.RuleName): $($e.Message)"
+          }
+
+          if ($errors.Count -gt 0) {
+            throw "PSScriptAnalyzer reported $($errors.Count) error-severity finding(s)."
+          }
+
+      - name: Upload SARIF file
+        if: (!cancelled())
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        with:
+          sarif_file: results.sarif
+          category: psscriptanalyzer
+
+      - name: Upload SARIF as artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: psscriptanalyzer-sarif
+          path: results.sarif
+          retention-days: 30
