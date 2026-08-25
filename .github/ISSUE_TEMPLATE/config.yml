@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Peter-N91/hve-squad/security/advisories/new
+    about: Report privately through GitHub Security Advisories. Do not open a public issue.
+  - name: Documentation
+    url: https://peter-n91.github.io/hve-squad/
+    about: Getting started, usage, maintaining, and troubleshooting guides.
+  - name: Issue in an upstream hve-core asset
+    url: https://github.com/microsoft/hve-core/issues
+    about: hve-squad composes hve-core agents, prompts, instructions, and skills.

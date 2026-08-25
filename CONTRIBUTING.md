@@ -3,6 +3,29 @@ title: Contributing to hve-squad
 description: How changes reach the hve-squad package and how to promote a sanitized shared learning through the fork and pull request review gate.
 ---
 
+## Reporting a bug
+
+Open an issue at
+[github.com/Peter-N91/hve-squad/issues](https://github.com/Peter-N91/hve-squad/issues)
+using the **Bug report** template. It asks for the version, the host you ran on,
+what you expected against what happened, and steps to reproduce. Squad state
+(`team.md` or `federation.md`, plus the relevant `history/` entry) is usually
+what pins a routing or ledger defect down, so include it when you can.
+
+Issues are triaged by a maintainer. There is no service-level agreement on a
+solo-maintained project, but a report that reproduces gets a response.
+
+Two things do not belong in a public issue:
+
+* **Security vulnerabilities.** Report them privately through
+  [security advisories](https://github.com/Peter-N91/hve-squad/security/advisories/new).
+  See [SECURITY.md](SECURITY.md).
+* **Defects in an upstream dependency.**
+  [microsoft/hve-core](https://github.com/microsoft/hve-core/issues) owns the
+  agents, prompts, instructions, and skills that hve-squad composes. If the
+  problem is in how hve-squad packages or routes one of them, it belongs here.
+  When in doubt, file here and it will be redirected.
+
 ## How contributions reach the package
 
 hve-squad gets better when a durable fix found in one environment reaches every other consumer hitting the same scenario. hve-squad ships through APM as one-directional package content: consumers pull the package, and the package never reads from consumer environments. The only route for a change to reach the published package is a fork and pull request against this repository.
