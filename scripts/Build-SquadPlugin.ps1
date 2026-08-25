@@ -167,7 +167,7 @@ function Get-SourceFileList {
         $absDir = Join-Path $Source.SourceRoot $RelativeDir
         if (-not (Test-Path -LiteralPath $absDir)) { return @() }
         return @(Get-ChildItem -LiteralPath $absDir -Recurse -File |
-            ForEach-Object { ($_.FullName.Substring($Source.SourceRoot.Length + 1)) -replace '\\', '/' })
+                ForEach-Object { ($_.FullName.Substring($Source.SourceRoot.Length + 1)) -replace '\\', '/' })
     }
 
     $listing = git -C $RepoRoot ls-tree -r --name-only $Source.Ref -- $RelativeDir 2>$null

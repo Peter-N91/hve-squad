@@ -146,8 +146,8 @@ function Get-DeliverablePathToken {
     # 'history/Squad Researcher.md' would truncate to 'history/Squad'. A fan-out
     # summarized as 'history/*.md' or 'root/{a.md,b.md}' names a set, not an artifact.
     @($tokens |
-        ForEach-Object { $_.Trim().TrimEnd(',', ';', '.') } |
-        Where-Object { $_ -and $_ -notmatch '[*?{}]' })
+            ForEach-Object { $_.Trim().TrimEnd(',', ';', '.') } |
+            Where-Object { $_ -and $_ -notmatch '[*?{}]' })
 }
 
 function Get-DeliverableEntry {

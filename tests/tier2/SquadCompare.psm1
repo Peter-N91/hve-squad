@@ -187,7 +187,7 @@ function Get-AnswerScore {
             -NoNewWindow -PassThru -RedirectStandardOutput $output -RedirectStandardError "$output.err"
 
         if (-not $process.WaitForExit($TimeoutMinutes * 60 * 1000)) {
-            try { $process.Kill($true) } catch { }
+            try { $process.Kill($true) } catch { Write-Debug 'The judge process exited between the timeout check and the kill; nothing to terminate.' }
             return [pscustomobject]@{ Score = -1; Note = 'judge timed out' }
         }
 

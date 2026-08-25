@@ -36,6 +36,10 @@
     See tests/squad-behavior-contract.md for the cases this implements.
 #>
 [CmdletBinding(DefaultParameterSetName = 'SelfCheck')]
+# False positive: -SelfCheck selects a parameter set and the script branches on
+# $PSCmdlet.ParameterSetName rather than reading the switch by name.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SelfCheck',
+    Justification = 'Parameter-set selector; consumed via $PSCmdlet.ParameterSetName.')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Assert')]
     [string]$SquadRoot,
@@ -78,7 +82,7 @@ else {
 }
 
 # An empty case set is a legitimate state, but Pester 6 treats it as an error by default.
-try { $config.Run.FailOnNullOrEmptyForEach = $false } catch { }
+try { $config.Run.FailOnNullOrEmptyForEach = $false } catch { Write-Debug 'FailOnNullOrEmptyForEach is a Pester 6 setting; Pester 5 has no such property and needs no opt-out.' }
 
 $result = Invoke-Pester -Configuration $config
 

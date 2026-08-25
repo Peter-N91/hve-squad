@@ -247,7 +247,8 @@ Describe 'The contract catches a broken tree' {
     It 'catches a file written with a read tool line-number gutter' {
         $root = New-Fixture 'numbered-lines'
         $path = Join-Path $root 'history/Squad Researcher.md'
-        $numbered = @(Get-Content -LiteralPath $path | ForEach-Object -Begin { $i = 0 } -Process { $i++; "$i. $_" })
+        $lines = @(Get-Content -LiteralPath $path)
+        $numbered = @(for ($n = 1; $n -le $lines.Count; $n++) { "$n. $($lines[$n - 1])" })
         Set-Content -LiteralPath $path -Value $numbered -Encoding utf8NoBOM
         (Test-Contract $root).Passed | Should -BeFalse -Because 'a gutter that reads as content leaves the file parseable to nobody'
     }

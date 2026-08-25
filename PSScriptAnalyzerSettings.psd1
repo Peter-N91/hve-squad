@@ -21,7 +21,14 @@
 
         # Reports the absence of an [OutputType] attribute on functions that
         # are internal helpers and never part of a published surface.
-        'PSUseOutputTypeCorrectly'
+        'PSUseOutputTypeCorrectly',
+
+        # This rule wants a UTF-8 BOM on every non-ASCII file. Every script here
+        # begins with a `#!/usr/bin/env pwsh` shebang, and a BOM places bytes
+        # ahead of it, which stops the kernel recognising the interpreter line
+        # and breaks execution on Linux. CI runs these scripts on ubuntu-latest,
+        # so honouring this rule would break the build.
+        'PSUseBOMForUnicodeEncodedFile'
     )
 
     Rules = @{

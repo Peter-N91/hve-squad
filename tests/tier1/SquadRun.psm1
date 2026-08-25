@@ -152,7 +152,7 @@ function Invoke-SquadTurn {
     $timedOut = $false
     if (-not $process.WaitForExit($TimeoutMinutes * 60 * 1000)) {
         $timedOut = $true
-        try { $process.Kill($true) } catch { }
+        try { $process.Kill($true) } catch { Write-Debug 'The run process exited between the timeout check and the kill; nothing to terminate.' }
         $process.WaitForExit(30 * 1000) | Out-Null
     }
 
