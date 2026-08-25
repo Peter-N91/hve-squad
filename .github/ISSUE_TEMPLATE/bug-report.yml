@@ -1,0 +1,78 @@
+name: Bug report
+description: Report something in hve-squad that does not behave as documented.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Two things first:
+
+        - **Security vulnerabilities do not belong here.** Report them privately through
+          [security advisories](https://github.com/Peter-N91/hve-squad/security/advisories/new).
+          See [SECURITY.md](https://github.com/Peter-N91/hve-squad/blob/main/SECURITY.md).
+        - **Want the squad to do work for you?** Use the *Squad task* template instead.
+
+        hve-squad composes assets from
+        [microsoft/hve-core](https://github.com/microsoft/hve-core). If the problem is in an
+        hve-core agent rather than in how hve-squad packages or routes it, that repository is
+        the better place. When in doubt, file here and it will be redirected.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The ref you installed. Run `apm list` if you are unsure.
+      placeholder: e.g. v0.16.1, or v0.16.2-pre
+    validations:
+      required: true
+
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      description: Where the squad was running.
+      options:
+        - GitHub Copilot CLI
+        - VS Code (Copilot Chat)
+        - GitHub.com (Copilot coding agent)
+        - Other or unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: Cite the documentation, instruction file, or roster rule that says so, if you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. apm install "Peter-N91/hve-squad#v0.16.1" --target copilot
+        2. /squad request="..."
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: state
+    attributes:
+      label: Squad state (optional)
+      description: |
+        The contents of `team.md` or `federation.md`, and the relevant `history/` entry, are usually
+        what pins a routing or ledger defect down. Remove anything you do not want public.
+      render: markdown
+    validations:
+      required: false
