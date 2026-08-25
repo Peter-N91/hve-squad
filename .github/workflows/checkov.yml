@@ -38,7 +38,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install Checkov (pinned)
-        run: python -m pip install checkov==3.2.533
+        # filelock is pulled in transitively. Versions below 3.20.3 carry
+        # CVE-2026-22701 and CVE-2025-68146, both TOCTOU symlink races in
+        # SoftFileLock, which OSV surfaces against this repository through the
+        # OpenSSF Scorecard Vulnerabilities check. Constrain it to a fixed
+        # release rather than accepting whatever checkov's range resolves to.
+        run: python -m pip install checkov==3.2.533 "filelock>=3.20.3"
 
       - name: Run Checkov (blocking, SARIF)
         # Phase C: blocking. No --soft-fail — a failed check fails the build.
