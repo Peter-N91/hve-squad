@@ -4,10 +4,16 @@
 # build scripts in scripts/ and the test suites in tests/, which together are the
 # only executable code this repository authors; squad-src/ is markdown assets.
 #
-# The gate blocks on Error severity. Warning and Information findings are
-# reported to the Security tab and the job summary so they stay visible without
-# holding a merge for a stylistic preference. Accepted rules are excluded in
-# PSScriptAnalyzerSettings.psd1 with a written justification, never silenced here.
+# The gate blocks on Error severity. Every finding, at every severity, is listed
+# in the job summary and kept as an artifact.
+#
+# Only findings from the security rule set below (or any Error-severity finding)
+# are uploaded to the Security tab. PSScriptAnalyzer is mostly a style and
+# quality linter, and publishing singular-noun or comment-help findings as code
+# scanning alerts buries real security findings under naming advice.
+#
+# Accepted rules are excluded in PSScriptAnalyzerSettings.psd1 with a written
+# justification, never silenced here.
 name: PSScriptAnalyzer Lint
 
 on:
@@ -69,7 +75,27 @@ jobs:
 
           # SARIF is generated inline rather than via the ConvertToSARIF module,
           # which Microsoft archived.
-          $rules = $findings | Group-Object RuleName | ForEach-Object {
+          #
+          # Only security-relevant rules reach the Security tab. Style and
+          # quality findings stay in the job summary below, where they belong.
+          $securityRules = @(
+            'PSAvoidUsingPlainTextForPassword'
+            'PSAvoidUsingConvertToSecureStringWithPlainText'
+            'PSAvoidUsingUsernameAndPasswordParams'
+            'PSUsePSCredentialType'
+            'PSAvoidUsingInvokeExpression'
+            'PSAvoidUsingComputerNameHardcoded'
+            'PSAvoidUsingBrokenHashAlgorithms'
+            'PSUseSupportsShouldProcess'
+            'PSAvoidUsingWMICmdlet'
+            'PSAvoidUsingEmptyCatchBlock'
+          )
+
+          $publishable = @($findings | Where-Object {
+            $_.Severity -eq 'Error' -or $securityRules -contains $_.RuleName
+          })
+
+          $rules = $publishable | Group-Object RuleName | ForEach-Object {
             @{
               id = $_.Name
               shortDescription = @{ text = $_.Name }
@@ -79,7 +105,7 @@ jobs:
 
           $levelMap = @{ Error = 'error'; Warning = 'warning'; Information = 'note' }
 
-          $results = $findings | ForEach-Object {
+          $results = $publishable | ForEach-Object {
             @{
               ruleId = $_.RuleName
               level = $levelMap[[string]$_.Severity]
@@ -144,7 +170,7 @@ jobs:
           }
 
           $summary += ''
-          $summary += 'The gate blocks on Error only. Accepted rules are excluded in `PSScriptAnalyzerSettings.psd1` with a written justification.'
+          $summary += "Published to the Security tab: $($publishable.Count) security-relevant finding(s). The gate blocks on Error only. Accepted rules are excluded in ``PSScriptAnalyzerSettings.psd1`` with a written justification."
           $summary -join "`n" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
           foreach ($e in $errors) {

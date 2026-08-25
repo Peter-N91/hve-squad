@@ -1,6 +1,13 @@
-# OpenSSF Scorecard supply-chain posture analysis. Results are uploaded to the
-# Security tab and published to the public OpenSSF API, which is what backs the
-# Scorecard badge in README.md.
+# OpenSSF Scorecard supply-chain posture analysis. Results are published to the
+# public OpenSSF API, which is what backs the Scorecard badge in README.md, and
+# kept as a build artifact.
+#
+# Results are deliberately NOT uploaded to the Security tab. Scorecard reports
+# posture checks (Fuzzing, Branch-Protection, Maintained, Pinned-Dependencies)
+# at error severity, and those are standing recommendations rather than defects
+# with a fix, so surfacing them as code-scanning alerts leaves the Security tab
+# permanently red and buries genuine findings. The score is read from the badge
+# and from https://scorecard.dev instead.
 name: OpenSSF Scorecard
 
 on:
@@ -22,7 +29,6 @@ jobs:
     name: Scorecard analysis
     runs-on: ubuntu-latest
     permissions:
-      security-events: write # upload the SARIF result to the Security tab
       id-token: write # publish results to the OpenSSF API (badge data)
       contents: read
       actions: read
@@ -47,10 +53,3 @@ jobs:
           name: scorecard-sarif
           path: results.sarif
           retention-days: 30
-
-      - name: Upload SARIF file
-        if: (!cancelled())
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
-        with:
-          sarif_file: results.sarif
-          category: scorecard
