@@ -9,6 +9,10 @@ updates:
       prefix: "chore(deps)"
     labels:
       - "dependencies"
+      # Dependabot cannot run `apm run change`, and PR Validation rejects a pull
+      # request that carries no fragment. Action bumps are not consumer-visible
+      # for a package of markdown assets, so they take the skip label instead.
+      - "skip-changelog"
     groups:
       github-actions:
         patterns:
