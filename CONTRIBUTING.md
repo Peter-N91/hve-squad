@@ -71,6 +71,64 @@ A pull request that changes nothing a consumer would notice can carry the `skip-
 
 The full format reference lives in [.changes/README.md](.changes/README.md).
 
+## Automated tests
+
+**Policy: major new functionality must come with tests.** A pull request that
+adds a new agent, a new routing rule, a new gate, or any behavior a consumer can
+observe is expected to add or extend a case in the automated suite covering it.
+Wording fixes, documentation, and pure refactors that change no observable
+behavior are exempt. A maintainer may waive the requirement when a behavior
+genuinely cannot be asserted without a live model run, and says so on the pull
+request.
+
+Cases are declared in
+[tests/squad-behavior-contract.md](tests/squad-behavior-contract.md) before they
+are implemented. Each case cites the source file that states the rule it
+asserts, so a case that cannot cite one is a case that is testing an assumption
+rather than the product. Add your case to the contract, give it an ID in the
+relevant family, then implement it in the matching tier.
+
+The suite is [Pester](https://pester.dev/) 5.7.1 and lives in `tests/`, split
+into three tiers:
+
+| Tier | What it asserts | Spends Copilot requests |
+|------|-----------------|-------------------------|
+| 0    | Static conformance of the installed package: rosters resolve, references exist, prompts bind to delivered agents | no |
+| 1    | Behavioral runs against fixture repos, asserting on state artifacts on disk | yes, for live runs |
+| 2    | Semantic comparison of a run against a golden baseline | yes |
+
+Run the fast suite against the tree your branch would deliver:
+
+```powershell
+apm run test
+```
+
+That is a shortcut for the Tier 0 runner. To invoke the tiers directly:
+
+```powershell
+# Tier 0 — static conformance of this working copy, no requests spent
+./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot .
+
+# Tier 0 — a published ref, exactly as a consumer receives it
+./tests/tier0/Invoke-Tier0Tests.ps1 -Ref v0.16.1
+
+# Tier 1 — mutation controls proving the state contract can fail
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck
+```
+
+Pester 5.7.1 is required and is pinned deliberately; Pester 6 changes `-ForEach`
+and configuration semantics that these suites rely on:
+
+```powershell
+Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+```
+
+Tier 0 gates every pull request that touches `squad-src/`, `apm.yml`, or
+`tests/tier0/`, and the same workflow is reused as the release gate. Tier 1 and
+Tier 2 are dispatched by hand because they are nondeterministic and cost
+requests. [tests/squad-behavior-contract.md](tests/squad-behavior-contract.md)
+explains that split and records the suite's known gaps.
+
 ## Testing before a release
 
 Releases are cut by hand when the pending work is judged ready, so merging is no longer the moment a change reaches consumers. What merging does reach is the **rolling pre-release**: one GitHub pre-release, rebuilt on every merge to the default branch, tagged with the version the pending fragments currently resolve to.

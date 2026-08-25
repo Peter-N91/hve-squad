@@ -38,6 +38,18 @@ No consumer-visible change at all? Ask a maintainer for the `skip-changelog`
 label instead. That skips the version bump too.
 -->
 
+## Tests
+
+<!--
+Major new functionality must come with tests. See "Automated tests" in
+CONTRIBUTING.md. Declare the case in tests/squad-behavior-contract.md first,
+then implement it in the matching tier.
+-->
+
+- [ ] Added or extended an automated test case for the behavior this PR changes, or this PR changes no observable behavior
+- [ ] Declared the case in `tests/squad-behavior-contract.md` with an ID and a citation to the source file stating the rule
+- [ ] Ran `apm run test` (Tier 0) locally and it passed
+
 ## Shared learning sanitization (if proposing a learning)
 
 <!-- Complete only if this PR adds or edits squad-src/.github/skills/squad/learnings/shared-learnings.md. -->

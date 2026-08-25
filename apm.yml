@@ -313,6 +313,7 @@ dependencies:
   mcp: []
 includes: auto
 scripts:
+  test: "pwsh -NoProfile -ExecutionPolicy Bypass -File tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot ."
   sync-deps: "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Update-ApmDependencies.ps1 -ApmFile apm.yml"
   install-sync: "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/Update-ApmDependencies.ps1 -ApmFile apm.yml && apm install"
   change: "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/New-ChangeFragment.ps1"
