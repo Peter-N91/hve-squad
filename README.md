@@ -18,7 +18,7 @@
   <a href="https://github.com/Peter-N91/hve-squad/actions/workflows/checkov.yml"><img src="https://github.com/Peter-N91/hve-squad/actions/workflows/checkov.yml/badge.svg" alt="Checkov" /></a>
   <br />
   <a href="https://scorecard.dev/viewer/?uri=github.com/Peter-N91/hve-squad"><img src="https://api.scorecard.dev/projects/github.com/Peter-N91/hve-squad/badge" alt="OpenSSF Scorecard" /></a>
-  <a href="https://www.bestpractices.dev/projects/14231"><img src="https://www.bestpractices.dev/projects/PROJECT_ID/badge" alt="OpenSSF Best Practices" /></a>
+  <a href="https://www.bestpractices.dev/projects/14231"><img src="https://www.bestpractices.dev/projects/14231/badge" alt="OpenSSF Best Practices" /></a>
   <a href="https://github.com/Peter-N91/hve-squad/releases/latest"><img src="https://img.shields.io/github/v/release/Peter-N91/hve-squad?sort=semver" alt="Latest release" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/Peter-N91/hve-squad" alt="License" /></a>
   <a href="https://peter-n91.github.io/hve-squad/"><img src="https://img.shields.io/badge/docs-peter--n91.github.io%2Fhve--squad-blue" alt="Documentation" /></a>
