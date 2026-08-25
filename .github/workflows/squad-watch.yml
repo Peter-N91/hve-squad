@@ -356,7 +356,7 @@ jobs:
 
       - name: Checkout
         if: steps.prep.outputs.authorized == 'true'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # The squad runs with --allow-all-tools on attacker-authored issue content;
@@ -477,7 +477,7 @@ jobs:
 
       - name: Checkout
         if: needs.interpret.outputs.hasChanges == 'true'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
