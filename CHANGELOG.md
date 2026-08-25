@@ -5,6 +5,73 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.2] - 2026-08-25
+
+### Changed
+
+- Updated hve-core dependency pin to `3050cf5` (3050cf5e609d50ec171cb4d657f0f4bc988e8982).
+
+- Updated hve-core dependency pin to `7cc6dc4` (7cc6dc42caf7f842e1f7aa9f3d41cb4581538f33).
+
+### Fixed
+
+- **The published plugin marketplace could pair a release with an hve-core commit it was never
+  validated against.** The generated `marketplace.json` carried a single `hve-squad` entry and
+  `autoUpdate: true`, leaving hve-core to be installed separately from its own source — so a
+  consumer resolved whatever was current upstream rather than the commit the installed squad
+  version's routing tables and role charters were built against.
+
+  `Build-SquadPlugin.ps1` now emits a second `hve-squad-hve-core` entry whose commit SHA is read
+  from the built ref's own `apm.yml`, so each release publishes the exact hve-core pin its
+  cast-delta guard validated — `v0.16.1` resolves `b1cae50`, `v0.16.2-pre` resolves `3050cf5`,
+  with no manifest hand-editing. `autoUpdate` is dropped deliberately: the two entries are a
+  matched pair, and an unattended update of one without the other reintroduces the same skew.
+
+  `publish-plugin.yml` gains an optional `mcp-version` input so a publish can bump the
+  `@hve-squad/mcp` pin in the same run; omitted, the existing `.mcp.json` pin is reused rather
+  than silently advanced.
+
+- **The plugin distribution shipped a partial rule set, and the squad dispatched an off-roster
+  role because of it.** The generator distilled fifteen instruction files into ten reference files
+  by hand. Five had no destination at all — `squad-routing`, the discovery and intake gates,
+  notifications, and watch mode — so `squad-routing`'s **Tracker-Write Gate** ("when the active
+  roster does not carry `backlog-executor`, propose adding it") and the roster's **"never
+  self-fill an absent role"** reached no plugin file. A federation sub-squad asked to write its
+  backlog to Azure DevOps dispatched `Squad Backlog Executor` and wrote its history without ever
+  adding the role to `team.md`, because in the plugin no rule said otherwise.
+
+  Three further reference files (`floor.md`, `mcp-capability.md`, `notifications-and-watch.md`)
+  existed only as hand-written files inside `hve-squad-plugin`, with no source of truth here and
+  no generator step authoring them — one of them the target of a citation the generator emitted
+  on every build.
+
+  `Build-SquadPlugin.ps1` now ports every instruction file verbatim into
+  `skills/squad/references/rules/`, builds the citation index from what it ported rather than
+  from a hand-maintained map, and rewrites the directory-level prose that told the coordinator
+  its rules live under `.github/instructions/squad/` in a distribution that ships no such
+  directory. A new instruction file now reaches the plugin without anyone remembering to map it.
+
+  A build-time conformance check fails the build — rather than warning — when a generated file
+  cites an instruction path the plugin does not ship, cites a `skills/` target no step authored,
+  or when anything under `agents/` or `skills/` was not authored by the run. Every defect it
+  catches is invisible at run time: a dangling citation reads as a working reference, and a
+  hand-written orphan is indistinguishable from generated content while it drifts.
+
+- **`squad-researcher.agent.md` cited an hve-core instruction under the squad namespace.**
+  `untrusted-content-boundary.instructions.md` deploys to `.github/instructions/`, not
+  `.github/instructions/squad/`, so the citation resolved to nothing in the package as well as in
+  the plugin.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.16.2"
+```
+
+[0.16.2]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.16.2
+
 ## [0.16.1] - 2026-08-23
 
 ### Added
