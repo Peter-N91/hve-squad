@@ -39,12 +39,30 @@ Full documentation lives on the project site:
 |-------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Prerequisites, installing the package with the correct target, first run |
 | [Usage](https://peter-n91.github.io/hve-squad/usage.html)                     | Profiles, autonomy modes, remote approval, and first-run Init Mode       |
+| [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html)             | The MCP server and the Copilot CLI plugin, and which surface to use      |
 | [Maintaining](https://peter-n91.github.io/hve-squad/maintaining.html)         | Dependency generation, author workflow, customization, release process   |
 | [Troubleshooting](https://peter-n91.github.io/hve-squad/troubleshooting.html) | Known install errors with fixes, versioning, and repository notes        |
 
 The site source is in [docs/](docs/) and is published to GitHub Pages by
 [.github/workflows/docs.yml](.github/workflows/docs.yml) on every push to `main` that touches
 `docs/`.
+
+## Related repositories
+
+This repository is the source of truth. The squad also ships through two sibling repositories,
+each generated from a tagged `hve-squad` release rather than maintained as a fork:
+
+- **[hve-squad-mcp](https://github.com/Peter-N91/hve-squad-mcp)** — an outbound MCP server that
+  publishes the squad as model-invocable tools, so hosts such as Copilot Studio can call it.
+  Docs: [peter-n91.github.io/hve-squad-mcp](https://peter-n91.github.io/hve-squad-mcp/)
+- **[hve-squad-plugin](https://github.com/Peter-N91/hve-squad-plugin)** — a generated,
+  release-gated mirror of the squad's GitHub Copilot CLI plugin tree, published as a plugin
+  marketplace. Docs: [peter-n91.github.io/hve-squad-plugin](https://peter-n91.github.io/hve-squad-plugin/)
+
+Use this package when you want `/squad` in VS Code Copilot Chat with the full cast installed in your
+repository, the plugin when you want the squad in the Copilot CLI or desktop app with no `apm install`,
+and the MCP server when another host should call the squad as tools. See
+[Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html) for the full comparison.
 
 ## Quick start
 

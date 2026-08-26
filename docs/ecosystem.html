@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ecosystem — hve-squad</title>
+  <meta name="description" content="The three hve-squad repositories — the APM package, the MCP server, and the Copilot CLI plugin — what each one is for and where its documentation lives." />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="demo.html">Demo</a>
+        <a href="ecosystem.html" class="active">Ecosystem</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="contributing.html">Contributing</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Reference</div>
+      <h1>Ecosystem</h1>
+      <p class="lead">
+        The squad ships through three repositories. This one is the source of truth; the other two
+        are distribution surfaces that carry the same cast to hosts an APM install cannot reach.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>The three repositories</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Repository</th>
+            <th>What it is</th>
+            <th>Documentation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="https://github.com/Peter-N91/hve-squad"><code>hve-squad</code></a></td>
+            <td>This repository. The APM package and the authored squad source (<code>squad-src/</code>) that both other repositories are built from.</td>
+            <td><a href="index.html">peter-n91.github.io/hve-squad</a></td>
+          </tr>
+          <tr>
+            <td><a href="https://github.com/Peter-N91/hve-squad-mcp"><code>hve-squad-mcp</code></a></td>
+            <td>An outbound Model Context Protocol server that publishes the squad as model-invocable tools, so MCP hosts can call it.</td>
+            <td><a href="https://peter-n91.github.io/hve-squad-mcp/">peter-n91.github.io/hve-squad-mcp</a></td>
+          </tr>
+          <tr>
+            <td><a href="https://github.com/Peter-N91/hve-squad-plugin"><code>hve-squad-plugin</code></a></td>
+            <td>A generated, release-gated mirror of the squad's GitHub Copilot CLI plugin tree, published as a plugin marketplace.</td>
+            <td><a href="https://peter-n91.github.io/hve-squad-plugin/">peter-n91.github.io/hve-squad-plugin</a></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          <strong>One cast, three doors.</strong> The roster, routing tables, and gates are authored
+          once here. The MCP server and the plugin do not fork that behavior &mdash; each is built
+          from a tagged <code>hve-squad</code> release, so a given version of any surface corresponds
+          to a known version of this package.
+        </p>
+      </div>
+
+      <h2>Which surface do I want?</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>If you want to&hellip;</th>
+            <th>Use</th>
+            <th>Install</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Run <code>/squad</code> in VS Code Copilot Chat with the full cast in your repository</td>
+            <td>This APM package</td>
+            <td><code>apm install</code> &mdash; see <a href="getting-started.html">Getting Started</a></td>
+          </tr>
+          <tr>
+            <td>Run the squad from the GitHub Copilot CLI or the desktop app, with no APM install</td>
+            <td><code>hve-squad-plugin</code></td>
+            <td><code>copilot plugin marketplace add</code></td>
+          </tr>
+          <tr>
+            <td>Call the squad as tools from an MCP host such as Copilot Studio</td>
+            <td><code>hve-squad-mcp</code></td>
+            <td>stdio server locally, or a deployed HTTP endpoint</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>hve-squad-mcp — the MCP server</h2>
+
+      <p>
+        <a href="https://github.com/Peter-N91/hve-squad-mcp">github.com/Peter-N91/hve-squad-mcp</a>
+        &middot;
+        <a href="https://peter-n91.github.io/hve-squad-mcp/">docs site</a>
+      </p>
+
+      <p>
+        The server exposes coarse, model-invocable tools that map onto the squad's routing intents
+        rather than onto individual agents: <code>squad_research</code>, <code>squad_plan</code>,
+        <code>squad_review</code>, <code>squad_architect</code>, <code>squad_run</code>, and
+        <code>squad_federate</code>, plus a deterministic <code>squad_render_pptx</code> file-output
+        tool. Every tool's input mirrors the <code>/squad</code> prompt arguments.
+      </p>
+
+      <p>It runs in two modes, at different maturity levels:</p>
+
+      <ul>
+        <li>
+          <strong>Delegated (stdio)</strong> &mdash; VS Code dispatches the real deployed cast, so it
+          behaves as the full package. Requires the cast to be installed.
+        </li>
+        <li>
+          <strong>Embedded (remote Streamable HTTP + Entra)</strong> &mdash; reaches hosts such as
+          Copilot Studio, resolving personas server-side from the bundled cast under auth, gates,
+          tenant isolation, and cost caps. Scope is <em>advisory</em>: finished text deliverables, not
+          code-executing implement or deploy.
+        </li>
+      </ul>
+
+      <div class="callout warn">
+        <p>
+          <strong>Read the status table first.</strong> The server's README and docs site are explicit
+          about what works today versus what is a deferred execution expansion. Take claims about the
+          remote surface from there rather than from this page.
+        </p>
+      </div>
+
+      <p>
+        Useful entry points on its site:
+        <a href="https://peter-n91.github.io/hve-squad-mcp/getting-started.html">Getting Started</a>,
+        <a href="https://peter-n91.github.io/hve-squad-mcp/tools.html">Tools</a>,
+        <a href="https://peter-n91.github.io/hve-squad-mcp/configuration.html">Configuration</a>, and
+        <a href="https://peter-n91.github.io/hve-squad-mcp/deploy.html">Deploy</a>.
+      </p>
+
+      <h2>hve-squad-plugin — the Copilot CLI plugin</h2>
+
+      <p>
+        <a href="https://github.com/Peter-N91/hve-squad-plugin">github.com/Peter-N91/hve-squad-plugin</a>
+        &middot;
+        <a href="https://peter-n91.github.io/hve-squad-plugin/">docs site</a>
+      </p>
+
+      <p>
+        That repository is generated output, never hand-edited. Its <code>agents/</code>,
+        <code>skills/</code>, and <code>.github/plugin/plugin.json</code> are regenerated by
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/scripts/Build-SquadPlugin.ps1"><code>scripts/Build-SquadPlugin.ps1</code></a>
+        only when this repository cuts a release, extracted from that release's immutable git tag.
+        It exists so the distribution tree lives outside this working tree, mirroring the
+        <code>hve-squad-mcp</code> sibling-repo pattern.
+      </p>
+
+      <p>The marketplace publishes <strong>two entries, installed as a pair</strong>:</p>
+
+      <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
+copilot plugin install hve-squad@hve-squad-plugin
+copilot plugin install hve-squad-hve-core@hve-squad-plugin</code></pre>
+
+      <div class="callout warn">
+        <p>
+          <strong>Two rules govern every later update.</strong> <code>hve-squad-hve-core</code> must be
+          uninstalled and reinstalled rather than updated &mdash; <code>copilot plugin update</code>
+          compares upstream hve-core's own version, so a moved pin reports <code>already at latest</code>
+          and the files never change. And do not <em>also</em> install the official <code>hve-core</code>
+          plugin next to it, or a dispatch can land on an unpinned second copy of every hve-core agent.
+          Both rules are explained in full on
+          <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">Install: Copilot CLI</a>.
+        </p>
+      </div>
+
+      <p>
+        Useful entry points on its site:
+        <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">Install: Copilot CLI</a>,
+        <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">Install: Desktop app</a>,
+        <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">Install: VS Code notes</a>,
+        <a href="https://peter-n91.github.io/hve-squad-plugin/architecture.html">Architecture</a>, and
+        <a href="https://peter-n91.github.io/hve-squad-plugin/enterprise-push.html">Enterprise Push</a>.
+      </p>
+
+      <h2>How releases stay aligned</h2>
+
+      <p>
+        Neither sibling repository is a fork. Both are produced from a tagged
+        <code>hve-squad</code> release, and each records the tag it was built from &mdash; the plugin
+        repository states its source tag and extraction date in its README, and each MCP release is
+        pinned to a matching package version. When this repository cuts a release, the downstream
+        surfaces are regenerated from it rather than drifting on their own schedule. See
+        <a href="maintaining.html">Maintaining</a> for the release process on this side.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="demo.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Demo</div>
+        </a>
+        <a class="next" href="maintaining.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Maintaining</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
