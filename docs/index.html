@@ -17,6 +17,7 @@
         <a href="getting-started.html">Getting Started</a>
         <a href="usage.html">Usage</a>
         <a href="demo.html">Demo</a>
+        <a href="ecosystem.html">Ecosystem</a>
         <a href="maintaining.html">Maintaining</a>
         <a href="troubleshooting.html">Troubleshooting</a>
         <a href="contributing.html">Contributing</a>
@@ -66,8 +67,12 @@
             <h3>Demo</h3>
             <p>Two runnable walkthroughs — an Azure squad (cost, architecture, IaC, gated deploy, as-built, diagnose) and a non-technical product squad (discovery, requirements, roadmap, deck) — each with a say-it-once autopilot version.</p>
             <span class="tag">Walkthrough</span>
-          </a>
-          <a class="card" href="maintaining.html">
+          </a>          <a class="card" href="ecosystem.html">
+            <div class="icon">🌐</div>
+            <h3>Ecosystem</h3>
+            <p>The MCP server and the Copilot CLI plugin &mdash; what each surface is for, and where their repositories and documentation sites live.</p>
+            <span class="tag">Reference</span>
+          </a>          <a class="card" href="maintaining.html">
             <div class="icon">🔧</div>
             <h3>Maintaining</h3>
             <p>Dependency generation, the author workflow, customization, and the release process.</p>
@@ -141,17 +146,42 @@
 
     <section class="section">
       <div class="container">
-        <p class="section-label">Companion server</p>
+        <p class="section-label">Companion projects</p>
         <p>
-          Beyond the local <code>/squad</code> experience, the squad is also available as a deployable
-          <strong>Model Context Protocol (MCP) server</strong>. It publishes the squad as
-          model-invocable tools — <code>squad_research</code>, <code>squad_plan</code>,
-          <code>squad_review</code>, <code>squad_architect</code>, <code>squad_run</code>, and a
-          deterministic <code>squad_render_pptx</code> file-output tool — over Streamable HTTP with
-          Entra auth, so hosts such as Copilot Studio can call the squad. It ships in its own
-          repository and each release is pinned to a matching hve-squad package version.
+          Beyond the local <code>/squad</code> experience, the squad reaches two other hosts through
+          sibling repositories. Neither is a fork &mdash; both are built from a tagged
+          <code>hve-squad</code> release, so each version maps back to a known version of this package.
+          See <a href="ecosystem.html">Ecosystem</a> for how to choose between them.
         </p>
-        <a class="btn btn-ghost" href="https://github.com/Peter-N91/hve-squad-mcp">hve-squad-mcp on GitHub →</a>
+        <div class="grid">
+          <div class="card">
+            <div class="icon">🔌</div>
+            <h3>MCP server</h3>
+            <p>
+              <code>hve-squad-mcp</code> publishes the squad as model-invocable tools &mdash;
+              <code>squad_research</code>, <code>squad_plan</code>, <code>squad_review</code>,
+              <code>squad_architect</code>, <code>squad_run</code>, and a deterministic
+              <code>squad_render_pptx</code> file-output tool &mdash; over Streamable HTTP with Entra
+              auth, so hosts such as Copilot Studio can call the squad.
+            </p>
+            <span class="tag">MCP</span>
+          </div>
+          <div class="card">
+            <div class="icon">🧩</div>
+            <h3>Copilot CLI plugin</h3>
+            <p>
+              <code>hve-squad-plugin</code> is a generated, release-gated mirror of the squad's plugin
+              tree, published as a Copilot plugin marketplace. It runs the squad in the GitHub Copilot
+              CLI and the desktop app with no <code>apm install</code>.
+            </p>
+            <span class="tag">Plugin</span>
+          </div>
+        </div>
+        <p>
+          <a class="btn btn-ghost" href="ecosystem.html">Ecosystem overview →</a>
+          <a class="btn btn-ghost" href="https://peter-n91.github.io/hve-squad-mcp/">hve-squad-mcp docs →</a>
+          <a class="btn btn-ghost" href="https://peter-n91.github.io/hve-squad-plugin/">hve-squad-plugin docs →</a>
+        </p>
       </div>
     </section>
 
