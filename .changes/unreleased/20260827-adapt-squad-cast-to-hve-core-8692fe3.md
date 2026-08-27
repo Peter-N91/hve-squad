@@ -1,0 +1,6 @@
+---
+bump: minor
+type: Changed
+---
+
+- **hve-core@8692fe3 renamed the entire data-science skill pack and retired the `Supply Chain Reviewer` agent outright.** `ds-catalog`, `ds-analysis-authoring`, `ds-dataops`, `ds-evaluation-design`, and `ds-feasibility` moved under `.github/skills/data-science-engineering/` as `data-catalog`, `analysis-authoring`, `dataops`, `evaluation-design`, and `feasibility`; `Squad Data Scientist` (`squad-src/.github/agents/squad/squad-data-scientist.agent.md`) and `Squad Prompt Engineer` (`squad-src/.github/agents/squad/squad-prompt-engineer.agent.md`) now route to the renamed skills, and `squad-roster.instructions.md`'s `data-scientist`/`prompt-engineer` rows and *Deferred Reviewer-Class Agents* table were updated to match — `Data Workstream Coach` is described generically as the non-dispatchable coach orchestrator its successor `Data Science and Engineering Coach` now ships as, and the removed `Supply Chain Reviewer` row was dropped in favor of a note that `SSSC Planner`/`Supply Chain Skill Assessor` already cover its ground. No squad-owned charter or doc page needed a new agent; `apm.yml` is regenerated and repinned to `8692fe38cc0415ff8d21aa1b5d8198f008cd4038`.
