@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.3",
+  "updated": "2026-08-27T17:30:46Z",
+  "turn": 1,
+  "mode": "autopilot",
+  "activeRoles": [],
+  "openEscalations": [],
+  "currentRun": {
+    "sessionModel": "claude-sonnet-5",
+    "modelOverrides": {},
+    "estCostUsd": 1.16,
+    "estCreditsTotal": 116.00
+  },
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": {
+      "handle": "",
+      "repo": ""
+    }
+  },
+  "trigger": {
+    "source": "issue",
+    "ref": "Peter-N91/hve-squad#104",
+    "eventId": "issues:5270353641",
+    "actor": "Peter-N91",
+    "sub": "issue-104"
+  }
+}
