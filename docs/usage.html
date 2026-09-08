@@ -694,6 +694,23 @@ flowchart TD
         <code>cost-ceiling</code>, and ends with a single consolidated final-outcome validation. Each
         sub-squad's inner pipeline is unchanged, and it never auto-releases.
       </p>
+
+      <h3>Work across separate repositories</h3>
+      <p>
+        Everything above keeps one federation inside one repository. When the other side of the work is
+        an <strong>independently owned GitHub repository</strong>, an opt-in advisory exchange registers
+        it as a <code>Kind=repo</code> row and swaps a task packet and a receipt through
+        <strong>human transport</strong> &mdash; the target runs under its own approvals, and the hub
+        records a reported outcome that only a human can turn into a verified one. It does not execute
+        work remotely, and it does not replace CI.
+      </p>
+      <pre><code># Register an advisory target, then issue a task packet for a human to carry
+/squad-federation request="Register service advisory target" exchange=register squad=service repo=https://github.com/contoso/service</code></pre>
+      <p>
+        See <a href="cross-repo-federation.html">Cross-repository federation</a> for the full flow,
+        prerequisites, mixed local and remote targets, and the recovery table.
+      </p>
+
       <h2>Promote a learning (<code>/squad-learn</code>)</h2>
       <p>
         Live agent memory always stays local to each consumer. When a squad run surfaces a durable,

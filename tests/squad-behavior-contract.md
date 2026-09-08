@@ -266,9 +266,9 @@ Init with each profile and assert the seeded roster holds exactly the documented
 | ID | Assertion | Source |
 |---|---|---|
 | FD-01 | Federation root holds `federation.md`, `meta-routing.md`, `decisions.md`, `state.json`, and a `history/` directory | `squad-federation.instructions.md`, Federation State Layout |
-| FD-02 | Each sub-squad root `.copilot-tracking/squad/members/<name>/` holds `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/` | |
-| FD-03 | `history/<sub-squad>.md` exists at the federation root for every registered sub-squad | |
-| FD-04 | `federation.md` has columns `Sub-squad`, `Profile`, `Kind`, `Location`, `Owner`, `Description`; every `Kind` is `in-repo`; every `Location` equals `members/<Sub-squad>/` | Registry Schema |
+| FD-02 | Each `Kind=in-repo` root `.copilot-tracking/squad/members/<name>/` holds `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/`; repo rows create no member tree | |
+| FD-03 | `history/<sub-squad>.md` exists at the federation root for every registered in-repo member; advisory exchange uses only nested `history/repo-exchange/audit.md` | |
+| FD-04 | `federation.md` has columns `Sub-squad`, `Profile`, `Kind`, `Location`, `Owner`, `Description`; `Kind=in-repo` retains `Location=members/<Sub-squad>/`; `Kind=repo` requires explicit advisory registration, canonical GitHub HTTPS Location and `Profile=advisory`; unknown kinds reject | Registry Schema and repo-exchange.md |
 | FD-05 | Every `Sub-squad` name is lower-kebab-case and unique | Sub-Squad Naming and Uniqueness |
 | FD-06 | `meta-routing.md` has columns `Pattern / Domain`, `Sub-squad`, `Parallel-Eligible`; every `Sub-squad` value exists as a row in `federation.md` | Meta-Routing Schema |
 
@@ -289,7 +289,7 @@ This is the highest-risk operation in the system because it moves state. Fixture
 | FD-17 | No source file was removed before its destination copy existed and verified — assert zero data loss by comparing the full manifest | Copy, Verify, Then Delete |
 | FD-18 | Federation `decisions.md` first entry records the promotion and the source-to-destination move | Step 6 |
 | FD-19 | `federation.md` has exactly one row, with `Location` = `members/<name>/` and `Profile` inferred from the moved `team.md` | Step 6 |
-| FD-20 | `members/<name>/history/scribe.md` carries the promotion's orchestration consumption block, and federation `state.json` `currentRun` totals are seeded from the relocated ledger total row | Step 7 — the ledger must not show a gap across the boundary |
+| FD-20 | `members/<name>/history/Squad Scribe.md` carries the promotion's orchestration consumption block, and federation `state.json` `currentRun` totals are seeded from the relocated ledger total row | Step 7 — the ledger must not show a gap across the boundary |
 | FD-21 | After promotion, detection flips: `/squad-federation` owns turns and `/squad` detects the federation and defers | Detection precedence |
 
 ### Expansion
@@ -303,11 +303,31 @@ This is the highest-risk operation in the system because it moves state. Fixture
 
 ### Meta-routing turn
 
+These ordinary dispatch assertions apply to eligible `Kind=in-repo` rows. Advisory exchanges are bookkeeping, not inner runs. Target intake's only additional cross-root reads are the fixed repository claim and its validated pinned-root commit evidence; member writes remain scoped.
+
 | ID | Assertion |
 |---|---|
 | FD-40 | A request routed to a sub-squad appends to federation `history/<sub-squad>.md` and to that sub-squad's own state under `members/<name>/`, with the full single-squad ordinary-turn contract (SQ-10 to SQ-19) holding at the sub-squad root |
 | FD-41 | Federation-level state records the meta-routing decision; sub-squad state records the role dispatches. Neither is written into the other |
 | FD-42 | A sub-squad's **inner run** reads and writes only inside its own root. It cannot discover another sub-squad's work on its own, and it does not read federation-level state | `squad-federation.instructions.md`, Cross-Sub-Squad Handoff |
+
+### Advisory repository exchange
+
+Protocol tests exercise the production validator with synthetic local context. Wiring tests check static entrypoint/ownership contracts and the existing history parser, not actual agent instruction following. Package tests check explicit offline output. Contained simulation remains required for Scribe write order, gate decisions and no-second-dispatch behavior.
+
+| ID | Assertion | Source |
+| --- | --- | --- |
+| RX-01 | Explicit Register confirms unique alias and canonical URL, preserves rows/routes and creates no member tree, dispatch history or Watch ownership | repo-exchange.md, Entrypoints and Registration |
+| RX-02 | Send/Report start with Scribe-only create-new staged candidates; validate before exact-byte final copy and transport only after committed audit/state/seal | Scribe Candidate Staging |
+| RX-03 | Target handoff validates independent Git root/origin/HEAD and fixed repository claim before Init, backfill or dispatch; federated root selection is current target-user input, never transported | Repository-Wide Acceptance |
+| RX-04 | Separate root Claim and member Accept preserve single-writer scope. Only the exclusive creator's live committed Claim return permits immediate Accept; restarted partial claims fail closed and complete duplicates never redispatch, including api then sdk | Repository-Wide Acceptance |
+| RX-05 | Malformed/unknown/stale/mismatched exchanges fail closed; every Git child isolates credentials/transports and disables lazy fetch, with no network fallback | Offline Git Contract; Closed JSON Contract |
+| RX-06 | Import requires committed Issue, exact binding, current allowlist and local source commit; reported is not verified. Verify needs committed Import and a separate attributed current human attestation to named evidence | Import and Human Verification |
+| RX-07 | Kind is checked before tree access/repair, Watch, targeted or fan-out autonomy, producer recovery and cost/completion. Repo dependencies and consumers remain pending; filtered-empty is not success and Report/Verify never auto-resumes consumers | federation.md, Kind Gate |
+| RX-08 | Missing artifact, paired audit, state advance or seal leaves incomplete; preserve bytes, never reconstruct provenance or overwrite finals. Historical no-ops write nothing and claim no cost | Commit Predicate and Write Order |
+| RX-09 | Existing in-repo `repo-exchange` member retains byte-identical flat history through Register/Send/Import; nested exchange audit is excluded from dispatch/consumption parsing, and later local dispatch still uses flat history | Fixed Local Records |
+| RX-10 | Promotion preserves root exchanges/claims and nested audit; old root bindings fail as root-relocated without same-ID reacceptance. No exchange lifecycle fields are added to state.json | Repository-Wide Acceptance |
+| RX-11 | Source prompts, direct agents, copied reference/module and both generated invocations reach the same conditional gates and explicit arguments | FederationExchange.Tests.ps1, Wiring/Package |
 
 ## Tier 1 — Post-promotion functional continuity
 
@@ -346,6 +366,8 @@ A sub-squad **can** build on another's data, but only through a defined handoff.
 | FD-59 | **The handoff is recorded.** A federation-level `decisions.md` entry names the producer, the consumer, and the artifacts passed | "Record the handoff" |
 
 ### Missing-input recovery
+
+The cases below remain unchanged for `Kind=in-repo` producers. Repo dependencies use RX-07 instead: no member recovery, same-turn consumer resume or assumption shortcut.
 
 The documented worst case is a consumer that re-derives requirements the producer never agreed, producing a plausible deliverable whose divergence is invisible in the output. These cases exist to make sure that cannot happen.
 
