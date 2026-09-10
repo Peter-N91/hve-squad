@@ -51,7 +51,6 @@ agents:
   - Code Review Security
   - Code Review Accessibility
   - Code Review Readiness
-  - Code Review PR
   - Code Review Explainer
   - Code Review Walkback
   - Squad Cost Manager
