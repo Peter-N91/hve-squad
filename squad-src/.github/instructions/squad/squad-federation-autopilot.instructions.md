@@ -20,6 +20,8 @@ Each sub-squad's inner run is byte-for-byte the single-squad autopilot pipeline:
 
 ## Trigger (Opt-In Surface)
 
+Before either single-target forwarding or fan-out, read the registry Kind. Only `in-repo` can run autopilot. An explicit `squad=repo` selection or exchange combined with mode/Watch stops; unknown kinds stop. Filter repo rows before built-tree checks, Init/repair, dependency recovery, Watch resume, inner dispatch and cost/completion aggregation. Repo producers and their blocked consumers remain pending; no eligible inner runs is not success. These guards precede the unchanged in-repo branches below.
+
 Federation autopilot engages only through the `/squad-federation` prompt input `mode=autopilot`, and only when the request has **no single `squad=` target**:
 
 * **`mode=autopilot` with no `squad=` target** → **federation autopilot**. The Federation Coordinator runs the Meta-Pipeline Contract below across the sub-squads that meta-routing selects for the request.
@@ -29,6 +31,8 @@ Federation autopilot engages only through the `/squad-federation` prompt input `
 The single opt-in is the `mode=autopilot` input on `/squad-federation` without a target. When present, the Federation Coordinator records the opt-in through the Squad Scribe so the federation-root autopilot-run history file (see *Two-Level Provenance*) carries the per-run opt-in evidence.
 
 ## Precondition — the Federation Must Be Built First
+
+Apply built-tree preconditions only to eligible `in-repo` rows after the Kind filter. A repo row's absent member tree is expected, never an Init/repair trigger.
 
 Before the meta-pipeline runs, a confirmed federation must exist: `.copilot-tracking/squad/federation.md` and `meta-routing.md` are present, and every targeted sub-squad already has its built squad tree under `members/<name>/` (`team.md` and `routing.md` present). When the federation is missing, the coordinator runs **Federation Init Mode** (propose → confirm → create) from `.github/agents/squad/squad-federation-coordinator.agent.md` to completion — including the user's confirmation of the sub-squad set — and only then enters the meta-pipeline. When the federation exists but a targeted sub-squad is not yet built, the coordinator escalates to run that sub-squad's Init before autopilot sequences it.
 
@@ -46,6 +50,8 @@ Federation autopilot runs the selected sub-squads as an ordered pipeline. Each m
 The coordinator advances meta-stage to meta-stage by reading each sub-squad inner run's outcome; it hands every meta-transition to the Scribe, which records it in the federation-root autopilot-run history file and updates the federation `state.json`. The coordinator never authors sub-squad or federation state directly.
 
 ## Sub-Squad Execution Order
+
+Resolve repo dependencies before ordering local producers. Never run member recovery for a repo row or resume its consumer after Report/Verify. A fresh local human request must supply separately reviewed local inputs through ordinary gates. Pending repo outcomes are not completed inner runs, including when a receipt says completed.
 
 The Federation plan meta-stage orders sub-squads before any inner run starts:
 
@@ -77,6 +83,8 @@ Before advancing the meta-pipeline past a sub-squad's inner run, confirm all of 
 Item 3 is mandatory and safety-critical: never advance the meta-pipeline past an inner gate that was not lifted to the federation level and approved. When any item is unmet, pause the meta-pipeline, re-verify, or escalate — a lighter model must not narrate an inner run as complete, or an inner gate as cleared, without this check.
 
 ## Federation Cost Ceiling
+
+Aggregate only actual `in-repo` inner runs. Exchange audit at `history/repo-exchange/audit.md` is not dispatch or consumption evidence, even in recursive history enumeration. It adds no target cost and no active sub-squad; the valid member's flat `history/repo-exchange.md` retains normal accounting. Keep pending repo dependencies visible rather than converting filtered work into zero-cost success.
 
 An optional `cost-ceiling=$X` on a federation autopilot run applies **across the whole federation run**, not per sub-squad. The coordinator tracks the aggregate estimated cost across every sub-squad inner run and escalates through the Risk Gate when the aggregate would exceed the ceiling on the next meta-stage or inner-run cycle, rather than enforcing a separate ceiling inside each sub-squad. Each sub-squad's own consumption ledger under `members/<name>/` is unchanged; the federation-level aggregate is the sum across sub-squads recorded in the federation `state.json` `currentRun`.
 
