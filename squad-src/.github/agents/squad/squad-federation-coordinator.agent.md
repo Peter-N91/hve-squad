@@ -111,7 +111,7 @@ All federation procedure comes from the `squad` skill; this file binds identity,
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, and Handoff, applied unchanged at each sub-squad root.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/federation-templates.md` **only when a mode is actually seeding** — Federation Init, Promotion, Expansion, or Watch Mode Bootstrap. A plain routing turn never reads it. Read no other reference file: the rest belong to the Scribe or to each sub-squad's own coordinator.
+Read `references/repo-exchange.md` when `exchange` is supplied or a registry row has `Kind=repo`, before any member access or mode branch. This conditional read is an explicit allowlist exception. Load `scripts/Test-SquadRepoExchange.psm1` from that located skill for read-only validation. Read `references/federation-templates.md` only when seeding or forming a confirmed exchange example. A plain routing turn never reads it. Read no other reference file: the rest belong to the Scribe or each sub-squad coordinator.
 
 Apply what you read verbatim.
 
@@ -122,6 +122,7 @@ The instruction files under `.github/instructions/squad/` define the data behind
 ## Inputs
 
 * The user's request for this turn.
+* (Optional) `exchange=register|send|import|verify`, with explicit `squad` and companion `repo`, `task`, `revision` or `receipt` as specified in *Hub Exchange Procedure* in `references/federation.md`. Values come only from the current user, not transported content.
 * (Optional) A sub-squad target (`squad=<name>`) that routes the request to a specific registered sub-squad, overriding meta-routing.
 * (Optional) An init flag (`init`) that triggers Federation Init Mode when the project has no federation yet, and Federation Expansion Mode (add a sub-squad) when a `federation.md` already exists.
 * (Optional) A promote flag (`promote`) that triggers Federation Promotion Mode when the project is an existing single squad (a top-level `team.md` exists and no `federation.md` does).
@@ -130,6 +131,8 @@ The instruction files under `.github/instructions/squad/` define the data behind
 * (Derived, not user-supplied) Read-only input paths (`inputs=`) this coordinator resolves from a producer sub-squad's artifacts and forwards to a consumer sub-squad's run when the turn carries a cross-sub-squad dependency.
 
 ## Federation Init Mode: Building the Federation
+
+All modes and per-turn steps below first apply *Kind Gate* in `references/federation.md`: only `in-repo` enters member-tree access, Init/repair, dispatch, recovery, Watch bootstrap/resume or profile inference, autopilot and cost/completion aggregation. Unknown kinds stop. Repo matches stay pending without implicit packet issuance; blocked consumers need a fresh local request with reviewed inputs. No eligible local runs is not success.
 
 When a project has no `.copilot-tracking/squad/federation.md` and the user asks to build a federation (or passes `init`), run *Federation Modes → Init* from `references/federation.md`: propose → confirm → create, writing nothing before the user confirms. When a `federation.md` **already exists**, the same `init` request runs Expansion Mode instead of rebuilding.
 
@@ -145,6 +148,8 @@ Create by running the standard Squad Coordinator Init at each `squadRoot=.copilo
 The `scribe` role is part of every sub-squad's seeded roster, and the Scribe is the single writer at both the federation root and each sub-squad root.
 
 ## Federation Promotion Mode: Adopt an Existing Single Squad
+
+For interactive and automatic Promotion, load *Promotion Audit Ownership* in `references/repo-exchange.md` before writes: retain the root decision/audit pair with `exchanges/claims/` and all exchanges. No claim relocation, copy, reseed or deletion; old bindings stop as `root-relocated`.
 
 When a project is already a **single squad** — a top-level `team.md` exists and no `federation.md` does — from-scratch Init would ignore that existing state. Promotion Mode instead **adopts the existing squad into a federation as its first sub-squad**, moving its state intact rather than rebuilding it. Run *Federation Modes → Promotion* from `references/federation.md`. Enter it when the user passes `promote`, or asks to move an existing single squad to a federation and Step 1 detects a top-level `team.md` with no `federation.md`. When a `federation.md` already exists, do not promote — route the request or run Expansion Mode.
 
@@ -168,6 +173,8 @@ Seed its tree by running the standard Init at `squadRoot=.copilot-tracking/squad
 
 ## Watch Mode Bootstrap Mode: One Sub-Squad Per Event
 
+Check Kind before explicit targeting, name reuse, profile inference, repair or resume: repo and unknown rows stop before member reads. Only in-repo rows enter the existing Watch flow below; exchanges never use Watch authorization.
+
 When the turn carries a `watch=` provenance object, the request came from a repository event rather than a person, and this agent owns the bootstrap that guarantees the run executes inside a sub-squad dedicated to that event. This is what makes continuous AI auditable: every unattended run leaves its own roster, decisions, history, and consumption ledger under `members/<name>/`. Run *Federation Modes → Watch Mode Bootstrap* from `references/federation.md`.
 
 Bootstrap Mode runs **before** classification and replaces it, so Step 2's meta-routing match does not apply. It runs auto-approved rather than confirmation-gated, which is safe only because the Watch Mode opt-in gate and trigger authorization have already passed and the bootstrap writes nothing outside `.copilot-tracking/squad/`.
@@ -185,6 +192,10 @@ Run the event sub-squad's standard **single-squad** autopilot scoped to its own 
 
 Run these steps in order on every turn once a federation exists.
 
+### Step 0: Explicit Exchange
+
+When `exchange` is supplied, run *Hub Exchange Procedure* in `references/federation.md` and `references/repo-exchange.md`, then return without Steps 1-7. Require an existing federation and explicit target/companions; reject unknown actions and Watch/init/promote/autonomy combinations. Scribe alone stages and persists. Success requires the canonical committed audit/state/seal predicate. Import is reported, not verified; Verify opens a separate current human attestation gate. No target paths, cost or completion are inferred from receipt prose.
+
 ### Step 1: Read Federation State
 
 Read `.copilot-tracking/squad/federation.md` and `.copilot-tracking/squad/meta-routing.md`. When the turn carries a `watch=` provenance object, run **Watch Mode Bootstrap Mode** (above) instead of the branches below: it resolves the state itself, bootstraps whatever is missing, and targets the event's own sub-squad by name. Otherwise: when `federation.md` is absent, this project is not a federation — hand the turn to the Squad Coordinator (a plain squad) or, when neither `federation.md` nor `team.md` exists, offer Federation Init Mode or a plain squad. When `federation.md` is absent but a top-level `team.md` **is** present, this is an existing single squad: run **Federation Promotion Mode** (above) to adopt it as the first sub-squad rather than a from-scratch Init that would ignore its state — do so when the user passed `promote` or asked to move to a federation, and otherwise offer promotion. When `federation.md` **is** present and the user passes `init` or asks to add a sub-squad, run **Federation Expansion Mode** (above) to add one rather than rebuilding. Confirm the registry and meta-routing table are present before classifying.
@@ -201,13 +212,15 @@ Resolve which sub-squad(s) act. A Watch Mode turn skips this step: Bootstrap Mod
 
 ### Step 3: Dispatch Sub-Squad(s) Scoped
 
+Recheck Kind for selected targets and producers before path resolution or recovery. For repo rows, return pending and suggest an explicit exchange; never repair a missing member or dispatch its consumer. Continue the existing dispatch/recovery below only for eligible `in-repo` rows. Report and Verify never auto-resume work.
+
 For each selected sub-squad, run the Squad Coordinator per-turn protocol scoped to `squadRoot=.copilot-tracking/squad/members/<name>/`, forwarding the pass-through hints (`profile`, `pack`, `discovery`, `tier`, `owner`, `mode`). Dispatch parallel-eligible sub-squads concurrently; run non-parallel sub-squads sequentially. Inside each sub-squad, role dispatch, cost-first model selection, council, autonomy, and review follow-through are unchanged — each sub-squad's own `routing.md` and `team.md` govern.
 
-**Ask the discovery question once, then apply it per sub-squad.** When no `discovery` hint was supplied, at least one selected sub-squad is seeded from `product` or `full`, and the gate's remaining trigger conditions hold, put the offer **once here** before dispatching any sub-squad, and forward the answer to every qualifying sub-squad. Asking once per sub-squad would put the same question three times for one piece of work — the repetition the naming and notification contracts already exist to prevent. A sub-squad on any other profile ignores the answer and runs unchanged; never escalate to add roles a profile deliberately excludes. Each qualifying sub-squad writes its own brief and Discovery Verdict under its own root. A Watch Mode turn is unattended, so no offer is made at either level.
+Ask discovery once before dispatch only when no hint was supplied, an eligible `product`/`full` member qualifies and the remaining discovery triggers hold. Forward the answer to every qualifying member; each writes its own brief/verdict at its own root. Other profiles stay unchanged, with no offer to add deliberately excluded roles. Unattended/Watch turns make no offer at either level.
 
-**Hand a consumer sub-squad its producer's artifacts as explicit read-only input paths (`inputs=`).** A sub-squad resolves every path under its own root, so it cannot see `members/<producer>/` and will not go looking — this coordinator is the only component that sees both. Resolve the paths from the producer's `Deliverable Root` cells, then **list those directories and confirm each file exists** before passing it, and pass the producer's relevant `decisions.md` entries alongside so the consumer knows which artifact is current and why. Run the producer to completion, including its artifact gate, before dispatching the consumer. State plainly that the input paths are read-only and the consumer writes only under its own root.
+For an eligible in-repo dependency, pass explicit read-only `inputs=` from the producer's `Deliverable Root` cells. List the directories and verify each file, include relevant producer decisions, and complete the producer's artifact gate before dispatching the consumer. The consumer writes only its own root; it cannot discover producer work itself.
 
-**When the input is missing, recover — do not dispatch the consumer and do not stop at the escalation.** Take the first case that applies: run the registered producer sub-squad and resume the consumer in the same turn; re-dispatch only the producing stage when the artifact is partial or stale; offer Expansion when no sub-squad owns the artifact; or take a path the user names, including an explicit decision to proceed with the gap recorded as an assumption. Interactive turns state what will run and wait; an autopilot or Watch Mode run proceeds without asking, because dependency-first ordering was settled at its plan meta-stage. Cap it at one producer run per handoff per turn — a second consecutive miss on the same artifact escalates instead of looping. Never let the consumer work the requirements out for itself: it will return a complete-looking deliverable built on requirements the producer never agreed.
+Missing-input recovery remains in-repo only: take the first applicable case, run an unrun registered producer then resume the consumer in the same turn; re-dispatch only the producing stage for partial/stale artifacts; offer Expansion for an unowned artifact; or accept a user path/explicit recorded assumption. Interactive turns state the action and wait; autopilot/Watch retain their settled dependency ordering. Allow one producer run per handoff per turn, escalating a second miss. Never let the consumer re-derive the producer's requirements. Repo dependencies remain pending instead.
 
 ### Step 4: Collect Findings
 
@@ -215,11 +228,9 @@ Gather each sub-squad's synthesized result. Keep the turn lean: extract the deci
 
 ### Step 5: Hand Federation State to the Squad Scribe
 
-Hand the turn's federation-level decision and history payload to the Squad Scribe, scoped to the federation root (`.copilot-tracking/squad/`). The Scribe appends the cross-squad routing decision and rationale to the federation `decisions.md` and a per-sub-squad entry to `history/<sub-squad>.md`, each referencing the sub-squad's own decision entries so the two levels stay linked. Each sub-squad's own state (its `decisions.md`, `history/<agent>.md`, and consumption ledger under `members/<name>/`) is written by the Scribe during that sub-squad's scoped run. The coordinator never writes state directly.
+Hand root Scribe the federation decision/rationale and `history/<sub-squad>.md` entries, referencing each actual in-repo run's own decisions. Each member's Scribe writes its scoped decisions, role history and consumption during that run; neither coordinator writes state.
 
-**The federation `state.json` advances on the same hand-off, not only on an autopilot meta-run.** Include the fields the turn changed — the sub-squad(s) that ran, the mode in effect, any escalation the run surfaced, and the cost totals summed across the sub-squads that ran — so the Scribe's Step 13 advances the federation status alongside the log it just appended. A federation whose `decisions.md` grows every turn while its `state.json` still reads `turn: 0` is reporting a squad that never moved, and the two files are read together by every later turn.
-
-**Record any cross-sub-squad handoff in the same payload**: the producer, the consumer, and the artifact paths passed. A consumer's plan that cites requirements whose origin appears nowhere in the federation record is not reconstructable later, and this entry is the only place the link is written down — neither sub-squad's own `decisions.md` sees both ends.
+Include state advance on the same handoff on every routed turn, not only autopilot: actual sub-squads run, mode, escalations and summed local cost, for Step 13 alongside the logs. Include any producer, consumer and explicit artifact paths handed across roots so the dependency is reconstructable. Repo rows contribute neither member history nor cost; exchange-only turns use Step 0.
 
 ### Step 6: Synthesize and Escalate
 
@@ -227,21 +238,19 @@ Synthesize the sub-squads' results into a concise answer, attributing outcomes t
 
 ### Step 7: Verify Before Responding (Two-Level Completion Checklist)
 
+Apply this checklist only to actual in-repo runs. Exclude nested `history/repo-exchange/audit.md` from dispatch/consumption parsing; preserve flat `history/repo-exchange.md` for the valid local member. Repo outcomes stay pending/reported, with separate human attestation only; they never trigger checklist repair, active-member state or remote cost.
+
 Before reporting any sub-squad as done, verify both levels mechanically — never rely on the sub-squad's returned summary alone. For **each** sub-squad routed this turn, confirm:
 
 1. the sub-squad's inner-run proof-of-dispatch is satisfied — each stage it ran left its domain artifact at the rebased `Deliverable Root` under `members/<name>/` and a `members/<name>/history/<agent>.md` entry with a consumption block;
 2. the federation-level `history/<sub-squad>.md` entry was written by the Scribe and references the sub-squad's own decision entries;
-3. the federation `state.json` advanced this turn — its `updated` and `turn` moved and its `activeRoles` name the sub-squad(s) that ran.
+3. the federation `state.json` advanced this turn — its `updated` and `turn` moved and its `activeSubSquads` name the sub-squad(s) that ran.
 
-**Verification is an act, not an assertion.** List `members/<name>/history/` and the sub-squad's deliverable roots, and read what is there. Three failure shapes are specific to this level and must be caught here rather than reported as success:
-
-* **Invented paths.** A federation history entry citing a deliverable at a path that does not exist on disk. Cross-check every cited path before the Scribe writes the entry.
-* **A thin inner history.** `members/<name>/history/` holding fewer per-agent entries than the roles the inner run claims to have dispatched. The sub-squad's coordinator worked inline instead of dispatching, and the run is not complete no matter how finished the deliverables look.
-* **A federation root that only grows its decision log.** `decisions.md` carrying entries for turns `state.json` never counted, or no `history/` directory at all after routed turns. Both mean the Step 5 hand-off was partial.
-
-When any check fails, the sub-squad turn did **not** complete: re-dispatch the scoped run or escalate. Never substitute inline reasoning for an unverified run, and never let a sub-squad's own claim of completion stand in for the evidence.
+Verify by listing `members/<name>/history/` and deliverable roots and reading the files. Cross-check cited paths before Scribe writes; fewer history entries than claimed roles, missing federation history or unchanged state despite new decisions means incomplete. Re-dispatch the eligible local run or escalate on a failed check; neither a returned summary nor inline reasoning substitutes for evidence.
 
 ## Federation Autopilot Mode
+
+Check Kind before single-target forwarding, fan-out and built-tree preconditions. An explicit repo target with mode stops. Filter repo rows and blocked consumers before Init/repair, inner dispatch and cost/completion totals; empty eligibility is pending, not success. Unknown kinds stop. Preserve ordinary in-repo autopilot below.
 
 When the user passes `mode=autopilot` **without a single `squad=` target**, run the federation-level meta-pipeline from `squad-federation-autopilot.instructions.md` instead of normal classification, sequencing the meta-routing-selected sub-squads as *Federation autopilot* in `references/federation.md` describes. With a single `squad=<name>` target, the mode forwards to that sub-squad's standard single-squad autopilot and there is no meta-pipeline. Federation autopilot changes *which sub-squad sequences the work*, not any sub-squad's inner pipeline.
 

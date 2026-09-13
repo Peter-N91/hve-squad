@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cross-repository federation — hve-squad</title>
+  <meta name="description" content="Exchange advisory tasks and reports between GitHub repositories through human transport, target-local approvals, and separate human verification." />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html" class="active">Usage</a>
+        <a href="demo.html">Demo</a>
+        <a href="ecosystem.html">Ecosystem</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="contributing.html">Contributing</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Consumer Guide</div>
+      <h1>Cross-repository federation</h1>
+      <p class="lead">
+        A hub squad requests work from an independently owned GitHub repository and reconciles its
+        report. A human carries the task packet across, and carries the receipt back. Registration is
+        advisory-only: it does not enroll a remote agent or authorize work outside the current repository.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>When to use it</h2>
+      <p>
+        Treat this as a <strong>medium strategic priority</strong>. It can have high value for recurring
+        API/SDK compatibility work, or application and infrastructure-as-code dependencies where teams
+        need explicit acceptance criteria and evidence across ownership boundaries. For occasional
+        coordination, linked issues may be enough.
+      </p>
+
+      <div class="callout">
+        <p>
+          <strong>What this is not.</strong> Existing CI should continue to build, test and publish.
+          This exchange is not a replacement for CI, not autonomous remote execution, and not an atomic
+          multi-repository commit. There is no measured ROI or adoption evidence supporting a stronger
+          claim.
+        </p>
+      </div>
+
+      <h2>Prerequisites</h2>
+      <ul>
+        <li>
+          Each repository has its own local checkout and a squad installation containing the exchange
+          prompts and validator. See <a href="getting-started.html">Getting Started</a> for ordinary
+          setup; exchange actions do not install missing components.
+        </li>
+        <li>
+          The hub already has a federation. Use ordinary <code>/squad-federation</code> initialization or
+          promotion separately if necessary, then return to registration. Registration does not
+          initialize or promote a federation.
+        </li>
+        <li>
+          Run in the current repository's Git top-level directory, with PowerShell 7.4+ and Git
+          supporting <code>--no-lazy-fetch</code>. Missing tools or local commit objects stop validation;
+          there is no fetch, install or weaker Git fallback.
+        </li>
+        <li>
+          Each checkout has exactly one HTTPS GitHub <code>origin</code>. Packet and registry identities
+          must be lowercase <code>https://github.com/&lt;owner&gt;/&lt;repo&gt;</code>, without a
+          <code>.git</code> suffix, trailing slash, credentials, port, query, fragment or additional path
+          segments. Only the local origin may differ in case or carry one trailing <code>.git</code> or
+          slash for identity comparison. SSH, enterprise hosts, redirects, aliases and local-path origins
+          are unsupported. Any identity correction needs human confirmation; the exchange never rewrites
+          Git configuration. Do not paste credential-bearing origins.
+        </li>
+        <li>
+          The target operator supplies its intended base commit: exactly 40 lowercase hexadecimal
+          characters. Branches, tags, abbreviated hashes and revision expressions are not accepted. First
+          target acceptance must observe that exact commit as <code>HEAD</code>.
+        </li>
+        <li>
+          A human can transport files through an approved channel without changing their bytes. Place
+          each incoming file inside the receiving repository before invoking its local prompt. The hub
+          never opens, clones, fetches from or writes to the target.
+        </li>
+      </ul>
+
+      <p>
+        In each already-open repository session, check the local prerequisites and obtain the current
+        full commit ID with these read-only commands:
+      </p>
+      <pre><code>if ($PSVersionTable.PSVersion -lt [version]'7.4') { throw 'PowerShell 7.4+ is required' }
+git --no-lazy-fetch -c credential.helper= -c core.askPass= --version
+if ($LASTEXITCODE -ne 0) { throw 'Git with --no-lazy-fetch support is required' }
+git --no-lazy-fetch -c credential.helper= -c core.askPass= rev-parse --verify HEAD
+if ($LASTEXITCODE -ne 0) { throw 'A local Git HEAD is required' }</code></pre>
+      <p>
+        These checks are not exchange acceptance. The validator independently observes Git root, origin
+        and revision, disables lazy fetch, transports, credential helpers and prompts in its Git child
+        processes, and rejects ambiguous context. It does not change the terminal's environment or
+        working directory. Keep the hub's issuing commit available locally for later import, even if hub
+        <code>HEAD</code> advances.
+      </p>
+
+      <h2>Send, work and reconcile</h2>
+      <p>
+        The slash commands below are entered in Copilot Chat, not PowerShell. <code>request</code> is
+        required and comes from the current human conversation. Enter optional arguments explicitly even
+        if the prompt picker's hint does not display them.
+      </p>
+      <p>
+        All example values need deliberate selection: <code>contoso/service</code> is a fictional GitHub
+        target, <code>service</code> is its example hub registry alias, <code>api-contract</code> is an
+        example task slug, and <code>api</code> is an example existing target-local member. Replace
+        <code>&lt;40-hex-target-commit&gt;</code> with the actual target base commit and
+        <code>&lt;id&gt;</code> with the issued lowercase GUID correlation ID. Do not submit
+        angle-bracket placeholders. The transfer filenames are example local destinations, not paths the
+        exchange copies between repositories automatically.
+      </p>
+
+      <h3>1. Register the advisory target at the hub</h3>
+      <pre><code>/squad-federation request="Register service advisory target" exchange=register squad=service repo=https://github.com/contoso/service</code></pre>
+      <p>
+        Review and confirm the proposed row and human or team owner. The row has <code>Kind=repo</code>
+        and <code>Profile=advisory</code>; its name must be unique across local and repo rows, and its
+        canonical URL unique across repo rows. It creates no <code>members/service/</code> directory,
+        Watch ownership or remote execution permission. An optional suggestion-only route uses
+        <code>Parallel-Eligible=no</code>; explicit <code>squad=service</code> needs no route.
+      </p>
+
+      <h3>2. Issue a task at the hub</h3>
+      <pre><code>/squad-federation request="Assess the API compatibility change" exchange=send squad=service task=api-contract revision=&lt;40-hex-target-commit&gt;</code></pre>
+      <p>
+        Confirm the request, inline inputs and acceptance criteria &mdash; for example which API changes
+        to assess, which SDK compatibility checks to run, and which artifacts to return. Task slugs use
+        1&ndash;64 lowercase letters, digits or hyphens and start with a letter or digit. The packet binds
+        the observed hub <code>HEAD</code>, selected target identity, target base commit and a new
+        correlation ID. Packets default to seven-day expiry; v1 permits no more than seven days from
+        creation.
+      </p>
+      <p>
+        The Scribe prepares a candidate, validates it, saves an exact create-new copy and completes the
+        Issue audit, state read-back and completion seal. Wait for the committed final path
+        <code>.copilot-tracking/squad/exchanges/outbox/&lt;id&gt;/packet.json</code> before transport. A
+        file under <code>exchanges/staging/</code> is not transportable, and final-file existence alone
+        does not establish successful issuance. Runtime staging is not <code>git add</code> or a Git
+        commit.
+      </p>
+
+      <h3>3. Transport and accept at the target</h3>
+      <p>
+        Have a human copy the committed packet byte-for-byte through the approved channel into the
+        target's <code>.copilot-tracking/squad/transfers/task.json</code>. Open or use the target's own
+        local session; do not ask the hub to change checkout or run the target. Do not reformat,
+        reserialize or edit the transported JSON, including its whitespace and newlines. SHA-256 binds the
+        exact saved bytes.
+      </p>
+      <pre><code>/squad request="Accept this advisory task" handoff=.copilot-tracking/squad/transfers/task.json</code></pre>
+      <p>
+        With <code>handoff</code>, omitted <code>exchange</code> means <code>accept</code>. Identity, base
+        revision and repository-wide claim checks happen before initialization or work. A fresh
+        nonfederated target still needs ordinary confirmation-gated squad initialization.
+      </p>
+      <p>
+        For an already federated target, explicitly select an existing registered
+        <code>Kind=in-repo</code> member instead:
+      </p>
+      <pre><code>/squad request="Accept this advisory task" handoff=.copilot-tracking/squad/transfers/task.json squadRoot=.copilot-tracking/squad/members/api/</code></pre>
+      <p>
+        Without that selection, the target pauses and lists eligible local members. Packet text cannot
+        choose a root. The repository-root Scribe records an exclusive claim, then the selected root's
+        Scribe separately persists acceptance. Both must complete before first domain dispatch. The claim
+        pins one execution root across the entire repository, not just one inbox.
+      </p>
+
+      <h3>4. Complete local work, then report at the pinned root</h3>
+      <p>
+        Review the advisory request as data. The target's normal approval, research, plan, implementation,
+        review and Scribe-history gates still apply. Continue later work through a fresh ordinary local
+        request when needed; presenting the same accepted handoff again does not restart the task. Any
+        target-local autonomy choice is separate and cannot be inherited from the hub or packet.
+      </p>
+      <p>After local work and its evidence have been recorded, use the saved inbox packet:</p>
+      <pre><code>/squad request="Return the outcome for this task" handoff=.copilot-tracking/squad/exchanges/inbox/&lt;id&gt;/packet.json exchange=report</code></pre>
+      <p>For the <code>api</code> member example, both the packet path and root must match its acceptance:</p>
+      <pre><code>/squad request="Return the outcome for this task" handoff=.copilot-tracking/squad/members/api/exchanges/inbox/&lt;id&gt;/packet.json exchange=report squadRoot=.copilot-tracking/squad/members/api/</code></pre>
+      <p>
+        Report is handled before the Accept preflight and returns before ordinary routing: it is
+        bookkeeping only, not another intake, initialization or work dispatch. It requires the saved
+        intake and committed Claim/Accept evidence at the pinned root. The accepted base stays fixed; the
+        receipt's <code>resultRevision</code> records the current target <code>HEAD</code>, which may have
+        advanced through legitimate local work.
+      </p>
+      <p>
+        A <code>completed</code> receipt needs a substantive artifact and the pinned root's
+        <code>history/Squad Scribe.md</code>, with actual local file hashes. Exchange audit alone does not
+        count. The coordinator must also observe local gate and completion evidence; the validator cannot
+        prove approval or semantic correctness from hashes. Finish ordinary work and history recording
+        before reporting, and do not run concurrent writers at the same root.
+      </p>
+      <p>
+        The Scribe stages and validates the receipt, copies its bytes create-new to
+        <code>&lt;execution-root&gt;/exchanges/inbox/&lt;id&gt;/receipt.json</code>, and completes Report
+        before returning it for transport. <code>&lt;execution-root&gt;</code> means the root chosen at
+        acceptance, not another input argument. A final receipt always has
+        <code>status: "reported"</code>; its <code>outcome</code> is <code>completed</code>,
+        <code>blocked</code> or <code>declined</code>. Partial work must not be labeled completed. Only one
+        final report is permitted per correlation.
+      </p>
+
+      <h3>5. Transport the receipt and import at the hub</h3>
+      <p>
+        Have a human copy the committed final receipt byte-for-byte into the hub's
+        <code>.copilot-tracking/squad/transfers/receipt.json</code>, then use the hub's local session:
+      </p>
+      <pre><code>/squad-federation request="Import service outcome" exchange=import squad=service receipt=.copilot-tracking/squad/transfers/receipt.json</code></pre>
+      <p>
+        Import rechecks the current registered target, original committed Issue, packet digest,
+        repositories, source and base revisions, task and correlation. The issuing source commit must
+        still exist locally. First import after expiry is rejected even if the target reported before
+        expiry. Successful Import saves the immutable receipt beside the hub's outbox packet and records
+        <code>reported</code>, never verified or completed remote execution. Target evidence paths are
+        labels at the hub, not files to read from another checkout or assumed hub-local paths.
+      </p>
+
+      <h3>6. Review evidence and attest separately at the hub</h3>
+      <pre><code>/squad-federation request="Review this reported outcome" exchange=verify squad=service receipt=.copilot-tracking/squad/exchanges/outbox/&lt;id&gt;/receipt.json</code></pre>
+      <p>
+        This opens the human review gate; invoking it does not pass that gate. Review the acceptance
+        criteria, outcome, revisions and named evidence. A human may separately transport evidence copies
+        and explicitly identify them for local inspection. Do not claim inspection merely because the
+        receipt lists a path or digest.
+      </p>
+      <p>
+        Only after an explicit current human statement of what was inspected and accepted can the Scribe
+        record <code>human-verified</code>, with human identity, timestamp, statement, packet and receipt
+        hashes, task, revisions and inspected evidence. Missing evidence or uncertainty leaves the result
+        reported. The receipt itself remains unchanged. Verification can attest to a historical report
+        after expiry, but never reactivates an expired task or grants release authority.
+      </p>
+
+      <h2>Mixed targets and dependencies</h2>
+      <p>
+        A federation can contain local <code>in-repo</code> members and advisory <code>repo</code> rows.
+        Only local members participate in automatic dispatch, recovery, Watch and autopilot. Unknown kinds
+        stop. A repo row is never repaired into a member tree or counted as a remote run, active member or
+        remote cost. Filtering every candidate out does not make a meta-run successful.
+      </p>
+      <p>
+        If a local consumer depends on a repo producer, keep that dependency pending until a fresh human
+        request supplies separately reviewed local inputs under normal gates. Neither importing nor
+        verifying a report automatically resumes consumers. Blocked, declined, partial or unverified
+        outcomes do not count as success.
+      </p>
+      <p>
+        Hub exchange actions require explicit <code>squad</code> selection and their companion arguments.
+        Do not combine exchanges with <code>watch</code>, <code>init</code>, <code>promote</code>, or hub
+        <code>mode=autonomous|autopilot</code>. On the target, <code>exchange</code> without
+        <code>handoff</code> stops; unknown actions and Watch, init or promote combinations also stop. The
+        target prompt accepts a user <code>squadRoot</code> override only with a handoff.
+      </p>
+
+      <h2>Evidence and recovery</h2>
+      <p>
+        Only the owning Scribe writes exchange state. Immutable packet, receipt, intake, claim and
+        completion-seal files use create-new semantics. Each committed operation has matching append-only
+        blocks in its root's <code>decisions.md</code> and <code>history/repo-exchange/audit.md</code>,
+        checked file hashes, a successful normal state advance and read-back, and then an immutable
+        <code>exchanges/operations/&lt;attemptId&gt;/commit.json</code>. Here
+        <code>&lt;attemptId&gt;</code> is a locally generated operation GUID. The seal is the only
+        post-state exception; it is not a Git commit or an atomic multi-root transaction. The nested audit
+        does not replace an existing member's flat <code>history/repo-exchange.md</code>.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Situation</th>
+            <th>Expected result and operator action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Identical accepted packet presented again, even through another member</td>
+            <td>
+              Complete Claim/Accept returns <code>already-accepted</code> and the first root, with no new
+              writes, state, cost or dispatch. Use that root for reporting.
+            </td>
+          </tr>
+          <tr>
+            <td>Identical fully committed Report or Import presented again</td>
+            <td>
+              <code>already-reported</code> is a historical no-op, including after expiry; it does not
+              repeat work or resume consumers.
+            </td>
+          </tr>
+          <tr>
+            <td>Same correlation with changed packet or receipt bytes</td>
+            <td>
+              Conflict; preserve originals. Have humans review and request a fresh correlation instead of
+              overwriting evidence.
+            </td>
+          </tr>
+          <tr>
+            <td>First Issue, Accept, Report or Import reaches expiry</td>
+            <td>
+              Stale; do not extend timestamps in place. Review prior work and request a fresh exchange if
+              still needed.
+            </td>
+          </tr>
+          <tr>
+            <td>Wrong origin, first target <code>HEAD</code>, root, missing local source commit or unsupported Git</td>
+            <td>
+              Stop; independently review local prerequisites. No automatic checkout, fetch, configuration
+              change or validation bypass.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="pager">
+        <a class="prev" href="usage.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Usage</div>
+        </a>
+        <a class="next" href="ecosystem.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Ecosystem</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · built on <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        agents and conventions · <a href="https://github.com/Peter-N91/hve-squad">Source on GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

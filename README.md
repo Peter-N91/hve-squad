@@ -1,3 +1,8 @@
+---
+title: hve-squad
+description: Assemble HVE Core agents into a reusable squad for Copilot target environments.
+---
+
 <p align="center">
   <img src="docs/assets/logo.svg" alt="hve-squad logo" width="120" height="120" />
 </p>
@@ -46,6 +51,12 @@ Full documentation lives on the project site:
 The site source is in [docs/](docs/) and is published to GitHub Pages by
 [.github/workflows/docs.yml](.github/workflows/docs.yml) on every push to `main` that touches
 `docs/`.
+
+For work across independently owned GitHub repositories,
+[cross-repository federation](https://peter-n91.github.io/hve-squad/cross-repo-federation.html)
+adds advisory task and receipt exchange through human transport, with target-local
+approvals and separate human verification. It does not execute work remotely or
+replace CI.
 
 ## Related repositories
 

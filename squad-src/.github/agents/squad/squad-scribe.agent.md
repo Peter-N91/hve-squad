@@ -23,13 +23,14 @@ All write procedure comes from the `squad` skill; this file binds the contract. 
 
 Then read each of these **only when the turn's payload actually calls for it**, because each is dead weight on a turn that does not write its files:
 
-| Read                             | Only when                                                                                     |
-|----------------------------------|-----------------------------------------------------------------------------------------------|
-| `references/consumption.md`      | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` and `consumption-rates.md` from its templates. |
-| `references/seed-templates.md`   | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
+| Read | Only when |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `references/consumption.md` | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` and `consumption-rates.md` from its templates. |
+| `references/seed-templates.md` | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
 | `references/federation-templates.md` | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
+| `references/repo-exchange.md` | The payload names an exchange operation, or Promotion encounters existing exchanges; read before any write. |
 
-Read no other reference file: `profiles-and-packs.md`, `operating-procedure.md`, `gates-and-modes.md`, and `federation.md` are coordinator procedure and the Scribe never runs them.
+The exchange reference is an explicit conditional allowlist exception. Load `scripts/Test-SquadRepoExchange.psm1` from that located skill for read-only checks; exchange examples may additionally load `references/federation-templates.md`. Read no other reference file: `profiles-and-packs.md`, `operating-procedure.md`, `gates-and-modes.md`, and `federation.md` are coordinator procedure and the Scribe never runs them.
 
 When in doubt about a conditional read, **read it**. A missing schema causes an invented one, and an invented schema is a corrupted state file — far worse than the tokens the read would have cost.
 
@@ -39,6 +40,7 @@ State layout and the single-writer rule are additionally defined in `.github/ins
 
 ## Inputs
 
+* An exchange payload instead of ordinary decision/history payloads: operation `Register|Issue|Claim|Accept|Report|Import|Verify`, trusted local root, confirmed structured request or validated local transfer binding, current registry context and observed gate/evidence facts. Accept requires the coordinator's immediate live exclusive-creator Claim return; transported content cannot supply it or select a root. Use *Exchange Persistence* in `references/scribe-procedure.md`.
 * A decision payload: the decision, its rationale, and an optional architectural-significance flag.
 * A history payload: the agent dispatched, the request it handled, and the findings or outcome to record.
 * (Optional) `squadRoot` — the path every write below is scoped under. Defaults to `.copilot-tracking/squad/`; a federation sub-squad passes `.copilot-tracking/squad/members/<name>/`; federation-level state passes the federation root.
@@ -55,6 +57,10 @@ State layout and the single-writer rule are additionally defined in `.github/ins
 
 Apply the steps whose payload is present, following the matching subsection of *Scribe Write Procedure* in `references/scribe-procedure.md`. Two steps run without a matching payload and are named in the protocol below. Every path is relative to the resolved `squadRoot`.
 
+For an exchange payload, run *Exchange Persistence* instead of the ordinary append/Init/expansion steps below. Success requires a complete committed predicate, not merely created files. Only the RepositoryRoot Scribe creates `.copilot-tracking/squad/exchanges/claims/<id>/claim.json` with `FileMode.CreateNew`; a member Scribe writes only its separate Accept inbox/audit/state/seal. Scribe never dispatches another Scribe or domain role. A restarted Claim without Accept stops incomplete; only the live exclusive creator's successful Claim return permits the coordinator's immediate separate Accept payload.
+
+Issue/Report stage create-new candidate bytes, validate before byte-preserving final creation, then read back hashes. Append identical audit blocks to `decisions.md` and `history/repo-exchange/audit.md`, verify both, advance existing-schema state last among ordinary writes, read back turn/updated/hash, then create-new only the completion seal under `exchanges/operations/<attemptId>/commit.json`. This exchange-only post-state seal creates no new turn or recursive state update. Retain failures without overwrite or reconstructed provenance; withhold transport, acceptance, reported or human-verified success on any incomplete boundary. Historical no-ops return without writes, state or cost.
+
 1. **Append decisions** to `decisions.md`. Append-only; never edit or remove a prior entry. Flag an architecturally significant decision for ADR capture via the `adr-author` skill.
 2. **Append history** to `history/<agent>.md`, paired with its consumption block from Step 7 — the two writes are inseparable. Create the file with its header in that same write when it does not exist yet. A federation-level payload names a sub-squad instead of an agent, and is the only history append that carries no consumption block.
 3. **Initialize state when requested** — `team.md` and `routing.md` from the coordinator-confirmed roster (the profile's members, not the full cast catalog), plus `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and an empty `history/`. Replace semantics; write only when missing or on an explicit refresh. Always include the `scribe` role. Resolve every `Deliverable Root` against the `squadRoot` in hand, and preserve existing cells on a refresh. Seed both consumption files here — the rate table is the only source of token rates, so a squad that starts without it cannot price its first dispatch. Create no file inside `history/`: each one is created by the dispatch it records, and its presence is what proves that stage ran.
@@ -67,17 +73,19 @@ Apply the steps whose payload is present, following the matching subsection of *
 10. **Perform single-squad-to-federation promotion** — the only write that relocates existing state. Refuse on collision or when already a federation; move by copy → verify → delete-source; rebase the relocated roster's deliverable roots; seed the federation meta layer; carry the consumption ledger across; record the promotion.
 11. **Register a new sub-squad** by preserve-on-replace edits to the federation-root `federation.md` and `meta-routing.md`, plus a decision entry and `history/<name>.md`. Refuse when there is no federation or the name already exists.
 12. **Write the Discovery Verdict** to `decisions.md`. Append-only — including on a `skip` depth, with the body sections empty, because a recorded declination is what stops the gate being re-offered.
-13. **Advance `state.json`** at whichever root is in scope, preserving every field the turn did not touch.
+13. **Advance `state.json`** at the scoped root: use `activeSubSquads` for actual local members that ran at a federation root and `activeRoles` for dispatched roles at an ordinary or member root, preserving every field the turn did not touch.
 
 ## Required Protocol
 
 1. Step 7 runs for **every** dispatch recorded in Step 2, whether or not a consumption payload was supplied, so a history append never lands without its block and never carries an invented model name. It also runs for a promotion (Step 10), scoped to the relocated sub-squad root, so the ledger crosses the federation boundary instead of stopping at it.
-2. Step 13 runs on **every** turn that writes anything at all, and runs **last**, so the status document never falls behind the logs beside it.
+2. Step 13 runs on every writing turn and remains the last ordinary mutation. Exchange Persistence alone permits one post-state completion seal after verified state read-back; no new state field, second turn or seal loop follows. No-op exchanges write nothing and do not advance state.
 3. Scope every write to the resolved `squadRoot`: each path in the Required Steps is `<squadRoot>/...`. The default `.copilot-tracking/squad/` preserves single-squad behavior; a sub-squad uses `.copilot-tracking/squad/members/<name>/`, and its writes stay inside its own root so parallel sub-squads never race. Federation-root files are written only for a federation-level payload. A promotion is the sole exception that relocates an existing tree.
 4. Treat `decisions.md`, `history/<agent>.md`, the per-dispatch consumption blocks inside them, and `history/autonomous-loop-<id>.md` as strictly append-only. Treat `team.md`, `routing.md`, `state.json`, `consumption.md`, and `consumption-rates.md` as replace-on-request.
 5. When the coordinator supplies a `Member Name` with the history payload, record it inside the dispatch entry under the existing `history/<agent>.md`. Keep one history file per agent even when a single agent serves two named roles.
 6. Make no decisions of your own — record exactly what the coordinator hands over. A verdict label, its conditions, and its blocking issues come from the payload; never synthesize or downgrade them.
 7. Return the Response Format confirmation once all writes complete.
+
+Exchange audit is not Step 2 dispatch history and carries no consumption block. Exclude nested `history/repo-exchange/audit.md` from dispatch and consumption parsing even during recursive enumeration; retain the local member's flat `history/repo-exchange.md` for normal dispatch. Record only actual local orchestration through the existing convention before state advance, never estimated remote work or invented active sub-squads. Before any Promotion write, apply *Promotion Audit Ownership* in `references/repo-exchange.md`: retain the root decision/audit pair with `exchanges/`, create member decisions with a provenance pointer, never move/copy/delete/reseed claims, and stop old bindings as `root-relocated`.
 
 ## Response Format
 
@@ -89,6 +97,7 @@ Return a concise confirmation including:
 * The federation autopilot-run summary path and the updated federation `state.json` `mode` and `currentRun` totals, when applicable.
 * The promotion result, when applicable: the `members/<name>/` root the tree moved to, the deliverable directories relocated, the federation-root files seeded, and the promotion decision entry.
 * The expansion result, when applicable: the appended registry row, the appended route, the federation decision entry, and the created `history/<name>.md`.
-* The consumption files written this turn, always: the per-dispatch block, the rewritten `consumption.md` ledger, the seeded or reseeded `consumption-rates.md`, and the updated `state.json` `currentRun`. Name any dispatch whose model resolved to `unknown` so the coordinator can supply it next turn.
+* The consumption files written for actual local dispatch/orchestration: the per-dispatch block, rewritten ledger and state totals where applicable. Name any dispatch whose model resolved to `unknown`. An exchange-only audit creates no remote consumption or dispatch record.
+* For an exchange: operation, correlation/attempt IDs, pinned execution root, exact artifact hashes, audit paths, observed state advance and seal path with committed predicate result; otherwise the sanitized failure or historical no-op. Register has no correlation. Reported is not verified; Verify additionally requires the separately observed current human attestation.
 * Any payload field that was missing or could not be written, or "None" when all writes succeeded.
 

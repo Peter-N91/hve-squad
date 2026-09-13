@@ -9,6 +9,11 @@ argument-hint: "request=... [squad=<name>] [init] [promote] [watch=...] [profile
 ## Inputs
 
 * ${input:request}: (Required) The work for the federation this turn, from the user prompt or conversation.
+* ${input:exchange}: (Optional) Explicit advisory `register`, `send`, `import` or `verify`; never inferred from meta-routing.
+* ${input:repo}: (Required for register) Canonical GitHub HTTPS repository identity for the confirmed advisory row.
+* ${input:task}: (Required for send) Task slug bound to the packet.
+* ${input:revision}: (Required for send) Exact lowercase 40-hex target commit; no branch or revision expression.
+* ${input:receipt}: (Required for import/verify) Explicit repository-relative receipt file manually transported into this repository, or the saved imported receipt for verify.
 * ${input:squad}: (Optional) The registered sub-squad to route this request to (for example, `squad=product` or `squad=azure`). Overrides meta-routing for the turn; when omitted, the coordinator matches the request against `meta-routing.md`.
 * ${input:init}: (Optional) When present, triggers Federation Init Mode so the coordinator proposes, confirms, and creates a set of named sub-squads before routing the request. When a `federation.md` already exists, the same flag runs Federation Expansion Mode instead — proposing, confirming, and adding one (or more) new sub-squad(s) to the existing federation before routing.
 * ${input:promote}: (Optional) When present on an existing single-squad project (a top-level `team.md` exists and no `federation.md`), triggers Federation Promotion Mode, which adopts the existing squad into a federation as its first sub-squad — moving its state and its pre-promotion deliverables intact — before routing the request.
@@ -20,6 +25,10 @@ argument-hint: "request=... [squad=<name>] [init] [promote] [watch=...] [profile
 * ${input:mode}: (Optional) The autonomy mode (`autonomous` or `autopilot`). With a single `squad=` target, or with `mode=autonomous`, it is forwarded to the selected sub-squad's coordinator run. With `mode=autopilot` and **no** `squad=` target, the coordinator runs the federation-level autopilot meta-pipeline across the meta-routing-selected sub-squads per `.github/instructions/squad/squad-federation-autopilot.instructions.md`. When omitted, the sub-squad uses the standard interactive tiers.
 
 ## Requirements
+
+Forward `${input:exchange}`, `${input:repo}`, `${input:task}`, `${input:revision}`, `${input:receipt}` and `${input:squad}` unchanged for an explicit exchange. Load `references/repo-exchange.md` from the located `squad` skill and run its Hub Exchange Procedure through the coordinator before any mode or member-tree branch, then return. Require an existing federation, explicit alias and companions; reject unknown actions and exchange with Watch/init/promote/autonomous/autopilot. Register is registry-only; Send returns only a committed packet for human transport; Import is reported; Verify requires a separate current human attestation. No remote execution or gate override is authorized.
+
+Without exchange, apply Kind before every member access, repair, explicit target, Watch bootstrap/resume, autopilot single/fan-out, recovery and completion/cost. Only `in-repo` follows the requirements below. Repo matches and dependent consumers remain pending, never dispatched; unknown kinds stop. An explicit repo target with mode/Watch stops. No eligible local runs is not success; Report/Verify never resumes consumers. No-handoff in-repo behavior is otherwise unchanged.
 
 1. Hand `${input:request}` to the Squad Federation Coordinator and let its per-turn protocol classify the request to one or more sub-squads and run each scoped to its own squad root.
 2. When `${input:squad}` is provided, route the request to that registered sub-squad (escalate when the name is not in `federation.md`); otherwise let the coordinator match `meta-routing.md`.
