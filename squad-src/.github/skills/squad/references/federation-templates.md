@@ -1,6 +1,6 @@
 ---
 name: squad-federation-templates
-description: "Federation-root seed templates: federation.md, meta-routing.md, decisions.md, state.json, and the autopilot meta-run summary."
+description: "Federation-root seed templates: routing, decisions, state, aggregate rate table, and autopilot meta-run summary."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -12,7 +12,7 @@ metadata:
 
 ## Federation Seed Templates
 
-The Squad Federation Coordinator hands these templates to the Squad Scribe when it creates a federation (after the user confirms the sub-squad set in Federation Init Mode). They stay consistent with `.github/instructions/squad/squad-federation.instructions.md`: `federation.md`, `meta-routing.md`, and the federation `state.json` use replace semantics; the federation `decisions.md` and `history/<sub-squad>.md` are append-only. Each `members/<name>/` sub-squad is seeded with the ordinary `team.md` and `routing.md` templates in [seed-templates.md](seed-templates.md) plus the `decisions.md`, `state.json`, and `history/` shapes in [entry-schemas.md](entry-schemas.md), rooted at `members/<name>/`.
+The Squad Federation Coordinator hands these templates to the Squad Scribe when it creates a federation. `federation.md`, `meta-routing.md`, `state.json`, and the root `consumption-rates.md` use replace semantics; `decisions.md` and `history/<sub-squad>.md` are append-only. Each `members/<name>/` sub-squad receives the ordinary templates rooted at `members/<name>/`.
 
 ### federation.md
 
@@ -72,7 +72,7 @@ Machine-readable federation status. Replace semantics — the Scribe overwrites 
 
 ```json
 {
-  "schemaVersion": "1.2",
+  "schemaVersion": "1.3",
   "updated": "",
   "turn": 0,
   "mode": "interactive",
@@ -83,14 +83,48 @@ Machine-readable federation status. Replace semantics — the Scribe overwrites 
     "sessionModel": "",
     "modelOverrides": {},
     "estCostUsd": 0,
-    "estCreditsTotal": 0
+    "estCreditsTotal": 0,
+    "costPreflight": {
+      "runId": "",
+      "roundId": "",
+      "ceilingUsd": null,
+      "evaluatedSpendUsd": 0,
+      "remainingUsd": null,
+      "plannedDispatches": 0,
+      "projectedCostUsd": 0,
+      "reserveMultiplier": 3.0,
+      "admissionCostUsd": 0,
+      "confidence": "not-applicable",
+      "basis": "not-requested",
+      "decision": "not-requested",
+      "reason": "No cost ceiling configured."
+    }
+  },
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": {
+      "handle": "",
+      "repo": ""
+    }
   }
 }
 ```
 
 `subSquads` lists every registered sub-squad name (mirroring `federation.md`); `activeSubSquads` lists the sub-squad(s) dispatched on the current turn. `currentRun.sessionModel` and `currentRun.modelOverrides` are the federation-wide defaults a sub-squad inherits unless its own `state.json` sets them. Each sub-squad keeps its own `state.json` under `members/<name>/` per `.github/instructions/squad/squad-state.instructions.md`.
 
-`mode` and `currentRun` are additive fields for federation-level autopilot (`.github/instructions/squad/squad-federation-autopilot.instructions.md`). `mode` records the autonomy mode in effect for the current federation turn (`interactive` or `autopilot`); `currentRun` aggregates the estimated cost and credits summed across every sub-squad inner run of the current meta-run, so the federation-level cost ceiling reads one number. All of these are backward-compatible — a federation that never runs autopilot leaves `mode` at `interactive` and `currentRun` at zero, and `sessionModel` / `modelOverrides` default to empty — so the `schemaVersion` bumps (`1.0` → `1.1` for autopilot, `1.1` → `1.2` for model attribution) keep existing federation state valid.
+`mode` and `currentRun` are additive fields for federation-level autopilot (`.github/instructions/squad/squad-federation-autopilot.instructions.md`). `mode` records the autonomy mode in effect for the current federation turn (`interactive` or `autopilot`). `currentRun` aggregates estimated inner-run cost plus federation coordinator and root-writer orchestration exactly once, so the ceiling reads the whole modeled spend rather than only child ledgers.
+
+Read legacy federation schema `1.2` without `costPreflight` as an unset ceiling with the default `not-requested` object. On the next preflight or ordinary federation write, add the exact object, bump only `schemaVersion` to `1.3`, and preserve every existing federation, mode, model, override, active-sub-squad, escalation, accumulated-total, and `notify` value. The coordinator may perform that exact version bump with its otherwise `costPreflight`-only legacy transaction.
+
+### consumption-rates.md (federation root)
+
+Copy the complete `consumption-rates.md` template from [consumption.md](consumption.md) when the federation is created or promoted. This root copy is dormant for ordinary and targeted routing. Untargeted federation autopilot uses it to price every imported inner-demand row and federation coordinator/root-writer row with one rate basis and one calibration factor, applied once.
+
+Reconcile this calibration only from a completed federation meta-run's aggregate observed credits divided by that run's aggregate estimated credits. Until the root calibration is eligible for the current rate and estimator basis, an aggregate configured ceiling returns `cannot-confirm`; per-sub-squad ceilings remain independent and unaffected.
+
+For a federation created before this root file existed, the Scribe copies the current complete template before the first untargeted federation-autopilot preflight. That one-time pricing-state initialization is outside the aggregate ceiling. It starts uncalibrated and does not permit a configured aggregate ceiling until eligible evidence exists.
 
 ### history/autopilot-run-\<id>.md (federation root)
 
@@ -108,6 +142,12 @@ description: "Federation autopilot meta-run summary for topic <id>"
 * Cost Ceiling: <value or unset>
 * Aggregate Cost: <est-usd> (~<est-credits> AI credits, estimated, not billed)
 * Outcome: completed (awaiting final validation) | escalated (<reason>) | stopped (<reason>)
+
+## Cost Preflight Rounds
+
+| Round | Inner Admission USD | Federation Meta Admission USD | Total Admission USD | Decision | Confidence | Decision Ref |
+|-------|--------------------:|------------------------------:|--------------------:|----------|------------|--------------|
+| <round-id> | <sum of selected inner reservations> | <coordinator and root-writer reservation> | <sum> | <decision> | <low or medium> | `decisions.md#cost-preflight-<timestamp>-<run-id>-<round-id>` |
 
 ## Meta-Stages
 

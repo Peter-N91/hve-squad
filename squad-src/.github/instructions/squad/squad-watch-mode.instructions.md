@@ -110,7 +110,7 @@ Gates therefore resolve in one of three ways, and the split is not negotiable by
 | --- | --- |
 | Stage transitions (research → plan → implement → review) | **Proceed.** These were never Human Gates in autopilot; they advance on artifact evidence as normal. |
 | Final-outcome validation | **Satisfied by the draft pull request.** The coordinator does not wait for an in-chat approval; it compiles the outcome into the PR body and opens the PR. The human validates by reviewing the PR. |
-| Risk Gate (`Stop` verdict, `Risk: High`, compliance finding, divergence, cost ceiling) | **Record, do not block.** The finding is written to the sub-squad `decisions.md` and reproduced verbatim in the PR body under a `Blocking findings` heading, and the PR stays a draft. A `Stop` verdict additionally stops the Implement stage, so the PR carries the research and plan plus the reason no implementation followed. |
+| Risk Gate (`Stop` verdict, `Risk: High`, compliance finding, divergence, cost ceiling) | **Record and keep the PR draft.** The finding is written to the sub-squad `decisions.md` and reproduced in the PR body under `Blocking findings`. A `Stop` verdict stops Implement. `over-ceiling` stops every new child and uses the draft approval thread for a stop-or-proceed decision; authorized proceed resumes sequentially from `approved-over-ceiling`. `cannot-confirm` remains blocked until its inputs change. |
 | Impactful-Action Gate (merge, deploy, push to a protected branch, schema migration, data deletion, destructive infrastructure operation, secret rotation, live issue-tracker write) | **Never proceeds.** No exception, no payload override, no `unattended` flag. |
 
 The Impactful-Action Gate is absolute in the unattended path because the whole safety argument rests on it. It is enforced in three independent places, so a single failure — including a prompt-injection success — does not carry the action through:
@@ -125,13 +125,13 @@ A consumer who wants an unattended run to reach further than a draft pull reques
 
 * **One active run per source event.** A re-triggered event (a new label, an edited issue, a `synchronize` push) resumes or references the existing run rather than starting a competing one. The event's own sub-squad is the anchor for that check: a re-trigger resolves to the same derived name and reuses that sub-squad's recorded state (see *Reuse, Collisions, and Concurrency*).
 * The run records its source event and run id so a fresh headless invocation can recover the exact pending gate from the event sub-squad's `state.json`, exactly as the poll-loop resume pattern does for approvals.
-* A per-run `cost-ceiling` bounds spend; the coordinator escalates rather than looping past it.
+* A per-run `cost-ceiling` applies the same initial and rolling Cost Preflight as interactive autopilot. A resumed event run inherits its active ceiling when the trigger omits the argument; a new event run does not inherit another run's ceiling; `cost-ceiling=unset` removes it explicitly. `within-ceiling` permits its named set. `over-ceiling` remains a blocking finding until an authorized stop or proceed response; proceed appends `approved-over-ceiling` and resumes sequential units until the estimated ceiling is reached. `cannot-confirm` requires changed inputs.
 
 ## Provenance and State
 
-Watch Mode writes through the same single-writer Scribe path an interactive run uses and adds one **backward-compatible** state change:
+Watch Mode writes through the same Scribe path an interactive run uses and carries one optional provenance object:
 
-* The Scribe records the trigger provenance in a `trigger` object in the run's `state.json`, and `schemaVersion` moves from `1.1` to `1.2`. The object is optional and additive — a squad that never runs in Watch Mode simply omits it, so existing state stays valid. Because every Watch Mode run is scoped to an event sub-squad, that `state.json` is `members/<name>/state.json` (see *Event-Scoped Sub-Squads*). The machine-readable provenance backs the idempotency and resume rules above, which matters because the CLI Action runtime is a fresh, stateless process on each event and reads `state.json` to learn whether it is already handling an event and where it stopped.
+* The Scribe records trigger provenance in the optional `trigger` object of current schema `1.4`. Historical schema `1.2`, which first introduced `trigger`, is accepted only as migration input and upgrades without losing provenance or notification fields. Because every Watch Mode run is scoped to an event sub-squad, that `state.json` is `members/<name>/state.json` (see *Event-Scoped Sub-Squads*). The machine-readable provenance backs idempotency and resume because each CLI Action invocation is stateless.
 
   ```json
   "trigger": {
@@ -231,7 +231,7 @@ Names are normalized before use: lowercase; every character outside `[a-z0-9]` r
 ### Provenance and Retention
 
 * The `trigger` object described in *Provenance and State* is written to the **event sub-squad's** `state.json` (`members/<name>/state.json`), and the run's `history/autopilot-run-<id>.md` lives under the same root.
-* The federation root records the bootstrap itself: a `decisions.md` entry naming the action taken (init, promotion, expansion, resume, or repair), the derived name and how it was derived, and the source event; plus a `history/<name>.md` entry for the event sub-squad. Both are written by the Squad Scribe, which remains the single writer at both levels.
+* The federation root records the bootstrap itself: a `decisions.md` entry naming the action taken (init, promotion, expansion, resume, or repair), the derived name and how it was derived, and the source event; plus a `history/<name>.md` entry for the event sub-squad. Both are ordinary writes performed by the Squad Scribe; only Cost Preflight uses the coordinator exception.
 * Event sub-squads are **retained** — they are the audit trail, so nothing prunes them automatically. Archiving or removing one is a separate, explicit, human-initiated Scribe operation, exactly as renaming or removing any sub-squad is.
 
 ### Bootstrap Escalation

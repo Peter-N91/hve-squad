@@ -296,6 +296,51 @@ flowchart TD
         <li><code>squad-src/.github/skills/squad/</code></li>
       </ul>
 
+      <h3>Cost-ceiling contract and tests</h3>
+      <p>
+        Cost admission spans several artifact types, but each concern has one primary owner. Keep the
+        prompt surface, canonical calculation, coordinator boundary, Scribe validation, state schema,
+        and tests synchronized when the parameter changes.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Concern</th><th>Primary owner</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Invocation and forwarding</td><td><code>squad.prompt.md</code> and <code>squad-federation.prompt.md</code></td></tr>
+          <tr><td>Effective ceiling, estimate, confidence, approval, and stop rules</td><td><code>references/consumption.md</code></td></tr>
+          <tr><td>Dispatch-boundary procedure</td><td><code>references/gates-and-modes.md</code></td></tr>
+          <tr><td>Machine and readable record shapes</td><td><code>references/entry-schemas.md</code> and <code>references/federation-templates.md</code></td></tr>
+          <tr><td>Post-admission slot enforcement</td><td><code>references/scribe-procedure.md</code></td></tr>
+          <tr><td>Single-squad and federation orchestration</td><td><code>squad-coordinator.agent.md</code> and <code>squad-federation-coordinator.agent.md</code></td></tr>
+          <tr><td>Federation aggregate rates and calibration</td><td>Federation-root <code>consumption-rates.md</code>, seeded from <code>references/federation-templates.md</code> and used only by untargeted federation autopilot</td></tr>
+          <tr><td>Stable behavior IDs</td><td><code>tests/squad-behavior-contract.md</code></td></tr>
+          <tr><td>Package, state, chronology, and mutation checks</td><td><code>tests/tier0/SquadPackage.Tests.ps1</code> and <code>tests/tier1/</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Keep the ownership split explicit. Initialization is setup spend outside admission. Ordinary
+        and targeted federation routing forwards an independent ceiling to every selected sub-squad.
+        Only untargeted federation autopilot reads or writes aggregate Cost Preflight state at the
+        federation root. Its completed meta cost is reconstructed across every round, not only the
+        latest shrinking manifest.
+      </p>
+      <p>Run the local-safe validation layers after a change:</p>
+      <pre><code># Prompt, package, reference, and body-cap conformance
+./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot .
+
+# Valid state plus adversarial transition fixtures
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
+
+# Whitespace and malformed patch output
+git diff --check</code></pre>
+      <p>
+        Tier 1 live runs invoke models and are a separate manual measurement lane. The self-check above
+        is deterministic and proves each contract assertion can reject a deliberately corrupted tree.
+        A behavior change also needs a new file under <code>.changes/unreleased/</code>; editing an
+        existing fragment does not satisfy the pull-request gate for a separate pull request.
+      </p>
+
       <h3>Why the source is separate from the deployed <code>.github/</code> tree</h3>
       <p>
         <code>apm install</code> deploys agents and prompts <em>flattened</em> into the consumer's
@@ -496,7 +541,9 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
         Tick <em>dry run</em> when you dispatch to see the resolved version and the assembled section
         without committing anything. Use the <code>bump</code> and <code>version</code> inputs to
         overrule the level the fragments resolved to or to pin an exact number.
-      </Do not keep a long-lived <code>release</code> branch. Cut a short-lived
+      </p>
+      <p>
+        Do not keep a long-lived <code>release</code> branch. Cut a short-lived
         <code>hotfix/vX.Y.Z</code> branch off an existing tag only when <code>main</code> holds work
         that must not ship yet and a fix cannot wait for it &mdash; a release ships a commit, so a tag
         cut from <code>main</code> carries that pending work out with the fix.
@@ -520,7 +567,10 @@ git push -u origin hotfix/v0.14.1</code></pre>
         and it exists precisely because Release Prep &mdash; not a human &mdash; wrote both. If a
         higher version has already shipped, the release workflow compares versions and passes
         <code>--latest=false</code>, so the hotfix does not take the <strong>Latest</strong> badge from
-        the release that supersedes itrelease-prep                        # resolve version, assemble, write
+        the release that supersedes it.
+      </p>
+      <p>Release Prep can also be run directly:</p>
+      <pre><code>apm run release-prep                        # resolve version, assemble, write
 pwsh -File scripts/Invoke-ReleasePrep.ps1 -DryRun           # preview only
 pwsh -File scripts/Invoke-ReleasePrep.ps1 -Bump minor       # overrule the fragments
 pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0    # force an exact version</code></pre>

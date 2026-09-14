@@ -38,7 +38,7 @@ Full documentation lives on the project site:
 | Page                                                                          | What it covers                                                           |
 |-------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Prerequisites, installing the package with the correct target, first run |
-| [Usage](https://peter-n91.github.io/hve-squad/usage.html)                     | Profiles, autonomy modes, remote approval, and first-run Init Mode       |
+| [Usage](https://peter-n91.github.io/hve-squad/usage.html)                     | Profiles, autonomy modes, cost ceilings, remote approval, and Init Mode  |
 | [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html)             | The MCP server and the Copilot CLI plugin, and which surface to use      |
 | [Maintaining](https://peter-n91.github.io/hve-squad/maintaining.html)         | Dependency generation, author workflow, customization, release process   |
 | [Troubleshooting](https://peter-n91.github.io/hve-squad/troubleshooting.html) | Known install errors with fixes, versioning, and repository notes        |
@@ -75,6 +75,19 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot
 ```text
 /squad request="add input validation to the login form"
 ```
+
+Add an optional model-spend ceiling when you want a conservative forecast before work starts:
+
+```text
+/squad request="add input validation to the login form" cost-ceiling=10
+```
+
+Within the same run, omitting the argument preserves an active ceiling. Use
+`cost-ceiling=unset` to remove it explicitly. See
+[Cost admission control](https://peter-n91.github.io/hve-squad/usage.html#cost-admission-control)
+for estimation, approval, stopping, and federation behavior. Fresh-squad initialization is outside
+admission. Ordinary federation routing applies the ceiling independently to each selected sub-squad;
+only untargeted federation autopilot uses one aggregate federation ceiling.
 
 The `/` picker lists two entries named `squad`: pick the **prompt** ("Hands a request to the Squad
 Coordinator...") to run the squad. The **skill** ("Operating procedure for...") only loads the squad

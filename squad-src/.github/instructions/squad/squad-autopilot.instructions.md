@@ -129,10 +129,16 @@ Autopilot also stops, regardless of pipeline stage, on any of these — identica
 * Any cost-impacting move the `cost-manager` flags at `confirm` tier.
 * Any compliance violation flagged by `rai` or `security` (regulated-data handling, PII leakage, GDPR/HIPAA scope).
 * Divergence: two consecutive validator cycles producing different verdicts on the same issue.
-* The configured per-turn cost ceiling (`cost-ceiling=$X`) would be exceeded by the next stage or cycle.
+* A configured Cost Preflight returns `over-ceiling` or `cannot-confirm` before the next dispatch round. A valid persisted `approved-over-ceiling` round clears only this cost trigger.
 * An intake-readiness `Not-Ready` verdict the bounded auto-remediation loop could not clear (see `.github/instructions/squad/squad-intake-gate.instructions.md`).
 
 A single qualifying trigger is enough to fire the gate, no matter how many other findings are clean.
+
+### Cost Preflight in Autopilot
+
+Before research and before every later dispatch round, apply the *Cost Preflight Procedure* in the `squad` skill's `references/gates-and-modes.md`. The initial manifest includes every applicable intake and both remediation attempts, Research, Plan, council, conservative pre-Plan deliverable fan-out, implementation validation cycles, Review, final validation, and coordinator/Scribe orchestration. Once Plan identifies exact fan-out, replace the conservative set and recalculate.
+
+Only a persisted `within-ceiling` or valid `approved-over-ceiling` round permits its named next slots. `over-ceiling` offers stop or bounded proceed; explicit proceed runs sequential child-plus-Scribe units until accumulated estimated spend reaches the ceiling. `cannot-confirm` remains non-admitting, and changed or expanded demand requires a new approval.
 
 ## What Autopilot Does Not Do
 

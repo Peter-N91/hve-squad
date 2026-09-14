@@ -111,6 +111,30 @@ description: "Append-only log of squad decisions and their rationale"
 
 # Squad Decisions
 
+## Cost Preflight 2026-08-19T09:59:59Z fixture-001 round-001
+
+* Ceiling USD: 10.0000
+* Estimated Spend So Far USD: 0.0000
+* Remaining USD: 10.0000
+* Projected Cost USD: 1.4243
+* Reserve Multiplier: 3.0
+* Admission Cost USD: 4.2728
+* Confidence: medium
+* Basis: calibrated
+* Decision: within-ceiling
+* Reason: Complete fixed-model manifest with eligible calibration fits the remaining ceiling.
+* Evaluated Dispatch Set: coordinator-1, researcher-1, scribe-1
+* Permitted Next Dispatch Set: researcher-1, scribe-1
+* Estimate Notice: Forecast only; not billed cost.
+
+### Planned Demand
+
+| Slot | Stage | Role | Count | Dispatch Class | Pricing Basis | Internal Turns | Base Context | Growth/Turn | Output/Turn | Projected Cost |
+|------|-------|------|------:|----------------|---------------|---------------:|-------------:|------------:|------------:|---------------:|
+| coordinator-1 | orchestration | coordinator | 1 | Lookup / single-file read | Claude Sonnet 4.6 | 3 | 20000 | 3000 | 800 | 0.191460 |
+| researcher-1 | research | researcher | 1 | Research / file survey | Claude Sonnet 4.6 | 12 | 40000 | 4000 | 1250 | 1.164960 |
+| scribe-1 | orchestration | scribe | 1 | Scribe state write | Claude Haiku 4.5 | 4 | 15000 | 3000 | 800 | 0.067840 |
+
 ## 2026-08-19T10:00:00Z Route research request to researcher
 
 * Turn: 1
@@ -127,7 +151,7 @@ description: "Append-only log of notifications fired and their delivery channel"
 
     Set-Content -LiteralPath (Join-Path $root 'state.json') -Encoding utf8NoBOM -Value @'
 {
-  "schemaVersion": "1.3",
+    "schemaVersion": "1.4",
   "updated": "2026-08-19T10:00:05Z",
   "turn": 1,
   "mode": "interactive",
@@ -135,9 +159,24 @@ description: "Append-only log of notifications fired and their delivery channel"
   "openEscalations": [],
   "currentRun": {
     "sessionModel": "Claude Sonnet 4.6",
-    "modelOverrides": {},
-    "estCostUsd": 0.09225,
-    "estCreditsTotal": 9.225
+        "modelOverrides": {},
+        "estCostUsd": 0.09225,
+        "estCreditsTotal": 9.225,
+        "costPreflight": {
+            "runId": "fixture-001",
+            "roundId": "round-001",
+            "ceilingUsd": 10.0,
+            "evaluatedSpendUsd": 0.0,
+            "remainingUsd": 10.0,
+            "plannedDispatches": 3,
+            "projectedCostUsd": 1.4243,
+            "reserveMultiplier": 3.0,
+            "admissionCostUsd": 4.2728,
+            "confidence": "medium",
+            "basis": "calibrated",
+            "decision": "within-ceiling",
+            "reason": "Complete fixed-model manifest with eligible calibration fits the remaining ceiling."
+        }
   },
   "notify": {
     "approvalChannel": "in-chat",
@@ -148,7 +187,12 @@ description: "Append-only log of notifications fired and their delivery channel"
 }
 '@
 
-    Set-Content -LiteralPath (Join-Path $root 'consumption-rates.md') -Encoding utf8NoBOM -Value (Get-ShippedRateTemplate)
+    $rateTemplate = Get-ShippedRateTemplate
+    $rateTemplate = $rateTemplate.Replace('Observed-on: <YYYY-MM-DD>', 'Observed-on: 2026-08-19')
+    $rateTemplate = $rateTemplate.Replace('last_reconciled: never', 'last_reconciled: 2026-08-19')
+    $rateTemplate = $rateTemplate.Replace('observations: 0', 'observations: 1')
+    $rateTemplate = $rateTemplate.Replace('calibration_basis: "<observed-on>|2"', 'calibration_basis: "2026-08-19|2"')
+    Set-Content -LiteralPath (Join-Path $root 'consumption-rates.md') -Encoding utf8NoBOM -Value $rateTemplate
 
     Set-Content -LiteralPath (Join-Path $root 'consumption.md') -Encoding utf8NoBOM -Value @'
 ---
@@ -202,6 +246,8 @@ description: "Append-only dispatch history for a single squad agent"
 * Request: Investigate how login input is validated today.
 * Deliverable: `.copilot-tracking/research/2026-08-19-login-validation.md` (410 words)
 * Outcome: Wrote `.copilot-tracking/research/2026-08-19-login-validation.md`.
+* Cost Preflight Ref: `decisions.md#cost-preflight-2026-08-19t095959z-fixture-001-round-001`
+* Cost Preflight Slot: researcher-1
 
 #### Consumption
 
@@ -234,6 +280,8 @@ description: "Append-only dispatch history for a single squad agent"
 * Request: Record the researcher dispatch and advance state.
 * Deliverable: `.copilot-tracking/squad/consumption.md`
 * Outcome: Appended history, rewrote the ledger, advanced `state.json`.
+* Cost Preflight Ref: `decisions.md#cost-preflight-2026-08-19t095959z-fixture-001-round-001`
+* Cost Preflight Slot: scribe-1
 
 #### Consumption — Orchestration
 

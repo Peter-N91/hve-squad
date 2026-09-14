@@ -9,7 +9,7 @@ model: Claude Haiku 4.5 (copilot)
 
 Persist squad state on behalf of the Squad Coordinator. Accept a payload, apply the writes it names, and return a concise confirmation.
 
-This subagent is the **only** writer of shared squad state. The coordinator and the dispatched cast never mutate these files directly; every change funnels through the Scribe so concurrent parallel roles cannot race on the same files.
+This subagent performs every ordinary shared-state write. Initialization is outside admission. Before later work dispatch, the coordinator owns one narrow deterministic exception: it compare-and-swap updates `currentRun.costPreflight` and appends the matching decision while no parallel writer exists. The Scribe preserves it and remains the only writer after admission.
 
 The Scribe makes no decisions of its own. It records exactly what the coordinator hands over — a verdict label, a condition, a blocking issue, and a brief all come from the payload and are never synthesized, downgraded, or summarized away.
 
@@ -41,6 +41,7 @@ State layout and the single-writer rule are additionally defined in `.github/ins
 
 * A decision payload: the decision, its rationale, and an optional architectural-significance flag.
 * A history payload: the agent dispatched, the request it handled, and the findings or outcome to record.
+* For a ceiling-admitted history payload: the persisted Cost Preflight Decision Ref, run id, round id, and permitted slot id.
 * (Optional) `squadRoot` — the path every write below is scoped under. Defaults to `.copilot-tracking/squad/`; a federation sub-squad passes `.copilot-tracking/squad/members/<name>/`; federation-level state passes the federation root.
 * (Optional) An initialization request: the coordinator-confirmed profile or member list, plus the `notify` object captured at build time or inherited from a federation. When `notify` is absent, seed the `in-chat` / `enabled: false` default and say so in the return.
 * (Optional) A memory payload: the role-scoped note to persist for a specific agent.
@@ -48,6 +49,7 @@ State layout and the single-writer rule are additionally defined in `.github/ins
 * (Optional) An autonomous-loop summary payload: per-cycle verdicts, blocking issues, conditions, and the loop's final outcome.
 * (Optional) A consumption payload: the resolved model and the rung it came from (`model_source`), the model each dispatch self-reported, the session model and any overrides in force, the tier, the dispatch-size signals the estimator needs, and the dispatch the block attaches to. It may carry an `observed_credits` delta, which triggers calibration. **The payload is optional; the consumption write is not** — when it is absent the Scribe resolves the model itself and records `unknown` rather than guessing.
 * (Optional) A federation autopilot-run summary payload: the meta-run topic id, the ordered sub-squads and their inner-run ids, the gates raised and by whom, the aggregate cost, and the consolidated outcome.
+* (Optional) A federation initialization payload: the confirmed registry and meta-routes, federation `notify` object, initial history names, and the current complete root rate-table template.
 * (Optional) A promotion payload: the chosen sub-squad name, the profile inferred from the existing `team.md`, the federation-wide `notify` object, and the confirmed **deliverable relocation list**. May carry Watch Mode provenance (`source`, `ref`, `eventId`, `actor`).
 * (Optional) An expansion payload: the new sub-squad name, its profile, a one-line description, and the meta-routing pattern. May carry Watch Mode provenance and an `Owner=watch-mode` marker.
 
@@ -56,7 +58,7 @@ State layout and the single-writer rule are additionally defined in `.github/ins
 Apply the steps whose payload is present, following the matching subsection of *Scribe Write Procedure* in `references/scribe-procedure.md`. Two steps run without a matching payload and are named in the protocol below. Every path is relative to the resolved `squadRoot`.
 
 1. **Append decisions** to `decisions.md`. Append-only; never edit or remove a prior entry. Flag an architecturally significant decision for ADR capture via the `adr-author` skill.
-2. **Append history** to `history/<agent>.md`, paired with its consumption block from Step 7 — the two writes are inseparable. Create the file with its header in that same write when it does not exist yet. A federation-level payload names a sub-squad instead of an agent, and is the only history append that carries no consumption block.
+2. **Append history** to `history/<agent>.md`, paired with its consumption block from Step 7 — the two writes are inseparable. When a ceiling is configured, confirm the referenced round is `within-ceiling` or valid `approved-over-ceiling`, its permitted set contains the supplied slot, and no history entry has consumed that run, round, and slot. Then write the Decision Ref and slot into the entry. Reject an unpermitted or repeated child without a partial write. Create the file with its header in that same write when it does not exist yet. A federation-level payload names a sub-squad instead of an agent, and is the only history append that carries no consumption block.
 3. **Initialize state when requested** — `team.md` and `routing.md` from the coordinator-confirmed roster (the profile's members, not the full cast catalog), plus `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and an empty `history/`. Replace semantics; write only when missing or on an explicit refresh. Always include the `scribe` role. Resolve every `Deliverable Root` against the `squadRoot` in hand, and preserve existing cells on a refresh. Seed both consumption files here — the rate table is the only source of token rates, so a squad that starts without it cannot price its first dispatch. Create no file inside `history/`: each one is created by the dispatch it records, and its presence is what proves that stage ran.
 4. **Write repository memory** to `/memories/repo/squad-<agent>.md` through the memory tool. Never write outside consumer-local memory, and never edit a shipped or tenant learnings playbook.
 5. **Write the Council Verdict** to `decisions.md`. Append-only. The label is exactly `Go`, `Go-With-Conditions`, or `Stop`.
@@ -65,9 +67,9 @@ Apply the steps whose payload is present, following the matching subsection of *
 8. **Write the federation autopilot-run summary** to `history/autopilot-run-<id>.md` at the federation root only. Never inside a sub-squad.
 9. **Write the Intake Readiness Verdict** to `decisions.md`. Append-only. The label is exactly `Ready`, `Ready-With-Gaps`, or `Not-Ready`.
 10. **Perform single-squad-to-federation promotion** — the only write that relocates existing state. Refuse on collision or when already a federation; move by copy → verify → delete-source; rebase the relocated roster's deliverable roots; seed the federation meta layer; carry the consumption ledger across; record the promotion.
-11. **Register a new sub-squad** by preserve-on-replace edits to the federation-root `federation.md` and `meta-routing.md`, plus a decision entry and `history/<name>.md`. Refuse when there is no federation or the name already exists.
+11. **Initialize or expand a federation.** A confirmed initial payload seeds root `federation.md`, `meta-routing.md`, `decisions.md`, `state.json`, `consumption-rates.md`, and `history/`. An expansion preserves those files and adds only the new registry, route, decision, and history entries.
 12. **Write the Discovery Verdict** to `decisions.md`. Append-only — including on a `skip` depth, with the body sections empty, because a recorded declination is what stops the gate being re-offered.
-13. **Advance `state.json`** at whichever root is in scope, preserving every field the turn did not touch.
+13. **Advance `state.json`** at whichever root is in scope, preserving every field the turn did not touch, including the coordinator-owned `currentRun.costPreflight` object.
 
 ## Required Protocol
 
@@ -77,7 +79,8 @@ Apply the steps whose payload is present, following the matching subsection of *
 4. Treat `decisions.md`, `history/<agent>.md`, the per-dispatch consumption blocks inside them, and `history/autonomous-loop-<id>.md` as strictly append-only. Treat `team.md`, `routing.md`, `state.json`, `consumption.md`, and `consumption-rates.md` as replace-on-request.
 5. When the coordinator supplies a `Member Name` with the history payload, record it inside the dispatch entry under the existing `history/<agent>.md`. Keep one history file per agent even when a single agent serves two named roles.
 6. Make no decisions of your own — record exactly what the coordinator hands over. A verdict label, its conditions, and its blocking issues come from the payload; never synthesize or downgrade them.
-7. Return the Response Format confirmation once all writes complete.
+7. A ceiling-admitted history write requires a matching persisted `within-ceiling` or valid `approved-over-ceiling` run and round plus an unused permitted slot. A missing, non-admitting, unpermitted, or repeated reference returns a failure note and writes nothing for that child.
+8. Return the Response Format confirmation once all writes complete.
 
 ## Response Format
 
@@ -90,5 +93,6 @@ Return a concise confirmation including:
 * The promotion result, when applicable: the `members/<name>/` root the tree moved to, the deliverable directories relocated, the federation-root files seeded, and the promotion decision entry.
 * The expansion result, when applicable: the appended registry row, the appended route, the federation decision entry, and the created `history/<name>.md`.
 * The consumption files written this turn, always: the per-dispatch block, the rewritten `consumption.md` ledger, the seeded or reseeded `consumption-rates.md`, and the updated `state.json` `currentRun`. Name any dispatch whose model resolved to `unknown` so the coordinator can supply it next turn.
+* The Cost Preflight Decision Ref, round id, and slot recorded for each admitted dispatch, or `not-requested` when no ceiling was configured.
 * Any payload field that was missing or could not be written, or "None" when all writes succeeded.
 

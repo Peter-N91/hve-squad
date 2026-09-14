@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Troubleshooting — hve-squad</title>
-  <meta name="description" content="Known install errors with copy-paste fixes, versioning, and repository notes." />
+  <meta name="description" content="Known install and squad-operation issues with copy-paste fixes, cost-ceiling recovery, versioning, and repository notes." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <link rel="stylesheet" href="assets/style.css" />
 </head>
@@ -126,6 +126,76 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
         under <code>.github/agents/</code>. A role whose <em>Deliverable Root</em> its Primary cannot write is
         always a wrong row. After any hve-core bump, re-run <code>apm install</code> and compare the cast with
         <code>scripts/Get-HveCoreCastDelta.ps1</code>.
+      </p>
+
+      <h2>Cost-ceiling issues</h2>
+
+      <h3>A fresh squad initialized before showing its Cost Preflight result</h3>
+      <p>
+        This is expected. Initialization is outside admission because it creates the state and rate
+        files the estimate needs. The setup Scribe dispatch is still recorded as estimated spend,
+        but it consumes no ceiling slot. The supplied ceiling applies to the original request before
+        its first work dispatch after initialization.
+      </p>
+
+      <h3>The run stops at <code>over-ceiling</code> before implementation starts</h3>
+      <p>
+        This is a forecast decision, not proof that the amount was already billed. Cost Preflight
+        prices the planned dispatch manifest, applies eligible calibration, and multiplies the point
+        estimate by the conservative <code>3.0</code> admission reserve. Open the Decision Ref in the
+        gate message and inspect the <code>## Cost Preflight</code> demand table in
+        <code>.copilot-tracking/squad/decisions.md</code>. The current estimate is in
+        <code>consumption.md</code>; rates and calibration are in <code>consumption-rates.md</code>.
+      </p>
+      <p>
+        With medium confidence and accumulated estimated spend still below the ceiling, you can stop
+        or approve bounded proceed. With <code>cannot-confirm</code>, fix the unresolved model, missing
+        rate, incomplete demand, invalid table, or stale calibration first. Approval does not replace
+        evidence the forecast could not establish. See
+        <a href="usage.html#cost-admission-control">Cost admission control</a>.
+      </p>
+
+      <h3>A later request unexpectedly still uses the old ceiling</h3>
+      <p>
+        Omission means <strong>inherit</strong> when the request continues the same run. This prevents a
+        guard from disappearing because a later prompt did not repeat it. Replace it with another
+        positive value, or remove it explicitly:
+      </p>
+
+      <h3>A federation ceiling appears inside each selected sub-squad</h3>
+      <p>
+        This is the ordinary federation contract. Targeted and meta-routed requests forward the same
+        ceiling lifecycle to every selected sub-squad, and each squad compares it with its own
+        accumulated estimate. A shared aggregate ceiling exists only for untargeted
+        <code>mode=autopilot</code>. That mode uses the federation root's
+        <code>consumption-rates.md</code> and does not double-apply the ceiling inside child runs.
+      </p>
+      <pre><code>/squad request="continue without a cost ceiling" cost-ceiling=unset</code></pre>
+      <p>
+        A new run ID with no supplied value starts as <code>not-requested</code>. Ceilings do not carry
+        across run IDs.
+      </p>
+
+      <h3>The last dispatch took estimated spend above the ceiling</h3>
+      <p>
+        Enforcement occurs between dispatch units because an in-flight model call cannot be stopped
+        safely and its Scribe handoff must record the consumption. The coordinator records the updated
+        total, writes a terminal <code>over-ceiling</code> round, and starts no later child. This bounded
+        overshoot is expected.
+      </p>
+      <p>
+        The run is not blocked forever. Set a new ceiling above the current estimate, use
+        <code>cost-ceiling=unset</code>, reduce or reprice the remaining demand, or begin a new run.
+        Re-approving the already exceeded value is not allowed because that value can no longer act as
+        a stopping boundary.
+      </p>
+
+      <h3>A ceiling of $10 stops immediately after an earlier ungated request spent $10.80</h3>
+      <p>
+        A ceiling added to an existing run is compared with the run's accumulated estimate, not only
+        the newest request. Remaining budget is <code>max(0, 10.00 - 10.80) = 0.00</code>, so no new
+        dispatch starts. Raise or remove the ceiling, or start a new run if the new request should have
+        an independent budget boundary.
       </p>
 
       <h3><code>.github</code> still appears in git status after ignoring</h3>

@@ -71,12 +71,15 @@ A trigger fires per-occurrence: a single qualifying finding is enough to escalat
 
 ## Cost Ceiling
 
-The autonomous loop honors an indicative per-turn spend cap. The cap is a placeholder the consumer sets in their `routing.md` or in the `/squad` prompt invocation (`cost-ceiling=$X`):
+The autonomous loop applies the *Cost Preflight Procedure* in `references/gates-and-modes.md` when the effective ceiling comes from `cost-ceiling=<positive USD number>` in `routing.md` or the `/squad` invocation, or from same-run inheritance. The literal `cost-ceiling=unset` removes it.
 
-* When the dispatched roles' projected token spend (or the cost-manager's indicative estimate of the change's runtime cost) exceeds the cap, the coordinator escalates instead of running the next cycle.
-* The default cap is unset; consumers opt in by naming a value. An unset cap means the loop runs to its cycle-2 boundary or to a mandatory escalation, whichever fires first.
-* The cap is advisory at the model-spend level (no runtime metering ships with the package); it is enforceable at the change-cost level through the `cost-manager` charter (`.github/agents/squad/squad-cost-manager.agent.md`).
-* **Re-baseline an existing cap against the current estimator.** Cost estimates are produced by the dispatch-size estimator in `consumption-rates.md`, which prices a dispatch as an internal tool loop rather than a single model call. A cap chosen against an older, single-call estimate reads far too low against current figures and will fire the Risk Gate almost immediately. When a cap starts tripping on turns that previously passed, compare it against a current `consumption.md` run total before assuming the run is at fault.
+* Run the first preflight before the initial council. Its manifest includes the current coordinator round, initial council, implementation, both permitted revalidation cycles, and every later Scribe handoff.
+* Recalculate before implementation and each revalidation round, subtracting accumulated estimated spend and removing completed slots.
+* Continue from a persisted `within-ceiling` or valid `approved-over-ceiling` decision whose permitted set names every next slot. `over-ceiling` and `cannot-confirm` fire the Risk Gate before dispatch.
+* On `over-ceiling`, offer stop or bounded proceed. Explicit proceed creates a new approved round and runs sequential child-plus-Scribe units until accumulated estimated spend reaches the ceiling. `cannot-confirm` is not approvable.
+* An explicitly cleared ceiling or a new run with no value records `not-requested` on the next ordinary state write and retains the bounded cycle behavior. Omission inside the same run preserves an active ceiling.
+
+Every amount remains an estimate, not billed cost. The `cost-manager` charter continues to own Azure workload-cost estimates; those do not enter this model-spend ceiling.
 
 ## History Entries
 

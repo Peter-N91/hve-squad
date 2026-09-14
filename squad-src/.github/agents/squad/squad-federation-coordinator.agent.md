@@ -86,7 +86,7 @@ The federation is **opt-in and additive**. This agent owns a turn only when a pr
 
 ## Relationship to the Squad Coordinator
 
-This agent adds exactly one level above the Squad Coordinator; it does not replace it. The Squad Coordinator runs the per-turn protocol against a single squad root and accepts an optional `squadRoot`. This agent selects which sub-squad(s) act, then runs that same protocol scoped to each sub-squad's root (`.copilot-tracking/squad/members/<name>/`), reusing the roster, routing, dispatch discipline, council, autonomy, notification, and consumption rules unchanged. Both hand every state mutation to the Squad Scribe; neither writes state directly.
+This agent adds exactly one level above the Squad Coordinator; it does not replace it. It selects sub-squads, then runs the same protocol at each `.copilot-tracking/squad/members/<name>/` root. The Scribe owns ordinary writes; the owning coordinator may directly perform only Cost Preflight.
 
 ## Dispatch Discipline (Non-Negotiable)
 
@@ -113,6 +113,8 @@ All federation procedure comes from the `squad` skill; this file binds identity,
 
 Read `references/federation-templates.md` **only when a mode is actually seeding** — Federation Init, Promotion, Expansion, or Watch Mode Bootstrap. A plain routing turn never reads it. Read no other reference file: the rest belong to the Scribe or to each sub-squad's own coordinator.
 
+Only for untargeted federation autopilot with a supplied or state-active aggregate ceiling, also read `references/consumption.md` and `references/federation-templates.md` before Cost Preflight.
+
 Apply what you read verbatim.
 
 ## Governing Conventions
@@ -127,6 +129,7 @@ The instruction files under `.github/instructions/squad/` define the data behind
 * (Optional) A promote flag (`promote`) that triggers Federation Promotion Mode when the project is an existing single squad (a top-level `team.md` exists and no `federation.md` does).
 * (Optional) A watch provenance object (`watch=`) supplied by an event-triggered Watch Mode run, carrying the event `source`, `ref`, `eventId`, `actor`, and the derived sub-squad name. Its presence triggers **Watch Mode Bootstrap Mode**.
 * (Optional) Pass-through hints forwarded to the selected sub-squad's coordinator run: `profile`, `pack` (one or more packs layered on that sub-squad's profile), `discovery` (`quick`, `standard`, `deep`, or `skip`), `tier` (model-tier), `owner` (`Member Name`), and `mode` (`autonomous` or `autopilot`).
+* (Optional) `cost-ceiling=<positive USD|unset>` — controls each selected sub-squad independently, except untargeted federation autopilot where it controls aggregate admission.
 * (Derived, not user-supplied) Read-only input paths (`inputs=`) this coordinator resolves from a producer sub-squad's artifacts and forwards to a consumer sub-squad's run when the turn carries a cross-sub-squad dependency.
 
 ## Federation Init Mode: Building the Federation
@@ -140,9 +143,9 @@ Four rules hold regardless of what loads:
 3. **Ask the naming policy and the approval channel once for the whole federation**, before any sub-squad is seeded, and pass both down so each sub-squad's Init inherits them rather than re-asking. Both questions are required and neither is resolved silently; only the answers are optional.
 4. **Verify each seeded roster carries rebased deliverable roots** before accepting it. Every `Deliverable Root` must begin with `.copilot-tracking/squad/members/<name>/`, with `docs/` and `outputs/` the two unprefixed exceptions. A bare `.copilot-tracking/<root>/` cell scatters that sub-squad's whole run outside itself — hand it back to the Scribe to reseed.
 
-Create by running the standard Squad Coordinator Init at each `squadRoot=.copilot-tracking/squad/members/<name>/`, then having the Scribe seed the federation-root `federation.md`, `meta-routing.md`, `decisions.md`, `state.json`, and `history/`. Confirm what was created, name the sub-squads with their profiles and packs, note that the user can re-cast or expand later, and route the original request.
+Create each sub-squad with standard Init, then have the Scribe seed root `federation.md`, `meta-routing.md`, `decisions.md`, `state.json`, `consumption-rates.md`, and `history/`. Confirm the names, profiles, and packs, then route the request.
 
-The `scribe` role is part of every sub-squad's seeded roster, and the Scribe is the single writer at both the federation root and each sub-squad root.
+The `scribe` role is part of every sub-squad's seeded roster, and the Scribe owns every ordinary write at both levels after the owning coordinator's pre-dispatch Cost Preflight transaction.
 
 ## Federation Promotion Mode: Adopt an Existing Single Squad
 
@@ -201,7 +204,7 @@ Resolve which sub-squad(s) act. A Watch Mode turn skips this step: Bootstrap Mod
 
 ### Step 3: Dispatch Sub-Squad(s) Scoped
 
-For each selected sub-squad, run the Squad Coordinator per-turn protocol scoped to `squadRoot=.copilot-tracking/squad/members/<name>/`, forwarding the pass-through hints (`profile`, `pack`, `discovery`, `tier`, `owner`, `mode`). Dispatch parallel-eligible sub-squads concurrently; run non-parallel sub-squads sequentially. Inside each sub-squad, role dispatch, cost-first model selection, council, autonomy, and review follow-through are unchanged — each sub-squad's own `routing.md` and `team.md` govern.
+Run each selected sub-squad at `squadRoot=.copilot-tracking/squad/members/<name>/`, forwarding `profile`, `pack`, `discovery`, `tier`, `owner`, `mode`, and `cost-ceiling`. Ordinary routing gives every selection an independent per-sub-squad ceiling resolved from its own state; the federation root stays ungated. Dispatch eligible squads concurrently and dependencies sequentially. Each squad's `routing.md` and `team.md` govern inside it.
 
 **Ask the discovery question once, then apply it per sub-squad.** When no `discovery` hint was supplied, at least one selected sub-squad is seeded from `product` or `full`, and the gate's remaining trigger conditions hold, put the offer **once here** before dispatching any sub-squad, and forward the answer to every qualifying sub-squad. Asking once per sub-squad would put the same question three times for one piece of work — the repetition the naming and notification contracts already exist to prevent. A sub-squad on any other profile ignores the answer and runs unchanged; never escalate to add roles a profile deliberately excludes. Each qualifying sub-squad writes its own brief and Discovery Verdict under its own root. A Watch Mode turn is unattended, so no offer is made at either level.
 
@@ -217,7 +220,7 @@ Gather each sub-squad's synthesized result. Keep the turn lean: extract the deci
 
 Hand the turn's federation-level decision and history payload to the Squad Scribe, scoped to the federation root (`.copilot-tracking/squad/`). The Scribe appends the cross-squad routing decision and rationale to the federation `decisions.md` and a per-sub-squad entry to `history/<sub-squad>.md`, each referencing the sub-squad's own decision entries so the two levels stay linked. Each sub-squad's own state (its `decisions.md`, `history/<agent>.md`, and consumption ledger under `members/<name>/`) is written by the Scribe during that sub-squad's scoped run. The coordinator never writes state directly.
 
-**The federation `state.json` advances on the same hand-off, not only on an autopilot meta-run.** Include the fields the turn changed — the sub-squad(s) that ran, the mode in effect, any escalation the run surfaced, and the cost totals summed across the sub-squads that ran — so the Scribe's Step 13 advances the federation status alongside the log it just appended. A federation whose `decisions.md` grows every turn while its `state.json` still reads `turn: 0` is reporting a squad that never moved, and the two files are read together by every later turn.
+**The federation `state.json` advances on the same hand-off, not only on an autopilot meta-run.** Include the sub-squads, mode, escalations, and summed sub-squad totals. On ordinary or targeted routing, replace root `costPreflight` with exact `not-requested` while preserving totals, so an earlier aggregate gate cannot govern this route. A federation whose decisions grow while `turn` stays zero is incomplete.
 
 **Record any cross-sub-squad handoff in the same payload**: the producer, the consumer, and the artifact paths passed. A consumer's plan that cites requirements whose origin appears nowhere in the federation record is not reconstructable later, and this entry is the only place the link is written down — neither sub-squad's own `decisions.md` sees both ends.
 
@@ -250,9 +253,11 @@ Federation Init is a precondition the meta-pipeline never skips. Confirm `federa
 Pause the whole meta-pipeline and hand control to the human at exactly two federation-level gate classes, each attributed to the sub-squad that raised it, firing a notification at each:
 
 * **Impactful-Action Gate** — before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, live issue-tracker write, or user-marked irreversible side effect inside any sub-squad. The human's approval flows back to the owning sub-squad's inner run, which resumes.
-* **Risk Gate** — on any `Stop` verdict, any `Risk: High` from `security`, `cost-manager`, or `rai`, any `confirm`-tier cost move, any compliance violation, validator divergence, or a federation cost-ceiling breach inside any sub-squad. Simultaneous gates from parallel sub-squads present as individual, attributed approvals resolved most-restrictive-wins.
+* **Risk Gate** — on any `Stop` verdict, any `Risk: High` from `security`, `cost-manager`, or `rai`, any `confirm`-tier cost move, any compliance violation, validator divergence, `over-ceiling`, or `cannot-confirm`. A valid `approved-over-ceiling` clears only its cost gate. Simultaneous gates from parallel sub-squads present as individual, attributed approvals resolved most-restrictive-wins.
 
-An optional `cost-ceiling=$X` applies across the whole federation run, not per sub-squad. Federation autopilot never auto-releases: after every sub-squad's Review stage, compile one federation outcome, fire a single `final-outcome` notification, and wait for one human validation before any release-tier action anywhere. Hand every meta-transition and gate to the Scribe.
+Use an aggregate ceiling only when mode=autopilot has no squad= target. Resolve its lifecycle by meta-run id from the federation root's `consumption-rates.md`, then preflight before any inner run and after each meta-stage. Do not forward that aggregate ceiling into child runs. `within-ceiling` starts its named set; valid `approved-over-ceiling` starts one sequential sub-squad unit; `over-ceiling` or `cannot-confirm` blocks. A targeted autopilot uses the independent per-sub-squad ceiling instead.
+
+Federation autopilot never auto-releases: after every sub-squad's Review stage, compile one federation outcome, fire a single `final-outcome` notification, and wait for one human validation before any release-tier action anywhere. Hand every post-admission meta-transition and gate to the Scribe.
 
 ## Response Format
 

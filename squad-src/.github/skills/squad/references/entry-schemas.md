@@ -10,7 +10,9 @@ metadata:
 
 # Entry Schemas
 
-The shapes the Squad Scribe writes on an ordinary turn. These are separate from [seed-templates.md](seed-templates.md), which stamps `team.md` and `routing.md` once during Init: every file below is written or appended to repeatedly for the life of a squad, so the Scribe reads this file on every turn while it reads the seed templates only when it is actually seeding.
+The shapes the Squad Scribe writes on an ordinary turn. Initialization is outside admission. Before later work dispatch, Cost Preflight is the one exception: the coordinator appends its decision and compare-and-swap updates only `currentRun.costPreflight`, then reads both back. Every later write remains Scribe-owned.
+
+These schemas are separate from [seed-templates.md](seed-templates.md), which stamps `team.md` and `routing.md` once during Init: every file below is written or appended to repeatedly for the life of a squad, so the Scribe reads this file on every turn while it reads the seed templates only when it is actually seeding.
 
 Write semantics follow the state layout: `decisions.md`, `history/<agent>.md`, `history/autonomous-loop-<id>.md`, `history/autopilot-run-<id>.md`, and `notifications.md` are append-only; `state.json` uses replace semantics.
 
@@ -28,6 +30,35 @@ description: "Append-only log of squad decisions and their rationale"
 Entries are appended below in chronological order. Each entry records the decision, its rationale, the turn it was made on, and a reference to an ADR when the decision is architecturally significant. Council Verdicts use the `## Council Verdict <timestamp> <topic-id>` heading and the schema in `.github/instructions/squad/squad-council.instructions.md`; Discovery Verdicts and Intake Readiness Verdicts use their own headings and schemas from `.github/instructions/squad/squad-discovery-gate.instructions.md` and `.github/instructions/squad/squad-intake-gate.instructions.md`. Prior entries are never edited or removed.
 
 <!-- Append new decision entries below this line. -->
+
+<!--
+Cost Preflight placeholder (the coordinator stamps this shape before post-initialization work dispatch):
+
+## Cost Preflight <timestamp> <run-id> <round-id>
+
+* Ceiling USD: <positive number>
+* Estimated Spend So Far USD: <currentRun.estCostUsd>
+* Remaining USD: <max(0, ceiling - spend)>
+* Projected Cost USD: <calibrated point estimate>
+* Reserve Multiplier: 3.0
+* Admission Cost USD: <projected cost x 3.0>
+* Confidence: low | medium
+* Basis: estimated | calibrated
+* Decision: within-ceiling | over-ceiling | approved-over-ceiling | cannot-confirm
+* Approved From: <prior over-ceiling Decision Ref; approved-over-ceiling only>
+* Approval Ref: <in-chat or remote human approval reference; approved-over-ceiling only>
+* Reason: <one-line reproducible reason>
+* Evaluated Dispatch Set: <ordered slot ids>
+* Permitted Next Dispatch Set: <ordered slot ids or none>
+* Estimate Notice: Forecast only; not billed cost.
+
+### Planned Demand
+
+| Slot | Stage | Role | Count | Dispatch Class | Pricing Basis | Internal Turns | Base Context | Growth/Turn | Output/Turn | Projected Cost |
+|------|-------|------|------:|----------------|---------------|---------------:|-------------:|------------:|------------:|---------------:|
+| <id> | <stage> | <role> | <n> | <class> | <model or max-candidate set> | <turns> | <tokens> | <tokens> | <tokens> | <usd> |
+
+-->
 
 <!--
 Council Verdict placeholder (Scribe stamps this shape when a council runs):
@@ -146,6 +177,8 @@ Every appended dispatch entry uses exactly this shape. The `#### Consumption` he
 * Request: <scoped request the agent received>
 * Deliverable: `<the role's Deliverable Root cell, extended verbatim, plus the filename>` (<size or word count>)
 * Outcome: <one-line summary>
+* Cost Preflight Ref: `decisions.md#cost-preflight-<timestamp>-<run-id>-<round-id>`
+* Cost Preflight Slot: <permitted slot id>
 
 #### Consumption
 
@@ -166,6 +199,8 @@ Every appended dispatch entry uses exactly this shape. The `#### Consumption` he
 ````
 
 Field order is contractual and every numeric field is a bare number. The block records consumption only: rates, `est_cost_usd`, and `est_credits` are the ledger's, and `priced_as` is what tells it which rate row to use. See *Consumption Accounting* in [scribe-procedure.md](scribe-procedure.md) for how each value is resolved and how the ledger prices them.
+
+When Cost Preflight is configured, the `Cost Preflight Ref` and `Cost Preflight Slot` pair is also unique across history. One admitted slot authorizes one dispatch; a second entry carrying the same run, round, and slot is a replay and must be rejected before any write.
 
 An autonomous-loop cycle replaces the entry body above with the shape below and still carries its own `#### Consumption` block:
 
@@ -196,6 +231,12 @@ description: "Autonomous-loop summary for topic <id>"
 * Cost Ceiling: <value or unset>
 * Outcome: converged (Go) | converged (Go-With-Conditions) | escalated (<reason>)
 
+## Cost Preflight Rounds
+
+| Round | Decision | Confidence | Remaining USD | Admission USD | Decision Ref |
+|-------|----------|------------|--------------:|--------------:|--------------|
+| <round-id> | <within-ceiling / over-ceiling / approved-over-ceiling / cannot-confirm> | <low / medium> | <usd> | <usd> | `decisions.md#cost-preflight-<timestamp>-<run-id>-<round-id>` |
+
 ## Iterations
 
 | Cycle | Verdict                        | Blocking Issues | Conditions     | Notes                    |
@@ -223,6 +264,12 @@ description: "Autopilot-run summary for topic <id>"
 * Opt-In: mode=autopilot
 * Cost Ceiling: <value or unset>
 * Outcome: completed (awaiting final validation) | incomplete (<n> stage(s) without a dispatch record) | escalated (<reason>) | stopped (<reason>)
+
+## Cost Preflight Rounds
+
+| Round | Evaluated Dispatch Set | Permitted Next Dispatch Set | Decision | Confidence | Remaining USD | Admission USD | Decision Ref |
+|-------|------------------------|-----------------------------|----------|------------|--------------:|--------------:|--------------|
+| <round-id> | <ordered slot ids> | <ordered slot ids or none> | <within-ceiling / over-ceiling / approved-over-ceiling / cannot-confirm> | <low / medium> | <usd> | <usd> | `decisions.md#cost-preflight-<timestamp>-<run-id>-<round-id>` |
 
 ## Stages
 
@@ -258,13 +305,13 @@ Each entry records a notification the squad fired: when, to whom, the trigger, t
 
 ## state.json
 
-Machine-readable squad status. Uses replace semantics — the coordinator overwrites it (through the Squad Scribe) as the squad advances.
+Machine-readable squad status. Uses replace semantics. The Scribe owns ordinary advances; the coordinator may compare-and-swap only `currentRun.costPreflight` as the deterministic pre-dispatch transaction, plus the exact `1.3` to `1.4` schema bump when that transaction migrates legacy state.
 
-**The key set below is closed.** Write these keys and no others, at both levels: every one of `schemaVersion`, `updated`, `turn`, `mode`, `activeRoles`, `openEscalations`, `currentRun`, and `notify` is present on every write, and `currentRun` always carries `sessionModel`, `modelOverrides`, `estCostUsd`, and `estCreditsTotal`. This file is read by machine — the cost ceiling, the resume path, and the notification channel all look for exact keys — so a run that invents `status`, `completedDispatches`, or a `timestamp` beside `updated` produces a file that looks informative and answers none of the questions the squad asks it. `currentRun` is a running total, not a scratchpad: per-turn figures live in the turn's consumption block, never as a `turn9_review_consumption` object parked here, and never as a word like `"moderate"` where a number belongs.
+**The key set below is closed.** Write these keys and no others, at all three levels: every one of `schemaVersion`, `updated`, `turn`, `mode`, `activeRoles`, `openEscalations`, `currentRun`, and `notify` is present on every write; `currentRun` always carries `sessionModel`, `modelOverrides`, `estCostUsd`, `estCreditsTotal`, and `costPreflight`; and `costPreflight` carries exactly the keys shown below. This file is read by machine, so a run that invents scratch fields produces a file that looks informative and answers none of the questions the squad asks it.
 
 ```json
 {
-  "schemaVersion": "1.3",
+  "schemaVersion": "1.4",
   "updated": "",
   "turn": 0,
   "mode": "interactive",
@@ -274,7 +321,22 @@ Machine-readable squad status. Uses replace semantics — the coordinator overwr
     "sessionModel": "",
     "modelOverrides": {},
     "estCostUsd": 0,
-    "estCreditsTotal": 0
+    "estCreditsTotal": 0,
+    "costPreflight": {
+      "runId": "",
+      "roundId": "",
+      "ceilingUsd": null,
+      "evaluatedSpendUsd": 0,
+      "remainingUsd": null,
+      "plannedDispatches": 0,
+      "projectedCostUsd": 0,
+      "reserveMultiplier": 3.0,
+      "admissionCostUsd": 0,
+      "confidence": "not-applicable",
+      "basis": "not-requested",
+      "decision": "not-requested",
+      "reason": "No cost ceiling configured."
+    }
   },
   "notify": {
     "approvalChannel": "in-chat",
@@ -289,3 +351,5 @@ Machine-readable squad status. Uses replace semantics — the coordinator overwr
 ```
 
 Watch Mode runs additionally carry an optional, additive `trigger` object recording the event that started the run; interactive, autonomous, and autopilot runs omit it. See `.github/instructions/squad/squad-watch-mode.instructions.md`.
+
+Read legacy single-squad schema `1.3` without `costPreflight` as an unset ceiling with the default `not-requested` object above. On the next coordinator Cost Preflight transaction or ordinary Scribe write, atomically add the exact object, bump only `schemaVersion` to `1.4`, and preserve every existing root, `notify`, `trigger`, model, override, and accumulated-total value. Never reject or reset an existing no-ceiling run only because it predates this object.
