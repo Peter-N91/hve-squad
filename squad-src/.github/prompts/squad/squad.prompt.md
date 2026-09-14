@@ -1,7 +1,7 @@
 ---
 description: "Hands a request to the Squad Coordinator, which routes it to a cast of HVE Core agents and persists squad state"
 agent: Squad Coordinator
-argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [mode=autonomous|autopilot]"
+argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>]"
 ---
 
 # Squad
@@ -15,6 +15,7 @@ argument-hint: "request=... [profile=default|full|security|design|accessibility|
 * ${input:tier}: (Optional) A model-tier hint (`fast` or `default`) that overrides the coordinator's cost-first defaults for this turn.
 * ${input:owner}: (Optional) A `Member Name` from `team.md` that picks a specific named member when two rows share the same `Role` (for example, `owner=Beta` when both `developer` rows exist as `Beta` and `Gamma`).
 * ${input:mode}: (Optional) The autonomy mode for this turn. `autonomous` engages the bounded `auto-validated` validator loop from `.github/instructions/squad/squad-autonomous.instructions.md`. `autopilot` runs the full research→plan→implement→review pipeline from `.github/instructions/squad/squad-autopilot.instructions.md`, stopping for the human only at impactful actions and final-outcome validation. When omitted, the coordinator uses the standard interactive `auto` and `confirm` tiers from the routing table, approving each step.
+* ${input:cost-ceiling}: (Optional) A finite positive USD model-spend ceiling or the literal `unset`. A positive value sets or replaces the ceiling for this run. Omission inherits an active ceiling only when this request continues the same run. `cost-ceiling=unset` explicitly removes it; a new run with no value starts without a ceiling.
 
 ## Requirements
 
@@ -23,4 +24,5 @@ argument-hint: "request=... [profile=default|full|security|design|accessibility|
 3. Pass `${input:tier}` through as the per-turn tier override when provided; otherwise leave cost-first model selection to the coordinator.
 4. Pass `${input:discovery}` through as the discovery-gate depth when provided; otherwise let the coordinator decide whether to offer the gate, per `.github/instructions/squad/squad-discovery-gate.instructions.md`. The gate runs ahead of the intake gate and produces the brief the intake gate then validates; it never runs on an unattended path.
 5. When `${input:mode}` is `autonomous`, request the coordinator engage the `auto-validated` tier per `.github/instructions/squad/squad-autonomous.instructions.md` (capped re-validation loop, always-escalate triggers); when `${input:mode}` is `autopilot`, request the coordinator run the full pipeline per `.github/instructions/squad/squad-autopilot.instructions.md` (Human Gates on impactful actions and final-outcome validation only); otherwise rely on the standard interactive `auto` and `confirm` tiers from the routing table.
-6. Let the coordinator own roster, routing, state, and the notification contract; it reads `.copilot-tracking/squad/{team.md,routing.md,state.json}`, seeds them on first run through Init Mode (including capturing an optional notification email per `.github/instructions/squad/squad-notifications.instructions.md`), and persists decisions, history, and notifications through the Squad Scribe.
+6. Pass `${input:cost-ceiling}` through exactly when provided. When omitted, do not synthesize a value; the coordinator resolves same-run inheritance from state. The literal `unset` is an explicit removal command, not a missing value.
+7. Let the coordinator own roster, routing, state, and the notification contract; it reads `.copilot-tracking/squad/{team.md,routing.md,state.json}`, seeds them on first run through Init Mode (including capturing an optional notification email per `.github/instructions/squad/squad-notifications.instructions.md`), and persists decisions, history, and notifications through the Squad Scribe.

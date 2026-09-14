@@ -166,9 +166,111 @@ A rate is a property of the model, so it belongs to the one file that lists mode
 calibration_factor: 1.00
 last_reconciled: never
 observations: 0
+estimator_revision: 2
+calibration_basis: "<observed-on>|2"
 ```
 
 The factor is the running mean of `observed_credits / estimated_credits` across reconciled runs, clamped to the range 0.25-10.0. To reconcile: read the per-user aggregate `ai_credits_used` from the Copilot usage-metrics REST API immediately before and after a run, take the delta as `observed_credits`, divide by the run's `est_credits` total, fold that ratio into the mean, and rewrite this block. Until `observations` is at least 1 the factor stays 1.00 and the ledger carries an "uncalibrated" note.
+
+`calibration_basis` binds those observations to the rate table's `Observed-on` value and `estimator_revision`, joined with `|`. A calibration is eligible for Cost Preflight only when `observations` is positive, `last_reconciled` is not `never`, and the stored basis exactly matches the current rate and estimator basis. When a rate-table reseed or estimator revision changes that basis, reset `calibration_factor` to `1.00`, `last_reconciled` to `never`, and `observations` to `0` rather than applying an old factor to a new calculation.
+
+## Cost Preflight
+
+`cost-ceiling=$X` is a model-spend admission control, not a billing quote and not an Azure workload budget. Initialization is outside Cost Preflight: the confirmed bootstrap Scribe dispatch seeds the files required for estimation and is recorded as setup spend without consuming a ceiling slot. After initialization completes, the coordinator evaluates the original request before its first work child or Scribe handoff, then repeats the evaluation before every later dispatch round. Receiving and classifying the request already consumes the current coordinator turn, so the manifest includes that turn; no preflight can avoid the model call needed to read the request.
+
+Resolve the effective ceiling before building the manifest:
+
+1. A supplied finite positive number sets or replaces the ceiling for the active run.
+2. The literal `cost-ceiling=unset` explicitly removes the ceiling. Persist the exact `not-requested` object, preserving accumulated cost totals, and continue without cost-based admission.
+3. When the argument is omitted, inherit the latest finite positive `ceilingUsd` only if its non-empty Cost Preflight `runId` matches the active run id. Omission never means removal.
+4. When the active run id differs, or no prior positive ceiling exists, omission means no ceiling for the new run and persists `not-requested`.
+
+Resolve the active run id before this decision from the run the coordinator is continuing or creating. A new autopilot topic, Watch event, or federation meta-run gets a new id; a later request that resumes that recorded run keeps its id. Never copy a ceiling across run ids.
+
+An effectively unset ceiling records `not-requested` and preserves existing behavior. A configured ceiling must be a finite positive USD number. The configured decisions are `within-ceiling`, `over-ceiling`, `approved-over-ceiling`, and `cannot-confirm`. `within-ceiling` and `approved-over-ceiling` permit only the exact next-dispatch set recorded by their round; the latter is created only by the explicit approval transition below.
+
+### Planned-dispatch manifest
+
+Build the complete manifest through the selected mode boundary before pricing it:
+
+1. Add one row for every fixed stage role, every maximum conditional remediation or validation slot, each coordinator dispatch round, and each later Scribe handoff. Include orchestration once; never assume it is free.
+2. For autonomous mode, include the initial council, implementation, and both permitted revalidation cycles. For autopilot, include applicable intake plus both remediation attempts, research, plan, council, implementation, both revalidation cycles, review, and final validation. Include an accepted discovery depth before intake. For federation autopilot, include every selected inner manifest plus federation coordinator and root-writer orchestration.
+3. Before a Plan artifact identifies deliverable fan-out, reserve every artifact-owning roster role other than `researcher`, `lead`, and `tester`. If that conservative set cannot be enumerated, return `cannot-confirm`. After Plan, replace it with the exact fan-out and recalculate before dispatch.
+4. Assign exactly one dispatch class to every row: research and discovery use `Research / file survey`; plan and remediation use `Plan / synthesis`; implementation and artifact-producing roles use `Implement / edit loop`; review and intake validation use `Review / verification`; council roles use `Council member opinion`; Scribe uses `Scribe state write`; coordinator rounds use `Lookup / single-file read`. An unmapped stage makes the manifest incomplete and returns `cannot-confirm`.
+5. Use the class row's exact `Internal turns`, `Base context`, `Growth/turn`, and `Output/turn` values unless a larger bound is already known before dispatch. Post-dispatch reports refine the ledger, never the preflight that admitted that dispatch.
+6. Resolve pricing only from facts knowable before dispatch. For an unpinned agent under a fixed session model, use that model's row. For a pinned agent under a fixed session model, price the more expensive of the pin and session model so an entitlement fallback cannot make the reservation cheaper. Include an operator-declared candidate the same way. `auto`, an unresolved model, a missing candidate rate, or an invalid rate table is low confidence and cannot admit work.
+
+Every readable Cost Preflight record uses this table shape. `Projected Cost` is the calibrated point estimate before the policy reserve; row calculations retain full precision.
+
+| Slot | Stage | Role | Count | Dispatch Class | Pricing Basis | Internal Turns | Base Context | Growth/Turn | Output/Turn | Projected Cost |
+|------|-------|------|------:|----------------|---------------|---------------:|-------------:|------------:|------------:|---------------:|
+| <id> | <stage> | <role> | <n> | <class> | <model or max-candidate set> | <turns> | <tokens> | <tokens> | <tokens> | <usd> |
+
+### Calculation and confidence
+
+Calculate rows through the existing dispatch-size and cost formulas. Apply the eligible `calibration_factor` exactly once to each unrounded row cost, then sum unrounded row values:
+
+```text
+remaining_usd       = max(0, ceiling_usd - currentRun.estCostUsd)
+projected_cost_usd  = sum(unrounded calibrated manifest row costs)
+reserve_multiplier  = 3.0
+admission_cost_usd  = projected_cost_usd * reserve_multiplier
+```
+
+The factor-of-three reserve matches the repository's material uncertainty band for estimated ledger figures. It is a policy reserve, not a statistical confidence interval. Round displayed and persisted totals to four decimal places only after all rows are summed; never sum rounded display values.
+
+Cost Preflight confidence is `medium` only when all of these are true:
+
+* The configured ceiling is finite and positive.
+* The manifest is complete through the selected mode boundary.
+* Every candidate model is fixed before dispatch and has a current rate row.
+* The rate table passes its shape check.
+* Calibration is eligible for the current `Observed-on` value and estimator revision.
+
+Otherwise confidence is `low`. The preflight never reports `high`, because future token use remains estimated even after calibration.
+
+Apply the decision in this order:
+
+1. With no ceiling, record `not-requested` and do not gate existing behavior.
+2. With an invalid ceiling or low confidence, record `cannot-confirm` and fire the Risk Gate.
+3. When accumulated estimated spend is at or above the ceiling, record `over-ceiling` with no permitted set and stop. This terminal boundary cannot be approved.
+4. With medium confidence and `admission_cost_usd > remaining_usd`, record `over-ceiling` with no permitted set. Present the ceiling, accumulated estimated spend, remaining amount, projected remaining-demand cost, conservative admission cost, and the one-dispatch-unit overshoot limitation, then ask the user to stop or proceed under the unchanged ceiling.
+5. Otherwise record `within-ceiling` and permit only that round's named next-dispatch set.
+
+When the user chooses proceed, preserve the `over-ceiling` record and append a new round with a new round id. Copy its run id, ceiling, evaluated spend, demand rows, pricing inputs, costs, confidence, and basis; add `Approved From` and `Approval Ref` to the readable record; set its decision to `approved-over-ceiling`; and permit one sequential dispatch unit. A dispatch unit is one substantive child plus the mandatory Scribe handoff that records it. The Scribe handoff completes even when that child's estimated cost reaches or crosses the ceiling, because omitting it would hide the spend that triggered the stop. Federation uses one sub-squad plus its root-writer handoff as the unit. Do not launch a parallel set from an approved-over-ceiling round.
+
+The approval remains valid for later rounds only while the run id and ceiling are unchanged, confidence remains medium, every remaining demand row is unchanged and belongs to the approved manifest, and the demand set only shrinks. Under those conditions, append a fresh `approved-over-ceiling` round for the next sequential unit without asking again. A changed ceiling, expanded or repriced demand, different model input, low confidence, or missing approval provenance requires a new gate; `cannot-confirm` is never approvable.
+
+Immediately before each dispatch unit, read `currentRun.estCostUsd` again. When it is at or above `ceilingUsd`, append the terminal `over-ceiling` round, permit no slot, and stop. An in-flight unit cannot be interrupted, so its final recorded estimate may cross the ceiling; no later substantive child starts. If later routing expands beyond the approved manifest, stop before dispatch and recalculate.
+
+### Worked single-squad example
+
+This example uses the class inputs above, Claude Sonnet 4.6 for coordinator and research, Claude Haiku 4.5 for Scribe, and an eligible calibration factor of `1.20`:
+
+```text
+coordinator  13800 x 3.00 +  55200 x 0.30 + 26000 x 3.75 +  2400 x 15.00 =  191460 / 1e6 x 1.20 = 0.229752
+researcher  148800 x 3.00 + 595200 x 0.30 + 84000 x 3.75 + 15000 x 15.00 = 1164960 / 1e6 x 1.20 = 1.397952
+scribe       15600 x 1.00 +  62400 x 0.10 + 24000 x 1.25 +  3200 x  5.00 =   67840 / 1e6 x 1.20 = 0.081408
+                                           projected = 1.709112
+                                         admission x3.0 = 5.127336
+```
+
+With `ceilingUsd=10.0000` and `currentRun.estCostUsd=0.5000`, `remainingUsd=9.5000`. The persisted point estimate is `1.7091`, admission cost is `5.1273`, and the decision is `within-ceiling` at medium confidence.
+
+### Worked federation example
+
+Federation admission sums already reserved inner-run costs and a separately priced federation meta-orchestration reservation:
+
+```text
+product inner admission       = 5.127336
+azure inner admission         = 3.200000
+federation meta admission     = 0.900000
+federation admission total    = 9.227336
+remaining (12.0000 - 1.0000)  = 11.000000
+decision                      = within-ceiling
+```
+
+The federation readable table displays all three terms. Federation `currentRun.estCostUsd` adds realized inner-ledger totals plus the unrounded calibrated projected cost of each completed federation coordinator or root-writer slot exactly once. A meta slot is completed only when its id appears in a federation history transition; future slots stay reserved in `admissionCostUsd`, and duplicate references do not add cost again. The sum of inner ledgers alone is never treated as the whole model spend.
 
 ## Comparison methodology (token terms)
 

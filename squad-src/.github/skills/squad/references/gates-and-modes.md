@@ -67,6 +67,20 @@ The methodology does not end at the deliverable. After any producing role lands 
 * Resolve `tester` through the roster Selection Cue — `Code Review Functional` for a correctness diff, `Code Review Security` for a security diff — and fold its findings into the turn summary. With no sub-type cue, the Primary `Squad Reviewer` reviews the output against the plan.
 * When the user has explicitly removed `tester` from the roster, report that the work closed unreviewed and recommend re-adding the role. Never drop the stage silently.
 
+## Cost Preflight Procedure
+
+`cost-ceiling=<positive USD number|unset>` controls a rolling model-spend admission gate. It does not govern Azure workload cost and never represents billed actuals. A positive value sets or replaces the current run's ceiling; `unset` explicitly removes it; omission inherits an active ceiling only within the same run. A new run with no value persists `not-requested` and keeps existing behavior.
+
+Initialization is outside Cost Preflight. The confirmed bootstrap Scribe dispatch seeds the state and rate table, is recorded as setup spend, and requires no ceiling slot. After initialization completes, before the first work child or its Scribe handoff and before every later dispatch round, the owning coordinator applies *Cost Preflight* from `references/consumption.md`:
+
+1. Enumerate the fixed and maximum conditional dispatch slots through the selected mode boundary, including coordinator and Scribe orchestration. A pre-Plan autopilot manifest reserves all possible artifact-owning fan-out roles; an unmapped or unbounded slot makes confidence low.
+2. Calculate the calibrated point estimate and its `3.0` admission reserve from the canonical class and model-rate tables. `auto`, unresolved or missing model rates, invalid rates, incomplete demand, or ineligible calibration returns low confidence.
+3. Directly append the Cost Preflight decision and compare-and-swap only `currentRun.costPreflight` while no parallel writer exists. Read both back. This deterministic transaction is the only coordinator-owned state write and adds no child model dispatch.
+4. Dispatch only from persisted `within-ceiling` or `approved-over-ceiling` rounds. An `over-ceiling` result offers stop or proceed; explicit proceed appends the approved round defined in `references/consumption.md`. `cannot-confirm` and a ceiling already reached remain non-admitting.
+5. Give each admitted child the Decision Ref, round id, and slot. The Scribe writes them into history, rejects an unpermitted slot, and preserves the latest preflight object on later state advances. Approved-over-ceiling work runs as sequential child-plus-Scribe units, re-reading accumulated estimated spend before each unit and starting none at or above the ceiling.
+
+The current coordinator invocation is unavoidable and is included in the manifest. If the preflight transaction collides, partially writes, or fails read-back, no child dispatch starts. A later routing expansion outside the evaluated set also stops before dispatch and requires a new round.
+
 ## Autonomous Procedure
 
 The opt-in `auto-validated` tier lets a council validate a developer's output on the same turn, without an intervening user prompt. The full protocol lives in `.github/instructions/squad/squad-autonomous.instructions.md`; the operator's view is:
@@ -76,7 +90,7 @@ The opt-in `auto-validated` tier lets a council validate a developer's output on
 3. The re-validation cap is hard at two cycles; after cycle 2 the coordinator escalates regardless of outcome.
 4. The loop stops and escalates immediately on any mandatory trigger: a `Stop` verdict, a `Risk: High` from `security` / `cost-manager` / `rai`, any cost-impacting `confirm`-tier move, any compliance violation, or any irreversible write (production deploy, schema migration, data deletion, force-push).
 5. Divergence detection escalates immediately when two consecutive cycles produce different verdicts on the same issue, even before the cap.
-6. A per-turn cost ceiling (`cost-ceiling=$X`, optional) caps spend; when exceeded, the coordinator escalates instead of running the next cycle.
+6. An optional cost ceiling runs Cost Preflight before the initial council and each later round. The manifest includes the initial council, implementation, and both permitted revalidation cycles; `within-ceiling` or a valid `approved-over-ceiling` round proceeds.
 7. The Scribe writes a per-topic summary to `history/autonomous-loop-<id>.md` (append-only by topic-id) and per-cycle entries to each role's `history/<agent>.md`.
 
 ## Autopilot Procedure
@@ -85,7 +99,7 @@ The opt-in `mode=autopilot` runs the full delivery pipeline end-to-end, stopping
 
 1. The user opts in per turn by passing `mode=autopilot` to `/squad`. Without that input, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing tier.
 2. The coordinator sequences the pipeline: an opt-in discovery gate (offered before the pipeline starts when nothing is written down yet) → a conditional intake gate (when the work is grounded in requirement or input artifacts) → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn. When the plan's deliverable list names two or more artifact-owning roles, the implement stage fans out across the owning specialists — the coordinator dispatches each in dependency order, each a Scribe-recorded stage — instead of a single `developer`; a plan naming one keeps the single-build implement stage.
-3. The pipeline stops only at two Human Gate classes: an **Impactful-Action Gate** (deploy, `git push`/force-push, PR merge, schema migration, data deletion, destructive infra ops, secret rotation, or any user-marked irreversible action) and a **Risk Gate** (any `Stop` verdict, `Risk: High` from security/cost/RAI, `confirm`-tier cost move, compliance violation, validator divergence, or cost-ceiling breach).
+3. The pipeline stops only at two Human Gate classes: an **Impactful-Action Gate** (deploy, `git push`/force-push, PR merge, schema migration, data deletion, destructive infra ops, secret rotation, or any user-marked irreversible action) and a **Risk Gate** (any `Stop` verdict, `Risk: High` from security/cost/RAI, `confirm`-tier cost move, compliance violation, validator divergence, `over-ceiling`, or `cannot-confirm`). A valid `approved-over-ceiling` round clears only its cost gate.
 4. Autopilot never auto-releases: after review it fires a `final-outcome` notification to the registered contact and waits for human validation before any release-tier action.
 5. The Scribe writes a per-run summary to `history/autopilot-run-<id>.md` (append-only by topic-id) and the notification records to `notifications.md`.
 

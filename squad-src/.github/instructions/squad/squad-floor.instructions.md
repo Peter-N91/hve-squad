@@ -21,10 +21,10 @@ All squad state lives under a **squad root**: `.copilot-tracking/squad/` for a s
 |------------------------|---------------------------------------------|--------------------|
 | `team.md`              | Roster of roles and the agents filling them | Replace via Scribe |
 | `routing.md`           | Request-pattern routing table               | Replace via Scribe |
-| `decisions.md`         | Squad decisions and their rationale         | Append-only        |
+| `decisions.md`         | Squad decisions and their rationale         | Append-only; Cost Preflight via coordinator |
 | `notifications.md`     | Notifications fired and their channel       | Append-only        |
 | `history/<agent>.md`   | Per-agent dispatch history                  | Append-only        |
-| `state.json`           | Machine-readable squad status               | Replace via Scribe |
+| `state.json`           | Machine-readable squad status               | Replace via Scribe; Cost Preflight compare-and-swap via coordinator |
 | `consumption.md`       | Member, model, and credit ledger            | Replace via Scribe |
 | `consumption-rates.md` | Per-model token-rate table                  | Replace via Scribe |
 
@@ -36,9 +36,11 @@ Detection precedence: `federation.md` present means federation; otherwise `team.
 
 ## The Squad Scribe Is the Single Writer
 
-Only the **Squad Scribe** writes squad state. Every other agent, including both coordinators, reads state to decide and hands each mutation to the Scribe through `runSubagent` or `task`. This is what lets parallel dispatch run without racing on the same files.
+The **Squad Scribe** performs every ordinary squad-state write. Confirmed initialization is setup outside Cost Preflight. After it completes, one deterministic exception gates work before its child and Scribe handoff: while no parallel writer exists, the owning coordinator may append one Cost Preflight entry to `decisions.md` and compare-and-swap only `state.json` `currentRun.costPreflight`. When that transaction upgrades a legacy single-squad `1.3` or federation `1.2` state, it may also change only `schemaVersion` to `1.4` or `1.3`, respectively. The coordinator compares the prior `updated` value, preserves every other field, reads both files back, and dispatches nothing on a collision, partial write, or mismatch.
 
-Append-only files are appended to and never edited or removed. A coordinator that edits `decisions.md`, `history/`, or `state.json` directly has broken the contract, even when the edit is correct.
+Every other mutation goes through the Scribe via `runSubagent` or `task`. After admission, the Scribe preserves the preflight object and links each child history entry to the exact admitted run and round. This keeps the exception narrow enough that parallel dispatch still has one writer.
+
+Append-only files are appended to and never edited or removed. A coordinator that edits `history/`, any prior decision, or any `state.json` field outside `currentRun.costPreflight` and the exact legacy schema bump has broken the contract, even when the edit is correct.
 
 **Line numbers are never file content.** A read tool renders a `1.`, `2.`, `12:` gutter down the left margin so you can cite a line; it belongs to the viewer, not to the file. Copying a template out of a numbered view and writing it back with the gutter intact produces a file nothing downstream can parse — including this contract's own checks. Strip the numbering before writing, every time.
 

@@ -26,11 +26,11 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 |-----------------------|----------------------------------------------------------------------------|----------------------|
 | `team.md`             | Roster of roles and the agents that fill them (see roster conventions)     | Replace via scribe   |
 | `routing.md`          | Request-pattern routing table (see routing conventions)                    | Replace via scribe   |
-| `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only          |
+| `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only via Scribe; Cost Preflight via coordinator |
 | `notifications.md`    | Chronological log of notifications (pings) fired and their delivery channel | Append-only          |
 | `history/<agent>.md`  | Per-agent dispatch history: requests handled, findings, outcomes           | Append-only          |
 | `history/autopilot-run-<id>.md` | Per-run autopilot pipeline summary: stages, gates, approvals     | Append-only by id    |
-| `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via scribe   |
+| `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via Scribe; Cost Preflight compare-and-swap via coordinator |
 | `consumption.md`      | Aggregated member/model/credit ledger; carries the cost comparison line    | Replace via scribe   |
 | `consumption-rates.md`| Per-model token-rate table (USD per 1M) plus the comparison methodology    | Replace via scribe   |
 
@@ -40,11 +40,11 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 
 ### state.json Shape
 
-The Scribe seeds `state.json` on first run and overwrites it as the squad advances:
+The Scribe seeds `state.json` on first run and overwrites it as the squad advances. Before a child dispatch, the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching Cost Preflight decision entry, and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`; this is the sole exception to Scribe-owned writes.
 
 ```json
 {
-  "schemaVersion": "1.3",
+  "schemaVersion": "1.4",
   "updated": "",
   "turn": 0,
   "mode": "interactive",
@@ -54,7 +54,22 @@ The Scribe seeds `state.json` on first run and overwrites it as the squad advanc
     "sessionModel": "",
     "modelOverrides": {},
     "estCostUsd": 0,
-    "estCreditsTotal": 0
+    "estCreditsTotal": 0,
+    "costPreflight": {
+      "runId": "",
+      "roundId": "",
+      "ceilingUsd": null,
+      "evaluatedSpendUsd": 0,
+      "remainingUsd": null,
+      "plannedDispatches": 0,
+      "projectedCostUsd": 0,
+      "reserveMultiplier": 3.0,
+      "admissionCostUsd": 0,
+      "confidence": "not-applicable",
+      "basis": "not-requested",
+      "decision": "not-requested",
+      "reason": "No cost ceiling configured."
+    }
   },
   "notify": {
     "approvalChannel": "in-chat",
@@ -68,7 +83,13 @@ The Scribe seeds `state.json` on first run and overwrites it as the squad advanc
 }
 ```
 
-The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`). The `currentRun` object holds the run totals `estCostUsd` and `estCreditsTotal`, both seeded at 0 and overwritten by the Scribe as dispatches accumulate; they are per-run estimates, not billed amounts (see [Consumption Tracking](#consumption-tracking)).
+The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`). The `currentRun` object holds estimated run totals plus the latest compact Cost Preflight decision. The full planned-demand table and permitted dispatch set live in the matching `decisions.md` entry rather than as JSON scratch data.
+
+Cost-ceiling omission is stateful only inside one run. When the latest Cost Preflight `runId` matches the active run id, an omitted argument preserves its finite positive `ceilingUsd`. The literal `cost-ceiling=unset` replaces the compact object with the exact `not-requested` shape above while preserving `estCostUsd` and `estCreditsTotal`. A new run id with no supplied ceiling also starts from that `not-requested` shape; a ceiling never carries across run ids.
+
+In a federation, ordinary routing and targeted autopilot resolve this lifecycle independently at every selected `members/<name>/` root. The federation root keeps `not-requested`. Only untargeted federation autopilot owns an aggregate root lifecycle and uses the root `consumption-rates.md`; it does not forward that aggregate ceiling into child state.
+
+Read legacy schema `1.3` without `costPreflight` as an unset ceiling and the default `not-requested` object. On the next preflight or ordinary Scribe write, add the object, bump to `1.4`, and preserve all existing root, `notify`, `trigger`, model, override, and accumulated-total values.
 
 **`state.json` advances on every turn that writes anything, not only at Init.** `updated`, `turn`, `mode`, `activeRoles`, and `openEscalations` all describe the turn just taken, so the Scribe moves them forward on the same hand-off that appends the decision and history entries — the three writes belong to one turn and a status document left behind is worse than an absent one, because it reads as current. Because the file has replace semantics, the advance is a read-modify-write: `schemaVersion`, `notify`, `trigger`, `currentRun.sessionModel`, and `currentRun.modelOverrides` are carried forward rather than reset to their seed values. The symptom of a missed advance is a `decisions.md` several entries long beside a `state.json` still reading `turn: 0`. In a federation this applies at both levels independently — a routed turn advances the sub-squad's `state.json` under `members/<name>/` **and** the federation's own at the federation root.
 
@@ -175,7 +196,7 @@ Totals are computed by summing the rows, never estimated. The total row must equ
 
 ## State Ownership
 
-Only the Squad Coordinator initiates state changes, and only the Squad Scribe performs the writes. Dispatched cast agents (Squad Researcher, Squad Lead, Squad Implementor, and the rest) return findings to the coordinator; they never write squad state directly.
+Only the Squad Coordinator initiates state changes, and the Squad Scribe performs every ordinary write. Initialization is outside admission. Before later work dispatch, the sole exception is the deterministic Cost Preflight transaction: while no parallel writer exists, the coordinator compares `updated`, changes only `currentRun.costPreflight` plus an exact legacy schema bump when required, appends the matching decision, and reads both back. A collision or mismatch permits no dispatch. Other cast agents never write squad state directly.
 
 This single-writer rule keeps shared state consistent across parallel dispatch: concurrent roles cannot race on the same files because every mutation funnels through the scribe.
 
@@ -221,4 +242,4 @@ Squad learnings live on up to three distinct surfaces: a consumer-local writable
 
 Watch Mode — triggering the squad automatically on repository events (a new issue, a PR, a `/squad` comment, a schedule) so a run produces a pull request — is specified in `.github/instructions/squad/squad-watch-mode.instructions.md`. A Watch Mode run reads `routing.md` and appends to `decisions.md` and `history/<agent>.md` through the same single-writer Scribe path an interactive run uses, rooted at the **event-scoped sub-squad** the run executes in (`.copilot-tracking/squad/members/<name>/`) rather than the top-level squad root.
 
-Watch Mode adds one backward-compatible state change: an optional `trigger` object in `state.json`, with `schemaVersion` moving to `1.2` (see [state.json Shape](#statejson-shape)). The object is additive — a squad that never runs in Watch Mode omits it — so existing state stays valid. The inbound approval half ships as the reference workflow `.github/skills/squad/github-approval-watcher.workflow.yml`; the outbound trigger half ships as the reference workflow `.github/skills/squad/squad-watch.workflow.yml`.
+Watch Mode carries an optional `trigger` object in current schema `1.4` (see [state.json Shape](#statejson-shape)). Historical schema `1.2`, which first introduced this object, is migration input only and upgrades without losing provenance. A squad that never runs in Watch Mode omits `trigger`. The inbound approval half ships as the reference workflow `.github/skills/squad/github-approval-watcher.workflow.yml`; the outbound trigger half ships as the reference workflow `.github/skills/squad/squad-watch.workflow.yml`.

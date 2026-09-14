@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Usage — hve-squad</title>
-  <meta name="description" content="Run the squad: inputs, profiles, autonomy modes, remote approval, first-run Init Mode, federation of sub-squads, and branded PowerPoint decks." />
+  <meta name="description" content="Run the squad: inputs, profiles, autonomy modes, cost admission control, remote approval, Init Mode, federation of sub-squads, and branded PowerPoint decks." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <link rel="stylesheet" href="assets/style.css" />
 </head>
@@ -85,12 +85,18 @@
           <code>mode=autonomous|autopilot</code> — the autonomy mode for this turn. Omit it to run
           interactively, approving each step.
         </li>
+        <li>
+          <code>cost-ceiling=&lt;positive USD&gt;|unset</code> &mdash; sets, replaces, or explicitly
+          removes the current run's estimated model-spend ceiling. Omission inherits an active
+          ceiling only within the same run. See <a href="#cost-admission-control">Cost admission
+          control</a> below.
+        </li>
       </ul>
       <pre><code>/squad request="threat-model the auth service" profile=security
 /squad request="design the approvals app" profile=architecture pack=power-platform
 /squad request="summarize the data layer" tier=fast
 /squad request="reduce onboarding drop-off" discovery=standard
-/squad request="build the booking service end to end" mode=autopilot</code></pre>
+/squad request="build the booking service end to end" mode=autopilot cost-ceiling=20</code></pre>
 
       <figure class="video-figure">
         <video controls preload="metadata" playsinline>
@@ -133,6 +139,184 @@
         autonomously but always stops for a human before anything irreversible and before release.
         The two impactful/final stop-points fire a notification through the approval channel you
         choose at build time (interactive mode pings you at every step instead).
+      </p>
+
+      <h2 id="cost-admission-control">Cost admission control</h2>
+      <p>
+        <code>cost-ceiling</code> is an optional ceiling on <strong>estimated model spend for one
+        run</strong>. Initialization is outside the ceiling: the confirmed setup Scribe dispatch
+        creates the roster, state, and pricing files and records that setup spend without consuming
+        a ceiling slot. After initialization, before the first work dispatch and every later round,
+        Cost Preflight builds a demand manifest from planned roles, dispatch classes, fixed model
+        rates, orchestration, maximum conditional cycles, and eligible calibration.
+        It does not quote billed cost, cap GitHub's invoice, or govern the Azure resources your
+        implementation may create.
+      </p>
+      <pre><code>remaining USD      = max(0, ceiling USD - accumulated estimated spend)
+projected cost USD = sum(calibrated planned-dispatch estimates)
+admission cost USD = projected cost USD × 3.0</code></pre>
+      <p>
+        The factor-of-three admission reserve is a conservative policy allowance for uncertain future
+        token use, not a statistical confidence interval. Displayed totals are rounded only after the
+        row estimates are summed. A forecast reaches <code>medium</code> confidence only when demand is
+        bounded, models and rates are known, the rate table is valid, and calibration matches the
+        current estimator revision. Otherwise the squad reports <code>cannot-confirm</code> rather than
+        presenting an optimistic answer.
+      </p>
+
+      <h3>Set, inherit, replace, or remove a ceiling</h3>
+      <table>
+        <thead>
+          <tr><th>Input</th><th>Effective behavior</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>cost-ceiling=20</code></td>
+            <td>Set or replace the active run's ceiling with $20.</td>
+          </tr>
+          <tr>
+            <td>Argument omitted, same run</td>
+            <td>Inherit the active positive ceiling. Omission never silently removes a guard.</td>
+          </tr>
+          <tr>
+            <td><code>cost-ceiling=unset</code></td>
+            <td>Explicitly remove the ceiling while preserving accumulated consumption totals.</td>
+          </tr>
+          <tr>
+            <td>Argument omitted, new run</td>
+            <td>Start as <code>not-requested</code>; no cost-ceiling comparison or stop applies.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Inheritance is bound to the recorded run ID. A later request that continues that run keeps
+        its ceiling; a new autopilot topic, Watch event, or federation meta-run gets a new ID and does
+        not inherit one. Estimated consumption is still recorded when no ceiling is active, and all
+        non-cost gates continue to apply.
+      </p>
+      <pre><code># Set a $20 ceiling for this run
+/squad request="implement the approved plan" mode=autopilot cost-ceiling=20
+
+# Same run: $20 remains active because omission means inherit
+/squad request="apply the review fixes"
+
+# Same run: remove the guard explicitly
+/squad request="continue without a cost ceiling" cost-ceiling=unset</code></pre>
+
+      <h3>What each decision means</h3>
+      <table>
+        <thead>
+          <tr><th>Decision</th><th>Meaning</th><th>Can work dispatch?</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>not-requested</code></td>
+            <td>No effective ceiling exists for this run.</td>
+            <td>Yes, subject to the normal non-cost gates.</td>
+          </tr>
+          <tr>
+            <td><code>within-ceiling</code></td>
+            <td>The conservative admission cost fits the remaining amount.</td>
+            <td>Yes, but only the slots named by that round.</td>
+          </tr>
+          <tr>
+            <td><code>over-ceiling</code></td>
+            <td>The known forecast exceeds the remaining amount, or accumulated spend has reached the boundary.</td>
+            <td>No. Before the boundary, the user may choose bounded proceed.</td>
+          </tr>
+          <tr>
+            <td><code>approved-over-ceiling</code></td>
+            <td>The user accepted a known overage for the unchanged demand and pricing inputs.</td>
+            <td>Yes, one sequential dispatch unit at a time while spend remains below the ceiling.</td>
+          </tr>
+          <tr>
+            <td><code>cannot-confirm</code></td>
+            <td>Demand, model pricing, rate-table shape, or calibration cannot support a defensible forecast.</td>
+            <td>No. Change the uncertain inputs; approval cannot waive missing evidence.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Proceeding after an over-ceiling forecast</h3>
+      <p>
+        Before asking, the squad shows the ceiling, accumulated estimated spend, remaining amount,
+        projected remaining-demand cost, conservative admission cost, and the stop limitation. If you
+        proceed, it preserves the original <code>over-ceiling</code> record and appends an auditable
+        <code>approved-over-ceiling</code> round linked to your approval. Approval applies only to the
+        unchanged manifest and pricing basis; expanded, repriced, or low-confidence demand opens a new
+        gate.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>The ceiling is checked between dispatch units.</strong> A model call already in
+          progress cannot be interrupted. The final child and its mandatory Scribe accounting handoff
+          can therefore take the recorded estimate above the ceiling. The coordinator then records a
+          terminal <code>over-ceiling</code> round and starts no later child.
+        </p>
+      </div>
+      <p>
+        Reaching the boundary does not block the project forever. To resume, set a new positive ceiling
+        above current accumulated spend, explicitly remove the ceiling with
+        <code>cost-ceiling=unset</code>, reduce or reprice the remaining demand and run a new preflight,
+        or begin a new run. Re-approving the already exceeded value is deliberately not an option,
+        because it would no longer define a stopping boundary.
+      </p>
+
+      <h3>Examples with accumulated spend</h3>
+      <table>
+        <thead>
+          <tr><th>Current state</th><th>Next request</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>No prior ceiling; estimated spend is $10.80</td>
+            <td><code>cost-ceiling=10</code> on the same run</td>
+            <td>Remaining is $0.00 and the new request does not dispatch until the ceiling changes or is removed.</td>
+          </tr>
+          <tr>
+            <td>Ceiling is $20; estimated spend is $10.80</td>
+            <td>Ceiling argument omitted on the same run</td>
+            <td>The $20 ceiling is inherited; $9.20 remains before considering the new demand.</td>
+          </tr>
+          <tr>
+            <td>Ceiling is $20; estimated spend is $10.80</td>
+            <td><code>cost-ceiling=unset</code></td>
+            <td>The guard is removed; $10.80 remains recorded and later work is not cost-gated.</td>
+          </tr>
+          <tr>
+            <td>A new run starts</td>
+            <td>Ceiling argument omitted</td>
+            <td>The new run records <code>not-requested</code> and proceeds without a cost ceiling.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Where to inspect the decision</h3>
+      <p>
+        The latest compact decision is in <code>state.json</code> under
+        <code>currentRun.costPreflight</code>. The reproducible record is the matching
+        <code>## Cost Preflight</code> entry in <code>decisions.md</code>, including its demand table,
+        evaluated and permitted slot sets, reason, and Decision Ref. Every admitted history entry
+        carries that Decision Ref and consumes one permitted slot exactly once. The accumulated
+        estimated totals remain in <code>consumption.md</code>; model rates, dispatch-size assumptions,
+        and calibration are in <code>consumption-rates.md</code>.
+      </p>
+
+      <h3>Federation scope</h3>
+      <p>
+        Ordinary federation routing applies the supplied ceiling independently to every selected
+        sub-squad, whether you name one with <code>squad=</code> or let meta-routing select one or
+        several. Each selected sub-squad uses its own state, accumulated estimate, lifecycle, and
+        stop boundary exactly like a plain squad. The federation root records routing and summary
+        totals but keeps its aggregate Cost Preflight as <code>not-requested</code>.
+      </p>
+      <p>
+        Only <code>/squad-federation mode=autopilot</code> without a <code>squad=</code> target applies
+        one aggregate ceiling across all selected inner runs plus federation coordinator and
+        root-writer orchestration. It uses the federation root's
+        <code>consumption-rates.md</code>, does not also pass the ceiling into child runs, and counts
+        completed meta slots across every round. An approved aggregate overage runs one sub-squad
+        and root-writer unit at a time so the federation can stop at the shared boundary.
       </p>
 
       <h2>Discovery gate &mdash; when there is nothing written down yet</h2>
@@ -538,7 +722,7 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
 
       <h2>Finding the details behind a gate</h2>
       <p>
-        When the squad pauses at a gate — a discovery, intake-readiness, or council verdict, an impactful action, or the final
+        When the squad pauses at a gate — a Cost Preflight, discovery, intake-readiness, or council verdict, an impactful action, or the final
         outcome — the chat message stays deliberately short so it does not bury the conversation.
         The full reasoning lives in <code>.copilot-tracking/squad/decisions.md</code>, which is
         <strong>append-only</strong>: a new <code>## Council Verdict</code> entry is inserted in the
@@ -547,6 +731,7 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         straight to the exact section:
       </p>
       <pre><code>.copilot-tracking/squad/decisions.md#council-verdict-2026-07-07-residual-controls</code></pre>
+      <pre><code>.copilot-tracking/squad/decisions.md#cost-preflight-2026-09-13-run-001-round-002</code></pre>
       <p>
         The anchor is the Markdown heading of the verdict entry (lower-cased, spaces to hyphens), so
         opening the link in VS Code or on GitHub Pages jumps you straight to the verdict, its
@@ -691,7 +876,9 @@ flowchart TD
         autopilot</strong>: it orders the selected sub-squads by dependency (confirmed at the first
         gate), runs each one's standard autopilot in turn, lifts every Impactful-Action and Risk Gate to
         the federation level (attributed to the sub-squad that raised it), applies one aggregate
-        <code>cost-ceiling</code>, and ends with a single consolidated final-outcome validation. Each
+        <code>cost-ceiling</code> with the lifecycle and bounded approval behavior described in
+        <a href="#cost-admission-control">Cost admission control</a>, and ends with a single
+        consolidated final-outcome validation. Each
         sub-squad's inner pipeline is unchanged, and it never auto-releases.
       </p>
       <h2>Promote a learning (<code>/squad-learn</code>)</h2>

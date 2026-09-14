@@ -26,6 +26,14 @@ $script:ModelSources = @('dispatch-reported', 'agent-pinned', 'operator-declared
 $script:Bases = @('estimated', 'tier-default')
 $script:Modes = @('interactive', 'autonomous', 'autopilot')
 $script:ApprovalChannels = @('in-chat', 'github-issue', 'webhook')
+$script:PreflightFields = @(
+    'runId', 'roundId', 'ceilingUsd', 'evaluatedSpendUsd', 'remainingUsd'
+    'plannedDispatches', 'projectedCostUsd', 'reserveMultiplier'
+    'admissionCostUsd', 'confidence', 'basis', 'decision', 'reason'
+)
+$script:PreflightConfidences = @('not-applicable', 'low', 'medium')
+$script:PreflightBases = @('not-requested', 'estimated', 'calibrated')
+$script:PreflightDecisions = @('not-requested', 'within-ceiling', 'over-ceiling', 'approved-over-ceiling', 'cannot-confirm')
 
 # Files Init seeds eagerly. history/<agent>.md is deliberately absent: it is created on
 # first dispatch, and its presence is the proof that a dispatch happened.
@@ -111,11 +119,16 @@ function Get-HistoryEntry {
             }
         )
 
+        $preflightRef = [regex]::Match($body, '(?m)^\s*\*\s*Cost Preflight Ref:\s*`(?<value>[^`]+)`\s*$')
+        $preflightSlot = [regex]::Match($body, '(?m)^\s*\*\s*Cost Preflight Slot:\s*(?<value>\S+)\s*$')
+
         [pscustomobject]@{
             Source        = Split-Path $Path -Leaf
             Agent         = [System.IO.Path]::GetFileNameWithoutExtension($Path)
             Title         = $headings[$index].Groups['title'].Value.Trim()
             NamesArtifact = $declared.Count -gt 0
+            PreflightRef  = if ($preflightRef.Success) { $preflightRef.Groups['value'].Value } else { $null }
+            PreflightSlot = if ($preflightSlot.Success) { $preflightSlot.Groups['value'].Value } else { $null }
         }
     }
 }
@@ -441,11 +454,84 @@ function Get-SquadStateModel {
                 if ('Role' -in $table.Header -and $row['Role']) { $roleAgents[$row['Role']] = $names }
                 $names
             }
+
+            function Get-DispatchClassTable {
+                <#
+                .SYNOPSIS
+                    Reads the canonical dispatch-size estimator table.
+                #>
+                [CmdletBinding()]
+                param(
+                    [AllowEmptyString()]
+                    [AllowNull()]
+                    [string]$Content = ''
+                )
+
+                $classes = @{}
+                foreach ($table in (Get-MarkdownTable -Content $Content)) {
+                    $required = @('Dispatch class', 'Internal turns', 'Base context', 'Growth/turn', 'Output/turn')
+                    if (@($required | Where-Object { $_ -notin $table.Header }).Count -gt 0) { continue }
+
+                    foreach ($row in $table.Rows) {
+                        $name = $row['Dispatch class']
+                        $numbers = @($required[1..4] | ForEach-Object { ConvertTo-LedgerNumber $row[$_] })
+                        if (-not $name -or $numbers -contains $null) { continue }
+                        $classes[$name] = @{
+                            internal_turns = $numbers[0]
+                            base_context   = $numbers[1]
+                            growth         = $numbers[2]
+                            output         = $numbers[3]
+                        }
+                    }
+                }
+
+                $classes
+            }
+
+            function Get-CostPreflightRecord {
+                <#
+                .SYNOPSIS
+                    Reads every append-only Cost Preflight decision and its demand table.
+                #>
+                [CmdletBinding()]
+                param(
+                    [AllowEmptyString()]
+                    [AllowNull()]
+                    [string]$Content = ''
+                )
+
+                foreach ($match in [regex]::Matches($Content, '(?ms)^## Cost Preflight (?<timestamp>\S+) (?<run>\S+) (?<round>\S+)\r?\n(?<body>.*?)(?=^## |\z)')) {
+                    $body = $match.Groups['body'].Value
+                    $fields = [ordered]@{}
+                    foreach ($field in [regex]::Matches($body, '(?m)^\* (?<key>[^:]+):\s*(?<value>.*)\r?$')) {
+                        $fields[$field.Groups['key'].Value] = $field.Groups['value'].Value.Trim()
+                    }
+
+                    $demand = @(Get-MarkdownTable -Content $body | Where-Object {
+                            'Slot' -in $_.Header -and 'Projected Cost' -in $_.Header
+                        } | Select-Object -First 1)
+                    $permitted = @(
+                        if ($fields['Permitted Next Dispatch Set'] -and $fields['Permitted Next Dispatch Set'] -ne 'none') {
+                            $fields['Permitted Next Dispatch Set'] -split ',' | ForEach-Object { $_.Trim() }
+                        }
+                    )
+
+                    [pscustomobject]@{
+                        Timestamp      = $match.Groups['timestamp'].Value
+                        RunId          = $match.Groups['run'].Value
+                        RoundId        = $match.Groups['round'].Value
+                        Fields         = $fields
+                        PermittedSlots = $permitted
+                        DemandRows     = @(if ($demand) { $demand[0].Rows })
+                    }
+                }
+            }
         }
     ) | Sort-Object -Unique
 
     # Only this file holds token rates, so every block's rates are checked against it.
     $rates = Get-RateTable -Content $ratesContent
+    $decisionsContent = Read-Text 'decisions.md'
 
     # The Deliverable Root cell is an operator declaration, not a default: a role writes
     # there or it escalates. Roots are resolved against the project root first and the
@@ -519,6 +605,12 @@ function Get-SquadStateModel {
 
     $declared = @(foreach ($file in $dispatchHistory) { Get-DeliverableEntry -Path $file.FullName })
     $entries = @(foreach ($file in $dispatchHistory) { Get-HistoryEntry -Path $file.FullName })
+    $preflightEntries = @(
+        foreach ($file in ($historyFiles | Where-Object { $_.BaseName -notmatch '^(autonomous-loop|autopilot-run)-' })) {
+            Get-HistoryEntry -Path $file.FullName
+        }
+    )
+    $preflightRecords = @(Get-CostPreflightRecord -Content $decisionsContent)
 
     $artifactlessEntries = @(
         foreach ($entry in $entries) {
@@ -585,11 +677,23 @@ function Get-SquadStateModel {
 
     $calibration = 1.0
     $observations = 0
+    $lastReconciled = 'never'
+    $estimatorRevision = 0
+    $calibrationBasis = ''
+    $ratesObservedOn = ''
     if ($ratesContent) {
         $factor = [regex]::Match($ratesContent, '(?im)^\s*[*-]?\s*`?calibration_factor`?\s*[:=]\s*([0-9.]+)')
         if ($factor.Success) { $calibration = [double]$factor.Groups[1].Value }
         $seen = [regex]::Match($ratesContent, '(?im)^\s*[*-]?\s*`?observations`?\s*[:=]\s*([0-9]+)')
         if ($seen.Success) { $observations = [int]$seen.Groups[1].Value }
+        $last = [regex]::Match($ratesContent, '(?im)^\s*[*-]?\s*`?last_reconciled`?\s*[:=]\s*([^\r\n]+)')
+        if ($last.Success) { $lastReconciled = $last.Groups[1].Value.Trim().Trim('"') }
+        $revision = [regex]::Match($ratesContent, '(?im)^\s*[*-]?\s*`?estimator_revision`?\s*[:=]\s*([0-9]+)')
+        if ($revision.Success) { $estimatorRevision = [int]$revision.Groups[1].Value }
+        $basis = [regex]::Match($ratesContent, '(?im)^\s*[*-]?\s*`?calibration_basis`?\s*[:=]\s*([^\r\n]+)')
+        if ($basis.Success) { $calibrationBasis = $basis.Groups[1].Value.Trim().Trim('"') }
+        $observedOn = [regex]::Match($ratesContent, '(?im)^\s*[*-]\s*Observed-on:\s*([^\.\r\n]+)')
+        if ($observedOn.Success) { $ratesObservedOn = $observedOn.Groups[1].Value.Trim() }
     }
 
     @{
@@ -609,17 +713,25 @@ function Get-SquadStateModel {
         AgentRoots       = $agentRoots
         RoleRoots        = $roleRoots
         Deliverables     = @($deliverables)
+        Entries          = @($entries)
+        PreflightEntries = @($preflightEntries)
+        PreflightRecords = @($preflightRecords)
         ArtifactlessEntries = @($artifactlessEntries)
         OrphanArtifacts  = @($orphanArtifacts)
         NestedTracking   = @($nestedTracking)
         Routing          = Read-Text 'routing.md'
-        Decisions        = Read-Text 'decisions.md'
+        Decisions        = $decisionsContent
         Notifications    = Read-Text 'notifications.md'
         Ledger           = $ledgerContent
         RatesContent     = $ratesContent
         Rates            = $rates
+        DispatchClasses  = Get-DispatchClassTable -Content $ratesContent
         Calibration      = $calibration
         Observations     = $observations
+        LastReconciled   = $lastReconciled
+        EstimatorRevision = $estimatorRevision
+        CalibrationBasis = $calibrationBasis
+        RatesObservedOn  = $ratesObservedOn
         Blocks           = $blocks
         DispatchBlocks   = @($blocks | Where-Object { -not $_.IsOrchestration })
         OrchestrationBlocks = @($blocks | Where-Object { $_.IsOrchestration })
@@ -630,7 +742,11 @@ function Get-SquadStateModel {
         Bases            = $script:Bases
         Modes            = $script:Modes
         ApprovalChannels = $script:ApprovalChannels
+        PreflightFields  = $script:PreflightFields
+        PreflightConfidences = $script:PreflightConfidences
+        PreflightBases   = $script:PreflightBases
+        PreflightDecisions = $script:PreflightDecisions
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, ConvertTo-LedgerNumber, Get-LedgerDecimal
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, Get-DispatchClassTable, Get-CostPreflightRecord, ConvertTo-LedgerNumber, Get-LedgerDecimal

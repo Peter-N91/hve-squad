@@ -74,6 +74,8 @@ No Copilot invocation. Install the ref into a scratch directory, then inspect th
 | PKG-08 | No relative link inside a delivered skill reference points at a missing file | |
 | PKG-09 | All five entrypoint prompts are delivered: `squad`, `squad-federation`, `squad-document`, `squad-governance-report`, `squad-learn` | |
 | PKG-10 | Worker agents declare `user-invocable: false`; the three user-facing agents declare `user-invocable: true` | Wrong flag either hides an entrypoint or exposes a worker |
+| PKG-12 | Both squad entry points expose and forward `cost-ceiling=<positive USD\|unset>` with same-run inheritance | The lifecycle must be invocable from the delivered prompts |
+| PKG-13 | Initialization is outside Cost Preflight; ordinary federation routing forwards one independent ceiling to every selected sub-squad and resets root admission to `not-requested`; only untargeted federation autopilot owns aggregate admission and its federation-root rate table | Prevents bootstrap deadlock, stale aggregate gates, silent ungated sub-squads, and accidental double admission |
 
 ## Tier 1 — Single squad
 
@@ -85,7 +87,13 @@ Fixture: a small repository with no `.copilot-tracking/squad/` directory.
 |---|---|---|
 | SQ-01 | After Init, these exist under `.copilot-tracking/squad/`: `team.md`, `routing.md`, `decisions.md`, `state.json`, `notifications.md`, `consumption.md`, `consumption-rates.md`, and a `history/` directory | `squad-state.instructions.md`, State Layout |
 | SQ-02 | `history/` contains **no** `<agent>.md` files yet | History is created lazily on first dispatch, never seeded empty |
-| SQ-03 | `state.json` parses and carries `schemaVersion`, `updated`, `turn`, `mode`, `activeRoles`, `openEscalations`, `currentRun.{sessionModel,modelOverrides,estCostUsd,estCreditsTotal}`, `notify.{approvalChannel,enabled,email,github.{handle,repo}}` | `entry-schemas.md` |
+| SQ-03 | `state.json` parses and carries `schemaVersion`, `updated`, `turn`, `mode`, `activeRoles`, `openEscalations`, `currentRun.{sessionModel,modelOverrides,estCostUsd,estCreditsTotal,costPreflight}`, `notify.{approvalChannel,enabled,email,github.{handle,repo}}` | `entry-schemas.md` |
+| SQ-03a | Schema 1.4 `costPreflight` carries exactly `runId`, `roundId`, `ceilingUsd`, `evaluatedSpendUsd`, `remainingUsd`, `plannedDispatches`, `projectedCostUsd`, `reserveMultiplier`, `admissionCostUsd`, `confidence`, `basis`, `decision`, `reason` | `entry-schemas.md` |
+| SQ-03b | `remainingUsd = max(0, ceilingUsd - evaluatedSpendUsd)` and `admissionCostUsd = projectedCostUsd x 3.0`; the planned-demand table's unrounded row sum reproduces `projectedCostUsd` | `consumption.md`, Cost Preflight |
+| SQ-03c | Medium-confidence `within-ceiling` and valid `approved-over-ceiling` may admit exact named slots; the original `over-ceiling` and every `cannot-confirm` round have no child entry | `gates-and-modes.md`, Cost Preflight Procedure |
+| SQ-03d | Every admitted history entry names the matching Cost Preflight Decision Ref and one slot in that round's permitted set | `entry-schemas.md` |
+| SQ-03e | Legacy single-squad 1.3 and federation 1.2 state without `costPreflight` is read as no-ceiling `not-requested` state and upgraded on the next write without resetting existing fields | State migration rule |
+| SQ-03f | The coordinator's legacy transaction may change only `costPreflight` and the exact schema version; single-squad and federation migrations preserve `notify`, `trigger`, models, totals, and federation fields | `squad-floor.instructions.md` |
 | SQ-04 | `state.json` `mode` is one of `interactive`, `autonomous`, `autopilot`; `notify.approvalChannel` is one of `in-chat`, `github-issue`, `webhook` | `squad-state.instructions.md` |
 | SQ-05 | `team.md` contains a `## Members` table with columns `Role`, `Member Name`, `Agent Name (Primary)`, `Alternate Agents`, `Selection Cue`, `Invocation`, `Model Tier`, `Deliverable Root` | `squad-roster.instructions.md`, Members Schema |
 | SQ-05a | Every row carries a `Selection Cue` value — the condition that picks an Alternate, or `—` when the role has none. The cast catalog is `applyTo`-scoped and does not load on every host, so a roster listing alternates without their cue leaves resolution to a guess | `squad-roster.instructions.md`, Members Schema |
@@ -182,6 +190,10 @@ The ledger has replace semantics but the rows accumulate. The documented failure
 | CON-42 | `calibration_factor` is within `0.25`–`10.0` | `consumption-rates.md` |
 | CON-43 | While `observations` is `0`, `calibration_factor` is exactly `1.00` and the ledger carries an **uncalibrated** note | Same |
 | CON-44 | Every model named in any consumption block has a rate row in `consumption-rates.md`, or its block is flagged `basis: tier-default` | Cross-check binding CON-03 and CON-05 |
+| CON-45 | A calibrated preflight has positive observations, a non-`never` reconciliation date, and `calibration_basis` equal to the current `Observed-on|estimator_revision`; a mismatch is low confidence | `consumption.md`, Calibration |
+| CON-46 | Every planned-demand row is rederived from count, the canonical dispatch-class inputs, candidate model rates, and eligible calibration; `auto`, unresolved, unrated, invalid, or incomplete rows cannot admit | `consumption.md`, Cost Preflight |
+| CON-47 | `projectedCostUsd` and `admissionCostUsd` are independently rounded to four decimals from the same unrounded row sum; admission is never derived by multiplying an already rounded point estimate | Same |
+| CON-48 | Each permitted run/round/slot tuple appears in history at most once | `scribe-procedure.md`, admitted slot consumption |
 
 ## Tier 1 — Routing and role selection
 
@@ -308,6 +320,9 @@ This is the highest-risk operation in the system because it moves state. Fixture
 | FD-40 | A request routed to a sub-squad appends to federation `history/<sub-squad>.md` and to that sub-squad's own state under `members/<name>/`, with the full single-squad ordinary-turn contract (SQ-10 to SQ-19) holding at the sub-squad root |
 | FD-41 | Federation-level state records the meta-routing decision; sub-squad state records the role dispatches. Neither is written into the other |
 | FD-42 | A sub-squad's **inner run** reads and writes only inside its own root. It cannot discover another sub-squad's work on its own, and it does not read federation-level state | `squad-federation.instructions.md`, Cross-Sub-Squad Handoff |
+| FD-43 | Federation admission equals selected inner admission costs plus federation coordinator and root-writer admission cost; accumulated federation spend adds realized inner totals and meta-orchestration exactly once | `squad-federation-autopilot.instructions.md`, Federation Cost Ceiling |
+| FD-44 | Federation current state preserves its closed `notify` object through initialization and 1.2 to 1.3 migration | `federation-templates.md` |
+| FD-45 | A federation meta slot enters accumulated spend only after its id appears in completed history, and duplicate transition references count once; future slots remain reserved only | `scribe-procedure.md`, federation state advance |
 
 ## Tier 1 — Post-promotion functional continuity
 
@@ -453,6 +468,15 @@ FD-15a and DLR-24 are written to fail on the literal reading. Tightening Step 5'
 | GATE-10 | **Impactful-Action Gate never proceeds unattended.** In an autopilot run, no `git push`, no merge, no deploy, no destructive data operation occurs without approval | |
 | GATE-11 | Autonomous writes `history/autonomous-loop-<id>.md` with an Iterations table, and escalates on any `Stop`, any `Risk: High` from security, cost-manager, or rai, and on any irreversible write | `squad-autonomous.instructions.md` |
 | GATE-12 | Notifications append to `notifications.md` with fields `Mode`, `Channel`, `Approval Ref`, `Topic`, `Awaiting`, `Resolved` | `squad-notifications.instructions.md` |
+| GATE-13 | A configured ceiling writes and reads back Cost Preflight before the first child or Scribe dispatch and before every later dispatch round | `gates-and-modes.md`, Cost Preflight Procedure |
+| GATE-14 | `over-ceiling` and `cannot-confirm` permit no child dispatch; low confidence never degrades to point-estimate admission | Same |
+| GATE-15 | Explicit proceed appends `approved-over-ceiling` linked to an immutable matching denial and human approval; it never admits `cannot-confirm`, changed or expanded demand, or a dispatch at or above the ceiling | Same |
+| GATE-16 | Watch Mode records `over-ceiling` as a blocking finding and resumes sequentially only after authorized proceed; `cannot-confirm` remains blocked | `squad-watch-mode.instructions.md` |
+| GATE-17 | A targeted federation forwards to one inner preflight; an approved aggregate federation runs one sequential sub-squad unit at a time and starts none at or above the aggregate ceiling | `squad-federation-autopilot.instructions.md` |
+| GATE-18 | A rolling round removes completed slots, uses current estimated spend as `evaluatedSpendUsd`, and blocks routing expansion outside its evaluated set until recalculation | `consumption.md`, Cost Preflight |
+| GATE-19 | Positive fixtures cover denied, cannot-confirm, approval-note-only, approved overage, ceiling reached, Watch denial at schema 1.4, targeted federation forwarding, aggregate federation accounting, rolling rounds, and legacy migration | `Assertions.Tests.ps1` |
+| GATE-20 | A completed approved dispatch may cross the estimated ceiling, but no history entry may be timestamped after the terminal ceiling-reached round | `StateContract.Tests.ps1` |
+| GATE-21 | A positive input sets the ceiling; omission inherits only inside the same run; `cost-ceiling=unset` and a new run with no value use the exact `not-requested` state without resetting accumulated totals | `consumption.md`, Cost Preflight |
 
 ## Tier 2 — Semantic comparison
 

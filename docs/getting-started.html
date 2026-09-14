@@ -127,6 +127,24 @@ targets:
         approval.
       </p>
 
+      <h3>Optional: set a model-spend ceiling</h3>
+      <p>
+        Add <code>cost-ceiling=&lt;positive USD&gt;</code> when you want the squad to forecast the
+        remaining work before dispatching it. The ceiling governs estimated model spend for the
+        current run; it is not a GitHub invoice guarantee and does not govern Azure workload cost.
+      </p>
+      <pre><code>/squad request="add input validation to the login form" cost-ceiling=10</code></pre>
+      <p>
+        If the forecast is above the ceiling, the squad shows the estimate and lets you stop or
+        proceed in bounded sequential units. It starts no new unit after accumulated estimated spend
+        reaches the ceiling. On a fresh project, confirmed initialization runs outside the ceiling
+        so the Scribe can create the state and pricing files; the ceiling applies before the original
+        request starts work. Omit the argument on later requests to inherit the ceiling within the
+        same run, or use <code>cost-ceiling=unset</code> to remove it. See
+        <a href="usage.html#cost-admission-control">Usage &rarr; Cost admission control</a> for the
+        full lifecycle and examples.
+      </p>
+
       <h2>3. Rebuild (re-deploy) after updating</h2>
       <p>
         To pull a newer version of the package or refresh your deployed assets, re-run install with

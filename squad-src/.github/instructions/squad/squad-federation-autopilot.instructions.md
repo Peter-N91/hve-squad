@@ -78,7 +78,17 @@ Item 3 is mandatory and safety-critical: never advance the meta-pipeline past an
 
 ## Federation Cost Ceiling
 
-An optional `cost-ceiling=$X` on a federation autopilot run applies **across the whole federation run**, not per sub-squad. The coordinator tracks the aggregate estimated cost across every sub-squad inner run and escalates through the Risk Gate when the aggregate would exceed the ceiling on the next meta-stage or inner-run cycle, rather than enforcing a separate ceiling inside each sub-squad. Each sub-squad's own consumption ledger under `members/<name>/` is unchanged; the federation-level aggregate is the sum across sub-squads recorded in the federation `state.json` `currentRun`.
+An effective `cost-ceiling=<positive USD number>` applies across the whole federation only for `mode=autopilot` with no `squad=` target. Omission inherits it only inside the same meta-run; `cost-ceiling=unset` removes it; a new meta-run with no value is ungated. Child runs receive no ceiling in this mode, preventing double admission. Ordinary routing and targeted autopilot instead forward one independent ceiling to every selected sub-squad.
+
+Before any inner run and every later meta round, import every selected inner-run demand row plus federation coordinator and root-writer rows. Price all rows from the federation root's `consumption-rates.md`, applying its aggregate calibration once:
+
+```text
+federation admission cost = sum(selected inner admission costs) + federation meta-orchestration admission cost
+```
+
+Persist the aggregate decision directly at the federation root before starting any child. `within-ceiling` starts its permitted set. `over-ceiling` offers stop or bounded proceed; explicit proceed appends `approved-over-ceiling` and starts one sequential sub-squad plus its root-writer handoff at a time until accumulated estimated spend reaches the ceiling. `cannot-confirm` remains blocked, including while the root calibration is ineligible. A later expansion of the selected set invalidates the approval and requires recalculation.
+
+Each sub-squad ledger remains unchanged. Federation `currentRun.estCostUsd` is the sum of realized inner-ledger totals plus completed federation meta slots across every Cost Preflight round in the active meta-run. Count each run/round/slot tuple once from its history reference; shrinking later manifests never erase earlier completed cost. Future slots remain reserved only in `admissionCostUsd`. Reconcile the root calibration from complete aggregate runs only.
 
 ## Consolidated Final-Outcome Validation
 

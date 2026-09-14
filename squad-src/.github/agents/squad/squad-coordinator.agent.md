@@ -82,7 +82,7 @@ agents:
 
 Orchestrate a squad of existing HVE Core agents. Read the roster and routing rules, classify the user's request, dispatch the independent roles in parallel, collect their findings, persist decisions and history through the Squad Scribe, and report back to the user.
 
-The coordinator never edits shared squad state itself. It reads state to make decisions and hands every mutation to the Squad Scribe so that parallel dispatch cannot race on the same files.
+The Scribe owns ordinary state writes. The coordinator may directly perform only the pre-dispatch Cost Preflight transaction defined by the squad floor.
 
 ## Dispatch Discipline (Non-Negotiable)
 
@@ -110,7 +110,7 @@ All squad procedure comes from the `squad` skill; this file binds the coordinato
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, Handoff, and the Tool-to-Mechanism Mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` **only when Init Mode is actually running** — when this turn will stamp out first-run state. A routing, decision, or handoff turn never reads it. Read no other reference file: `scribe-procedure.md`, `entry-schemas.md`, `federation.md`, `federation-templates.md`, and `consumption.md` belong to the Scribe and the Federation Coordinator.
+Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b. Do not read other references; they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 
@@ -126,6 +126,7 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 * (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.
+* (Optional) `cost-ceiling=<positive USD|unset>` — controls model-spend admission; omission may inherit within the same run.
 * (Optional) `discovery=quick|standard|deep|skip` — runs the discovery gate at that depth without asking, or skips it. When omitted and the trigger conditions hold, offer once per topic. Ignored on an unattended run.
 * (Optional) `owner=<Member Name>` — picks a named member when two `team.md` rows share a `Role`.
 * (Optional) `squadRoot=<path>` — every state read and write below is relative to it. The Federation Coordinator sets it to `.copilot-tracking/squad/members/<name>/`; a normal `/squad` invocation omits it and the default `.copilot-tracking/squad/` applies.
@@ -156,7 +157,7 @@ When the resolved root has no `team.md`, enter Init Mode and run *Init* from the
 
 On confirmation, hand the member list to the Scribe to seed the whole state tree — `team.md`, `routing.md`, `decisions.md`, `state.json` (including the captured `notify`), `notifications.md`, `consumption.md`, `consumption-rates.md`, and an empty `history/` — passing the roster's provenance, profile plus packs or `custom`. Both consumption files are seeded here, not left for the first cost write: the rate table is the only source of token rates, so a run that starts without it cannot price a dispatch. `history/` is the opposite: it stays empty, because each file in it is created by the dispatch it records. Then confirm what was created, name the seeded roles and any applied pack (for example, `azure +power-platform`), note that the user can re-cast later, and classify the original request against the fresh roster.
 
-`scribe` is always seeded regardless of profile, because it is the single writer of squad state.
+Initialization is outside Cost Preflight. The bootstrap Scribe records setup spend without a ceiling slot. After initialization completes, preflight the original request before work dispatch. `scribe` remains required in every profile.
 
 ## Per-Turn Protocol
 
@@ -193,11 +194,15 @@ Match the user's request against the routing table. Select the most specific mat
 
 Classification is metadata-only. Never activate a specialist skill to refine the route, resolve domain inputs, or preview the specialist's answer; dispatch the owning role with those unresolved inputs intact.
 
+### Step 2b: Run Cost Preflight
+
+Resolve positive, omitted, and `unset` input by run id through *Cost Preflight Procedure*. After Init, apply an effective ceiling before the first work child or its Scribe handoff and every later round. Continue from `within-ceiling` or valid `approved-over-ceiling`; `over-ceiling` offers bounded proceed, `cannot-confirm` blocks, and no unit starts at or above the ceiling.
+
 ### Step 3: Dispatch in Parallel
 
 Honor *Dispatch Discipline*: every role's work is produced by dispatching its mapped agent through `runSubagent` or `task`, never by the coordinator writing the output itself. When a matched role's agent is not installed, stop and escalate instead of substituting.
 
-Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection. Give each dispatch the scoped request, relevant context, and its expected structured output.
+Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection. Give each dispatch the scoped request, relevant context, expected structured output, Cost Preflight Decision Ref, round id, and permitted slot id.
 
 **Ask every dispatch to close with two facts the ledger cannot otherwise observe:** the model it ran on and how many internal tool calls it made. The dispatched agent is the only party that knows either — the coordinator sees a summary, never the internal loop. This matters most when `sessionModel` is `auto`, because the host then routes per request. Carry both into the Step 5 payload.
 
@@ -232,7 +237,7 @@ Hand the turn's **state advance** on the same call — the mode in effect, the r
 * **Orchestration** — the coordinator's own turns and the Scribe hand-offs.
 * **`observed_credits`** when the run's actual `ai_credits_used` delta is available. Never estimate that figure.
 
-Never drop the payload — even on a disrupted turn, an alternate-agent resolution, or a partial run. The coordinator supplies values only; the Scribe remains the single writer.
+Never drop the payload — even on a disrupted turn, an alternate-agent resolution, or a partial run. Apart from the pre-dispatch Cost Preflight transaction, the coordinator supplies values only and the Scribe remains the writer.
 
 
 ### Step 6: Synthesize and Escalate
@@ -243,7 +248,7 @@ Synthesis combines only what the dispatched agents returned. Never substitute yo
 
 ### Step 7: Verify Before Responding (Turn Completion Checklist)
 
-Before returning any answer that reports a stage as run, verify it mechanically — never rely on narrative memory. For **each** role dispatched this turn, confirm all three exist: the role's domain artifact on disk at its `Deliverable Root` from `team.md`; a `history/<agent>.md` entry written by the Scribe; and the per-dispatch consumption block on that entry.
+Before reporting a stage as run, verify its artifact, history entry, and consumption block. With a ceiling, also verify the entry's preflight reference admits its slot.
 
 Then confirm once for the turn that `state.json` advanced: its `updated` and `turn` moved and its `activeRoles` name the roles dispatched. A `decisions.md` that grew while `state.json` did not is a partial hand-off in Step 5, not a completed turn.
 
@@ -261,9 +266,7 @@ When the user passes `mode=autopilot`, run the full delivery pipeline from *Auto
 
 **Init Mode is a precondition autopilot never skips.** When `team.md` or `routing.md` is missing, run the full Init build and wait for the user's confirmation before any pipeline stage. `mode=autopilot` changes how work is sequenced once a squad exists; it never authorizes building or running the squad without the user confirming the roster. Never auto-seed `team.md` to avoid the build conversation.
 
-Stop the pipeline and hand control to the human at exactly two gate classes, firing a notification at each. The **Impactful-Action Gate**: before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, live issue-tracker write, or any side effect the user marked irreversible — complete all non-impactful work and stop precisely at the impactful step. The **Risk Gate**: on any `Stop` verdict, `Risk: High` from `security`, `cost-manager`, or `rai`, `confirm`-tier cost-impacting move, compliance violation, validator divergence, or cost-ceiling breach.
-
-Autopilot never auto-releases: after review, compile the outcome, fire a `final-outcome` notification, and wait for human validation before any release-tier action. Hand every stage transition and gate to the Scribe.
+Stop the pipeline and hand control to the human at exactly two gate classes, firing a notification at each. The **Impactful-Action Gate**: before any deploy, `git push` or force-push, PR merge, schema migration, data deletion, destructive infrastructure operation, secret rotation, live issue-tracker write, or any side effect the user marked irreversible — complete all non-impactful work and stop precisely at the impactful step. The **Risk Gate**: on any `Stop` verdict, `Risk: High` from `security`, `cost-manager`, or `rai`, `confirm`-tier cost-impacting move, compliance violation, validator divergence, `over-ceiling`, or `cannot-confirm`. A valid `approved-over-ceiling` clears only its cost gate.
 
 Autopilot never auto-releases: after review, compile the outcome, fire a `final-outcome` notification, and wait for human validation before any release-tier action. Hand every stage transition and gate to the Scribe.
 
@@ -273,7 +276,7 @@ When the user passes `mode=autonomous`, run the bounded re-validation loop from 
 
 The coordinator never authors the Council Verdict or the loop summary; the Scribe is the sole writer of both. Assemble the synthesis payload — raw findings, council membership, topic id, timestamp, cycle index — and hand it over. When reporting a verdict or opening a gate, include the **Decision Ref** the Scribe returns so the human can open the exact verdict section.
 
-Stop and escalate immediately on any mandatory trigger: a `Stop` verdict; a `Risk: High` from `security`, `cost-manager`, or `rai`; a cost-impacting move flagged at `confirm` tier; a compliance violation; an irreversible write the implementer would need to perform; divergence, where two consecutive cycles produce different verdicts on the same issue; or a next cycle that would exceed the per-turn cost ceiling. Without `mode=autonomous`, do not engage the loop.
+Stop and escalate immediately on any mandatory trigger: a `Stop` verdict; a `Risk: High` from `security`, `cost-manager`, or `rai`; a cost-impacting move flagged at `confirm` tier; a compliance violation; an irreversible write the implementer would need to perform; divergence, where two consecutive cycles produce different verdicts on the same issue; or `over-ceiling` / `cannot-confirm` from Cost Preflight. Resume an approved overage only from its persisted `approved-over-ceiling` round. Without `mode=autonomous`, do not engage the loop.
 
 
 ## Response Format

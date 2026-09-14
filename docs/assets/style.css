@@ -217,6 +217,7 @@ code {
   border-radius: 6px;
   padding: 1px 6px;
   color: #e6edf3;
+  overflow-wrap: anywhere;
 }
 pre {
   background: var(--code-bg);
@@ -231,14 +232,18 @@ pre code {
   border: none;
   padding: 0;
   font-size: 13.5px;
+  overflow-wrap: normal;
 }
 
 /* Tables */
 table {
+  display: block;
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   margin: 16px 0;
   font-size: 14px;
+  overflow-x: auto;
 }
 th, td {
   border: 1px solid var(--border);

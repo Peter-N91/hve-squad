@@ -143,3 +143,40 @@ Describe 'PKG-10 Invocation flags match the entrypoint set' {
         $Meta['user-invocable'] | Should -Be 'false' -Because 'a worker exposed as an entrypoint invites a user to bypass the coordinator'
     }
 }
+
+Describe 'PKG-12 Cost ceiling is exposed by both squad entrypoints' {
+    It '<Name> declares and forwards the full cost-ceiling lifecycle' -ForEach @(
+        $model.Prompts | Where-Object { $_.Name -in @('squad.prompt.md', 'squad-federation.prompt.md') }
+    ) {
+        $Meta['argument-hint'] | Should -Match 'cost-ceiling=<positive USD\|unset>'
+        $Body | Should -Match '\$\{input:cost-ceiling\}'
+        $Body | Should -Match 'cost-ceiling=unset'
+        $Body | Should -Match 'same run'
+    }
+}
+
+Describe 'PKG-13 Cost ceiling ownership is mode-specific' {
+    It 'keeps initialization outside Cost Preflight' {
+        $coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0]
+        $coordinator.Body | Should -Match 'Initialization is outside Cost Preflight'
+        $coordinator.Body | Should -Match 'after initialization completes'
+    }
+
+    It 'applies an ordinary federation ceiling independently to each selected sub-squad' {
+        $coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
+        $coordinator.Body | Should -Match 'independent per-sub-squad ceiling'
+        $coordinator.Body | Should -Match 'forwarding.+cost-ceiling'
+
+        $scribeReference = Join-Path $script:Model.SquadSkillRoot 'references/scribe-procedure.md'
+        Get-Content -LiteralPath $scribeReference -Raw | Should -Match 'ordinary or targeted federation routing replaces root `costPreflight` with the exact `not-requested` object'
+    }
+
+    It 'reserves aggregate admission for untargeted federation autopilot' {
+        $coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
+        $coordinator.Body | Should -Match 'aggregate ceiling only when mode=autopilot has no squad= target'
+        $coordinator.Body | Should -Match 'seed root.+consumption-rates\.md'
+
+        $federationReference = Join-Path $script:Model.SquadSkillRoot 'references/federation-templates.md'
+        Get-Content -LiteralPath $federationReference -Raw | Should -Match 'consumption-rates\.md \(federation root\)'
+    }
+}

@@ -38,6 +38,17 @@ BeforeAll {
     # percent of drift on a number that was estimated in the first place is not. Structure
     # is still strict, because a missing row loses a role rather than mis-stating one.
     $script:LedgerBand = 3.0
+    $script:Preflight = if ($script:Model.State -and $script:Model.State['currentRun']) {
+        $script:Model.State['currentRun']['costPreflight']
+    }
+    else { $null }
+    $script:PreflightRecord = @(
+        if ($script:Preflight) {
+            $script:Model.PreflightRecords | Where-Object {
+                $_.RunId -eq $script:Preflight['runId'] -and $_.RoundId -eq $script:Preflight['roundId']
+            }
+        }
+    )
 
     function Test-LedgerFigure {
         param([double]$Actual, [double]$Expected)
@@ -47,6 +58,42 @@ BeforeAll {
 
         $ratio = $Actual / $Expected
         return ($ratio -le $script:LedgerBand -and $ratio -ge (1 / $script:LedgerBand))
+    }
+
+    function Get-PreflightRowCost {
+        param([System.Collections.IDictionary]$Row)
+
+        $dispatchClass = $script:Model.DispatchClasses[$Row['Dispatch Class']]
+        $count = ConvertTo-LedgerNumber $Row['Count']
+        $turns = ConvertTo-LedgerNumber $Row['Internal Turns']
+        $baseContext = ConvertTo-LedgerNumber $Row['Base Context']
+        $growth = ConvertTo-LedgerNumber $Row['Growth/Turn']
+        $outputPerTurn = ConvertTo-LedgerNumber $Row['Output/Turn']
+        if (-not $dispatchClass -or $null -in @($count, $turns, $baseContext, $growth, $outputPerTurn)) { return $null }
+        if ($count -lt 1 -or $turns -lt $dispatchClass.internal_turns -or
+            $baseContext -lt $dispatchClass.base_context -or $growth -lt $dispatchClass.growth -or
+            $outputPerTurn -lt $dispatchClass.output) { return $null }
+
+        $candidateCosts = @(
+            foreach ($candidate in ($Row['Pricing Basis'] -split '\s+/\s+')) {
+                if (-not $candidate -or $candidate -in @('auto', 'unknown', 'unresolved')) { return $null }
+                $rate = $script:Model.Rates[$candidate]
+                if (-not $rate) { return $null }
+
+                $averageContext = $baseContext + ($growth * ($turns - 1) / 2)
+                $grossInput = $turns * $averageContext
+                $inputTokens = $grossInput * 0.20
+                $cachedTokens = $grossInput * 0.80
+                $cacheWriteTokens = if ($rate.cache_write -gt 0) { $baseContext + ($growth * ($turns - 1)) } else { 0 }
+                $outputTokens = $turns * $outputPerTurn
+                $pricedTokens = ($inputTokens * $rate.input) + ($cachedTokens * $rate.cached)
+                $pricedTokens += ($cacheWriteTokens * $rate.cache_write) + ($outputTokens * $rate.output)
+                $rawCost = $pricedTokens / 1e6
+                $rawCost * $script:Model.Calibration * $count
+            }
+        )
+
+        ($candidateCosts | Measure-Object -Maximum).Maximum
     }
 }
 
@@ -89,6 +136,16 @@ Describe 'SQ-03 state.json carries the documented shape' {
         $script:Model.State['currentRun'].Keys | Should -Contain $_
     }
 
+    It 'uses a supported single-squad schema version' {
+        $script:Model.State['schemaVersion'] | Should -BeIn @('1.3', '1.4')
+    }
+
+    It 'schema 1.4 declares costPreflight and legacy 1.3 may omit it' {
+        if ($script:Model.State['schemaVersion'] -eq '1.4') {
+            $script:Model.State['currentRun'].Keys | Should -Contain 'costPreflight'
+        }
+    }
+
     It 'notify declares <_>' -ForEach @('approvalChannel', 'enabled', 'email', 'github') {
         $script:Model.State['notify'].Keys | Should -Contain $_
     }
@@ -103,6 +160,7 @@ Describe 'SQ-03 state.json carries the documented shape' {
 
     It 'currentRun declares no key outside the documented set' {
         $documented = @('sessionModel', 'modelOverrides', 'estCostUsd', 'estCreditsTotal')
+        if ($script:Model.State['schemaVersion'] -eq '1.4') { $documented += 'costPreflight' }
         $extra = @($script:Model.State['currentRun'].Keys | Where-Object { $_ -notin $documented })
         $extra -join ', ' | Should -BeNullOrEmpty -Because 'currentRun is a running total, not a scratchpad for per-turn figures'
     }
@@ -113,6 +171,193 @@ Describe 'SQ-03 state.json carries the documented shape' {
 
     It 'approvalChannel is a documented value' {
         $script:Model.ApprovalChannels | Should -Contain $script:Model.State['notify']['approvalChannel']
+    }
+}
+
+Describe 'SQ-04 Cost Preflight is reproducible and binding' -Skip:($model.State['schemaVersion'] -ne '1.4' -or $model.State['currentRun']['costPreflight']['decision'] -eq 'not-requested') {
+    It 'declares exactly the documented fields' {
+        @($script:Preflight.Keys) -join ',' | Should -Be (@($script:Model.PreflightFields) -join ',')
+    }
+
+    It 'uses documented confidence basis and decision values' {
+        $script:Model.PreflightConfidences | Should -Contain $script:Preflight['confidence']
+        $script:Model.PreflightBases | Should -Contain $script:Preflight['basis']
+        $script:Model.PreflightDecisions | Should -Contain $script:Preflight['decision']
+    }
+
+    It 'resolves current compact state to exactly one readable round' {
+        $script:PreflightRecord.Count | Should -Be 1
+    }
+
+    It 'matches the compact decision to the readable round' {
+        $script:Preflight['decision'] | Should -Be $script:PreflightRecord[0].Fields['Decision']
+        $script:Preflight['confidence'] | Should -Be $script:PreflightRecord[0].Fields['Confidence']
+        $script:Preflight['basis'] | Should -Be $script:PreflightRecord[0].Fields['Basis']
+    }
+
+    It 'rederives every readable demand row from canonical classes and rates' {
+        foreach ($record in $script:Model.PreflightRecords) {
+            $record.DemandRows.Count | Should -BeGreaterThan 0
+            foreach ($row in $record.DemandRows) {
+                $expected = Get-PreflightRowCost -Row $row
+                $expected | Should -Not -BeNullOrEmpty -Because "slot $($row['Slot']) must have complete class and fixed-model inputs"
+                [math]::Round([double]$row['Projected Cost'], 6) | Should -Be ([math]::Round($expected, 6))
+            }
+        }
+    }
+
+    It 'derives both persisted totals independently from unrounded demand' {
+        [double]$script:Preflight['reserveMultiplier'] | Should -Be 3.0
+        $unrounded = ($script:PreflightRecord[0].DemandRows | ForEach-Object { Get-PreflightRowCost -Row $_ } | Measure-Object -Sum).Sum
+        $expectedProjected = [math]::Round($unrounded, 4)
+        $expectedAdmission = [math]::Round($unrounded * 3.0, 4)
+        [double]$script:Preflight['projectedCostUsd'] | Should -Be $expectedProjected
+        [math]::Round([double]$script:Preflight['admissionCostUsd'], 4) | Should -Be $expectedAdmission
+    }
+
+    It 'derives remaining budget from spend at evaluation time' {
+        $expected = [math]::Max(0.0, [double]$script:Preflight['ceilingUsd'] - [double]$script:Preflight['evaluatedSpendUsd'])
+        [math]::Round([double]$script:Preflight['remainingUsd'], 4) | Should -Be ([math]::Round($expected, 4))
+    }
+
+    It 'matches the readable planned-demand dispatch count' {
+        $count = ($script:PreflightRecord[0].DemandRows | ForEach-Object { [int]$_['Count'] } | Measure-Object -Sum).Sum
+        [int]$script:Preflight['plannedDispatches'] | Should -Be $count
+    }
+
+    It 'records the matching run and round in decisions' {
+        $heading = '(?m)^## Cost Preflight .* ' + [regex]::Escape($script:Preflight['runId']) + ' ' + [regex]::Escape($script:Preflight['roundId']) + '\r?$'
+        $script:Model.Decisions | Should -Match $heading
+    }
+
+    It 'admits only qualified medium-confidence demand' {
+        if ($script:Preflight['decision'] -eq 'within-ceiling') {
+            $script:Preflight['confidence'] | Should -Be 'medium'
+            [double]$script:Preflight['admissionCostUsd'] | Should -BeLessOrEqual ([double]$script:Preflight['remainingUsd'])
+        }
+        elseif ($script:Preflight['decision'] -eq 'approved-over-ceiling') {
+            $script:Preflight['confidence'] | Should -Be 'medium'
+            [double]$script:Preflight['admissionCostUsd'] | Should -BeGreaterThan ([double]$script:Preflight['remainingUsd'])
+            [double]$script:Preflight['evaluatedSpendUsd'] | Should -BeLessThan ([double]$script:Preflight['ceilingUsd'])
+            $script:PreflightRecord[0].PermittedSlots.Count | Should -BeIn @(1, 2)
+        }
+    }
+
+    It 'selects the decision from confidence and independently derived admission cost' {
+        $unrounded = ($script:PreflightRecord[0].DemandRows | ForEach-Object { Get-PreflightRowCost -Row $_ } | Measure-Object -Sum).Sum
+        $admission = [math]::Round($unrounded * 3.0, 4)
+        $expectedDecision = if ($script:Preflight['confidence'] -eq 'low') {
+            'cannot-confirm'
+        }
+        elseif ($admission -gt [double]$script:Preflight['remainingUsd']) {
+            'over-ceiling'
+        }
+        else {
+            'within-ceiling'
+        }
+        if ($script:Preflight['decision'] -eq 'approved-over-ceiling') {
+            $expectedDecision | Should -Be 'over-ceiling'
+        }
+        else {
+            $script:Preflight['decision'] | Should -Be $expectedDecision
+        }
+    }
+
+    It 'uses an eligible calibration for a calibrated admission' {
+        if ($script:Preflight['decision'] -in @('within-ceiling', 'approved-over-ceiling')) {
+            $script:Preflight['basis'] | Should -Be 'calibrated'
+            $script:Model.Observations | Should -BeGreaterThan 0
+            $script:Model.LastReconciled | Should -Not -Be 'never'
+            $script:Model.CalibrationBasis | Should -Be "$($script:Model.RatesObservedOn)|$($script:Model.EstimatorRevision)"
+        }
+    }
+
+    It 'binds every approved over-ceiling round to an unchanged prior denial and human approval' {
+        $records = @($script:Model.PreflightRecords)
+        for ($index = 0; $index -lt $records.Count; $index++) {
+            $record = $records[$index]
+            if ($record.Fields['Decision'] -ne 'approved-over-ceiling') { continue }
+
+            $index | Should -BeGreaterThan 0
+            if ($index -eq 0) { continue }
+
+            $approvedFrom = $record.Fields['Approved From'].Trim('`')
+            $record.Fields['Approval Ref'] | Should -Not -BeNullOrEmpty
+            $prior = @($records[0..($index - 1)] | Where-Object {
+                    $reference = 'decisions.md#cost-preflight-' + $_.Timestamp.ToLowerInvariant().Replace(':', '') + '-' + $_.RunId + '-' + $_.RoundId
+                    $reference -eq $approvedFrom
+                })
+            $prior.Count | Should -Be 1
+            if ($prior.Count -ne 1) { continue }
+
+            $prior[0].Fields['Decision'] | Should -Be 'over-ceiling'
+            $prior[0].PermittedSlots.Count | Should -Be 0
+            foreach ($field in @('Ceiling USD', 'Estimated Spend So Far USD', 'Remaining USD', 'Projected Cost USD', 'Reserve Multiplier', 'Admission Cost USD', 'Confidence', 'Basis', 'Evaluated Dispatch Set')) {
+                $record.Fields[$field] | Should -Be $prior[0].Fields[$field]
+            }
+            ($record.DemandRows | ConvertTo-Json -Depth 5 -Compress) | Should -Be ($prior[0].DemandRows | ConvertTo-Json -Depth 5 -Compress)
+        }
+    }
+
+    It 'links every history entry to an admitted slot from its own round' -Skip:(-not $ExpectDispatches) {
+        foreach ($entry in @($script:Model.PreflightEntries)) {
+            $matching = @($script:Model.PreflightRecords | Where-Object {
+                    $entry.PreflightRef -match ('-' + [regex]::Escape($_.RunId) + '-' + [regex]::Escape($_.RoundId) + '$')
+                })
+            $matching.Count | Should -Be 1
+            $matching[0].Fields['Decision'] | Should -BeIn @('within-ceiling', 'approved-over-ceiling')
+            $matching[0].PermittedSlots | Should -Contain $entry.PreflightSlot
+        }
+    }
+
+    It 'consumes each admitted run round and slot at most once' -Skip:(-not $ExpectDispatches) {
+        $replayed = @($script:Model.PreflightEntries |
+                Where-Object { $_.PreflightRef -and $_.PreflightSlot } |
+                Group-Object -Property { "$($_.PreflightRef)|$($_.PreflightSlot)" } |
+                Where-Object { $_.Count -gt 1 })
+        $replayed.Count | Should -Be 0
+    }
+
+    It 'records no child dispatch for any non-admitting round' {
+        foreach ($record in @($script:Model.PreflightRecords | Where-Object { $_.Fields['Decision'] -in @('over-ceiling', 'cannot-confirm') })) {
+            $suffix = '-' + [regex]::Escape($record.RunId) + '-' + [regex]::Escape($record.RoundId) + '$'
+            @($script:Model.PreflightEntries | Where-Object { $_.PreflightRef -match $suffix }).Count | Should -Be 0
+        }
+    }
+
+    It 'records no child dispatch after accumulated estimated spend reaches the ceiling' {
+        foreach ($record in @($script:Model.PreflightRecords | Where-Object {
+                    $_.Fields['Decision'] -eq 'over-ceiling' -and
+                    [double]$_.Fields['Estimated Spend So Far USD'] -ge [double]$_.Fields['Ceiling USD']
+                })) {
+            $boundary = [datetimeoffset]::Parse($record.Timestamp)
+            $laterEntries = @($script:Model.Entries | Where-Object {
+                    $timestampText = ($_.Title -split '\s+')[0]
+                    $timestamp = [datetimeoffset]::MinValue
+                    [datetimeoffset]::TryParse($timestampText, [ref]$timestamp) -and $timestamp -gt $boundary
+                })
+            $laterEntries.Count | Should -Be 0
+        }
+    }
+}
+
+Describe 'SQ-04a An effectively unset ceiling preserves ungated behavior' -Skip:($model.State['schemaVersion'] -ne '1.4' -or $model.State['currentRun']['costPreflight']['decision'] -ne 'not-requested') {
+    It 'uses the exact compact no-ceiling values' {
+        @($script:Preflight.Keys) -join ',' | Should -Be (@($script:Model.PreflightFields) -join ',')
+        $script:Preflight['runId'] | Should -BeNullOrEmpty
+        $script:Preflight['roundId'] | Should -BeNullOrEmpty
+        $script:Preflight['ceilingUsd'] | Should -BeNullOrEmpty
+        $script:Preflight['remainingUsd'] | Should -BeNullOrEmpty
+        [int]$script:Preflight['plannedDispatches'] | Should -Be 0
+        [double]$script:Preflight['projectedCostUsd'] | Should -Be 0
+        [double]$script:Preflight['admissionCostUsd'] | Should -Be 0
+        $script:Preflight['confidence'] | Should -Be 'not-applicable'
+        $script:Preflight['basis'] | Should -Be 'not-requested'
+        $script:Preflight['reason'] | Should -Be 'No cost ceiling configured.'
+    }
+
+    It 'does not require a readable planned-demand round' {
+        $script:PreflightRecord.Count | Should -Be 0
     }
 }
 
