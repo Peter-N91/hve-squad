@@ -549,9 +549,6 @@ button:hover { border-color: var(--cp-accent); }
 .language-control, .theme-control { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .theme-control input { width: 18px; height: 18px; accent-color: var(--cp-accent); }
 .menu-toggle { display: none; }
-.workshop-links { border-top: 1px solid var(--cp-border); margin-top: 24px; padding-top: 20px; }
-.workshop-links strong { display: block; padding: 0 12px 12px; font-size: 12px; color: var(--cp-text-soft); }
-.workshop-links a { display: block; }
 .host-tabs {
   display: flex;
   width: fit-content;

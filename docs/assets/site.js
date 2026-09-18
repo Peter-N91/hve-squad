@@ -79,21 +79,6 @@
     actions.append(menu, languageLabel, themeLabel);
     nav.append(actions);
 
-    const workshops = document.createElement('div');
-    workshops.className = 'workshop-links';
-    const heading = document.createElement('strong');
-    heading.textContent = french ? 'Ateliers pratiques' : 'Hands-on workshops';
-    workshops.append(heading);
-    for (const [name, url] of [
-      ['onepoint', 'https://peter-n91.github.io/onepoint-hve-squad-workshop/'],
-      ['Qubix', 'https://peter-n91.github.io/hve-squad-workshop/']
-    ]) {
-      const link = document.createElement('a');
-      link.href = url;
-      link.textContent = name;
-      workshops.append(link);
-    }
-    links.append(workshops);
     document.body.classList.add('docs-ready');
   }
 

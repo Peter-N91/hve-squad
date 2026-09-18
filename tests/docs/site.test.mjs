@@ -24,6 +24,13 @@ function openPage(name, { query = '', stored = {}, blockedStorage = false, darkS
   return dom;
 }
 
+function assertNoPartnerWorkshopLinks(document) {
+  for (const link of document.querySelectorAll('a[href]')) {
+    assert.doesNotMatch(link.href, /\/(?:onepoint-)?hve-squad-workshop(?:[/?#]|$)/i,
+      'Documentation must not link to partner-specific workshops');
+  }
+}
+
 for (const name of pages) {
   for (const locale of ['en', 'fr']) {
     const relative = `${locale === 'fr' ? 'fr/' : ''}${name}`;
@@ -31,6 +38,7 @@ for (const name of pages) {
       const dom = openPage(relative, { scripts: false });
       try {
         const document = dom.window.document;
+        assertNoPartnerWorkshopLinks(document);
         assert.equal(document.documentElement.lang, locale);
         assert.equal(document.querySelectorAll('main').length, 1);
         assert.equal(document.querySelectorAll('h1').length, 1);
@@ -63,6 +71,7 @@ for (const name of pages) {
       const dom = openPage(relative, { query: '?host=cli' });
       try {
         const document = dom.window.document;
+        assertNoPartnerWorkshopLinks(document);
         assert.equal(document.querySelectorAll('[role="tab"]').length, 3);
         assert.equal(document.querySelectorAll('[role="tab"][aria-selected="true"]').length, 1);
         assert.equal(document.querySelectorAll('[role="tabpanel"]:not([hidden])').length, 1);
