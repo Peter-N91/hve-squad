@@ -14,9 +14,9 @@
     <p>Le run documenté porte sur <code>hve-squad-modernize-dotnet</code>, une application de gestion de stock volontairement ancienne : bibliothèque, console et 20 tests MSTest sous .NET Framework 4.8. La cible de ce scénario est .NET 10. Il s'agit d'une mise à niveau sur place, pas d'une nouvelle application.</p>
     <p>Préparez le dépôt, hve-squad, la capacité de délégation et le SDK .NET 10. Contrôlez <code>dotnet --version</code>. Sans SDK approprié, l'analyse reste possible mais vous ne pouvez pas revendiquer des builds ou tests exécutés. Aucun déploiement cloud n'est nécessaire ; la consommation Copilot reste distincte.</p>
     <h2>La demande</h2>
-    <p>Confirmez d'abord l'équipe et les spécialistes requis. Dans VS Code :</p>
+    <p>Confirmez d'abord l'équipe et les spécialistes requis, puis envoyez la demande :</p>
     <pre><code>/squad mode=autopilot request="Modernise ce dépôt de .NET Framework 4.8 vers .NET 10. Évalue les projets et dépendances, définis la cible puis réalise la mise à niveau sur place. Préserve le comportement, rends explicites les risques et vérifie les builds et tests. Attends mes décisions aux validations requises."</code></pre>
-    <p>Dans CLI ou App, sélectionnez Squad Coordinator et envoyez les arguments sans <code>/squad</code>. Les résultats ci-dessous sont ceux du parcours d'origine, pas des mesures réalisées par cette documentation.</p>
+    <p>Les résultats ci-dessous sont ceux du parcours d'origine, pas des mesures réalisées par cette documentation.</p>
     <h2>Première escalade</h2>
     <p>Le chercheur a signalé un outillage de délégation manquant et suspendu le travail. L'utilisateur a approuvé une réaffectation au Squad Modernization Planner. La décision a été conservée au lieu d'être masquée par une substitution silencieuse.</p>
     <h2>Analyse et contrôle des risques</h2>

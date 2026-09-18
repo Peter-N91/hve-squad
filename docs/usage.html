@@ -45,12 +45,12 @@
   <main class="content">
     <div class="container">
       <h2>Invoke the coordinator</h2>
-      <p>The reference examples below use VS Code prompt syntax. In CLI or App, select <strong>Squad Coordinator</strong> and send the arguments without <code>/squad</code>. For <code>/squad-federation</code>, select <strong>Squad Federation Coordinator</strong> instead. Other named prompts are separate workflows, not shell commands. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
+      <p>Use the coordinator's conversation for Squad requests, not your system shell. VS Code invokes prompts; CLI and App use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
         <p>
-          <strong>Two entries named <code>squad</code>?</strong> The <code>/</code> picker lists
+          <strong>Two entries named <code>squad</code> in VS Code?</strong> The VS Code <code>/</code> picker lists
           both prompts and skills, and the package ships one of each. Pick the
           <strong>prompt</strong> — described as <em>"Hands a request to the Squad Coordinator…"</em> —
           to actually run the squad. The <strong>skill</strong> — <em>"Operating procedure for the HVE
@@ -316,7 +316,7 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         totals but keeps its aggregate Cost Preflight as <code>not-requested</code>.
       </p>
       <p>
-        Only <code>/squad-federation mode=autopilot</code> without a <code>squad=</code> target applies
+        Only federation-wide <code>mode=autopilot</code> without a <code>squad=</code> target applies
         one aggregate ceiling across all selected inner runs plus federation coordinator and
         root-writer orchestration. It uses the federation root's
         <code>consumption-rates.md</code>, does not also pass the ceiling into child runs, and counts
@@ -506,7 +506,7 @@ admission cost USD = projected cost USD × 3.0</code></pre>
 flowchart TD
     A["Issue labeled squad/auto"] --> B{"Write collaborator?"}
     B -- no --> X["Ignored, comment left on issue"]
-    B -- yes --> C["Copilot CLI runs /squad mode=autopilot"]
+    B -- yes --> C["Copilot CLI runs Squad Coordinator with mode=autopilot"]
     C --> D["Profile inferred from the issue (fallback: default)"]
     D --> E["Research, Plan, Implement, Review"]
     E --> F{"Impactful or Risk Gate?"}
@@ -830,13 +830,13 @@ flowchart TD
       <p>
         If you started on an older version with a <strong>single squad</strong> and now want the
         federation shape for a more complex, multi-team or multi-domain project, you do not start over.
-        <code>/squad-federation promote</code> <strong>adopts your existing squad into a federation as
+        Promotion <strong>adopts your existing squad into a federation as
         its first sub-squad</strong>, moving its state intact rather than rebuilding it.
       </p>
       <pre><code># Promote the current single squad into a federation
 /squad-federation promote
 
-# (Or just ask on /squad and accept the handoff it offers)
+# Or ask the Squad Coordinator and accept its handoff
 /squad request="I want to move this squad to a federation"</code></pre>
       <p>
         Promotion runs a <strong>propose &rarr; confirm &rarr; migrate &rarr; seed &rarr; route</strong>
@@ -858,7 +858,7 @@ flowchart TD
 
       <h3>Add a sub-squad to an existing federation</h3>
       <p>
-        Federations grow. Once a federation exists, <code>/squad-federation init</code> (or just asking
+        Federations grow. Once a federation exists, sending <code>init</code> to its coordinator (or just asking
         to add a sub-squad) runs <strong>Expansion Mode</strong> &mdash; the same <code>init</code>
         entry point <em>builds</em> a federation on a fresh project and <em>expands</em> one that
         already exists.
@@ -874,11 +874,9 @@ flowchart TD
         sub-squad is routable by <code>squad=&lt;new&gt;</code> or by meta-routing keyword.
       </p>
       <p>
-        Autonomy modes work <em>inside</em> a targeted sub-squad &mdash;
-        <code>/squad-federation squad=azure mode=autopilot request="…"</code> runs that one sub-squad's
-        full pipeline (forward-only, exactly as before). Drop the <code>squad=</code> target and
-        <code>/squad-federation mode=autopilot request="…"</code> now runs a <strong>federation-wide
-        autopilot</strong>: it orders the selected sub-squads by dependency (confirmed at the first
+        Autonomy modes work <em>inside</em> a targeted sub-squad. With <code>squad=azure</code>,
+        autopilot runs that one sub-squad's full pipeline. Drop the <code>squad=</code> target
+        for <strong>federation-wide autopilot</strong>: it orders the selected sub-squads by dependency (confirmed at the first
         gate), runs each one's standard autopilot in turn, lifts every Impactful-Action and Risk Gate to
         the federation level (attributed to the sub-squad that raised it), applies one aggregate
         <code>cost-ceiling</code> with the lifecycle and bounded approval behavior described in
@@ -886,6 +884,11 @@ flowchart TD
         consolidated final-outcome validation. Each
         sub-squad's inner pipeline is unchanged, and it never auto-releases.
       </p>
+        <pre><code># Target one existing sub-squad
+      /squad-federation squad=azure mode=autopilot request="implement the approved infrastructure plan"
+
+      # Or coordinate the work across the federation
+      /squad-federation mode=autopilot request="implement the approved cross-squad plan"</code></pre>
       <h2>Promote a learning (<code>/squad-learn</code>)</h2>
       <p>
         Live agent memory always stays local to each consumer. When a squad run surfaces a durable,
@@ -1218,9 +1221,9 @@ flowchart TD
         <code>.github/skills/squad/mcp.template.json</code> into your
         <code>.vscode/mcp.json</code> and reload VS Code. The server authenticates via
         <code>az login</code> (<code>DefaultAzureCredential</code>) — no stored secrets. You can
-        ask the coordinator to scaffold this for you: <code>/squad request="merge the squad MCP
-        template into my workspace"</code>.
+        ask the coordinator to scaffold this for your VS Code workspace:
       </p>
+      <pre><code>/squad request="merge the squad MCP template into my VS Code workspace"</code></pre>
 
       <h2>Backlog writes (Azure DevOps and Jira)</h2>
       <p>
@@ -1230,7 +1233,9 @@ flowchart TD
         approve, then write.
       </p>
       <ol>
-        <li><strong>Ask.</strong> With a planned backlog in hand, ask the squad to create the items (for example, <code>/squad request="create these work items in Azure DevOps"</code>).</li>
+        <li><strong>Ask.</strong> With a planned backlog in hand, ask the squad to create the items:
+          <pre><code>/squad request="create these work items in Azure DevOps"</code></pre>
+        </li>
         <li><strong>Accept the role.</strong> If your squad does not carry <code>backlog-executor</code>, the coordinator offers to add it and names the tracker and project it would write to.</li>
         <li><strong>Review the preview.</strong> The role reads your handoff file and shows every item it would create or update &mdash; type, title, parent, target project, and the fields it would set &mdash; plus the total count. Nothing has been written yet.</li>
         <li><strong>Check the warnings.</strong> It also searches the live tracker for items that already match and flags probable duplicates with their existing IDs, and it strips internal planning references out of the outbound text so no tracking paths or placeholder IDs land in your backlog.</li>
@@ -1363,10 +1368,9 @@ layouts:
         generated" and "it looks great."
       </p>
       <p>
-        After that, a request as simple as
-        <code>/squad request="build a 6-slide overview deck for the booking service"</code> produces an
-        on-brand deck without any per-request template wiring.
+        After that, request an on-brand deck without any per-request template wiring:
       </p>
+      <pre><code>/squad request="build a 6-slide overview deck for the booking service"</code></pre>
 
       <h2>Run cost ledger</h2>
       <p>
@@ -1417,7 +1421,7 @@ layouts:
         invocation model that works everywhere.
       </p>
 
-      <table>
+      <table data-host-reference>
         <thead>
           <tr><th>Entry point</th><th>VS Code</th><th>Copilot CLI and Copilot app</th></tr>
         </thead>
