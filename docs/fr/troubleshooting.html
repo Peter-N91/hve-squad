@@ -41,7 +41,7 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
     <h3>Une nouvelle demande garde l'ancien plafond</h3>
     <p>Dans le même run, l'omission signifie héritage. Remplacez la valeur ou retirez-la explicitement :</p>
     <pre><code>/squad request="Continue sans plafond de coût" cost-ceiling=unset</code></pre>
-    <p>Dans CLI ou App, envoyez les arguments au coordinateur sans <code>/squad</code>. Un nouveau run sans plafond fourni démarre avec <code>not-requested</code>.</p>
+    <p>Un nouveau run sans plafond fourni démarre avec <code>not-requested</code>.</p>
     <h3>Le dernier appel a dépassé la limite</h3>
     <p>Un appel en cours ne peut pas être interrompu par ce contrôle. Le Scribe enregistre son coût, puis aucune unité suivante ne démarre. Relevez la limite au-dessus du cumul, retirez-la, réduisez le travail ou démarrez un nouveau run. Un plafond de 10 USD avec 10,80 USD déjà estimés laisse zéro budget disponible.</p>
     <h3>Chaque sous-squad reçoit le plafond</h3>

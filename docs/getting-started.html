@@ -42,7 +42,8 @@
 
   <main class="content">
     <div class="container">
-      <div class="host-guide">
+      <h2>1. Install for your environment</h2>
+      <div class="host-guide installation-guide">
       <section data-host="cli">
         <h2>Copilot CLI</h2>
         <p>Install GitHub Copilot CLI, sign in with an account that has Copilot access, and open a terminal in your own project repository. Install both marketplace entries:</p>
@@ -50,12 +51,7 @@
 copilot plugin install hve-squad@hve-squad-plugin
 copilot plugin install hve-squad-hve-core@hve-squad-plugin
 copilot</code></pre>
-        <h3>Select the coordinator</h3>
-        <p>Enter <code>/agent</code> and choose <strong>Squad Coordinator</strong> (possibly displayed as <code>hve-squad:squad-coordinator</code>). Send the following in that agent's conversation, not in your shell:</p>
-        <pre><code>init</code></pre>
-        <p>Review and confirm the proposed profile and roster. Then send a separate request:</p>
-        <pre><code>request="add input validation to the login form" mode="autopilot"</code></pre>
-        <p>Autopilot coordinates the requested work; it does not bypass approvals or expand scope. Keep initialization and promotion interactive. To resume, ask the coordinator to inspect the current state and propose the next step.</p>
+  <p>In the agent picker, Squad Coordinator may be displayed as <code>hve-squad:squad-coordinator</code>. Continue with initialization below after checking the installation.</p>
         <h3>Check agent availability</h3>
         <p>Ask the coordinator to run <code>squad-doctor</code> before dispatching work. The plugin distribution can lack HVE Core domains. If the report identifies missing domains, use the documented full-package remedy in your repository:</p>
         <pre><code>apm install github/microsoft/hve-core --target copilot</code></pre>
@@ -65,18 +61,13 @@ copilot</code></pre>
         <h2>Copilot App</h2>
         <p>Open your project in the GitHub Copilot desktop app and sign in with Copilot access. In the app's plugin settings, register <code>Peter-N91/hve-squad-plugin</code> and install both <code>hve-squad</code> and <code>hve-squad-hve-core</code>. Names and settings locations can vary by app version; follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">desktop installation guide</a>.</p>
         <p>Verify the pair is installed in the app itself. A terminal installation may use a different <code>COPILOT_HOME</code> and does not prove the app has the same plugins.</p>
-        <h3>Start an agent conversation</h3>
-        <p>Select <strong>Squad Coordinator</strong> in the agent picker, possibly listed as <code>hve-squad:squad-coordinator</code>. Choose the agent, not a similarly named skill. Send:</p>
-        <pre><code>init</code></pre>
-        <p>Confirm the proposed profile and roster, then send your goal separately:</p>
-        <pre><code>request="add input validation to the login form" mode="autopilot"</code></pre>
-        <p>Keep initialization and promotion interactive. Autopilot never replaces required human approvals. Ask for <code>squad-doctor</code> and resolve missing agents before work starts; the <a href="https://peter-n91.github.io/hve-squad-plugin/">plugin documentation</a> records current domain gaps and the full APM package remedy.</p>
+        <p>Look for the <strong>Squad Coordinator</strong> agent, possibly listed as <code>hve-squad:squad-coordinator</code>, not a similarly named skill. Ask for <code>squad-doctor</code> and resolve missing agents before work starts; the <a href="https://peter-n91.github.io/hve-squad-plugin/">plugin documentation</a> records current domain gaps and the full APM package remedy.</p>
         <p>Do not add a second, official <code>hve-core</code> plugin alongside the companion. Update both entries in the app's plugin home, reinstalling <code>hve-squad-hve-core</code> when its pin changes.</p>
       </section>
       <section data-host="vscode">
       <h2>VS Code</h2>
       <p>Open your project in VS Code with GitHub Copilot Chat enabled and authenticated. This route installs the full cast into the repository through APM.</p>
-      <h2>Prerequisites</h2>
+      <h3>Prerequisites</h3>
       <ul>
         <li>PowerShell 7+</li>
         <li>Git</li>
@@ -85,7 +76,7 @@ copilot</code></pre>
         <li>Authenticated GitHub access (<code>gh auth login</code> or <code>GITHUB_TOKEN</code>) — strongly recommended; see the note in step 1</li>
       </ul>
 
-      <h2>1. Install the package</h2>
+      <h3>Install the package</h3>
       <p>Run <code>apm install</code> from the root of the project you want the squad in.</p>
       <p>Replace <code>vX.Y.z</code> in the examples with a published tag from <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>.</p>
 
@@ -146,17 +137,25 @@ targets:
         </p>
       </div>
 
-      <h2>2. Run the squad</h2>
+      <h3>Re-deploy after an update</h3>
+      <p>Re-run install with the published tag you want, including <code>--target copilot</code> unless your project declares <code>targets:</code>:</p>
+      <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+      <p>To test merged work before release, use the rolling <code>vX.Y.z-pre</code> tag shown on <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>. That tag moves; pin a stable release for work you depend on. Reinstallation refreshes <code>.github/</code>, not your state under <code>.copilot-tracking/squad/</code>.</p>
+      </section>
+      </div>
+
+      <h2>2. Initialize the squad</h2>
       <p>
         The squad is a user-invocable Squad Coordinator that routes your request to a cast of HVE
-        Core agents and persists its state under <code>.copilot-tracking/squad/</code>. Invoke it
-        with the <code>/squad</code> prompt in Copilot Chat. Initialize and confirm the proposed team first:
+        Core agents and persists its state under <code>.copilot-tracking/squad/</code>.
+        Initialize and confirm the proposed team first:
       </p>
       <pre><code>/squad init</code></pre>
+      <h2>3. Send a work request</h2>
       <p>After confirmation, send a separate work request. Use <code>mode=autopilot</code> to sequence the work while keeping required human approvals, or omit it to approve each step:</p>
       <pre><code>/squad request="add input validation to the login form" mode=autopilot</code></pre>
       <p>
-        The <code>/</code> picker shows two entries named <code>squad</code>: the <strong>prompt</strong>
+        In VS Code, the <code>/</code> picker shows two entries named <code>squad</code>: the <strong>prompt</strong>
         (<em>"Hands a request to the Squad Coordinator…"</em>), which runs the squad, and the
         <strong>skill</strong> (<em>"Operating procedure for…"</em>), which only loads the procedure as
         context. Pick the prompt.
@@ -185,27 +184,6 @@ targets:
         full lifecycle and examples.
       </p>
 
-      <h2>3. Rebuild (re-deploy) after updating</h2>
-      <p>
-        To pull a newer version of the package or refresh your deployed assets, re-run install with
-        the version tag you want (include <code>--target copilot</code> if you have not declared
-        <code>targets:</code> in your project's <code>apm.yml</code>):
-      </p>
-      <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
-      <p>
-        To try something that has been merged but not released yet, install the rolling pre-release
-        instead &mdash; <code>apm install "Peter-N91/hve-squad#vX.Y.z-pre"</code>. Its exact tag is on
-        the <a href="https://github.com/Peter-N91/hve-squad/releases">Releases page</a>, marked as a
-        pre-release. The tag moves on every merge, so use it to test and pin a released version for
-        anything you depend on.
-      </p>
-      <p>
-        <code>apm install</code> re-flattens the package into <code>.github/</code>. Your squad
-        <strong>state</strong> under <code>.copilot-tracking/squad/</code> is created per-project and
-        is never packaged, so re-installing does not overwrite your roster, routing, decisions, or
-        history.
-      </p>
-
       <h2>Optional: scaffold the Azure execution layer</h2>
       <p>
         If you seed the <code>azure</code> profile, the squad can scaffold an Azure build-and-deploy
@@ -220,8 +198,6 @@ targets:
         <li>The Azure CLI (<code>az</code>) and GitHub CLI (<code>gh</code>) — both provided by the bundled dev container.</li>
       </ul>
       <p>See <a href="usage.html">Usage → Azure execution layer</a> for the full scaffolding flow.</p>
-      </section>
-      </div>
 
       <div class="pager">
         <a class="prev" href="index.html">

@@ -15,7 +15,7 @@
     <p>Le périmètre porte sur l'étude et les fichiers de préparation, sans déploiement Azure. Vérifiez les agents disponibles et, pour les diagrammes avec icônes, Python ou uv et Graphviz. Mermaid reste possible sans ce rendu.</p>
     <div class="callout warn"><p><strong>Un dossier ignoré par Git ne suffit pas à empêcher une fuite.</strong> Les documents privés sont un contexte de lecture ; examinez aussi les livrables et le diff pour vérifier qu'aucune donnée confidentielle n'a été reproduite.</p></div>
     <h2>La demande</h2>
-    <p>Initialisez et confirmez d'abord l'équipe. Dans VS Code :</p>
+    <p>Initialisez et confirmez d'abord l'équipe, puis envoyez la demande :</p>
     <pre><code>/squad profile=azure mode=autopilot request="Planifie et prépare la migration de ce projet depuis l'environnement local vers Azure.
 
 Contexte : lis les définitions de processus du dépôt et ./knowledge-docs pour comprendre le besoin.
@@ -23,7 +23,6 @@ Contexte : lis les définitions de processus du dépôt et ./knowledge-docs pour
 Livrables : architecture cible justifiée, plan de migration concret, IaC sous infra/, estimation des coûts, revue de sécurité, HLD Mermaid et LLD avec icônes si l'outillage est disponible.
 
 Contraintes : ./knowledge-docs est privé. Ne reproduis pas son contenu dans les fichiers suivis, livrables ou sorties à publier. Aucun déploiement. Arrête-toi sur les blocages et attends ma décision."</code></pre>
-    <p>Dans CLI ou App, sélectionnez Squad Coordinator et envoyez ces paramètres sans <code>/squad</code>.</p>
     <h2>Résultats du parcours d'origine</h2>
     <p>Ces observations décrivent le run documenté, pas une garantie de résultats identiques dans votre projet :</p>
     <table><thead><tr><th>Étape</th><th>Livrable observé</th><th>État</th></tr></thead><tbody>

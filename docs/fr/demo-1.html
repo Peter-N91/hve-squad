@@ -17,7 +17,7 @@
     <p>Mermaid convient sans outillage supplémentaire. Pour produire des images PNG/SVG avec le skill <code>python-diagrams</code>, prévoyez Python ou <code>uv</code> et Graphviz. Vérifiez <code>dot -V</code> avant la session. En l'absence de ces outils, conservez Mermaid.</p>
     <h2>0. Initialiser</h2>
     <pre><code>/squad init profile=azure</code></pre>
-    <p>Confirmez l'équipe proposée. Dans CLI ou App, sélectionnez Squad Coordinator et envoyez <code>init profile=azure</code>. Les demandes suivantes s'envoient au même agent, sans le préfixe <code>/squad</code>.</p>
+    <p>Confirmez l'équipe proposée avant d'envoyer les demandes de travail.</p>
     <h2>1. Estimer le coût</h2>
     <pre><code>/squad request="Estime le coût mensuel Azure d'une petite application interne en West Europe : frontend et backend App Service, Azure SQL, Key Vault et Storage, avec réseau privé. L'objectif est moins de 60 USD par mois. Donne une estimation indicative et les compromis nécessaires, sans promettre que cette architecture respecte ce budget."</code></pre>
     <p>Examinez les hypothèses de dimensionnement, région, disponibilité et réseau. Le budget est une contrainte à tester, pas un coût garanti. Le plafond de consommation des modèles est un mécanisme distinct.</p>

@@ -550,8 +550,9 @@ button:hover { border-color: var(--cp-accent); }
 .theme-control input { width: 18px; height: 18px; accent-color: var(--cp-accent); }
 .menu-toggle { display: none; }
 .host-tabs {
-  display: flex;
-  width: fit-content;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 360px;
   max-width: 100%;
   gap: 4px;
   padding: 4px;
@@ -560,11 +561,15 @@ button:hover { border-color: var(--cp-accent); }
   background: var(--cp-surface-soft);
   margin-bottom: 20px;
 }
-.host-tabs button { border: 0; background: none; font-size: 13px; min-height: 40px; }
+.host-tabs button { border: 0; background: none; font-size: 13px; min-height: 40px; padding: 8px; }
 .host-tabs button[aria-selected="true"] { background: var(--cp-surface); color: var(--cp-accent); font-weight: 700; }
-.host-summary { margin-top: 24px; }
-.host-summary [role="tabpanel"] { border-left: 3px solid var(--cp-accent); padding: 4px 20px; font-size: 14px; max-width: 780px; }
-.host-summary p { margin: 0 0 8px; color: var(--cp-text-muted); }
+.command-example { margin: 20px 0 28px; min-width: 0; }
+.command-example .host-tabs { margin-bottom: 12px; }
+.command-example .command-instruction { font-size: 14px; margin: 12px 0 8px; color: var(--cp-text-muted); }
+.command-example .command-note { font-size: 14px; white-space: pre-line; color: var(--cp-text-muted); }
+.command-example pre { margin: 8px 0 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.command-example pre code { overflow-wrap: anywhere; }
+.installation-guide { margin-bottom: 32px; }
 .host-guide > section > h2:first-child { margin-top: 12px; border-top: 0; }
 .language-link { font-size: 14px; }
 .grid, .demo-hub { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }

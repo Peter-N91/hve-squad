@@ -82,49 +82,121 @@
     document.body.classList.add('docs-ready');
   }
 
-  if (!document.querySelector('.host-guide')) {
-    const container = document.querySelector('.hero .container');
-    if (container) {
-      const guide = document.createElement('div');
-      guide.className = 'host-guide host-summary';
-      const descriptions = french ? {
-        cli: 'Dans Copilot CLI, saisissez /agent et choisissez Squad Coordinator. Envoyez votre demande dans sa conversation, sans le pr\u00e9fixe /squad.',
-        app: 'Dans Copilot App, ouvrez votre projet et choisissez Squad Coordinator dans le s\u00e9lecteur d\u2019agents. Envoyez votre demande, sans le pr\u00e9fixe /squad.',
-        vscode: 'Dans Copilot Chat, choisissez le prompt /squad, et non le skill du m\u00eame nom. Les exemples de r\u00e9f\u00e9rence utilisent cette syntaxe.'
-      } : {
-        cli: 'In Copilot CLI, enter /agent and choose Squad Coordinator. Send your request in its conversation, without the /squad prefix.',
-        app: 'In Copilot App, open your project and choose Squad Coordinator in the agent picker. Send your request without the /squad prefix.',
-        vscode: 'In Copilot Chat, choose the /squad prompt, not the similarly named skill. Reference examples use this syntax.'
-      };
-      for (const host of ['cli', 'app', 'vscode']) {
-        const panel = document.createElement('section');
-        panel.dataset.host = host;
-        const paragraph = document.createElement('p');
-        paragraph.textContent = descriptions[host];
-        const setup = document.createElement('a');
-        setup.href = `getting-started.html?host=${host}`;
-        setup.textContent = french ? 'Installation et premi\u00e8re demande' : 'Installation and first request';
-        panel.append(paragraph, setup);
-        guide.append(panel);
+  const agents = {
+    '/squad': 'Squad Coordinator',
+    '/squad-federation': 'Squad Federation Coordinator',
+    '/squad-document': 'Squad Document',
+    '/squad-governance-report': 'Squad Governance Report',
+    '/squad-learn': 'Squad Learn'
+  };
+  const commandPattern = /^[ \t]*(\/squad(?:-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
+  const defaultRequests = french ? {
+    '/squad': 'Initialise la squad.',
+    '/squad-federation': 'Initialise la f\u00e9d\u00e9ration.',
+    '/squad-governance-report': 'G\u00e9n\u00e8re le rapport de gouvernance avec les param\u00e8tres par d\u00e9faut.',
+    '/squad-learn': 'Aide-moi \u00e0 proposer un apprentissage partag\u00e9.'
+  } : {
+    '/squad': 'Initialize the squad.',
+    '/squad-federation': 'Initialize the federation.',
+    '/squad-governance-report': 'Generate the governance report with default settings.',
+    '/squad-learn': 'Help me propose a shared learning.'
+  };
+  const parseExample = text => {
+    const requests = [];
+    let current;
+    let quoted = false;
+    let notes = [];
+    for (const line of text.split('\n')) {
+      if (!quoted && (!line.trim() || line.trimStart().startsWith('#'))) {
+        if (line.trim()) notes.push(line.trimStart().slice(1).trim());
+        continue;
       }
-      container.append(guide);
+      const match = !quoted && line.match(commandPattern);
+      if (match) {
+        current = { command: match[1], lines: [match[2]], notes };
+        requests.push(current);
+        notes = [];
+      } else if (current && quoted) {
+        current.lines.push(line);
+      } else {
+        return [];
+      }
+      for (let index = 0; index < line.length; index++) {
+        if (line[index] === '\\') { index++; continue; }
+        if (line[index] === '"') quoted = !quoted;
+      }
     }
-  }
+    if (quoted || notes.length) return [];
+    return requests;
+  };
 
+  document.querySelectorAll('pre > code').forEach(code => {
+    if (code.closest('[data-host-reference]')) return;
+    const requests = parseExample(code.textContent);
+    if (!requests.length) return;
+    const original = code.parentElement;
+    const guide = document.createElement('div');
+    guide.className = 'host-guide command-example';
+    for (const host of ['cli', 'app', 'vscode']) {
+      const panel = document.createElement('section');
+      panel.dataset.host = host;
+      if (host === 'vscode') {
+        const instruction = document.createElement('p');
+        instruction.className = 'command-instruction';
+        instruction.textContent = french
+          ? 'Dans Copilot Chat, choisissez le prompt (pas le skill). Envoyez chaque demande s\u00e9par\u00e9ment.'
+          : 'In Copilot Chat, choose the prompt (not the skill). Send each request separately.';
+        panel.append(instruction, original.cloneNode(true));
+      } else {
+        requests.forEach(request => {
+          const instruction = document.createElement('p');
+          instruction.className = 'command-instruction';
+          instruction.textContent = host === 'cli'
+            ? (french ? 'Dans Copilot CLI, saisissez /agent et choisissez ' : 'In Copilot CLI, enter /agent and choose ')
+            : (french ? 'Dans Copilot App, choisissez ' : 'In Copilot App, select ');
+          const agent = document.createElement('strong');
+          agent.textContent = agents[request.command];
+          instruction.append(agent, french ? '. Envoyez dans sa conversation :' : '. Send in its conversation:');
+          if (request.notes.length) {
+            const note = document.createElement('p');
+            note.className = 'command-note';
+            note.textContent = request.notes.join('\n');
+            panel.append(note);
+          }
+          const pre = document.createElement('pre');
+          const input = document.createElement('code');
+          input.textContent = request.lines.join('\n') || defaultRequests[request.command];
+          pre.append(input);
+          panel.append(instruction, pre);
+        });
+      }
+      guide.append(panel);
+    }
+    original.replaceWith(guide);
+  });
+
+  const selections = [];
   document.querySelectorAll('.host-guide').forEach((guide, guideIndex) => {
     const panels = [...guide.querySelectorAll(':scope > [data-host]')];
     const tablist = document.createElement('div');
     tablist.className = 'host-tabs';
     tablist.setAttribute('role', 'tablist');
     tablist.setAttribute('aria-label', document.documentElement.lang === 'fr' ? 'Environnement Copilot' : 'Copilot environment');
-    const activate = (host, focus = false) => {
+    const select = (host, focus = false) => {
       panels.forEach((panel, index) => {
         const selected = panel.dataset.host === host;
         panel.hidden = !selected;
         tabs[index].setAttribute('aria-selected', String(selected));
         tabs[index].tabIndex = selected ? 0 : -1;
-        if (selected && focus) tabs[index].focus();
+        if (selected && focus) tabs[index].focus({ preventScroll: true });
       });
+    };
+    const activate = (host, focus = false, preservePosition = true) => {
+      const previousTop = tablist.getBoundingClientRect().top;
+      selections.forEach(update => update(host));
+      select(host, focus);
+      const offset = tablist.getBoundingClientRect().top - previousTop;
+      if (preservePosition && offset) window.scrollBy({ top: offset, behavior: 'instant' });
       savePreference('host', host);
       const url = new URL(location.href);
       if (url.searchParams.has('host')) {
@@ -159,7 +231,8 @@
       return tab;
     });
     guide.prepend(tablist);
+    selections.push(select);
     const requested = new URLSearchParams(location.search).get('host') || readPreference('host', 'vscode');
-    activate(panels.some(panel => panel.dataset.host === requested) ? requested : 'vscode');
+    activate(panels.some(panel => panel.dataset.host === requested) ? requested : 'vscode', false, false);
   });
 })();
