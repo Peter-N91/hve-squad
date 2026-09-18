@@ -6,7 +6,10 @@
   <title>Troubleshooting — hve-squad</title>
   <meta name="description" content="Known install and squad-operation issues with copy-paste fixes, cost-ceiling recovery, versioning, and repository notes." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <script src="assets/theme.js"></script>
   <link rel="stylesheet" href="assets/style.css" />
+  <script src="assets/site.js" defer></script>
+  <link rel="alternate" hreflang="fr" href="fr/troubleshooting.html" />
 </head>
 <body>
   <nav class="nav">
@@ -22,6 +25,7 @@
         <a href="troubleshooting.html" class="active">Troubleshooting</a>
         <a href="contributing.html">Contributing</a>
         <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="fr/troubleshooting.html" lang="fr">Fran&ccedil;ais</a>
       </div>
     </div>
   </nav>
@@ -37,6 +41,8 @@
   <main class="content">
     <div class="container">
       <h2>Common issues</h2>
+      <h3>CLI or App cannot find the coordinator or a specialist</h3>
+      <p>Confirm that both <code>hve-squad</code> and <code>hve-squad-hve-core</code> are installed in the current client's plugin home. Select the coordinator agent, not a skill, then ask for <code>squad-doctor</code>. Follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">plugin guide</a> for missing domains and companion reinstalls. A terminal update does not update an app using another <code>COPILOT_HOME</code>.</p>
 
       <h3>First <code>apm install</code> takes 30+ minutes (but never errors)</h3>
       <p>

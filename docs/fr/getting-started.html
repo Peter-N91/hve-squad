@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bien démarrer | hve-squad</title>
+  <meta name="description" content="Installer hve-squad dans Copilot CLI, Copilot App ou VS Code et lancer votre première demande." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../getting-started.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner">
+    <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+    <div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html" class="active">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../getting-started.html" lang="en">English</a></div>
+  </div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Guide utilisateur</div><h1>Bien démarrer</h1><p class="lead">Installez hve-squad dans votre environnement Copilot, choisissez le coordinateur et envoyez votre première demande.</p></div></header>
+  <main class="content"><div class="container">
+    <div class="host-guide">
+      <section data-host="cli">
+        <h2>Copilot CLI</h2>
+        <p>Installez GitHub Copilot CLI, connectez-vous avec un compte disposant d'un accès Copilot et ouvrez un terminal à la racine de votre projet. Installez les deux entrées du marketplace :</p>
+        <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
+copilot plugin install hve-squad@hve-squad-plugin
+copilot plugin install hve-squad-hve-core@hve-squad-plugin
+copilot</code></pre>
+        <h3>Choisir le coordinateur</h3>
+        <p>Saisissez <code>/agent</code>, puis choisissez <strong>Squad Coordinator</strong>. Selon la version, le nom peut être <code>hve-squad:squad-coordinator</code>. Envoyez ensuite ceci dans la conversation de cet agent, pas dans le terminal système :</p>
+        <pre><code>init</code></pre>
+        <p>Examinez le profil et les rôles proposés, puis confirmez. Envoyez votre objectif dans une demande séparée :</p>
+        <pre><code>request="Ajoute une validation des champs au formulaire de connexion" mode="autopilot"</code></pre>
+        <p>Autopilot coordonne le travail demandé sans élargir le périmètre ni contourner les approbations. L'initialisation et la promotion restent interactives. Pour reprendre, demandez au coordinateur d'examiner l'état actuel et de proposer la prochaine étape.</p>
+        <h3>Vérifier les agents disponibles</h3>
+        <p>Demandez au coordinateur d'exécuter <code>squad-doctor</code> avant le travail. Certains domaines HVE Core peuvent manquer dans la distribution plugin. Si le diagnostic le signale, installez le package complet dans le dépôt :</p>
+        <pre><code>apm install github/microsoft/hve-core --target copilot</code></pre>
+        <p>Ne cumulez pas le plugin officiel <code>hve-core</code> et <code>hve-squad-hve-core</code> : le routage pourrait choisir une copie non épinglée.</p>
+        <h3>Mettre les plugins à jour</h3>
+        <pre><code>copilot plugin marketplace update Peter-N91/hve-squad-plugin
+copilot plugin update hve-squad@hve-squad-plugin
+copilot plugin uninstall hve-squad-hve-core@hve-squad-plugin
+copilot plugin install hve-squad-hve-core@hve-squad-plugin</code></pre>
+        <p>Le plugin compagnon doit être désinstallé puis réinstallé : une simple mise à jour peut afficher <code>already at latest</code> alors que son commit épinglé a changé. Consultez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">guide CLI du plugin (anglais)</a>.</p>
+      </section>
+      <section data-host="app">
+        <h2>Copilot App</h2>
+        <p>Ouvrez votre projet dans l'application de bureau GitHub Copilot et connectez-vous. Dans les paramètres des plugins, ajoutez le marketplace <code>Peter-N91/hve-squad-plugin</code>, puis installez <strong>les deux entrées</strong> : <code>hve-squad</code> et <code>hve-squad-hve-core</code>.</p>
+        <p>Les libellés et l'emplacement des paramètres dépendent de la version. Le <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">guide d'installation de l'application (anglais)</a> décrit le chemin actuel.</p>
+        <div class="callout"><p><strong>Vérifiez l'installation dans l'application.</strong> Elle peut utiliser un autre <code>COPILOT_HOME</code> que votre terminal. Une installation ou une mise à jour en ligne de commande ne prouve pas que l'application utilise les mêmes fichiers.</p></div>
+        <h3>Démarrer la conversation</h3>
+        <p>Choisissez l'agent <strong>Squad Coordinator</strong>, éventuellement nommé <code>hve-squad:squad-coordinator</code>, et non le skill du même nom. Envoyez :</p>
+        <pre><code>init</code></pre>
+        <p>Confirmez le profil et les rôles, puis formulez votre objectif séparément :</p>
+        <pre><code>request="Ajoute une validation des champs au formulaire de connexion" mode="autopilot"</code></pre>
+        <p>Gardez l'initialisation et la promotion interactives. Les actions importantes attendent toujours une approbation humaine. Demandez <code>squad-doctor</code> et résolvez les agents manquants avant le travail ; la <a href="https://peter-n91.github.io/hve-squad-plugin/">documentation du plugin (anglais)</a> indique les limites et le recours au package APM complet.</p>
+        <p>Ne cumulez pas le plugin officiel <code>hve-core</code> avec le compagnon. Mettez les deux entrées à jour dans l'environnement de l'application et réinstallez <code>hve-squad-hve-core</code> lorsque son commit épinglé change.</p>
+      </section>
+      <section data-host="vscode">
+        <h2>VS Code</h2>
+        <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. APM installe les agents, prompts, instructions et skills dans le dossier <code>.github/</code> du projet.</p>
+        <h3>Prérequis</h3>
+        <ul><li>PowerShell 7 ou version ultérieure et Git.</li><li>APM CLI installé et accessible dans <code>PATH</code>.</li><li>Accès au dépôt public <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a>.</li><li>Authentification GitHub, de préférence avec <code>gh auth login</code>.</li></ul>
+        <h3>1. Installer le package</h3>
+        <p>Exécutez ces commandes à la racine de votre projet. Remplacez <code>vX.Y.z</code> par un tag publié sur la page <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>.</p>
+        <pre><code>gh auth login
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+        <p>Sans authentification, la limite GitHub de 60 requêtes par heure peut rendre l'installation très lente. L'authentification augmente généralement cette limite à 5 000 requêtes par heure. N'insérez pas vos jetons dans les conversations.</p>
+        <div class="callout warn"><p><strong>APM 0.18.0 et versions ultérieures :</strong> sans environnement détecté, l'installation peut télécharger les sources dans <code>apm_modules/</code> puis s'arrêter avec <code>No harness detected</code>. Utilisez <code>--target copilot</code> ou déclarez la cible dans le fichier du projet :</p></div>
+        <pre><code>name: my-project
+version: 0.1.0
+targets:
+  - copilot</code></pre>
+        <p>Avec ce bloc dans <code>apm.yml</code>, les installations suivantes n'ont plus besoin de l'option de cible. Relancez <code>apm install</code> après un échec pour déployer les sources déjà téléchargées. Les scripts <code>sync-deps</code> et <code>install-sync</code> sont réservés aux mainteneurs.</p>
+        <h3>2. Initialiser et lancer la squad</h3>
+        <p>Dans Copilot Chat, choisissez le <strong>prompt</strong> <code>/squad</code> décrit par « Hands a request to the Squad Coordinator… », pas le skill « Operating procedure for… ».</p>
+        <pre><code>/squad init</code></pre>
+        <p>Le coordinateur examine votre dépôt et propose un profil. Confirmez les rôles avant la création des fichiers d'état. Envoyez ensuite :</p>
+        <pre><code>/squad request="Ajoute une validation des champs au formulaire de connexion" mode="autopilot"</code></pre>
+        <p>Omettez <code>mode</code> pour approuver chaque étape. Autopilot enchaîne le travail mais conserve les validations humaines obligatoires.</p>
+        <h3>3. Mettre à jour</h3>
+        <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+        <p>Choisissez le nouveau tag publié. La préversion glissante <code>vX.Y.z-pre</code> sert aux essais : elle change à chaque fusion. Sans référence, APM suit la branche par défaut, pas nécessairement la dernière version stable.</p>
+        <p>L'installation renouvelle les ressources dans <code>.github/</code>, pas votre équipe ni vos décisions dans <code>.copilot-tracking/squad/</code>.</p>
+      </section>
+    </div>
+    <h2>Limiter le coût estimé</h2>
+    <p>Ajoutez <code>cost-ceiling=10</code> pour fixer un plafond de 10 USD sur le coût estimé des modèles du run. Il ne garantit pas le montant facturé par GitHub et ne limite pas les ressources Azure. L'initialisation confirmée est hors plafond ; le contrôle s'applique avant le travail qui suit.</p>
+    <p>Dans un même run, omettre le paramètre conserve le plafond. <code>cost-ceiling=unset</code> le retire explicitement. Le contrôle se fait entre les unités de travail, donc un appel déjà lancé peut dépasser le plafond. Voir <a href="usage.html#cost-admission-control">le contrôle des coûts</a>.</p>
+    <h2>Préparer une exécution Azure</h2>
+    <p>Avec le profil <code>azure</code>, demandez la préparation du conteneur de développement, des workflows OIDC Bicep ou Terraform, du référentiel de gouvernance et des dossiers <code>infra/</code>. Examinez les fichiers avant de les valider dans Git. Aucun déploiement n'est autorisé par cette seule préparation.</p>
+    <p>La configuration OIDC initiale nécessite les droits Azure appropriés, notamment Owner ou User Access Administrator pour les affectations RBAC. Les déploiements restent soumis à votre approbation.</p>
+    <div class="pager"><a class="prev" href="index.html"><div class="dir">Retour</div><div class="ttl">Accueil</div></a><a class="next" href="usage.html"><div class="dir">Suite</div><div class="ttl">Utilisation</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

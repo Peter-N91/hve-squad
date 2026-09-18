@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Migration autopilot | hve-squad</title><meta name="description" content="Retour sur une migration préparée par hve-squad puis arrêtée au contrôle de qualité avant déploiement." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../demo-2.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html" class="active">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../demo-2.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Démonstration 02</div><h1>Migration autopilot</h1><p class="lead">Une demande produit un dossier de migration. La revue trouve des blocages et s'arrête : ce scénario montre une escalade, pas un déploiement réussi.</p></div></header>
+  <main class="content"><div class="container">
+    <p><a href="demo.html">Toutes les démonstrations</a> · <a href="demo-1.html">Azure</a> · <a href="demo-3.html">Produit</a> · <a href="demo-4.html">.NET</a></p>
+    <h2>Contexte et préparation</h2>
+    <p>Le parcours d'origine utilise le dépôt préparé <code>hve-squad-demo2</code>, des définitions de processus Contoso et des documents privés dans <code>knowledge-docs/</code>. Ces documents ne sont pas distribués avec ce site. Pour le reproduire, utilisez votre propre contexte autorisé et le profil <code>azure</code>.</p>
+    <p>Le périmètre porte sur l'étude et les fichiers de préparation, sans déploiement Azure. Vérifiez les agents disponibles et, pour les diagrammes avec icônes, Python ou uv et Graphviz. Mermaid reste possible sans ce rendu.</p>
+    <div class="callout warn"><p><strong>Un dossier ignoré par Git ne suffit pas à empêcher une fuite.</strong> Les documents privés sont un contexte de lecture ; examinez aussi les livrables et le diff pour vérifier qu'aucune donnée confidentielle n'a été reproduite.</p></div>
+    <h2>La demande</h2>
+    <p>Initialisez et confirmez d'abord l'équipe. Dans VS Code :</p>
+    <pre><code>/squad profile=azure mode=autopilot request="Planifie et prépare la migration de ce projet depuis l'environnement local vers Azure.
+
+Contexte : lis les définitions de processus du dépôt et ./knowledge-docs pour comprendre le besoin.
+
+Livrables : architecture cible justifiée, plan de migration concret, IaC sous infra/, estimation des coûts, revue de sécurité, HLD Mermaid et LLD avec icônes si l'outillage est disponible.
+
+Contraintes : ./knowledge-docs est privé. Ne reproduis pas son contenu dans les fichiers suivis, livrables ou sorties à publier. Aucun déploiement. Arrête-toi sur les blocages et attends ma décision."</code></pre>
+    <p>Dans CLI ou App, sélectionnez Squad Coordinator et envoyez ces paramètres sans <code>/squad</code>.</p>
+    <h2>Résultats du parcours d'origine</h2>
+    <p>Ces observations décrivent le run documenté, pas une garantie de résultats identiques dans votre projet :</p>
+    <table><thead><tr><th>Étape</th><th>Livrable observé</th><th>État</th></tr></thead><tbody>
+      <tr><td>Recherche</td><td>Étude de faisabilité et correspondance des services pour un contexte de 117 clients.</td><td>Terminée</td></tr>
+      <tr><td>Plan</td><td>Six phases, montée en charge de 28 semaines et migration sur trois ans.</td><td>Terminé</td></tr>
+      <tr><td>Conseil</td><td>Quatre ADR, HLD/LLD, prévision de coût et examen de sécurité.</td><td>Accord conditionnel</td></tr>
+      <tr><td>Implémentation</td><td>Structure Bicep de 15 modules, workflows, tests et supervision.</td><td>Structure générée, non prête pour la production</td></tr>
+      <tr><td>Revue</td><td>Cinq blocages critiques.</td><td>Arrêt et escalade</td></tr>
+      <tr><td>Validation finale</td><td>Non atteinte.</td><td>Pas de livraison validée</td></tr>
+    </tbody></table>
+    <p>L'architecture proposée associait Azure Container Instances et PostgreSQL managé dans une organisation hub-spoke. La prévision historique était d'environ 598 000 à 648 000 USD la première année et 2,4 millions USD sur trois ans. Ces chiffres ne sont ni une tarification actuelle ni une estimation pour votre projet.</p>
+    <h2>Les cinq blocages de la revue</h2>
+    <table><thead><tr><th>Constat</th><th>Conséquence</th></tr></thead><tbody>
+      <tr><td>Erreurs de compilation Bicep</td><td>Portées, fonctions ou schémas incorrects : déploiement impossible.</td></tr>
+      <tr><td>Chemins CI/CD incohérents</td><td>Des workflows pointent vers des fichiers absents.</td></tr>
+      <tr><td>Validation de déploiement contournée</td><td>Un accord à deux personnes est documenté mais l'implémentation approuve automatiquement.</td></tr>
+      <tr><td>Tests d'intégration non mesurables</td><td>Les cinq scénarios attendent un déploiement réel ; leur succès n'est pas démontré.</td></tr>
+      <tr><td>Supervision incomplète</td><td>Cinq alertes implémentées pour quatorze annoncées.</td></tr>
+    </tbody></table>
+    <h2>La décision humaine</h2>
+    <p>La squad a proposé soit une remédiation avec responsables puis nouvelle revue, soit une synthèse d'escalade et l'arrêt. L'utilisateur a choisi l'escalade : aucune correction n'a été appliquée dans ce run et aucune validation finale n'a été obtenue.</p>
+    <p>La reprise prévue attribuait les erreurs Bicep à l'auteur IaC, les chemins CI/CD au Deployer, les tests au développeur, la supervision au rôle concerné et la revalidation au tester. Les estimations d'effort du parcours d'origine ne constituent pas un engagement pour une nouvelle exécution.</p>
+    <h2>Présenter honnêtement le résultat</h2>
+    <ul><li>Montrez les fichiers générés et leurs limites, pas seulement le résumé du coordinateur.</li><li>Si l'IaC ne compile pas, présentez le rapport de revue et l'escalade ; ne forcez pas un déploiement.</li><li>Si un agent ou un outil manque, consignez le blocage avant d'adapter l'équipe.</li><li>Ne présentez pas le contrôle de qualité comme une garantie absolue de détection.</li></ul>
+    <div class="pager"><a class="prev" href="demo-1.html"><div class="dir">Retour</div><div class="ttl">Squad Azure</div></a><a class="next" href="demo-3.html"><div class="dir">Suite</div><div class="ttl">Squad produit</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

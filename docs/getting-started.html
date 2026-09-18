@@ -6,7 +6,10 @@
   <title>Getting Started — hve-squad</title>
   <meta name="description" content="Prerequisites, installing the hve-squad APM package, and your first squad run." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <script src="assets/theme.js"></script>
   <link rel="stylesheet" href="assets/style.css" />
+  <link rel="alternate" hreflang="fr" href="fr/getting-started.html" />
+  <script src="assets/site.js" defer></script>
 </head>
 <body>
   <nav class="nav">
@@ -22,6 +25,7 @@
         <a href="troubleshooting.html">Troubleshooting</a>
         <a href="contributing.html">Contributing</a>
         <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="fr/getting-started.html" lang="fr">Fran&ccedil;ais</a>
       </div>
     </div>
   </nav>
@@ -31,14 +35,47 @@
       <div class="eyebrow">Consumer Guide</div>
       <h1>Getting Started</h1>
       <p class="lead">
-        Everything a consumer needs to install the package, deploy it to Copilot, and run the
-        squad for the first time.
+        Install hve-squad in your Copilot environment, select the coordinator, and run your first request.
       </p>
     </div>
   </header>
 
   <main class="content">
     <div class="container">
+      <div class="host-guide">
+      <section data-host="cli">
+        <h2>Copilot CLI</h2>
+        <p>Install GitHub Copilot CLI, sign in with an account that has Copilot access, and open a terminal in your own project repository. Install both marketplace entries:</p>
+        <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
+copilot plugin install hve-squad@hve-squad-plugin
+copilot plugin install hve-squad-hve-core@hve-squad-plugin
+copilot</code></pre>
+        <h3>Select the coordinator</h3>
+        <p>Enter <code>/agent</code> and choose <strong>Squad Coordinator</strong> (possibly displayed as <code>hve-squad:squad-coordinator</code>). Send the following in that agent's conversation, not in your shell:</p>
+        <pre><code>init</code></pre>
+        <p>Review and confirm the proposed profile and roster. Then send a separate request:</p>
+        <pre><code>request="add input validation to the login form" mode="autopilot"</code></pre>
+        <p>Autopilot coordinates the requested work; it does not bypass approvals or expand scope. Keep initialization and promotion interactive. To resume, ask the coordinator to inspect the current state and propose the next step.</p>
+        <h3>Check agent availability</h3>
+        <p>Ask the coordinator to run <code>squad-doctor</code> before dispatching work. The plugin distribution can lack HVE Core domains. If the report identifies missing domains, use the documented full-package remedy in your repository:</p>
+        <pre><code>apm install github/microsoft/hve-core --target copilot</code></pre>
+        <p>Do not install the official <code>hve-core</code> plugin alongside <code>hve-squad-hve-core</code>. For updates, reinstall the companion entry rather than using plugin update on it. Follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">CLI installation and update guide</a>.</p>
+      </section>
+      <section data-host="app">
+        <h2>Copilot App</h2>
+        <p>Open your project in the GitHub Copilot desktop app and sign in with Copilot access. In the app's plugin settings, register <code>Peter-N91/hve-squad-plugin</code> and install both <code>hve-squad</code> and <code>hve-squad-hve-core</code>. Names and settings locations can vary by app version; follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">desktop installation guide</a>.</p>
+        <p>Verify the pair is installed in the app itself. A terminal installation may use a different <code>COPILOT_HOME</code> and does not prove the app has the same plugins.</p>
+        <h3>Start an agent conversation</h3>
+        <p>Select <strong>Squad Coordinator</strong> in the agent picker, possibly listed as <code>hve-squad:squad-coordinator</code>. Choose the agent, not a similarly named skill. Send:</p>
+        <pre><code>init</code></pre>
+        <p>Confirm the proposed profile and roster, then send your goal separately:</p>
+        <pre><code>request="add input validation to the login form" mode="autopilot"</code></pre>
+        <p>Keep initialization and promotion interactive. Autopilot never replaces required human approvals. Ask for <code>squad-doctor</code> and resolve missing agents before work starts; the <a href="https://peter-n91.github.io/hve-squad-plugin/">plugin documentation</a> records current domain gaps and the full APM package remedy.</p>
+        <p>Do not add a second, official <code>hve-core</code> plugin alongside the companion. Update both entries in the app's plugin home, reinstalling <code>hve-squad-hve-core</code> when its pin changes.</p>
+      </section>
+      <section data-host="vscode">
+      <h2>VS Code</h2>
+      <p>Open your project in VS Code with GitHub Copilot Chat enabled and authenticated. This route installs the full cast into the repository through APM.</p>
       <h2>Prerequisites</h2>
       <ul>
         <li>PowerShell 7+</li>
@@ -50,6 +87,7 @@
 
       <h2>1. Install the package</h2>
       <p>Run <code>apm install</code> from the root of the project you want the squad in.</p>
+      <p>Replace <code>vX.Y.z</code> in the examples with a published tag from <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>.</p>
 
       <div class="callout warn">
         <p>
@@ -112,9 +150,11 @@ targets:
       <p>
         The squad is a user-invocable Squad Coordinator that routes your request to a cast of HVE
         Core agents and persists its state under <code>.copilot-tracking/squad/</code>. Invoke it
-        with the <code>/squad</code> prompt in Copilot Chat:
+        with the <code>/squad</code> prompt in Copilot Chat. Initialize and confirm the proposed team first:
       </p>
-      <pre><code>/squad request="add input validation to the login form"</code></pre>
+      <pre><code>/squad init</code></pre>
+      <p>After confirmation, send a separate work request. Use <code>mode=autopilot</code> to sequence the work while keeping required human approvals, or omit it to approve each step:</p>
+      <pre><code>/squad request="add input validation to the login form" mode=autopilot</code></pre>
       <p>
         The <code>/</code> picker shows two entries named <code>squad</code>: the <strong>prompt</strong>
         (<em>"Hands a request to the Squad Coordinator…"</em>), which runs the squad, and the
@@ -180,6 +220,8 @@ targets:
         <li>The Azure CLI (<code>az</code>) and GitHub CLI (<code>gh</code>) — both provided by the bundled dev container.</li>
       </ul>
       <p>See <a href="usage.html">Usage → Azure execution layer</a> for the full scaffolding flow.</p>
+      </section>
+      </div>
 
       <div class="pager">
         <a class="prev" href="index.html">

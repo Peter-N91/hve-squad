@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maintenance | hve-squad</title><meta name="description" content="Maintenir les sources hve-squad, les dépendances HVE Core, les tests, les versions et la documentation bilingue." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../maintaining.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html" class="active">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../maintaining.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Guide mainteneur</div><h1>Maintenir le package</h1><p class="lead">Travaillez sur les sources, vérifiez les agents réellement disponibles et publiez depuis une référence reproductible.</p></div></header>
+  <main class="content"><div class="container">
+    <h2>Structure du dépôt</h2>
+    <table><thead><tr><th>Chemin</th><th>Responsabilité</th></tr></thead><tbody>
+      <tr><td><code>apm.yml</code></td><td>Métadonnées, dépendances et scripts du package.</td></tr><tr><td><code>apm.lock.yaml</code></td><td>Références résolues par APM.</td></tr>
+      <tr><td><code>squad-src/.github/</code></td><td>Sources des agents, prompts, instructions et skills de la squad.</td></tr>
+      <tr><td><code>scripts/Update-ApmDependencies.ps1</code></td><td>Générateur de dépendances.</td></tr>
+      <tr><td><code>scripts/Get-HveCoreCastDelta.ps1</code></td><td>Comparaison des agents déployables entre références HVE Core.</td></tr>
+      <tr><td><code>.changes/unreleased/</code></td><td>Fragments en attente d'une publication.</td></tr>
+      <tr><td><code>apm_modules/</code> et <code>.github/</code></td><td>Dépendances et ressources déployées ; ne pas les confondre avec les sources.</td></tr>
+      <tr><td><code>.copilot-tracking/</code></td><td>État de travail local ; certaines traces Watch Mode sont suivies pour l'audit.</td></tr>
+      <tr><td><code>docs/</code></td><td>Documentation statique publiée sur GitHub Pages.</td></tr>
+    </tbody></table>
+    <h2>Cycle local</h2>
+    <pre><code>apm run sync-deps
+apm install
+apm lock</code></pre>
+    <p><code>install-sync</code> combine génération et installation. <code>apm pack</code> est facultatif pour produire un artefact, notamment pour le plugin. <code>apm run change</code> prépare un fragment. <code>release-prep</code> assemble une publication ; ne le lancez pas comme simple étape de développement.</p>
+    <p>Le générateur parcourt les agents, instructions, prompts et skills de HVE Core à la référence choisie, filtre les ressources Markdown et réécrit <code>dependencies.apm</code>. Par défaut, il conserve le SHA déjà épinglé.</p>
+    <h2>Mettre HVE Core à jour</h2>
+    <p>Les rôles désignent les agents par leur nom exact. Avant de changer le SHA, vérifiez si un agent référencé a disparu, changé de nom ou perdu sa capacité de délégation :</p>
+    <pre><code>./scripts/Get-HveCoreCastDelta.ps1
+./scripts/Get-HveCoreCastDelta.ps1 -ToRef main -MarkdownPath delta.md</code></pre>
+    <h3>Évolution mécanique</h3>
+    <p>Sans changement bloquant du catalogue, la synchronisation déplace le pin et ajoute un fragment. Elle ne publie pas automatiquement une version stable. La modification attend la prochaine publication décidée par un mainteneur.</p>
+    <h3>Adaptation du catalogue</h3>
+    <p>En cas de rupture, la synchronisation ne modifie pas le manifeste : elle crée une issue <code>squad/auto</code> avec le diagnostic et les critères d'acceptation. Watch Mode travaille dans <code>issue-&lt;N&gt;</code> et ouvre une PR en brouillon. Le label <code>squad/review</code> déclenche une revue distincte sous <code>pr-&lt;N&gt;</code>.</p>
+    <p>Examinez les nouvelles correspondances de rôles et l'historique de chaque délégation. Un agent marqué <code>disable-model-invocation: true</code> ne peut pas remplir un rôle délégué. Un historique vide ne prouve pas que les spécialistes ont réellement travaillé.</p>
+    <h3>Exécution sans utilisateur</h3>
+    <p>Les transitions reposent sur les preuves. Les conclusions et risques sont portés dans la PR en brouillon ; ils ne deviennent pas une approbation humaine. Aucune fusion, aucun déploiement, force-push, changement de données, rotation de secret ou écriture dans un backlog externe n'est autorisé par ce mode.</p>
+    <p>Configurez les secrets <code>COPILOT_GITHUB_TOKEN</code> et <code>SYNC_DEPS_TOKEN</code> selon les workflows, les labels, les droits de création de PR et la protection de branche. Épinglez le modèle CLI via <code>--model</code> ou le paramètre prévu par le workflow ; le frontmatter d'un agent ne suffit pas à fixer le modèle d'un run sans interface.</p>
+    <h2>Sources et références reproductibles</h2>
+    <p>Modifiez <code>squad-src/.github/agents/squad/</code>, <code>instructions/squad/</code>, <code>prompts/squad/</code> ou <code>skills/squad/</code> sous cette même racine. APM aplatit le contenu vers <code>.github/</code> lors du déploiement : modifier cette sortie exposerait vos changements à un écrasement.</p>
+    <p><code>SquadSourceRoot</code>, <code>SquadRepoSlug</code> et <code>SquadRef</code> contrôlent les auto-références de la squad. <code>RepoSlug</code>, <code>Ref</code>, <code>IncludeRoots</code> et <code>IncludeRegex</code> contrôlent la découverte HVE Core. Utilisez <code>-DryRun</code> pour inspecter le résultat sans écrire.</p>
+    <p>Depuis v0.15.2, le workflow de publication épingle les auto-références avec <code>Set-SquadSelfRefPin.ps1</code> dans un commit propre au tag ; <code>main</code> garde ses références de développement. Les anciens tags ne garantissent pas cette reproductibilité. Vérifiez une installation depuis un clone frais du tag, pas seulement depuis l'arbre de travail.</p>
+    <h2>Contrats et tests</h2>
+    <p>Lors d'une évolution du plafond de coût, gardez synchronisés les paramètres des prompts, <code>references/consumption.md</code>, <code>gates-and-modes.md</code>, les schémas d'entrée, les modèles de fédération, la procédure du Scribe et les coordinateurs. L'initialisation reste hors plafond et seul l'autopilot de fédération non ciblé porte un contrôle agrégé.</p>
+    <pre><code>./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot .
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
+git diff --check</code></pre>
+    <p>Les tests déterministes ne prouvent pas les résultats d'une exécution avec modèles. Les runs live constituent une vérification séparée et consomment des requêtes Copilot.</p>
+    <h2>Documentation bilingue</h2>
+    <p>Le site reste en HTML statique. Les pages anglaises sont dans <code>docs/</code> et leurs correspondantes françaises dans <code>docs/fr/</code>, avec les mêmes noms de fichiers. Les styles et contrôles communs sont dans <code>docs/assets/style.css</code>, <code>theme.js</code> et <code>site.js</code>.</p>
+    <p>Mettez à jour les deux langues dans la même PR, conservez les identifiants d'ancre et les commandes, puis testez les onglets, la navigation mobile et les liens de langue. Les rapports historiques et vidéos gardent leur langue d'origine, explicitement indiquée. Les pages restent lisibles sans JavaScript.</p>
+    <pre><code>npm --prefix tests/docs ci --ignore-scripts
+  npm --prefix tests/docs test</code></pre>
+    <p>Ouvrez <code>docs/index.html</code> directement dans le navigateur. Aucun serveur ni build React n'est requis. Le workflow <code>.github/workflows/docs.yml</code> publie le dossier <code>docs</code> sur GitHub Pages.</p>
+    <h2>Fragments et publications</h2>
+    <p>Une PR ajoute un nouveau fragment dans <code>.changes/unreleased/</code>, sans modifier <code>CHANGELOG.md</code> ni <code>version:</code> dans <code>apm.yml</code>. Le niveau suit les concepts : une extension ordinaire est généralement un <code>patch</code>, une nouvelle idée un <code>minor</code>, une rupture consommateur un <code>major</code>.</p>
+    <p>La validation de PR contrôle les fragments et les déplacements de pin non autorisés. Une fusion alimente la préversion glissante ; elle ne publie pas une version stable. Un mainteneur déclenche <strong>Release Prep</strong> quand le lot est prêt. Le workflow assemble le changelog, calcule la version, consomme les fragments et lance la publication du tag.</p>
+    <p>Un correctif isolé doit partir d'une branche issue du dernier tag si <code>main</code> contient du travail non publiable. Sélectionner des fragments ne sélectionne pas le code livré. Voir <a href="contributing.html">Contribuer</a> et la <a href="../maintaining.html" lang="en">référence détaillée de maintenance en anglais</a> pour les options avancées des workflows.</p>
+    <div class="pager"><a class="prev" href="ecosystem.html"><div class="dir">Retour</div><div class="ttl">Écosystème</div></a><a class="next" href="troubleshooting.html"><div class="dir">Suite</div><div class="ttl">Dépannage</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

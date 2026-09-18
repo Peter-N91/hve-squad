@@ -6,7 +6,10 @@
   <title>Maintaining — hve-squad</title>
   <meta name="description" content="Maintainer workflow, dependency generation, squad source layout, customization, and the release process." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <script src="assets/theme.js"></script>
   <link rel="stylesheet" href="assets/style.css" />
+  <script src="assets/site.js" defer></script>
+  <link rel="alternate" hreflang="fr" href="fr/maintaining.html" />
 </head>
 <body>
   <nav class="nav">
@@ -22,6 +25,7 @@
         <a href="troubleshooting.html">Troubleshooting</a>
         <a href="contributing.html">Contributing</a>
         <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="fr/maintaining.html" lang="fr">Fran&ccedil;ais</a>
       </div>
     </div>
   </nav>
@@ -67,6 +71,13 @@
       </ul>
 
       <h2>Scripts</h2>
+      <h3>Documentation site</h3>
+      <p>The site is static HTML with shared CSS and progressive JavaScript, published directly from <code>docs/</code>. Open <code>docs/index.html</code> locally; no frontend build or server is required. English pages live in <code>docs/</code> and their French counterparts in <code>docs/fr/</code>, using the same filenames and shared anchor IDs.</p>
+      <p>Update both languages in the same change. Preserve command names and parameters, and label links to English-only external guides, historical reports and videos. Shared presentation and controls live in <code>docs/assets/style.css</code>, <code>theme.js</code> and <code>site.js</code>. Host tabs retain their selection across pages; language switching keeps the current page.</p>
+      <pre><code>npm --prefix tests/docs ci --ignore-scripts
+    npm --prefix tests/docs test</code></pre>
+      <p>The isolated test dependency is not shipped to GitHub Pages. Tests check language pairing, local links and assets, keyboard tabs, saved preferences and no-script setup content. The Pages workflow runs them on documentation pull requests and before deployment. Also check desktop and mobile layouts in a browser after visual changes.</p>
+      <h3>Package scripts</h3>
       <p>Defined in <code>apm.yml</code>:</p>
       <ul>
         <li><code>sync-deps</code> — regenerates <code>dependencies.apm</code> from HVE Core content.</li>

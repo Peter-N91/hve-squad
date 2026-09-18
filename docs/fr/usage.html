@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Utilisation | hve-squad</title>
+  <meta name="description" content="Piloter hve-squad : profils, autonomie, coûts estimés, validations, fédération, Watch Mode et livrables." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../usage.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html" class="active">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../usage.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Guide utilisateur</div><h1>Utiliser la squad</h1><p class="lead">Exprimez le résultat attendu. Le coordinateur répartit le travail entre les agents HVE Core et conserve les rôles, décisions et historiques dans <code>.copilot-tracking/squad/</code>.</p></div></header>
+  <main class="content"><div class="container">
+    <h2>Envoyer une demande</h2>
+    <p>Les exemples ci-dessous utilisent les prompts VS Code. Dans CLI ou App, sélectionnez l'agent correspondant et envoyez les mêmes arguments sans le préfixe du prompt. Ne les exécutez pas dans un terminal système.</p>
+    <table><thead><tr><th>Objectif</th><th>Prompt VS Code</th><th>Agent dans CLI ou App</th></tr></thead><tbody>
+      <tr><td>Piloter une squad</td><td><code>/squad</code></td><td>Squad Coordinator</td></tr>
+      <tr><td>Piloter une fédération</td><td><code>/squad-federation</code></td><td>Squad Federation Coordinator</td></tr>
+      <tr><td>Rechercher et exporter</td><td><code>/squad-document</code></td><td>Squad Document</td></tr>
+      <tr><td>Rapport de gouvernance</td><td><code>/squad-governance-report</code></td><td>Squad Governance Report</td></tr>
+      <tr><td>Partager un apprentissage</td><td><code>/squad-learn</code></td><td>Squad Learn</td></tr>
+    </tbody></table>
+    <pre><code>/squad request="Ajoute une validation des champs au formulaire de connexion"</code></pre>
+    <p>Le skill <code>squad</code> charge la procédure dans l'agent courant ; il ne remplace pas le coordinateur. Dans VS Code, choisissez bien le prompt. Dans CLI, utilisez <code>/agent</code> ; les noms peuvent être préfixés par le nom du plugin.</p>
+    <h3>Paramètres</h3>
+    <ul>
+      <li><code>profile=</code> choisit le profil proposé à l'initialisation. Sans valeur, le coordinateur recommande un profil adapté au dépôt.</li>
+      <li><code>pack=power-platform|m365-copilot|aws</code> ajoute des spécialistes technologiques. Plusieurs packs peuvent être séparés par des virgules.</li>
+      <li><code>tier=fast|default</code> donne une préférence de niveau de modèle pour le tour.</li>
+      <li><code>discovery=quick|standard|deep|skip</code> choisit la profondeur de découverte ou la refuse.</li>
+      <li><code>owner=&lt;Member Name&gt;</code> désigne un membre précis si plusieurs membres partagent le même rôle.</li>
+      <li><code>mode=autonomous|autopilot</code> choisit le mode d'autonomie. Sans paramètre, le mode est interactif.</li>
+      <li><code>cost-ceiling=&lt;positive USD&gt;|unset</code> fixe ou retire un plafond de coût estimé pour le run.</li>
+    </ul>
+    <pre><code>/squad request="Analyse les menaces du service d'authentification" profile=security
+/squad request="Conçois notre application d'approbation" profile=architecture pack=power-platform
+/squad request="Réduis les abandons pendant l'inscription" discovery=standard
+/squad request="Implémente le plan validé" mode=autopilot cost-ceiling=20</code></pre>
+    <h2>Initialiser l'équipe</h2>
+    <p>Envoyez <code>/squad init</code> dans VS Code, ou <code>init</code> au coordinateur dans CLI ou App. Sans <code>team.md</code>, il propose un profil ou une équipe personnalisée composée d'agents réellement disponibles. Vous choisissez une squad unique ou une fédération, puis le canal d'approbation. Aucun fichier n'est créé avant votre confirmation.</p>
+    <p>La squad crée <code>team.md</code>, <code>routing.md</code>, <code>decisions.md</code>, <code>notifications.md</code>, <code>state.json</code> et <code>history/</code>. Gardez l'initialisation et la promotion séparées des demandes de travail.</p>
+    <h2>Modes d'autonomie</h2>
+    <table><thead><tr><th>Mode</th><th>Comportement</th></tr></thead><tbody>
+      <tr><td>Interactif, sans <code>mode</code></td><td>Vous approuvez chaque étape : recherche, plan, implémentation et revue.</td></tr>
+      <tr><td><code>mode=autonomous</code></td><td>Boucle de validation ciblée sur un livrable, au maximum deux cycles.</td></tr>
+      <tr><td><code>mode=autopilot</code></td><td>Enchaînement du travail avec arrêts obligatoires pour les actions importantes, les risques à escalader et la validation finale.</td></tr>
+    </tbody></table>
+    <div class="callout warn"><p><strong>Autopilot n'est pas une autorisation générale.</strong> Déployer, pousser du code, fusionner ou modifier des données reste soumis aux contrôles prévus. Une question en lecture seule n'autorise pas une implémentation.</p></div>
+    <h2 id="cost-admission-control">Contrôle du coût estimé</h2>
+    <p><code>cost-ceiling</code> limite le coût estimé des modèles pour un run, pas la facture GitHub ni la consommation Azure. L'initialisation confirmée reste hors plafond : elle crée les fichiers d'état et de tarification nécessaires, et son coût estimé est enregistré.</p>
+    <pre><code>budget restant = max(0, plafond - coût estimé cumulé)
+coût d'admission = estimation du travail restant × 3.0</code></pre>
+    <p>La réserve de 3 est une politique prudente, pas un intervalle de confiance statistique. Une prévision défendable exige un périmètre borné, des modèles et tarifs connus, une table valide et une calibration compatible.</p>
+    <table><thead><tr><th>Entrée</th><th>Effet</th></tr></thead><tbody>
+      <tr><td><code>cost-ceiling=20</code></td><td>Fixe ou remplace le plafond du run par 20 USD.</td></tr>
+      <tr><td>Paramètre omis, même run</td><td>Conserve le plafond existant.</td></tr>
+      <tr><td><code>cost-ceiling=unset</code></td><td>Retire explicitement le plafond sans effacer la consommation cumulée.</td></tr>
+      <tr><td>Paramètre omis, nouveau run</td><td>Aucun plafond hérité ; état <code>not-requested</code>.</td></tr>
+    </tbody></table>
+    <table><thead><tr><th>Décision</th><th>Conséquence</th></tr></thead><tbody>
+      <tr><td><code>not-requested</code></td><td>Pas de contrôle de plafond ; les autres validations restent applicables.</td></tr>
+      <tr><td><code>within-ceiling</code></td><td>Seules les unités prévues pour ce tour peuvent démarrer.</td></tr>
+      <tr><td><code>over-ceiling</code></td><td>Prévision trop élevée ou plafond déjà atteint. Le travail attend.</td></tr>
+      <tr><td><code>approved-over-ceiling</code></td><td>Après accord sur une prévision connue, exécution séquentielle bornée tant que le cumul reste sous le plafond.</td></tr>
+      <tr><td><code>cannot-confirm</code></td><td>Données insuffisantes : corrigez les tarifs, modèles, périmètre ou calibration. Une approbation ne remplace pas ces preuves.</td></tr>
+    </tbody></table>
+    <p>Le contrôle s'effectue entre les unités. Un appel déjà en cours et son enregistrement par le Scribe peuvent dépasser la limite ; aucune unité suivante ne démarre. Si le cumul vaut déjà 10,80 USD, ajouter un plafond de 10 USD ne crée pas un nouveau budget de 10 USD.</p>
+    <pre><code>/squad request="Implémente le plan validé" mode=autopilot cost-ceiling=20
+/squad request="Applique les corrections de la revue"
+/squad request="Continue sans plafond de coût" cost-ceiling=unset</code></pre>
+    <p>Pour reprendre après un arrêt, relevez le plafond au-dessus du cumul, retirez-le explicitement, réduisez ou réévaluez la demande, ou démarrez un nouveau run. Réapprouver une limite déjà dépassée n'est pas une reprise valide.</p>
+    <p>Consultez <code>currentRun.costPreflight</code> dans <code>state.json</code>, l'entrée <code>Cost Preflight</code> et sa <code>Decision Ref</code> dans <code>decisions.md</code>, les totaux dans <code>consumption.md</code> et les hypothèses dans <code>consumption-rates.md</code>. Les chiffres sont des estimations, pas une télémétrie de facturation.</p>
+    <h2>Découverte et validation des exigences</h2>
+    <p>Sans document d'entrée, les profils <code>product</code> et <code>full</code> peuvent proposer une découverte pour un objectif encore ouvert. Elle est proposée une fois par sujet, jamais imposée : les agents vous interrogent et ne doivent pas inventer vos choix. Avec un document d'entrée, le contrôle de préparation évalue sa clarté, sa cohérence, son périmètre et sa testabilité.</p>
+    <table><thead><tr><th>Profondeur</th><th>Résultat</th></tr></thead><tbody><tr><td><code>quick</code></td><td>Un brief produit par l'analyste.</td></tr><tr><td><code>standard</code></td><td>Cadrage et pistes avec le designer, puis brief.</td></tr><tr><td><code>deep</code></td><td>Objections, hypothèse risquée et expérimentation avant le brief. Le rôle challenger doit être disponible ou ajouté avec accord.</td></tr><tr><td><code>skip</code></td><td>Refus enregistré, sans séance de découverte.</td></tr></tbody></table>
+    <p>Un <code>discovery=</code> explicite fonctionne avec tout profil ; les rôles manquants sont proposés avant l'exécution. La découverte n'est pas exécutée sans utilisateur pour répondre.</p>
+    <p>Le contrôle d'entrée produit <code>Ready</code>, <code>Ready-With-Gaps</code> ou <code>Not-Ready</code> dans <code>decisions.md</code>. Les lacunes bloquantes sont corrigées puis réévaluées, au maximum deux cycles ; les décisions humaines sont escaladées. Le validateur d'un brief doit être différent de son auteur.</p>
+    <h2>Profils et packs</h2>
+    <table><thead><tr><th>Profil</th><th>Usage principal</th></tr></thead><tbody>
+      <tr><td><code>default</code></td><td>Travail général : researcher, lead, developer, tester et scribe.</td></tr>
+      <tr><td><code>full</code></td><td>Travail transverse avec les spécialistes disponibles, hors rôles explicitement optionnels ou non pris en charge.</td></tr>
+      <tr><td><code>security</code></td><td>Sécurité, chaîne logicielle, vie privée et IA responsable.</td></tr>
+      <tr><td><code>design</code></td><td>Conception UX/UI et produit.</td></tr>
+      <tr><td><code>accessibility</code></td><td>Évaluation et correction de l'accessibilité.</td></tr>
+      <tr><td><code>architecture</code></td><td>Architecture système, Azure et coûts.</td></tr>
+      <tr><td><code>azure</code></td><td>Architecture, IaC, déploiement validé, documentation et diagnostic.</td></tr>
+      <tr><td><code>modernization</code></td><td>Évolution de frameworks, dépendances, plateformes et migrations.</td></tr>
+      <tr><td><code>compliance</code></td><td>Preuves de conformité, risques et audits.</td></tr>
+      <tr><td><code>operations</code></td><td>Incidents, fiabilité, observabilité et exploitation.</td></tr>
+      <tr><td><code>product</code></td><td>Découverte, exigences, backlog, expérimentation, données et livrables métier.</td></tr>
+    </tbody></table>
+    <p>Un profil détermine la nature du travail. Un pack ajoute une spécialité technique : <code>power-platform</code>, <code>m365-copilot</code> ou <code>aws</code>. Les ressources correspondantes nécessitent une installation explicite ; le coordinateur propose la commande. Il ne promet pas des agents absents.</p>
+    <pre><code>/squad request="Conçois une application Power Platform auditable" profile=compliance pack=power-platform
+/squad request="Analyse notre architecture Azure et AWS" profile=azure pack=aws</code></pre>
+    <p>Power BI et Fabric relèvent du rôle <code>data-scientist</code>, l'ingénierie d'applications IA du rôle <code>developer</code>. Ils ne sont pas des packs. Les rôles <code>devrel</code>, <code>networking</code>, <code>gcp</code> et <code>identity</code> sont répertoriés mais non sélectionnables faute d'agents associés.</p>
+    <p>Retirer un pack enlève uniquement les rôles qu'il possède encore, sans effacer les livrables ni l'historique. Les rôles optionnels comme <code>backlog-executor</code> attendent votre accord ; les rôles fournis ailleurs nécessitent leur installation.</p>
+    <h2>Fédération</h2>
+    <p>Une fédération convient à plusieurs flux avec des responsables et livrables distincts. Une expertise supplémentaire sur le même travail appelle plutôt un profil et un pack. Chaque sous-squad possède un nom unique en minuscules avec tirets et un état sous <code>.copilot-tracking/squad/members/&lt;name&gt;/</code>.</p>
+    <pre><code>/squad-federation init
+/squad-federation request="Prépare la feuille de route" squad=product
+/squad-federation request="Implémente le plan validé" squad=delivery mode=autopilot</code></pre>
+    <p>Dans CLI ou App, sélectionnez <strong>Squad Federation Coordinator</strong> et omettez <code>/squad-federation</code>. Remplacez <code>product</code> et <code>delivery</code> par les noms réellement confirmés à l'initialisation.</p>
+    <h3>Promouvoir ou étendre</h3>
+    <pre><code>/squad-federation promote
+/squad-federation init request="Ajoute une sous-squad de sécurité"</code></pre>
+    <p>La promotion propose puis fait confirmer le déplacement de la squad existante. Elle conserve ses journaux et refuse les collisions de noms. Après promotion, <code>federation.md</code> et <code>meta-routing.md</code> pilotent le routage. L'expansion ajoute une sous-squad sans réécrire les autres.</p>
+    <p>Le routage ordinaire applique le plafond indépendamment à chaque sous-squad choisie. Seul un <code>/squad-federation mode=autopilot</code> sans cible <code>squad=</code> utilise un plafond agrégé couvrant les runs sélectionnés et l'orchestration racine, sans doubler le contrôle chez les enfants. Les dépendances sont confirmées, les validations importantes remontent à la fédération et la validation finale est consolidée.</p>
+    <figure class="video-figure"><video controls preload="metadata" playsinline><source src="../assets/hve-squad-federation.mp4" type="video/mp4" /><a href="../assets/hve-squad-federation.mp4">Télécharger la vidéo</a></video><figcaption>Démonstration enregistrée de la fédération ; interface et narration d'origine en anglais.</figcaption></figure>
+    <h2>Approbations à distance</h2>
+    <p>Choisissez <code>github-issue</code> lors de la configuration pour recevoir une issue et répondre avec <code>/approve</code>, <code>/approve-all</code>, <code>/changes: &lt;note&gt;</code> ou <code>/stop</code>. Seules les réponses reconnues d'une personne autorisée agissent. Un délai dépassé n'autorise jamais la poursuite.</p>
+    <ol><li>Authentifiez <code>gh</code> sur l'hôte d'exécution ou configurez le serveur MCP GitHub avec les droits nécessaires au dépôt et aux issues.</li><li>Copiez <code>.github/skills/squad/github-approval-watcher.workflow.yml</code> vers <code>.github/workflows/squad-approval-watcher.yml</code>, puis examinez et validez le workflow.</li><li>Indiquez le compte à mentionner et le dépôt qui reçoit les approbations.</li></ol>
+    <p><code>webhook</code> envoie uniquement une notification Teams, Slack ou Discord ; ce n'est pas un canal d'approbation entrant. <code>in-chat</code> reste le mode par défaut et le repli lorsque l'outillage manque.</p>
+    <h2>Watch Mode</h2>
+    <p>Un événement autorisé peut déclencher un run sans interface, par exemple une issue portant <code>squad/auto</code>. Le résultat attendu est une pull request <strong>en brouillon</strong>, pas une fusion ni un déploiement automatique.</p>
+    <ol><li>Ajoutez le secret de dépôt <code>COPILOT_GITHUB_TOKEN</code> avec la permission Copilot Requests. Le jeton Actions standard n'authentifie pas Copilot.</li><li>Protégez la branche par défaut et exigez une revue humaine.</li><li>Autorisez la création de pull requests par Actions dans les paramètres du dépôt, ou configurez un jeton dédié correctement limité.</li><li>Copiez <code>.github/skills/squad/squad-watch.workflow.yml</code> vers <code>.github/workflows/squad-watch.yml</code> et installez le workflow d'approbation.</li><li>Examinez les déclencheurs, supprimez ceux qui ne sont pas souhaités et appliquez <code>squad/auto</code> uniquement lorsque vous voulez lancer le travail.</li></ol>
+    <p>Le workflow de référence prend aussi en charge le déclenchement manuel, <code>squad/review</code> sur une PR du même dépôt, les commentaires <code>/squad</code>, un balayage planifié et les pushes configurés. Les acteurs sont autorisés, les PR de forks sont exclues et le contenu des événements est traité comme des données, jamais comme des instructions modifiant les règles.</p>
+    <p>Chaque événement possède sa sous-squad, par exemple <code>issue-123</code> ou <code>pr-456</code>. Watch Mode prépare la fédération si nécessaire, conserve l'état existant lors d'une promotion et refuse d'écraser une sous-squad qu'il n'a pas créée. Les journaux sont conservés ; leur suppression est une décision explicite.</p>
+    <h2>Retrouver les décisions et les livrables</h2>
+    <p>Une validation fournit une <code>Decision Ref</code> vers les conclusions, conditions et preuves dans <code>decisions.md</code>. Utilisez aussi <code>state.json</code>, <code>history/</code> et <code>notifications.md</code> pour comprendre un arrêt.</p>
+    <pre><code>/squad-document request="Résume les décisions de la semaine" format=html
+/squad-document request="Prépare une synthèse pour les parties prenantes" format=docx outputPath=docs/synthese.docx
+/squad-governance-report period=30d output=docs/gouvernance.html</code></pre>
+    <p><code>squad-document</code> lit l'état sans le modifier et produit un fichier fondé sur ses sources. Les formats sont <code>md</code>, <code>html</code>, <code>pdf</code> et <code>docx</code>, avec repli Markdown si l'outillage manque. <code>squad=</code> limite la recherche à une sous-squad.</p>
+    <p>Le rapport de gouvernance couvre contrôles, verdicts, coûts estimés, activité des rôles, risques, chronologie et résultats. <code>period</code> accepte <code>all</code>, <code>30d</code> ou <code>7d</code>. <a href="../squad-governance-report-2026-08-04.html" lang="en">Exemple historique du 4 août 2026 (anglais)</a>.</p>
+    <h2>Azure, backlog et modernisation</h2>
+    <p>Le profil Azure couvre HLD/LLD, Bicep ou Terraform, estimation indicative, contrôle Azure Policy, <code>what-if</code> ou <code>plan</code>, puis déploiement après accord. Documentation de l'existant et diagnostic restent en lecture seule. La capacité Azure privilégie le MCP configuré et peut utiliser Azure CLI ou REST en repli.</p>
+    <p>Le backlog local est distinct de sa publication. Le rôle optionnel <code>backlog-executor</code> présente les éléments, destinations et doublons possibles avant une approbation par lot. Un changement de périmètre exige une nouvelle prévisualisation. Les écritures sont journalisées pour reprendre sans dupliquer ; sans connecteur configuré, le rôle s'arrête. Un run sans utilisateur ne publie pas à votre place.</p>
+    <p>La modernisation produit d'abord un plan. Les changements ciblés vont au développeur ; les grandes mises à niveau compatibles peuvent passer par l'outillage officiel. Une réécriture entre technologies nécessite un contrat de comportement, des étapes incrémentales et une revue d'architecture.</p>
+    <h2>Présentations à votre image</h2>
+    <p>Le rôle <code>presenter</code> des profils <code>product</code> et <code>full</code> peut utiliser <code>.github/brand/pptx-brand-template.pptx</code>. Préparez un modèle 16:9 avec masques, dispositions nommées et thème. S'il manque, le générateur doit vous demander un modèle.</p>
+    <p>Une reconstruction complète utilise <code>--template</code> et conserve les masques, dispositions et thème, pas les diapositives d'exemple. Une mise à jour partielle utilise <code>--source</code> avec <code>--slides</code>. Ne combinez pas ces modes : le modèle pourrait remplacer les diapositives non sélectionnées. Vérifiez toujours les débordements, alignements et contenus.</p>
+    <h2>Partager un apprentissage</h2>
+    <pre><code>/squad-learn target=upstream
+/squad-learn target=tenant learning="Relire les verdicts avant une nouvelle délégation"</code></pre>
+    <p>La mémoire active reste locale. La promotion prépare une proposition nettoyée et une PR soumise à revue humaine, vers le package public ou un dépôt privé du tenant. Retirez secrets, noms de clients, chemins internes et données personnelles avant tout partage. Voir <a href="contributing.html">Contribuer</a>.</p>
+    <h2>Prérequis d'exécution et limites des hôtes</h2>
+    <p>Le coordinateur doit disposer de <code>runSubagent</code> ou <code>task</code> pour déléguer. L'outil mémoire permet des notes durables. Hors VS Code, les corps d'agents sont limités à 30 000 caractères, <code>model:</code> est une chaîne unique et la substitution <code>${input:…}</code> n'est pas disponible. Les agents exposent donc leurs arguments directement.</p>
+    <p>Les questions passent par le chat lorsque l'outil de questions n'existe pas. Un run sans utilisateur ne peut pas inventer une réponse. Vérifiez les domaines manquants avec <code>squad-doctor</code> dans les distributions plugin.</p>
+    <div class="pager"><a class="prev" href="getting-started.html"><div class="dir">Retour</div><div class="ttl">Bien démarrer</div></a><a class="next" href="demo.html"><div class="dir">Suite</div><div class="ttl">Démonstrations</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

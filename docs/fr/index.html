@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hve-squad | Documentation en français</title>
+  <meta name="description" content="Installer et utiliser hve-squad dans Copilot CLI, Copilot App et VS Code. Guides, démonstrations et dépannage en français." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../index.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner">
+    <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+    <div class="nav-links">
+      <a href="index.html" class="active">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../index.html" lang="en">English</a>
+    </div>
+  </div></nav>
+  <header class="hero"><div class="container">
+    <div class="hero-logo"><img src="../assets/logo.svg" alt="Logo hve-squad" /><span class="wordmark">hve<span class="dot">-</span>squad</span></div>
+    <div class="eyebrow">Documentation · Copilot CLI · Copilot App · VS Code</div>
+    <h1>hve-squad</h1>
+    <p class="lead">Des agents HVE Core réunis autour d'un coordinateur. Décrivez votre objectif, examinez les livrables et gardez la décision sur les actions importantes. Le coordinateur répartit le travail entre les spécialistes et conserve les décisions dans votre projet.</p>
+    <a class="btn btn-primary" href="getting-started.html">Bien démarrer</a><a class="btn btn-ghost" href="usage.html">Utiliser la squad</a>
+  </div></header>
+  <main>
+    <section class="section"><div class="container">
+      <h2>Votre parcours</h2>
+      <div class="grid">
+        <a class="card" href="getting-started.html"><h3>Installer et lancer</h3><p>Choisir le bon environnement, installer le package ou les plugins, puis confirmer votre première équipe.</p><span class="tag">Installation</span></a>
+        <a class="card" href="usage.html"><h3>Piloter le travail</h3><p>Profils, modes d'autonomie, plafonds de coût, validations humaines et fédération.</p><span class="tag">Utilisation</span></a>
+        <a class="card" href="demo.html"><h3>Pratiquer</h3><p>Quatre parcours : Azure, migration, produit et modernisation .NET.</p><span class="tag">Démonstrations</span></a>
+        <a class="card" href="ecosystem.html"><h3>Choisir une distribution</h3><p>Comprendre le package APM, les plugins Copilot et le serveur MCP.</p><span class="tag">Référence</span></a>
+        <a class="card" href="maintaining.html"><h3>Maintenir le package</h3><p>Dépendances, sources, tests, versions et publication de la documentation.</p><span class="tag">Maintenance</span></a>
+        <a class="card" href="troubleshooting.html"><h3>Résoudre un problème</h3><p>Installation lente, agent introuvable, mise à jour des plugins et reprise après un arrêt.</p><span class="tag">Dépannage</span></a>
+      </div>
+    </div></section>
+    <section class="section"><div class="container">
+      <h2>Une méthode commune</h2>
+      <p>Chaque profil comprend les rôles de recherche, planification, implémentation, revue et tenue de l'historique. Les spécialistes complètent cette base selon votre objectif : produit, architecture, sécurité, accessibilité, exploitation ou Azure.</p>
+      <p>Le package rassemble les agents, prompts, instructions et skills de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> avec les sources de la squad. APM les installe dans le dossier <code>.github/</code> de votre dépôt ; les plugins proposent un autre accès dans CLI et App, avec des limites de couverture à vérifier.</p>
+      <p>Le profil <code>product</code> aide à cadrer un besoin, formaliser les exigences et préparer un backlog. Le profil <code>azure</code> ajoute architecture, IaC, déploiement soumis à approbation, documentation de l'existant et diagnostic en lecture seule. Une fédération permet à plusieurs sous-squads de conserver leurs propres livrables et historiques.</p>
+      <div class="callout"><p><strong>Vous restez responsable des décisions.</strong> Autopilot ne supprime ni les validations humaines ni les limites du périmètre demandé. Un livrable généré n'est pas nécessairement testé, déployé ou validé.</p></div>
+    </div></section>
+    <section class="section"><div class="container">
+      <h2>Ateliers pratiques</h2>
+      <p><a href="https://peter-n91.github.io/onepoint-hve-squad-workshop/">Atelier onepoint</a> : cadrer puis commencer un complément Office, avec un parcours bilingue. <a href="https://peter-n91.github.io/hve-squad-workshop/">Atelier Qubix</a> : du besoin métier au backlog, à la fédération et à l'implémentation.</p>
+      <p>Travaillez dans votre propre dépôt. Placez uniquement des documents autorisés dans <code>knowledge-docs/</code> et n'insérez aucun secret dans vos demandes.</p>
+    </div></section>
+  </main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>
