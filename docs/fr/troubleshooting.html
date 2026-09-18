@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dépannage | hve-squad</title><meta name="description" content="Résoudre les problèmes d'installation, de plugins, d'agents, de coût estimé et de diagrammes hve-squad." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../troubleshooting.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html" class="active">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../troubleshooting.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Référence</div><h1>Dépannage</h1><p class="lead">Identifiez l'environnement utilisé, l'étape en échec et les preuves disponibles avant de relancer le travail.</p></div></header>
+  <main class="content"><div class="container">
+    <h2>Plugins et agents</h2>
+    <h3>Le coordinateur est introuvable dans CLI ou App</h3>
+    <p>Vérifiez que <code>hve-squad</code> et <code>hve-squad-hve-core</code> sont tous deux installés dans le client courant. L'application peut utiliser un autre <code>COPILOT_HOME</code>. Dans CLI, saisissez <code>/agent</code> et cherchez <code>Squad Coordinator</code> ou <code>hve-squad:squad-coordinator</code>.</p>
+    <h3><code>/squad</code> charge du texte mais ne lance pas l'équipe</h3>
+    <p>Vous avez probablement sélectionné le skill. Dans VS Code, choisissez le prompt « Hands a request to the Squad Coordinator… ». Dans CLI ou App, sélectionnez directement l'agent coordinateur, puis envoyez les arguments sans préfixe.</p>
+    <h3>Un spécialiste manque ou ne produit aucun livrable</h3>
+    <p>Demandez <code>squad-doctor</code>. La distribution plugin peut manquer de domaines HVE Core ; le remède documenté est <code>apm install github/microsoft/hve-core --target copilot</code> dans le dépôt. Ne remplacez pas silencieusement le spécialiste par un autre agent.</p>
+    <p>Vérifiez le <code>Primary</code> du rôle dans <code>.copilot-tracking/squad/team.md</code>, sa disponibilité et son dossier de livrables. Un agent délégué peut aussi refuser une demande faute de contrat d'entrée complet. Après une évolution HVE Core, les mainteneurs peuvent comparer les agents avec <code>scripts/Get-HveCoreCastDelta.ps1</code>.</p>
+    <h3>Le compagnon affiche <code>already at latest</code></h3>
+    <p>La version propre à HVE Core peut rester identique alors que le SHA du marketplace a changé. Désinstallez puis réinstallez <code>hve-squad-hve-core</code> dans chaque environnement concerné. Ne cumulez pas ce compagnon avec le plugin officiel <code>hve-core</code>. Voir <a href="getting-started.html?host=cli">les commandes de mise à jour</a>.</p>
+    <h2>Installation APM</h2>
+    <h3>L'installation dépasse 30 minutes sans erreur</h3>
+    <p>La cause habituelle est la limite GitHub de 60 requêtes par heure sans authentification. APM attend la réinitialisation de la fenêtre. Authentifiez-vous, puis relancez :</p>
+    <pre><code>gh auth login
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+    <p>Remplacez le tag par une version publiée. Le cache évite de retélécharger les fichiers déjà présents. Augmenter le parallélisme ne supprime pas la limite horaire.</p>
+    <p>L'ordre de recherche du jeton APM est <code>GITHUB_APM_PAT_&lt;ORG&gt;</code>, <code>GITHUB_APM_PAT</code>, <code>GITHUB_TOKEN</code>, <code>GH_TOKEN</code>, <code>gh auth token</code>, puis l'assistant d'identifiants Git. Vérifiez votre configuration sans afficher de secret dans une conversation ou un journal partagé.</p>
+    <h3>Quelques téléchargements échouent avec HTTP 502 ou 503</h3>
+    <p>Il s'agit généralement d'un incident temporaire côté GitHub, pas d'un changement de pin. Relancez <code>apm install --target copilot</code> ; les fichiers en cache sont conservés. Si les erreurs persistent, consultez <a href="https://www.githubstatus.com/">GitHub Status</a>. Une erreur 404 indique plutôt un fichier absent à la référence demandée.</p>
+    <h3><code>No harness detected</code> ou dossier <code>.github/</code> vide</h3>
+    <p>Depuis APM 0.18.0, un projet sans marqueur d'environnement n'est plus déployé implicitement vers Copilot. Les sources peuvent déjà être présentes dans <code>apm_modules/</code>. Relancez avec <code>--target copilot</code> ou ajoutez <code>targets: [copilot]</code> dans <code>apm.yml</code>. Voir <a href="getting-started.html?host=vscode">Bien démarrer</a>.</p>
+    <h3>Scripts absents, accès refusé ou dépendances anciennes</h3>
+    <p><code>apm list</code> affiche les scripts déclarés. Vérifiez l'authentification Git et l'accès au dépôt. En tant qu'utilisateur, réinstallez la version souhaitée. En tant que mainteneur du package, régénérez les dépendances avec <code>apm run sync-deps</code>, puis <code>apm lock</code>.</p>
+    <h2>Plafond de coût estimé</h2>
+    <h3>L'initialisation précède le contrôle du plafond</h3>
+    <p>C'est prévu : elle crée les fichiers nécessaires au calcul et reste hors plafond. Sa consommation estimée est néanmoins enregistrée. Le contrôle précède la première unité de travail après cette configuration.</p>
+    <h3>Le run s'arrête avec <code>over-ceiling</code></h3>
+    <p>Il s'agit d'une prévision, pas d'une preuve de facturation. Ouvrez la <code>Decision Ref</code> vers <code>decisions.md</code>, puis examinez <code>consumption.md</code> et <code>consumption-rates.md</code>. Le contrôle applique une réserve de 3 à l'estimation restante.</p>
+    <p>Si le cumul reste sous le plafond et la prévision est suffisamment fondée, vous pouvez approuver une poursuite séquentielle bornée. Avec <code>cannot-confirm</code>, corrigez d'abord les données manquantes ; l'approbation ne peut pas les remplacer.</p>
+    <h3>Une nouvelle demande garde l'ancien plafond</h3>
+    <p>Dans le même run, l'omission signifie héritage. Remplacez la valeur ou retirez-la explicitement :</p>
+    <pre><code>/squad request="Continue sans plafond de coût" cost-ceiling=unset</code></pre>
+    <p>Dans CLI ou App, envoyez les arguments au coordinateur sans <code>/squad</code>. Un nouveau run sans plafond fourni démarre avec <code>not-requested</code>.</p>
+    <h3>Le dernier appel a dépassé la limite</h3>
+    <p>Un appel en cours ne peut pas être interrompu par ce contrôle. Le Scribe enregistre son coût, puis aucune unité suivante ne démarre. Relevez la limite au-dessus du cumul, retirez-la, réduisez le travail ou démarrez un nouveau run. Un plafond de 10 USD avec 10,80 USD déjà estimés laisse zéro budget disponible.</p>
+    <h3>Chaque sous-squad reçoit le plafond</h3>
+    <p>C'est le comportement normal du routage ciblé ou ordinaire : le plafond s'applique séparément à chaque sous-squad. Seul l'autopilot de fédération sans <code>squad=</code> utilise un plafond agrégé à la racine. Voir <a href="usage.html#cost-admission-control">le contrat de coût</a>.</p>
+    <h2>Diagrammes et fichiers suivis</h2>
+    <h3>Les diagrammes Azure avec icônes ne se génèrent pas</h3>
+    <p>Le rendu optionnel repose sur Python, la bibliothèque <code>diagrams</code> et le binaire Graphviz <code>dot</code>. Si <code>python</code> lance le raccourci Microsoft Store, utilisez <code>uv</code> :</p>
+    <pre><code>uv run --with diagrams python docs/architecture/your-diagram.py
+dot -V</code></pre>
+    <p>Si Graphviz manque, installez-le avec la procédure autorisée sur votre poste puis rouvrez le terminal. Sans cet outillage, utilisez Mermaid. Le contrôle fourni par le skill est <code>uv run --with diagrams python .github/skills/python-diagrams/scripts/verify_installation.py</code>.</p>
+    <h3><code>.github/</code> apparaît encore après ajout au fichier d'exclusion Git</h3>
+    <p>Un fichier déjà suivi n'est pas retiré de l'index par <code>.gitignore</code>. Examinez d'abord les chemins suivis. Ne retirez de l'index que les ressources générées concernées et conservez vos workflows ; une suppression globale peut désindexer des fichiers écrits à la main.</p>
+    <h2>Versions et état local</h2>
+    <p>Épinglez un tag publié pour un usage reproductible. La préversion glissante change à chaque fusion et ne remplace pas une version stable. Le <a href="https://github.com/Peter-N91/hve-squad/blob/main/CHANGELOG.md">journal des versions (anglais)</a> décrit les changements.</p>
+    <p><code>apm_modules/</code> et les ressources générées sont exclus selon les règles du dépôt ; les workflows restent suivis. L'état de la squad est distinct du package. Une réinstallation n'est pas une raison de supprimer vos décisions ou votre historique.</p>
+    <div class="pager"><a class="prev" href="maintaining.html"><div class="dir">Retour</div><div class="ttl">Maintenance</div></a><a class="next" href="contributing.html"><div class="dir">Suite</div><div class="ttl">Contribuer</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

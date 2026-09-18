@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Écosystème | hve-squad</title>
+  <meta name="description" content="Choisir entre le package APM hve-squad, les plugins Copilot et le serveur MCP." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../ecosystem.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html" class="active">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../ecosystem.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Référence</div><h1>Écosystème</h1><p class="lead">Une source commune, trois distributions. Choisissez l'accès adapté à votre environnement sans confondre leurs capacités d'exécution.</p></div></header>
+  <main class="content"><div class="container">
+    <h2>Les trois dépôts</h2>
+    <table><thead><tr><th>Dépôt</th><th>Rôle</th><th>Usage</th></tr></thead><tbody>
+      <tr><td><a href="https://github.com/Peter-N91/hve-squad">hve-squad</a></td><td>Sources de la squad dans <code>squad-src/</code> et package APM.</td><td>Installer le contenu complet dans votre dépôt pour VS Code.</td></tr>
+      <tr><td><a href="https://github.com/Peter-N91/hve-squad-plugin">hve-squad-plugin</a></td><td>Distribution générée depuis un tag publié ; marketplace de plugins.</td><td>Utiliser les agents dans Copilot CLI ou App.</td></tr>
+      <tr><td><a href="https://github.com/Peter-N91/hve-squad-mcp">hve-squad-mcp</a></td><td>Serveur Model Context Protocol exposant les intentions de la squad comme outils.</td><td>Intégration à un hôte MCP, notamment Copilot Studio selon le mode.</td></tr>
+    </tbody></table>
+    <p>Les distributions dérivées ne sont pas des forks indépendants. Elles sont construites à partir d'une version identifiée de hve-squad ; leurs limites restent toutefois propres à chaque hôte.</p>
+    <h2>Package APM</h2>
+    <p>Choisissez cette voie pour utiliser <code>/squad</code> dans Copilot Chat avec les ressources installées dans le dépôt. Les versions publiées sont épinglées ; une installation sans référence suit la branche par défaut. Voir <a href="getting-started.html?host=vscode">l'installation VS Code</a>.</p>
+    <h2>Plugins CLI et App</h2>
+    <p>Le marketplace publie deux entrées à installer ensemble :</p>
+    <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
+copilot plugin install hve-squad@hve-squad-plugin
+copilot plugin install hve-squad-hve-core@hve-squad-plugin</code></pre>
+    <p>Sélectionnez ensuite l'agent <strong>Squad Coordinator</strong>. Les prompts VS Code ne sont pas lus par ces hôtes. Un skill nommé <code>squad</code> n'est pas une invocation du coordinateur.</p>
+    <div class="callout warn"><p><strong>Deux règles de mise à jour :</strong> réinstallez <code>hve-squad-hve-core</code> lorsque son commit épinglé change, et n'installez pas le plugin officiel <code>hve-core</code> à côté. Vérifiez le <code>COPILOT_HOME</code> réellement utilisé par chaque client.</p></div>
+    <p>La distribution plugin peut manquer de domaines HVE Core. Faites vérifier les capacités par <code>squad-doctor</code> ; la solution documentée pour les domaines absents est l'installation du package HVE Core complet dans le dépôt.</p>
+    <p>Guides de la distribution, en anglais : <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">CLI</a>, <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">application de bureau</a>, <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">notes VS Code</a> et <a href="https://peter-n91.github.io/hve-squad-plugin/enterprise-push.html">distribution en entreprise</a>.</p>
+    <h2>Serveur MCP</h2>
+    <p>Les outils principaux sont <code>squad_research</code>, <code>squad_plan</code>, <code>squad_review</code>, <code>squad_architect</code>, <code>squad_run</code>, <code>squad_federate</code> et <code>squad_render_pptx</code>. Leurs entrées reprennent les intentions et paramètres de la squad.</p>
+    <ul><li><strong>Mode délégué, stdio :</strong> VS Code délègue aux vrais agents installés. Leur installation reste nécessaire.</li><li><strong>Mode distant embarqué, Streamable HTTP avec Entra :</strong> accès à des réponses et livrables textuels sous authentification, isolation et plafonds. Le périmètre est consultatif, pas une exécution de code ou un déploiement distant.</li></ul>
+    <p>Consultez les capacités actuelles dans la <a href="https://peter-n91.github.io/hve-squad-mcp/">documentation MCP (anglais)</a> avant de concevoir une intégration. Un outil nommé « run » n'est pas à lui seul une garantie d'exécution sur l'hôte distant.</p>
+    <h2>Alignement des versions</h2>
+    <p>Le script <code>scripts/Build-SquadPlugin.ps1</code> extrait les sources d'un tag immuable lors d'une publication. Le contenu généré ne doit pas être modifié à la main dans le dépôt de distribution. Le tag source permet de relier une version du plugin ou du serveur à la version du package.</p>
+    <div class="pager"><a class="prev" href="demo.html"><div class="dir">Retour</div><div class="ttl">Démonstrations</div></a><a class="next" href="maintaining.html"><div class="dir">Suite</div><div class="ttl">Maintenance</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

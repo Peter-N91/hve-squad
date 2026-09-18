@@ -6,7 +6,10 @@
   <title>Usage — hve-squad</title>
   <meta name="description" content="Run the squad: inputs, profiles, autonomy modes, cost admission control, remote approval, Init Mode, federation of sub-squads, and branded PowerPoint decks." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <script src="assets/theme.js"></script>
   <link rel="stylesheet" href="assets/style.css" />
+  <script src="assets/site.js" defer></script>
+  <link rel="alternate" hreflang="fr" href="fr/usage.html" />
 </head>
 <body>
   <nav class="nav">
@@ -22,6 +25,7 @@
         <a href="troubleshooting.html">Troubleshooting</a>
         <a href="contributing.html">Contributing</a>
         <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="fr/usage.html" lang="fr">Fran&ccedil;ais</a>
       </div>
     </div>
   </nav>
@@ -41,6 +45,7 @@
   <main class="content">
     <div class="container">
       <h2>Invoke the coordinator</h2>
+      <p>The reference examples below use VS Code prompt syntax. In CLI or App, select <strong>Squad Coordinator</strong> and send the arguments without <code>/squad</code>. For <code>/squad-federation</code>, select <strong>Squad Federation Coordinator</strong> instead. Other named prompts are separate workflows, not shell commands. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">

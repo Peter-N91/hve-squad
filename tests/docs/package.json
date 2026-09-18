@@ -1,0 +1,11 @@
+{
+  "name": "hve-squad-docs-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test site.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modernisation .NET | hve-squad</title><meta name="description" content="Parcours de modernisation .NET Framework 4.8 vers .NET 10 avec analyse des risques, approbation et boucle de revue." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../demo-4.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html" class="active">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../demo-4.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Démonstration 04</div><h1>Modernisation .NET</h1><p class="lead">Faire évoluer une solution existante, garder une décision humaine sur les risques et vérifier les corrections avant la validation finale.</p></div></header>
+  <main class="content"><div class="container">
+    <p><a href="demo.html">Toutes les démonstrations</a> · <a href="demo-1.html">Azure</a> · <a href="demo-2.html">Migration</a> · <a href="demo-3.html">Produit</a></p>
+    <h2>Contexte</h2>
+    <p>Le run documenté porte sur <code>hve-squad-modernize-dotnet</code>, une application de gestion de stock volontairement ancienne : bibliothèque, console et 20 tests MSTest sous .NET Framework 4.8. La cible de ce scénario est .NET 10. Il s'agit d'une mise à niveau sur place, pas d'une nouvelle application.</p>
+    <p>Préparez le dépôt, hve-squad, la capacité de délégation et le SDK .NET 10. Contrôlez <code>dotnet --version</code>. Sans SDK approprié, l'analyse reste possible mais vous ne pouvez pas revendiquer des builds ou tests exécutés. Aucun déploiement cloud n'est nécessaire ; la consommation Copilot reste distincte.</p>
+    <h2>La demande</h2>
+    <p>Confirmez d'abord l'équipe et les spécialistes requis. Dans VS Code :</p>
+    <pre><code>/squad mode=autopilot request="Modernise ce dépôt de .NET Framework 4.8 vers .NET 10. Évalue les projets et dépendances, définis la cible puis réalise la mise à niveau sur place. Préserve le comportement, rends explicites les risques et vérifie les builds et tests. Attends mes décisions aux validations requises."</code></pre>
+    <p>Dans CLI ou App, sélectionnez Squad Coordinator et envoyez les arguments sans <code>/squad</code>. Les résultats ci-dessous sont ceux du parcours d'origine, pas des mesures réalisées par cette documentation.</p>
+    <h2>Première escalade</h2>
+    <p>Le chercheur a signalé un outillage de délégation manquant et suspendu le travail. L'utilisateur a approuvé une réaffectation au Squad Modernization Planner. La décision a été conservée au lieu d'être masquée par une substitution silencieuse.</p>
+    <h2>Analyse et contrôle des risques</h2>
+    <p>L'analyse a identifié les projets non SDK, MSTest v1 lié au GAC, la configuration spécifique au framework et les builds dépendant des chemins Visual Studio. Le conseil a rendu un accord conditionnel :</p>
+    <table><thead><tr><th>Domaine</th><th>Conditions</th></tr></thead><tbody>
+      <tr><td>Architecture</td><td>Documenter le changement de plateforme de tests, stabiliser le contrat de build et expliciter la stratégie de configuration.</td></tr>
+      <tr><td>Sécurité</td><td>Risque élevé : ajouter SAST et SCA ainsi qu'une politique de confiance des dépendances avant fusion.</td></tr>
+      <tr><td>IA responsable</td><td>Périmètre non matériel pour cette migration ; conserver les revues et la traçabilité.</td></tr>
+    </tbody></table>
+    <p>Le risque élevé a déclenché une décision humaine. L'utilisateur a autorisé la poursuite sous conditions dans le mode consultatif du scénario. Cette décision ne constitue pas une règle permettant de contourner les contrôles sur un autre projet.</p>
+    <h2>Changements réalisés dans le run d'origine</h2>
+    <table><thead><tr><th>Avant</th><th>Après</th></tr></thead><tbody>
+      <tr><td>Projets historiques .NET Framework 4.8</td><td>Projets SDK ciblant <code>net10.0</code>.</td></tr>
+      <tr><td>MSTest v1 via le GAC</td><td><code>Microsoft.NET.Test.Sdk</code>, <code>MSTest.TestFramework</code> et <code>MSTest.TestAdapter</code> via NuGet.</td></tr>
+      <tr><td>Build dépendant de Visual Studio</td><td>CLI <code>dotnet</code> et SDK épinglé dans <code>global.json</code>.</td></tr>
+      <tr><td>Anciennes métadonnées de configuration</td><td>Nettoyage de la configuration obsolète.</td></tr>
+      <tr><td>Absence de CI et de scans</td><td>Workflows de build, tests, SAST et SCA.</td></tr>
+    </tbody></table>
+    <p>La validation rapportait une restauration réussie, des builds Debug et Release et 20 tests sur 20 réussis. Le renforcement des analyseurs et de la nullabilité était reporté explicitement, pas déclaré terminé.</p>
+    <h2>Revue, corrections et nouvelle revue</h2>
+    <p>La première revue a détecté trois écarts malgré le build réussi :</p>
+    <ol><li>Le job CodeQL pouvait utiliser un autre SDK que celui de <code>global.json</code>.</li><li>La CI ne couvrait pas les pushes directs sur <code>main</code>.</li><li>Un fichier <code>App.config</code> vide restait référencé.</li></ol>
+    <p>Le run a épinglé le SDK du scan, ajouté le déclencheur de push et retiré la référence vide. La nouvelle revue rapportait zéro constat dans les catégories Critical, High, Medium et Low, avec les 20 tests toujours réussis. Ce résultat appartient à ce run et à son périmètre de vérification.</p>
+    <h2>Décision finale</h2>
+    <p>Un verdict Go ne publie rien tout seul. L'utilisateur doit choisir entre préparer une release candidate, demander des modifications ou arrêter. Le parcours documenté attendait encore cette validation finale.</p>
+    <p>Le bilan historique indiquait 8 tours, 11 délégations et environ 0,72 USD, soit 72 crédits IA estimés. Ce n'est ni une mesure de facturation ni une prévision pour votre code. Les deux interventions intermédiaires concernaient la réaffectation du chercheur et l'approbation du risque.</p>
+    <h2>En cas de blocage</h2>
+    <ul><li>Outillage absent : consignez le blocage et demandez une décision sur la suite.</li><li>SDK indisponible : distinguez l'analyse achevée des tests non exécutés.</li><li>Revue propre dès le premier passage : présentez les preuves réelles sans inventer des erreurs corrigées.</li><li>Demande de livraison immédiate : les validations et conditions de fusion restent applicables.</li></ul>
+    <div class="pager"><a class="prev" href="demo-3.html"><div class="dir">Retour</div><div class="ttl">Squad produit</div></a><a class="next" href="ecosystem.html"><div class="dir">Suite</div><div class="ttl">Écosystème</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

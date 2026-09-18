@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contribuer | hve-squad</title><meta name="description" content="Proposer une contribution, ajouter un fragment de changement et partager un apprentissage sans exposer de données privées." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../contributing.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html" class="active">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../contributing.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Guide contributeur</div><h1>Contribuer</h1><p class="lead">Proposez un changement ciblé, accompagnez-le de preuves et faites-le relire avant publication.</p></div></header>
+  <main class="content"><div class="container">
+    <h2>De la proposition au package</h2>
+    <p>Le <a href="https://github.com/Peter-N91/hve-squad/blob/main/CONTRIBUTING.md">guide de contribution du dépôt (anglais)</a> reste la référence. Le package ne lit pas les environnements consommateurs : une modification entre dans la distribution par une pull request, pas par une remontée automatique des fichiers locaux.</p>
+    <ol><li>Créez un fork et une branche pour votre changement.</li><li>Modifiez les sources concernées et ajoutez les tests adaptés.</li><li>Ajoutez un fragment avec <code>apm run change</code>.</li><li>Ouvrez une PR vers la branche par défaut avec le périmètre et les vérifications réalisées.</li><li>Traitez les remarques de revue. Un mainteneur décide de la fusion et de la publication.</li></ol>
+    <h2>Enregistrer le changement</h2>
+    <p>Ne modifiez pas <code>CHANGELOG.md</code> ni la version dans <code>apm.yml</code> : ce sont des sorties de publication. Ajoutez un fichier distinct dans <code>.changes/unreleased/</code> pour éviter les conflits entre PR.</p>
+    <pre><code>apm run change</code></pre>
+    <p>Le script demande le type, le niveau de version, un titre pour le nom de fichier et le texte destiné aux notes de publication. Les types admis sont <code>Added</code>, <code>Changed</code>, <code>Deprecated</code>, <code>Removed</code>, <code>Fixed</code> et <code>Security</code>.</p>
+    <table><thead><tr><th>Niveau</th><th>Quand le proposer</th></tr></thead><tbody><tr><td><code>patch</code></td><td>Correction ou extension d'un concept existant, y compris un agent ou un rôle supplémentaire.</td></tr><tr><td><code>minor</code></td><td>Nouveau concept ou changement important de la manière d'utiliser le package.</td></tr><tr><td><code>major</code></td><td>Changement qui impose une adaptation au consommateur.</td></tr></tbody></table>
+    <pre><code>---
+bump: patch
+type: Fixed
+---
+
+- **Corrected a missing role mapping.** Updated the roster to use the deployed agent.</code></pre>
+    <p>Les valeurs techniques et les notes de publication du dépôt restent en anglais. Commencez les entrées par <code>- </code>, nommez le problème en gras, décrivez le changement et citez les chemins utiles. Un fragment correspond à une idée ; le mainteneur peut corriger le niveau avant fusion.</p>
+    <h2>Préversion et correctif isolé</h2>
+    <p>Une fusion ne publie pas une version stable. Les fragments attendent la décision du mainteneur. La préversion glissante permet de tester le contenu déjà fusionné ; son tag exact figure sur <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>. Elle change à chaque fusion : épinglez une version publiée pour un usage durable.</p>
+    <p>Une publication livre un commit entier, pas une sélection de fragments. Si <code>main</code> contient du travail qui ne doit pas partir, un mainteneur prépare une branche de correctif depuis le dernier tag et y applique uniquement les changements nécessaires. Release Prep cible cette branche, puis le résultat est réintégré selon la procédure du dépôt.</p>
+    <h2>Améliorer la documentation</h2>
+    <p>Les pages correspondantes de <code>docs/</code> et <code>docs/fr/</code> doivent évoluer ensemble. Conservez les noms de commandes et de paramètres, vérifiez les liens et les ancres, puis contrôlez le rendu mobile. Les styles et interactions sont partagés ; aucune compilation frontend n'est nécessaire.</p>
+    <h2>Partager un apprentissage</h2>
+    <p>La mémoire active des agents reste locale. <code>/squad-learn</code> prépare une proposition nettoyée pour revue humaine ; elle n'est jamais promue automatiquement. Un apprentissage général peut rejoindre le package public, un apprentissage propre à une organisation doit rester dans son dépôt privé.</p>
+    <ul><li>Retirez secrets, jetons, identifiants et chaînes de connexion.</li><li>Retirez les noms de clients, d'organisations et de personnes.</li><li>Retirez les chemins absolus et URL internes.</li><li>Généralisez les détails propres au projet sans perdre la leçon vérifiable.</li><li>Confirmez que le destinataire est autorisé à recevoir le contenu.</li></ul>
+    <p>Les apprentissages partagés résident dans <code>squad-src/.github/skills/squad/learnings/shared-learnings.md</code>. Le <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/shared-learnings.md">modèle de partage (anglais)</a> décrit les voies publique et privée. La revue humaine protège contre les fuites, les règles erronées et l'altération de la mémoire.</p>
+    <div class="pager"><a class="prev" href="troubleshooting.html"><div class="dir">Retour</div><div class="ttl">Dépannage</div></a><a class="next" href="index.html"><div class="dir">Suite</div><div class="ttl">Accueil</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

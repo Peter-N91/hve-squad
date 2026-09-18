@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squad produit | hve-squad</title><meta name="description" content="Du besoin métier aux exigences, au backlog, à l'expérimentation et à la synthèse de direction avec hve-squad." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../demo-3.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html" class="active">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../demo-3.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Démonstration 03</div><h1>Squad produit</h1><p class="lead">Transformer un problème métier en livrables examinables : découverte, exigences, feuille de route, expérience minimale et synthèse de direction.</p></div></header>
+  <main class="content"><div class="container">
+    <p><a href="demo.html">Toutes les démonstrations</a> · <a href="demo-1.html">Azure</a> · <a href="demo-2.html">Migration</a> · <a href="demo-4.html">.NET</a></p>
+    <h2>Avant de commencer</h2>
+    <p>Installez hve-squad et vérifiez les rôles du profil <code>product</code> : découverte, analyse, produit, expérimentation, présentation et rédaction. Le coordinateur doit pouvoir déléguer avec <code>runSubagent</code> ou <code>task</code>. Dans une distribution plugin, contrôlez les agents manquants avant la session.</p>
+    <p>Ce parcours produit des documents, sans création de ressources cloud ni publication dans un backlog externe. L'utilisation des modèles Copilot peut néanmoins consommer votre quota ou générer un coût selon votre offre.</p>
+    <p>Remplacez <code>{{CLIENT_PROCESS}}</code> par le processus choisi avec les participants : accueil des nouveaux arrivants, demandes de support, achats ou validation des dépenses.</p>
+    <h2>0. Initialiser</h2>
+    <pre><code>/squad init profile=product</code></pre>
+    <p>Confirmez l'équipe et le canal d'approbation. <code>in-chat</code> suffit pour une session locale ; <code>github-issue</code> nécessite la configuration décrite dans <a href="usage.html">Utilisation</a>. Dans CLI ou App, choisissez Squad Coordinator puis envoyez les paramètres sans <code>/squad</code>.</p>
+    <h2>1. Comprendre le problème</h2>
+    <pre><code>/squad request="Explore le problème de {{CLIENT_PROCESS}}. Identifie les personnes concernées, leur parcours actuel et leurs difficultés. Prépare des personas et une carte du parcours en distinguant les faits des hypothèses."</code></pre>
+    <p>Les participants apportent leur contexte. Les agents ne doivent pas inventer des entretiens ni transformer une hypothèse en observation.</p>
+    <h2>2. Formaliser les exigences</h2>
+    <pre><code>/squad request="Transforme la découverte en BRD pour {{CLIENT_PROCESS}} : objectifs, périmètre, parties prenantes, exigences métier et mesures de succès."</code></pre>
+    <p>L'analyse produit un document que les responsables peuvent examiner. La recherche et le plan précèdent la rédaction, puis une revue vérifie le livrable.</p>
+    <h2>3. Préparer la feuille de route et le backlog</h2>
+    <pre><code>/squad request="Organise les exigences en feuille de route progressive et en backlog orienté résultats, avec critères d'acceptation. Produis un livrable local ; ne publie rien dans un outil de suivi."</code></pre>
+    <p>Un backlog préparé n'est pas un backlog publié. L'écriture dans Azure DevOps ou Jira constitue une action distincte avec aperçu et approbation.</p>
+    <h2>4. Tester l'incertitude principale</h2>
+    <pre><code>/squad request="Conçois une Minimum Viable Experiment pour tester l'hypothèse la plus risquée de {{CLIENT_PROCESS}} avant de construire. Précise la mesure, le seuil de décision et les preuves à recueillir."</code></pre>
+    <div class="callout warn"><p><strong>Une MVE n'est pas un MVP.</strong> Elle teste une incertitude. Un protocole non exécuté ne fournit aucun résultat ; ne le présentez pas comme une validation du produit.</p></div>
+    <h2>5. Examiner la préparation</h2>
+    <pre><code>/squad request="Évalue la préparation du plan et du backlog avant engagement. Donne un verdict go, conditions ou stop, avec les lacunes, risques et preuves manquantes."</code></pre>
+    <p>Si l'initiative exige sécurité, coûts ou architecture, le coordinateur propose les rôles manquants ou un profil plus large. Il ne doit pas simuler l'avis d'un spécialiste absent.</p>
+    <h2>6. Préparer la synthèse de direction</h2>
+    <pre><code>/squad request="Prépare une présentation de synthèse pour une direction non technique : problème, parcours, exigences, feuille de route, expérience prévue et décisions attendues. Appuie chaque affirmation sur les livrables disponibles."</code></pre>
+    <p>Fournissez le modèle de marque si nécessaire. Vérifiez le contenu et le rendu, puis demandez une revue par rapport aux documents sources.</p>
+    <h2>Variante autopilot</h2>
+    <p>Après initialisation et confirmation :</p>
+    <pre><code>/squad profile=product mode=autopilot request="Nous voulons améliorer {{CLIENT_PROCESS}}. Comprends les acteurs et les difficultés, formalise les exigences, prépare une feuille de route et un backlog local, conçois une expérience pour tester l'hypothèse principale, vérifie la préparation et produis une synthèse pour la direction. Distingue faits, hypothèses et tests non exécutés. Garde-moi décisionnaire pour les validations et ne publie rien sans accord."</code></pre>
+    <p>Le coordinateur organise les spécialistes et conserve les validations obligatoires. Sans canal distant, approuvez dans la conversation. Si l'outillage bloque, montrez le blocage ou un enregistrement clairement identifié plutôt que de prétendre à une exécution live.</p>
+    <div class="pager"><a class="prev" href="demo-2.html"><div class="dir">Retour</div><div class="ttl">Migration autopilot</div></a><a class="next" href="demo-4.html"><div class="dir">Suite</div><div class="ttl">Modernisation .NET</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

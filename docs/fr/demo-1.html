@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Démonstration Azure | hve-squad</title><meta name="description" content="Parcours Azure avec hve-squad : coûts, architecture, IaC, validation humaine, documentation et diagnostic." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../demo-1.html" />
+</head>
+<body>
+  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html" class="active">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../demo-1.html" lang="en">English</a></div></div></nav>
+  <header class="hero"><div class="container"><div class="eyebrow">Démonstration 01</div><h1>Squad Azure</h1><p class="lead">Concevoir, chiffrer, préparer et examiner une infrastructure. Les déploiements attendent votre accord ; le diagnostic reste en lecture seule.</p></div></header>
+  <main class="content"><div class="container">
+    <p><a href="demo.html">Toutes les démonstrations</a> · <a href="demo-2.html">Migration</a> · <a href="demo-3.html">Produit</a> · <a href="demo-4.html">.NET</a></p>
+    <h2>Avant de commencer</h2>
+    <p>Installez une version publiée de hve-squad, vérifiez les agents du profil <code>azure</code> et authentifiez Azure CLI avec <code>az login</code>. Contrôlez l'abonnement avec <code>az account show</code>. Utilisez un groupe de ressources existant autorisé pour les étapes de documentation et de diagnostic.</p>
+    <p>Le serveur <code>@azure/mcp</code> est facultatif : les capacités concernées peuvent utiliser Azure CLI et REST en repli. Son installation n'est pas implicitement déclenchée par l'installation du package.</p>
+    <h3 id="icon-diagrams">Diagrammes avec icônes Azure</h3>
+    <p>Mermaid convient sans outillage supplémentaire. Pour produire des images PNG/SVG avec le skill <code>python-diagrams</code>, prévoyez Python ou <code>uv</code> et Graphviz. Vérifiez <code>dot -V</code> avant la session. En l'absence de ces outils, conservez Mermaid.</p>
+    <h2>0. Initialiser</h2>
+    <pre><code>/squad init profile=azure</code></pre>
+    <p>Confirmez l'équipe proposée. Dans CLI ou App, sélectionnez Squad Coordinator et envoyez <code>init profile=azure</code>. Les demandes suivantes s'envoient au même agent, sans le préfixe <code>/squad</code>.</p>
+    <h2>1. Estimer le coût</h2>
+    <pre><code>/squad request="Estime le coût mensuel Azure d'une petite application interne en West Europe : frontend et backend App Service, Azure SQL, Key Vault et Storage, avec réseau privé. L'objectif est moins de 60 USD par mois. Donne une estimation indicative et les compromis nécessaires, sans promettre que cette architecture respecte ce budget."</code></pre>
+    <p>Examinez les hypothèses de dimensionnement, région, disponibilité et réseau. Le budget est une contrainte à tester, pas un coût garanti. Le plafond de consommation des modèles est un mécanisme distinct.</p>
+    <h2>2. Concevoir puis préparer l'IaC</h2>
+    <pre><code>/squad request="Conçois le HLD et le LLD de cette application avec Azure Verified Modules et une organisation compatible avec une landing zone. Définis VNet, sous-réseaux et endpoints privés nécessaires. Justifie les choix de sécurité et l'intérêt éventuel des conteneurs. Ne déploie rien."
+/squad request="Écris le Bicep de ce LLD sous infra/bicep/demo avec des modules AVM. Ne déploie rien."</code></pre>
+    <p>La recherche et la planification précèdent l'implémentation. Vérifiez la traçabilité entre le LLD et les fichiers IaC ; ne prenez pas une génération de fichiers pour une preuve de compilation.</p>
+    <h2>3. Revoir et préparer le déploiement</h2>
+    <pre><code>/squad request="Revois le Bicep par rapport au LLD. Vérifie la compilation et signale les écarts."
+/squad request="Prépare le déploiement de infra/bicep/demo. Exécute le contrôle Azure Policy en lecture seule et présente le what-if ainsi que les contraintes. Attends mon approbation avant toute modification Azure."</code></pre>
+    <p>Le Deployer présente les politiques effectives et les refus anticipés, puis attend la validation requise. Pour une démonstration sans création de ressources, arrêtez-vous ici ou refusez le déploiement.</p>
+    <h2>4. Documenter l'existant</h2>
+    <pre><code>/squad request="Documente l'infrastructure déjà déployée dans rg-demo : inventaire, matrice de conformité Azure Policy, guide d'exploitation et plan de sauvegarde et reprise. Lecture seule, aucune modification."</code></pre>
+    <p>Remplacez <code>rg-demo</code> par un groupe autorisé. Le rôle As-Built collecte les preuves et prépare les documents sans déployer.</p>
+    <h2>5. Diagnostiquer un symptôme réel</h2>
+    <pre><code>/squad request="Analyse les erreurs 5xx de l'App Service dans rg-demo. Consulte Resource Health et les journaux récents, classe les causes plausibles et recommande des corrections. Ne modifie rien."</code></pre>
+    <p>Une recommandation n'autorise pas son application. Le diagnostic nécessite un symptôme réel ; n'inventez pas un incident pour compléter le scénario.</p>
+    <h2>Variante autopilot</h2>
+    <p>Après l'initialisation confirmée, formulez l'objectif complet :</p>
+    <pre><code>/squad profile=azure mode=autopilot request="Prépare une petite application interne sur Azure en West Europe avec frontend, backend, base SQL, secrets et stockage. Étudie le réseau privé, la sécurité, les contraintes de gouvernance et un objectif de coût mensuel inférieur à 60 USD. Produis l'architecture, l'IaC et sa revue, puis prépare l'exploitation. Signale les compromis ou contraintes incompatibles. Garde-moi décisionnaire pour tout coût cloud et toute modification de l'abonnement."</code></pre>
+    <p>Attendez des preuves de recherche, planification, revue et validation, pas seulement un résumé confiant. Sans abonnement disponible, restez sur les livrables locaux. Sans outillage de prix avancé, explicitez les limites de l'estimation.</p>
+    <div class="pager"><a class="prev" href="demo.html"><div class="dir">Retour</div><div class="ttl">Démonstrations</div></a><a class="next" href="demo-2.html"><div class="dir">Suite</div><div class="ttl">Migration autopilot</div></a></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+</body>
+</html>

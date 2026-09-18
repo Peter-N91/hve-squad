@@ -65,3 +65,5 @@ tests/tier2/tier2-score.json
 
 # Linter and scanner output (generated in CI)
 results.sarif
+
+tests/docs/node_modules/
