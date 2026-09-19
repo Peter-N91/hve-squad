@@ -14,7 +14,6 @@ agents:
   - Squad Prompt Engineer
   - Squad Document
   - Squad Governance Report
-  - RPI Planner
   - Codebase Profiler
   - Meeting Analyst
   - System Architecture Reviewer
