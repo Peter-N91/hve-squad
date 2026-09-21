@@ -5,6 +5,68 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-09-21
+
+### Added
+
+- **The documentation never pointed to the MCP server or the Copilot CLI plugin.** The home page mentioned `hve-squad-mcp` in passing with a bare GitHub link, and `hve-squad-plugin` was absent from the site and the README entirely, so a consumer had no path from this repository to either sibling's documentation. Added an **Ecosystem** page (`docs/ecosystem.html`, wired into the navigation and pager across the site) covering what each of the three repositories is, which surface to use for which host, the MCP server's two execution modes and its tool set, the plugin's install-as-a-pair rule and its two update rules, and how releases stay aligned. The home page's companion section now covers both siblings with links to their GitHub Pages sites, and `README.md` gained a **Related repositories** table (`docs/index.html`, `README.md`).
+
+### Changed
+
+- **hve-core@8692fe3 renamed the entire data-science skill pack and retired the `Supply Chain Reviewer` agent outright.** `ds-catalog`, `ds-analysis-authoring`, `ds-dataops`, `ds-evaluation-design`, and `ds-feasibility` moved under `.github/skills/data-science-engineering/` as `data-catalog`, `analysis-authoring`, `dataops`, `evaluation-design`, and `feasibility`; `Squad Data Scientist` (`squad-src/.github/agents/squad/squad-data-scientist.agent.md`) and `Squad Prompt Engineer` (`squad-src/.github/agents/squad/squad-prompt-engineer.agent.md`) now route to the renamed skills, and `squad-roster.instructions.md`'s `data-scientist`/`prompt-engineer` rows and *Deferred Reviewer-Class Agents* table were updated to match — `Data Workstream Coach` is described generically as the non-dispatchable coach orchestrator its successor `Data Science and Engineering Coach` now ships as, and the removed `Supply Chain Reviewer` row was dropped in favor of a note that `SSSC Planner`/`Supply Chain Skill Assessor` already cover its ground. No squad-owned charter or doc page needed a new agent; `apm.yml` is regenerated and repinned to `8692fe38cc0415ff8d21aa1b5d8198f008cd4038`.
+
+- Updated hve-core dependency pin to `c7ee5b9` (c7ee5b9642ab1877a6b5ce5336ebc448b89b2708).
+
+- Updated hve-core dependency pin to `b7f8a7e` (b7f8a7e8b79694812ea89a46c6517d7ae6050d0b).
+
+- Updated hve-core dependency pin to `b972914` (b972914964965b00e40e3a65f42e592fe3885a1a).
+
+- Updated hve-core dependency pin to `48a7bfd` (48a7bfd14cea8b5122c1ba3c17eb0a7fdb28809d).
+
+- Updated hve-core dependency pin to `aaf51b9` (aaf51b9bf77237708f55e83974696fb62a910d80).
+
+- Updated hve-core dependency pin to `8aa6b21` (8aa6b214461e06df5b304ee48027fc49dfb5fd6f).
+
+- Updated hve-core dependency pin to `f68cc90` (f68cc90a7f25bd5a0a0f13740f38327e476c9ff6).
+
+- Updated hve-core dependency pin to `abeea85` (abeea85e70290fe9657989fd4fbd4e93afabca3d).
+
+- **hve-core@c8c5e94 removed the `Code Review PR` findings-perspective subagent outright with no dispatchable one-for-one replacement.** Its Register 1 walkthrough capability moved into `Code Review Orientation`, a new mandatory internal stage the `Code Review` orchestrator now runs itself before any findings perspective rather than a caller-dispatchable subagent -- it consumes a `diff-state.json` only that orchestrator produces, so it fails the roster's worker-agent contract test and cannot serve as a roster alternate. The `tester` role's Cast Catalog row and the `squad-coordinator.agent.md`/`squad-federation-coordinator.agent.md` `agents:` frontmatter were updated to drop the retired alternate; `Code Review Readiness` already covers PR deliverable readiness, so no gap remains and no new squad-owned charter was needed. `apm.yml` is regenerated and repinned to `c8c5e94ecd22438e21460bd4b2064f8516f55603`.
+
+- **The cost ceiling warned only after estimated spend had already accumulated.** Cost Preflight now builds a conservative demand manifest before work dispatch, applies eligible calibration plus a factor-of-three reserve, and persists a reproducible decision. Confirmed initialization is recorded setup spend outside admission. An `over-ceiling` forecast offers stop or bounded proceed; approved work runs in sequential units and stops new work when accumulated estimated spend reaches the ceiling. Omitted input inherits inside the same run, `cost-ceiling=unset` removes the guard, and a new run without a value is ungated. Ordinary federation routing applies an independent ceiling to every selected sub-squad; only untargeted federation autopilot uses one aggregate root ceiling, rate table, and cumulative multi-round meta total (`squad-src/.github/skills/squad/references/consumption.md`, `squad-src/.github/skills/squad/references/gates-and-modes.md`).
+
+- Updated hve-core dependency pin to `9661382` (966138293855f7f7547bc31a6e8a60d18793c6f7).
+
+- Updated hve-core dependency pin to `9569d84` (9569d84fb6a203bc68f6a8245c386e08d3133a6c).
+
+- Updated hve-core dependency pin to `9bf1a30` (9bf1a30022ca907e06d93baa00f87cf889ee573b).
+
+- Updated hve-core dependency pin to `199d39e` (199d39e1974dfdccff05fbea882d2ebf6527cc55).
+
+- Updated hve-core dependency pin to `ed16a20` (ed16a20a6479a4c2ac01173086b8136679924fe5).
+
+- Updated hve-core dependency pin to `a648c6c` (a648c6c4a0fcf4d7156621fae1295af60ce7b4d1).
+
+- Updated hve-core dependency pin to `bc73115` (bc731154f13b0d1f1887a6e3c514b6d93a2f7d4b).
+
+- **The `lead` role lost its `RPI Planner` alternate.** `hve-core@14e46010407edaa194bd2bba3d4e100d8707739c` removed `RPI Planner` outright with no replacement agent; it shared the same delegated-worker input contract (a required parent plan artifact, one assigned phase, a bounded write boundary) that already excludes `RPI Researcher` from the roster, so it was never a valid plain role dispatch target. The `lead` role's cast catalog row, the roster example, the `seed-templates.md` template, and the `agents:` frontmatter of both `squad-coordinator.agent.md` and `squad-federation-coordinator.agent.md` now drop it with no substitute, since `Squad Lead` already authors and revises every phase of its own plan directly. No new squad-owned charter was needed.
+
+### Fixed
+
+- **An installed `hve-squad-hve-core` tree could not be proven to match the commit its marketplace entry pins.** `config.json` records a content digest rather than the git commit SHA-1, and its `version` comes from upstream hve-core's own `plugin.json`, so `copilot plugin update` reports 'already at latest' even when the pin moves. Added `scripts/Test-HveCorePin.ps1`, which recomputes the git blob SHA-1 of every installed file against the pinned tree, and rewrote the marketplace description in `scripts/Build-SquadPlugin.ps1` to say the plugin replaces the official hve-core plugin rather than sitting beside it, and must be refreshed with uninstall-then-install.
+
+- **VS Code omitted squad agents and local Copilot sessions could not launch plugin hooks.** The plugin builder now emits identical manifests at the root and `.github/plugin/plugin.json`, generates hook commands relative to `${CLAUDE_PLUGIN_ROOT}`, invokes Windows PowerShell with an execution-policy bypass, and rejects missing hook scripts (`scripts/Build-SquadPlugin.ps1`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.17.0"
+```
+
+[0.17.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.17.0
+
 ## [0.16.2] - 2026-08-25
 
 ### Changed
