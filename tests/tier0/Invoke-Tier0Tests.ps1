@@ -48,7 +48,7 @@
 .EXAMPLE
     ./Invoke-Tier0Tests.ps1 -SourceRoot .
 .NOTES
-    See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-11).
+    See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-14).
 #>
 [CmdletBinding(DefaultParameterSetName = 'Install')]
 param(
@@ -118,6 +118,9 @@ $containers = @(
 # Manifest coverage is a property of the working copy, not of an installed tree.
 if ($PSCmdlet.ParameterSetName -eq 'Source') {
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Manifest.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Build-SquadPlugin.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
 }
