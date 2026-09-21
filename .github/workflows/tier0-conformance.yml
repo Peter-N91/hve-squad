@@ -20,6 +20,7 @@ on:
       - main
     paths:
       - 'squad-src/**'
+      - 'scripts/Build-SquadPlugin.ps1'
       - 'apm.yml'
       - 'tests/tier0/**'
       - '.github/workflows/tier0-conformance.yml'

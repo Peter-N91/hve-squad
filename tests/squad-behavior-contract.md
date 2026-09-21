@@ -76,6 +76,7 @@ No Copilot invocation. Install the ref into a scratch directory, then inspect th
 | PKG-10 | Worker agents declare `user-invocable: false`; the three user-facing agents declare `user-invocable: true` | Wrong flag either hides an entrypoint or exposes a worker |
 | PKG-12 | Both squad entry points expose and forward `cost-ceiling=<positive USD\|unset>` with same-run inheritance | The lifecycle must be invocable from the delivered prompts |
 | PKG-13 | Initialization is outside Cost Preflight; ordinary federation routing forwards one independent ceiling to every selected sub-squad and resets root admission to `not-requested`; only untargeted federation autopilot owns aggregate admission and its federation-root rate table | Prevents bootstrap deadlock, stale aggregate gates, silent ungated sub-squads, and accidental double admission |
+| PKG-14 | The plugin build emits byte-identical `plugin.json` files at the distribution root and under `.github/plugin/`, and every generated hook command resolves its script through the `CLAUDE_PLUGIN_ROOT` environment variable | VS Code discovers agents through the root manifest, while CLI hooks execute from the consumer repository rather than the installed plugin directory |
 
 ## Tier 1 — Single squad
 

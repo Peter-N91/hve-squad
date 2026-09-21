@@ -9,15 +9,16 @@
     hve-squad-plugin sibling repository.
 .DESCRIPTION
     Per ADR-0006, the plugin distribution tree (agents/, skills/,
-    .github/plugin/plugin.json, .github/plugin/marketplace.json) is generated
+    plugin.json, .github/plugin/plugin.json, .github/plugin/marketplace.json) is generated
     output that never lives in hve-squad's own working tree. This script is
     the single, reproducible generator: it resolves an immutable source (a
     git ref or, for local iteration only, a working copy), copies the 26
     squad agents with their dead .instructions.md citations rewritten to the
     plugin's skill-reference targets, ports squad-src/.github/skills/squad/
     with its two housekeeping edits, authors the 5 prompt-derived invocation
-    skills, and writes a version-stamped plugin.json plus a marketplace.json
-    scaffold.
+    skills, writes a cwd-independent hooks.json, and writes byte-identical
+    version-stamped plugin.json manifests at the root and under
+    .github/plugin/, plus a marketplace.json scaffold.
 
     Source resolution never reads a live copy of main's working tree unless
     -SourceRoot is explicitly passed. Under -Ref (the default, resolving to
@@ -118,22 +119,27 @@ function Resolve-BuildSource {
         throw "Specify either -Ref <tag> or -SourceRoot <path>, not both. -Ref builds a shippable, tag-pinned tree; -SourceRoot is local/dev-only and stamps a non-release version."
     }
 
-    $latestTag = (git -C $RepoRoot describe --tags --abbrev=0 2>$null)
-    if ($LASTEXITCODE -ne 0 -or -not $latestTag) {
-        throw "Could not resolve the latest tag via 'git describe --tags --abbrev=0' in $RepoRoot. Pass -Ref explicitly, or -SourceRoot for a local/dev build."
-    }
-
     if ($SourceRootSpecified) {
         $resolvedSourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
         if (-not (Test-Path -LiteralPath (Join-Path $resolvedSourceRoot 'squad-src/.github'))) {
             throw "-SourceRoot '$resolvedSourceRoot' has no squad-src/.github — not an hve-squad working copy."
         }
+        $apmYaml = Get-Content -LiteralPath (Join-Path $resolvedSourceRoot 'apm.yml') -Raw
+        $versionMatch = [regex]::Match($apmYaml, '(?m)^version:\s*([0-9A-Za-z.+-]+)\s*$')
+        if (-not $versionMatch.Success) {
+            throw "Could not resolve the package version from '$resolvedSourceRoot/apm.yml'."
+        }
         return [pscustomobject]@{
             Mode          = 'Source'
             SourceRoot    = $resolvedSourceRoot
             Ref           = $null
-            PluginVersion = "$($latestTag -replace '^v', '')+local"
+            PluginVersion = "$($versionMatch.Groups[1].Value)+local"
         }
+    }
+
+    $latestTag = (git -C $RepoRoot describe --tags --abbrev=0 2>$null)
+    if ($LASTEXITCODE -ne 0 -or -not $latestTag) {
+        throw "Could not resolve the latest tag via 'git describe --tags --abbrev=0' in $RepoRoot. Pass -Ref explicitly."
     }
 
     $resolvedRef = if ($RefSpecified) { $Ref } else { $latestTag }
@@ -451,6 +457,77 @@ function Assert-PluginTreeConformance {
     }
 
     Write-Host "Conform: citations resolve and no unauthored files under agents/ or skills/" -ForegroundColor Green
+}
+
+function Write-PluginHookManifest {
+    <#
+    .SYNOPSIS
+        Writes hook commands that resolve bundled scripts from the installed
+        plugin root instead of the consumer repository's working directory.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$OutputRoot,
+
+        [switch]$DryRun
+    )
+
+    $hookDefinitions = @(
+        [pscustomobject]@{ Event = 'sessionStart'; Script = 'session-start-check'; Matcher = $null }
+        [pscustomobject]@{ Event = 'preToolUse'; Script = 'impactful-action-gate'; Matcher = 'bash|powershell' }
+        [pscustomobject]@{ Event = 'preToolUse'; Script = 'state-write-guard'; Matcher = 'create|edit' }
+        [pscustomobject]@{ Event = 'preToolUse'; Script = 'dispatch-guards'; Matcher = 'task' }
+        [pscustomobject]@{ Event = 'postToolUse'; Script = 'notification-audit'; Matcher = 'bash|powershell' }
+        [pscustomobject]@{ Event = 'subagentStop'; Script = 'autonomous-escalation-check'; Matcher = $null }
+        [pscustomobject]@{ Event = 'userPromptSubmitted'; Script = 'prompt-injection-note'; Matcher = $null }
+    )
+
+    if (-not $DryRun) {
+        $missingScripts = [System.Collections.Generic.List[string]]::new()
+        foreach ($definition in $hookDefinitions) {
+            foreach ($extension in @('sh', 'ps1')) {
+                $relativePath = "hooks/scripts/$($definition.Script).$extension"
+                if (-not (Test-Path -LiteralPath (Join-Path $OutputRoot $relativePath) -PathType Leaf)) {
+                    $missingScripts.Add($relativePath) | Out-Null
+                }
+            }
+        }
+        if ($missingScripts.Count -gt 0) {
+            throw "Plugin hook scripts are missing from OutputRoot: $($missingScripts -join ', '). The builder will not publish hooks.json entries that fail closed from every consumer repository."
+        }
+    }
+
+    $hooks = [ordered]@{}
+    foreach ($definition in $hookDefinitions) {
+        if (-not $hooks.Contains($definition.Event)) {
+            $hooks[$definition.Event] = [System.Collections.Generic.List[object]]::new()
+        }
+
+        $entry = [ordered]@{
+            type       = 'command'
+            bash       = 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/' + $definition.Script + '.sh"'
+            powershell = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:CLAUDE_PLUGIN_ROOT/hooks/scripts/' + $definition.Script + '.ps1"'
+            timeoutSec = 10
+        }
+        if ($definition.Matcher) {
+            $entry = [ordered]@{
+                type       = $entry.type
+                matcher    = $definition.Matcher
+                bash       = $entry.bash
+                powershell = $entry.powershell
+                timeoutSec = $entry.timeoutSec
+            }
+        }
+        $hooks[$definition.Event].Add($entry)
+    }
+
+    $manifest = [ordered]@{
+        version = 1
+        hooks   = $hooks
+    }
+    Write-TextFile -Path (Join-Path $OutputRoot 'hooks.json') `
+        -Content (($manifest | ConvertTo-Json -Depth 10) + "`n") -DryRun:$DryRun
 }
 
 function New-InvocationSkillContent {
@@ -817,6 +894,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/invocations/$name/SKILL.md") -Content $invocationSkills[$name] -DryRun:$DryRun
         }
 
+        # ── hooks.json (plugin-root-qualified; scripts are retained in the output repo) ──
+        Write-PluginHookManifest -OutputRoot $OutputRoot -DryRun:$DryRun
+
         # ── plugin.json (P02-T06; hooks/mcpServers fields added, P03/P04-aware) ──
         $pluginManifest = [ordered]@{
             '$schema'     = 'https://raw.githubusercontent.com/github/open-plugin-spec/main/schemas/plugin.schema.json'
@@ -828,8 +908,11 @@ if ($MyInvocation.InvocationName -ne '.') {
             hooks         = 'hooks.json'
             mcpServers    = '.mcp.json'
         }
+        $pluginManifestContent = ($pluginManifest | ConvertTo-Json -Depth 10) + "`n"
         Write-TextFile -Path (Join-Path $OutputRoot '.github/plugin/plugin.json') `
-            -Content (($pluginManifest | ConvertTo-Json -Depth 10) + "`n") -DryRun:$DryRun
+            -Content $pluginManifestContent -DryRun:$DryRun
+        Write-TextFile -Path (Join-Path $OutputRoot 'plugin.json') `
+            -Content $pluginManifestContent -DryRun:$DryRun
 
         # ── marketplace.json (P02-T07 scaffold, P04-T02-aware) ──
         #    autoUpdate is deliberately absent: a consumer must receive the
