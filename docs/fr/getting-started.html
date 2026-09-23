@@ -51,7 +51,24 @@ copilot plugin install hve-squad-hve-core@hve-squad-plugin</code></pre>
         <h2>VS Code</h2>
         <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. APM installe les agents, prompts, instructions et skills dans le dossier <code>.github/</code> du projet.</p>
         <h3>Prérequis</h3>
-        <ul><li>PowerShell 7 ou version ultérieure et Git.</li><li>APM CLI installé et accessible dans <code>PATH</code>.</li><li>Accès au dépôt public <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a>.</li><li>Authentification GitHub, de préférence avec <code>gh auth login</code>.</li></ul>
+        <ul><li>PowerShell 7 ou version ultérieure sous Windows, ou un shell <code>zsh</code>/<code>bash</code> récent sous macOS.</li><li>Git.</li><li>APM CLI <strong>0.29.0</strong> installé et accessible dans <code>PATH</code>.</li><li>Accès au dépôt public <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a>.</li><li>Authentification GitHub, de préférence avec <code>gh auth login</code>.</li></ul>
+        <div class="callout warn"><p><strong>APM CLI 0.29.0 est obligatoire pour l'installation APM.</strong> Il s'agit de la dernière version connue qui installe correctement toutes les dépendances HVE Squad. Une régression dans APM 0.29.1 et 0.30.0 provoque l'échec des mêmes 11 dépendances. La version d'APM et celle du package HVE Squad sont deux épingles distinctes : <code>apm --version</code> doit afficher <code>0.29.0</code>, tandis que <code>#vX.Y.z</code> choisit la version de HVE Squad.</p></div>
+        <h3>Installer APM CLI 0.29.0</h3>
+        <p><strong>Windows (PowerShell)</strong></p>
+        <pre><code>$env:VERSION = 'v0.29.0'; irm https://aka.ms/apm-windows | iex
+apm --version  # doit afficher 0.29.0</code></pre>
+        <p>Si la version reste incorrecte, ouvrez une nouvelle fenêtre PowerShell et vérifiez à nouveau. <code>Get-Command apm -All</code> permet d'identifier un ancien exécutable placé plus tôt dans le <code>PATH</code>.</p>
+        <p><strong>macOS (Apple Silicon ou Intel)</strong></p>
+        <pre><code># À exécuter uniquement si Homebrew gère déjà apm ; l'installateur épinglé ne peut pas l'écraser.
+brew uninstall apm
+
+curl -sSL https://aka.ms/apm-unix | sh -s -- @v0.29.0
+
+# L'installateur utilise ~/.local/bin. Ajoutez cette ligne à ~/.zshrc pour la conserver.
+export PATH="$HOME/.local/bin:$PATH"
+hash -r
+apm --version  # doit afficher 0.29.0</code></pre>
+        <p>Si vous préférez une installation isolée sans modifier la copie gérée par Homebrew, utilisez <code>uv tool install apm-cli@0.29.0</code>. Corrigez toute ambiguïté de <code>PATH</code> avant de continuer.</p>
         <h3>Installer le package</h3>
         <p>Exécutez ces commandes à la racine de votre projet. Remplacez <code>vX.Y.z</code> par un tag publié sur la page <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>.</p>
         <pre><code>gh auth login

@@ -44,6 +44,75 @@
       <h3>CLI or App cannot find the coordinator or a specialist</h3>
       <p>Confirm that both <code>hve-squad</code> and <code>hve-squad-hve-core</code> are installed in the current client's plugin home. Select the coordinator agent, not a skill, then ask for <code>squad-doctor</code>. Follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">plugin guide</a> for missing domains and companion reinstalls. A terminal update does not update an app using another <code>COPILOT_HOME</code>.</p>
 
+      <h3>Exactly 11 dependencies fail during <code>apm install</code></h3>
+      <p>
+        This is a known APM regression, not a network or project-environment problem. The tested
+        compatibility results are:
+      </p>
+      <table>
+        <thead><tr><th>APM CLI</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>0.28.0</td><td>Works</td></tr>
+          <tr><td><strong>0.29.0</strong></td><td><strong>Works — latest known working version</strong></td></tr>
+          <tr><td>0.29.1</td><td>Fails with 11 dependency errors</td></tr>
+          <tr><td>0.30.0</td><td>Fails with 11 dependency errors</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Pin APM CLI 0.29.0, remove the partial dependency state, and reinstall the HVE Squad
+        package. The CLI pin is separate from the package pin in
+        <code>Peter-N91/hve-squad#vX.Y.z</code>.
+      </p>
+
+      <p><strong>Windows (PowerShell)</strong></p>
+      <pre><code># 1. Install the required APM CLI version.
+$env:VERSION = 'v0.29.0'; irm https://aka.ms/apm-windows | iex
+
+# 2. Verify it. Open a new terminal first if this still reports another version.
+apm --version
+
+# 3. From the affected project root, remove the partial APM state.
+Set-Location C:\Temp\myapp
+Remove-Item -Recurse -Force apm_modules, apm.lock.yaml, apm.yml -ErrorAction SilentlyContinue
+
+# 4. Reinstall the HVE Squad release you need.
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+
+      <p><strong>macOS (Apple Silicon or Intel)</strong></p>
+      <pre><code># 1. Remove the Homebrew copy if it is installed; the pinned installer cannot overwrite it.
+brew uninstall apm
+
+# 2. Install the required APM CLI version.
+curl -sSL https://aka.ms/apm-unix | sh -s -- @v0.29.0
+
+# 3. Make the install visible to this shell and verify it.
+export PATH="$HOME/.local/bin:$PATH"
+hash -r
+apm --version
+
+# 4. From the affected project root, remove the partial APM state and reinstall.
+cd /path/to/myapp
+rm -rf apm_modules apm.lock.yaml apm.yml
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+      <p>
+        Add <code>export PATH="$HOME/.local/bin:$PATH"</code> to <code>~/.zshrc</code> to keep the
+        path after reopening the terminal. As an isolated alternative, use
+        <code>uv tool install apm-cli@0.29.0</code>.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>Protect project-specific configuration.</strong> The cleanup commands above remove
+          <code>apm.yml</code>. If you authored that file or it contains settings beyond the failed
+          workshop installation, back it up first and restore the required settings afterward, or
+          remove only the failed HVE Squad entry instead of deleting the file.
+        </p>
+      </div>
+      <p>
+        For the workshop release that exposed this issue (<code>v0.16.2</code>), a healthy install
+        reported <code>Installed 302 APM dependencies</code> after about one to two minutes. Later
+        HVE Squad releases may report a different dependency count.
+      </p>
+
       <h3>First <code>apm install</code> takes 30+ minutes (but never errors)</h3>
       <p>
         Almost always GitHub API rate limiting. This package references hundreds of individual files

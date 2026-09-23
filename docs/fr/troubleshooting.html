@@ -20,6 +20,42 @@
     <h3>Le compagnon affiche <code>already at latest</code></h3>
     <p>La version propre à HVE Core peut rester identique alors que le SHA du marketplace a changé. Désinstallez puis réinstallez <code>hve-squad-hve-core</code> dans chaque environnement concerné. Ne cumulez pas ce compagnon avec le plugin officiel <code>hve-core</code>. Voir <a href="getting-started.html?host=cli">les commandes de mise à jour</a>.</p>
     <h2>Installation APM</h2>
+    <h3>Exactement 11 dépendances échouent pendant <code>apm install</code></h3>
+    <p>Il s'agit d'une régression connue d'APM, et non d'un problème de réseau ou d'environnement projet. Les résultats vérifiés sont :</p>
+    <table><thead><tr><th>APM CLI</th><th>Résultat</th></tr></thead><tbody><tr><td>0.28.0</td><td>Fonctionne</td></tr><tr><td><strong>0.29.0</strong></td><td><strong>Fonctionne — dernière version fonctionnelle connue</strong></td></tr><tr><td>0.29.1</td><td>Échec avec 11 erreurs de dépendances</td></tr><tr><td>0.30.0</td><td>Échec avec 11 erreurs de dépendances</td></tr></tbody></table>
+    <p>Épinglez APM CLI 0.29.0, supprimez l'état partiel puis réinstallez la version HVE Squad souhaitée. La version de l'outil APM est distincte de celle du package dans <code>Peter-N91/hve-squad#vX.Y.z</code>.</p>
+    <p><strong>Windows (PowerShell)</strong></p>
+    <pre><code># 1. Installer la version APM CLI requise.
+$env:VERSION = 'v0.29.0'; irm https://aka.ms/apm-windows | iex
+
+# 2. Vérifier. Ouvrez d'abord un nouveau terminal si une autre version apparaît encore.
+apm --version
+
+# 3. Depuis la racine du projet concerné, supprimer l'état APM partiel.
+Set-Location C:\Temp\myapp
+Remove-Item -Recurse -Force apm_modules, apm.lock.yaml, apm.yml -ErrorAction SilentlyContinue
+
+# 4. Réinstaller la version HVE Squad souhaitée.
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+    <p><strong>macOS (Apple Silicon ou Intel)</strong></p>
+    <pre><code># 1. Supprimer la copie Homebrew si elle est installée ; l'installateur épinglé ne peut pas l'écraser.
+brew uninstall apm
+
+# 2. Installer la version APM CLI requise.
+curl -sSL https://aka.ms/apm-unix | sh -s -- @v0.29.0
+
+# 3. Rendre l'installation visible dans ce shell et vérifier.
+export PATH="$HOME/.local/bin:$PATH"
+hash -r
+apm --version
+
+# 4. Depuis la racine du projet concerné, supprimer l'état APM partiel et réinstaller.
+cd /chemin/vers/myapp
+rm -rf apm_modules apm.lock.yaml apm.yml
+apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+    <p>Ajoutez <code>export PATH="$HOME/.local/bin:$PATH"</code> à <code>~/.zshrc</code> pour conserver ce chemin après la réouverture du terminal. Comme solution isolée, utilisez <code>uv tool install apm-cli@0.29.0</code>.</p>
+    <div class="callout warn"><p><strong>Protégez la configuration propre au projet.</strong> Les commandes de nettoyage ci-dessus suppriment <code>apm.yml</code>. Si vous avez créé ce fichier ou s'il contient d'autres paramètres que ceux de l'installation d'atelier en échec, sauvegardez-le d'abord puis restaurez les paramètres nécessaires, ou retirez uniquement l'entrée HVE Squad en échec au lieu de supprimer le fichier.</p></div>
+    <p>Pour la version d'atelier qui a révélé le problème (<code>v0.16.2</code>), une installation saine affichait <code>Installed 302 APM dependencies</code> après environ une à deux minutes. Une version HVE Squad ultérieure peut annoncer un nombre différent.</p>
     <h3>L'installation dépasse 30 minutes sans erreur</h3>
     <p>La cause habituelle est la limite GitHub de 60 requêtes par heure sans authentification. APM attend la réinitialisation de la fenêtre. Authentifiez-vous, puis relancez :</p>
     <pre><code>gh auth login

@@ -66,11 +66,21 @@ and the MCP server when another host should call the squad as tools. See
 
 ## Quick start
 
-Install the package into the project you want the squad in, then invoke `/squad` in Copilot Chat:
+The APM installation path currently requires **APM CLI 0.29.0**. A regression in APM
+0.29.1 and 0.30.0 causes 11 HVE Squad dependencies to fail, so do not use an unversioned
+latest installation for now. Confirm the CLI version before installing the package:
 
 ```powershell
+apm --version  # must report 0.29.0
 apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot
 ```
+
+See [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) for pinned
+APM installation commands for Windows and macOS, and
+[Troubleshooting](https://peter-n91.github.io/hve-squad/troubleshooting.html) if an earlier
+attempt left a partial installation.
+
+Then invoke `/squad` in Copilot Chat:
 
 ```text
 /squad request="add input validation to the login form"

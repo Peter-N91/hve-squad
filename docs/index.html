@@ -192,11 +192,16 @@
     <section class="section">
       <div class="container">
         <p class="section-label">Quick install</p>
-        <pre><code># In the project you want the squad in:
+        <pre><code># APM CLI must report 0.29.0:
+apm --version
+# In the project you want the squad in:
 apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
         <p>
-          Then invoke the coordinator from Copilot Chat with the <code>/squad</code> prompt. See
-          <a href="getting-started.html">Getting Started</a> for the full flow.
+          APM 0.29.1 and 0.30.0 have a regression that breaks this package's dependency
+          installation. Use APM CLI 0.29.0 until that issue is resolved. Then invoke the
+          coordinator from Copilot Chat with the <code>/squad</code> prompt. See
+          <a href="getting-started.html">Getting Started</a> for the pinned Windows and macOS
+          installation commands and the full flow.
         </p>
       </div>
     </section>
