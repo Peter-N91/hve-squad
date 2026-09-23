@@ -69,12 +69,49 @@ copilot</code></pre>
       <p>Open your project in VS Code with GitHub Copilot Chat enabled and authenticated. This route installs the full cast into the repository through APM.</p>
       <h3>Prerequisites</h3>
       <ul>
-        <li>PowerShell 7+</li>
+        <li>PowerShell 7+ on Windows, or a current <code>zsh</code>/<code>bash</code> shell on macOS</li>
         <li>Git</li>
-        <li>APM CLI installed and available in <code>PATH</code></li>
+        <li>APM CLI <strong>0.29.0</strong> installed and available in <code>PATH</code></li>
         <li>Access to the <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a> repository</li>
         <li>Authenticated GitHub access (<code>gh auth login</code> or <code>GITHUB_TOKEN</code>) — strongly recommended; see the note in step 1</li>
       </ul>
+
+      <div class="callout warn">
+        <p>
+          <strong>APM CLI 0.29.0 is required for the APM installation path.</strong>
+          APM 0.29.0 is the latest version known to install all HVE Squad dependencies
+          successfully. A regression in 0.29.1 and 0.30.0, which an unversioned installer may
+          select, causes the same 11 dependencies to fail. The APM CLI version and the HVE Squad
+          package version are separate pins: <code>apm --version</code> must report
+          <code>0.29.0</code>, while <code>#vX.Y.z</code> selects the HVE Squad release.
+        </p>
+      </div>
+
+      <h3>Install APM CLI 0.29.0</h3>
+      <p><strong>Windows (PowerShell)</strong></p>
+      <pre><code>$env:VERSION = 'v0.29.0'; irm https://aka.ms/apm-windows | iex
+apm --version  # must report 0.29.0</code></pre>
+      <p>
+        If the version is still wrong, open a new PowerShell window and check again. Use
+        <code>Get-Command apm -All</code> to find an older executable that appears earlier in
+        <code>PATH</code>.
+      </p>
+
+      <p><strong>macOS (Apple Silicon or Intel)</strong></p>
+      <pre><code># Run this only if Homebrew currently manages apm; the pinned installer cannot overwrite it.
+brew uninstall apm
+
+curl -sSL https://aka.ms/apm-unix | sh -s -- @v0.29.0
+
+# The installer uses ~/.local/bin. Add this line to ~/.zshrc to persist it.
+export PATH="$HOME/.local/bin:$PATH"
+hash -r
+apm --version  # must report 0.29.0</code></pre>
+      <p>
+        If you prefer an isolated installation rather than changing the Homebrew-managed copy,
+        install the same version with <code>uv tool install apm-cli@0.29.0</code>. Resolve any
+        <code>PATH</code> ambiguity before continuing.
+      </p>
 
       <h3>Install the package</h3>
       <p>Run <code>apm install</code> from the root of the project you want the squad in.</p>
