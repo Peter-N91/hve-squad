@@ -8,8 +8,8 @@
   "currentRun": {
     "sessionModel": "",
     "modelOverrides": {},
-    "estCostUsd": 0,
-    "estCreditsTotal": 0,
+    "estCostUsd": 0.3171,
+    "estCreditsTotal": 31.71,
     "costPreflight": {
       "runId": "",
       "roundId": "",

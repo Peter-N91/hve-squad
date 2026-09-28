@@ -353,6 +353,49 @@ git diff --check</code></pre>
         existing fragment does not satisfy the pull-request gate for a separate pull request.
       </p>
 
+      <h3>Squad skill and reference maintenance</h3>
+      <p>
+        The squad skill's instruction and reference files drive roster, model selection, and ledger behavior.
+        Edits here propagate to every consumer on the next <code>apm install</code>.
+      </p>
+      <p>
+        <strong>Roster split:</strong> <code>squad-src/.github/instructions/squad/squad-roster.instructions.md</code>
+        carries inline safety summary, dispatchability rules, and Profiles/Packs. The cast catalog (formerly
+        Cast Catalog, External Cast, and Building a Custom Roster sections) now lives in the canonical
+        <code>squad-src/.github/skills/squad/references/roster-catalog.md</code> (read on demand). When adding a
+        new cast agent, edit <code>references/roster-catalog.md</code> to append the role row and link the agent
+        file under <code>.github/agents/</code>.
+      </p>
+      <p>
+        <strong>Model catalog and routing:</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
+        enumerates supported models, tiers, and availability. <code>references/model-routing.md</code> defines the
+        ranked selection algorithm and precedence chain. The Scribe must not inherit the frontier session model
+        (pinned to Claude Haiku 4.5 in its frontmatter; bookkeeping assignment class floors at seeded fast Model Tier).
+        When GitHub Copilot's model lineup changes, update the catalog's <code>Retrieved</code> date; a date >90 days
+        stale falls back to static tiers. Keep the retrieval date and the catalog synchronized.
+      </p>
+      <p>
+        <strong>Tier 0 byte-budget gate:</strong> <code>tests/tier0/baselines/byte-budget-baseline.json</code> (see
+        Performance.Tests.ps1 L507) sets size limits (roster 61,170 B; Scribe hot core 82,000 B; 5% tolerance). Edit
+        <code>budgetBytes</code> and <code>note</code> by hand when an intentional size change occurs. The
+        <code>tests/tier0/baselines/prefill-baseline.json</code> baseline is regenerated with
+        <code>./scripts/Measure-SquadPerformance.ps1 -SourceRoot . -UpdateBaseline</code> (see Measure-SquadPerformance.ps1
+        L52–56); after regenerating, diff it to confirm only intended normative sentences and headings changed (a removed
+        normative sentence fails the superset gate in Performance.Tests.ps1 L507 unless it was an intentional correction).
+      </p>
+      <p>
+        <strong>Ledger helper and guards:</strong> The <code>Measure-SquadLedger.ps1 -SquadRoot &lt;root&gt; -Check</code>
+        script validates ledger arithmetic, ledger↔state.json divergence (strict; missing/unparseable state.json fails;
+        a federation root marked by <code>federation.md</code> is logged not-applicable), the identity guard (recorded
+        per-file ordered block identities must form an ordered prefix of current identities; overwrites/removals fail;
+        appends pass; a plain <code>-Check</code> only warns when no identities are recorded at all — legacy ledgers),
+        and is called by the Scribe with
+        <code>-ExpectedHistoryCounts &lt;per-agent entry counts&gt;</code> (scribe-procedure.md L166), which turns those
+        same missing-identity warnings into failures — entirely missing, or missing for only some of the touched files
+        (a partial paste) — since that call always follows a fresh write. Test fixtures under
+        <code>tests/fixtures/ledger-*</code> exercise each guard condition.
+      </p>
+
       <h3>Why the source is separate from the deployed <code>.github/</code> tree</h3>
       <p>
         <code>apm install</code> deploys agents and prompts <em>flattened</em> into the consumer's

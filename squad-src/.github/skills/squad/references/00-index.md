@@ -17,6 +17,7 @@ Read this file first, then read only the reference files your role names in its 
 | File                                               | Read it when                                                              |
 |----------------------------------------------------|---------------------------------------------------------------------------|
 | [profiles-and-packs.md](profiles-and-packs.md)     | Seeding or amending a roster: profile choice, packs, which roles exist    |
+| [roster-catalog.md](roster-catalog.md)             | Casting a role for the first time, recasting after an HVE Core upgrade, applying or registering a pack's external agents, resolving an external role, or assembling a custom roster |
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
 | [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |
@@ -39,7 +40,7 @@ The Scribe reads `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `
 
 The `squad` skill complements eleven instruction files that auto-apply when squad state is touched. Their `applyTo` globs only fire in a host that loads modular instructions, so a rule that must hold unconditionally belongs in a reference file above, not only here.
 
-* `.github/instructions/squad/squad-roster.instructions.md` — roster schema and cast catalog.
+* `.github/instructions/squad/squad-roster.instructions.md` — roster schema, `### Dispatchability`, Casting Rules, and Squad Profiles/Packs; the Cast Catalog and External Cast are canonical in `references/roster-catalog.md`.
 * `.github/instructions/squad/squad-routing.instructions.md` — routing table and escalation rules.
 * `.github/instructions/squad/squad-discovery-gate.instructions.md` — opt-in pre-work discovery gate, scoped to the `product` and `full` profiles, that brainstorms a brief when a turn has no requirement or input artifact to build on, with depth tiers, an offer-once rule, an unattended-run prohibition, and the Discovery Verdict schema.
 * `.github/instructions/squad/squad-intake-gate.instructions.md` — conditional pre-work intake gate that validates requirement and input artifacts before planning or implementation, with a bounded auto-remediation loop and the Intake Readiness Verdict schema.

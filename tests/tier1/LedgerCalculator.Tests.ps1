@@ -27,17 +27,61 @@ BeforeAll {
             Runs Measure-SquadLedger.ps1 as a genuine child process (it calls `exit` at
             top level, both with and without -Check, and would otherwise terminate this
             Pester run's own process) and returns its stdout and exit code.
+        .DESCRIPTION
+            When -ExpectedHistoryCounts is supplied, the call is built as a `-Command`
+            string (rather than `-File` plus a positional args array) so the child
+            pwsh process's own parser evaluates the `@{ ... }` hashtable literal --
+            `-File` passes every trailing token as a literal string, which a hashtable
+            parameter cannot bind. This is the F3 review-fix's post-write self-check
+            shape: `-Check` combined with `-ExpectedHistoryCounts`.
         #>
         param(
             [Parameter(Mandatory)][string]$SquadRoot,
             [switch]$Check,
-            [string]$Format
+            [string]$Format,
+            [hashtable]$ExpectedHistoryCounts
         )
-        $scriptArgs = @('-NoProfile', '-File', $script:LedgerScript, '-SquadRoot', $SquadRoot)
-        if ($Check) { $scriptArgs += '-Check' }
-        if ($Format) { $scriptArgs += @('-Format', $Format) }
-        $output = & pwsh @scriptArgs 2>&1 | Out-String
+        if ($ExpectedHistoryCounts) {
+            $countsLiteral = '@{' + (($ExpectedHistoryCounts.GetEnumerator() | ForEach-Object { "'$($_.Key)' = $($_.Value)" }) -join '; ') + '}'
+            $cmdParts = [System.Collections.Generic.List[string]]::new()
+            $cmdParts.Add("& '$script:LedgerScript'")
+            $cmdParts.Add("-SquadRoot '$SquadRoot'")
+            if ($Check) { $cmdParts.Add('-Check') }
+            if ($Format) { $cmdParts.Add("-Format '$Format'") }
+            $cmdParts.Add("-ExpectedHistoryCounts $countsLiteral")
+            $command = $cmdParts -join ' '
+            $output = & pwsh -NoProfile -Command $command 2>&1 | Out-String
+        }
+        else {
+            $scriptArgs = @('-NoProfile', '-File', $script:LedgerScript, '-SquadRoot', $SquadRoot)
+            if ($Check) { $scriptArgs += '-Check' }
+            if ($Format) { $scriptArgs += @('-Format', $Format) }
+            $output = & pwsh @scriptArgs 2>&1 | Out-String
+        }
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+    }
+
+    function Sync-LedgerStateLocal {
+        <#
+        .SYNOPSIS
+            Re-derives a root's ledger totals via -Format json and rewrites that root's
+            state.json currentRun.estCostUsd/estCreditsTotal to match, so a test that
+            splices extra history blocks onto a copy of a fixture doesn't trip the C3
+            ledger<->state.json divergence check for reasons unrelated to what the test
+            itself is asserting.
+        #>
+        param(
+            [Parameter(Mandatory)][string]$SquadRoot
+        )
+        $derived = (Invoke-Ledger -SquadRoot $SquadRoot -Format json).Output | ConvertFrom-Json
+        $statePath = Join-Path $SquadRoot 'state.json'
+        $raw = Get-Content -LiteralPath $statePath -Raw
+        $invariant = [System.Globalization.CultureInfo]::InvariantCulture
+        $costText = ([double]$derived.total.estCostUsd).ToString('F4', $invariant)
+        $creditsText = ([double]$derived.total.estCredits).ToString('F2', $invariant)
+        $raw = $raw -replace '"estCostUsd"\s*:\s*[0-9.]+', "`"estCostUsd`": $costText"
+        $raw = $raw -replace '"estCreditsTotal"\s*:\s*[0-9.]+', "`"estCreditsTotal`": $creditsText"
+        Set-Content -LiteralPath $statePath -Value $raw -NoNewline
     }
 }
 
@@ -314,6 +358,7 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 $fragment
 "@
         Set-Content -LiteralPath $ledgerPath -Value $rebuilt -NoNewline
+        Sync-LedgerStateLocal -SquadRoot $root
 
         $selfCheck = Invoke-Ledger -SquadRoot $root -Check
         $selfCheck.ExitCode | Should -Be 0 -Because "the freshly regenerated ledger must itself pass -Check before corruption: $($selfCheck.Output)"
@@ -547,6 +592,7 @@ description: "Append-only dispatch history for a single squad agent"
         $script:CompositeKeyLedgerContent = "$head`n`n$fragment`n`n$tail"
         $script:CompositeKeyLedgerPath = Join-Path $script:CompositeKeyRoot 'consumption.md'
         Set-Content -LiteralPath $script:CompositeKeyLedgerPath -Value $script:CompositeKeyLedgerContent -NoNewline
+        Sync-LedgerStateLocal -SquadRoot $script:CompositeKeyRoot
 
         # Guard: the spliced-together ledger must itself pass -Check before either
         # It below relies on it, so a failure here points at the splice, not the
@@ -583,5 +629,178 @@ description: "Append-only dispatch history for a single squad agent"
         $result.ExitCode | Should -Be 1
         $result.Output | Should -Match "role 'architect' agent 'System Architecture Reviewer' column 'Priced As'"
         $result.Output | Should -Match "role 'architect' agent 'ADR Creator' column 'Priced As'"
+    }
+}
+
+# P01b / C2: the history-identity guard. consumption.md's own '### Derivation'
+# block records, per history file, the ordered short-hash identities of that
+# file's '###' dispatch-entry headings at the time the ledger was last written.
+# -Check (and render mode, covered separately below) must treat the recorded
+# list as failing unless it is an ordered prefix of history/'s current list --
+# an overwritten or removed entry fails even at the same recorded count, a
+# plain append still passes, and an older-format ledger recording no
+# identities at all only warns. See tests/fixtures/ledger-identity-*/.
+Describe 'Measure-SquadLedger C2 history-identity guard' {
+    BeforeAll {
+        $script:AppendRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-identity-append'
+        $script:OverwriteRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-identity-overwrite'
+        $script:RemovalRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-identity-removal'
+        $script:LegacyRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-identity-legacy'
+    }
+
+    It 'a plain append (recorded identities are a prefix of current) passes -Check cleanly' {
+        $result = Invoke-Ledger -SquadRoot $script:AppendRoot -Check
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'PASS'
+        $result.Output | Should -Not -Match 'overwritten or reordered'
+        $result.Output | Should -Not -Match 'entry was removed'
+    }
+
+    It 'a same-count overwrite (an entry''s heading text changed in place) fails -Check, naming the file' {
+        $result = Invoke-Ledger -SquadRoot $script:OverwriteRoot -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "'Squad Researcher\.md'.*overwritten or reordered"
+    }
+
+    It 'a removal (an entry recorded in consumption.md no longer exists in history/) fails -Check, naming the file' {
+        $result = Invoke-Ledger -SquadRoot $script:RemovalRoot -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "'Squad Researcher\.md'.*entry was removed"
+    }
+
+    It 'an older-format ledger recording no identities at all only warns, and still passes -Check' {
+        $result = Invoke-Ledger -SquadRoot $script:LegacyRoot -Check
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'older-format ledger'
+        $result.Output | Should -Match 'PASS'
+    }
+
+    It 'render mode refuses to print a new fragment while the identity guard already fails (overwrite root)' {
+        $result = Invoke-Ledger -SquadRoot $script:OverwriteRoot
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'overwritten or reordered'
+    }
+
+    It 'render mode refuses to print a new fragment while the identity guard already fails (removal root)' {
+        $result = Invoke-Ledger -SquadRoot $script:RemovalRoot
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'entry was removed'
+    }
+
+    It 'render mode still prints normally over a passing (plain-append) history' {
+        $result = Invoke-Ledger -SquadRoot $script:AppendRoot
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match '^## Attribution'
+    }
+}
+
+# F3 review-fix / C2 post-write hardening: the Scribe's own post-write
+# self-check always pairs `-Check` with `-ExpectedHistoryCounts` (see
+# scribe-procedure.md's Write-Completeness Self-Check Step 3). In that
+# combination a Derivation missing identities -- entirely, or for only some of
+# the touched history files (a partial paste) -- must FAIL rather than only
+# warn, because that call always follows a fresh write: a missing or partial
+# paste there is this run's own defect, never a genuinely old ledger. A plain
+# `-Check` (no `-ExpectedHistoryCounts`) keeps the C2 warn-only legacy
+# behavior unchanged, and a fully and correctly recorded Derivation passes
+# cleanly even in post-write mode. See tests/fixtures/ledger-identity-missing-
+# postwrite/, ledger-identity-partial/, and ledger-identity-full-postwrite/.
+Describe 'Measure-SquadLedger C2 history-identity guard: post-write (-Check + -ExpectedHistoryCounts) hardening' {
+    BeforeAll {
+        $script:MissingPostWriteRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-identity-missing-postwrite'
+        $script:PartialRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-identity-partial'
+        $script:FullPostWriteRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-identity-full-postwrite'
+    }
+
+    It 'a Derivation missing every identity, without -ExpectedHistoryCounts, only warns and still passes -Check' {
+        $result = Invoke-Ledger -SquadRoot $script:MissingPostWriteRoot -Check
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'older-format ledger'
+        $result.Output | Should -Match 'PASS'
+    }
+
+    It 'a Derivation missing every identity, with -Check -ExpectedHistoryCounts, FAILS naming the paste instruction' {
+        $result = Invoke-Ledger -SquadRoot $script:MissingPostWriteRoot -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1 }
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'FAIL'
+        $result.Output | Should -Match 'paste the helper''s Derivation verbatim including identity lines'
+    }
+
+    It 'a partial paste (one file''s identities recorded, another file''s missing entirely), without -ExpectedHistoryCounts, only warns and still passes -Check' {
+        $result = Invoke-Ledger -SquadRoot $script:PartialRoot -Check
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "'Squad Developer\.md'"
+        $result.Output | Should -Match 'PASS'
+    }
+
+    It 'a partial paste, with -Check -ExpectedHistoryCounts, FAILS naming the file missing identities' {
+        $result = Invoke-Ledger -SquadRoot $script:PartialRoot -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Developer' = 1 }
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'FAIL'
+        $result.Output | Should -Match "'Squad Developer\.md'.*partial paste"
+        $result.Output | Should -Not -Match "'Squad Researcher\.md'.*partial paste"
+    }
+
+    It 'a fully and correctly recorded Derivation passes cleanly even with -Check -ExpectedHistoryCounts' {
+        $result = Invoke-Ledger -SquadRoot $script:FullPostWriteRoot -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1 }
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'PASS'
+        $result.Output | Should -Not -Match 'older-format ledger'
+        $result.Output | Should -Not -Match 'partial paste'
+    }
+}
+
+# P01 / C3: the ledger<->state.json currentRun divergence check. -Check must
+# fail when state.json's currentRun.estCostUsd/estCreditsTotal diverge from
+# this script's own derived totals beyond the existing float tolerance, naming
+# both values and the delta; must fail (naming the reason) when history holds
+# consumption blocks but state.json is missing or unparseable; and must log a
+# `not-applicable: federation root` line -- never a silent pass, never a
+# failure -- when the squad root carries federation.md. See
+# tests/fixtures/ledger-state-*/ and ledger-federation-root/.
+Describe 'Measure-SquadLedger C3 ledger-vs-state.json currentRun divergence check' {
+    BeforeAll {
+        $script:DivergenceRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-state-divergence'
+        $script:MissingStateRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-state-missing'
+        $script:UnparseableStateRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-state-unparseable'
+        $script:FederationRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-federation-root'
+    }
+
+    It 'fails and names both estCostUsd values and the delta when state.json diverges from the derived total' {
+        $result = Invoke-Ledger -SquadRoot $script:DivergenceRoot -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'estCostUsd -- ledger derives 0\.3000, currentRun says 0\.9000 \(delta 0\.6000'
+    }
+
+    It 'fails and names both estCreditsTotal values and the delta when state.json diverges from the derived total' {
+        $result = Invoke-Ledger -SquadRoot $script:DivergenceRoot -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'estCreditsTotal -- ledger derives 30\.00, currentRun says 90\.00 \(delta 60\.00'
+    }
+
+    It 'fails, naming the reason, when history holds consumption blocks but state.json does not exist' {
+        $result = Invoke-Ledger -SquadRoot $script:MissingStateRoot -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "currentRun cost/credits could not be read \(state\.json not found"
+    }
+
+    It 'fails, naming the reason, when history holds consumption blocks but state.json is unparseable' {
+        $result = Invoke-Ledger -SquadRoot $script:UnparseableStateRoot -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "currentRun cost/credits could not be read \(state\.json at '.*' failed to parse"
+    }
+
+    It 'logs not-applicable (never a silent pass, never a failure) on a federation root, regardless of state.json divergence' {
+        $result = Invoke-Ledger -SquadRoot $script:FederationRoot -Check
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'not-applicable: federation root'
+        $result.Output | Should -Match 'PASS'
+    }
+
+    It 'passes cleanly when the ledger and state.json currentRun agree (the plain-append C2 fixture doubles as the C3 match case)' {
+        $matchRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-identity-append'
+        $result = Invoke-Ledger -SquadRoot $matchRoot -Check
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Not -Match 'divergence'
     }
 }

@@ -209,4 +209,146 @@ function Get-SquadPackageModel {
     }
 }
 
-Export-ModuleMember -Function Read-SquadArtifact, Get-SquadPackageModel
+function Get-MarkdownTableRows {
+    <#
+    .SYNOPSIS
+        Returns the raw cell array of every data row in the first GFM table whose
+        header row's first cell equals $HeaderCell.
+    .DESCRIPTION
+        Deliberately not a general markdown-table parser: it assumes every row starts
+        and ends with `|` and that a header row is followed immediately by a
+        `|---|`-shaped separator row, which is the shape every table this function
+        reads (Squad Profiles, Squad Packs, Cast Catalog) actually uses. $Body may
+        hold more than one table; only the first whose header matches $HeaderCell is
+        read, so callers that need a specific table (for example Cast Catalog, not the
+        later Registered External Cast table that also starts with `Role`) must scope
+        $Body to that table's section first.
+    .PARAMETER Body
+        Raw markdown text to scan.
+    .PARAMETER HeaderCell
+        Exact text of the header row's first cell, for example 'Profile' or 'Role'.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Body,
+
+        [Parameter(Mandatory)]
+        [string]$HeaderCell
+    )
+
+    $lines = $Body -split '\r?\n'
+    $rows = New-Object System.Collections.Generic.List[object]
+    $inTable = $false
+    $headerPattern = "^\|\s*$([regex]::Escape($HeaderCell))\s*\|"
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $line = $lines[$i]
+
+        if (-not $inTable) {
+            if ($line -match $headerPattern -and
+                $i + 1 -lt $lines.Count -and $lines[$i + 1] -match '^\|[\s:|-]+$') {
+                $inTable = $true
+                $i++ # the separator row carries no data; skip past it
+            }
+            continue
+        }
+
+        if ($line -notmatch '^\|.*\|\s*$') {
+            break # the table ended; a second same-named table (if any) is not this one
+        }
+
+        $rows.Add(@($line -split '\|'))
+    }
+
+    # `@($rows)` (rather than `.ToArray()`) makes PowerShell's array-literal binder
+    # try to flatten a `List[object]` whose own elements are string arrays, which
+    # throws `ArgumentException: Argument types do not match` on this host's
+    # PowerShell 7.4. `.ToArray()` returns the outer array without touching the
+    # element type.
+    return $rows.ToArray()
+}
+
+function Get-SquadRosterRoles {
+    <#
+    .SYNOPSIS
+        Extracts every role named in a Squad Profiles or Squad Packs table's members
+        column, across one or more raw file bodies.
+    .PARAMETER Body
+        One or more raw file contents to scan (for example
+        squad-roster.instructions.md and profiles-and-packs.md).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Body
+    )
+
+    $roles = New-Object System.Collections.Generic.List[string]
+
+    foreach ($text in $Body) {
+        foreach ($headerCell in @('Profile', 'Pack')) {
+            foreach ($cells in (Get-MarkdownTableRows -Body $text -HeaderCell $headerCell)) {
+                # cells[0] is the empty text before the row's leading `|`; cells[1] is
+                # the Profile/Pack label; cells[2] is the members/adds column.
+                if ($cells.Count -lt 3) { continue }
+
+                foreach ($role in ($cells[2] -split ',')) {
+                    $clean = $role.Trim().Trim('`').Trim()
+                    if ($clean) { $roles.Add($clean) }
+                }
+            }
+        }
+    }
+
+    return @($roles | Sort-Object -Unique)
+}
+
+function Get-SquadCastCatalogRoles {
+    <#
+    .SYNOPSIS
+        Extracts every role named in the Cast Catalog table's Role column.
+    .DESCRIPTION
+        Scopes $Body to the `## Cast Catalog` section (up to the next heading of any
+        level) before reading the table, so the later `Registered External Cast`
+        table - whose own Role column cites catalog roles rather than declaring new
+        ones - is never read as a second Cast Catalog.
+    .PARAMETER Body
+        Raw content of roster-catalog.md (or an equivalent fixture string).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Body
+    )
+
+    $lines = $Body -split '\r?\n'
+    $start = $null
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^## Cast Catalog\s*$') { $start = $i; break }
+    }
+    if ($null -eq $start) { return @() }
+
+    $end = $lines.Count
+    for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^#{1,6}\s') { $end = $i; break }
+    }
+
+    $section = ($lines[$start..($end - 1)]) -join "`n"
+    $roles = New-Object System.Collections.Generic.List[string]
+
+    foreach ($cells in (Get-MarkdownTableRows -Body $section -HeaderCell 'Role')) {
+        # cells[0] is the empty text before the row's leading `|`; cells[1] is Role.
+        if ($cells.Count -lt 2) { continue }
+
+        $clean = $cells[1].Trim().Trim('`').Trim()
+        if ($clean -and $clean -ne '—') { $roles.Add($clean) }
+    }
+
+    return @($roles | Sort-Object -Unique)
+}
+
+Export-ModuleMember -Function Read-SquadArtifact, Get-SquadPackageModel, Get-MarkdownTableRows, Get-SquadRosterRoles, Get-SquadCastCatalogRoles

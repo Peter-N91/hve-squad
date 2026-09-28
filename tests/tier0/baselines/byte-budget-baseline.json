@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "description": "C7 (routing-performance plan) checked-in byte-size budgets. Each entry is a ceiling: measured bytes may exceed budgetBytes by up to tolerancePercent before Performance.Tests.ps1's byte-budget gate fails. Harvested from 3a26f5d's tests/performance/baseline.json idea, adapted to a tolerance ceiling instead of a required-shrink assertion because these two files are stable-state targets, not files mid-reduction.",
+  "budgets": {
+    "roster-hot-instruction": {
+      "path": "squad-src/.github/instructions/squad/squad-roster.instructions.md",
+      "budgetBytes": 61170,
+      "tolerancePercent": 5,
+      "note": "Set from the P02 hot/cold split AFTER size (2026-09-28, this delivery). Cast Catalog, External Cast, and Building a Custom Roster now live in references/roster-catalog.md; this budget covers only what remains inline (schema, naming, Dispatchability, Deliverable Roots, casting rules, Squad Profiles/Packs/Profile Selection/Opt-In Roles, and the safety summary)."
+    },
+    "scribe-hot-core": {
+      "path": null,
+      "budgetBytes": 82394,
+      "tolerancePercent": 5,
+      "note": "Tightened in P05 (2026-09-28) to the actual AFTER size once dev-a's scribe-procedure.md shrink (C1/C2/C5) and dev-b's Init Mode/pointer edits to 00-index.md landed: squad-scribe.agent.md (15,667 B) + 00-index.md (7,247 B) + scribe-procedure.md (39,322 B) + entry-schemas.md (12,400 B) + scribe-payload-template.md (7,364 B) = 82,000 B, summed the same way Packaging.Tests.ps1's D7-5 derives the hot core (and matching D7-5's own strict, zero-headroom BEFORE-baseline figure of 82,113 B, which this delivery's net -113 B holds under). Previously an 81,328-byte upper bound recorded before scribe-procedure.md's shrink had landed; superseded now that the shrink is final. Grown again in dev-d's F3 review-fix (2026-09-28) by the Write-Completeness Self-Check Step 3 wording that makes the Scribe always pass -ExpectedHistoryCounts and states that missing/partial identities now fail: squad-scribe.agent.md (15,667 B) + 00-index.md (7,247 B) + scribe-procedure.md (39,716 B, +394 B) + entry-schemas.md (12,400 B) + scribe-payload-template.md (7,364 B) = 82,394 B, re-tightened to this new exact actual size (still comfortably under the previous 86,100 B ceiling; recorded exactly rather than left at the stale 82,000 B figure so this budget keeps meaning 'the actual current size', per this file's own zero-headroom convention)."
+    }
+  }
+}

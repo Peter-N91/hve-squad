@@ -78,6 +78,25 @@
           coordinator's cost-first defaults.
         </li>
         <li>
+          <code>routing=ranked|off</code> — opt into capability-ranked model selection. Default is
+          <code>off</code>; no policy is applied. With <code>routing=ranked</code>, the coordinator
+          ranks the best-qualified model from the declared model catalog for each role, filters by
+          availability on your host, and applies consequence floors to prevent models below a role's
+          tier. See <a href="#model-selection-per-role">Model selection per role</a> below.
+        </li>
+        <li>
+          <code>models=&lt;key&gt;:&lt;id&gt;,&lt;key&gt;:&lt;id&gt;,...</code> — explicit per-role
+          or per-assignment-class model overrides. Supported keys: role IDs from your
+          <code>team.md</code> (such as <code>researcher</code>, <code>developer</code>,
+          <code>tester</code>), or assignment classes (<code>research</code>, <code>planning</code>,
+          <code>implementation</code>, <code>review</code>, <code>council</code>, <code>intake</code>,
+          <code>bookkeeping</code>). Unknown keys or model IDs are refused and logged rather than
+          guessed. A model below your role's roster tier is also refused—raise the tier in
+          <code>.copilot-tracking/squad/team.md</code> if you need it. Works independently of
+          <code>routing=</code>. See <a href="#model-selection-per-role">Model selection per
+          role</a> below.
+        </li>
+        <li>
           <code>discovery=quick|standard|deep|skip</code> &mdash; runs the discovery gate at that
           depth without being asked, or skips it. See <em>Discovery gate</em> below.
         </li>
@@ -101,7 +120,8 @@
 /squad request="design the approvals app" profile=architecture pack=power-platform
 /squad request="summarize the data layer" tier=fast
 /squad request="reduce onboarding drop-off" discovery=standard
-/squad request="build the booking service end to end" mode=autopilot cost-ceiling=20</code></pre>
+/squad request="build the booking service end to end" mode=autopilot cost-ceiling=20
+/squad request="run security research and implement" routing=ranked models=review:claude-opus-5.5</code></pre>
 
       <figure class="video-figure">
         <video controls preload="metadata" playsinline>
@@ -1401,6 +1421,107 @@ layouts:
         = $0.01 USD). The run totals also surface in <code>state.json</code> under
         <code>currentRun</code>.
       </p>
+
+      <h3 id="model-selection-per-role">Model selection per role (<code>routing=</code> / <code>models=</code>)</h3>
+      <p>
+        <strong>Default behavior (no <code>routing=</code> or <code>models=</code>):</strong> When
+        neither input is given, no <code>model</code> parameter is passed to any dispatch, so each
+        agent runs on its own frontmatter model or the session model, exactly as before this feature
+        existed.
+      </p>
+      <p>Optionally, you can take direct control of model selection with two inputs:</p>
+      <ul>
+        <li>
+          <strong><code>routing=ranked</code></strong> — Opt into capability-ranked model selection.
+          The squad ranks the best-qualified model from the declared model catalog for each role,
+          filters by availability on your host, and applies consequence floors to prevent models
+          below a role's tier. With <code>routing=off</code> (or omitted), <code>models=</code>
+          overrides only the named keys; every other role omits the parameter.
+        </li>
+        <li>
+          <strong><code>models=&lt;key&gt;:&lt;id&gt;,&lt;key&gt;:&lt;id&gt;,...</code></strong> —
+          Explicit per-role or per-assignment-class overrides. Supported keys:
+          <ul>
+            <li>
+              <strong>Role IDs</strong> from your <code>team.md</code>: <code>researcher</code>,
+              <code>lead</code>, <code>developer</code>, <code>tester</code>, <code>challenger</code>,
+              <code>architect</code>, <code>security</code>, <code>cost-manager</code>, <code>rai</code>,
+              <code>product-owner</code>, <code>prompt-engineer</code>, <code>intake-validator</code>,
+              <code>scribe</code>, and any other role in the seeded rosters.
+            </li>
+            <li>
+              <strong>Assignment classes</strong>: <code>research</code>, <code>planning</code>,
+              <code>implementation</code>, <code>review</code>, <code>council</code>, <code>intake</code>,
+              <code>bookkeeping</code>.
+            </li>
+          </ul>
+          Unknown keys or model IDs are refused and logged rather than guessed. A model below your
+          role's roster tier is also refused—raise the tier in
+          <code>.copilot-tracking/squad/team.md</code> if you need it. For details on available roles
+          and the canonical cast catalog, see the squad skill's <code>references/roster-catalog.md</code>.
+        </li>
+      </ul>
+      <p><strong>Precedence</strong> (highest wins, per role):</p>
+      <ol>
+        <li>A <code>models=&lt;role-id&gt;:&lt;model-id&gt;</code> pair naming that exact role id.</li>
+        <li>A <code>models=&lt;class&gt;:&lt;model-id&gt;</code> pair naming that role's assignment class.</li>
+        <li><code>routing=ranked</code> output for that role, when no override applies.</li>
+        <li>
+          <code>tier=</code> (the existing static-tier input) or the seeded <code>team.md</code> Model
+          Tier — today's fallback, unchanged.
+        </li>
+        <li>Omit the parameter — the no-policy default.</li>
+      </ol>
+      <p>
+        <strong>Re-ranking:</strong> When the host rejects the chosen model id, the routing procedure
+        re-ranks to the next eligible candidate under the same floor and class, and records the
+        substitution (requested, actual, why) in that dispatch's history.
+      </p>
+      <p>
+        <strong>Unevaluated models:</strong> A model the host advertises but the catalog does not
+        carry is never auto-ranked. It is usable only through an explicit <code>models=</code>
+        override and is labelled <code>unevaluated</code> in the dispatch record.
+      </p>
+      <p><strong>Examples:</strong></p>
+      <pre><code># Default: no ranking; every role uses static tier defaults (fast/standard/advanced/frontier).
+/squad request="design the data layer" models=architect:gpt-5.5
+
+# Enable ranked selection; every role picks its best-qualified model.
+/squad request="implement the design" routing=ranked
+
+# Use gpt-5.5 for review, and re-rank everything else.
+/squad request="review the implementation" routing=ranked models=review:gpt-5.5
+
+# Route to a sub-squad with rank model selection, but pin bookkeeping to gpt-5-mini.
+/squad-federation squad=product routing=ranked models=bookkeeping:gpt-5-mini</code></pre>
+
+      <h3>Ledger validation</h3>
+      <p>
+        The Scribe runs a write-completeness Self-Check exactly once per hand-off, after all writes
+        are persisted. This check re-counts dispatch records and consumption blocks in every touched history file
+        to confirm they match what was written, and verifies the consumption ledger's per-role and run-total rows
+        sum correctly from the blocks recorded on disk.
+      </p>
+      <p>
+        When PowerShell 7+ is available, the coordinator also runs the helper script
+        <code>Measure-SquadLedger.ps1 -Check</code> (with <code>-SquadRoot &lt;root&gt;</code> pointing to a squad
+        root) from the squad skill's <code>scripts/</code> directory. This read-only helper
+        re-derives the entire ledger from the history files and <code>consumption-rates.md</code>, and exits
+        non-zero if it detects any of these conditions:
+      </p>
+      <ul>
+        <li>A divergence between the ledger's run total and the sum of its own rows.</li>
+        <li>A divergence between the ledger's run total and <code>state.json</code>'s <code>currentRun</code>
+        totals. Missing or unparseable <code>state.json</code> fails the check; a federation root (marked by
+        <code>federation.md</code>) is logged as not-applicable instead.</li>
+        <li>An identity-guard failure: recorded per-file ordered block identities in the ledger
+        <code>### Derivation</code> block must form an ordered prefix of that file's current identities.
+        Overwrites, reorders, or removals of history entries fail this guard; appends pass. A plain
+        <code>-Check</code> (no <code>-ExpectedHistoryCounts</code>) only warns on ledgers with no recorded
+        identities at all (legacy format compatibility). Combined with <code>-ExpectedHistoryCounts</code> — the
+        Scribe's own post-write self-check — a Derivation missing identities entirely, or missing them for only
+        some of the touched files (a partial paste), fails instead of warning.</li>
+      </ul>
 
       <h3>Requirements for running the squad</h3>
       <ul>

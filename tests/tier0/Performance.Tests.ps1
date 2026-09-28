@@ -504,6 +504,60 @@ Describe 'The correctness inventory fails on content-level mutations (OBJ-02, CH
     }
 }
 
+Describe 'C7 byte-budget gate holds within tolerance for the roster hot file and the Scribe hot core' {
+    # C7 (routing-performance plan): a checked-in, tolerance-based ceiling on the two
+    # files/aggregates most sensitive to prompt-footprint growth. Unlike the strict
+    # "at or under BEFORE baseline" gate in Packaging.Tests.ps1 D7-5 (no headroom),
+    # this gate allows bounded future growth (tolerancePercent) before failing, since
+    # both budgets here are stable-state targets rather than files mid-reduction.
+    # Idea harvested from 3a26f5d's tests/performance/baseline.json + its
+    # Performance.Tests.ps1 deltaPercent assertions, adapted to a ceiling-with-headroom
+    # shape instead of a required-shrink shape (see tests/tier0/baselines/byte-budget-baseline.json).
+    BeforeAll {
+        $script:ByteBudgetPath = Join-Path -Path $script:SourceRoot -ChildPath 'tests' -AdditionalChildPath 'tier0', 'baselines', 'byte-budget-baseline.json'
+        $script:ByteBudget = Get-Content -LiteralPath $script:ByteBudgetPath -Raw | ConvertFrom-Json
+
+        $script:RosterHotPath = Join-Path -Path $script:SourceRoot -ChildPath $script:ByteBudget.budgets.'roster-hot-instruction'.path
+        $script:RosterHotBytes = (Get-Item -LiteralPath $script:RosterHotPath).Length
+
+        # Mirrors Packaging.Tests.ps1's D7-5 dynamic derivation of the Scribe hot core:
+        # parsed from 00-index.md's own "The Scribe reads ... on every turn" sentence
+        # plus the agent charter file itself, so this test tracks the contract if it
+        # is ever re-worded, rather than hardcoding a file list.
+        $indexPath = Join-Path -Path $script:SourceRoot -ChildPath 'squad-src' -AdditionalChildPath '.github', 'skills', 'squad', 'references', '00-index.md'
+        $indexText = Get-Content -LiteralPath $indexPath -Raw
+        $hotCoreSentence = [regex]::Match($indexText, 'The Scribe reads (.+?) on every turn')
+        $referenceFiles = @([regex]::Matches($hotCoreSentence.Groups[1].Value, '`([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value })
+        $scribeHotCoreFiles = @('squad-src/.github/agents/squad/squad-scribe.agent.md') + @($referenceFiles | ForEach-Object { "squad-src/.github/skills/squad/references/$_" })
+        $script:ScribeHotCoreBytes = ($scribeHotCoreFiles | ForEach-Object {
+                (Get-Item -LiteralPath (Join-Path -Path $script:SourceRoot -ChildPath $_)).Length
+            } | Measure-Object -Sum).Sum
+    }
+
+    It 'has a checked-in byte-budget baseline with both required entries' {
+        $script:ByteBudget.budgets.'roster-hot-instruction' | Should -Not -BeNullOrEmpty
+        $script:ByteBudget.budgets.'scribe-hot-core' | Should -Not -BeNullOrEmpty
+    }
+
+    It 'keeps the roster hot instruction file within its budget plus tolerance' {
+        $budget = $script:ByteBudget.budgets.'roster-hot-instruction'
+        $ceiling = [math]::Ceiling($budget.budgetBytes * (1 + ($budget.tolerancePercent / 100)))
+        $script:RosterHotBytes | Should -BeLessOrEqual $ceiling -Because (
+            "the roster hot file is $($script:RosterHotBytes) bytes, exceeding its $($budget.budgetBytes)-byte " +
+            "budget plus $($budget.tolerancePercent)% tolerance ($ceiling bytes)"
+        )
+    }
+
+    It 'keeps the Scribe hot core within its budget plus tolerance (upper bound pending P05 tightening)' {
+        $budget = $script:ByteBudget.budgets.'scribe-hot-core'
+        $ceiling = [math]::Ceiling($budget.budgetBytes * (1 + ($budget.tolerancePercent / 100)))
+        $script:ScribeHotCoreBytes | Should -BeLessOrEqual $ceiling -Because (
+            "the Scribe hot core is $($script:ScribeHotCoreBytes) bytes, exceeding its $($budget.budgetBytes)-byte " +
+            "budget plus $($budget.tolerancePercent)% tolerance ($ceiling bytes)"
+        )
+    }
+}
+
 Describe 'Script hygiene' {
     BeforeDiscovery {
         $script:HygieneScripts = @(

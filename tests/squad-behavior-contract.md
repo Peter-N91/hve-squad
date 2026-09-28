@@ -77,6 +77,7 @@ No Copilot invocation. Install the ref into a scratch directory, then inspect th
 | PKG-12 | Both squad entry points expose and forward `cost-ceiling=<positive USD\|unset>` with same-run inheritance | The lifecycle must be invocable from the delivered prompts |
 | PKG-13 | Initialization is outside Cost Preflight; ordinary federation routing forwards one independent ceiling to every selected sub-squad and resets root admission to `not-requested`; only untargeted federation autopilot owns aggregate admission and its federation-root rate table | Prevents bootstrap deadlock, stale aggregate gates, silent ungated sub-squads, and accidental double admission |
 | PKG-14 | The plugin build emits byte-identical `plugin.json` files at the distribution root and under `.github/plugin/`, and every generated hook command resolves its script through the `CLAUDE_PLUGIN_ROOT` environment variable | VS Code discovers agents through the root manifest, while CLI hooks execute from the consumer repository rather than the installed plugin directory |
+| PKG-15 | Every role named in a Squad Profiles or Squad Packs row (`squad-roster.instructions.md`, `references/profiles-and-packs.md`) resolves to a Cast Catalog row in `references/roster-catalog.md` | A profile or pack naming a role the catalog does not carry leaves the coordinator unable to cast it at runtime (Council condition C4) |
 
 ## Tier 1 — Single squad
 

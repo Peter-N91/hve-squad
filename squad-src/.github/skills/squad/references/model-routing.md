@@ -12,6 +12,8 @@ metadata:
 
 **No policy is the default and is byte-for-byte today's behavior.** When neither `routing=` nor `models=` is present, the coordinator omits the dispatch `model` parameter entirely, exactly as before this file existed. Everything below only ever narrows or substitutes a model id passed through that same parameter — it never rewrites an agent's `model:` frontmatter (that pin, and the five-rung *Model Attribution* ladder that resolves what actually ran, stay exactly as `.github/instructions/squad/squad-state.instructions.md` defines them).
 
+**Omitting the parameter defers to the target agent's own model pin, when it has one.** A dispatch with no `model` parameter runs on that pin; when the agent declares none, the host decides — typically the session model — so the squad pins every role it wants off the session model. The two coordinators (`squad-coordinator`, `federation-coordinator`) declare no pin by design and run on the session model the user selected. The Scribe must not inherit the frontier session model: its `model:` frontmatter pins Claude Haiku 4.5, its `bookkeeping` assignment class floors at the seeded `fast` Model Tier, and neither routing input nor the no-policy default ever substitutes the orchestrating session's own model in its place.
+
 ## Inputs
 
 * `routing=ranked|off` — default `off`. `ranked` turns on capability-ranked selection over `references/model-catalog.md`; `off` (or the input absent) disables ranking entirely.

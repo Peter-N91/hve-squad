@@ -48,6 +48,49 @@ apm lock</code></pre>
 ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
 git diff --check</code></pre>
     <p>Les tests déterministes ne prouvent pas les résultats d'une exécution avec modèles. Les runs live constituent une vérification séparée et consomment des requêtes Copilot.</p>
+    <h2>Maintenance du skill squad et des références</h2>
+    <p>
+      Les fichiers d'instruction et de référence du skill squad pilotent le comportement du roster, la sélection des modèles
+      et la validation du registre. Les modifications ici se propagent à chaque consommateur à la prochaine
+      <code>apm install</code>.
+    </p>
+    <p>
+      <strong>Division du roster :</strong> <code>squad-src/.github/instructions/squad/squad-roster.instructions.md</code>
+      porte le résumé de sécurité inline, les règles de dispatchabilité et Profils/Packs. Le catalogue des rôles (anciennement
+      sections Cast Catalog, External Cast et Building a Custom Roster) vit désormais dans le fichier canonique
+      <code>squad-src/.github/skills/squad/references/roster-catalog.md</code> (lu à la demande). Quand vous ajoutez un nouvel
+      agent au cast, modifiez <code>references/roster-catalog.md</code> pour ajouter la ligne de rôle et lier le fichier
+      d'agent sous <code>.github/agents/</code>.
+    </p>
+    <p>
+      <strong>Catalogue des modèles et routage :</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
+      énumère les modèles, niveaux et disponibilités. <code>references/model-routing.md</code> définit l'algorithme de classement
+      et la chaîne de précédence. Le Scribe ne doit pas hériter du modèle de session frontière (épinglé à Claude Haiku 4.5 dans
+      son frontmatter ; la classe d'assignation bookkeeping s'étage à partir du Model Tier rapide sélectionné). Quand la gamme
+      de modèles GitHub Copilot change, mettez à jour la date <code>Retrieved</code> du catalogue ; une date >90 jours stale
+      replie sur les niveaux statiques. Gardez la date d'extraction et le catalogue synchronisés.
+    </p>
+    <p>
+      <strong>Portail Tier 0 byte-budget :</strong> <code>tests/tier0/baselines/byte-budget-baseline.json</code> (voir
+      Performance.Tests.ps1 L507) fixe des limites (roster 61 170 B ; cœur chaud Scribe 82 000 B ; 5% de tolérance).
+      Éditez <code>budgetBytes</code> et <code>note</code> à la main quand un changement de taille intentionnel survient.
+      La baseline <code>tests/tier0/baselines/prefill-baseline.json</code> est régénérée avec
+      <code>./scripts/Measure-SquadPerformance.ps1 -SourceRoot . -UpdateBaseline</code> (voir Measure-SquadPerformance.ps1
+      L52–56) ; après régénération, diffez-la pour confirmer que seules les phrases normatives et en-têtes intentionnels ont changé
+      (une phrase normative supprimée échoue le portail superset dans Performance.Tests.ps1 L507 sauf si c'était une correction intentionnelle).
+    </p>
+    <p>
+      <strong>Assistant registre et gardes :</strong> Le script <code>Measure-SquadLedger.ps1 -SquadRoot &lt;racine&gt; -Check</code>
+      valide l'arithmétique du registre, la divergence registre↔state.json (strict ; state.json manquant/non-analysable échoue ;
+      une racine de fédération marquée par <code>federation.md</code> est enregistrée comme non-applicable), le garde identité
+      (les identités de blocs ordonnées enregistrées par fichier doivent former un préfixe ordonné des identités actuelles ;
+      les réécritures/suppressions échouent ; les ajouts réussissent ; un <code>-Check</code> simple ne fait que prévenir
+      quand aucune identité n'est enregistrée — registres hérités), et est appelé par le Scribe avec
+      <code>-ExpectedHistoryCounts &lt;nombres d'entrées par agent&gt;</code> (scribe-procedure.md L166), ce qui transforme
+      ces mêmes avertissements d'identité manquante en échecs — totalement absentes, ou n'étant enregistrées que pour une
+      partie des fichiers touchés (collage partiel) — puisque cet appel suit toujours une écriture fraîche.
+      Les fixtures de test sous <code>tests/fixtures/ledger-*</code> exercent chaque condition de garde.
+    </p>
     <h2>Documentation bilingue</h2>
     <p>Le site reste en HTML statique. Les pages anglaises sont dans <code>docs/</code> et leurs correspondantes françaises dans <code>docs/fr/</code>, avec les mêmes noms de fichiers. Les styles et contrôles communs sont dans <code>docs/assets/style.css</code>, <code>theme.js</code> et <code>site.js</code>.</p>
     <p>Mettez à jour les deux langues dans la même PR, conservez les identifiants d'ancre et les commandes, puis testez les onglets, la navigation mobile et les liens de langue. Les onglets sont placés sur chaque exemple et partagent le choix de l'environnement. Les rapports historiques et vidéos gardent leur langue d'origine, explicitement indiquée. Les pages restent lisibles sans JavaScript.</p>

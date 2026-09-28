@@ -197,10 +197,11 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
       </p>
       <p>
         Check the role’s Primary in <code>.copilot-tracking/squad/team.md</code> against the cast catalog in
-        <code>.github/instructions/squad/squad-roster.instructions.md</code>, and confirm the agent file exists
-        under <code>.github/agents/</code>. A role whose <em>Deliverable Root</em> its Primary cannot write is
-        always a wrong row. After any hve-core bump, re-run <code>apm install</code> and compare the cast with
-        <code>scripts/Get-HveCoreCastDelta.ps1</code>.
+        the squad skill's <code>references/roster-catalog.md</code>, and confirm the agent file exists
+        under <code>.github/agents/</code>. The squad skill's <code>squad-roster.instructions.md</code> still
+        carries the dispatchability and safety rules. A role whose <em>Deliverable Root</em> its Primary cannot
+        write is always a wrong row. After any hve-core bump, re-run <code>apm install</code> and compare the cast
+        with <code>scripts/Get-HveCoreCastDelta.ps1</code>.
       </p>
 
       <h2>Cost-ceiling issues</h2>

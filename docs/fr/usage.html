@@ -31,6 +31,8 @@
       <li><code>profile=</code> choisit le profil proposé à l'initialisation. Sans valeur, le coordinateur recommande un profil adapté au dépôt.</li>
       <li><code>pack=power-platform|m365-copilot|aws</code> ajoute des spécialistes technologiques. Plusieurs packs peuvent être séparés par des virgules.</li>
       <li><code>tier=fast|default</code> donne une préférence de niveau de modèle pour le tour.</li>
+      <li><code>routing=ranked|off</code> active la sélection des modèles par rang de capacité. Par défaut, <code>off</code> ; aucune politique n'est appliquée. Avec <code>routing=ranked</code>, le coordinateur classe le modèle le mieux qualifié du catalogue déclaré pour chaque rôle, filtre selon la disponibilité sur votre système et applique des étages minimum pour éviter les modèles en dessous du rang du rôle. Voir <a href="#model-selection-per-role">Sélection des modèles par rôle</a> ci-dessous.</li>
+      <li><code>models=&lt;clé&gt;:&lt;id&gt;,&lt;clé&gt;:&lt;id&gt;,...</code> — remplacements explicites par rôle ou par classe d'assignation. Les clés acceptées : les identifiants de rôles de votre <code>team.md</code> (comme <code>researcher</code>, <code>developer</code>, <code>tester</code>), ou les classes d'assignation (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>, <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Les clés ou identifiants inconnus sont refusés et enregistrés plutôt que devinés. Un modèle en dessous du rang du rôle dans votre <code>.copilot-tracking/squad/team.md</code> est également refusé. Fonctionne indépendamment de <code>routing=</code>. Voir <a href="#model-selection-per-role">Sélection des modèles par rôle</a> ci-dessous.</li>
       <li><code>discovery=quick|standard|deep|skip</code> choisit la profondeur de découverte ou la refuse.</li>
       <li><code>owner=&lt;Member Name&gt;</code> désigne un membre précis si plusieurs membres partagent le même rôle.</li>
       <li><code>mode=autonomous|autopilot</code> choisit le mode d'autonomie. Sans paramètre, le mode est interactif.</li>
@@ -39,7 +41,8 @@
     <pre><code>/squad request="Analyse les menaces du service d'authentification" profile=security
 /squad request="Conçois notre application d'approbation" profile=architecture pack=power-platform
 /squad request="Réduis les abandons pendant l'inscription" discovery=standard
-/squad request="Implémente le plan validé" mode=autopilot cost-ceiling=20</code></pre>
+/squad request="Implémente le plan validé" mode=autopilot cost-ceiling=20
+/squad request="Mène une recherche de sécurité et implémente" routing=ranked models=review:claude-opus-5.5</code></pre>
     <h2>Initialiser l'équipe</h2>
     <p>Sans <code>team.md</code>, le coordinateur propose un profil ou une équipe personnalisée composée d'agents réellement disponibles. Vous choisissez une squad unique ou une fédération, puis le canal d'approbation. Aucun fichier n'est créé avant votre confirmation.</p>
     <pre><code>/squad init</code></pre>
@@ -75,6 +78,114 @@ coût d'admission = estimation du travail restant × 3.0</code></pre>
 /squad request="Continue sans plafond de coût" cost-ceiling=unset</code></pre>
     <p>Pour reprendre après un arrêt, relevez le plafond au-dessus du cumul, retirez-le explicitement, réduisez ou réévaluez la demande, ou démarrez un nouveau run. Réapprouver une limite déjà dépassée n'est pas une reprise valide.</p>
     <p>Consultez <code>currentRun.costPreflight</code> dans <code>state.json</code>, l'entrée <code>Cost Preflight</code> et sa <code>Decision Ref</code> dans <code>decisions.md</code>, les totaux dans <code>consumption.md</code> et les hypothèses dans <code>consumption-rates.md</code>. Les chiffres sont des estimations, pas une télémétrie de facturation.</p>
+    <h2 id="model-selection-per-role">Sélection des modèles par rôle (<code>routing=</code> / <code>models=</code>)</h2>
+    <p>
+      <strong>Comportement par défaut (sans <code>routing=</code> ni <code>models=</code>) :</strong> Quand
+      aucun paramètre n'est donné, aucun paramètre <code>model</code> n'est passé à aucune dispatch ;
+      chaque agent s'exécute sur son propre modèle frontmatter ou le modèle de session, exactement comme
+      avant que cette fonctionnalité existe.
+    </p>
+    <p>Vous pouvez contrôler directement la sélection du modèle avec deux paramètres :</p>
+    <ul>
+      <li>
+        <strong><code>routing=ranked</code></strong> — Active la sélection des modèles par rang de capacité.
+        Le coordinateur classe le modèle le mieux qualifié du catalogue déclaré pour chaque rôle,
+        filtre selon la disponibilité sur votre hôte, et applique des étages minimum pour éviter les
+        modèles en dessous du rang du rôle. Avec <code>routing=off</code> (ou omis), les remplacements
+        <code>models=</code> s'appliquent uniquement aux clés nommées ; tous les autres rôles omettent
+        le paramètre.
+      </li>
+      <li>
+        <strong><code>models=&lt;clé&gt;:&lt;id&gt;,&lt;clé&gt;:&lt;id&gt;,...</code></strong> —
+        Remplacements explicites par rôle ou par classe d'assignation. Les clés acceptées :
+        <ul>
+          <li>
+            <strong>Identifiants de rôles</strong> de votre <code>team.md</code> : <code>researcher</code>,
+            <code>lead</code>, <code>developer</code>, <code>tester</code>, <code>challenger</code>,
+            <code>architect</code>, <code>security</code>, <code>cost-manager</code>, <code>rai</code>,
+            <code>product-owner</code>, <code>prompt-engineer</code>, <code>intake-validator</code>,
+            <code>scribe</code>, et tout autre rôle dans les rosters sélectionnés.
+          </li>
+          <li>
+            <strong>Classes d'assignation</strong> : <code>research</code>, <code>planning</code>,
+            <code>implementation</code>, <code>review</code>, <code>council</code>, <code>intake</code>,
+            <code>bookkeeping</code>.
+          </li>
+        </ul>
+        Les clés ou identifiants de modèles inconnus sont refusés et enregistrés plutôt que devinés.
+        Un modèle en dessous du rang du rôle est aussi refusé—augmentez le rang dans
+        <code>.copilot-tracking/squad/team.md</code> si vous en avez besoin. Pour plus de détails et
+        la liste complète, consultez le skill squad's <code>references/roster-catalog.md</code>.
+      </li>
+    </ul>
+    <p><strong>Ordre de précédence</strong> (le plus élevé gagne, par rôle) :</p>
+    <ol>
+      <li>Une paire <code>models=&lt;id-rôle&gt;:&lt;id-modèle&gt;</code> nommant ce rôle exact.</li>
+      <li>Une paire <code>models=&lt;classe&gt;:&lt;id-modèle&gt;</code> nommant la classe du rôle.</li>
+      <li>La sortie <code>routing=ranked</code> pour ce rôle, quand aucun remplacement ne s'applique.</li>
+      <li>
+        <code>tier=</code> (l'entrée de statique tier existante) ou le <code>Model Tier</code> sélectionné
+        dans <code>team.md</code> — la base de secours d'aujourd'hui, inchangée.
+      </li>
+      <li>Omettez le paramètre — la politique par défaut.</li>
+    </ol>
+    <p>
+      <strong>Re-classement :</strong> Quand l'hôte rejette l'id de modèle choisi, la procédure de routage
+      se reclasse sur le candidat éligible suivant sous le même étage et classe, et enregistre la
+      substitution (demandé, réel, pourquoi) dans l'historique de cette dispatch.
+    </p>
+    <p>
+      <strong>Modèles non évalués :</strong> Un modèle que l'hôte propose mais que le catalogue ne
+      porte pas n'est jamais auto-classé. Il n'est utilisable que par un remplacement explicite
+      <code>models=</code> et est étiqueté <code>unevaluated</code> dans le registre de dispatch.
+    </p>
+    <p><strong>Exemples :</strong></p>
+    <pre><code># Par défaut : pas de classement ; chaque rôle utilise les tiers statiques par défaut (fast/standard/advanced/frontier).
+/squad request="concevoir la couche de données" models=architect:gpt-5.5
+
+# Active la sélection classée ; chaque rôle choisit son meilleur modèle qualifié.
+/squad request="implémenter la conception" routing=ranked
+
+# Utilise gpt-5.5 pour review, et re-classe tout le reste.
+/squad request="examiner l'implémentation" routing=ranked models=review:gpt-5.5
+
+# Route vers une sous-squad avec sélection classée, mais épingle bookkeeping à gpt-5-mini.
+/squad-federation squad=product routing=ranked models=bookkeeping:gpt-5-mini</code></pre>
+
+    <h3>Validation du registre de consommation</h3>
+    <p>
+      Le Scribe exécute une auto-vérification d'exhaustivité des écritures exactement une fois par handoff,
+      après la persistance de tous les écritures. Cette vérification recompte les registres de dispatch
+      et les blocs de consommation dans chaque fichier d'historique touché pour confirmer qu'ils
+      correspondent à ce qui a été écrit, et vérifie que les lignes d'agrégation et de totaux du
+      registre de consommation se somment correctement à partir des blocs enregistrés sur disque.
+    </p>
+    <p>
+      Quand PowerShell 7+ est disponible, le coordinateur exécute aussi <code>Measure-SquadLedger.ps1
+      -SquadRoot &lt;root&gt; -Check</code> depuis le répertoire <code>scripts/</code> du skill squad.
+      Cet assistant en lecture seule redérive entièrement le registre des fichiers d'historique et
+      <code>consumption-rates.md</code>, et quitte avec un code non-zéro s'il détecte :
+    </p>
+    <ul>
+      <li>Une divergence entre le total du registre et la somme de ses propres lignes.</li>
+      <li>
+        Une divergence entre le total du registre et les totaux <code>currentRun</code> du fichier
+        <code>state.json</code>. Un fichier <code>state.json</code> manquant ou non-parsable fait échouer
+        la vérification ; une racine de fédération (marquée par <code>federation.md</code>) est enregistrée
+        comme non-applicable à la place.
+      </li>
+      <li>
+        Un défaut du garde-identité : les identités de blocs ordonnées enregistrées par fichier dans le
+        bloc <code>### Derivation</code> du registre doivent former un préfixe ordonné des identités
+        actuelles du fichier. Les réécritures, réordonnances ou suppressions d'entrées d'historique
+        échouent ce garde ; les ajouts en fin réussissent. Un <code>-Check</code> simple (sans
+        <code>-ExpectedHistoryCounts</code>) ne fait que prévenir sur les registres sans aucune identité
+        enregistrée (compatibilité format hérité). Combiné à <code>-ExpectedHistoryCounts</code> —
+        l'auto-vérification post-écriture propre au Scribe — une Derivation sans aucune identité, ou
+        n'en enregistrant que pour une partie des fichiers touchés (collage partiel), échoue au lieu de
+        prévenir.
+      </li>
+    </ul>
     <h2>Découverte et validation des exigences</h2>
     <p>Sans document d'entrée, les profils <code>product</code> et <code>full</code> peuvent proposer une découverte pour un objectif encore ouvert. Elle est proposée une fois par sujet, jamais imposée : les agents vous interrogent et ne doivent pas inventer vos choix. Avec un document d'entrée, le contrôle de préparation évalue sa clarté, sa cohérence, son périmètre et sa testabilité.</p>
     <table><thead><tr><th>Profondeur</th><th>Résultat</th></tr></thead><tbody><tr><td><code>quick</code></td><td>Un brief produit par l'analyste.</td></tr><tr><td><code>standard</code></td><td>Cadrage et pistes avec le designer, puis brief.</td></tr><tr><td><code>deep</code></td><td>Objections, hypothèse risquée et expérimentation avant le brief. Le rôle challenger doit être disponible ou ajouté avec accord.</td></tr><tr><td><code>skip</code></td><td>Refus enregistré, sans séance de découverte.</td></tr></tbody></table>

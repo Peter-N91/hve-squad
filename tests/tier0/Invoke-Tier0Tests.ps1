@@ -48,7 +48,7 @@
 .EXAMPLE
     ./Invoke-Tier0Tests.ps1 -SourceRoot .
 .NOTES
-    See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-14).
+    See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-15).
 #>
 [CmdletBinding(DefaultParameterSetName = 'Install')]
 param(

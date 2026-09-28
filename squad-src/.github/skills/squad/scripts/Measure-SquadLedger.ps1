@@ -82,9 +82,28 @@
     not compared. Numerically: the Usage & Cost Total row's tokens/turns (exact
     match) and cost (within 0.0001 USD or 0.1%, whichever is larger) against the
     figures this script derived from `history/*.md`. Also compares
-    -ExpectedHistoryCounts when supplied. Writes nothing, ever — this switch only
-    changes the exit code and adds a mismatch report. Exits 0 when every comparison
-    passes, 1 otherwise, listing every mismatch found.
+    -ExpectedHistoryCounts when supplied. Also checks two conditions independent
+    of consumption.md's own shape: the C2 history-identity guard (every history
+    file's `###` entry identities recorded in consumption.md's `### Derivation`
+    block must be an ordered prefix of that file's current identities -- an
+    entry overwritten or removed fails even at the same entry count, a plain
+    append passes, and an older-format ledger recording no identities at all
+    only warns -- *except* when -Check is combined with -ExpectedHistoryCounts,
+    the Scribe's own post-write self-check shape: there, a Derivation with no
+    recorded identities at all, or recording some but not every history file
+    with entries (a partial paste), FAILS instead of warning, because that call
+    always follows a fresh write and a missing or partial paste is this run's
+    own defect, never a pre-existing legacy ledger); and the C3 ledger<->state.json `currentRun` divergence (its
+    `estCostUsd`/`estCreditsTotal` must match this script's own derived totals
+    within the same tolerance as the Total row above, and a history holding
+    consumption blocks with no readable `currentRun` also fails) -- except on a
+    federation root (marked by `federation.md`), which has no single run-level
+    `currentRun` to reconcile against and logs `not-applicable: federation root`
+    instead of comparing or silently passing. The C2 guard also runs outside
+    -Check, refusing to render a new fragment while it already fails. Writes
+    nothing, ever — this switch only changes the exit code and adds a mismatch
+    report. Exits 0 when every comparison passes, 1 otherwise, listing every
+    mismatch found.
 .PARAMETER ExpectedHistoryCounts
     Optional hashtable keyed by history file name (with or without the `.md`
     extension, e.g. `'Squad Researcher'` or `'Squad Researcher.md'`) whose value is
@@ -366,6 +385,157 @@ function Get-HistoryEntryCountLocal {
     @([regex]::Matches($Content, '(?m)^###[ \t]+\S')).Count
 }
 
+function Get-ShortIdentityHashLocal {
+    <#
+    .SYNOPSIS
+        An 8-hex-character SHA-256 fingerprint of a string. This is a compact,
+        deterministic identity for a history-entry heading, never a security
+        boundary -- collisions are not a concern for this integrity-guard use.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    $hashBytes = [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($Text))
+    -join ($hashBytes[0..3] | ForEach-Object { $_.ToString('x2') })
+}
+
+function Get-HistoryEntryIdentitiesLocal {
+    <#
+    .SYNOPSIS
+        The ordered list of short identity hashes of a history file's `###`
+        dispatch-entry headings, one per entry in file order.
+    .DESCRIPTION
+        This is the C2 history-identity guard's own record: consumption.md's
+        `### Derivation` block persists this list per file (see the enumeration
+        line built in the main loop below) so a later run can tell an entry that
+        was overwritten or removed (same or fewer entries, a different or
+        missing identity at some position) apart from a run that only appended
+        new entries (a longer list sharing the same identities as a prefix).
+    #>
+    param([string]$Content)
+    # No trailing `$` anchor -- see Get-ConsumptionBlockLocal's own CRLF note
+    # above; `.` already stops before `\r`/`\n`, so the heading text is captured
+    # cleanly without needing (and without risking) a multiline `$` anchor.
+    @(
+        [regex]::Matches($Content, '(?m)^###[ \t]+(?<title>\S.*)') | ForEach-Object {
+            Get-ShortIdentityHashLocal -Text $_.Groups['title'].Value.Trim()
+        }
+    )
+}
+
+function Test-HistoryIdentityGuardLocal {
+    <#
+    .SYNOPSIS
+        The C2 history-identity guard: compares each history file's identity
+        list already recorded in an existing consumption.md against its current
+        identity list (this run's own count of history/*.md).
+    .DESCRIPTION
+        The recorded list must be an ordered prefix of the current list. A
+        shorter-or-equal-length recorded list that diverges anywhere (an entry
+        overwritten in place, or reordered) fails, as does a recorded list
+        longer than the current one (an entry removed). A recorded list that is
+        a genuine prefix of a longer current list (a plain append) passes. When
+        the existing ledger's `### Derivation` block carries no identity records
+        at all (an older-format ledger, pre-dating this guard), every file WARNs
+        instead of failing, so it keeps working until its next rewrite records
+        identities for the first time. A file whose own line lacks the
+        `-- identities:` suffix even though other lines in the same ledger carry
+        one WARNs for that file alone, for the same reason -- *unless* `-PostWrite`
+        is set, in which case both the fully-legacy case (no identities recorded
+        at all) and the partial-paste case (some, but not every history file
+        with entries, recorded) FAIL instead of warning. `-PostWrite` names the
+        Scribe's own post-write self-check (`-Check` combined with
+        `-ExpectedHistoryCounts`, per `scribe-procedure.md`'s Self-Check step):
+        that call always follows an actual write of a fresh Derivation block, so
+        a Derivation missing identities there is never a genuinely old ledger --
+        it is this run's own paste having silently dropped the identity lines,
+        which must not be allowed to pass. An ordinary `-Check` without
+        `-ExpectedHistoryCounts` (or no `-Check` at all) keeps warning-only, so a
+        pre-existing legacy ledger that nobody has rewritten yet still passes
+        until its next rewrite, per council condition C2.
+    .OUTPUTS
+        [pscustomobject] with Legacy (bool), Failures (string[]), Warnings (string[]).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$ConsumptionContent,
+        [Parameter(Mandatory)][hashtable]$CurrentIdentitiesByFile,
+        [switch]$PostWrite
+    )
+
+    $failures = [System.Collections.Generic.List[string]]::new()
+    $guardWarnings = [System.Collections.Generic.List[string]]::new()
+
+    $derivationMatch = [regex]::Match($ConsumptionContent, '(?ms)^###\s+Derivation\s*?\r?\n.*?```text\r?\n(?<body>.*?)\r?\n```')
+    $body = if ($derivationMatch.Success) { $derivationMatch.Groups['body'].Value } else { '' }
+
+    $taggedLineCount = @([regex]::Matches($body, '(?m)^.+\.md — \d+ block\(s\) — identities: .*$')).Count
+    if ($taggedLineCount -eq 0) {
+        $message = "consumption.md's ### Derivation block records no history-entry identities yet (an older-format ledger); the C2 overwrite/removal guard cannot check it and only warns until the next rewrite records identities."
+        if ($PostWrite) {
+            return [pscustomobject]@{
+                Legacy   = $true
+                Failures = @("History identity guard: consumption.md's ### Derivation block records no history-entry identities. This is the Scribe's post-write self-check (-ExpectedHistoryCounts was supplied), which always follows a fresh write, so a missing Derivation here is a bad paste, not a legacy ledger -- paste the helper's Derivation verbatim including identity lines.")
+                Warnings = @()
+            }
+        }
+        return [pscustomobject]@{
+            Legacy   = $true
+            Failures = @()
+            Warnings = @($message)
+        }
+    }
+
+    $recordedByFile = @{}
+    foreach ($lineMatch in [regex]::Matches($body, '(?m)^(?<file>.+\.md) — \d+ block\(s\)(?<rest>.*)$')) {
+        $fileName = $lineMatch.Groups['file'].Value.Trim()
+        $idsMatch = [regex]::Match($lineMatch.Groups['rest'].Value, '— identities: (?<ids>.*)$')
+        if (-not $idsMatch.Success) { continue }
+        $idsText = $idsMatch.Groups['ids'].Value.Trim()
+        $recordedByFile[$fileName] = if (-not $idsText -or $idsText -eq '(none)') { @() } else { @($idsText -split ',' | ForEach-Object { $_.Trim() }) }
+    }
+
+    # Partial paste: a file this run enumerates with at least one history entry
+    # (so the helper's own Derivation would have printed an identities line for
+    # it) but whose identities are not recorded in consumption.md's existing
+    # Derivation at all -- either its enumeration line lost the
+    # `-- identities:` suffix, or the line itself is missing outright, because
+    # only some of the helper's per-file lines were pasted.
+    foreach ($fileName in @($CurrentIdentitiesByFile.Keys | Sort-Object)) {
+        if (@($CurrentIdentitiesByFile[$fileName]).Count -eq 0) { continue }
+        if ($recordedByFile.ContainsKey($fileName)) { continue }
+        $message = "consumption.md's ### Derivation block has no recorded identities for '$fileName', even though other history files in the same block carry them (a partial paste); the C2 guard cannot check '$fileName' this run."
+        if ($PostWrite) {
+            $failures.Add("History identity guard: $message This is the Scribe's post-write self-check, so a partial paste must not pass -- paste the helper's Derivation verbatim including identity lines for every history file, not just some.")
+        }
+        else {
+            $guardWarnings.Add($message)
+        }
+    }
+
+    foreach ($fileName in $recordedByFile.Keys) {
+        $recorded = @($recordedByFile[$fileName])
+        if ($recorded.Count -eq 0) { continue }
+        $current = @(if ($CurrentIdentitiesByFile.ContainsKey($fileName)) { $CurrentIdentitiesByFile[$fileName] } else { @() })
+
+        if ($recorded.Count -gt $current.Count) {
+            $failures.Add("History identity guard: '$fileName' recorded $($recorded.Count) entry identity(ies) in consumption.md but history/ now holds only $($current.Count); an entry was removed.")
+            continue
+        }
+
+        $prefixOk = $true
+        for ($i = 0; $i -lt $recorded.Count; $i++) {
+            if ($recorded[$i] -ne $current[$i]) { $prefixOk = $false; break }
+        }
+        if (-not $prefixOk) {
+            $failures.Add("History identity guard: '$fileName' entry identities recorded in consumption.md are not a prefix of history/'s current identities (an entry was overwritten or reordered rather than only appended to).")
+        }
+    }
+
+    [pscustomobject]@{
+        Legacy   = $false
+        Failures = @($failures)
+        Warnings = @($guardWarnings)
+    }
+}
+
 function Get-ConsumptionBlockLocal {
     <#
     .SYNOPSIS
@@ -588,6 +758,7 @@ $calibrationFactor = Get-CalibrationFactorLocal -Content $ratesContent
 $warnings = [System.Collections.Generic.List[string]]::new()
 $parseErrors = [System.Collections.Generic.List[string]]::new()
 $historyCounts = @{}
+$historyIdentitiesByFile = @{}
 $enumerationLines = [System.Collections.Generic.List[string]]::new()
 
 # role label -> aggregate; kept in a list alongside a sort key so unmapped agents
@@ -603,8 +774,12 @@ foreach ($file in $historyFiles) {
     $entryCount = Get-HistoryEntryCountLocal -Content $content
     $historyCounts[$agentName] = $entryCount
 
+    $identities = @(Get-HistoryEntryIdentitiesLocal -Content $content)
+    $historyIdentitiesByFile[$file.Name] = $identities
+    $identityLabel = if ($identities.Count -gt 0) { $identities -join ',' } else { '(none)' }
+
     $blocks = @(Get-ConsumptionBlockLocal -Content $content -SourceName $file.Name)
-    $enumerationLines.Add("$($file.Name) — $($blocks.Count) block(s)")
+    $enumerationLines.Add("$($file.Name) — $($blocks.Count) block(s) — identities: $identityLabel")
 
     foreach ($block in $blocks) {
         if ($block.ParseError) {
@@ -692,6 +867,7 @@ $totalCredits = $totalCost / 0.01
 $statePath = Join-Path $SquadRoot 'state.json'
 $stateCostUsd = $null
 $stateCreditsTotal = $null
+$stateReadError = $null
 if (Test-Path -LiteralPath $statePath -PathType Leaf) {
     try {
         $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
@@ -699,8 +875,50 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
             $stateCostUsd = $state['currentRun']['estCostUsd']
             $stateCreditsTotal = $state['currentRun']['estCreditsTotal']
         }
+        else {
+            $stateReadError = "state.json at '$statePath' has no 'currentRun' key."
+        }
     }
-    catch { $warnings.Add("WARN: state.json at '$statePath' failed to parse: $($_.Exception.Message)") }
+    catch { $stateReadError = "state.json at '$statePath' failed to parse: $($_.Exception.Message)" }
+}
+else {
+    $stateReadError = "state.json not found at '$statePath'."
+}
+if ($stateReadError) { $warnings.Add("WARN: $stateReadError") }
+
+# federation.md marks a federation root, whose own run-level state.json has no
+# single currentRun to reconcile the ledger against (a federation root
+# aggregates its members' own runs instead) -- see the C3 divergence check below.
+$isFederationRoot = Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') -PathType Leaf
+
+# ---------------------------------------------------------------------------
+# C2 history-identity guard: read back whatever consumption.md already records
+# (in either mode -- render or -Check -- so a render never silently papers over
+# an identity divergence -Check would also have caught) before anything below
+# reads or rewrites it.
+# ---------------------------------------------------------------------------
+
+$consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$existingConsumptionContent = $null
+$identityGuardResult = $null
+# Post-write mode is the Scribe's own self-check shape: -Check combined with
+# -ExpectedHistoryCounts always follows an actual write (see
+# references/scribe-procedure.md's Self-Check step), so a Derivation missing
+# identities there is this run's own bad paste, never a pre-existing legacy
+# ledger -- it must fail rather than only warn. Any other combination (no
+# -Check, or -Check alone) keeps the warn-only legacy behavior.
+$postWriteIdentityCheck = [bool]($Check -and $ExpectedHistoryCounts.Count -gt 0)
+if (Test-Path -LiteralPath $consumptionPath -PathType Leaf) {
+    $existingConsumptionContent = Get-Content -LiteralPath $consumptionPath -Raw
+    $identityGuardResult = Test-HistoryIdentityGuardLocal -ConsumptionContent $existingConsumptionContent -CurrentIdentitiesByFile $historyIdentitiesByFile -PostWrite:$postWriteIdentityCheck
+}
+
+if (-not $Check -and $identityGuardResult) {
+    foreach ($w in $identityGuardResult.Warnings) { $warnings.Add("WARN: $w") }
+    if ($identityGuardResult.Failures.Count -gt 0) {
+        foreach ($f in $identityGuardResult.Failures) { Write-Warning $f }
+        throw "Measure-SquadLedger: refusing to render a ledger fragment while consumption.md's existing history-identity guard record fails ($($identityGuardResult.Failures.Count) failure(s); see warnings above). An entry was overwritten or removed rather than only appended to -- resolve history/ (or the stale consumption.md record) before rerunning."
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -709,13 +927,13 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
 
 if ($Check) {
     $mismatches = [System.Collections.Generic.List[string]]::new()
+    $infoLines = [System.Collections.Generic.List[string]]::new()
 
-    $consumptionPath = Join-Path $SquadRoot 'consumption.md'
     if (-not (Test-Path -LiteralPath $consumptionPath -PathType Leaf)) {
         $mismatches.Add("consumption.md not found at '$consumptionPath'.")
     }
     else {
-        $consumptionContent = Get-Content -LiteralPath $consumptionPath -Raw
+        $consumptionContent = $existingConsumptionContent
 
         # Structural checks: numbers can reconcile on a ledger that lost its own
         # shape (the observed failure pasted the helper's console output -- heading,
@@ -898,6 +1116,40 @@ if ($Check) {
                 }
             }
         }
+
+        # C2 history-identity guard (see Test-HistoryIdentityGuardLocal): a legacy
+        # ledger with no recorded identities only warns, never fails, so an
+        # existing squad root keeps passing -Check until its next rewrite.
+        if ($identityGuardResult) {
+            foreach ($w in $identityGuardResult.Warnings) { $warnings.Add("WARN: $w") }
+            foreach ($f in $identityGuardResult.Failures) { $mismatches.Add($f) }
+        }
+    }
+
+    # C3: ledger<->state.json currentRun divergence. Independent of whether
+    # consumption.md itself parsed above -- state.json can diverge from the
+    # ledger even when consumption.md is missing or malformed, and the Scribe
+    # needs that named too. A federation root (marked by federation.md) has no
+    # single run-level currentRun to reconcile against, so this is logged as
+    # not-applicable rather than silently skipped or falsely failed.
+    if ($isFederationRoot) {
+        $infoLines.Add('not-applicable: federation root (ledger<->state.json currentRun divergence check skipped; a federation root has no single run-level currentRun to compare against)')
+    }
+    elseif ($roleAggregates.Count -gt 0 -and ($null -eq $stateCostUsd -or $null -eq $stateCreditsTotal)) {
+        $reason = if ($stateReadError) { $stateReadError } else { "currentRun.estCostUsd/estCreditsTotal missing." }
+        $mismatches.Add("history/ holds consumption block(s) for $($roleAggregates.Count) role(s), but state.json's currentRun cost/credits could not be read ($reason); the Scribe must overwrite state.json currentRun to match the ledger.")
+    }
+    elseif ($roleAggregates.Count -gt 0) {
+        $costTolerance = [math]::Max(0.0001, [math]::Abs($totalCost) * 0.001)
+        $costDelta = [double]$stateCostUsd - $totalCost
+        if ([math]::Abs($costDelta) -gt $costTolerance) {
+            $mismatches.Add(("Ledger<->state.json currentRun divergence: estCostUsd -- ledger derives {0:N4}, currentRun says {1:N4} (delta {2:N4}, tolerance {3:N4})." -f $totalCost, [double]$stateCostUsd, $costDelta, $costTolerance))
+        }
+        $creditsTolerance = [math]::Max(0.01, [math]::Abs($totalCredits) * 0.001)
+        $creditsDelta = [double]$stateCreditsTotal - $totalCredits
+        if ([math]::Abs($creditsDelta) -gt $creditsTolerance) {
+            $mismatches.Add(("Ledger<->state.json currentRun divergence: estCreditsTotal -- ledger derives {0:N2}, currentRun says {1:N2} (delta {2:N2}, tolerance {3:N2})." -f $totalCredits, [double]$stateCreditsTotal, $creditsDelta, $creditsTolerance))
+        }
     }
 
     foreach ($key in $ExpectedHistoryCounts.Keys) {
@@ -910,6 +1162,7 @@ if ($Check) {
     }
 
     foreach ($w in $warnings) { Write-Warning $w }
+    foreach ($info in $infoLines) { Write-Host $info -ForegroundColor Yellow }
 
     if ($mismatches.Count -gt 0) {
         Write-Host "Measure-SquadLedger -Check: FAIL ($($mismatches.Count) mismatch(es))" -ForegroundColor Red
@@ -1023,5 +1276,10 @@ Write-Host '```'
 # and Cost Comparison section are never reprinted here -- see scribe-procedure.md
 # Step 7 for what stays untouched when these rows are pasted in.
 foreach ($w in $warnings) { Write-Warning $w }
-Write-Verbose "state.json currentRun.estCostUsd: $stateCostUsd"
-Write-Verbose "state.json currentRun.estCreditsTotal: $stateCreditsTotal"
+# Actionable, not merely informational: names both currentRun fields and the
+# values this run derived for them, so a Scribe reading -Verbose output knows
+# exactly what to copy into state.json rather than recomputing it by hand (see
+# scribe-procedure.md Step 8). Deliberately worded so the phrase never appears
+# as one contiguous run of text on the success stream above -- that exact
+# adjacency is what -Check's own leak-detection guards against in consumption.md.
+Write-Verbose ("Copy these derived totals into currentRun inside state.json: estCostUsd={0:N4}, estCreditsTotal={1:N2}." -f $totalCost, $totalCredits)

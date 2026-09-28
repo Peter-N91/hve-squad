@@ -203,3 +203,78 @@ Describe 'The Scribe hot core and charter bind writes to the file tool and fix t
             -Because 'the charter defers the ledger''s decimal-mark rule to the hot core it cites rather than restating it, so this checks the cross-reference holds'
     }
 }
+
+Describe 'Consumption Accounting keeps its literal contract after the worked-example trim (C1)' {
+    # C1 removed only the worked-example arithmetic duplicated from
+    # squad-floor.instructions.md ("Example-Model X1" and the lead/orchestration
+    # worked block); it must never remove the surrounding literal contract these
+    # five phrases anchor. A regression here would mean the trim silently ate part
+    # of the contract rather than just the redundant numbers.
+    It 'still states the exact-JSON-shape, Derivation, orchestration-row, append-only-pairing, and paste-helper-output contract phrases' {
+        $scribeReference = Join-Path $script:Model.SquadSkillRoot 'references/scribe-procedure.md'
+        $referenceBody = Get-Content -LiteralPath $scribeReference -Raw
+
+        $referenceBody | Should -Match ([regex]::Escape('exactly one container shape')) `
+            -Because 'the consumption block''s literal/exact JSON shape contract must survive the trim'
+        $referenceBody | Should -Match ([regex]::Escape('in a `### Derivation` block under the Usage & Cost table')) `
+            -Because 'the requirement that the ledger show a `### Derivation` block must survive the trim even though its worked numeric example was removed'
+        $referenceBody | Should -Match ([regex]::Escape('plus the `orchestration` row')) `
+            -Because 'the orchestration-row rule (every table carries an orchestration row alongside dispatched roles) must survive the trim'
+        $referenceBody | Should -Match ([regex]::Escape('are inseparable')) `
+            -Because 'the append-only history/consumption pairing rule must survive the trim'
+        $referenceBody | Should -Match ([regex]::Escape('Paste its rows')) `
+            -Because 'the instruction to paste the helper''s own output rather than hand-composing the ledger must survive the trim'
+
+        $referenceBody | Should -Not -Match ([regex]::Escape('Example-Model X1')) `
+            -Because 'C1 removes the worked-example arithmetic duplicated from squad-floor.instructions.md, not just trims around it'
+        $referenceBody | Should -Not -Match ([regex]::Escape('9600 × 2.00')) `
+            -Because 'the lead/orchestration worked-example arithmetic block duplicated from squad-floor.instructions.md must be gone, not merely relocated'
+    }
+}
+
+Describe 'PKG-15 Roster roles resolve in the catalog (C4)' {
+    # C4 requires an automated gate proving every role a Squad Profiles or Squad Packs
+    # row names actually resolves to a Cast Catalog row, not just a manual read. Both
+    # roster tables (squad-roster.instructions.md, the hot file) and the mirrored
+    # catalog copy (profiles-and-packs.md, a skill reference) are checked, because
+    # either could drift from roster-catalog.md independently.
+    BeforeAll {
+        $rosterInstructions = @($script:Model.Instructions | Where-Object { $_.Name -eq 'squad-roster.instructions.md' })
+        $rosterInstructions.Count | Should -Be 1 -Because 'exactly one roster-instructions file ships'
+
+        $script:ProfilesAndPacksPath = Join-Path $script:Model.SquadSkillRoot 'references/profiles-and-packs.md'
+        $script:CatalogPath = Join-Path $script:Model.SquadSkillRoot 'references/roster-catalog.md'
+        Test-Path -LiteralPath $script:ProfilesAndPacksPath | Should -BeTrue -Because 'profiles-and-packs.md must ship for its mirrored roles to be checked'
+        Test-Path -LiteralPath $script:CatalogPath | Should -BeTrue -Because 'roster-catalog.md is the canonical Cast Catalog every profile/pack role must resolve against'
+
+        $script:RosterBody = $rosterInstructions[0].Body
+        $script:ProfilesAndPacksBody = Get-Content -LiteralPath $script:ProfilesAndPacksPath -Raw
+        $script:CatalogBody = Get-Content -LiteralPath $script:CatalogPath -Raw
+
+        $script:RosterRoles = Get-SquadRosterRoles -Body @($script:RosterBody, $script:ProfilesAndPacksBody)
+        $script:CatalogRoles = Get-SquadCastCatalogRoles -Body $script:CatalogBody
+
+        $script:RosterRoles.Count | Should -BeGreaterThan 0 -Because 'a Squad Profiles/Packs table with zero parsed roles means the parser broke, not that the roster is empty'
+        $script:CatalogRoles.Count | Should -BeGreaterThan 0 -Because 'a Cast Catalog with zero parsed roles means the parser broke, not that the catalog is empty'
+    }
+
+    It 'resolves every role named in a Squad Profiles or Squad Packs row to a Cast Catalog row' {
+        $missing = @($script:RosterRoles | Where-Object { $script:CatalogRoles -notcontains $_ })
+        $missing | Should -BeNullOrEmpty -Because "every role a Squad Profiles or Squad Packs row names in squad-roster.instructions.md or profiles-and-packs.md must resolve to a Cast Catalog row in roster-catalog.md, but these do not: $($missing -join ', ')"
+    }
+
+    It 'catches a renamed catalog row instead of passing vacuously (regression proof)' {
+        # Proves the assertion above actually detects a break: mutate a copy of the
+        # catalog text in memory only (the real file on disk is never touched) so the
+        # `lead` row no longer exists, then confirm the same comparison reports `lead`
+        # as missing.
+        $mutatedCatalogBody = $script:CatalogBody -replace '(?m)^\| lead(\s*\|)', '| lead-renamed$1'
+        $mutatedCatalogBody | Should -Not -Be $script:CatalogBody -Because 'the mutation must actually change the in-memory fixture for this to be a meaningful proof'
+
+        $mutatedCatalogRoles = Get-SquadCastCatalogRoles -Body $mutatedCatalogBody
+        $mutatedCatalogRoles | Should -Not -Contain 'lead' -Because 'the mutated fixture must no longer carry the lead row for this negative case to be valid'
+
+        $missingAfterMutation = @($script:RosterRoles | Where-Object { $mutatedCatalogRoles -notcontains $_ })
+        $missingAfterMutation | Should -Contain 'lead' -Because 'renaming the lead catalog row must surface lead as a missing role; a test that cannot fail this way would pass even if the real catalog lost a role'
+    }
+}

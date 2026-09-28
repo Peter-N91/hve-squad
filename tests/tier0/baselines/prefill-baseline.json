@@ -109,14 +109,14 @@
     {
       "sessionType": "scribe",
       "hostPath": "plugin-cli",
-      "unconditionalBytes": 82113.0,
+      "unconditionalBytes": 82394.0,
       "conditionalBytes": {
         "consumption-write": 25854.0,
         "roster-stamp-or-seed": 22412.0,
         "federation-level-payload": 9494.0
       },
       "fileCount": 4,
-      "tokensApprox": 20528.0,
+      "tokensApprox": 20598.0,
       "tokensApproxBasis": "computed",
       "hostLoadingVerified": true,
       "files": [
@@ -140,7 +140,7 @@
       "tokensApproxBasis": "computed",
       "hostLoadingVerified": false,
       "hostLoadingNote": "Whether a host that honors applyTo also has a matching path already in a given dispatched session's working context is unresolved (research Gap-1). This bundle is computed additively onto every VS Code/APM row below; it is never asserted as measured for that row.",
-      "explicitReadBytes": 82113.0,
+      "explicitReadBytes": 82394.0,
       "applyToBundleBytes": 444764.0,
       "files": [
         "squad-src/.github/agents/squad/squad-scribe.agent.md",
@@ -240,11 +240,11 @@
     "perRun": {
       "plugin-cli": {
         "dispatches": 7,
-        "perDispatchUnconditionalBytes": 82113.0,
-        "unconditionalOnlyBytes": 574791.0,
-        "unconditionalOnlyTokensApprox": 143698.0,
-        "withConsumptionBytes": 755769.0,
-        "withConsumptionTokensApprox": 188942.0,
+        "perDispatchUnconditionalBytes": 82394.0,
+        "unconditionalOnlyBytes": 576758.0,
+        "unconditionalOnlyTokensApprox": 144190.0,
+        "withConsumptionBytes": 757736.0,
+        "withConsumptionTokensApprox": 189434.0,
         "tokensApproxBasis": "computed",
         "dispatchCountBasis": "derived (performance-research.md Q2, from squad-autopilot.instructions.md pipeline/Artifact Gates text)"
       },
@@ -368,7 +368,7 @@
     "filesScanned": 58,
     "headingCount": 529,
     "normativeSentenceCount": 115,
-    "checksum": "sha256:7bcb186e0d125c1d68a99d70439696be8f1b18d64ab27e345ab6595901eef35e",
+    "checksum": "sha256:5e45e28a479fdc7428041c8a6d2c060422b8bd5bc2eb851c11f8dd189aa236ec",
     "headingCounts": {
       "Squad Operating Procedure": 1,
       "Overview": 1,
@@ -1012,7 +1012,7 @@
       "**Blocking gaps are questions, not assumptions.** Recording a blocking gap as a \"riskiest assumption\" and proceeding is the failure this gate exists to prevent — a contradiction between two stakeholders is not resolvable by picking one silently. Put the clarifying questions to the user and wait. On a host with no question tool, ask in the response text and stop the turn; on an unattended path, escalate through the approval channel. Never convert an unanswered blocking question into a recorded assumption to keep the pipeline moving.": 1,
       "3. When a precondition is unmet, dispatch the missing stage or escalate. **Never produce the missing research, plan, or verdict inline**, and never advance because the request \"is only a document\". Skipping research and plan to reach the deliverable faster is the single most common way a squad turn degrades into one model improvising, and it is invisible afterwards because the deliverable still looks finished.": 1,
       "* When the user has explicitly removed `tester` from the roster, report that the work closed unreviewed and recommend re-adding the role. Never drop the stage silently.": 1,
-      "Create `team.md` from the coordinator-confirmed roster — the chosen profile's members, not the full cast catalog — and `routing.md` from the default routing rules filtered to that roster, dropping any routing row whose role is not on the seeded team. Always include the `scribe` role. Include the `Member Name` column whenever the coordinator supplies names, leaving cells empty for unnamed roles; two rows sharing a `Role` are legal only when each has a unique `Member Name`. Seed the `Selection Cue` cell for every row, using `—` where the role has no alternates: the cast catalog is an `applyTo`-scoped instruction file that does not load on every host, so a roster listing alternates without their condition leaves the coordinator to guess which one applies. Both files use replace semantics — write them only when missing or on an explicit refresh.": 1,
+      "Create `team.md` from the coordinator-confirmed roster — the chosen profile's members, not the full cast catalog — and `routing.md` from the default routing rules filtered to that roster, dropping any routing row whose role is not on the seeded team. Always include the `scribe` role. Include the `Member Name` column whenever the coordinator supplies names, leaving cells empty for unnamed roles; two rows sharing a `Role` are legal only when each has a unique `Member Name`. Seed the `Selection Cue` cell for every row, using `—` where the role has no alternates: the cast catalog is canonical in `references/roster-catalog.md`, a reference file that loads only when a role's Skill Reference Contract calls for it, so a roster listing alternates without their condition leaves the coordinator to guess which one applies. Both files use replace semantics — write them only when missing or on an explicit refresh.": 1,
       "Set `basis` to exactly one value: `estimated` when the model resolved, or `tier-default` when it did not. Never write a combined value. Either way a block is always produced.": 1,
       "4. **Move by copy → verify → delete-source, in that order, per file.** Write the destination, read it back and confirm it matches, and only then remove the source. Never remove, clear, or truncate anything at the source before its verified destination copy exists. Deleting first is the failure this ordering prevents: a relocation that clears the source and then cannot find the files has destroyed append-only logs no later step reconstructs. On any destination write failure, stop and return a failure note with the source intact.": 1,
       "2. **Append the registry row (preserve-on-replace).** Read `federation.md`, add one row (`Sub-squad`, `Profile`, `Kind=in-repo`, `Location=members/<name>/`, optional `Owner`, `Description`), and rewrite preserving every existing row, its frontmatter, and its heading. Never edit or remove an existing row. For a Watch Mode expansion set `Owner=watch-mode` and write a `Description` naming the source ref and, once known, the terminal deliverable.": 1

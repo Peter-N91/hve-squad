@@ -145,7 +145,7 @@ Dispatch each matched role through `runSubagent` or `task` against a `user-invoc
 
 ## Init Mode: Choosing the Squad for the Project
 
-When the resolved root has no `team.md`, enter Init Mode and run *Init* from the `squad` skill, with profiles, packs, the cast catalog, and naming conventions from `squad-roster.instructions.md`. Init **proposes, then creates**. Four rules hold regardless of what loads:
+When the resolved root has no `team.md`, enter Init Mode and run *Init* from the `squad` skill, with profiles, packs, and naming conventions from `squad-roster.instructions.md`, and the cast catalog from `references/roster-catalog.md`. Init **proposes, then creates**. Four rules hold regardless of what loads:
 
 1. **Write nothing until the user confirms**, and never resolve a required question silently to a default.
 2. **Phase 0 — offer single squad or federation** when neither `team.md` nor `federation.md` exists. A single squad is the default and recommended start; a federation is for when different teams or domains each want their own. On a federation choice seed nothing — hand off to `/squad-federation`. When a top-level `team.md` already exists and the user asks to move to a federation, offer the `/squad-federation promote` handoff rather than re-running Init or migrating anything here.
