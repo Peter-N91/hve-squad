@@ -28,14 +28,14 @@ function Get-ShippedRateTemplate {
     [CmdletBinding()]
     param()
 
-    $reference = Join-Path $PSScriptRoot '..' '..' 'squad-src' '.github' 'skills' 'squad' 'references' 'consumption.md'
+    $reference = Join-Path $PSScriptRoot '..' '..' 'squad-src' '.github' 'skills' 'squad' 'references' 'consumption-rates-template.md'
     if (-not (Test-Path -LiteralPath $reference)) {
-        throw "The shipped consumption reference was not found at '$reference'."
+        throw "The shipped consumption-rates-template reference was not found at '$reference'."
     }
 
     $match = [regex]::Match(
         (Get-Content -LiteralPath $reference -Raw),
-        '(?ms)^##\s+consumption-rates\.md\s*$.*?^````markdown\r?\n(?<body>.*?)\r?\n````\s*$')
+        '(?ms)^````markdown\r?\n(?<body>.*?)\r?\n````\s*$')
 
     if (-not $match.Success) {
         throw "Could not extract the consumption-rates.md template from '$reference'."

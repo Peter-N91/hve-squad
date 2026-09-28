@@ -115,7 +115,7 @@ Precondition: an initialized squad. Action: one request that routes to at least 
 | SQ-10d | The history file carries its `# History: <agent>` heading and description frontmatter when created | `entry-schemas.md` |
 | SQ-11 | Each dispatch entry is followed by a `#### Consumption` heading (or `#### Consumption — Orchestration`) and a fenced `json` block | `scribe-procedure.md` Step 6 |
 | SQ-11a | Those two headings take **no** suffix. `### Consumption`, `#### Consumption Block`, `#### Consumption — Research`, and `#### Consumption — Orchestration (Turn 1)` are all unreadable to the ledger rewrite | `scribe-procedure.md` Step 6 |
-| SQ-12 | That JSON block carries exactly these keys in this order: `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `input_rate`, `cached_rate`, `cache_write_rate`, `output_rate`, `est_cost_usd`, `est_credits`, `basis` | `scribe-procedure.md` Step 6 |
+| SQ-12 | That JSON block carries exactly these keys in this order: `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis` — ten fields, no rate or cost keys | `entry-schemas.md`, history schema; `scribe-procedure.md` Step 5 |
 | SQ-13 | Every numeric field in that block is a bare number — no thousands separators, no `~`, no units, no parenthetical qualifiers | `scribe-procedure.md` Step 6; the ledger rewrite reparses these |
 | SQ-14 | **No history entry exists without its consumption block** | `squad-state.instructions.md`, Proof of Dispatch |
 | SQ-15 | `decisions.md` grew, and its pre-turn content is byte-identical as a prefix of its post-turn content | Append-only; catches silent rewrites |
@@ -137,6 +137,19 @@ These are the ones that catch a coordinator quietly doing the work itself, which
 | SQ-22 | No stage is reported complete while its history entry is absent | "No history entry means the stage did not happen" |
 | SQ-23 | **Negative case.** Point one roster row at an agent that is not installed, then send a request that routes to it. The run must **stop and escalate**. Assert: no deliverable produced for that role, no history entry, an escalation recorded, and no substitute agent dispatched | `squad-coordinator.agent.md`, Dispatch Discipline |
 | SQ-24 | **Negative case.** Send a request whose domain matches a bundled specialist skill. Assert the coordinator activated only the `squad` skill and produced no specialist artifact before dispatching; the specialist artifact appears only after the resolved role ran | `squad-coordinator.agent.md`, Dispatch Discipline — the rule added by PR #74 |
+
+### Model routing
+
+Precondition: an initialized squad. These cases check the opt-in `routing=`/`models=` layer defined in `model-routing.md`; none of them apply when neither input is present.
+
+| ID | Assertion | Source |
+|---|---|---|
+| SQ-25 | **No-policy default.** When neither `routing=` nor `models=` is present, every dispatch omits the `model` parameter entirely and the history entry carries no identity bullets beneath its `#### Consumption` block | `model-routing.md`, Worked Examples: No policy |
+| SQ-26 | **Below-floor override refused.** A `models=` pair naming an id ranked below a role's floor (its `team.md` Model Tier) is refused and logged — a history bullet plus a decision note — and never applied, never silently downgraded | `model-routing.md`, Consequence Floors |
+| SQ-27 | **Unevaluated ids only by explicit override.** An id `model-catalog.md` marks `Advertised but Unevaluated` is never auto-ranked; it dispatches only through an explicit `models=` override, and that dispatch's identity bullets mark it `unevaluated` | `model-routing.md`, Advertised-but-Uncatalogued IDs |
+| SQ-28 | **Watch ignores untrusted routing inputs.** A Watch Mode trigger's issue, PR, or comment text carrying `routing=`, `models=`, `tier=`, `mode=`, or `cost-ceiling=` is recorded as seen-and-ignored, never applied as a control input | `model-routing.md`, Watch and Unattended Runs |
+| SQ-29 | **Stale catalog falls back.** When `model-catalog.md`'s `Retrieved:` date is more than 90 days old, or the file fails to parse, ranking falls back to `consumption.md`'s static `fast`/`default`/`extended` tiers for every class, and one warning line is logged; the run is never blocked | `model-routing.md`, Stale-Catalog Fallback |
+| SQ-30 | **Unknown price never `0`.** An unpriced routed id is priced at the maximum rate of its eligible set within the floor, or returns `cannot-confirm` — never `0` and never a blended rate | `model-routing.md`, Cost Preflight Pricing |
 
 ## Tier 1 — Consumption integrity
 

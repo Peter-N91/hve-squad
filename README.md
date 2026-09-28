@@ -99,6 +99,91 @@ for estimation, approval, stopping, and federation behavior. Fresh-squad initial
 admission. Ordinary federation routing applies the ceiling independently to each selected sub-squad;
 only untargeted federation autopilot uses one aggregate federation ceiling.
 
+### Choosing models per role (`routing=` / `models=`)
+
+**Default behavior (no `routing=` or `models=`):** When neither input is given, no `model` parameter is passed to any dispatch, so each agent runs on its own frontmatter model or the session model, exactly as before this feature existed.
+
+Optionally, you can take direct control of model selection with two inputs:
+
+* **`routing=ranked`** — Opt into capability-ranked model selection. The squad ranks the best-qualified model from the declared model catalog for each role, filters by availability on your host, and applies consequence floors to prevent models below a role's tier. With `routing=off` (or omitted), `models=` overrides only the named keys; every other role omits the parameter.
+
+* **`models=<key>:<id>,<key>:<id>,...`** — Explicit per-role or per-assignment-class overrides. Supported keys:
+  - **Role IDs** from your `team.md`: `researcher`, `lead`, `developer`, `tester`, `challenger`, `architect`, `security`, `cost-manager`, `rai`, `product-owner`, `prompt-engineer`, `intake-validator`, `scribe`, and any other role in the seeded rosters.
+  - **Assignment classes**: `research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`.
+
+  Unknown keys or model IDs are refused and logged rather than guessed. A model below your role's roster tier is also refused—raise the tier in `.copilot-tracking/squad/team.md` if you need it.
+
+**Precedence** (highest wins, per role):
+1. A `models=<role-id>:<model-id>` pair naming that exact role id.
+2. A `models=<class>:<model-id>` pair naming that role's assignment class.
+3. `routing=ranked` output for that role, when no override applies.
+4. `tier=` (the existing static-tier input) or the seeded `team.md` Model Tier — today's fallback, unchanged.
+5. Omit the parameter — the no-policy default.
+
+**Re-ranking:** When the host rejects the chosen model id, the routing procedure re-ranks to the next eligible candidate under the same floor and class, and records the substitution (requested, actual, why) in that dispatch's history.
+
+**Unevaluated models:** A model the host advertises but the catalog does not carry is never auto-ranked. It is usable only through an explicit `models=` override and is labelled `unevaluated` in the dispatch record.
+
+**Examples:**
+
+```text
+/squad request="..." routing=ranked
+```
+Enable ranked selection; every role picks its best-qualified model from the catalog and your host.
+
+```text
+/squad request="..." routing=ranked models=review:claude-opus-5.5
+```
+Enable ranking, but use Claude Opus 5.5 explicitly for `review` class (or specific reviewer roles).
+
+```text
+/squad request="..." models=researcher:gpt-5.5 tier=default
+```
+No ranking (`routing=off` by default); only `researcher` uses `gpt-5.5`, every other role falls back to `default` tier.
+
+```text
+/squad-federation squad=product routing=ranked models=bookkeeping:gpt-5-mini
+```
+Route to the `product` sub-squad with ranked selection, but use `gpt-5-mini` for bookkeeping roles.
+
+**Rejection example:**
+
+```text
+/squad request="..." models=architect:claude-haiku-4.5
+```
+If `architect` has a `default` tier floor and `claude-haiku-4.5` is classified as `fast-lightweight`, this is refused (logged as "below-floor") and the architect falls back to the precedence chain instead.
+
+**How to see available models:**
+
+- **Copilot CLI:** Run `/model` to see the model ids the `task` tool advertises — the same list that `routing=ranked` uses.
+- **VS Code:** Use the model picker when you see a model selector in the UI. A rejected model id is automatically re-ranked.
+- **Full catalog:** See `squad-src/.github/skills/squad/references/model-catalog.md` in the repository. It is a dated snapshot (retrieved 2026-09-27) with capability classifications, pricing rates, and host-availability notes. The catalog has a 90-day staleness threshold; older catalogs fall back to static tier pricing.
+
+**History and identity bullets:**
+
+The squad records which model routing requested, which model actually ran (if the host substituted one), and which model the host reported. These details appear in `.copilot-tracking/squad/history/` (single squad) or `.copilot-tracking/squad/members/<name>/history/` (federation) only when a `routing=` or `models=` policy applied. See the identity bullets in those history files for: Requested model, Effective model, Observed model, and Route rationale.
+
+**Important notes:**
+
+- **Estimates, not bills** — Token counts and cost figures are estimated from a dispatch-size model, not from runtime telemetry. Premium-request multipliers and long-context pricing come from the catalog and are estimates. See `squad-src/.github/skills/squad/references/model-catalog.md` and `consumption-rates.md` for methodology.
+- **Availability sources** — The catalog cites three GitHub official documentation pages (fetched at catalog build time): Supported AI models, Models and pricing, and AI model comparison. URLs are listed in the catalog header.
+
+**Optional ledger check:**
+
+After a squad run, you can verify the consumed and estimated consumption against the recorded history using the read-only script:
+
+```powershell
+.github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check
+```
+
+Or, for a sub-squad in a federation:
+
+```powershell
+.github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/<name> -Check
+```
+
+This script (PowerShell 7+) validates that every recorded dispatch has a consumption block, that token counts and cost derivations round-trip correctly, and that the aggregated ledger totals match the sum of all recorded history entries. It is optional, never required, and is useful for post-run audits or when troubleshooting cost reporting.
+
 The `/` picker lists two entries named `squad`: pick the **prompt** ("Hands a request to the Squad
 Coordinator...") to run the squad. The **skill** ("Operating procedure for...") only loads the squad
 procedure as context and is normally loaded by the coordinator itself.

@@ -89,6 +89,41 @@ function Get-ConsumptionBlock {
     }
 }
 
+function Get-RoutingIdentityBullets {
+    <#
+    .SYNOPSIS
+        Extracts the optional routing-identity bullets beneath each Consumption block
+        in a history file, per model-routing.md's Identity Bullets contract.
+    .DESCRIPTION
+        The four bullets - Requested model, Effective model, Observed model, Route
+        rationale - are additive narrative content, never a JSON key. A no-policy
+        dispatch omits all four, so absence is a valid, expected result rather than a
+        parse failure: callers assert on HasBullets, not on this returning nothing.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $raw = Get-Content -LiteralPath $Path -Raw
+
+    foreach ($match in [regex]::Matches($raw, '(?ms)^####\s+Consumption(?:\s+[-\u2014]\s+Orchestration)?\s*$\r?\n+```json\r?\n.*?\r?\n```(?<bullets>(?:\r?\n[ \t]*\*[ \t]*\*\*[^\r\n]+)*)')) {
+        $bulletBlock = $match.Groups['bullets'].Value
+        $labels = @(
+            [regex]::Matches($bulletBlock, '(?m)^[ \t]*\*[ \t]*\*\*(?<label>[^*]+)\*\*[ \t]*(?:\u2014|-)[ \t]*(?<value>.+)$') |
+            ForEach-Object { [pscustomobject]@{ Label = $_.Groups['label'].Value.Trim(); Value = $_.Groups['value'].Value.Trim() } }
+        )
+
+        [pscustomobject]@{
+            Source     = Split-Path $Path -Leaf
+            HasBullets = $labels.Count -gt 0
+            Labels     = @($labels | ForEach-Object { $_.Label })
+            Values     = $labels
+        }
+    }
+}
+
 function Get-HistoryEntry {
     <#
     .SYNOPSIS
@@ -749,4 +784,4 @@ function Get-SquadStateModel {
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, Get-DispatchClassTable, Get-CostPreflightRecord, ConvertTo-LedgerNumber, Get-LedgerDecimal
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-RoutingIdentityBullets, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, Get-DispatchClassTable, Get-CostPreflightRecord, ConvertTo-LedgerNumber, Get-LedgerDecimal

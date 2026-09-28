@@ -77,7 +77,16 @@ if ($PSCmdlet.ParameterSetName -eq 'Assert') {
     $config.TestResult.OutputPath = Join-Path $PSScriptRoot 'tier1-results.xml'
 }
 else {
-    $config.Run.Container = New-PesterContainer -Path (Join-Path $PSScriptRoot 'Assertions.Tests.ps1')
+    # ModelRouting.Tests.ps1 and LedgerCalculator.Tests.ps1 are offline and
+    # self-contained in the same way this fixture self-check is - shipped
+    # references/scripts and static fixtures, no live squad root - so they run as
+    # additional containers alongside the mutation self-check rather than needing
+    # their own switch.
+    $config.Run.Container = @(
+        New-PesterContainer -Path (Join-Path $PSScriptRoot 'Assertions.Tests.ps1')
+        New-PesterContainer -Path (Join-Path $PSScriptRoot 'ModelRouting.Tests.ps1')
+        New-PesterContainer -Path (Join-Path $PSScriptRoot 'LedgerCalculator.Tests.ps1')
+    )
     $config.TestResult.OutputPath = Join-Path $PSScriptRoot 'tier1-selfcheck-results.xml'
 }
 

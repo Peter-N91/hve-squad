@@ -180,3 +180,26 @@ Describe 'PKG-13 Cost ceiling ownership is mode-specific' {
         Get-Content -LiteralPath $federationReference -Raw | Should -Match 'consumption-rates\.md \(federation root\)'
     }
 }
+
+Describe 'The Scribe hot core and charter bind writes to the file tool and fix the ledger decimal mark (CH5-07)' {
+    # A static text assertion is the only offline-testable guard for this contract:
+    # nothing short of an actual model turn exercises whether an agent chooses the
+    # file edit/create tool over a shell string, so this proves the instruction the
+    # Scribe is bound to still says so in both places it must -- the hot core it
+    # follows and the charter that dispatches it -- rather than proving the
+    # instruction is obeyed at runtime.
+    It 'states file-edit/create-tool-only writes in the hot core and the charter, and the "." decimal mark in the hot core the charter defers to' {
+        $scribeReference = Join-Path $script:Model.SquadSkillRoot 'references/scribe-procedure.md'
+        $referenceBody = Get-Content -LiteralPath $scribeReference -Raw
+        $referenceBody | Should -Match ([regex]::Escape("write every file with the host's file edit or create tool, never through a shell string")) `
+            -Because 'the hot core is where the Scribe''s own write-mechanism rule lives'
+        $referenceBody | Should -Match ([regex]::Escape('as the decimal mark whatever the host locale')) `
+            -Because 'the hot core is where the ledger''s locale-independence rule lives'
+
+        $scribeAgent = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0]
+        $scribeAgent.Body | Should -Match ([regex]::Escape('write the files themselves with the file edit or create tool, never through a shell string')) `
+            -Because 'the charter must bind the coordinator''s own dispatched agent to the same write-mechanism rule as the hot core'
+        $scribeAgent.Body | Should -Match 'scribe-procedure\.md' `
+            -Because 'the charter defers the ledger''s decimal-mark rule to the hot core it cites rather than restating it, so this checks the cross-reference holds'
+    }
+}

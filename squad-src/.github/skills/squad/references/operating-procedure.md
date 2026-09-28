@@ -25,7 +25,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
 3. Resolve each matched role to a deployed agent through the roster. A role marked **thin charter needed** has no deployed agent — escalate instead of substituting.
 4. Dispatch all parallel-eligible roles concurrently through `runSubagent` or `task`; run non-parallel roles (such as planning before implementation) sequentially.
-5. Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn.
+5. Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn. With `routing=ranked` or `models=` present, `references/model-routing.md` resolves the dispatched id instead; omitted, this step is unchanged.
 
 ### Ledger Reconciliation (before new work)
 
@@ -36,6 +36,10 @@ Check three conditions against `consumption.md`, and treat any one as proof that
 * **Divergence** — the ledger total disagrees with `state.json` `currentRun.estCostUsd` in either direction, including `currentRun` still reading `0` while history shows dispatches.
 
 Count the rows against the history before assuming the ledger is healthy. A populated ledger carrying a plausible non-zero total is exactly what a truncated one looks like, so an existence check clears the very failure worth catching — the run whose first two turns are recorded and whose remaining eight are not. On any hit, hand the existing `history/<agent>.md` entries to the Scribe to backfill the per-dispatch blocks and rewrite `consumption.md` from the full set, resolving each dispatch's model through the ladder and recording `unknown` where a backfilled entry cannot establish what ran. This self-heals a disrupted run on the next turn; it is a Scribe-only write and touches no implementation file.
+
+**When a shell tool and `pwsh` 7+ are available, run `scripts/Measure-SquadLedger.ps1 -SquadRoot <squadRoot> -Check` from the installed squad skill as this check, and again after every Scribe dispatch that appended history.** It reads `history/*.md`, `consumption-rates.md`, `consumption.md`, and `state.json` and writes nothing, so running it is not a state write. A non-zero exit is a hit under all three conditions above: hand its listed mismatches to the Scribe for a corrective write rather than accepting the Scribe's own pass claim. The Scribe's self-report is not evidence; a block written through a shell string can collapse its ```` ```json ```` fence and leave a ledger that looks complete while no block parses. Without a shell, the manual count above applies unchanged.
+
+State which path — `scripted` or `manual` — this reconciliation used in the hand-off given to the Scribe, so the history shows which path a run took.
 
 ## Decide
 

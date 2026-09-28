@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.4",
+  "updated": "2026-09-27T09:05:03Z",
+  "turn": 2,
+  "mode": "interactive",
+  "activeRoles": [ "researcher" ],
+  "openEscalations": [],
+  "currentRun": {
+    "sessionModel": "Claude Sonnet 4.6",
+    "modelOverrides": {},
+    "estCostUsd": 0.0085,
+    "estCreditsTotal": 0.85,
+    "costPreflight": {
+      "runId": "rp-autopilot-20260927",
+      "roundId": "round-002",
+      "ceilingUsd": 10.0,
+      "evaluatedSpendUsd": 0.0,
+      "remainingUsd": 10.0,
+      "plannedDispatches": 2,
+      "projectedCostUsd": 0.017,
+      "reserveMultiplier": 3.0,
+      "admissionCostUsd": 0.051,
+      "confidence": "medium",
+      "basis": "calibrated",
+      "decision": "within-ceiling",
+      "reason": "No routing policy or override was in effect for this run."
+    }
+  },
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": { "handle": "", "repo": "" }
+  }
+}

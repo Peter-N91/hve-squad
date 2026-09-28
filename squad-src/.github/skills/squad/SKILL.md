@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-06-10"
+  last_updated: "2026-09-27"
 ---
 
 # Squad Operating Procedure
@@ -36,10 +36,17 @@ The procedure is split across the reference files below so that each agent loads
 | [operating-procedure.md](references/operating-procedure.md)   | Init, Route, ledger reconciliation, Decide, Handoff, tool-to-mechanism mapping |
 | [gates-and-modes.md](references/gates-and-modes.md)           | Discovery, intake, council, implementation gates; autopilot and autonomy modes |
 | [federation.md](references/federation.md)                     | Federation layout, detection precedence, and federation modes                  |
-| [scribe-procedure.md](references/scribe-procedure.md)         | The Squad Scribe write procedure — Scribe only                                 |
-| [entry-schemas.md](references/entry-schemas.md)               | Recurring write shapes: decision and verdict entries, history, state.json      |
+| [scribe-procedure.md](references/scribe-procedure.md)         | The Squad Scribe write procedure, Non-Negotiable Rules, and Cold-File Dispatch Table — Scribe only |
+| [entry-schemas.md](references/entry-schemas.md)               | Recurring write shapes: decision base entry, history, state.json          |
+| [scribe-payload-template.md](references/scribe-payload-template.md) | The Scribe hand-off payload both coordinators fill, byte-stable-prefix ordered |
+| [scribe-cold-init-and-seeding.md](references/scribe-cold-init-and-seeding.md) | Full state-tree seed and Repository Memory promotion — Scribe only, conditional |
+| [scribe-cold-federation.md](references/scribe-cold-federation.md) | Federation promotion, expansion, and federation-level summaries — Scribe only, conditional |
+| [scribe-cold-gates-and-verdicts.md](references/scribe-cold-gates-and-verdicts.md) | Verdict schemas, autonomous-loop and autopilot-run summaries, notifications.md — Scribe only, conditional |
 | [seed-templates.md](references/seed-templates.md)             | First-run state templates: team.md and routing.md                              |
-| [consumption.md](references/consumption.md)                   | Consumption ledger templates and the cost estimator                            |
+| [consumption.md](references/consumption.md)                   | Consumption ledger templates, the cost estimator, and Cost Preflight           |
+| [consumption-rates-template.md](references/consumption-rates-template.md) | Cold seed template for consumption-rates.md: rate tables, tier fallback, calibration |
+| [model-catalog.md](references/model-catalog.md)               | Declared model capability, pricing, and host-availability precedence           |
+| [model-routing.md](references/model-routing.md)               | Opt-in per-run model routing: inputs, floors, ranking, and identity-bullet contract |
 | [federation-templates.md](references/federation-templates.md) | Federation-root seed templates                                                 |
 
 Files at the skill root that are not part of this split — `learnings/shared-learnings.md`, `squad-watch.workflow.yml`, `github-approval-watcher.workflow.yml`, `mcp.template.json`, `mcp-server.template.json`, and `squad-task.issue-template.yml` — keep their existing paths.

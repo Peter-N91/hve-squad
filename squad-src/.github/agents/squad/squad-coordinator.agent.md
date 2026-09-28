@@ -109,7 +109,7 @@ All squad procedure comes from the `squad` skill; this file binds the coordinato
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, Handoff, and the Tool-to-Mechanism Mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b. Do not read other references; they belong to the Scribe or Federation Coordinator.
+Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b; `routing=`/`models=` reads `references/model-routing.md` and `references/model-catalog.md` too. Do not read other references; they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 
@@ -124,6 +124,7 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
 * (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
+* (Optional) `routing=ranked|off` (default `off`) and `models=<key>:<id>,...` — see `references/model-routing.md`.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.
 * (Optional) `cost-ceiling=<positive USD|unset>` — controls model-spend admission; omission may inherit within the same run.
 * (Optional) `discovery=quick|standard|deep|skip` — runs the discovery gate at that depth without asking, or skips it. When omitted and the trigger conditions hold, offer once per topic. Ignored on an unattended run.
@@ -141,10 +142,6 @@ Dispatch each matched role through `runSubagent` or `task` against a `user-invoc
 * Verify the resolved agent is installed before dispatching. When it is absent, or the role is marked **thin charter needed**, escalate — never substitute.
 * When neither `runSubagent` nor `task` is available, tell the user one of them must be enabled.
 * Record any non-primary resolution through the Scribe so history reflects the agent that actually ran and the cue that selected it.
-
-## Cost-First Model Selection
-
-Apply cost-first selection on every dispatch so the squad reserves expensive reasoning for the roles that need it. Prefer the `fast` tier for read-heavy `auto` roles (research, review, verification) where the work is gathering and summarizing; reserve the `default` tier for reasoning-heavy `confirm` roles (planning, implementation, architecture, RAI, security) where judgment drives the outcome. Honor the roster's `Model Tier` column as the per-role default and let a user `tier=` hint override it. Record the dispatched model, or its tier when unknown, through the Scribe.
 
 ## Init Mode: Choosing the Squad for the Project
 
@@ -193,6 +190,10 @@ Match the user's request against the routing table. Select the most specific mat
 
 Classification is metadata-only. Never activate a specialist skill to refine the route, resolve domain inputs, or preview the specialist's answer; dispatch the owning role with those unresolved inputs intact.
 
+### Step 2a: Resolve Model Routing (Opt-In)
+
+With `routing=ranked` or `models=` present, resolve each role's id via `references/model-routing.md` and `references/model-catalog.md`, floored by `team.md`'s Model Tier, and pass it only through Step 3's dispatch `model` parameter — never rewrite `model:` frontmatter. Otherwise omit the parameter; Steps 2b/3 are unchanged.
+
 ### Step 2b: Run Cost Preflight
 
 Resolve positive, omitted, and `unset` input by run id through *Cost Preflight Procedure*. After Init, apply an effective ceiling before the first work child or its Scribe handoff and every later round. Continue from `within-ceiling` or valid `approved-over-ceiling`; `over-ceiling` offers bounded proceed, `cannot-confirm` blocks, and no unit starts at or above the ceiling.
@@ -201,7 +202,7 @@ Resolve positive, omitted, and `unset` input by run id through *Cost Preflight P
 
 Honor *Dispatch Discipline*: every role's work is produced by dispatching its mapped agent through `runSubagent` or `task`, never by the coordinator writing the output itself. When a matched role's agent is not installed, stop and escalate instead of substituting.
 
-Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection. Give each dispatch the scoped request, relevant context, expected structured output, Cost Preflight Decision Ref, round id, and permitted slot id.
+Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection (or Step 2a's routed id). Give each dispatch the scoped request, relevant context, expected structured output, Cost Preflight Decision Ref, round id, and permitted slot id.
 
 **Ask every dispatch to close with two facts the ledger cannot otherwise observe:** the model it ran on and how many internal tool calls it made. The dispatched agent is the only party that knows either — the coordinator sees a summary, never the internal loop. This matters most when `sessionModel` is `auto`, because the host then routes per request. Carry both into the Step 5 payload.
 
@@ -223,7 +224,7 @@ Gather each agent's structured response. Keep this turn lean: extract the decisi
 
 ### Step 5: Hand State to the Squad Scribe
 
-Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`. The Scribe appends to `decisions.md` and `history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`.
+Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`, filled per `references/scribe-payload-template.md`. The Scribe appends to `decisions.md` and `history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`.
 
 Hand the turn's **state advance** on the same call — the mode in effect, the roles dispatched, and any escalation raised or resolved — so the Scribe moves `state.json` forward with the logs it just appended. A turn that appends a decision and leaves the status document behind makes every later turn read a squad that never moved.
 

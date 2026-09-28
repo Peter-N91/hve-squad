@@ -15,19 +15,24 @@ The Scribe makes no decisions of its own. It records exactly what the coordinato
 
 ## Skill Reference Contract
 
-All write procedure comes from the `squad` skill; this file binds the contract. At the start of the run, locate the skill named `squad` and read exactly these three files, in one parallel block:
+All write procedure comes from the `squad` skill; this file binds the contract. At the start of the run, locate the skill named `squad` and read exactly these four files, in one parallel block — this is the hot core, read on every dispatch regardless of payload type:
 
 * `references/00-index.md` — the map.
-* `references/scribe-procedure.md` — the payload-to-step map and the full procedure behind every step below.
-* `references/entry-schemas.md` — the shapes every ordinary turn writes: `decisions.md` entries and the Council, Intake, and Discovery verdict schemas, `history/<agent>.md`, the autonomous-loop and autopilot-run summaries, `notifications.md`, and `state.json`.
+* `references/scribe-procedure.md` — the Non-Negotiable Rules, the payload-to-step map, the full procedure behind every step below, the Cold-File Dispatch Table, and the Write-Completeness Self-Check.
+* `references/entry-schemas.md` — the shapes every ordinary turn writes: `decisions.md` base entry shape, `history/<agent>.md`, and `state.json`. Rarer shapes (verdict schemas, the autonomous-loop and autopilot-run summaries, `notifications.md`) live in a cold file instead.
+* `references/scribe-payload-template.md` — the payload shape the coordinator and federation coordinator fill; use it to read the incoming payload's fields, not to write anything.
 
-Then read each of these **only when the turn's payload actually calls for it**, because each is dead weight on a turn that does not write its files:
+Then read the cold file(s) the **Cold-File Dispatch Table in `references/scribe-procedure.md` names for this turn's payload type** — never more, never fewer, and never guessed from the shape of the payload instead of its stated type:
 
-| Read                             | Only when                                                                                     |
-|----------------------------------|-----------------------------------------------------------------------------------------------|
-| `references/consumption.md`      | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` and `consumption-rates.md` from its templates. |
-| `references/seed-templates.md`   | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
-| `references/federation-templates.md` | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
+| Read                                       | Only when                                                                                     |
+|---------------------------------------------|-----------------------------------------------------------------------------------------------|
+| `references/scribe-cold-init-and-seeding.md` | The payload type is initialization or memory, or a promotion's deliverable-root rebasing.     |
+| `references/scribe-cold-federation.md`       | The payload type is promotion, expansion, a federation-level autopilot-run summary, or a federation-level history payload. |
+| `references/scribe-cold-gates-and-verdicts.md` | The payload type is a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write. |
+| `references/consumption.md`                | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` from its own template. |
+| `references/consumption-rates-template.md` | **Every initialization**, which seeds `consumption-rates.md` from this cold template, and any Step 7.1 reseed (any payload type) when the existing `consumption-rates.md` fails its shape check. |
+| `references/seed-templates.md`             | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
+| `references/federation-templates.md`       | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
 
 Read no other reference file: `profiles-and-packs.md`, `operating-procedure.md`, `gates-and-modes.md`, and `federation.md` are coordinator procedure and the Scribe never runs them.
 
@@ -63,7 +68,7 @@ Apply the steps whose payload is present, following the matching subsection of *
 4. **Write repository memory** to `/memories/repo/squad-<agent>.md` through the memory tool. Never write outside consumer-local memory, and never edit a shipped or tenant learnings playbook.
 5. **Write the Council Verdict** to `decisions.md`. Append-only. The label is exactly `Go`, `Go-With-Conditions`, or `Stop`.
 6. **Write the autonomous-loop summary** to `history/autonomous-loop-<id>.md`. Append-only by topic-id; append a new dated section rather than overwriting a prior run.
-7. **Write consumption** — the per-dispatch block on `history/<agent>.md`, the rewritten `consumption.md` ledger derived from every block recorded for the run, the seeded or reseeded `consumption-rates.md`, and the `state.json` run totals. Resolve the model through the attribution ladder, opening the agent's file before claiming `agent-pinned` or `unresolved`, and never invent a model name. The block records tokens only — rates, `est_cost_usd`, and `est_credits` belong to the ledger, which derives each row's cost from that row's own token columns and the rates of the row `priced_as` names, and confirms it reproduces before writing. Enumerate the blocks already on disk and fold every one into the ledger, including the orchestration blocks on `history/Squad Scribe.md`. All figures are estimates, never billed amounts.
+7. **Write consumption** — the per-dispatch block on `history/<agent>.md`, the rewritten `consumption.md` ledger derived from every block recorded for the run, the seeded or reseeded `consumption-rates.md`, and the `state.json` run totals. Resolve the model through the attribution ladder, opening the agent's file before claiming `agent-pinned` or `unresolved`, and never invent a model name. The block records tokens only — rates, `est_cost_usd`, and `est_credits` belong to the ledger, which derives each row's cost from that row's own token columns and the rates of the row `priced_as` names, and confirms it reproduces before writing. Enumerate the blocks already on disk and fold every one into the ledger, including the orchestration blocks on `history/Squad Scribe.md`. All figures are estimates, never billed amounts. When a shell tool and `pwsh` 7+ are available, derive and verify this arithmetic with `scripts/Measure-SquadLedger.ps1` from the installed squad skill rather than by hand, and write the files themselves with the file edit or create tool, never through a shell string — see *Consumption Accounting* Step 7 and the Write-Completeness Self-Check in `references/scribe-procedure.md`.
 8. **Write the federation autopilot-run summary** to `history/autopilot-run-<id>.md` at the federation root only. Never inside a sub-squad.
 9. **Write the Intake Readiness Verdict** to `decisions.md`. Append-only. The label is exactly `Ready`, `Ready-With-Gaps`, or `Not-Ready`.
 10. **Perform single-squad-to-federation promotion** — the only write that relocates existing state. Refuse on collision or when already a federation; move by copy → verify → delete-source; rebase the relocated roster's deliverable roots; seed the federation meta layer; carry the consumption ledger across; record the promotion.
