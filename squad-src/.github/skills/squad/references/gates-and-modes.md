@@ -119,9 +119,29 @@ Autopilot removes the human turn between stages; it does not remove the stages. 
 
 ### Per-Stage Advance Checklist (Run After Every Stage)
 
-Do not advance from stage N to stage N+1 until both are confirmed on disk for stage N: the required artifact at the owning role's `Deliverable Root`, and a `history/<agent>.md` entry carrying its consumption block. When either is absent, re-dispatch the owning role or fire the Risk Gate — never advance on assumed completion. Quote only paths this run actually enumerated. For a fan-out run, apply the check per deliverable before Review begins.
+Stage N's required artifact at the owning role's `Deliverable Root` gates dispatching stage N+1; a `history/<agent>.md` entry carrying its consumption block additionally gates counting stage N complete. When the artifact is absent, re-dispatch the owning role or fire the Risk Gate — never advance on assumed completion. When the artifact exists but the history entry does not, that is a resend candidate, not a re-run — see *Scribe Hand-off Pipelining* below. Quote only paths this run actually enumerated. For a fan-out run, apply the check per deliverable before Review begins.
 
 **Count the history entries at the end of the run.** The number of `history/<agent>.md` entries must be at least the number of stages and deliverables the run claims — counting the dispatched agents' files, not `Squad Scribe.md` or the `autopilot-run-*` and `autonomous-loop-*` summaries. A run that produced polished deliverables and left one or two history files did not dispatch its cast — it authored them inline. Report that as a failed run rather than a completed one.
+
+### Scribe Hand-off Pipelining: Enablement Predicate and Barriers
+
+**Enablement Predicate (`PipeliningEnabled`, default OFF).** Pipelining is active for a given hand-off only when **all** of the following hold: `mode == autopilot`; not Watch Mode; no cost ceiling has been configured at any point in this run id (latched — once true, stays true for the rest of the run id even if the ceiling is later removed); not the federation root; not an inner run under untargeted federation autopilot with an aggregate ceiling; no fail-closed event has occurred this run; and the host can dispatch subagents in parallel. That last term is decided from one tool-checkable signal only: the coordinator's own dispatch tool advertises a background or asynchronous execution mode in its tool schema (for example, Copilot CLI's `task` tool with `mode: background`). The coordinator checks its own tool schema — never the model name, host name, or prose claims — and when the signal is absent the term is `false`, the safe default. When the predicate does not hold, the coordinator dispatches stage N's Scribe hand-off, waits for it, and only then dispatches stage N+1 — exactly as today.
+
+**Barrier invariant.** Any step that reads Scribe-written state is a barrier: every Scribe hand-off queued for that squad root up to and including the current stage must have returned and been verified (`-Check -ExpectedHistoryCounts` plus `-BaselinePath`) before the barrier's consuming step proceeds — a queued-but-unverified hand-off blocks the barrier, it does not get skipped. The list below is a minimum, not exhaustive:
+
+1. A council verdict consumed by Implement.
+2. An intake gate verdict.
+3. A discovery gate verdict.
+4. Every Cost Preflight write, CAS or check, with or without a ceiling.
+5. The Risk Gate, before the approved action.
+6. The Impactful-Action Gate, before the approved action.
+7. Autonomous re-validation / divergence check.
+8. The final-outcome gate, including the notification record and the autopilot-run summary.
+9. Session start/resume reconciliation.
+10. End of every coordinator turn, and any read of `state.json`.
+11. All fan-out deliverables' Scribe writes verified before Review begins.
+
+`state.json` advances per stage; it legitimately lags one stage during overlap, which is expected, not a defect. A dispatch to any impactful-capable role is never included in the same parallel block as a Scribe hand-off — evaluate every Risk-Gate trigger for stage N before batching stage N+1's dispatch. The narrative — unit of concurrency, queueing, verification, fail-closed/correction, and resume — lives in *Scribe Hand-off Pipelining (Autopilot)* in `references/operating-procedure.md`.
 
 ## Notification Procedure
 

@@ -166,6 +166,58 @@
         choose at build time (interactive mode pings you at every step instead).
       </p>
 
+
+      <h2 id="autopilot-hand-off-pipelining">Autopilot hand-off pipelining</h2>
+      <p>
+        Under <code>mode=autopilot</code>, the coordinator may dispatch stage N's Scribe hand-off and
+        stage N+1's role in parallel when three conditions hold: stage N's own artifact is confirmed on
+        disk, the host's dispatch tool advertises a background or asynchronous execution mode (such as
+        Copilot CLI's <code>task</code> tool with <code>mode: background</code>), and pipelining has not been
+        disabled by a prior verification failure in this run.
+      </p>
+      <p>
+        Pipelining remains <strong>off</strong> in the following cases:
+      </p>
+      <ul>
+        <li>Watch Mode</li>
+        <li>Any <code>cost-ceiling</code> has been configured at any point in this run (latched; once true, stays true)</li>
+        <li>The squad is a federation root (marked by presence of <code>federation.md</code>)</li>
+        <li>An inner run under untargeted federation autopilot with an aggregate ceiling</li>
+        <li>The host's dispatch tool does not advertise an asynchronous execution mode</li>
+        <li>After a verification failure has occurred in this run</li>
+      </ul>
+      <p>
+        When pipelining is off, the coordinator dispatches stage N's Scribe hand-off, waits for it to
+        complete and be verified, and only then dispatches stage N+1 — exactly as in prior versions.
+        When pipelining is active, stage N+1 starts while stage N's hand-off is in flight, but stage
+        N+2 does not start until stage N's hand-off has returned and passed verification.
+      </p>
+      <h3>Verification and safety gates</h3>
+      <p>
+        A bare <code>Measure-SquadLedger.ps1 -Check</code> is not sufficient for pipelined verification.
+        Instead, the coordinator takes a pre-dispatch snapshot of the target history file's heading count,
+        then verifies using <code>-ExpectedHistoryCounts</code> with that snapshot plus the entries this
+        hand-off is expected to add. The coordinator also uses <code>-BaselinePath</code> to preserve a
+        content-level baseline (Length, SHA-256, heading count) of every deliverable written so far this run,
+        allowing detection of corrupted or modified prefixes in subsequent writes.
+      </p>
+      <p>
+        When verification fails, pipelining is disabled for the rest of the run. The bad write is never
+        rewritten by the Scribe; instead, a new append-only correction entry is dispatched, and the
+        affected deliverable is restored by re-dispatching its owning role (not by editing history).
+        The run does not cross the next barrier until a human approves the fix.
+      </p>
+      <p>
+        <code>.copilot-tracking/squad/</code> and its contents are git-ignored, so ledger state is local
+        evidence, not part of reviewed history. The delivered code, plans, and review records in
+        <code>plans/</code>, <code>research/</code>, <code>reviews/</code> and project files are tracked normally.
+      </p>
+      <h3>Benchmark harness</h3>
+      <p>
+        An opt-in paired benchmark harness exists at <code>tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1</code>
+        (requires <code>COPILOT_GITHUB_TOKEN</code>). The live benchmark has not yet produced a baseline result,
+        so pipelining behavior is described here and in the squad source references; no performance claim is made.
+      </p>
       <h2 id="cost-admission-control">Cost admission control</h2>
       <p>
         <code>cost-ceiling</code> is an optional ceiling on <strong>estimated model spend for one

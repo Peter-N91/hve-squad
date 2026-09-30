@@ -39,7 +39,18 @@ BeforeAll {
             [Parameter(Mandatory)][string]$SquadRoot,
             [switch]$Check,
             [string]$Format,
-            [hashtable]$ExpectedHistoryCounts
+            [hashtable]$ExpectedHistoryCounts,
+            # U1 (Amendment 3 §2): -EmitBaseline / -BaselinePath / -ProtectedPath /
+            # -AllowedWritePath and the four -Lookup* key-lookup parameters. All
+            # optional and orthogonal to the params above and to each other.
+            [string]$EmitBaseline,
+            [string]$BaselinePath,
+            [string[]]$ProtectedPath,
+            [string[]]$AllowedWritePath,
+            [string]$LookupRunId,
+            [string]$LookupTopic,
+            [string]$LookupStage,
+            [string]$LookupSlot
         )
         if ($ExpectedHistoryCounts) {
             $countsLiteral = '@{' + (($ExpectedHistoryCounts.GetEnumerator() | ForEach-Object { "'$($_.Key)' = $($_.Value)" }) -join '; ') + '}'
@@ -56,6 +67,14 @@ BeforeAll {
             $scriptArgs = @('-NoProfile', '-File', $script:LedgerScript, '-SquadRoot', $SquadRoot)
             if ($Check) { $scriptArgs += '-Check' }
             if ($Format) { $scriptArgs += @('-Format', $Format) }
+            if ($EmitBaseline) { $scriptArgs += @('-EmitBaseline', $EmitBaseline) }
+            if ($BaselinePath) { $scriptArgs += @('-BaselinePath', $BaselinePath) }
+            if ($ProtectedPath) { $scriptArgs += @('-ProtectedPath') + $ProtectedPath }
+            if ($AllowedWritePath) { $scriptArgs += @('-AllowedWritePath') + $AllowedWritePath }
+            if ($PSBoundParameters.ContainsKey('LookupRunId')) { $scriptArgs += @('-LookupRunId', $LookupRunId) }
+            if ($PSBoundParameters.ContainsKey('LookupTopic')) { $scriptArgs += @('-LookupTopic', $LookupTopic) }
+            if ($PSBoundParameters.ContainsKey('LookupStage')) { $scriptArgs += @('-LookupStage', $LookupStage) }
+            if ($PSBoundParameters.ContainsKey('LookupSlot')) { $scriptArgs += @('-LookupSlot', $LookupSlot) }
             $output = & pwsh @scriptArgs 2>&1 | Out-String
         }
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
@@ -82,6 +101,20 @@ BeforeAll {
         $raw = $raw -replace '"estCostUsd"\s*:\s*[0-9.]+', "`"estCostUsd`": $costText"
         $raw = $raw -replace '"estCreditsTotal"\s*:\s*[0-9.]+', "`"estCreditsTotal`": $creditsText"
         Set-Content -LiteralPath $statePath -Value $raw -NoNewline
+    }
+
+    function New-BaselineTestRootLocal {
+        <#
+        .SYNOPSIS
+            U1 (Amendment 3 §2 item 1) baseline/protected-artifact tests: a fresh copy
+            of the known-good scribe-benchmark 'applied' fixture under $TestDrive, so
+            each test mutates its own private copy and the checked-in fixture is never
+            touched -- and every baseline JSON these tests emit is written elsewhere
+            under $TestDrive, never into the repo or a squad root.
+        #>
+        $dest = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $dest -Recurse
+        $dest
     }
 }
 
@@ -802,5 +835,501 @@ Describe 'Measure-SquadLedger C3 ledger-vs-state.json currentRun divergence chec
         $result = Invoke-Ledger -SquadRoot $matchRoot -Check
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Not -Match 'divergence'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# U1 (Amendment 3 §2, tasks P03-T06/P03-T07): -EmitBaseline/-BaselinePath and
+# caller-named -ProtectedPath/-AllowedWritePath verification. Every baseline
+# JSON below is generated at test time into $TestDrive (never the repo or a
+# squad root); the squad root each test mutates is always a fresh $TestDrive
+# copy of the known-good scribe-benchmark 'applied' fixture (New-BaselineTestRootLocal).
+# See .copilot-tracking/squad/members/routing-performance/changes/2026-09-29-u1-ledger-baseline-tooling.md.
+# ---------------------------------------------------------------------------
+Describe 'Measure-SquadLedger -EmitBaseline / -BaselinePath (U1 item 1)' {
+    It 'emits a baseline JSON and a sibling .files/ directory outside the squad root, and an unmutated -BaselinePath -Check round-trip passes' {
+        $root = New-BaselineTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-roundtrip.json'
+
+        $emit = Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath
+        $emit.ExitCode | Should -Be 0
+        Test-Path -LiteralPath $baselinePath -PathType Leaf | Should -BeTrue
+        Test-Path -LiteralPath "$baselinePath.files" -PathType Container | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path "$baselinePath.files" 'history\Squad Researcher.md') -PathType Leaf | Should -BeTrue
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Match 'PASS'
+    }
+
+    It 'the emitted baseline JSON never records state.json or consumption.md (both are excluded from append-only/protected scope by design)' {
+        $root = New-BaselineTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-scope.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+
+        $baseline = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json
+        @($baseline.appendOnly.PSObject.Properties.Name) | Should -Not -Contain 'state.json'
+        @($baseline.appendOnly.PSObject.Properties.Name) | Should -Not -Contain 'consumption.md'
+    }
+
+    It 'FAILs -BaselinePath -Check when an append-only history file shrinks (a 48-byte-style truncation to 8 bytes)' {
+        $root = New-BaselineTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-truncate.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+
+        $historyFile = Join-Path $root 'history\Squad Researcher.md'
+        $bytes = [System.IO.File]::ReadAllBytes($historyFile)
+        [System.IO.File]::WriteAllBytes($historyFile, $bytes[0..7])
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match 'Baseline:.*shrank'
+    }
+
+    It 'FAILs -BaselinePath -Check when an append-only history file''s original bytes are edited in place (a prefix edit, not only an append)' {
+        $root = New-BaselineTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-prefix.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+
+        $historyFile = Join-Path $root 'history\Squad Researcher.md'
+        $content = Get-Content -LiteralPath $historyFile -Raw
+        $edited = $content -replace 'Squad Researcher', 'SQUAD RESEARCHER'
+        Set-Content -LiteralPath $historyFile -Value $edited -NoNewline
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match 'Baseline:.*prefix edit'
+    }
+
+    It 'FAILs -BaselinePath -Check when a caller-named protected artifact changes and is not in the allowed-write set' {
+        $root = New-BaselineTestRootLocal
+        $protectedRel = 'research/2026-09-27-fixture-topic.md'
+        $baselinePath = Join-Path $TestDrive 'baseline-protected.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath -ProtectedPath $protectedRel).ExitCode | Should -Be 0
+
+        Add-Content -LiteralPath (Join-Path $root 'research\2026-09-27-fixture-topic.md') -Value "`nUnauthorized edit."
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check -ProtectedPath $protectedRel
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match 'Baseline:.*Protected artifact changed'
+    }
+
+    It 'does NOT fail a protected-artifact change when the path is named in -AllowedWritePath (a concurrent Role(N+1) write, or an authorized correction)' {
+        $root = New-BaselineTestRootLocal
+        $protectedRel = 'research/2026-09-27-fixture-topic.md'
+        $baselinePath = Join-Path $TestDrive 'baseline-allowed.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath -ProtectedPath $protectedRel).ExitCode | Should -Be 0
+
+        Add-Content -LiteralPath (Join-Path $root 'research\2026-09-27-fixture-topic.md') -Value "`nRole(N+1) concurrent write."
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check -ProtectedPath $protectedRel -AllowedWritePath $protectedRel
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Not -Match 'Protected artifact changed'
+    }
+
+    # Review fix (coordinator finding, fail-open): the protected set verified at
+    # -Check time must be the baseline's own recorded `protected` map, not only
+    # whatever -ProtectedPath the caller happens to re-supply -- a verifier that
+    # omits -ProtectedPath must still catch a change to an artifact the matching
+    # -EmitBaseline call protected.
+    It 'FAILs -BaselinePath -Check on a baseline-recorded protected artifact''s change even when -ProtectedPath is NOT re-supplied at check time' {
+        $root = New-BaselineTestRootLocal
+        $protectedRel = 'research/2026-09-27-fixture-topic.md'
+        $baselinePath = Join-Path $TestDrive 'baseline-protected-omitted.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath -ProtectedPath $protectedRel).ExitCode | Should -Be 0
+
+        Add-Content -LiteralPath (Join-Path $root 'research\2026-09-27-fixture-topic.md') -Value "`nUnauthorized edit, no -ProtectedPath at check time."
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match 'Baseline:.*Protected artifact changed'
+    }
+
+    It 'does NOT fail a baseline-recorded protected artifact''s change when the path is named in -AllowedWritePath, even without re-supplying -ProtectedPath' {
+        $root = New-BaselineTestRootLocal
+        $protectedRel = 'research/2026-09-27-fixture-topic.md'
+        $baselinePath = Join-Path $TestDrive 'baseline-protected-allowed-omitted.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath -ProtectedPath $protectedRel).ExitCode | Should -Be 0
+
+        Add-Content -LiteralPath (Join-Path $root 'research\2026-09-27-fixture-topic.md') -Value "`nRole(N+1) concurrent write, no -ProtectedPath at check time."
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check -AllowedWritePath $protectedRel
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Not -Match 'Protected artifact changed'
+    }
+
+    It 'FAILs -BaselinePath -Check when a baseline-recorded protected artifact is deleted after baseline, even without re-supplying -ProtectedPath' {
+        $root = New-BaselineTestRootLocal
+        $protectedRel = 'research/2026-09-27-fixture-topic.md'
+        $baselinePath = Join-Path $TestDrive 'baseline-protected-deleted-omitted.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath -ProtectedPath $protectedRel).ExitCode | Should -Be 0
+
+        Remove-Item -LiteralPath (Join-Path $root 'research\2026-09-27-fixture-topic.md') -Force
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match 'Baseline:.*Protected artifact missing'
+    }
+
+    It 'does NOT fail a state.json / consumption.md rewrite (both are outside baseline scope by design)' {
+        $root = New-BaselineTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-replace.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+
+        # A genuine rewrite -- same currentRun numbers (so C3 keeps agreeing), only
+        # the "updated" timestamp changes, exactly as the Scribe does every stage.
+        $statePath = Join-Path $root 'state.json'
+        ((Get-Content -LiteralPath $statePath -Raw) -replace '"updated":\s*"[^"]*"', '"updated": "2026-09-27T12:00:00Z"') |
+            Set-Content -LiteralPath $statePath -NoNewline
+        Add-Content -LiteralPath (Join-Path $root 'consumption.md') -Value "`n<!-- rewritten by Scribe -->"
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Match 'PASS'
+    }
+
+    It 'FAILs -BaselinePath -Check when the baseline file itself is missing' {
+        $root = New-BaselineTestRootLocal
+        $missingBaseline = Join-Path $TestDrive 'does-not-exist.json'
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $missingBaseline -Check
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match "Baseline file '.*' not found"
+    }
+
+    It 'refuses (throws) an -EmitBaseline / -BaselinePath that resolves under a .copilot-tracking/squad tree' {
+        $root = New-BaselineTestRootLocal
+        $badPath = Join-Path $TestDrive '.copilot-tracking\squad\baseline.json'
+        $result = Invoke-Ledger -SquadRoot $root -EmitBaseline $badPath
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match '\.copilot-tracking/squad'
+    }
+
+    It 'refuses (throws) naming state.json or consumption.md as -ProtectedPath' {
+        $root = New-BaselineTestRootLocal
+        $result = Invoke-Ledger -SquadRoot $root -EmitBaseline (Join-Path $TestDrive 'baseline-guard.json') -ProtectedPath 'state.json'
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'must not name'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# U1 (Amendment 3 §2 item 2): -LookupRunId/-LookupTopic/-LookupStage/-LookupSlot
+# key-lookup mode. A model-free existence check for resume logic: a literal
+# substring search across history/*.md for the composed
+# "{RunId}::{Topic}::{Stage}::{Slot}" key (see the script's own comment-help).
+# ---------------------------------------------------------------------------
+Describe 'Measure-SquadLedger -LookupRunId/-LookupTopic/-LookupStage/-LookupSlot (U1 item 2: key-lookup mode)' {
+    BeforeAll {
+        $script:LookupRoot = Join-Path $script:FixtureRoot 'applied'
+    }
+
+    It 'reports MISSING (exit 1) for a key that appears in no history/*.md file' {
+        $result = Invoke-Ledger -SquadRoot $script:LookupRoot -LookupRunId 'rp-fixture-01' -LookupTopic 'no-such-topic' -LookupStage 'research' -LookupSlot '1'
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'MISSING'
+    }
+
+    It 'reports EXISTS (exit 0) once the composed key is embedded verbatim in a history entry' {
+        $root = Join-Path $TestDrive 'lookup-exists'
+        Copy-Item -LiteralPath $script:LookupRoot -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'history\Squad Researcher.md') -Value "`nLedgerLookupKey: rp-lookup-01::topic-x::research::1"
+
+        $result = Invoke-Ledger -SquadRoot $root -LookupRunId 'rp-lookup-01' -LookupTopic 'topic-x' -LookupStage 'research' -LookupSlot '1'
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'EXISTS'
+        $result.Output | Should -Match 'Squad Researcher\.md'
+    }
+
+    It 'emits a structured exists/missing object with -Format json' {
+        $root = Join-Path $TestDrive 'lookup-json'
+        Copy-Item -LiteralPath $script:LookupRoot -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'history\Squad Researcher.md') -Value "`nLedgerLookupKey: rp-lookup-02::topic-y::research::2"
+
+        $result = Invoke-Ledger -SquadRoot $root -LookupRunId 'rp-lookup-02' -LookupTopic 'topic-y' -LookupStage 'research' -LookupSlot '2' -Format json
+        $result.ExitCode | Should -Be 0
+        $parsed = $result.Output | ConvertFrom-Json
+        $parsed.exists | Should -BeTrue
+        $parsed.key | Should -Be 'rp-lookup-02::topic-y::research::2'
+    }
+
+    It 'throws when only some of the four -Lookup* parameters are supplied' {
+        $result = Invoke-Ledger -SquadRoot $script:LookupRoot -LookupRunId 'rp-fixture-01' -LookupTopic 'partial'
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'must be supplied together'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# U1 (Amendment 3 §2 items 3 and 4): baseline-scoped WARN-vs-FAIL for a
+# malformed or illegal-model_source consumption block, and the no-throw rate
+# fallback for a block whose priced_as/model_tier don't resolve. Static
+# fixture: tests/fixtures/ledger-baseline/root/history/Legacy Agent.md carries
+# five pre-baseline blocks (two orphaned headings -- a single-backtick fence
+# and a markdown table pasted in place of one --, an illegal model_source, a
+# whitespace-padded priced_as, and one fully well-formed block); the tests
+# below baseline a fresh copy of it, then append additional post-baseline
+# blocks at test time.
+# ---------------------------------------------------------------------------
+Describe 'Measure-SquadLedger baseline-scoped malformed/illegal-model_source WARN-vs-FAIL and no-throw rate fallback (U1 items 3 and 4)' {
+    BeforeAll {
+        $script:LegacyFixtureRoot = Join-Path -Path $script:FixtureRoot -ChildPath '..' -AdditionalChildPath 'ledger-baseline', 'root'
+
+        function New-LegacyTestRootLocal {
+            $dest = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+            Copy-Item -LiteralPath $script:LegacyFixtureRoot -Destination $dest -Recurse
+            $dest
+        }
+
+        $script:PostBaselineWellFormedBlock = @'
+
+
+### 2026-09-25T09:00:00Z Post-baseline well-formed consumption block
+
+* Turn: 1
+* Request: Post-baseline synthetic entry, well-formed.
+* Deliverable: `fixtures/ledger-baseline/post-1.md`
+* Outcome: Synthetic.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "session-inherited",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 1,
+  "input_tokens": 100,
+  "cached_tokens": 0,
+  "cache_write_tokens": 0,
+  "output_tokens": 50,
+  "basis": "estimated"
+}
+```
+'@
+
+        $script:PostBaselineIllegalModelSourceBlock = @'
+
+
+### 2026-09-25T09:05:00Z Post-baseline illegal model_source consumption block
+
+* Turn: 1
+* Request: Post-baseline synthetic entry with an illegal model_source value.
+* Deliverable: `fixtures/ledger-baseline/post-2.md`
+* Outcome: Synthetic.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "session",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 1,
+  "input_tokens": 100,
+  "cached_tokens": 0,
+  "cache_write_tokens": 0,
+  "output_tokens": 50,
+  "basis": "estimated"
+}
+```
+'@
+
+        $script:PostBaselineUnparseableBlock = @'
+
+
+### 2026-09-25T09:10:00Z Post-baseline unparseable (bad fence) consumption block
+
+* Turn: 1
+* Request: Post-baseline synthetic entry with a bad fence.
+* Deliverable: `fixtures/ledger-baseline/post-3.md`
+* Outcome: Synthetic.
+
+#### Consumption
+
+`json
+{
+  "model": "Claude Sonnet 4.6"
+}
+`
+'@
+    }
+
+    It 'without any -BaselinePath at all, every malformed/illegal shape only WARNs -- "cannot scope, so it never throws"' {
+        $root = New-LegacyTestRootLocal
+        $result = Invoke-Ledger -SquadRoot $root -Format json
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'bad fence, or non-JSON content'
+        $result.Output | Should -Match "illegal model_source 'session'"
+        $result.Output | Should -Match "priced_as ' Claude Opus 5 ' only resolves.*after trimming"
+        # Still aggregates the two blocks that do resolve (the trimmed-whitespace
+        # block and the one fully well-formed block): turns 1 + 2 = 3.
+        ($result.Output | ConvertFrom-Json).total.turns | Should -Be 3.0
+    }
+
+    It 'with -BaselinePath, the same four pre-baseline (legacy) shapes still only WARN, never FAIL/throw' {
+        $root = New-LegacyTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-legacy.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+
+        $result = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Format json
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'WARN:.*bad fence, or non-JSON content'
+        $result.Output | Should -Match "WARN:.*illegal model_source 'session'"
+        $result.Output | Should -Match "WARN:.*priced_as ' Claude Opus 5 ' only resolves.*after trimming"
+        $result.Output | Should -Match 'pre-baseline/legacy block'
+    }
+
+    It 'a post-baseline illegal-model_source block FAILs under -BaselinePath -Check (and throws outside -Check)' {
+        $root = New-LegacyTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-post-illegal.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+        Add-Content -LiteralPath (Join-Path $root 'history\Legacy Agent.md') -Value $script:PostBaselineIllegalModelSourceBlock
+
+        $render = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Format json
+        $render.ExitCode | Should -Not -Be 0
+        $render.Output | Should -Match 'Refusing to compute a ledger'
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match "Post-baseline block:.*illegal model_source 'session'"
+    }
+
+    It 'a post-baseline unparseable (bad fence) block FAILs under -BaselinePath -Check (and throws outside -Check)' {
+        $root = New-LegacyTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-post-unparseable.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+        Add-Content -LiteralPath (Join-Path $root 'history\Legacy Agent.md') -Value $script:PostBaselineUnparseableBlock
+
+        $render = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Format json
+        $render.ExitCode | Should -Not -Be 0
+        $render.Output | Should -Match 'Refusing to compute a ledger'
+
+        $check = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Check
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match 'Post-baseline block:.*bad fence, or non-JSON content'
+    }
+
+    It 'a well-formed post-baseline block passes cleanly with no WARN naming it' {
+        $root = New-LegacyTestRootLocal
+        $baselinePath = Join-Path $TestDrive 'baseline-post-wellformed.json'
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+        Add-Content -LiteralPath (Join-Path $root 'history\Legacy Agent.md') -Value $script:PostBaselineWellFormedBlock
+
+        $result = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Format json
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Not -Match 'Post-baseline block'
+        # The new block aggregates alongside the two pre-existing resolvable ones:
+        # turns 1 (legacy well-formed... already 2) -- confirm the post-baseline
+        # block's own 1 turn is included without any WARN/FAIL naming it.
+        ($result.Output | ConvertFrom-Json).total.turns | Should -Be 4.0
+    }
+}
+
+# ---------------------------------------------------------------------------
+# U1 (Amendment 3 §2 item 5): an empty/absent Agent cell in consumption.md's
+# Attribution table must never crash Get-AttributionCompositeKeyLocal -- it
+# reports a mismatch (a ledger row nothing matches) instead.
+# ---------------------------------------------------------------------------
+Describe 'Measure-SquadLedger -Check: an empty Agent cell in the Attribution table reports a mismatch, never throws (U1 item 5)' {
+    BeforeAll {
+        $script:EmptyAgentRoot = Join-Path $TestDrive 'empty-agent-cell'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $script:EmptyAgentRoot -Recurse
+
+        # Same Primary+Fallback `architect` shape used elsewhere in this file: two
+        # rows sharing one Role, disambiguated only by Agent -- exactly the case
+        # where Get-AttributionCompositeKeyLocal's lookup is load-bearing, so an
+        # empty Agent cell on one row is guaranteed to reach it.
+        Add-Content -LiteralPath (Join-Path $script:EmptyAgentRoot 'team.md') -Value "| architect | Zeta | System Architecture Reviewer | ADR Creator | — | runSubagent / task | default | docs/architecture/ |"
+
+        $primaryHistory = @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: System Architecture Reviewer
+
+### 2026-09-27T12:00:00Z Reviewing the fixture-topic design tradeoffs
+
+* Turn: 4
+* Request: Review the recommended fixture shape's design tradeoffs.
+* Deliverable: `docs/architecture/2026-09-27-design-review.md`
+* Outcome: Confirmed the minimal shape.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "agent-pinned",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 4,
+  "input_tokens": 2000,
+  "cached_tokens": 8000,
+  "cache_write_tokens": 1000,
+  "output_tokens": 2500,
+  "basis": "estimated"
+}
+```
+'@
+        Set-Content -LiteralPath (Join-Path $script:EmptyAgentRoot 'history/System Architecture Reviewer.md') -Value $primaryHistory -NoNewline
+
+        $fallbackHistory = @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: ADR Creator
+
+### 2026-09-27T13:00:00Z Capturing the fixture-topic decision record
+
+* Turn: 2
+* Request: Capture the fixture-topic decision as an ADR.
+* Deliverable: `docs/architecture/2026-09-27-decision-record.md`
+* Outcome: ADR captured.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Opus 5",
+  "model_source": "agent-pinned",
+  "priced_as": "Claude Opus 5",
+  "model_tier": "extended",
+  "internal_turns": 2,
+  "input_tokens": 1000,
+  "cached_tokens": 4000,
+  "cache_write_tokens": 500,
+  "output_tokens": 1200,
+  "basis": "estimated"
+}
+```
+'@
+        Set-Content -LiteralPath (Join-Path $script:EmptyAgentRoot 'history/ADR Creator.md') -Value $fallbackHistory -NoNewline
+
+        # Splice the helper's own printed fragment in, exactly like the existing
+        # composite-key Describe block above, then blank the ADR Creator row's
+        # Agent cell only -- the Role cell, and every other row, stay intact.
+        $fragment = (Invoke-Ledger -SquadRoot $script:EmptyAgentRoot -Format markdown).Output.Trim()
+        $originalLedger = Get-Content -LiteralPath (Join-Path $script:FixtureRoot 'applied/consumption.md') -Raw
+        $h1Line = [regex]::Match($originalLedger, '(?m)^#\s+Squad Consumption Ledger.*$')
+        $basisIndex = $originalLedger.IndexOf('> Basis:')
+        $head = $originalLedger.Substring(0, $h1Line.Index + $h1Line.Length)
+        $tail = $originalLedger.Substring($basisIndex)
+        $ledgerContent = "$head`n`n$fragment`n`n$tail"
+        $ledgerContent = $ledgerContent -replace '(\|\s*architect\s*\|\s*Zeta\s*\|\s*)ADR Creator(\s*\|)', '$1$2'
+        $ledgerPath = Join-Path $script:EmptyAgentRoot 'consumption.md'
+        Set-Content -LiteralPath $ledgerPath -Value $ledgerContent -NoNewline
+        Sync-LedgerStateLocal -SquadRoot $script:EmptyAgentRoot
+    }
+
+    It 'does not throw or crash, and reports a mismatch for the row an empty Agent cell can no longer be matched against' {
+        $result = Invoke-Ledger -SquadRoot $script:EmptyAgentRoot -Check
+        $result.Output | Should -Not -Match 'Exception'
+        $result.Output | Should -Not -Match 'Get-AttributionCompositeKeyLocal'
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Attribution:.*role 'architect'"
     }
 }

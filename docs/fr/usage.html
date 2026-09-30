@@ -54,6 +54,65 @@
       <tr><td><code>mode=autopilot</code></td><td>Enchaînement du travail avec arrêts obligatoires pour les actions importantes, les risques à escalader et la validation finale.</td></tr>
     </tbody></table>
     <div class="callout warn"><p><strong>Autopilot n'est pas une autorisation générale.</strong> Déployer, pousser du code, fusionner ou modifier des données reste soumis aux contrôles prévus. Une question en lecture seule n'autorise pas une implémentation.</p></div>
+
+    <h2 id="autopilot-hand-off-pipelining">Chevauchement des remises du Scribe en autopilot</h2>
+      <p>
+        En <code>mode=autopilot</code>, le coordinateur peut dispatcher la remise Scribe de l'étape N et
+        le rôle de l'étape N+1 en parallèle quand trois conditions sont remplies : l'artefact propre
+        de l'étape N est confirmé sur disque, l'outil de dispatch de l'hôte annonce un mode d'exécution
+        d'arrière-plan ou asynchrone (par exemple, l'outil <code>task</code> de CLI Copilot avec
+        <code>mode: background</code>), et le chevauchement n'a pas été désactivé par un échec de
+        vérification antérieur dans ce run.
+      </p>
+      <p>
+        Le chevauchement reste <strong>désactivé</strong> dans les cas suivants :
+      </p>
+      <ul>
+        <li>Watch Mode</li>
+        <li>Tout <code>cost-ceiling</code> configuré à n'importe quel point de ce run (verrouillé ; une fois vrai, reste vrai)</li>
+        <li>La squad est une racine de fédération (marquée par la présence de <code>federation.md</code>)</li>
+        <li>Un run interne sous autopilot de fédération sans cible avec plafond agrégé</li>
+        <li>L'outil de dispatch de l'hôte n'annonce pas un mode d'exécution asynchrone</li>
+        <li>Après un échec de vérification dans ce run</li>
+      </ul>
+      <p>
+        Quand le chevauchement est désactivé, le coordinateur dispatche la remise Scribe de l'étape N,
+        attend qu'elle se termine et soit vérifiée, puis seulement dispatche l'étape N+1 — exactement
+        comme dans les versions antérieures. Quand le chevauchement est actif, l'étape N+1 commence
+        tandis que la remise de l'étape N est en cours, mais l'étape N+2 ne commence pas avant que la
+        remise de l'étape N ait retourné et passé la vérification.
+      </p>
+      <h3>Vérification et barrières de sécurité</h3>
+      <p>
+        Un simple <code>Measure-SquadLedger.ps1 -Check</code> n'est pas suffisant pour la vérification
+        chevauchée. Le coordinateur prend plutôt un instantané pré-dispatch du nombre de rubriques du
+        fichier d'historique cible, puis vérifie avec <code>-ExpectedHistoryCounts</code> en ajoutant
+        cet instantané plus les entrées que cette remise doit ajouter. Le coordinateur utilise aussi
+        <code>-BaselinePath</code> pour préserver une ligne de base au niveau du contenu (Longueur,
+        SHA-256, nombre de rubriques) de chaque livrable écrit jusqu'à présent dans ce run, permettant
+        la détection de préfixes corrompus ou modifiés dans les écritures ultérieures.
+      </p>
+      <p>
+        Quand la vérification échoue, le chevauchement est désactivé pour le reste du run. L'écriture
+        invalide n'est jamais réécrite par le Scribe ; au lieu de cela, une nouvelle entrée de correction
+        en ajout uniquement est dispatchée, et le livrable affecté est restauré en redispatchant son rôle
+        propriétaire (jamais en modifiant l'historique). Le run ne traverse pas la barrière suivante
+        jusqu'à ce qu'un humain approuve la correction.
+      </p>
+      <p>
+        <code>.copilot-tracking/squad/</code> et son contenu sont git-ignorés, donc l'état du registre
+        est une preuve locale, pas partie de l'historique révisé. Le code livré, les plans et les
+        enregistrements de révision dans <code>plans/</code>, <code>research/</code>, <code>reviews/</code>
+        et les fichiers du projet sont suivis normalement.
+      </p>
+      <h3>Harnais de repère</h3>
+      <p>
+        Un harnais de repère jumelé optionnel existe à
+        <code>tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1</code>
+        (nécessite <code>COPILOT_GITHUB_TOKEN</code>). Le repère en direct n'a pas encore produit de
+        résultat de base, donc le comportement de chevauchement est décrit ici et dans les références
+        source de la squad ; aucune affirmation de performance n'est faite.
+      </p>
     <h2 id="cost-admission-control">Contrôle du coût estimé</h2>
     <p><code>cost-ceiling</code> limite le coût estimé des modèles pour un run, pas la facture GitHub ni la consommation Azure. L'initialisation confirmée reste hors plafond : elle crée les fichiers d'état et de tarification nécessaires, et son coût estimé est enregistré.</p>
     <pre><code>budget restant = max(0, plafond - coût estimé cumulé)

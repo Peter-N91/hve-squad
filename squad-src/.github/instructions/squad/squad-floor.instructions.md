@@ -38,7 +38,7 @@ Detection precedence: `federation.md` present means federation; otherwise `team.
 
 The **Squad Scribe** performs every ordinary squad-state write. Confirmed initialization is setup outside Cost Preflight. After it completes, one deterministic exception gates work before its child and Scribe handoff: while no parallel writer exists, the owning coordinator may append one Cost Preflight entry to `decisions.md` and compare-and-swap only `state.json` `currentRun.costPreflight`. When that transaction upgrades a legacy single-squad `1.3` or federation `1.2` state, it may also change only `schemaVersion` to `1.4` or `1.3`, respectively. The coordinator compares the prior `updated` value, preserves every other field, reads both files back, and dispatches nothing on a collision, partial write, or mismatch.
 
-Every other mutation goes through the Scribe via `runSubagent` or `task`. After admission, the Scribe preserves the preflight object and links each child history entry to the exact admitted run and round. This keeps the exception narrow enough that parallel dispatch still has one writer.
+Every other mutation goes through the Scribe via `runSubagent` or `task`. After admission, the Scribe preserves the preflight object and links each child history entry to the exact admitted run and round. This keeps the exception narrow enough that parallel dispatch still has one writer. Under autopilot pipelining, hand-offs for different stages of the same squad root still funnel through this one writer — never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order and dispatch the next only once the current one has returned and verified clean.
 
 Append-only files are appended to and never edited or removed. A coordinator that edits `history/`, any prior decision, or any `state.json` field outside `currentRun.costPreflight` and the exact legacy schema bump has broken the contract, even when the edit is correct.
 
@@ -64,7 +64,7 @@ A roster row names one **Primary** agent and optionally some **Alternates**. The
 
 ## Proof of Dispatch
 
-A stage counts as run only when both exist: its domain artifact on disk at the role's `Deliverable Root`, and a `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block. No history entry means the stage did not happen and the turn cannot advance past it.
+The stage's domain artifact on disk at the role's `Deliverable Root` gates dispatching the next stage. A `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block additionally gates counting the stage as run. No history entry means the stage has not been proven complete — re-send its Scribe hand-off rather than re-running the stage that produced the artifact — and no barrier that reads Scribe-written state may proceed past it.
 
 A history file is created by the dispatch it records, with this preamble and nothing else above the first entry:
 

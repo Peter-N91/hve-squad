@@ -1,0 +1,27 @@
+{
+  "id": "autopilot-pipelining",
+  "description": "An autopilot-mode run advances through research, plan, council, and implement stages in a single turn, giving the coordinator's own Scribe Hand-off Pipelining contract exactly two hand-off/next-stage boundaries it MAY overlap (research to plan, plan to council) and one barrier it must never overlap (the council verdict a council stage produces, consumed by the implement stage). This scenario asserts integrity only: every stage artifact has a history entry, stage order is preserved, at most one Scribe hand-off lands per stage, the barrier's pre-conditions land before its consumer, and Measure-SquadLedger -Check -ExpectedHistoryCounts passes -- all of which must hold whether or not the run actually overlapped anything.",
+  "fixture": "minimal-app",
+  "squadRootGlob": ".copilot-tracking/squad",
+  "expectDispatches": true,
+  "turns": [
+    {
+      "id": "init",
+      "prompt": "Act as the Squad Coordinator for this repository. Run squad Init only: seed the squad state under .copilot-tracking/squad/ and select a roster appropriate for this codebase. Do not route or dispatch any role this turn. Do not configure a Cost Preflight ceiling now or at any later turn in this run."
+    },
+    {
+      "id": "autopilot-run",
+      "prompt": "Act as the Squad Coordinator for this repository. Run the rest of this turn in mode=autopilot: do not stop for approval between stages, this is a single-topic run (not a federation, not Watch Mode), and do not configure a Cost Preflight ceiling at any point -- proceed without one for the whole turn. This scenario's topic is stated here inline, not read from any fixture file: a hypothetical `reserve()` function in this codebase's booking module is described (by this prompt, not by a file on disk) as calling a two-step check-then-write against a shared counter without holding a lock across the two steps, which a concurrent caller could interleave with. Advance through exactly these four stages, in this order, and let your own Scribe Hand-off Pipelining contract (references/operating-procedure.md and references/gates-and-modes.md) decide whether any hand-off may run alongside the next stage's dispatch: (1) research that hypothetical concurrency gap as described above (do not search the repository for a real `reserve()` implementation; treat the description in this prompt as the finding to analyze) and write findings to `.copilot-tracking/research/bench-research.md`; (2) write a short remediation plan to `.copilot-tracking/plans/bench-plan.md`, building on stage 1's findings; (3) as a deliberately lightweight STAND-IN for the full pre-implementation council protocol -- do not invoke the multi-role Council-of-Three synthesis for this stage -- render a short go/no-go verdict on the plan yourself and write it to `.copilot-tracking/reviews/bench-council.md`; this verdict is still a barrier your own contract lists ('a council verdict consumed by Implement'), so treat every step after it as gated on this verdict's hand-off being confirmed and verified, exactly as the contract requires; (4) only once stage 3's verdict is confirmed on disk and its hand-off verified, write a one-paragraph change summary to `.copilot-tracking/changes/bench-implement.md`. Keep every deliverable under half a page."
+    }
+  ],
+  "pipeliningIntegrity": {
+    "stages": [
+      { "id": "research", "artifact": ".copilot-tracking/research/bench-research.md" },
+      { "id": "plan", "artifact": ".copilot-tracking/plans/bench-plan.md" },
+      { "id": "council", "artifact": ".copilot-tracking/reviews/bench-council.md" },
+      { "id": "implement", "artifact": ".copilot-tracking/changes/bench-implement.md" }
+    ],
+    "barrierAfterStage": "council",
+    "scribeAgentFile": "Squad Scribe.md"
+  }
+}

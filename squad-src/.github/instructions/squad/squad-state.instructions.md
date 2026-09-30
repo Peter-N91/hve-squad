@@ -198,7 +198,7 @@ Totals are computed by summing the rows, never estimated. The total row must equ
 
 Only the Squad Coordinator initiates state changes, and the Squad Scribe performs every ordinary write. Initialization is outside admission. Before later work dispatch, the sole exception is the deterministic Cost Preflight transaction: while no parallel writer exists, the coordinator compares `updated`, changes only `currentRun.costPreflight` plus an exact legacy schema bump when required, appends the matching decision, and reads both back. A collision or mismatch permits no dispatch. Other cast agents never write squad state directly.
 
-This single-writer rule keeps shared state consistent across parallel dispatch: concurrent roles cannot race on the same files because every mutation funnels through the scribe.
+This single-writer rule keeps shared state consistent across parallel dispatch: concurrent roles cannot race on the same files because every mutation funnels through the scribe. Under autopilot pipelining this still holds per squad root: at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order, and a federation applies this same per-root rule independently to each sub-squad root.
 
 ## Proof of Dispatch
 
@@ -206,7 +206,7 @@ A `history/<agent>.md` entry is the squad's proof that a role actually ran. Beca
 
 The coordinator and the pipeline gates treat history as the gate mechanism:
 
-* A stage (discovery, intake, research, plan, council, implement, review) counts as complete only when both its domain artifact and a `history/<agent>.md` entry for the dispatched agent exist.
+* A stage (discovery, intake, research, plan, council, implement, review) has its domain artifact gate dispatching the next stage; it additionally needs a `history/<agent>.md` entry for the dispatched agent to count as complete.
 * Every `history/<agent>.md` dispatch entry MUST be accompanied by its per-dispatch consumption block (see [Consumption Tracking](#consumption-tracking)). A history entry written without its consumption block is an incomplete dispatch record: the Scribe always writes the two together, and the coordinator may not treat a stage as complete — or advance past it — when the consumption block is missing. This binds consumption to the same gate that already guarantees history, so a run can never leave `consumption.md` at its seed while history shows dispatches occurred.
 * A missing history entry means the stage did not run, regardless of any narrative claim that it did. The coordinator may not advance past a stage whose history entry is absent — it dispatches the owning agent (or escalates) instead of synthesizing the stage itself.
 * This makes the methodology checkable after the fact: every completed run leaves a research file, a plan file, a Council Verdict, change records, and one `history/<agent>.md` per dispatched agent, each carrying its consumption block. When the run's work was grounded in requirement or input artifacts, it also leaves an Intake Readiness Verdict in `decisions.md`; when the discovery gate ran or was offered and declined, it leaves a Discovery Verdict there too, plus a brief for any depth other than `skip`. If any is missing, the run is provably incomplete.

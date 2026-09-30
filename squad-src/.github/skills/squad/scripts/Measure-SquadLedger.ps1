@@ -113,13 +113,100 @@
     Output shape: `markdown` (default) prints the pasteable table and Derivation
     block; `json` prints the same figures as a structured object instead, for a
     caller that wants to consume them programmatically rather than paste them.
+.PARAMETER EmitBaseline
+    Path -- which must resolve OUTSIDE any `.copilot-tracking/squad` tree (a
+    session/temp path); the script refuses and throws otherwise -- to write a
+    JSON content-level baseline: for every append-only file (`history/*.md`,
+    plus `decisions.md` and `notifications.md` when present) a `{length,
+    sha256, headingCount, blockCount, blocks[]}` record (`length`/`sha256` are
+    the file's raw byte length and full-content SHA-256; `headingCount` counts
+    `##`/`###` heading lines combined; `blocks` records each existing `####
+    Consumption` block's ordinal, character offset, and content SHA-256, so a
+    later `-BaselinePath` check can recognise a pre-baseline/legacy block by
+    ordinal <= this recorded `blockCount`); and for every `-ProtectedPath`
+    entry a `{exists, sha256}` record. `state.json` and `consumption.md` are
+    intentionally never covered (they are replace-semantics files rewritten
+    every stage) -- passing either as `-ProtectedPath` throws. Also writes full
+    pre-write copies of every covered file next to the JSON, under a sibling
+    `<baseline-file-name>.files/` directory (mirroring each file's relative
+    path), per Amendment 3 E3. Orthogonal to `-BaselinePath` and to `-Check`:
+    it may be combined with either, or used alone.
+.PARAMETER BaselinePath
+    Path to a JSON baseline previously written by `-EmitBaseline`. Loading it
+    (regardless of `-Check`) makes every consumption block's ordinal position
+    in its own history file comparable against that file's baseline
+    `blockCount`, so `-Check`-independent behaviour in `Resolve-RateForBlockLocal`
+    (an unresolvable `priced_as`/`model_tier`) and in block validation (a
+    malformed block or an illegal `model_source`) can tell a pre-baseline
+    (legacy) block -- which only WARNs, never throws or fails -- from one
+    appended after the baseline -- which still throws outside `-Check` and
+    becomes a `-Check` FAIL instead of a warning. A file absent from the
+    baseline (created after it was taken) is treated as having a baseline
+    `blockCount` of 0 -- every block in it is post-baseline. A missing
+    `-BaselinePath` file throws outside `-Check` and is reported as a `-Check`
+    FAIL. Combined with `-Check`, it additionally runs the full append-only/
+    protected-artifact verification described under `-EmitBaseline`'s FAIL
+    conditions: an append-only file that shrank; whose first `length` bytes no
+    longer hash to the baseline's recorded SHA-256 (a prefix edit); a
+    protected artifact whose SHA-256 changed and is not named in
+    `-AllowedWritePath`; or a baseline-recorded file that no longer exists. The
+    protected set verified at `-Check` time is always the *baseline's own*
+    recorded `protected` map -- every path the matching `-EmitBaseline` call
+    covered -- unioned with any `-ProtectedPath` the caller also names at
+    check time; omitting `-ProtectedPath` at `-Check` never skips a protected
+    artifact the baseline recorded, it only means no *additional* path is
+    checked beyond what the baseline already covers. `state.json` and
+    `consumption.md` rewrites are never checked here (by design, not because
+    they happened to pass) and are not FAILs. Without `-Check`, `-BaselinePath`
+    only affects legacy-block classification and performs no append-only/
+    protected verification of its own.
+.PARAMETER ProtectedPath
+    Caller-named deliverable paths, relative to `-SquadRoot`, added to
+    `-EmitBaseline`'s content-level baseline and, combined with `-BaselinePath
+    -Check`, checked for any hash change at all (not only shrinkage) unless
+    named in `-AllowedWritePath`. Must not include `state.json` or
+    `consumption.md` -- those are excluded from protection by design. At
+    `-Check` time this list only *adds* to the protected set verified -- see
+    `-BaselinePath`: every path the baseline itself recorded under `protected`
+    is always verified whether or not it is re-supplied here.
+.PARAMETER AllowedWritePath
+    Caller-named paths, relative to `-SquadRoot`, excluded from the
+    `-ProtectedPath` hash-change check when combined with `-BaselinePath
+    -Check` -- e.g. the concurrent write set of an in-flight Role(N+1)
+    dispatch, or an authorized correction/restore path -- so a legitimate
+    concurrent or corrective write is never reported as a clobber.
+.PARAMETER LookupRunId
+.PARAMETER LookupTopic
+.PARAMETER LookupStage
+.PARAMETER LookupSlot
+    Four parameters that, supplied together (any subset throws), select
+    key-lookup mode: a deterministic, model-free existence check for resume
+    logic. The four values are joined with `::` into one composite key, and
+    every `history/*.md` file's raw content is searched for that exact literal
+    substring. Prints `EXISTS` (naming the file(s) it was found in) or
+    `MISSING`, or (with `-Format json`) `{key, exists, files[]}`; exits `0`
+    when found, `1` when not. This is a plain substring search, not a
+    schema-aware field lookup -- the composite key must actually appear in a
+    written history entry (e.g. embedded in its Deliverable path or a
+    dedicated tag) for a later lookup of it to succeed; wiring the Scribe to
+    embed it is a separate, contract-text task outside this script's scope.
+    No other switch (`-Check`, `-EmitBaseline`, `-BaselinePath`, `-Format`
+    aside) is honored in this mode.
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/routing-performance
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
+.EXAMPLE
+    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -EmitBaseline $env:TEMP/squad-baseline.json -ProtectedPath 'research/2026-09-27-topic.md'
+.EXAMPLE
+    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -BaselinePath $env:TEMP/squad-baseline.json -ProtectedPath 'research/2026-09-27-topic.md' -AllowedWritePath 'research/2026-09-28-next.md'
+.EXAMPLE
+    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -LookupRunId rp-20260929a -LookupTopic pipelining -LookupStage P03-T06 -LookupSlot 1
 .NOTES
     See .copilot-tracking/squad/members/routing-performance/changes/2026-09-28-d6b-ledger-tool.md
-    for this script's contract and the benchmark regression it remedies.
+    for this script's contract and the benchmark regression it remedies, and
+    .copilot-tracking/squad/members/routing-performance/changes/2026-09-29-u1-ledger-baseline-tooling.md
+    for the baseline/lookup/no-throw additions.
 #>
 [CmdletBinding()]
 param(
@@ -131,7 +218,23 @@ param(
     [hashtable]$ExpectedHistoryCounts = @{},
 
     [ValidateSet('markdown', 'json')]
-    [string]$Format = 'markdown'
+    [string]$Format = 'markdown',
+
+    [string]$EmitBaseline,
+
+    [string]$BaselinePath,
+
+    [string[]]$ProtectedPath = @(),
+
+    [string[]]$AllowedWritePath = @(),
+
+    [string]$LookupRunId,
+
+    [string]$LookupTopic,
+
+    [string]$LookupStage,
+
+    [string]$LookupSlot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -376,6 +479,12 @@ $script:ConsumptionFieldOrder = @(
 )
 $script:ConsumptionTextFields = @('model', 'model_source', 'priced_as', 'model_tier', 'basis')
 
+# The legal `model_source` set (Amendment 3 §2 item 4's anchor list), hoisted to
+# script scope so both the pre-aggregation block-validation pass (which
+# baseline-scopes an illegal value the same way it does a parse failure) and
+# -Check's own Attribution-table comparison read one authoritative list.
+$script:LegalModelSources = @('cli-pinned', 'operator-declared', 'dispatch-reported', 'agent-pinned', 'session-inherited', 'unresolved')
+
 function Get-HistoryEntryCountLocal {
     <#
     .SYNOPSIS
@@ -541,6 +650,15 @@ function Get-ConsumptionBlockLocal {
     .SYNOPSIS
         Parses every `#### Consumption` / `#### Consumption — Orchestration` block
         in a history file's content, validating field presence, order, and shape.
+    .DESCRIPTION
+        U1 (Amendment 3 §2 item 3) also recognises a heading with no valid fenced
+        ```json block following it at all (a bad/single-backtick fence, or a
+        markdown table pasted in place of one) -- not merely a fenced block whose
+        contents fail to parse. A separate heading-only regex enumerates every
+        `#### Consumption...` heading in document order; any heading whose start
+        index is not also the start of a full fenced-block match becomes its own
+        malformed entry (ParseError set, Fields $null) rather than silently
+        vanishing, so item 3's WARN/FAIL scoping has something to classify.
     #>
     param(
         [Parameter(Mandatory)][string]$Content,
@@ -558,8 +676,40 @@ function Get-ConsumptionBlockLocal {
     # blank line before the fence is `(?:\r?\n)+`, not `\r?\n+`, because the
     # latter's `\n+` cannot cross a second `\r` to reach a second `\n`.
     $pattern = '(?ms)^####[ \t]+Consumption(?<orch>[ \t]+[-\u2013\u2014][ \t]+Orchestration)?[ \t]*(?:\r?\n)+```json\r?\n(?<json>.*?)\r?\n```'
+    # Heading-only: same anchor/prefix as $pattern (so a genuine well-formed
+    # block's heading match shares the exact same start index as its full-block
+    # match), but makes no assumption about what -- if anything -- follows on
+    # later lines. `[^\r\n]*` stops at end-of-line without relying on `$`'s
+    # CRLF quirk noted above.
+    $headingPattern = '(?m)^####[ \t]+Consumption(?<orch>[ \t]+[-\u2013\u2014][ \t]+Orchestration)?[^\r\n]*'
 
-    foreach ($match in [regex]::Matches($Content, $pattern)) {
+    $fullMatchesByIndex = @{}
+    foreach ($match in [regex]::Matches($Content, $pattern)) { $fullMatchesByIndex[$match.Index] = $match }
+
+    $ordinal = 0
+    foreach ($headingMatch in [regex]::Matches($Content, $headingPattern)) {
+        $ordinal++
+        $match = $fullMatchesByIndex[$headingMatch.Index]
+
+        if (-not $match) {
+            # A heading with no full-block match at the same offset: no valid
+            # fenced ```json block follows it (bad/single-backtick fence, or
+            # non-JSON content -- e.g. a markdown table -- pasted in its place).
+            [pscustomobject]@{
+                Source          = $SourceName
+                IsOrchestration = [bool]$headingMatch.Groups['orch'].Success
+                Fields          = $null
+                Order           = @()
+                OrderOk         = $false
+                NonNumeric      = @()
+                ParseError      = 'heading found but no valid fenced ```json block follows it (bad fence, or non-JSON content immediately after the heading).'
+                Ordinal         = $ordinal
+                Offset          = $headingMatch.Index
+                RawText         = $headingMatch.Value
+            }
+            continue
+        }
+
         $json = $match.Groups['json'].Value
 
         $order = @([regex]::Matches($json, '(?m)^\s*"([a-z_]+)"\s*:') | ForEach-Object { $_.Groups[1].Value })
@@ -591,6 +741,16 @@ function Get-ConsumptionBlockLocal {
             OrderOk         = $orderOk
             NonNumeric      = $nonNumeric
             ParseError      = $parseError
+            # U1 baseline-scoping identity (Amendment 3 §2 item 1/3): Ordinal is
+            # this block's 1-based position among every regex match in this
+            # file -- including unparseable ones -- so a baseline's recorded
+            # per-file blockCount can classify it pre- or post-baseline even
+            # when it never reaches ConvertFrom-Json. Offset/RawText are the
+            # match's own character index and full text, hashed into the
+            # baseline for an auditable per-block identity record.
+            Ordinal         = $ordinal
+            Offset          = $match.Index
+            RawText         = $match.Value
         }
     }
 }
@@ -603,8 +763,17 @@ function Resolve-RateForBlockLocal {
     <#
     .SYNOPSIS
         Resolves a priced rate for one Consumption block: the block's own
-        `priced_as` row when it resolves, otherwise the block's `model_tier` row
-        (flagged), and never a fabricated or zero rate.
+        `priced_as` row when it resolves (trimmed, if needed), otherwise the
+        block's `model_tier` row (flagged), otherwise -- for a pre-baseline/
+        legacy block, or when no baseline was supplied at all -- the rate
+        table's own 'default' tier (flagged), and never a fabricated or zero
+        rate for a block this baseline-scoped fallback does not cover.
+    .PARAMETER TreatUnresolvedAsWarning
+        U1 no-throw fix (Amendment 3 §2 item 4): true for a block classified as
+        pre-baseline/legacy, or whenever no baseline was supplied at all (both
+        cases documented as "cannot scope, so it defers rather than blocks").
+        A block appended after a supplied baseline still throws when
+        unresolvable -- a new-data defect, not a deferred legacy one.
     #>
     param(
         [Parameter(Mandatory)]$Block,
@@ -612,21 +781,37 @@ function Resolve-RateForBlockLocal {
         # Not [Parameter(Mandatory)]: PowerShell's binder rejects an empty
         # collection argument for a Mandatory collection-typed parameter, and an
         # accumulator list legitimately starts empty on a run with no warnings.
-        [System.Collections.Generic.List[string]]$Warnings
+        [System.Collections.Generic.List[string]]$Warnings,
+        [bool]$TreatUnresolvedAsWarning = $true
     )
 
-    $pricedAs = [string]$Block.Fields['priced_as']
-    if ($pricedAs -and $Rates.ByModel.ContainsKey($pricedAs)) {
-        return $Rates.ByModel[$pricedAs]
+    $pricedAsRaw = [string]$Block.Fields['priced_as']
+    $pricedAsTrimmed = $pricedAsRaw.Trim()
+    if ($pricedAsRaw -and $Rates.ByModel.ContainsKey($pricedAsRaw)) {
+        return $Rates.ByModel[$pricedAsRaw]
+    }
+    if ($pricedAsTrimmed -and $pricedAsTrimmed -ne $pricedAsRaw -and $Rates.ByModel.ContainsKey($pricedAsTrimmed)) {
+        $Warnings.Add("WARN: $($Block.Source): priced_as '$pricedAsRaw' only resolves to a rate row after trimming surrounding whitespace (to '$pricedAsTrimmed').")
+        return $Rates.ByModel[$pricedAsTrimmed]
     }
 
-    $tier = [string]$Block.Fields['model_tier']
-    if ($tier -and $Rates.ByTier.ContainsKey($tier)) {
-        $Warnings.Add("WARN: $($Block.Source): priced_as '$pricedAs' has no rate row; priced at the '$tier' tier fallback instead.")
-        return $Rates.ByTier[$tier]
+    $tierRaw = [string]$Block.Fields['model_tier']
+    $tierTrimmed = $tierRaw.Trim()
+    if ($tierRaw -and $Rates.ByTier.ContainsKey($tierRaw)) {
+        $Warnings.Add("WARN: $($Block.Source): priced_as '$pricedAsRaw' has no rate row; priced at the '$tierRaw' tier fallback instead.")
+        return $Rates.ByTier[$tierRaw]
+    }
+    if ($tierTrimmed -and $tierTrimmed -ne $tierRaw -and $Rates.ByTier.ContainsKey($tierTrimmed)) {
+        $Warnings.Add("WARN: $($Block.Source): priced_as '$pricedAsRaw' has no rate row; priced at the '$tierTrimmed' tier fallback instead (model_tier resolved only after trimming whitespace).")
+        return $Rates.ByTier[$tierTrimmed]
     }
 
-    throw "Measure-SquadLedger: block in '$($Block.Source)' has priced_as '$pricedAs' and model_tier '$tier', neither of which resolves to a rate row. Refusing to price at 0 -- fix consumption-rates.md or the block."
+    if ($TreatUnresolvedAsWarning -and $Rates.ByTier.ContainsKey('default')) {
+        $Warnings.Add("WARN: $($Block.Source): priced_as '$pricedAsRaw' and model_tier '$tierRaw' neither resolve to a rate row; this is a pre-baseline/legacy block (or no baseline was supplied to scope it), so it is priced at the rate table's 'default' tier fallback instead of terminating.")
+        return $Rates.ByTier['default']
+    }
+
+    throw "Measure-SquadLedger: block in '$($Block.Source)' has priced_as '$pricedAsRaw' and model_tier '$tierRaw', neither of which resolves to a rate row. Refusing to price at 0 -- fix consumption-rates.md or the block."
 }
 
 function New-RoleAggregateLocal {
@@ -666,10 +851,11 @@ function Add-BlockToAggregateLocal {
         [Parameter(Mandatory)]$Rates,
         [Parameter(Mandatory)][double]$CalibrationFactor,
         # Not Mandatory -- see Resolve-RateForBlockLocal for why.
-        [System.Collections.Generic.List[string]]$Warnings
+        [System.Collections.Generic.List[string]]$Warnings,
+        [bool]$TreatUnresolvedRateAsWarning = $true
     )
 
-    $rate = Resolve-RateForBlockLocal -Block $Block -Rates $Rates -Warnings $Warnings
+    $rate = Resolve-RateForBlockLocal -Block $Block -Rates $Rates -Warnings $Warnings -TreatUnresolvedAsWarning $TreatUnresolvedRateAsWarning
 
     $turns = [double]$Block.Fields['internal_turns']
     $inTok = [double]$Block.Fields['input_tokens']
@@ -724,8 +910,385 @@ function Get-AttributionCompositeKeyLocal {
         means each history-file's own row is looked up, and compared, only
         against its own aggregate.
     #>
-    param([Parameter(Mandatory)][string]$Role, [Parameter(Mandatory)][string]$Agent)
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Role, [Parameter(Mandatory)][AllowEmptyString()][string]$Agent)
     '{0}|{1}' -f $Role.Trim().ToLowerInvariant(), $Agent.Trim().ToLowerInvariant()
+}
+
+# ---------------------------------------------------------------------------
+# U1 (Amendment 3 §2): content-level baseline (-EmitBaseline / -BaselinePath),
+# protected-artifact scope, and key-lookup mode. Self-contained, like every
+# other function in this script -- it ships to consumers and must not import
+# anything from tests/.
+# ---------------------------------------------------------------------------
+
+function Test-PathUnderSquadTrackingLocal {
+    <#
+    .SYNOPSIS
+        True when a path (existing or not yet created) resolves under any
+        `.copilot-tracking/squad` tree. Baselines must live entirely outside the
+        squad root, so `-EmitBaseline`/`-BaselinePath` refuse such a path rather
+        than silently writing (or trusting) squad-tracked state.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+    # GetFullPath resolves a not-yet-existing path against the current
+    # directory without requiring it to exist -- -EmitBaseline's target
+    # legitimately does not exist until this run creates it.
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $normalized = $full -replace '\\', '/'
+    return $normalized -match '(?i)(^|/)\.copilot-tracking/squad(/|$)'
+}
+
+function Get-Sha256HexLocal {
+    <#
+    .SYNOPSIS
+        Lowercase-hex SHA-256 of a byte array. Byte-based (never string-based)
+        so a baseline's hash is encoding-agnostic and a prefix-byte slice hashes
+        identically to hashing that same slice read fresh from disk.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes)
+    $hashBytes = [System.Security.Cryptography.SHA256]::HashData($Bytes)
+    -join ($hashBytes | ForEach-Object { $_.ToString('x2') })
+}
+
+function Get-AppendOnlyFileListLocal {
+    <#
+    .SYNOPSIS
+        The append-only file set a baseline covers: every history/*.md file,
+        plus decisions.md and notifications.md when present (Amendment 3 §2
+        item 1). state.json and consumption.md are never included here -- they
+        are replace-semantics files the Scribe legitimately rewrites every
+        stage, per Amendment 2 §8's "-Check -ExpectedHistoryCounts is retained
+        for replace-semantics consumption" language.
+    #>
+    param([Parameter(Mandatory)][string]$SquadRoot, [Parameter(Mandatory)]$HistoryFiles)
+
+    $list = [System.Collections.Generic.List[pscustomobject]]::new()
+    foreach ($file in $HistoryFiles) {
+        $list.Add([pscustomobject]@{ RelativePath = "history/$($file.Name)"; FullPath = $file.FullName })
+    }
+    foreach ($name in @('decisions.md', 'notifications.md')) {
+        $full = Join-Path $SquadRoot $name
+        if (Test-Path -LiteralPath $full -PathType Leaf) {
+            $list.Add([pscustomobject]@{ RelativePath = $name; FullPath = $full })
+        }
+    }
+    $list
+}
+
+function Assert-ProtectedPathNotReplaceSemanticsLocal {
+    <#
+    .SYNOPSIS
+        Throws if a caller-supplied -ProtectedPath entry names state.json or
+        consumption.md -- both are excluded from protection by design (they are
+        rewritten every stage), not merely by omission.
+    #>
+    param([Parameter(Mandatory)][string[]]$ProtectedPath)
+    foreach ($rel in $ProtectedPath) {
+        $normalized = ($rel -replace '\\', '/').Trim('/')
+        if ($normalized -match '(?i)^(state\.json|consumption\.md)$') {
+            throw "Measure-SquadLedger: -ProtectedPath must not name '$rel' -- state.json and consumption.md are replace-semantics files the Scribe legitimately rewrites every stage and are excluded from protected-artifact checks by design."
+        }
+    }
+}
+
+function Get-BaselineFileEntryLocal {
+    <#
+    .SYNOPSIS
+        One append-only file's baseline entry: byte Length, full-content
+        SHA-256, a combined `##`/`###` heading count, and the identity
+        (ordinal + character offset + content hash) of every `#### Consumption`
+        block already present -- so a later `-BaselinePath` check can tell a
+        pre-baseline (legacy) block (ordinal <= this entry's blockCount) from
+        one appended after this baseline was taken.
+    #>
+    param([Parameter(Mandatory)][string]$FullPath)
+
+    $bytes = [System.IO.File]::ReadAllBytes($FullPath)
+    $content = [System.Text.Encoding]::UTF8.GetString($bytes)
+    $headingCount = @([regex]::Matches($content, '(?m)^(?:##|###)[ \t]')).Count
+    $blocks = @(Get-ConsumptionBlockLocal -Content $content -SourceName ([System.IO.Path]::GetFileName($FullPath)))
+
+    [ordered]@{
+        length       = $bytes.Length
+        sha256       = (Get-Sha256HexLocal -Bytes $bytes)
+        headingCount = $headingCount
+        blockCount   = $blocks.Count
+        blocks       = @(
+            foreach ($block in $blocks) {
+                [ordered]@{
+                    ordinal = $block.Ordinal
+                    offset  = $block.Offset
+                    sha256  = (Get-Sha256HexLocal -Bytes ([System.Text.Encoding]::UTF8.GetBytes($block.RawText)))
+                }
+            }
+        )
+    }
+}
+
+function Get-ProtectedFileEntryLocal {
+    <#
+    .SYNOPSIS
+        One protected artifact's baseline entry: whether it existed at
+        baseline time, and its full-file SHA-256 when it did.
+    #>
+    param([Parameter(Mandatory)][string]$FullPath)
+    if (-not (Test-Path -LiteralPath $FullPath -PathType Leaf)) {
+        return [ordered]@{ exists = $false; sha256 = $null }
+    }
+    $bytes = [System.IO.File]::ReadAllBytes($FullPath)
+    [ordered]@{ exists = $true; sha256 = (Get-Sha256HexLocal -Bytes $bytes) }
+}
+
+function New-SquadLedgerBaselineLocal {
+    <#
+    .SYNOPSIS
+        Builds the -EmitBaseline JSON object: an append-only-file map and a
+        caller-named protected-artifact map, both keyed by squad-root-relative
+        path with forward slashes (so the JSON is diff-friendly and platform-
+        independent regardless of the host's path separator).
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+        Justification = 'Pure in-memory baseline object constructor; no system state is changed (writing it to disk is the caller''s job).')]
+    param(
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)]$HistoryFiles,
+        [string[]]$ProtectedPath = @()
+    )
+
+    $appendOnly = [ordered]@{}
+    foreach ($entry in (Get-AppendOnlyFileListLocal -SquadRoot $SquadRoot -HistoryFiles $HistoryFiles)) {
+        $appendOnly[$entry.RelativePath] = Get-BaselineFileEntryLocal -FullPath $entry.FullPath
+    }
+
+    $protected = [ordered]@{}
+    foreach ($rel in $ProtectedPath) {
+        $normalizedRel = ($rel -replace '\\', '/').Trim('/')
+        $full = Join-Path $SquadRoot $normalizedRel
+        $protected[$normalizedRel] = Get-ProtectedFileEntryLocal -FullPath $full
+    }
+
+    [ordered]@{
+        schemaVersion = 1
+        emittedAtUtc  = (Get-Date).ToUniversalTime().ToString('o')
+        appendOnly    = $appendOnly
+        protected     = $protected
+    }
+}
+
+function Copy-BaselineSourceFilesLocal {
+    <#
+    .SYNOPSIS
+        Writes full pre-write copies of every append-only and protected file,
+        plus consumption.md and state.json, into a sibling `<name>.files/`
+        directory next to the baseline JSON (Amendment 3 §2 item 1 / Amendment
+        2 E3/A-4), mirroring each file's squad-root-relative path.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)]$HistoryFiles,
+        [string[]]$ProtectedPath = @(),
+        [Parameter(Mandatory)][string]$DestinationRoot
+    )
+
+    $sources = [System.Collections.Generic.List[pscustomobject]]::new()
+    foreach ($entry in (Get-AppendOnlyFileListLocal -SquadRoot $SquadRoot -HistoryFiles $HistoryFiles)) {
+        $sources.Add($entry)
+    }
+    foreach ($rel in $ProtectedPath) {
+        $normalizedRel = ($rel -replace '\\', '/').Trim('/')
+        $full = Join-Path $SquadRoot $normalizedRel
+        if (Test-Path -LiteralPath $full -PathType Leaf) { $sources.Add([pscustomobject]@{ RelativePath = $normalizedRel; FullPath = $full }) }
+    }
+    foreach ($name in @('consumption.md', 'state.json')) {
+        $full = Join-Path $SquadRoot $name
+        if (Test-Path -LiteralPath $full -PathType Leaf) { $sources.Add([pscustomobject]@{ RelativePath = $name; FullPath = $full }) }
+    }
+
+    foreach ($source in $sources) {
+        $destination = Join-Path $DestinationRoot ($source.RelativePath -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+        $destinationDir = Split-Path -Parent $destination
+        if ($destinationDir -and -not (Test-Path -LiteralPath $destinationDir -PathType Container)) {
+            New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $source.FullPath -Destination $destination -Force
+    }
+}
+
+function Test-SquadLedgerBaselineLocal {
+    <#
+    .SYNOPSIS
+        The -BaselinePath -Check verification (Amendment 3 §2 item 1): FAILs on
+        an append-only file shrink, a prefix edit (first baseline-Length bytes
+        no longer hashing to the baseline's recorded full-content SHA-256), a
+        protected-artifact hash change not covered by -AllowedWritePath, or a
+        baseline-recorded file that no longer exists. Never checks state.json
+        or consumption.md -- excluded by design.
+    .DESCRIPTION
+        Review fix (coordinator finding): the protected set actually verified is
+        the UNION of the baseline's own recorded `protected` map and any caller
+        -ProtectedPath, not the caller-supplied list alone. A verifier that omits
+        -ProtectedPath at -Check time still catches every artifact the matching
+        -EmitBaseline call protected -- the caller-supplied list only adds paths
+        beyond what the baseline already recorded, it never narrows the set.
+    #>
+    param(
+        [Parameter(Mandatory)]$Baseline,
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)]$HistoryFiles,
+        [string[]]$ProtectedPath = @(),
+        [string[]]$AllowedWritePath = @()
+    )
+
+    $failures = [System.Collections.Generic.List[string]]::new()
+    $allowedLookup = @{}
+    foreach ($p in $AllowedWritePath) { $allowedLookup[(($p -replace '\\', '/').Trim('/')).ToLowerInvariant()] = $true }
+
+    $currentByRel = @{}
+    foreach ($entry in (Get-AppendOnlyFileListLocal -SquadRoot $SquadRoot -HistoryFiles $HistoryFiles)) {
+        $currentByRel[$entry.RelativePath] = $entry.FullPath
+    }
+
+    foreach ($relPath in @($Baseline.appendOnly.PSObject.Properties.Name)) {
+        $baseEntry = $Baseline.appendOnly.$relPath
+        if (-not $currentByRel.ContainsKey($relPath)) {
+            $failures.Add("Baseline file missing: '$relPath' was recorded in the baseline but no longer exists.")
+            continue
+        }
+        $bytes = [System.IO.File]::ReadAllBytes($currentByRel[$relPath])
+        $baselineLength = [int64]$baseEntry.length
+        if ($bytes.Length -lt $baselineLength) {
+            $failures.Add("Append-only file shrank: '$relPath' was $baselineLength byte(s) at baseline, now $($bytes.Length).")
+            continue
+        }
+        if ($baselineLength -gt 0) {
+            $prefixBytes = $bytes[0..($baselineLength - 1)]
+            $prefixHash = Get-Sha256HexLocal -Bytes $prefixBytes
+            if ($prefixHash -ne $baseEntry.sha256) {
+                $failures.Add("Append-only file's original content changed: '$relPath' first $baselineLength byte(s) no longer hash to the baseline's recorded SHA-256 (a prefix edit, not only an append).")
+            }
+        }
+    }
+
+    # Review fix (coordinator finding, fail-open): the checked protected set is the
+    # UNION of every path the baseline itself recorded under `protected` and any
+    # caller-supplied -ProtectedPath, not the caller-supplied list alone -- a
+    # verifier that omits -ProtectedPath at -Check time must still catch every
+    # protected artifact the baseline actually covers, or the check silently no-ops.
+    # Uses `ForEach-Object Name` rather than the `.PSObject.Properties.Name` member-
+    # enumeration shorthand: under this script's `Set-StrictMode -Version Latest`,
+    # that shorthand throws "property 'Name' not found" when the PSCustomObject has
+    # zero NoteProperties (an empty `protected` map, the common case for a baseline
+    # with no caller-named artifacts) instead of returning an empty array.
+    $baselineProtectedNames = @($Baseline.protected.PSObject.Properties | ForEach-Object Name)
+    $protectedRelSet = [ordered]@{}
+    foreach ($baselineRel in $baselineProtectedNames) {
+        $protectedRelSet[$baselineRel] = $true
+    }
+    foreach ($rel in $ProtectedPath) {
+        $normalizedRel = ($rel -replace '\\', '/').Trim('/')
+        $protectedRelSet[$normalizedRel] = $true
+    }
+
+    foreach ($normalizedRel in $protectedRelSet.Keys) {
+        if ($allowedLookup.ContainsKey($normalizedRel.ToLowerInvariant())) { continue }
+        if ($baselineProtectedNames -notcontains $normalizedRel) {
+            $failures.Add("Protected artifact '$normalizedRel' was not recorded in the baseline; re-emit the baseline before checking it.")
+            continue
+        }
+        $baseEntry = $Baseline.protected.$normalizedRel
+        $full = Join-Path $SquadRoot $normalizedRel
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+            if ($baseEntry.exists) {
+                $failures.Add("Protected artifact missing: '$normalizedRel' existed at baseline time and no longer exists.")
+            }
+            continue
+        }
+        $hash = Get-Sha256HexLocal -Bytes ([System.IO.File]::ReadAllBytes($full))
+        if ((-not $baseEntry.exists) -or ($hash -ne $baseEntry.sha256)) {
+            $failures.Add("Protected artifact changed: '$normalizedRel' no longer matches its baseline SHA-256 and is not named in -AllowedWritePath.")
+        }
+    }
+
+    @($failures)
+}
+
+function Get-BaselineBlockCountLocal {
+    <#
+    .SYNOPSIS
+        The blockCount a loaded baseline recorded for one history file, or $0
+        when the baseline exists but has no entry for that file (a file
+        created after the baseline was taken -- every block in it is
+        post-baseline). Returns $null only when $Baseline itself is $null (no
+        -BaselinePath supplied at all), which callers treat as "cannot scope"
+        rather than "zero pre-baseline blocks".
+    #>
+    param($Baseline, [Parameter(Mandatory)][string]$HistoryFileName)
+    if (-not $Baseline) { return $null }
+    $relPath = "history/$HistoryFileName"
+    if (@($Baseline.appendOnly.PSObject.Properties.Name) -contains $relPath) {
+        return [int]$Baseline.appendOnly.$relPath.blockCount
+    }
+    return 0
+}
+
+function Test-LedgerBlockIsLegacyLocal {
+    <#
+    .SYNOPSIS
+        True when a consumption block should be treated as pre-baseline/legacy
+        for both the no-throw pricing fallback (item 4) and the
+        malformed/illegal-model_source WARN-vs-FAIL scoping (item 3): no
+        baseline was supplied at all, or the block's own ordinal position in
+        its file is within the baseline's recorded blockCount for that file.
+    #>
+    param($Baseline, [Parameter(Mandatory)][string]$HistoryFileName, [Parameter(Mandatory)][int]$Ordinal)
+    $baselineCount = Get-BaselineBlockCountLocal -Baseline $Baseline -HistoryFileName $HistoryFileName
+    if ($null -eq $baselineCount) { return $true }
+    return $Ordinal -le $baselineCount
+}
+
+function Invoke-SquadLedgerLookupLocal {
+    <#
+    .SYNOPSIS
+        Key-lookup mode (Amendment 3 §2 item 2): a deterministic, model-free
+        existence check for resume logic. Prints EXISTS/MISSING (or, with
+        -Format json, a structured object) and returns the process exit code
+        the caller should use (0 = exists, 1 = missing).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)][string]$RunId,
+        [Parameter(Mandatory)][string]$Topic,
+        [Parameter(Mandatory)][string]$Stage,
+        [Parameter(Mandatory)][string]$Slot,
+        [ValidateSet('markdown', 'json')][string]$Format = 'markdown'
+    )
+
+    $key = '{0}::{1}::{2}::{3}' -f $RunId, $Topic, $Stage, $Slot
+    $historyDir = Join-Path $SquadRoot 'history'
+    $matchingFiles = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $historyDir -PathType Container) {
+        foreach ($file in (Get-ChildItem -LiteralPath $historyDir -Filter '*.md' -File | Sort-Object Name)) {
+            $raw = Get-Content -LiteralPath $file.FullName -Raw
+            if ($raw -and $raw.Contains($key)) { $matchingFiles.Add($file.Name) }
+        }
+    }
+    $exists = $matchingFiles.Count -gt 0
+
+    if ($Format -eq 'json') {
+        # Write-Host (not a bare pipeline expression): the caller assigns this
+        # function's call to $lookupExitCode to capture the trailing `return`
+        # value below, which would otherwise silently swallow success-stream
+        # output (an object piped to ConvertTo-Json) into that same variable.
+        Write-Host ([ordered]@{ key = $key; exists = $exists; files = @($matchingFiles) } | ConvertTo-Json -Depth 4)
+    }
+    elseif ($exists) {
+        Write-Host "EXISTS: a history entry recorded for key '$key' (found in: $($matchingFiles -join ', '))." -ForegroundColor Green
+    }
+    else {
+        Write-Host "MISSING: no history entry recorded for key '$key'." -ForegroundColor Yellow
+    }
+
+    return [int](-not $exists)
 }
 
 # ---------------------------------------------------------------------------
@@ -736,6 +1299,55 @@ if (-not (Test-Path -LiteralPath $SquadRoot -PathType Container)) {
     throw "Measure-SquadLedger: squad root not found at '$SquadRoot'."
 }
 $SquadRoot = (Resolve-Path -LiteralPath $SquadRoot).Path
+
+# ---------------------------------------------------------------------------
+# Key-lookup mode (Amendment 3 §2 item 2): a self-contained early exit. All
+# four -Lookup* parameters must be supplied together; no other mode's
+# preconditions (consumption-rates.md, etc.) are required or checked.
+# ---------------------------------------------------------------------------
+$lookupParamNames = @('LookupRunId', 'LookupTopic', 'LookupStage', 'LookupSlot')
+$suppliedLookupParamNames = @($lookupParamNames | Where-Object { $PSBoundParameters.ContainsKey($_) })
+if ($suppliedLookupParamNames.Count -gt 0) {
+    if ($suppliedLookupParamNames.Count -ne $lookupParamNames.Count) {
+        $missing = @($lookupParamNames | Where-Object { $_ -notin $suppliedLookupParamNames })
+        throw "Measure-SquadLedger: -LookupRunId, -LookupTopic, -LookupStage, and -LookupSlot must be supplied together for key-lookup mode; missing: $($missing -join ', ')."
+    }
+    $lookupExitCode = Invoke-SquadLedgerLookupLocal -SquadRoot $SquadRoot -RunId $LookupRunId -Topic $LookupTopic -Stage $LookupStage -Slot $LookupSlot -Format $Format
+    exit $lookupExitCode
+}
+
+# ---------------------------------------------------------------------------
+# -EmitBaseline / -BaselinePath / -ProtectedPath preconditions (Amendment 3 §2
+# item 1): a baseline path must resolve entirely outside any
+# `.copilot-tracking/squad` tree, and state.json/consumption.md can never be
+# named as a protected artifact -- both checked before anything else runs.
+# ---------------------------------------------------------------------------
+if ($EmitBaseline -and (Test-PathUnderSquadTrackingLocal -Path $EmitBaseline)) {
+    throw "Measure-SquadLedger: -EmitBaseline path '$EmitBaseline' resolves under a '.copilot-tracking/squad' tree; baselines must live outside the squad root entirely (use a session or temp path)."
+}
+if ($BaselinePath -and (Test-PathUnderSquadTrackingLocal -Path $BaselinePath)) {
+    throw "Measure-SquadLedger: -BaselinePath path '$BaselinePath' resolves under a '.copilot-tracking/squad' tree; baselines must be read from outside the squad root entirely."
+}
+if ($ProtectedPath.Count -gt 0) { Assert-ProtectedPathNotReplaceSemanticsLocal -ProtectedPath $ProtectedPath }
+
+# Loaded once here (regardless of -Check) because item 4's no-throw pricing
+# fallback and item 3's malformed/illegal-model_source WARN-vs-FAIL scoping
+# both need per-block legacy classification during aggregation, which happens
+# whether or not -Check is present. Only -BaselinePath *combined with* -Check
+# additionally runs the full append-only/protected verification below.
+$loadedBaseline = $null
+$baselineFileMissing = $false
+if ($BaselinePath) {
+    if (-not (Test-Path -LiteralPath $BaselinePath -PathType Leaf)) {
+        $baselineFileMissing = $true
+        if (-not $Check) {
+            throw "Measure-SquadLedger: -BaselinePath '$BaselinePath' not found."
+        }
+    }
+    else {
+        $loadedBaseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
+    }
+}
 
 $historyDir = Join-Path $SquadRoot 'history'
 $historyFiles = @(
@@ -755,11 +1367,31 @@ $ratesContent = Get-Content -LiteralPath $ratesPath -Raw
 $rates = Get-RateTableLocal -Content $ratesContent
 $calibrationFactor = Get-CalibrationFactorLocal -Content $ratesContent
 
+# -EmitBaseline (Amendment 3 §2 item 1): computed as soon as history/roster/
+# rates are known, so it reflects this run's on-disk state regardless of
+# whatever -Check/-Format/-BaselinePath processing follows. Full pre-write
+# copies (E3/A-4) go into a sibling `<name>.files/` directory next to the JSON.
+if ($EmitBaseline) {
+    $baselineToEmit = New-SquadLedgerBaselineLocal -SquadRoot $SquadRoot -HistoryFiles $historyFiles -ProtectedPath $ProtectedPath
+    $emitBaselineFullPath = [System.IO.Path]::GetFullPath($EmitBaseline)
+    $emitBaselineDir = Split-Path -Parent $emitBaselineFullPath
+    if ($emitBaselineDir -and -not (Test-Path -LiteralPath $emitBaselineDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $emitBaselineDir -Force | Out-Null
+    }
+    $baselineToEmit | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $emitBaselineFullPath -NoNewline
+    $filesRoot = "$emitBaselineFullPath.files"
+    if (Test-Path -LiteralPath $filesRoot -PathType Container) { Remove-Item -LiteralPath $filesRoot -Recurse -Force }
+    New-Item -ItemType Directory -Path $filesRoot -Force | Out-Null
+    Copy-BaselineSourceFilesLocal -SquadRoot $SquadRoot -HistoryFiles $historyFiles -ProtectedPath $ProtectedPath -DestinationRoot $filesRoot
+    Write-Host "Measure-SquadLedger: baseline emitted to '$emitBaselineFullPath' ($($baselineToEmit.appendOnly.Count) append-only file(s), $($baselineToEmit.protected.Count) protected file(s)); pre-write copies under '$filesRoot'." -ForegroundColor Cyan
+}
+
 $warnings = [System.Collections.Generic.List[string]]::new()
-$parseErrors = [System.Collections.Generic.List[string]]::new()
+$postBaselineBlockIssues = [System.Collections.Generic.List[string]]::new()
 $historyCounts = @{}
 $historyIdentitiesByFile = @{}
 $enumerationLines = [System.Collections.Generic.List[string]]::new()
+
 
 # role label -> aggregate; kept in a list alongside a sort key so unmapped agents
 # and orchestration land in the documented order (roster order, unmapped next,
@@ -782,16 +1414,37 @@ foreach ($file in $historyFiles) {
     $enumerationLines.Add("$($file.Name) — $($blocks.Count) block(s) — identities: $identityLabel")
 
     foreach ($block in $blocks) {
+        $isLegacyBlock = Test-LedgerBlockIsLegacyLocal -Baseline $loadedBaseline -HistoryFileName $file.Name -Ordinal $block.Ordinal
+
+        # U1 baseline-scoped malformed/illegal-model_source rule (Amendment 3 §2
+        # item 3): a block that fails to parse, has the wrong field order/set,
+        # carries a non-numeric numeric-typed field, or whose model_source is
+        # outside the legal set, is excluded from aggregation either way -- the
+        # only question is whether it WARNs (pre-baseline/legacy, or no
+        # baseline supplied at all -- "cannot scope") or becomes a reportable
+        # issue (post-baseline: a -Check FAIL, or -- outside -Check -- the
+        # same terminating throw this script has always used for new bad data).
+        $issue = $null
         if ($block.ParseError) {
-            $parseErrors.Add("$($block.Source): JSON parse error: $($block.ParseError)")
-            continue
+            $issue = "$($block.Source): JSON parse error: $($block.ParseError)"
         }
-        if (-not $block.OrderOk) {
-            $parseErrors.Add("$($block.Source): field order/set does not match the contractual ten fields (got: $($block.Order -join ', '))")
-            continue
+        elseif (-not $block.OrderOk) {
+            $issue = "$($block.Source): field order/set does not match the contractual ten fields (got: $($block.Order -join ', '))"
         }
-        if ($block.NonNumeric.Count -gt 0) {
-            $parseErrors.Add("$($block.Source): non-numeric value in field(s): $($block.NonNumeric -join ', ')")
+        elseif ($block.NonNumeric.Count -gt 0) {
+            $issue = "$($block.Source): non-numeric value in field(s): $($block.NonNumeric -join ', ')"
+        }
+        elseif ([string]$block.Fields['model_source'] -notin $script:LegalModelSources) {
+            $issue = "$($block.Source): consumption block $($block.Ordinal) has illegal model_source '$($block.Fields['model_source'])' (legal values: $($script:LegalModelSources -join ', '))."
+        }
+
+        if ($issue) {
+            if ($isLegacyBlock) {
+                $warnings.Add("WARN: $issue (pre-baseline/legacy block, or no baseline supplied; not scoped for FAIL).")
+            }
+            else {
+                $postBaselineBlockIssues.Add($issue)
+            }
             continue
         }
 
@@ -805,7 +1458,7 @@ foreach ($file in $historyFiles) {
                 $orchestrationAggregate.Agent = 'Coordinator+Scribe'
                 $orchestrationAggregate.Tier = 'mixed'
             }
-            Add-BlockToAggregateLocal -Aggregate $orchestrationAggregate -Block $block -Rates $rates -CalibrationFactor $calibrationFactor -Warnings $warnings
+            Add-BlockToAggregateLocal -Aggregate $orchestrationAggregate -Block $block -Rates $rates -CalibrationFactor $calibrationFactor -Warnings $warnings -TreatUnresolvedRateAsWarning $isLegacyBlock
             continue
         }
 
@@ -836,13 +1489,19 @@ foreach ($file in $historyFiles) {
             }
             $ordered.Add($existing)
         }
-        Add-BlockToAggregateLocal -Aggregate $existing.Aggregate -Block $block -Rates $rates -CalibrationFactor $calibrationFactor -Warnings $warnings
+        Add-BlockToAggregateLocal -Aggregate $existing.Aggregate -Block $block -Rates $rates -CalibrationFactor $calibrationFactor -Warnings $warnings -TreatUnresolvedRateAsWarning $isLegacyBlock
     }
 }
 
-if ($parseErrors.Count -gt 0) {
-    foreach ($e in $parseErrors) { Write-Warning $e }
-    throw "Measure-SquadLedger: $($parseErrors.Count) consumption block(s) failed to parse or validate; see warnings above. Refusing to compute a ledger from unreadable blocks."
+# Post-baseline malformed/illegal-model_source blocks (item 3): outside -Check
+# this keeps the script's original behaviour of terminating on new bad data
+# (a post-baseline block is never legacy, so "keep current behaviour" applies
+# to it unchanged); under -Check the caller wants a full mismatch report
+# instead of an early exit, so these are surfaced as FAILs there (seeded into
+# $mismatches below) rather than thrown.
+if ($postBaselineBlockIssues.Count -gt 0 -and -not $Check) {
+    foreach ($e in $postBaselineBlockIssues) { Write-Warning $e }
+    throw "Measure-SquadLedger: $($postBaselineBlockIssues.Count) post-baseline consumption block(s) failed to parse or validate; see warnings above. Refusing to compute a ledger from unreadable blocks."
 }
 
 $roleAggregates = @($ordered | Sort-Object SortIndex, AgentName | ForEach-Object { $_.Aggregate })
@@ -929,6 +1588,27 @@ if ($Check) {
     $mismatches = [System.Collections.Generic.List[string]]::new()
     $infoLines = [System.Collections.Generic.List[string]]::new()
 
+    # Post-baseline malformed/illegal-model_source blocks (item 3): under -Check
+    # these are reported as FAILs rather than thrown (see the non--Check throw
+    # gate above, right after the per-file loop).
+    foreach ($e in $postBaselineBlockIssues) { $mismatches.Add("Post-baseline block: $e") }
+
+    # -BaselinePath append-only/protected-artifact verification (Amendment 3 §2
+    # item 1), only meaningful paired with -Check: shrink, prefix-hash mismatch,
+    # protected-hash mismatch (unless in the allowed write set), and a missing
+    # baseline file are all FAILs here; state.json/consumption.md rewrites are
+    # explicitly not checked by this helper (they are expected to change and are
+    # covered by C3 and the structural checks below instead).
+    if ($BaselinePath) {
+        if ($baselineFileMissing) {
+            $mismatches.Add("Baseline file '$BaselinePath' not found.")
+        }
+        else {
+            $baselineFailures = @(Test-SquadLedgerBaselineLocal -SquadRoot $SquadRoot -Baseline $loadedBaseline -HistoryFiles $historyFiles -ProtectedPath $ProtectedPath -AllowedWritePath $AllowedWritePath)
+            foreach ($f in $baselineFailures) { $mismatches.Add("Baseline: $f") }
+        }
+    }
+
     if (-not (Test-Path -LiteralPath $consumptionPath -PathType Leaf)) {
         $mismatches.Add("consumption.md not found at '$consumptionPath'.")
     }
@@ -971,7 +1651,9 @@ if ($Check) {
         # so they are intentionally not compared here -- validating them would only
         # re-check team.md against itself, not the block-honesty contract this
         # check exists to enforce.
-        $legalModelSources = @('cli-pinned', 'operator-declared', 'dispatch-reported', 'agent-pinned', 'session-inherited', 'unresolved')
+        # Reuses the same script-scope list item 3's post-baseline model_source
+        # check validates against, so a value legal in history/ is legal here too.
+        $legalModelSources = $script:LegalModelSources
 
         $attributionTable = @(Get-MarkdownTableLocal -Content $consumptionContent | Where-Object { 'Model Source' -in $_.Header -and 'Priced As' -in $_.Header })
         if ($attributionTable.Count -eq 0) {

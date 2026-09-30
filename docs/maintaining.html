@@ -641,6 +641,20 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0    # force an exact ver
         <code>main</code>.
       </p>
 
+      <h2>Known incidents from pipelining testing</h2>
+      <p>
+        During the development and testing of Scribe hand-off pipelining (autopilot mode), five audit-trail integrity incidents were observed and detected. These incidents informed the design of per-write verification barriers and corrective controls. They are recorded here for maintainers working with squad state and Scribe dispatches:
+      </p>
+      <ul>
+        <li><strong>Incident 3 (turn 15):</strong> The run-start Scribe dispatch cut <code>history/Squad Scribe.md</code> from 48 blocks to 8; a bare <code>Measure-SquadLedger.ps1 -Check</code> passed because the ledger had been rewritten to match. The original content was unrecoverable because <code>.copilot-tracking/</code> is git-ignored.</li>
+        <li><strong>Incident 4 (turn 18):</strong> The Scribe hand-wrote <code>consumption.md</code> in an invalid shape with an empty Attribution Agent cell that caused <code>Measure-SquadLedger -Check</code> to throw; the coordinator's pre-write snapshot comparison detected it and the file was rewritten from the helper's output. Separately, a triple heading append in a history file received an append-only correction entry.</li>
+        <li><strong>Incident 5 (turn 21):</strong> Existing bytes in the first 4,937 bytes of <code>history/System Architecture Reviewer.md</code> were modified by the Scribe. <code>Measure-SquadLedger -Check -ExpectedHistoryCounts</code> passed despite the prefix change; only the coordinator's out-of-band SHA-256 prefix check detected it. The original bytes were unrecoverable, and this incident led to the adoption of tool-level content-prefix baseline checks (<code>-EmitBaseline</code> / <code>-BaselinePath</code>).</li>
+        <li><strong>Incident 6 (turn 23):</strong> The Scribe overwrote <code>plans/2026-09-28-scribe-pipelining-plan-amendment-2.md</code> (99,355 bytes to 8,659 bytes) because its payload did not enumerate an explicit allowed-write set. The owning role (Squad Lead) re-authored the plan; the tool now enforces a protected-artifact scope via content-baseline comparison.</li>
+        <li><strong>Incident 7 (turn 25):</strong> The Scribe appended six heading lines per council history file (instead of one), issued void/re-append corrections, embedded entries inside heading lines, and included newline-split values. A human decision adopted pre-rendered Scribe payloads (coordinator authorship, Scribe append-only) for the rest of that run.</li>
+      </ul>
+      <p>
+        Each incident was detected and corrected with append-only history entries or by re-dispatching the owning role. The original bytes for incidents 3 and 5 could not be recovered. The corrective controls are now integrated into the Scribe pipelining verification contract: <code>Measure-SquadLedger.ps1 -Check -ExpectedHistoryCounts -BaselinePath</code> (not bare <code>-Check</code>), content-prefix preservation and checking via baseline snapshots, and role re-dispatch on failed verification.
+      </p>
       <div class="pager">
         <a class="prev" href="ecosystem.html">
           <div class="dir">← Back</div>

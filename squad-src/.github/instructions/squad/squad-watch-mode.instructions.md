@@ -126,6 +126,7 @@ A consumer who wants an unattended run to reach further than a draft pull reques
 * **One active run per source event.** A re-triggered event (a new label, an edited issue, a `synchronize` push) resumes or references the existing run rather than starting a competing one. The event's own sub-squad is the anchor for that check: a re-trigger resolves to the same derived name and reuses that sub-squad's recorded state (see *Reuse, Collisions, and Concurrency*).
 * The run records its source event and run id so a fresh headless invocation can recover the exact pending gate from the event sub-squad's `state.json`, exactly as the poll-loop resume pattern does for approvals.
 * A per-run `cost-ceiling` applies the same initial and rolling Cost Preflight as interactive autopilot. A resumed event run inherits its active ceiling when the trigger omits the argument; a new event run does not inherit another run's ceiling; `cost-ceiling=unset` removes it explicitly. `within-ceiling` permits its named set. `over-ceiling` remains a blocking finding until an authorized stop or proceed response; proceed appends `approved-over-ceiling` and resumes sequential units until the estimated ceiling is reached. `cannot-confirm` requires changed inputs.
+* **Scribe hand-off pipelining stays off.** The Enablement Predicate in `.github/instructions/squad/squad-autopilot.instructions.md` requires `not Watch Mode`; every Watch Mode run dispatches one Scribe hand-off at a time, exactly as autopilot did before pipelining existed.
 
 ## Provenance and State
 
