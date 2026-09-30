@@ -179,25 +179,27 @@ test('multiline quoted content, embedded slash commands and escaped quotes remai
   } finally { dom.window.close(); }
 });
 
-test('usage.html documents roster-catalog.md and model-routing/models= features', () => {
+test('usage.html documents roster-catalog.md and the routing= modes', () => {
   const dom = openPage('usage.html', { scripts: false });
   try {
     const document = dom.window.document;
     const content = document.body.textContent;
     assert.ok(content.includes('roster-catalog.md'), 'usage.html mentions roster-catalog.md reference');
     assert.ok(content.includes('routing='), 'usage.html documents routing= parameter');
-    assert.ok(content.includes('models='), 'usage.html documents models= parameter');
+    assert.ok(content.includes('routing=manual'), 'usage.html documents routing=manual');
+    assert.ok(content.includes('Model routing: manual'), 'usage.html documents the persisted team.md mode line');
     assert.ok(content.includes('Model selection per role'), 'usage.html has Model selection per role section');
   } finally { dom.window.close(); }
 });
 
-test('fr/usage.html documents roster-catalog.md and model-routing/models= features', () => {
+test('fr/usage.html documents the routing= modes', () => {
   const dom = openPage('fr/usage.html', { scripts: false });
   try {
     const document = dom.window.document;
     const content = document.body.textContent;
     assert.ok(content.includes('routing='), 'fr/usage.html documents routing= parameter');
-    assert.ok(content.includes('models='), 'fr/usage.html documents models= parameter');
+    assert.ok(content.includes('routing=manual'), 'fr/usage.html documents routing=manual');
+    assert.ok(content.includes('Model routing: manual'), 'fr/usage.html documents the persisted team.md mode line');
   } finally { dom.window.close(); }
 });
 

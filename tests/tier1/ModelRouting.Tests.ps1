@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 # Static, offline checks for the opt-in routing/model-override contract in
-# model-routing.md (SQ-25 through SQ-30 in squad-behavior-contract.md) and the D9
+# model-routing.md (SQ-25 through SQ-34 in squad-behavior-contract.md) and the D9
 # identity-bullet wiring into the Scribe's history-entry and state.json shapes. Every
 # case here reads a shipped reference file or a static fixture under
 # fixtures/model-routing/ - no live squad run, no network call, and no model dispatch -
@@ -306,12 +306,12 @@ Describe 'model-routing.md phrase-survival for security- and precedence-critical
         }
     }
 
-    It 'keeps the exact models= metacharacter refusal set' {
+    It 'keeps the exact Model-cell metacharacter refusal set' {
         $script:RoutingRaw | Should -Match $([regex]::Escape('shell or prompt metacharacter (` ` `;|&$<>\`''"(){}[]` or a newline)'))
     }
 
-    It 'keeps the "refuses that one pair" refusal phrase' {
-        $script:RoutingRaw | Should -Match $([regex]::Escape('refuses that one pair'))
+    It 'keeps the "refuses that one cell" refusal phrase' {
+        $script:RoutingRaw | Should -Match $([regex]::Escape('refuses that one cell'))
     }
 
     It 'keeps the SQ-28 Watch-mode "data, never a control input" rule' {
@@ -322,14 +322,13 @@ Describe 'model-routing.md phrase-survival for security- and precedence-critical
         $script:RoutingRaw | Should -Match $([regex]::Escape('is **refused and logged**'))
     }
 
-    It 'keeps the five-level Precedence list in order: models= exact role, models= class, ranked, tier/Model Tier, omit' {
+    It 'keeps the four-level Precedence list in order: manual Model cell, ranked, tier/Model Tier, omit' {
         $section = [regex]::Match($script:RoutingRaw, '(?ms)^## Precedence\s*\r?\n.*?\r?\n(?<body>.*?)(?=\r?\n## )').Groups['body'].Value
         $section | Should -Not -BeNullOrEmpty
 
         $order = @(
-            'A `models=` pair naming that exact role id.'
-            'A `models=` pair naming that role''s assignment class.'
-            '`routing=ranked` output for that role, when no override applies.'
+            '`routing=manual`: the role''s valid `Model` cell.'
+            '`routing=ranked`: the ranked id for that role'
             '`tier=` (the existing static-tier input) or the seeded `team.md` Model Tier'
             'Omit the parameter'
         )
@@ -352,5 +351,220 @@ Describe 'model-routing.md phrase-survival for security- and precedence-critical
 
         $seedTemplatesRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
         $seedTemplatesRaw | Should -Match '\|\s*scribe\s*\|.*\|\s*fast\s*\|'
+    }
+}
+
+Describe 'model-catalog.md Assignment Fit table (case j)' {
+    BeforeAll {
+        $catalogRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-catalog.md') -Raw
+        $tables = @(Get-MarkdownTable -Content $catalogRaw)
+        $script:FitRows = @($tables | Where-Object { 'Blended' -in $_.Header } | Select-Object -First 1 | ForEach-Object { $_.Rows })
+        $script:PriceRows = @{}
+        foreach ($table in @($tables | Where-Object { 'Rate-row alias' -in $_.Header })) {
+            foreach ($row in $table.Rows) { $script:PriceRows[$row['Catalog ID']] = $row }
+        }
+        $script:CapabilityIds = @($tables | Where-Object { 'Capability class' -in $_.Header } | ForEach-Object { $_.Rows } | ForEach-Object { $_['Catalog ID'] })
+        $script:SevenClasses = @('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping')
+    }
+
+    It 'finds the fit table' {
+        $script:FitRows.Count | Should -BeGreaterThan 20
+    }
+
+    It 'scores every priced Catalog ID exactly once, and nothing else' {
+        $fitIds = @($script:FitRows | ForEach-Object { $_['Catalog ID'] })
+        ($fitIds | Group-Object | Where-Object Count -gt 1 | ForEach-Object Name) -join ', ' | Should -BeNullOrEmpty
+        (@($script:PriceRows.Keys | Where-Object { $_ -notin $fitIds }) -join ', ') | Should -BeNullOrEmpty
+        (@($fitIds | Where-Object { $_ -notin $script:PriceRows.Keys -or $_ -notin $script:CapabilityIds }) -join ', ') | Should -BeNullOrEmpty
+    }
+
+    It 'holds an integer fit score from 0 to 3 in every class column' {
+        $bad = @(
+            foreach ($row in $script:FitRows) {
+                foreach ($class in $script:SevenClasses) {
+                    if ($row[$class] -notmatch '^[0-3]$') { "$($row['Catalog ID']).$class='$($row[$class])'" }
+                }
+            }
+        )
+        $bad -join ', ' | Should -BeNullOrEmpty
+    }
+
+    It 'derives every Blended rate from the pricing tables with the documented formula' {
+        $number = { param($v) if ($v -match '^\d+(\.\d+)?$') { [double]$v } else { 0.0 } }
+        $wrong = @(
+            foreach ($row in $script:FitRows) {
+                $price = $script:PriceRows[$row['Catalog ID']]
+                $expected = 0.20 * (& $number $price['Input']) + 0.80 * (& $number $price['Cached']) + 0.08 * (& $number $price['Cache write']) + 0.02 * (& $number $price['Output'])
+                if ([math]::Abs($expected - [double]$row['Blended']) -gt 0.0005) { "$($row['Catalog ID']): $($row['Blended']) vs $([math]::Round($expected, 3))" }
+            }
+        )
+        $wrong -join ', ' | Should -BeNullOrEmpty
+    }
+
+    It 'keeps at least one model scoring 3 in every class, so no class ranks on cost alone' {
+        foreach ($class in $script:SevenClasses) {
+            @($script:FitRows | Where-Object { $_[$class] -eq '3' }).Count | Should -BeGreaterThan 0 -Because "$class needs a best-in-class row"
+        }
+    }
+}
+
+Describe 'consumption-rates-template.md Model ID column (case k)' {
+    BeforeAll {
+        $templateRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'consumption-rates-template.md') -Raw
+        $script:RateRows = @(Get-MarkdownTable -Content $templateRaw | Where-Object { 'Model ID' -in $_.Header } | Select-Object -First 1 | ForEach-Object { $_.Rows })
+        $catalogRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-catalog.md') -Raw
+        $script:AliasById = @{}
+        foreach ($table in @(Get-MarkdownTable -Content $catalogRaw | Where-Object { 'Rate-row alias' -in $_.Header })) {
+            foreach ($row in $table.Rows) { $script:AliasById[$row['Catalog ID']] = $row['Rate-row alias'] }
+        }
+    }
+
+    It 'keeps Model (as routed) as the first column so the ledger parsers still key on it' {
+        $header = @(Get-MarkdownTable -Content (Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'consumption-rates-template.md') -Raw) | Where-Object { 'Model ID' -in $_.Header } | Select-Object -First 1).Header
+        $header[0] | Should -Be 'Model (as routed)'
+        $header[1] | Should -Be 'Model ID'
+    }
+
+    It 'names every priced catalog id exactly once' {
+        $ids = @($script:RateRows | ForEach-Object { $_['Model ID'] } | Where-Object { $_ -and $_ -ne '—' })
+        ($ids | Group-Object | Where-Object Count -gt 1 | ForEach-Object Name) -join ', ' | Should -BeNullOrEmpty
+        (@($script:AliasById.Keys | Where-Object { $_ -notin $ids }) -join ', ') | Should -BeNullOrEmpty
+    }
+
+    It 'pairs each Model ID with the display name the catalog aliases it to' {
+        $wrong = @(
+            foreach ($row in $script:RateRows) {
+                $id = $row['Model ID']
+                if (-not $id -or $id -eq '—' -or $row['Model (as routed)'] -eq '(additional)') { continue }
+                if ($script:AliasById[$id] -ne $row['Model (as routed)']) { "$id -> '$($row['Model (as routed)'])'" }
+            }
+        )
+        $wrong -join ', ' | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
+    BeforeAll {
+        $script:Resolver = Join-Path $script:ReferencesRoot '../scripts/Resolve-SquadModelRoute.ps1'
+        $seedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
+        $script:SeedTeam = [regex]::Match($seedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
+        $script:CliEnum = @(
+            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
+            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'
+            'gpt-5.3-codex', 'gpt-5-mini', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'
+            'gemini-3.5-flash', 'grok-4.5', 'claude-sonnet-5.5', 'gpt-6.1-sol', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
+        )
+
+        function Initialize-RosterFixture {
+            param([Parameter(Mandatory)][string]$Content)
+            $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $root | Out-Null
+            Set-Content -LiteralPath (Join-Path $root 'team.md') -Value $Content -Encoding utf8NoBOM
+            $root
+        }
+
+        function Invoke-Resolver {
+            param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{})
+            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-01' }
+            foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
+            & $script:Resolver @parameters | ConvertFrom-Json
+        }
+
+        $script:FullRoot = Initialize-RosterFixture -Content $script:SeedTeam
+        $script:Ranked = Invoke-Resolver -Root $script:FullRoot -Extra @{ AvailableModels = $script:CliEnum; Mode = 'ranked' }
+        $script:PickOf = @{}
+        foreach ($entry in $script:Ranked.roles) { $script:PickOf[$entry.role] = $entry.suggested }
+    }
+
+    It 'reads a roster with no mode line as off' {
+        $script:Ranked.recordedMode | Should -Be 'off'
+    }
+
+    It 'matches every pick the model-routing.md ranked worked example documents' {
+        $routingRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-routing.md') -Raw
+        $example = [regex]::Match($routingRaw, '(?m)^\* \*\*Ranked on the Copilot CLI\*\*:.*$').Value
+        $example | Should -Not -BeNullOrEmpty
+        $pairs = @([regex]::Matches($example, '`(?<role>[a-z-]+)`(?: \([^)]*\))? → `(?<id>[a-z0-9.-]+)`'))
+        $pairs.Count | Should -BeGreaterThan 5
+        foreach ($pair in $pairs) {
+            $script:PickOf[$pair.Groups['role'].Value] | Should -Be $pair.Groups['id'].Value -Because "the worked example names $($pair.Value)"
+        }
+    }
+
+    It 'gives different classes different picks instead of one cheapest or first-alphabetical model' {
+        @($script:Ranked.roles | Where-Object suggested | ForEach-Object suggested | Sort-Object -Unique).Count | Should -BeGreaterOrEqual 5
+        $script:PickOf['intake-validator'] | Should -Not -BeLike 'gemini-*'
+        $script:PickOf['researcher'] | Should -Not -Be $script:PickOf['lead']
+    }
+
+    It 'keeps a fast-floor role off frontier-reasoning rows under ranked selection' {
+        $script:PickOf['tester'] | Should -Be 'gpt-6-sol'
+        $script:PickOf['scribe'] | Should -Be 'claude-haiku-4.5'
+    }
+
+    It 'breaks an equal fit and price tie by generation, never by spelling' {
+        $root = Initialize-RosterFixture -Content (@(
+                '# Squad Roster', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Deliverable Root |'
+                '|------|-------------|----------------------|------------|------------------|'
+                '| scribe | | Squad Scribe | fast | (squad state) |'
+            ) -join "`n")
+        $result = Invoke-Resolver -Root $root -Extra @{ AvailableModels = @('gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash') }
+        $result.roles[0].suggested | Should -Be 'gemini-3.8-flash'
+    }
+
+    It 'never offers or ranks an unevaluated id, but reports it' {
+        $script:Ranked.unevaluated | Should -Contain 'gpt-5.6-sol-fast'
+        @($script:Ranked.roles | ForEach-Object { $_.candidates } | ForEach-Object { $_.id }) | Should -Not -Contain 'gpt-5.6-sol-fast'
+    }
+
+    It 'narrows a VS Code session to models priced at or below the session model' {
+        $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ SessionModel = 'claude-sonnet-5'; Mode = 'ranked'; Role = @('researcher', 'architect') }
+        $result.availability | Should -Match 'unverified'
+        foreach ($entry in $result.roles) { $entry.suggested | Should -Not -BeIn @('claude-opus-5.5', 'gpt-5.5', 'gpt-5.6-sol') }
+    }
+
+    It 'falls back to static tiers on a stale catalog' {
+        $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ AvailableModels = $script:CliEnum; AsOf = [datetime]'2027-06-01'; Role = @('lead') }
+        $result.warnings.Count | Should -BeGreaterThan 0
+        $result.roles[0].suggested | Should -BeNullOrEmpty
+        $result.roles[0].rationale | Should -Be 'stale-catalog fallback'
+    }
+
+    It 'validates manual Model cells: <Cell> is <Status>' -ForEach @(
+        @{ Tier = 'default'; Cell = 'claude-opus-4.8'; Status = 'valid' }
+        @{ Tier = 'default'; Cell = 'claude-haiku-4.5'; Status = 'refused: below the default floor' }
+        @{ Tier = 'default'; Cell = 'gpt-5.6-sol-fast'; Status = 'valid: unevaluated' }
+        @{ Tier = 'default'; Cell = 'not-a-model'; Status = 'refused: unknown id' }
+        @{ Tier = 'default'; Cell = 'gpt-5.5;rm'; Status = 'refused: metacharacter' }
+        @{ Tier = 'default'; Cell = 'claude-fable-5'; Status = 'refused: not available on this host' }
+        @{ Tier = 'fast'; Cell = 'claude-opus-5'; Status = 'valid' }
+    ) {
+        $root = Initialize-RosterFixture -Content (@(
+                '# Squad Roster', '', 'Model routing: manual', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                "| architect | | System Architecture Reviewer | $Tier | $Cell | docs/architecture/ |"
+            ) -join "`n")
+        $result = Invoke-Resolver -Root $root -Extra @{ AvailableModels = $script:CliEnum }
+        $result.recordedMode | Should -Be 'manual'
+        $result.roles[0].cellStatus | Should -Be $Status
+        if ($Status -like 'valid*') { $result.roles[0].resolved | Should -Be $Cell } else { $result.roles[0].resolved | Should -BeNullOrEmpty }
+    }
+}
+
+Describe 'Seeded roster defaults for routing (case m)' {
+    BeforeAll {
+        $script:SeedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
+    }
+
+    It 'seeds intake-validator at the default floor, never fast' {
+        $script:SeedRaw | Should -Match '\|\s*intake-validator\s*\|.*\|\s*default\s*\|'
+    }
+
+    It 'keeps the default (routing=off) roster free of a mode line and a Model column' {
+        $team = [regex]::Match($script:SeedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
+        $team | Should -Not -Match '(?m)^Model routing:'
+        $team | Should -Not -Match '\|\s*Model\s*\|'
     }
 }

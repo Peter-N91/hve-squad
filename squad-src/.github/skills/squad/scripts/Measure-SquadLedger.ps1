@@ -372,6 +372,12 @@ function Get-RateTableLocal {
                 # Per-model table read first, so it stays authoritative over any
                 # tier-fallback duplicate of the same model name.
                 $byModel[$key] = $rate
+                # A routed dispatch records its exact Model ID, so the row answers to
+                # that id too; pricedAsName still prints the row's display name.
+                if ('Model ID' -in $table.Header) {
+                    $modelId = ($row['Model ID'] -replace '`', '').Trim()
+                    if ($modelId -and $modelId -ne '—' -and -not $byModel.ContainsKey($modelId)) { $byModel[$modelId] = $rate }
+                }
                 if ('Tier' -in $table.Header -and $row['Tier'] -and -not $byTier.ContainsKey($row['Tier'])) {
                     $byTier[$row['Tier']] = $rate
                 }

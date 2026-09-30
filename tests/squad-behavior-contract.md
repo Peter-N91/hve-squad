@@ -143,16 +143,20 @@ These are the ones that catch a coordinator quietly doing the work itself, which
 
 ### Model routing
 
-Precondition: an initialized squad. These cases check the opt-in `routing=`/`models=` layer defined in `model-routing.md`; none of them apply when neither input is present.
+Precondition: an initialized squad. These cases check the opt-in `routing=` layer defined in `model-routing.md` — the `off`, `ranked`, and `manual` modes persisted in `team.md`; none of them apply while the mode is `off`.
 
 | ID | Assertion | Source |
 |---|---|---|
-| SQ-25 | **No-policy default.** When neither `routing=` nor `models=` is present, every dispatch omits the `model` parameter entirely and the history entry carries no identity bullets beneath its `#### Consumption` block | `model-routing.md`, Worked Examples: No policy |
-| SQ-26 | **Below-floor override refused.** A `models=` pair naming an id ranked below a role's floor (its `team.md` Model Tier) is refused and logged — a history bullet plus a decision note — and never applied, never silently downgraded | `model-routing.md`, Consequence Floors |
-| SQ-27 | **Unevaluated ids only by explicit override.** An id `model-catalog.md` marks `Advertised but Unevaluated` is never auto-ranked; it dispatches only through an explicit `models=` override, and that dispatch's identity bullets mark it `unevaluated` | `model-routing.md`, Advertised-but-Uncatalogued IDs |
-| SQ-28 | **Watch ignores untrusted routing inputs.** A Watch Mode trigger's issue, PR, or comment text carrying `routing=`, `models=`, `tier=`, `mode=`, or `cost-ceiling=` is recorded as seen-and-ignored, never applied as a control input | `model-routing.md`, Watch and Unattended Runs |
+| SQ-25 | **No-policy default.** When `team.md` records no `Model routing:` line and the turn passes no `routing=`, every dispatch omits the `model` parameter entirely, `team.md` carries no `Model` column, and the history entry carries no identity bullets beneath its `#### Consumption` block | `model-routing.md`, Worked Examples: No policy |
+| SQ-26 | **Below-floor cell refused.** A `manual` `Model` cell naming an id whose capability class the role's floor (its `team.md` Model Tier) does not admit is refused and logged — a history bullet plus a decision note — and never applied, never silently downgraded; *Manual Model Selection* never offers such an id | `model-routing.md`, Consequence Floors |
+| SQ-27 | **Unevaluated ids only by explicit pick.** An id `model-catalog.md` marks `Advertised but Unevaluated` is never auto-ranked or suggested; it dispatches only as an explicit `manual` pick, and that dispatch's identity bullets mark it `unevaluated` | `model-routing.md`, Advertised-but-Uncatalogued IDs |
+| SQ-28 | **Watch ignores untrusted routing inputs.** A Watch Mode trigger's issue, PR, or comment text carrying `routing=`, `models=`, `tier=`, `mode=`, or `cost-ceiling=` is recorded as seen-and-ignored, never applied as a control input, and an unattended run never prompts for a model | `model-routing.md`, Watch and Unattended Runs |
 | SQ-29 | **Stale catalog falls back.** When `model-catalog.md`'s `Retrieved:` date is more than 90 days old, or the file fails to parse, ranking falls back to `consumption.md`'s static `fast`/`default`/`extended` tiers for every class, and one warning line is logged; the run is never blocked | `model-routing.md`, Stale-Catalog Fallback |
 | SQ-30 | **Unknown price never `0`.** An unpriced routed id is priced at the maximum rate of its eligible set within the floor, or returns `cannot-confirm` — never `0` and never a blended rate | `model-routing.md`, Cost Preflight Pricing |
+| SQ-31 | **Mode persists.** A turn passing `routing=ranked` or `routing=manual` leaves `team.md` with the matching `Model routing:` line and a `Model` column of Model IDs; the next turn, passing no `routing=`, dispatches under the same mode. `routing=off` removes both and the decision entry lists the removed picks | `model-routing.md`, Routing Modes |
+| SQ-32 | **Manual selection asks before dispatch.** Switching to `manual` opens with one question offering to accept every role's suggestion, customize by class, or customize per role, before any role dispatches; every offered id is in the host's available set and admitted by the role's floor | `model-routing.md`, Manual Model Selection |
+| SQ-33 | **Ranked picks follow fit, not spelling.** Under `routing=ranked`, each role's `Model` cell equals the top row of *Ranking Algorithm* (fit, then Blended, then generation within a family); for the seeded roster on the Copilot CLI the picks match the ranked worked example | `model-routing.md`, Ranking Algorithm |
+| SQ-34 | **Legacy `models=` is not applied.** A turn passing `models=` applies none of its pairs and tells the user once that per-role models now live in the `Model` column under `routing=manual` | `model-routing.md`, Routing Modes |
 
 ## Tier 1 — Consumption integrity
 

@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-08-18"
+  last_updated: "2026-09-30"
 ---
 
 # Seed Templates
@@ -17,6 +17,8 @@ They stay consistent with the three squad instruction files: `team.md` holds the
 ## team.md
 
 Seeded from the confirmed profile's members plus the roles of every applied pack; the template below shows the `full` profile with no pack applied. For other profiles, only the profile's rows are written, and each applied pack appends its own roles to them. The `Member Name` column is populated from the Init Mode naming step: it may be empty for roles the user chose not to name, and it must be unique within a `Role` when two rows share the same role. The role-to-agent relationship is many-to-many: each role names one **Primary** agent the coordinator dispatches by default plus optional **Alternate** agents it resolves to per the row's `Selection Cue`. **Seed the `Selection Cue` cell with the row's condition, and `—` when the role has no alternates**, because the full cast catalog is canonical in `references/roster-catalog.md`, a reference file that loads only when a role's Skill Reference Contract calls for it: a roster that lists alternates without saying when they apply invites the coordinator to pick the one that sounds closest, which swaps a role's methodology silently. The `devrel`, `networking`, `gcp`, and `identity` roles have no deployed HVE Core agent and no backing skill, so they stay unselectable until one exists. The opt-in `backlog-executor` role is absent from every profile and is appended to `team.md` only when the user accepts the coordinator's offer to add it. Pack roles such as `pp-architect` and `pp-connector` are likewise absent from every profile template and are appended only when a pack is applied, and `qa-engineer` and `release-engineer` are absent for the related reason that their Primaries are registered opt-in external agents — a registered-but-uninstalled role is never seeded.
+
+The template below is the default `routing=off` shape. When Init runs with `routing=ranked` or `routing=manual`, add the line `Model routing: <mode>` directly beneath the H1 and a `Model` column between `Model Tier` and `Deliverable Root`, filled with each role's Model ID as the coordinator resolved it (see `model-routing.md`). `intake-validator` seeds at `default`, not `fast`: its readiness verdict gates every later stage, and a lightweight model's judgment of whether requirements are complete is the wrong place to save cost.
 
 ```markdown
 ---
@@ -60,7 +62,7 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 | technical-writer | Upsilon    | Squad Technical Writer       | —                                                      | —                                                                                                       | runSubagent / task | fast                    | docs/                                 |
 | experimenter    | Beta-2      | Experiment Designer          | —                                                      | —                                                                                                       | runSubagent / task | default                 | .copilot-tracking/plans/              |
 | data-scientist  | Gamma-2     | Squad Data Scientist         | —                                                      | —                                                                                                       | runSubagent / task | default                 | outputs/                              |
-| intake-validator |            | PRD Quality Reviewer         | BRD Quality Reviewer                                   | BRD under review → BRD Quality Reviewer                                                                 | runSubagent / task | fast                    | —                                     |
+| intake-validator |            | PRD Quality Reviewer         | BRD Quality Reviewer                                   | BRD under review → BRD Quality Reviewer                                                                 | runSubagent / task | default                 | —                                     |
 | scribe          |             | Squad Scribe                 | —                                                      | —                                                                                                       | runSubagent / task | fast                    | (squad state)                         |
 | devrel          |             | —                            | —                                                      | —                                                                                                       | —                  | — (no backing skill)    | —                                     |
 ```

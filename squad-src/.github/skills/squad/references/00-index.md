@@ -31,7 +31,7 @@ Read this file first, then read only the reference files your role names in its 
 | [consumption.md](consumption.md)                   | Recording or estimating cost: ledger templates, the estimator, and Cost Preflight |
 | [consumption-rates-template.md](consumption-rates-template.md) | Scribe only, initialization or a Step 7.1 reseed: the cold seed template for `consumption-rates.md` |
 | [model-catalog.md](model-catalog.md)               | Routing a dispatch to a specific model: declared capability, pricing, and host-availability precedence |
-| [model-routing.md](model-routing.md)               | Applying opt-in `routing=`/`models=` policy: allowlist, precedence, floors, ranking, and identity bullets |
+| [model-routing.md](model-routing.md)               | Applying `routing=` (off, ranked, manual): modes, the Model column, fit ranking, floors, and identity bullets |
 | [federation-templates.md](federation-templates.md) | Creating or expanding a federation: registry, meta-routing, root files    |
 
 The Scribe reads `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` on every turn — this hot core replaced a heavier unconditional set so the common case reads less — and reads every other file above, including the three `scribe-cold-*.md` files, only when the turn's payload calls for it per the Cold-File Dispatch Table in `scribe-procedure.md`. The coordinators read `seed-templates.md` and `federation-templates.md` only to verify deliverable roots during Init or a federation change, and fill `scribe-payload-template.md` on every hand-off.

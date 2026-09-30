@@ -393,8 +393,9 @@ $scribeSummary = [ordered]@{
 }
 
 # Coordinator routing-file variants (D5/condition #23): squad-coordinator.agent.md
-# Step 2a reads model-catalog.md/model-routing.md only when routing=ranked or a
-# models= override is present; squad-federation-coordinator.agent.md never reads them
+# Step 2a reads model-catalog.md/model-routing.md only when routing is ranked or
+# manual (the 'routing-ranked-or-models-override' key predates routing=manual and is
+# kept stable for baseline comparison); squad-federation-coordinator.agent.md never reads them
 # itself (it only forwards the params), so this summary is coordinator-only. Both
 # variants are reported explicitly here rather than left implicit in conditionalBytes.
 $coordinatorPlugin = $sessionTypeRows | Where-Object { $_.sessionType -eq 'coordinator' -and $_.hostPath -eq 'plugin-cli' } | Select-Object -First 1

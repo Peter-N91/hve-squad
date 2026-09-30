@@ -99,69 +99,69 @@ for estimation, approval, stopping, and federation behavior. Fresh-squad initial
 admission. Ordinary federation routing applies the ceiling independently to each selected sub-squad;
 only untargeted federation autopilot uses one aggregate federation ceiling.
 
-### Choosing models per role (`routing=` / `models=`)
+### Choosing models per role (`routing=`)
 
-**Default behavior (no `routing=` or `models=`):** When neither input is given, no `model` parameter is passed to any dispatch, so each agent runs on its own frontmatter model or the session model, exactly as before this feature existed.
+**Default behavior (`routing=off`):** No `model` parameter is passed to any dispatch, so each agent runs on its own frontmatter model or the session model, exactly as before this feature existed.
 
-Optionally, you can take direct control of model selection with two inputs:
+`routing=` has three modes. The mode is **saved in `team.md`** and stays in effect on later requests until you change it, so you pass it once:
 
-* **`routing=ranked`** — Opt into capability-ranked model selection. The squad ranks the best-qualified model from the declared model catalog for each role, filters by availability on your host, and applies consequence floors to prevent models below a role's tier. With `routing=off` (or omitted), `models=` overrides only the named keys; every other role omits the parameter.
+| Mode | How each role's model is chosen | What `team.md` shows |
+|------|---------------------------------|----------------------|
+| `off` (default) | Not chosen; the agent's own pin or the session model runs | No `Model` column |
+| `ranked` | The squad picks the model that best fits the role's work, among the models your host offers | `Model routing: ranked` and a `Model` column listing each pick |
+| `manual` | You pick, once, with suggestions pre-filled | `Model routing: manual` and a `Model` column holding your picks |
 
-* **`models=<key>:<id>,<key>:<id>,...`** — Explicit per-role or per-assignment-class overrides. Supported keys:
-  - **Role IDs** from your `team.md`: `researcher`, `lead`, `developer`, `tester`, `challenger`, `architect`, `security`, `cost-manager`, `rai`, `product-owner`, `prompt-engineer`, `intake-validator`, `scribe`, and any other role in the seeded rosters.
-  - **Assignment classes**: `research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`.
+**How ranked picks are made.** Each role maps to an assignment class (`research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`). The model catalog scores every model 0–3 for each class, and the squad picks the highest fit, then the lowest blended cost, then the newest generation of the same model family. It never breaks a tie by a model's name. On the Copilot CLI the seeded roster resolves to, for example, `researcher` → `claude-opus-5.5`, `lead` → `gpt-5.6-sol`, `developer` → `gpt-5.3-codex`, `tester` → `gpt-6-sol`, `architect` → `gpt-5.5`, `intake-validator` → `claude-sonnet-5.5`, and `scribe` → `claude-haiku-4.5`.
 
-  Unknown keys or model IDs are refused and logged rather than guessed. A model below your role's roster tier is also refused—raise the tier in `.copilot-tracking/squad/team.md` if you need it.
+**How manual picks are made.** When you switch to `routing=manual`, whether at squad creation or later, the coordinator asks before dispatching anything:
+
+1. Accept the suggested model for every role (the ranked picks), or
+2. choose one model per assignment class, then
+3. override any individual role.
+
+Every question lists only models **your host can run** and that meet the role's `Model Tier` floor. On the Copilot CLI and the GitHub Copilot app, that is the exact list the `task` tool advertises. VS Code does not advertise a list, so the squad offers catalog models priced at or below your session model; VS Code rejects a subagent model above the session's cost tier. If VS Code rejects a pick, you are asked again with the list VS Code reports. You can also edit a `Model` cell by hand; the squad validates it on every read.
+
+**What a `Model` cell holds.** One exact model id from the `Model ID` column of `consumption-rates.md` (for example `claude-sonnet-5.5`). A cell below the role's floor, an unknown id, or an id containing shell or prompt metacharacters is refused and logged, never guessed. That role then falls back to its `Model Tier`, and the next interactive turn asks again.
 
 **Precedence** (highest wins, per role):
-1. A `models=<role-id>:<model-id>` pair naming that exact role id.
-2. A `models=<class>:<model-id>` pair naming that role's assignment class.
-3. `routing=ranked` output for that role, when no override applies.
-4. `tier=` (the existing static-tier input) or the seeded `team.md` Model Tier — today's fallback, unchanged.
-5. Omit the parameter — the no-policy default.
+1. `routing=manual`: the role's valid `Model` cell.
+2. `routing=ranked`: the ranked pick for that role.
+3. `tier=` or the role's `team.md` Model Tier — today's fallback, unchanged.
+4. Omit the parameter — the no-policy default.
 
-**Re-ranking:** When the host rejects the chosen model id, the routing procedure re-ranks to the next eligible candidate under the same floor and class, and records the substitution (requested, actual, why) in that dispatch's history.
-
-**Unevaluated models:** A model the host advertises but the catalog does not carry is never auto-ranked. It is usable only through an explicit `models=` override and is labelled `unevaluated` in the dispatch record.
+**Unevaluated models:** A model the host offers but the catalog does not carry is never ranked or suggested. You can still type it as a manual pick; it is then labelled `unevaluated` in the dispatch record.
 
 **Examples:**
 
 ```text
 /squad request="..." routing=ranked
 ```
-Enable ranked selection; every role picks its best-qualified model from the catalog and your host.
+Switch to ranked selection; `team.md` gains a `Model` column showing each role's pick.
 
 ```text
-/squad request="..." routing=ranked models=review:claude-opus-5.5
+/squad request="..." routing=manual
 ```
-Enable ranking, but use Claude Opus 5.5 explicitly for `review` class (or specific reviewer roles).
+Switch to manual selection; you are asked for the models before the request runs, and later requests reuse your picks.
 
 ```text
-/squad request="..." models=researcher:gpt-5.5 tier=default
+/squad request="..." routing=off
 ```
-No ranking (`routing=off` by default); only `researcher` uses `gpt-5.5`, every other role falls back to `default` tier.
+Return to the default; the `Model` column is removed, and the decision log keeps your previous picks so switching back to `manual` can offer them again.
 
 ```text
-/squad-federation squad=product routing=ranked models=bookkeeping:gpt-5-mini
+/squad-federation squad=product routing=manual
 ```
-Route to the `product` sub-squad with ranked selection, but use `gpt-5-mini` for bookkeeping roles.
+Switch the `product` sub-squad to manual selection; each sub-squad keeps its own picks.
 
-**Rejection example:**
+The former `models=<key>:<id>,...` input is retired. If you pass it, it is not applied, and the coordinator points you to `routing=manual`.
 
-```text
-/squad request="..." models=architect:claude-haiku-4.5
-```
-If `architect` has a `default` tier floor and `claude-haiku-4.5` is classified as `fast-lightweight`, this is refused (logged as "below-floor") and the architect falls back to the precedence chain instead.
+**Full catalog:** See `squad-src/.github/skills/squad/references/model-catalog.md`. It is a dated snapshot (retrieved 2026-09-30) with capability classes, per-class fit scores, pricing, and host-availability notes. After 90 days the catalog counts as stale, and ranking falls back to static tier pricing.
 
-**How to see available models:**
-
-- **Copilot CLI:** Run `/model` to see the model ids the `task` tool advertises — the same list that `routing=ranked` uses.
-- **VS Code:** Use the model picker when you see a model selector in the UI. A rejected model id is automatically re-ranked.
-- **Full catalog:** See `squad-src/.github/skills/squad/references/model-catalog.md` in the repository. It is a dated snapshot (retrieved 2026-09-27) with capability classifications, pricing rates, and host-availability notes. The catalog has a 90-day staleness threshold; older catalogs fall back to static tier pricing.
+**Deterministic helper:** `.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1 -SquadRoot .copilot-tracking/squad` (PowerShell 7+, read-only) prints each role's class, floor, ranked pick, and `Model` cell status. On the CLI, pass `-AvailableModels` with your host's model ids; on VS Code, pass `-SessionModel`.
 
 **History and identity bullets:**
 
-The squad records which model routing requested, which model actually ran (if the host substituted one), and which model the host reported. These details appear in `.copilot-tracking/squad/history/` (single squad) or `.copilot-tracking/squad/members/<name>/history/` (federation) only when a `routing=` or `models=` policy applied. See the identity bullets in those history files for: Requested model, Effective model, Observed model, and Route rationale.
+The squad records which model routing requested, which model actually ran (if the host substituted one), and which model the host reported. These details appear in `.copilot-tracking/squad/history/` (single squad) or `.copilot-tracking/squad/members/<name>/history/` (federation) only while routing is `ranked` or `manual`. See the identity bullets in those history files for: Requested model, Effective model, Observed model, and Route rationale.
 
 **Important notes:**
 

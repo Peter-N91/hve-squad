@@ -31,7 +31,7 @@ description: "Append-only dispatch history for a single squad agent"
 ## 2026-09-27T09:05:03Z Second no-policy dispatch in the same file
 
 * Turn: 2
-* Request: A second dispatch, still with no routing policy or `models=` override in effect.
+* Request: A second dispatch, still with `routing` off.
 * Deliverable: `.copilot-tracking/squad/members/routing-performance/research/2026-09-27-routing-identity-followup.md`
 * Outcome: Wrote a follow-up note.
 

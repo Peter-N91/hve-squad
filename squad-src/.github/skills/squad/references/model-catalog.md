@@ -1,19 +1,19 @@
 ---
 name: squad-model-catalog
-description: "Declared, dated snapshot of the GitHub Copilot model offering: capability class, context/reasoning documentation status, pricing including long-context tiers, rate-row alias, and host-availability precedence."
+description: "Declared, dated snapshot of the GitHub Copilot model offering: capability class, per-assignment-class fit scores, context/reasoning documentation status, pricing including long-context tiers, rate-row alias, and host-availability precedence."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-09-30"
 ---
 
 # Squad Model Catalog
 
 **This catalog is declared, not live-discovered.** No chat or interactive Copilot host exposes a callable model-list API to the agent at dispatch time (research finding F7); the CLI's dispatch tool advertises an enum, which this catalog intersects. Every row below was retrieved by fetching GitHub's own documentation pages on the date stamped below, not by querying a runtime discovery endpoint. A routing procedure that reads this file is reading a curated, dated snapshot — never an assertion that the catalog was assembled live for the current session.
 
-* **Retrieved: 2026-09-27**
-* Sources (fetched directly for this snapshot; all three retrieved 2026-09-27):
+* **Retrieved: 2026-09-30**
+* Sources (fetched directly for this snapshot; all three retrieved 2026-09-30):
   * Supported AI models in GitHub Copilot — <https://docs.github.com/en/copilot/reference/ai-models/supported-models>
   * Models and pricing for GitHub Copilot — <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
   * AI model comparison — <https://docs.github.com/en/copilot/reference/ai-models/model-comparison>
@@ -32,7 +32,7 @@ This file is CODEOWNERS-level content: a change to it is reviewed the same way a
 
 The retrieval date above is this catalog's only freshness signal — there is no live "last confirmed" heartbeat. **A catalog older than 90 days from its `Retrieved:` date, or a catalog that fails to parse, is stale**: the routing procedure that would otherwise rank against it must fall back to `consumption.md`'s static `fast`/`default`/`extended` tiers and log a warning, rather than blocking the run or guessing at a value this file no longer confirms. Re-verification is a normal Follow-Up trigger for whichever role next touches routing, not an ongoing maintenance obligation of this delivery.
 
-`consumption-rates.md`'s `Observed-on:` date **must equal** this file's `Retrieved:` date exactly, not merely "close" — both are `2026-09-27` as of this snapshot. A future re-verification that updates one must update the other in the same change.
+`consumption-rates.md`'s `Observed-on:` date **must equal** this file's `Retrieved:` date exactly, not merely "close" — both are `2026-09-30` as of this snapshot. A future re-verification that updates one must update the other in the same change.
 
 ## How This Catalog Is Consumed
 
@@ -42,9 +42,11 @@ A model is **eligible** for automatic ranking only when it is in the intersectio
 2. **Host config/picker** — when no enum is advertised (for example, VS Code's `runSubagent`), the effective host-available set is whatever the operator's picker/config allows; the routing procedure re-ranks reactively on rejection.
 3. **Declared catalog** — this file, used as the ranking universe once the eligible set from (1) or (2) is known, or as the static fallback when the catalog itself is stale or unparsable (see Staleness above).
 
+Ranked selection reads the *Catalog: Assignment Fit* table below, never the capability class alone: the capability class decides only which Model Tier floors a model can serve, while the per-class fit score decides which model suits the work.
+
 Two labels describe a mismatch between what the host advertises and what this catalog declares, and neither is ever silently dropped:
 
-* **`unevaluated`** — advertised by the host but not present in this catalog. Excluded from automatic ranking; reachable only via an explicit `models=` override, never ranked as if this catalog had evaluated it.
+* **`unevaluated`** — advertised by the host but not present in this catalog. Excluded from automatic ranking; reachable only as an explicit `routing=manual` pick, never ranked as if this catalog had evaluated it.
 * **declared but unavailable** — present in this catalog but not advertised by the host. Never passed to a dispatch call regardless of how well it ranks, because the host has not offered it.
 
 ## Capability Class Legend
@@ -78,6 +80,7 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 | `gpt-6-astra` | advertised | GPT-6 Astra | GA | frontier-reasoning | undocumented | undocumented | research, planning, review, council | "Long-horizon, autonomous coding and agentic tasks... continuous planning, batched diagnosis and verification, and independent result confirmation" |
 | `gpt-6-luna` | advertised | GPT-6 Luna | GA | fast-lightweight | undocumented | undocumented | intake, bookkeeping | "Fast help with simple or repetitive tasks"; card "Coming soon" |
 | `gpt-6-sol` | advertised | GPT-6 Sol | GA | balanced | undocumented | undocumented | planning, implementation, review | "Interactive and agentic coding... all-round development tasks that benefit from careful, multistep validation"; card "Coming soon" |
+| `gpt-6.1-sol` | advertised | GPT-6.1 Sol | GA | frontier-reasoning | undocumented | undocumented | implementation, review, planning | "Complex coding tasks... advanced, efficient reasoning for complex coding tasks"; "Powerful" category on the pricing page; card "Coming soon" |
 
 ### Anthropic
 
@@ -87,6 +90,7 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 | `claude-sonnet-4` | constructed | Claude Sonnet 4 | **priced, not in current supported list** — see Contradictions below | balanced | undocumented | undocumented | planning, implementation | Not in the "Supported AI models" table at retrieval; carried here only because the pricing table still names it |
 | `claude-sonnet-4.6` | constructed | Claude Sonnet 4.6 | GA (documented, not advertised) | balanced | undocumented | undocumented | planning, implementation, review | "General-purpose coding and agent tasks... reliable completions and smarter reasoning under pressure" |
 | `claude-sonnet-5` | advertised | Claude Sonnet 5 | GA | balanced | undocumented | undocumented | planning, implementation, review | "General-purpose coding and agent tasks... complex problem-solving challenges, sophisticated reasoning" |
+| `claude-sonnet-5.5` | advertised | Claude Sonnet 5.5 | GA | balanced | undocumented | undocumented | implementation, intake, review | "Versatile" category on the pricing page; no comparison-guide entry at retrieval, so its task fit is inferred from Claude Sonnet 5 — see Contradictions below |
 | `claude-opus-4.7` | advertised | Claude Opus 4.7 | GA | frontier-reasoning | undocumented | undocumented | research, planning, review, council | "Deep reasoning and debugging... Anthropic's most powerful model. Strong at deep reasoning over large, complex codebases" |
 | `claude-opus-4.8` | advertised | Claude Opus 4.8 | GA | frontier-reasoning | undocumented | undocumented | research, planning, review, council | "Deep reasoning and debugging... complex problem-solving challenges, sophisticated reasoning" |
 | `claude-opus-4.8-fast` | constructed | Claude Opus 4.8 (fast mode) (preview) | preview (documented, not advertised) | frontier-reasoning | undocumented | undocumented | research, planning, review, council | Same task fit as Opus 4.8; priced materially higher (see pricing table) — a latency/cost trade, not a capability difference the sources describe |
@@ -127,7 +131,7 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 
 ## Catalog: Pricing (USD per 1M tokens)
 
-Every price below is transcribed verbatim from the "Models and pricing" page retrieved 2026-09-27; **`unpriced` never means `0`**. The `Rate-row alias` column names the exact `consumption-rates.md` "Model (as routed)" row this ID prices as — every ID above resolves to exactly one alias here, or is explicitly `unpriced`. `LC threshold` follows the source page's own wording: OpenAI and xAI publish an explicit input-token threshold with a second, higher rate above it (a genuine tiered price); Anthropic and Google publish **no threshold column at all** for any model in this snapshot — that absence is recorded as `none (flat rate)`, a positive confirmation that the tier does not exist today, never a blank cell.
+Every price below is transcribed verbatim from the "Models and pricing" page retrieved 2026-09-30; **`unpriced` never means `0`**. The `Rate-row alias` column names the exact `consumption-rates.md` "Model (as routed)" row this ID prices as — every ID above resolves to exactly one alias here, or is explicitly `unpriced`. `LC threshold` follows the source page's own wording: OpenAI and xAI publish an explicit input-token threshold with a second, higher rate above it (a genuine tiered price); Anthropic and Google publish **no threshold column at all** for any model in this snapshot — that absence is recorded as `none (flat rate)`, a positive confirmation that the tier does not exist today, never a blank cell.
 
 ### OpenAI (has a documented long-context tier)
 
@@ -145,6 +149,7 @@ Every price below is transcribed verbatim from the "Models and pricing" page ret
 | `gpt-6-astra` | GPT-6 Astra | ≤272K / >272K | 10.00 | 1.00 | 12.50 | 50.00 | 20.00 | 2.00 | 25.00 | 75.00 |
 | `gpt-6-luna` | GPT-6 Luna | ≤272K / >272K | 0.10 | 0.01 | 0.125 | 0.50 | 0.20 | 0.02 | 0.25 | 0.75 |
 | `gpt-6-sol` | GPT-6 Sol | ≤272K / >272K | 2.00 | 0.20 | 2.50 | 10.00 | 4.00 | 0.40 | 5.00 | 15.00 |
+| `gpt-6.1-sol` | GPT-6.1 Sol | ≤272K / >272K | 2.00 | 0.10 | 2.50 | 10.00 | 4.00 | 0.20 | 5.00 | 15.00 |
 
 ### Anthropic (no long-context tier documented — flat rate)
 
@@ -154,6 +159,7 @@ Every price below is transcribed verbatim from the "Models and pricing" page ret
 | `claude-sonnet-4` | Claude Sonnet 4 | none (flat rate) | 3.00 | 0.30 | 3.75 | 15.00 |
 | `claude-sonnet-4.6` | Claude Sonnet 4.6 | none (flat rate) | 3.00 | 0.30 | 3.75 | 15.00 |
 | `claude-sonnet-5` | Claude Sonnet 5 | none (flat rate) | 2.00 | 0.20 | 2.50 | 10.00 |
+| `claude-sonnet-5.5` | Claude Sonnet 5.5 | none (flat rate) | 2.00 | 0.20 | 2.50 | 10.00 |
 | `claude-opus-4.7` | Claude Opus 4.7 | none (flat rate) | 5.00 | 0.50 | 6.25 | 25.00 |
 | `claude-opus-4.8` | Claude Opus 4.8 | none (flat rate) | 5.00 | 0.50 | 6.25 | 25.00 |
 | `claude-opus-4.8-fast` | Claude Opus 4.8 (fast mode) | none (flat rate) | 10.00 | 1.00 | 12.50 | 50.00 |
@@ -189,9 +195,59 @@ Gemini 3.6/3.7/3.8 Flash are priced at a promotional rate ($0.75 / $0.075 / – 
 | `kimi-k2.7-code` | Kimi K2.7 Code | none (flat rate) | 0.95 | 0.19 | 0 | 4.00 |
 | `kimi-k3` | Kimi K3 | none (flat rate) | 3.00 | 0.30 | 0 | 15.00 |
 
+## Catalog: Assignment Fit
+
+This table is what ranked routing reads. Each row scores how well a model suits each of the seven assignment classes, so ranking matches a model to the work rather than to its price or its name:
+
+* `3` — best in class: the source pages name this model for exactly this kind of work.
+* `2` — capable: a sound choice for the class, but not what the sources lead with.
+* `1` — usable: acceptable for the class, but weaker at it than its cost suggests.
+* `0` — unsuitable: never ranked for the class.
+
+The scores are this catalog's editorial curation over the sources' task-area and "excels at" text, like the capability class, and are revisited on every re-verification. `3` is kept scarce on purpose: when several models score `3` the cheapest wins, so a generous `3` would hand every class to one low-cost model. `research` needs sustained reading and synthesis over large codebases; `planning` needs multi-step reasoning; `implementation` needs agentic coding; `review` needs careful verification; `council` needs cross-domain judgment; `intake` needs a reliable judgment on whether requirements are complete and testable, which is why the lightweight rows score `1` there; `bookkeeping` needs exact, schema-bound writes at the lowest cost.
+
+`Family` and `Generation` resolve a tie between two generations of the same line (`claude-sonnet` `5.5` ranks ahead of `5` at equal fit and price). `Blended` is USD per 1M tokens of a representative agentic dispatch, derived from the pricing tables above as `0.20 × Input + 0.80 × Cached + 0.08 × Cache write + 0.02 × Output` (`n/a` counts as `0`); `model-routing.md` defines how it is used. Rows are grouped by family, newest generation first; that order is the final tie-break. Unevaluated and degraded-confidence ids carry no row, so they are never ranked.
+
+| Catalog ID | Family | Generation | research | planning | implementation | review | council | intake | bookkeeping | Blended |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `gpt-5.6-sol` | gpt-sol | 5.6 | 3 | 3 | 2 | 3 | 2 | 2 | 0 | 1.920 |
+| `gpt-6.1-sol` | gpt-sol | 6.1 | 2 | 2 | 3 | 2 | 2 | 2 | 0 | 0.880 |
+| `gpt-6-sol` | gpt-sol | 6 | 1 | 2 | 3 | 3 | 2 | 2 | 0 | 0.960 |
+| `gpt-6-astra` | gpt-astra | 6 | 3 | 3 | 2 | 2 | 3 | 1 | 0 | 4.800 |
+| `gpt-5.5` | gpt | 5.5 | 2 | 3 | 1 | 3 | 3 | 2 | 0 | 2.000 |
+| `gpt-5.4` | gpt | 5.4 | 2 | 2 | 2 | 2 | 2 | 2 | 0 | 1.000 |
+| `gpt-5.6-terra` | gpt-terra | 5.6 | 1 | 2 | 2 | 2 | 1 | 3 | 0 | 1.000 |
+| `gpt-5.3-codex` | gpt-codex | 5.3 | 1 | 1 | 3 | 2 | 0 | 1 | 0 | 0.770 |
+| `gpt-5.4-mini` | gpt-mini | 5.4 | 1 | 0 | 2 | 1 | 0 | 1 | 2 | 0.300 |
+| `gpt-5-mini` | gpt-mini | 5 | 1 | 0 | 1 | 1 | 0 | 1 | 2 | 0.110 |
+| `gpt-5.4-nano` | gpt-nano | 5.4 | 0 | 0 | 0 | 0 | 0 | 1 | 2 | 0.081 |
+| `gpt-6-luna` | gpt-luna | 6 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.048 |
+| `gpt-5.6-luna` | gpt-luna | 5.6 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.100 |
+| `claude-opus-5.5` | claude-opus | 5.5 | 3 | 2 | 2 | 2 | 2 | 1 | 0 | 1.760 |
+| `claude-opus-5` | claude-opus | 5 | 3 | 3 | 2 | 3 | 3 | 2 | 0 | 2.400 |
+| `claude-opus-4.8` | claude-opus | 4.8 | 2 | 3 | 2 | 3 | 3 | 2 | 0 | 2.400 |
+| `claude-opus-4.7` | claude-opus | 4.7 | 2 | 2 | 2 | 2 | 2 | 2 | 0 | 2.400 |
+| `claude-opus-4.8-fast` | claude-opus-fast | 4.8 | 2 | 2 | 2 | 2 | 2 | 1 | 0 | 4.800 |
+| `claude-fable-5.1` | claude-fable | 5.1 | 3 | 2 | 3 | 2 | 2 | 1 | 0 | 4.200 |
+| `claude-fable-5` | claude-fable | 5 | 3 | 3 | 2 | 2 | 2 | 1 | 0 | 4.800 |
+| `claude-sonnet-5.5` | claude-sonnet | 5.5 | 2 | 2 | 3 | 2 | 2 | 3 | 0 | 0.960 |
+| `claude-sonnet-5` | claude-sonnet | 5 | 2 | 2 | 2 | 2 | 2 | 3 | 0 | 0.960 |
+| `claude-sonnet-4.6` | claude-sonnet | 4.6 | 1 | 2 | 2 | 2 | 1 | 2 | 0 | 1.440 |
+| `claude-sonnet-4` | claude-sonnet | 4 | 1 | 1 | 1 | 1 | 1 | 1 | 0 | 1.440 |
+| `claude-haiku-4.5` | claude-haiku | 4.5 | 1 | 0 | 1 | 1 | 0 | 2 | 3 | 0.480 |
+| `gemini-3.8-flash` | gemini-flash | 3.8 | 1 | 1 | 1 | 1 | 0 | 1 | 2 | 0.285 |
+| `gemini-3.7-flash` | gemini-flash | 3.7 | 1 | 1 | 1 | 1 | 0 | 1 | 2 | 0.285 |
+| `gemini-3.6-flash` | gemini-flash | 3.6 | 1 | 1 | 1 | 1 | 0 | 1 | 2 | 0.285 |
+| `gemini-3.5-flash` | gemini-flash | 3.5 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.600 |
+| `grok-4.7` | grok | 4.7 | 1 | 2 | 2 | 2 | 1 | 2 | 0 | 0.920 |
+| `grok-4.6` | grok | 4.6 | 1 | 1 | 2 | 1 | 1 | 1 | 0 | 0.920 |
+| `grok-4.5` | grok | 4.5 | 1 | 1 | 2 | 1 | 1 | 1 | 0 | 0.920 |
+| `kimi-k3` | kimi | 3 | 1 | 1 | 2 | 1 | 0 | 1 | 0 | 1.140 |
+| `kimi-k2.7-code` | kimi-code | 2.7 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0.422 |
+| `mai-code-1.1-flash` | mai-code-flash | 1.1 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.080 |
 ## Advertised but Unevaluated
 
-This host's `task` dispatch tool advertises `model` values that this snapshot's three sources do not document at all. Each is `unevaluated`: excluded from automatic ranking, priced `unpriced` (never `0`), and reachable only via an explicit `models=` override.
+This host's `task` dispatch tool advertises `model` values that this snapshot's three sources do not document at all. Each is `unevaluated`: excluded from automatic ranking, priced `unpriced` (never `0`), and reachable only as an explicit `routing=manual` pick.
 
 | Advertised ID | Why unevaluated | Price |
 | --- | --- | --- |
@@ -223,6 +279,8 @@ These models are named by at least one of the three sources but are not in this 
 * **Claude Sonnet 4 is priced but not currently supported.** The "Models and pricing" page's Anthropic table carries a Claude Sonnet 4 row ($3.00 / $0.30 / $3.75 / $15.00), but the "Supported AI models" table does not list Claude Sonnet 4 among the current Anthropic offering (it lists Claude Sonnet 4.6 and Claude Sonnet 5 instead). This catalog records both facts rather than silently dropping the model or inferring a status the sources do not state; treat this row cautiously pending the cost-manager review (D4).
 * **`Gemini 3.1 Pro` in the existing `consumption-rates.md` template does not appear in any of the three sources fetched for this snapshot.** Google's current pricing table lists only Flash-tier models (3.5/3.6/3.7/3.8). This catalog does not add a `gemini-3.1-pro` row and does not reprice the existing template row (no current official source to reprice it against); the existing row is flagged for cost-manager attention in this delivery's change record rather than deleted or guessed at.
 * **Qwen2.5** is named only in "AI model comparison," not in "Supported AI models" or "Models and pricing" — see the degraded-confidence section above.
+* **Claude Sonnet 5.5 has no comparison-guide entry.** It is GA in "Supported AI models" and priced ("Versatile") in "Models and pricing," but "AI model comparison" does not describe it at retrieval. Its fit scores below reuse Claude Sonnet 5's task text, one generation newer — an inference, labeled as such, to revisit when the guide adds it.
+* **GitHub's own category is coarser than a role's need.** The pricing page files Gemini 3.6/3.7/3.8 Flash as "Versatile" beside Claude Sonnet 5, yet the comparison guide describes all four Gemini Flash models as "fast help with simple or repetitive tasks". The capability class keeps the sourced category; the fit table is where that difference is recorded, which is why ranking never uses the class alone.
 
 ## Squad Assignment Classes Referenced Above
 
