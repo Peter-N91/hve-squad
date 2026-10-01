@@ -67,3 +67,5 @@ tests/tier2/tier2-score.json
 results.sarif
 
 tests/docs/node_modules/
+node_modules/
+_site/

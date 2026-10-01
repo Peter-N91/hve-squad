@@ -1,46 +1,295 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Squad produit | hve-squad</title><meta name="description" content="Du besoin métier aux exigences, au backlog, à l'expérimentation et à la synthèse de direction avec hve-squad." />
-  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../demo-3.html" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Démo 3 — hve-squad</title>
+  <meta name="description" content="Une démo de squad produit non technique : découverte, exigences (BRD), feuille de route et backlog, expérimentation de validation peu coûteuse, revue de préparation et présentation de direction — avec une exécution autopilot en une seule demande." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../demo-3.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html" class="active">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../demo-3.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Démonstration 03</div><h1>Squad produit</h1><p class="lead">Transformer un problème métier en livrables examinables : découverte, exigences, feuille de route, expérience minimale et synthèse de direction.</p></div></header>
-  <main class="content"><div class="container">
-    <p><a href="demo.html">Toutes les démonstrations</a> · <a href="demo-1.html">Azure</a> · <a href="demo-2.html">Migration</a> · <a href="demo-4.html">.NET</a></p>
-    <h2>Avant de commencer</h2>
-    <p>Installez hve-squad et vérifiez les rôles du profil <code>product</code> : découverte, analyse, produit, expérimentation, présentation et rédaction. Le coordinateur doit pouvoir déléguer avec <code>runSubagent</code> ou <code>task</code>. Dans une distribution plugin, contrôlez les agents manquants avant la session.</p>
-    <p>Ce parcours produit des documents, sans création de ressources cloud ni publication dans un backlog externe. L'utilisation des modèles Copilot peut néanmoins consommer votre quota ou générer un coût selon votre offre.</p>
-    <p>Remplacez <code>{{CLIENT_PROCESS}}</code> par le processus choisi avec les participants : accueil des nouveaux arrivants, demandes de support, achats ou validation des dépenses.</p>
-    <h2>0. Initialiser</h2>
-    <pre><code>/squad init profile=product</code></pre>
-    <p>Confirmez l'équipe et le canal d'approbation. <code>in-chat</code> suffit pour une session locale ; <code>github-issue</code> nécessite la configuration décrite dans <a href="usage.html">Utilisation</a>.</p>
-    <h2>1. Comprendre le problème</h2>
-    <pre><code>/squad request="Explore le problème de {{CLIENT_PROCESS}}. Identifie les personnes concernées, leur parcours actuel et leurs difficultés. Prépare des personas et une carte du parcours en distinguant les faits des hypothèses."</code></pre>
-    <p>Les participants apportent leur contexte. Les agents ne doivent pas inventer des entretiens ni transformer une hypothèse en observation.</p>
-    <h2>2. Formaliser les exigences</h2>
-    <pre><code>/squad request="Transforme la découverte en BRD pour {{CLIENT_PROCESS}} : objectifs, périmètre, parties prenantes, exigences métier et mesures de succès."</code></pre>
-    <p>L'analyse produit un document que les responsables peuvent examiner. La recherche et le plan précèdent la rédaction, puis une revue vérifie le livrable.</p>
-    <h2>3. Préparer la feuille de route et le backlog</h2>
-    <pre><code>/squad request="Organise les exigences en feuille de route progressive et en backlog orienté résultats, avec critères d'acceptation. Produis un livrable local ; ne publie rien dans un outil de suivi."</code></pre>
-    <p>Un backlog préparé n'est pas un backlog publié. L'écriture dans Azure DevOps ou Jira constitue une action distincte avec aperçu et approbation.</p>
-    <h2>4. Tester l'incertitude principale</h2>
-    <pre><code>/squad request="Conçois une Minimum Viable Experiment pour tester l'hypothèse la plus risquée de {{CLIENT_PROCESS}} avant de construire. Précise la mesure, le seuil de décision et les preuves à recueillir."</code></pre>
-    <div class="callout warn"><p><strong>Une MVE n'est pas un MVP.</strong> Elle teste une incertitude. Un protocole non exécuté ne fournit aucun résultat ; ne le présentez pas comme une validation du produit.</p></div>
-    <h2>5. Examiner la préparation</h2>
-    <pre><code>/squad request="Évalue la préparation du plan et du backlog avant engagement. Donne un verdict go, conditions ou stop, avec les lacunes, risques et preuves manquantes."</code></pre>
-    <p>Si l'initiative exige sécurité, coûts ou architecture, le coordinateur propose les rôles manquants ou un profil plus large. Il ne doit pas simuler l'avis d'un spécialiste absent.</p>
-    <h2>6. Préparer la synthèse de direction</h2>
-    <pre><code>/squad request="Prépare une présentation de synthèse pour une direction non technique : problème, parcours, exigences, feuille de route, expérience prévue et décisions attendues. Appuie chaque affirmation sur les livrables disponibles."</code></pre>
-    <p>Fournissez le modèle de marque si nécessaire. Vérifiez le contenu et le rendu, puis demandez une revue par rapport aux documents sources.</p>
-    <h2>Variante autopilot</h2>
-    <p>Après initialisation et confirmation :</p>
-    <pre><code>/squad profile=product mode=autopilot request="Nous voulons améliorer {{CLIENT_PROCESS}}. Comprends les acteurs et les difficultés, formalise les exigences, prépare une feuille de route et un backlog local, conçois une expérience pour tester l'hypothèse principale, vérifie la préparation et produis une synthèse pour la direction. Distingue faits, hypothèses et tests non exécutés. Garde-moi décisionnaire pour les validations et ne publie rien sans accord."</code></pre>
-    <p>Le coordinateur organise les spécialistes et conserve les validations obligatoires. Sans canal distant, approuvez dans la conversation. Si l'outillage bloque, montrez le blocage ou un enregistrement clairement identifié plutôt que de prétendre à une exécution live.</p>
-    <div class="pager"><a class="prev" href="demo-2.html"><div class="dir">Retour</div><div class="ttl">Migration autopilot</div></a><a class="next" href="demo-4.html"><div class="dir">Suite</div><div class="ttl">Modernisation .NET</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html" class="active">Démonstrations</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../demo-3.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Demo selector — pinned at the top; the walkthrough below follows the demo you choose. -->
+  <div class="demo-bar">
+    <div class="container">
+      <div class="demo-switch">
+        <div class="label">Choisir une démo</div>
+        <!--
+          Multi-demo selector. To add a demo: give it the next "Demo N" number,
+          turn its chevron into a link (<a class="chev" href="demo-N.html">),
+          mark the current page's chevron .active, and drop the .soon class once
+          the demo page exists.
+        -->
+        <ul class="demo-chevrons">
+          <li><a class="chev" href="demo-1.html"><span class="step">Démo 1</span><span class="name">Squad Azure</span></a></li>
+          <li><a class="chev" href="demo-2.html"><span class="step">Démo 2</span><span class="name">Migration en autopilot</span></a></li>
+          <li><span class="chev active"><span class="step">Démo 3</span><span class="name">Squad produit</span></span></li>
+          <li><a class="chev" href="demo-4.html"><span class="step">Démo 4</span><span class="name">Moderniser .NET</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Parcours guidé</div>
+      <h1>Démo Squad produit</h1>
+      <p class="lead">
+        Un scénario exécutable pour le profil <code>product</code> qui mène une idée métier de la
+        découverte à un document d'exigences, à une feuille de route et un backlog, à une expérimentation
+        de validation peu coûteuse, à une revue de préparation et à une présentation prête pour le
+        conseil d'administration — chaque étape depuis le point d'entrée unique <code>/squad</code>.
+        Le même parcours s'exécute aussi en une seule demande autopilot. Sans cloud, sans code, sans
+        dépense — conçu pour convaincre un public non technique, avec toute la méthodologie HVE
+        (recherche → planification → réalisation → revue) en arrière-plan.
+      </p>
+      <a class="btn btn-primary" href="https://github.com/Peter-N91/hve-squad-demo3">Ouvrir le dépôt de la démo sur GitHub →</a>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+
+      <h2>Ce que vous démontrez</h2>
+      <p>
+        Que la squad est une <em>méthodologie</em>, pas seulement un générateur de code. La même
+        ossature Recherche → Planification → Implémentation → Revue qui pilote la démo Azure anime
+        aussi la découverte métier et la livraison — sous la responsabilité de spécialistes nommés,
+        avec décisions et historique conservés, et une validation pour chaque action à conséquences.
+        La différence pour un client non technique : chaque étape aboutit à un livrable qu'il peut
+        lire et approuver — un document d'exigences, une feuille de route, une présentation — jamais
+        à du Markdown brut enfoui dans un dépôt.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Capacité</th><th>Rôle de la squad</th><th>Remarques</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Découverte (personas, carte du parcours)</td><td>designer (DT Coach)</td><td>Animation Design Thinking — empathie et définition, entièrement non technique.</td></tr>
+          <tr><td>Exigences (BRD / PRD)</td><td>analyst (BRD Builder)</td><td>Transforme la découverte en un document d'exigences métier prêt à être approuvé.</td></tr>
+          <tr><td>Feuille de route + backlog</td><td>product-owner (Functional Planner)</td><td>Organise le travail en une hiérarchie validée d'éléments de travail orientés objectifs.</td></tr>
+          <tr><td>Validation peu coûteuse</td><td>experimenter (Experiment Designer)</td><td>Conçoit une expérimentation minimale viable pour l'hypothèse la plus risquée avant toute réalisation.</td></tr>
+          <tr><td>Présentation de direction</td><td>presenter (PowerPoint Subagent)</td><td>Une synthèse de tout le parcours, prête pour le conseil d'administration.</td></tr>
+          <tr><td>Recherche → Planification → Implémentation → Revue</td><td>researcher, lead, developer, tester</td><td>L'ossature méthodologique, intégrée au profil <code>product</code> aux côtés des spécialistes.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Avant de commencer</h2>
+      <p>
+        Cette démo n'accède à aucun cloud et n'écrit que des documents : elle s'exécute donc partout
+        où VS Code et Copilot sont disponibles — idéale pour une première présentation. La seule
+        option supplémentaire qui mérite d'être configurée est l'<strong>approbation depuis un
+        téléphone</strong>, pour qu'un sponsor non technique puisse approuver le travail de la squad
+        depuis son appareil.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Prérequis</th><th>Pourquoi</th><th>Vérification</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>hve-squad installé (avec le profil <code>product</code>)</td><td>Les rôles de découverte, d'exigences, de feuille de route, d'expérimentation et de présentation sont initialisés par le profil <code>product</code>.</td><td><code>apm install "Peter-N91/hve-squad"</code></td></tr>
+          <tr><td>VS Code + Copilot (mode agent)</td><td>La squad délègue aux sous-agents.</td><td>—</td></tr>
+          <tr><td>Outil <code>runSubagent</code> ou <code>task</code> activé</td><td>Le coordinateur en a besoin pour solliciter les membres de l'équipe.</td><td>—</td></tr>
+          <tr><td>Dépôt GitHub + authentification <code>gh</code> <small>(facultatif)</small></td><td>Uniquement pour le canal d'approbation <code>github-issue</code> — permet à un sponsor d'approuver depuis un téléphone.</td><td><code>gh auth status</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          <strong>Sans Azure, sans dépense, sans code.</strong> Chaque étape de cette démo produit un
+          document métier. Elle peut donc être exécutée en direct sans risque devant un client non
+          technique — rien à déployer, rien à casser. Les rôles PowerPoint et documentation assurent
+          la transformation des productions de la squad en livrables qu'un client lit réellement.
+        </p>
+      </div>
+
+      <h3>Ancrez la démo dans leur réalité</h3>
+      <p>
+        Le scénario ci-dessous utilise une variable, <code>{{CLIENT_PROCESS}}</code> — un processus
+        métier que le client souhaite améliorer (accueil des nouveaux arrivants, approbation des
+        dépenses, réception des demandes de support, achats, ou tout autre processus). Adaptez-la à
+        chaque client ou, en direct, laissez le client nommer lui-même son problème à l'étape 1. Les
+        rôles de découverte sont généralistes : la squad traite donc le sujet qu'il apporte.
+      </p>
+
+      <h2>Étape 0 — Initialiser la squad</h2>
+      <pre><code>/squad profile=product request="Set up the squad for a business improvement project."</code></pre>
+      <p>
+        Le coordinateur découvre le dépôt, propose le profil <code>product</code> et initialise la
+        squad après votre confirmation. <strong>À expliquer :</strong> « Une seule équipe —
+        spécialistes de la découverte, des exigences, de la feuille de route, de l'expérimentation
+        et de la présentation — accompagnée de l'<em>ossature méthodologique</em> : researcher, lead,
+        developer, tester, pour que recherche → planification → réalisation → revue reste toujours
+        présente, même pour les travaux métier. »
+      </p>
+      <p>
+        À l'initialisation, le coordinateur propose un canal d'approbation. Choisissez
+        <code>github-issue</code> pour permettre à un sponsor d'approuver depuis un téléphone avec un
+        commentaire <code>/approve</code> ; conservez le canal par défaut <code>in-chat</code> pour
+        une exécution simple à votre poste.
+      </p>
+
+      <h2>Étape 1 — Découverte</h2>
+      <pre><code>/squad request="Explore the problem of {{CLIENT_PROCESS}}. Map the people involved, their journey today, and where it hurts — produce personas and a journey map."</code></pre>
+      <p>
+        Le <code>researcher</code> rassemble le contexte et le <code>designer</code> (DT Coach) mène
+        les phases d'empathie et de définition du Design Thinking — personas et carte du parcours.
+        Cette étape est manifestement non technique : elle porte sur les personnes et le processus,
+        pas sur les systèmes. <strong>Conseil pour le direct :</strong> demandez au client de fournir
+        <code>{{CLIENT_PROCESS}}</code> ici — c'est bien plus convaincant qu'un scénario préparé.
+      </p>
+
+      <h2>Étape 2 — Exigences (BRD)</h2>
+      <pre><code>/squad request="Turn the discovery into a Business Requirements Document for {{CLIENT_PROCESS}} — goals, scope, stakeholders, business requirements, and success measures."</code></pre>
+      <p>
+        L'<code>analyst</code> (BRD Builder) produit un document d'exigences prêt à être approuvé.
+        <strong>C'est ici que la méthodologie devient visible :</strong> la rédaction du BRD est une
+        étape de niveau <code>confirm</code> : la squad effectue donc les recherches et planifie le
+        document avant de le rédiger, puis le revoit — le livrable métier est planifié et revu, pas improvisé.
+      </p>
+
+      <h2>Étape 3 — Feuille de route et backlog</h2>
+      <pre><code>/squad request="Sequence the requirements into a phased roadmap and a refined backlog of goal-oriented stories with acceptance criteria."</code></pre>
+      <p>
+        Le <code>lead</code> planifie les phases et le <code>product-owner</code> (Functional Planner)
+        organise le backlog en une hiérarchie validée d'éléments de travail orientés résultats, avec
+        critères d'acceptation. Le client termine l'étape avec une feuille de route et un backlog prêt
+        à être mis en œuvre — le lien entre l'idée et la livraison.
+      </p>
+
+      <h2>Étape 4 — Valider à moindre coût</h2>
+      <pre><code>/squad request="Design a Minimum Viable Experiment to test the riskiest assumption behind {{CLIENT_PROCESS}} before we build anything."</code></pre>
+      <p>
+        L'<code>experimenter</code> (Experiment Designer) formule une hypothèse et conçoit
+        l'expérimentation la moins coûteuse qui pourrait la confirmer ou l'infirmer.
+        <strong>À expliquer :</strong> « Avant de dépenser un dollar pour construire, la squad nous
+        indique le plus petit test capable de réduire le risque lié à l'idée. »
+      </p>
+
+      <h2>Étape 5 — Revue de préparation (feu vert / arrêt)</h2>
+      <pre><code>/squad request="Run a go/no-go readiness review of the plan and backlog before we commit — call out gaps, risks, and conditions."</code></pre>
+      <p>
+        Le <code>product-owner</code> vérifie l'adéquation du produit et le <code>tester</code> (Plan
+        Validator) recoupe le plan avec la découverte et les exigences, puis rend un avis clair :
+        feu vert / conditions / arrêt. C'est une gouvernance compréhensible par un sponsor non
+        technique : la squad ne laisse pas passer le travail lorsqu'une véritable lacune subsiste.
+      </p>
+
+      <div class="callout">
+        <p>
+          <strong>Le conseil s'élargit automatiquement.</strong> Lorsqu'une initiative acquiert des
+          dimensions techniques ou de risque — sécurité, coûts ou architecture — et que la demande
+          couvre au moins deux de ces domaines, le coordinateur réunit le conseil complet avant
+          implémentation et synthétise un verdict unique : feu vert / feu vert sous conditions / arrêt.
+          Comme le profil <code>product</code> n'initialise pas les rôles <code>architect</code>,
+          <code>security</code> ou <code>cost-manager</code>, la squad propose de les ajouter ou de
+          passer au profil <code>full</code> plutôt que d'improviser — elle n'assume jamais elle-même
+          un rôle absent.
+        </p>
+      </div>
+
+      <h2>Étape 6 — Présentation de direction</h2>
+      <pre><code>/squad request="Build an executive summary deck of the whole initiative: the problem, the journey, the requirements, the roadmap, and the experiment — for a non-technical leadership audience."</code></pre>
+      <p>
+        Le <code>presenter</code> (PowerPoint Subagent) assemble une présentation prête pour le conseil
+        d'administration à partir des livrables déjà produits par la squad. Le <strong>suivi
+        systématique de revue (Review Follow-Through)</strong> sollicite ensuite <code>tester</code>
+        pour vérifier la présentation par rapport aux livrables sources : le livrable final est donc
+        validé, pas simplement généré. Le client repart avec un support qu'il peut utiliser en réunion
+        de direction.
+      </p>
+
+      <h2>La version « une demande, une exécution »</h2>
+      <p>
+        Le même parcours s'exécute à partir d'une seule demande autopilot qui exprime le <em>besoin</em>
+        sans nommer les étapes. La squad déduit elle-même leur enchaînement :
+      </p>
+      <pre><code>/squad mode=autopilot profile=product request="We want to improve {{CLIENT_PROCESS}} for our team. Understand who is involved and where it hurts today, write up the business requirements, lay out a phased roadmap with a refined backlog, design a cheap experiment to test the riskiest assumption, do a readiness review, and finish with an executive summary deck for non-technical leadership. Keep me in control of anything that needs my sign-off."</code></pre>
+      <p>À partir de cette seule ligne, autopilot organise le pipeline et ne s'arrête que lorsque c'est nécessaire :</p>
+      <ul>
+        <li><strong>Initialisation</strong> — propose le profil <code>product</code> et attend votre confirmation.</li>
+        <li><strong>Recherche → Planification</strong> — découverte (researcher + designer), puis plan de la feuille de route (lead).</li>
+        <li><strong>Implémentation</strong> — analyst, product-owner, experimenter et presenter rédigent le BRD, le backlog, l'expérimentation et la présentation.</li>
+        <li><strong>Revue</strong> — <code>tester</code> valide chaque livrable par rapport à la découverte et aux exigences.</li>
+        <li><strong>Validation du résultat final</strong> — envoie une notification au contact que vous avez enregistré et attend votre accord avant de déclarer l'initiative terminée.</li>
+      </ul>
+      <p>
+        Vous n'intervenez qu'à la confirmation du profil et à la validation finale — c'est le mode
+        « dites-le une fois, laissez-le travailler ». Si l'approbation <code>github-issue</code> a été
+        configurée à l'initialisation, un sponsor peut donner cet accord depuis un téléphone.
+      </p>
+
+      <div class="callout warn">
+        <p>
+          <strong>Présentez l'expérimentation pour ce qu'elle est.</strong> L'expérimentation minimale
+          viable est une conception, pas un résultat. Ne la présentez pas comme des résultats prouvés —
+          sa valeur est de faire ressortir l'hypothèse la plus risquée et le moyen le moins coûteux de
+          la tester <em>avant</em> que le client n'engage un budget.
+        </p>
+      </div>
+
+      <h2>Solutions de repli en cas de problème</h2>
+      <table>
+        <thead>
+          <tr><th>Si…</th><th>Alors…</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Un rôle n'est pas sollicité</td><td>Vérifiez que l'agent auquel il correspond est installé — le profil <code>product</code> associe <code>analyst</code>, <code>designer</code>, <code>product-owner</code>, <code>experimenter</code>, <code>presenter</code> et <code>technical-writer</code> aux agents HVE Core déployés.</td></tr>
+          <tr><td>La demande nécessite une revue de sécurité / coûts / architecture</td><td>La squad propose d'ajouter ces rôles ou de passer au profil <code>full</code> — acceptez, et le conseil se réunit.</td></tr>
+          <tr><td>Aucun dépôt GitHub pour approuver depuis un téléphone</td><td>Conservez le canal par défaut <code>in-chat</code> et approuvez dans la session — rien ne bloque.</td></tr>
+          <tr><td>L'outillage rencontre un problème en direct</td><td>Passez à une exécution préenregistrée du même scénario sur un cas neutre — le parcours est identique, la présentation ne perd donc jamais son fil.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Points clés pour conclure</h2>
+      <ul>
+        <li><strong>C'est une méthodologie, pas un modèle.</strong> Recherche → planification → réalisation → revue s'exécute dans chaque profil : même la découverte métier est donc planifiée et revue par des spécialistes nommés.</li>
+        <li><strong>Chaque étape est un livrable.</strong> Découverte, BRD, feuille de route, expérimentation, présentation — le client approuve des livrables, pas du code.</li>
+        <li><strong>Approuver où que l'on soit.</strong> Avec l'approbation <code>github-issue</code>, un sponsor non technique donne son accord depuis un téléphone.</li>
+        <li><strong>Exécution en direct sans risque.</strong> Sans cloud, sans dépense, sans code — idéale pour une première présentation, et le conseil complet intervient dès qu'un véritable risque apparaît.</li>
+      </ul>
+
+      <div class="pager">
+        <a class="prev" href="demo-2.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Démo 2 — Migration en autopilot</div>
+        </a>
+        <a class="next" href="demo-4.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Démo 4 — Moderniser .NET</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · fondé sur les agents et les conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
 </body>
 </html>

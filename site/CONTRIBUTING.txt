@@ -1,0 +1,70 @@
+HVE SQUAD DOCUMENTATION
+
+The main documentation site shares the Eleventy/Pagefind foundation, blue/cyan/
+green identity and fonts already adopted by the plugin documentation. MCP and MAF
+share the shell with their distinct product palettes.
+
+Local development (Node.js 22+)
+  npm ci
+  npm run docs:test
+  npm run docs:build
+  npm run docs:dev
+
+Port 4176 is the main-site development preview. Pagefind indexes refresh during
+docs:build; restart docs:dev after content edits to refresh search. Pull requests
+build/validate, while only main can deploy through the Pages workflow.
+
+Original English content stays in docs/*.html; complete French equivalents are
+in docs/fr/*.html. The original source chrome remains readable but is not the
+deployed template. Eleventy extracts the hero, demo selector, main body and footer
+without rewriting technical prose or examples. Code comments and prompt strings
+remain exact in translations; instructions outside copyable blocks are localized.
+The archival governance report is copied unchanged, not treated as a new guide.
+
+Key files
+  site/pages.njk / site/_includes   Shared shell and components
+  site/locales.json               Languages, UI, direction and navigation
+  site/host-locales.json          Localized CLI/App/VS Code interaction messages
+  site/assets/site.css           Shared fonts, theme and blue identity tokens
+  site/assets/squad.css          Host tabs, demo selectors, cards and video layout
+  site/assets/hosts.js            Existing command-to-host examples and synchronized tabs
+  site/assets/diagrams.js         Local, theme-aware Mermaid with source fallback
+  scripts/docs-content.mjs         Source extraction and stable section anchors
+  scripts/check-docs.mjs           Prose/code/translation/media/link contracts
+  scripts/diagram-locales.mjs      Diagram-label translations without graph changes
+
+Appearance
+  G1 frame: #2563EB -> #06B6D4 -> #22C55E (0/50/100%, 45 degrees)
+  Badge field #0F172A, blue agent nodes #60A5FA, green execution #4ADE80
+  Light interactive accent #2563EB; dark interactive accent #60A5FA
+  Manrope headings; Source Sans 3 prose and true italics; JetBrains Mono code
+  Fonts and Mermaid are self-hosted with their redistribution licence notices.
+
+Reader behavior
+System/Light/Dark persists using hve-docs-theme, shared with sibling sites.
+Existing scoutTheme and host query overrides are retained. The host selection is
+synchronized across local tabs and persisted with hve-docs-host. VS Code examples
+retain exact original slash commands; CLI and App show agent-selection guidance
+outside copyable request arguments. Language changes keep page, section and query.
+Without JavaScript all static content and manual host panels remain readable.
+Diagrams show their source if rendering is unavailable, and can zoom to full size.
+
+Additional languages
+Add a BCP 47 key, native name, one-segment prefix, ltr/rtl direction and every UI/
+page label to site/locales.json. Add its host UI messages to host-locales.json.
+Translate every guide, keeping heading order, existing IDs, links and code.
+Translate diagram labels in diagram-locales.mjs; never change graph topology.
+Builds reject missing files, headings, UI keys or diagram translations.
+
+Publication boundaries
+Only the named public pages/assets, videos, existing public templates and archival
+governance report are copied. docs/planning, docs/architecture, knowledge-docs and
+.copilot-tracking are not published. Generated _site is ignored and rebuilt cleanly.
+No changes to squad-src, APM pins, package release logic or runtime agents are needed.
+
+Newsletter
+site/_includes/footer-extra.njk is the reserved component extension. It currently
+renders nothing: no fake signup, disabled CTA, tracking or email collection.
+Before activating subscriptions, choose the provider/backend, data controller,
+consent/privacy wording, double-opt-in/unsubscribe policy and real success/error
+handling. Public deployment or external subscriber-data transfers require approval.

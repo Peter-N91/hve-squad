@@ -1,0 +1,54 @@
+{
+  "en": {
+    "tablistLabel": "Copilot environment",
+    "hostLabels": {
+      "cli": "Copilot CLI",
+      "app": "Copilot App",
+      "vscode": "VS Code"
+    },
+    "agents": {
+      "/squad": "Squad Coordinator",
+      "/squad-federation": "Squad Federation Coordinator",
+      "/squad-document": "Squad Document",
+      "/squad-governance-report": "Squad Governance Report",
+      "/squad-learn": "Squad Learn"
+    },
+    "instructions": {
+      "cli": "In Copilot CLI, enter /agent and choose {agent}. Send in its conversation:",
+      "app": "In Copilot App, select {agent}. Send in its conversation:",
+      "vscode": "In Copilot Chat, choose the prompt (not the skill). Send each request separately."
+    },
+    "defaultRequests": {
+      "/squad": "Initialize the squad.",
+      "/squad-federation": "Initialize the federation.",
+      "/squad-governance-report": "Generate the governance report with default settings.",
+      "/squad-learn": "Help me propose a shared learning."
+    }
+  },
+  "fr": {
+    "tablistLabel": "Environnement Copilot",
+    "hostLabels": {
+      "cli": "Copilot CLI",
+      "app": "Copilot App",
+      "vscode": "VS Code"
+    },
+    "agents": {
+      "/squad": "Squad Coordinator",
+      "/squad-federation": "Squad Federation Coordinator",
+      "/squad-document": "Squad Document",
+      "/squad-governance-report": "Squad Governance Report",
+      "/squad-learn": "Squad Learn"
+    },
+    "instructions": {
+      "cli": "Dans Copilot CLI, saisissez /agent et choisissez {agent}. Envoyez dans sa conversation :",
+      "app": "Dans Copilot App, choisissez {agent}. Envoyez dans sa conversation :",
+      "vscode": "Dans Copilot Chat, choisissez le prompt (pas le skill). Envoyez chaque demande séparément."
+    },
+    "defaultRequests": {
+      "/squad": "Initialise la squad.",
+      "/squad-federation": "Initialise la fédération.",
+      "/squad-governance-report": "Génère le rapport de gouvernance avec les paramètres par défaut.",
+      "/squad-learn": "Aide-moi à proposer un apprentissage partagé."
+    }
+  }
+}

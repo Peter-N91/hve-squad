@@ -1,0 +1,21 @@
+{
+  "name": "hve-squad-documentation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "docs:build": "node scripts/docs-inputs.mjs --clean && eleventy && pagefind --site _site && node scripts/check-docs.mjs",
+    "docs:dev": "npm run docs:build && eleventy --serve --port=4176",
+    "docs:check": "node scripts/check-docs.mjs",
+    "docs:test": "node --test tests/docs/*.test.mjs"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "3.1.6",
+    "cheerio": "1.2.0",
+    "jsdom": "26.1.0",
+    "mermaid": "11.17.2",
+    "pagefind": "1.5.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

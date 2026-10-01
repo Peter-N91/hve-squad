@@ -1,40 +1,230 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Contribuer | hve-squad</title><meta name="description" content="Proposer une contribution, ajouter un fragment de changement et partager un apprentissage sans exposer de données privées." />
-  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../contributing.html" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contribuer — hve-squad</title>
+  <meta name="description" content="Comment les changements parviennent au package hve-squad et comment faire valider un apprentissage partagé expurgé de ses données sensibles." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../contributing.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html" class="active">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../contributing.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Guide contributeur</div><h1>Contribuer</h1><p class="lead">Proposez un changement ciblé, accompagnez-le de preuves et faites-le relire avant publication.</p></div></header>
-  <main class="content"><div class="container">
-    <h2>De la proposition au package</h2>
-    <p>Le <a href="https://github.com/Peter-N91/hve-squad/blob/main/CONTRIBUTING.md">guide de contribution du dépôt (anglais)</a> reste la référence. Le package ne lit pas les environnements consommateurs : une modification entre dans la distribution par une pull request, pas par une remontée automatique des fichiers locaux.</p>
-    <ol><li>Créez un fork et une branche pour votre changement.</li><li>Modifiez les sources concernées et ajoutez les tests adaptés.</li><li>Ajoutez un fragment avec <code>apm run change</code>.</li><li>Ouvrez une PR vers la branche par défaut avec le périmètre et les vérifications réalisées.</li><li>Traitez les remarques de revue. Un mainteneur décide de la fusion et de la publication.</li></ol>
-    <h2>Enregistrer le changement</h2>
-    <p>Ne modifiez pas <code>CHANGELOG.md</code> ni la version dans <code>apm.yml</code> : ce sont des sorties de publication. Ajoutez un fichier distinct dans <code>.changes/unreleased/</code> pour éviter les conflits entre PR.</p>
-    <pre><code>apm run change</code></pre>
-    <p>Le script demande le type, le niveau de version, un titre pour le nom de fichier et le texte destiné aux notes de publication. Les types admis sont <code>Added</code>, <code>Changed</code>, <code>Deprecated</code>, <code>Removed</code>, <code>Fixed</code> et <code>Security</code>.</p>
-    <table><thead><tr><th>Niveau</th><th>Quand le proposer</th></tr></thead><tbody><tr><td><code>patch</code></td><td>Correction ou extension d'un concept existant, y compris un agent ou un rôle supplémentaire.</td></tr><tr><td><code>minor</code></td><td>Nouveau concept ou changement important de la manière d'utiliser le package.</td></tr><tr><td><code>major</code></td><td>Changement qui impose une adaptation au consommateur.</td></tr></tbody></table>
-    <pre><code>---
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html">Démonstrations</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html" class="active">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../contributing.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Participer</div>
+      <h1>Contribuer</h1>
+      <p class="lead">Comment un correctif trouvé dans un environnement parvient à tous les autres utilisateurs du package, et comment faire valider un apprentissage partagé expurgé de ses données sensibles.</p>
+      <a class="btn btn-primary" href="https://github.com/Peter-N91/hve-squad/blob/main/CONTRIBUTING.md">Lire le guide de contribution complet</a>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <p>
+        Le guide de contribution de référence se trouve dans
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>,
+        à la racine du dépôt, où GitHub le présente lors de la création d’issues et de pull requests. Cette
+        page donne un bref aperçu ; le fichier à la racine fait autorité.
+      </p>
+
+      <h2>Comment les contributions parviennent au package</h2>
+      <p>
+        hve-squad est distribué via APM sous forme de contenu de package à sens unique : les utilisateurs récupèrent le package,
+        et celui-ci ne lit jamais leurs environnements. La seule voie permettant à un changement de parvenir au
+        package publié consiste à créer un fork et à soumettre une pull request au dépôt.
+      </p>
+      <ol>
+        <li>Créez un fork du dépôt.</li>
+        <li>Créez une branche pour votre changement.</li>
+        <li>Ajoutez un fragment de changement avec <code>apm run change</code>.</li>
+        <li>Ouvrez une pull request vers la branche par défaut.</li>
+        <li>Un mainteneur effectue la revue, demande des modifications si nécessaire, puis fusionne.</li>
+      </ol>
+      <p>Les utilisateurs reçoivent le changement fusionné à la prochaine exécution de <code>apm run sync-deps</code>.</p>
+
+      <h2>Enregistrer votre changement</h2>
+      <p>
+        Ne modifiez pas <code>CHANGELOG.md</code> et n’incrémentez pas <code>version:</code> dans
+        <code>apm.yml</code>. Ce sont deux sorties de publication, assemblées sur la branche par défaut lors de la
+        préparation d’une version, et la CI rejette toute pull request qui touche à l’une ou à l’autre.
+      </p>
+      <p>
+        La raison est mécanique. La version occupe une seule ligne et le titre le plus récent du changelog une
+        seule position : deux pull requests qui les modifient entrent donc toujours en conflit &mdash; et la
+        seconde à être fusionnée réutilise silencieusement un numéro de version déjà pris par la première. À la place, chaque
+        pull request ajoute <strong>un nouveau fichier</strong> dans <code>.changes/unreleased/</code>. Deux
+        pull requests ajoutant deux fichiers de noms différents n’entrent jamais en conflit.
+      </p>
+      <pre><code>apm run change</code></pre>
+      <p>Le script vous demande quatre éléments et écrit le fichier pour vous :</p>
+      <ul>
+        <li><strong>Type</strong> &mdash; la section Keep a Changelog à laquelle appartient votre entrée : <code>Added</code>, <code>Changed</code>, <code>Deprecated</code>, <code>Removed</code>, <code>Fixed</code> ou <code>Security</code>.</li>
+        <li><strong>Bump</strong> &mdash; la manière dont la version doit évoluer. Ce niveau suit les <strong>idées, pas les artefacts</strong> : la plupart des changements relèvent donc de <code>patch</code>.</li>
+        <li><strong>Title</strong> &mdash; une courte formule, utilisée uniquement pour nommer le fichier.</li>
+        <li><strong>Entry</strong> &mdash; le texte du changelog lui-même, rédigé tel qu’il doit apparaître dans les notes de publication.</li>
+      </ul>
+
+      <h3>Choisir le niveau d’incrémentation</h3>
+      <table>
+        <thead>
+          <tr><th>Valeur</th><th>À utiliser quand</th><th>Dans ce dépôt</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>major</code></td>
+            <td>Un utilisateur doit modifier quelque chose pour continuer à utiliser le package.</td>
+            <td>Pas encore utilisé.</td>
+          </tr>
+          <tr>
+            <td><code>minor</code></td>
+            <td>Une idée réellement nouvelle est introduite, ou un changement modifie sensiblement la manière d’utiliser le package.</td>
+            <td><code>0.10.0</code> a introduit la fédération. <code>0.11.0</code> a remanié le rattachement de hve-core.</td>
+          </tr>
+          <tr>
+            <td><code>patch</code></td>
+            <td>Tout le reste, <strong>y compris les nouveaux agents, skills, prompts, instructions et rôles qui prolongent une idée déjà distribuée</strong>.</td>
+            <td>Un nouveau rôle de squad dans la fédération. Un nouveau skill OWASP. Une correction de formulation.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Ajouter un agent ne justifie pas une version mineure. Ajouter le <em>concept</em> auquel cet agent appartient, oui. Dix agents
+        au service d’une même idée déjà distribuée représentent dix correctifs, pas dix versions mineures. En cas de doute, choisissez
+        <code>patch</code> &mdash; le mainteneur voit le niveau calculé dans le contrôle de la pull request et
+        corrige la ligne avant la fusion ; relever le niveau coûte peu, alors qu’une version mineure accidentelle est définitive.
+      </p>
+      <p>Vous obtenez un fichier tel que <code>.changes/unreleased/20260804-roster-row-resolves-to-nothing.md</code> :</p>
+      <pre><code>---
 bump: patch
 type: Fixed
 ---
 
-- **Corrected a missing role mapping.** Updated the roster to use the deployed agent.</code></pre>
-    <p>Les valeurs techniques et les notes de publication du dépôt restent en anglais. Commencez les entrées par <code>- </code>, nommez le problème en gras, décrivez le changement et citez les chemins utiles. Un fragment correspond à une idée ; le mainteneur peut corriger le niveau avant fusion.</p>
-    <h2>Préversion et correctif isolé</h2>
-    <p>Une fusion ne publie pas une version stable. Les fragments attendent la décision du mainteneur. La préversion glissante permet de tester le contenu déjà fusionné ; son tag exact figure sur <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>. Elle change à chaque fusion : épinglez une version publiée pour un usage durable.</p>
-    <p>Une publication livre un commit entier, pas une sélection de fragments. Si <code>main</code> contient du travail qui ne doit pas partir, un mainteneur prépare une branche de correctif depuis le dernier tag et y applique uniquement les changements nécessaires. Release Prep cible cette branche, puis le résultat est réintégré selon la procédure du dépôt.</p>
-    <h2>Améliorer la documentation</h2>
-    <p>Les pages correspondantes de <code>docs/</code> et <code>docs/fr/</code> doivent évoluer ensemble. Conservez les noms de commandes et de paramètres, vérifiez les liens et les ancres, puis contrôlez le rendu mobile. Les styles et interactions sont partagés ; aucune compilation frontend n'est nécessaire.</p>
-    <h2>Partager un apprentissage</h2>
-    <p>La mémoire active des agents reste locale. <code>/squad-learn</code> prépare une proposition nettoyée pour revue humaine ; elle n'est jamais promue automatiquement. Un apprentissage général peut rejoindre le package public, un apprentissage propre à une organisation doit rester dans son dépôt privé.</p>
-    <ul><li>Retirez secrets, jetons, identifiants et chaînes de connexion.</li><li>Retirez les noms de clients, d'organisations et de personnes.</li><li>Retirez les chemins absolus et URL internes.</li><li>Généralisez les détails propres au projet sans perdre la leçon vérifiable.</li><li>Confirmez que le destinataire est autorisé à recevoir le contenu.</li></ul>
-    <p>Les apprentissages partagés résident dans <code>squad-src/.github/skills/squad/learnings/shared-learnings.md</code>. Le <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/shared-learnings.md">modèle de partage (anglais)</a> décrit les voies publique et privée. La revue humaine protège contre les fuites, les règles erronées et l'altération de la mémoire.</p>
-    <div class="pager"><a class="prev" href="troubleshooting.html"><div class="dir">Retour</div><div class="ttl">Dépannage</div></a><a class="next" href="index.html"><div class="dir">Suite</div><div class="ttl">Accueil</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+- **A roster Primary pointed at an agent hve-core no longer ships.** Repointed it to ...</code></pre>
+      <p>
+        Rédigez l’entrée sous forme de puces Markdown commençant par <code>- </code>, car l’étape de publication
+        les copie telles quelles. Commencez par une phrase en gras qui nomme le problème, puis indiquez ce qui a changé,
+        et enfin citez les chemins de fichiers entre accents graves. Incluez le fragment dans le commit avec le reste de votre changement. Un fragment
+        par idée &mdash; une pull request qui traite deux sujets sans rapport ajoute deux fragments.
+      </p>
+      <p>
+        Fusionner votre pull request <strong>ne la publie pas</strong>. Le fragment attend dans
+        <code>.changes/unreleased/</code> avec tous les autres changements déjà fusionnés, et un mainteneur prépare une
+        version lorsque ce lot est prêt &mdash; dans l’heure pour un correctif rapide, ou plus tard pour un changement
+        qui nécessite davantage de tests. Entre-temps, la fusion est publiée dans la
+        <strong>préversion glissante</strong> : votre changement peut donc être installé et testé en quelques minutes :
+      </p>
+      <pre><code>apm install "Peter-N91/hve-squad#v0.15.0-pre" --target copilot</code></pre>
+      <p>
+        Le tag exact figure sur la
+        <a href="https://github.com/Peter-N91/hve-squad/releases">page Releases</a>, avec la mention
+        de préversion. Il s’agit d’un canal plutôt que d’un point fixe : le tag se déplace à chaque fusion et change
+        de nom lorsqu’un fragment <code>minor</code> est intégré. Utilisez une version publiée épinglée pour tout
+        ce dont vous dépendez. La référence complète du format se trouve dans
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/.changes/README.md">.changes/README.md</a>.
+      </p>
+
+      <h2>Publier un correctif sans publier tout le reste</h2>
+      <p>
+        Une version livre un <strong>commit</strong>, pas une sélection de fragments. Le tag est créé à partir de la
+        tête de branche : une version issue de la branche par défaut contient donc tout ce qui y a été fusionné, quoi
+        qu’indique le CHANGELOG. Choisir les fragments à consommer modifie les notes de publication,
+        pas le code. Il reste donc deux cas, et seul le second nécessite une procédure particulière.
+      </p>
+      <p>
+        <strong>La branche par défaut est publiable.</strong> Un mainteneur déclenche Release Prep et votre
+        correctif est publié avec tous les autres changements en attente, dans une seule version. Si un fragment en attente demande
+        <code>minor</code>, cette version est mineure &mdash; et elle contient quand même votre correctif : les
+        utilisateurs le reçoivent donc. C’est presque toujours la bonne solution.
+      </p>
+      <p>
+        <strong>La branche par défaut contient un changement qui ne doit pas encore être publié.</strong> Une version issue de
+        cette branche emporterait ce travail avec le correctif. Le correctif doit donc partir d’un endroit qui ne
+        le contient pas : une branche de correctif créée à partir du dernier tag de version.
+      </p>
+      <pre><code>git switch --detach v0.14.0
+git switch -c hotfix/v0.14.1
+# apply the fix, then record it
+apm run change            # Type: Fixed, Bump: patch
+git push -u origin hotfix/v0.14.1</code></pre>
+      <p>
+        Un mainteneur déclenche ensuite <strong>Release Prep</strong> en définissant <code>ref</code> sur la
+        branche de correctif. Le workflow assemble le CHANGELOG uniquement à partir des fragments de cette branche, incrémente
+        <code>apm.yml</code> à <code>0.14.1</code> et crée le tag à partir de cette branche. La
+        préversion glissante de la branche par défaut reste intacte, car le lot qu’elle décrit est toujours
+        en attente. La branche de correctif est ensuite fusionnée en retour avec le label <code>release-merge-back</code>,
+        qui autorise cette pull request à inclure l’état de publication déjà écrit par Release Prep.
+      </p>
+      <p>
+        Un correctif publié après une version supérieure ne lui prend pas le badge <strong>Latest</strong> : le
+        workflow de publication compare les versions et ne l’attribue pas lorsque le tag est inférieur à la version
+        actuellement considérée comme la plus récente.
+      </p>
+
+      <h2>Proposer un apprentissage partagé</h2>
+      <p>
+        Un apprentissage partagé est une règle durable et largement applicable, découverte lors de l’utilisation de la squad,
+        qui devrait aider tous les autres utilisateurs confrontés au même scénario. La mémoire active des agents reste toujours locale
+        à chaque environnement utilisateur et n’est jamais promue automatiquement. La promotion passe délibérément par une
+        pull request soumise à validation humaine ; cette revue protège contre l’empoisonnement de la mémoire, les fuites de données et la dérive
+        du contexte.
+      </p>
+      <p>Expurgez chaque entrée de ses données sensibles avant de la proposer :</p>
+      <ul>
+        <li>Retirez tous les secrets, jetons, informations d’identification et chaînes de connexion.</li>
+        <li>Retirez les noms de clients, d’organisations et de personnes.</li>
+        <li>Retirez les chemins absolus propres au dépôt et les URL internes.</li>
+        <li>Généralisez les détails propres à la pile technique pour que l’apprentissage s’applique au-delà de son contexte d’origine.</li>
+        <li>Confirmez que l’apprentissage est largement applicable à différents utilisateurs et scénarios.</li>
+      </ul>
+      <p>
+        Les apprentissages partagés sélectionnés sont distribués avec le package dans
+        <code>squad-src/.github/skills/squad/learnings/shared-learnings.md</code>. Lorsqu’un apprentissage est
+        propre aux projets d’une organisation, promouvez-le plutôt vers un dépôt interne au tenant. Les
+        deux voies, ainsi que le modèle de structure <code>squad-learnings-tenant</code>, sont décrites dans
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/shared-learnings.md">Apprentissages partagés</a>.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="troubleshooting.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Dépannage</div>
+        </a>
+        <a class="next" href="index.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Accueil</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · basé sur les agents et conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
 </body>
 </html>

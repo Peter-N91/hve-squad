@@ -1,46 +1,327 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Démonstration Azure | hve-squad</title><meta name="description" content="Parcours Azure avec hve-squad : coûts, architecture, IaC, validation humaine, documentation et diagnostic." />
-  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../demo-1.html" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Démo 1 — hve-squad</title>
+  <meta name="description" content="Une démo de squad Azure à exécuter : coûts, architecture, IaC, déploiement contrôlé par la gouvernance, documentation de l'existant et diagnostic — avec une version autonome en une demande." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../demo-1.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html" class="active">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../demo-1.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Démonstration 01</div><h1>Squad Azure</h1><p class="lead">Concevoir, chiffrer, préparer et examiner une infrastructure. Les déploiements attendent votre accord ; le diagnostic reste en lecture seule.</p></div></header>
-  <main class="content"><div class="container">
-    <p><a href="demo.html">Toutes les démonstrations</a> · <a href="demo-2.html">Migration</a> · <a href="demo-3.html">Produit</a> · <a href="demo-4.html">.NET</a></p>
-    <h2>Avant de commencer</h2>
-    <p>Installez une version publiée de hve-squad, vérifiez les agents du profil <code>azure</code> et authentifiez Azure CLI avec <code>az login</code>. Contrôlez l'abonnement avec <code>az account show</code>. Utilisez un groupe de ressources existant autorisé pour les étapes de documentation et de diagnostic.</p>
-    <p>Le serveur <code>@azure/mcp</code> est facultatif : les capacités concernées peuvent utiliser Azure CLI et REST en repli. Son installation n'est pas implicitement déclenchée par l'installation du package.</p>
-    <h3 id="icon-diagrams">Diagrammes avec icônes Azure</h3>
-    <p>Mermaid convient sans outillage supplémentaire. Pour produire des images PNG/SVG avec le skill <code>python-diagrams</code>, prévoyez Python ou <code>uv</code> et Graphviz. Vérifiez <code>dot -V</code> avant la session. En l'absence de ces outils, conservez Mermaid.</p>
-    <h2>0. Initialiser</h2>
-    <pre><code>/squad init profile=azure</code></pre>
-    <p>Confirmez l'équipe proposée avant d'envoyer les demandes de travail.</p>
-    <h2>1. Estimer le coût</h2>
-    <pre><code>/squad request="Estime le coût mensuel Azure d'une petite application interne en West Europe : frontend et backend App Service, Azure SQL, Key Vault et Storage, avec réseau privé. L'objectif est moins de 60 USD par mois. Donne une estimation indicative et les compromis nécessaires, sans promettre que cette architecture respecte ce budget."</code></pre>
-    <p>Examinez les hypothèses de dimensionnement, région, disponibilité et réseau. Le budget est une contrainte à tester, pas un coût garanti. Le plafond de consommation des modèles est un mécanisme distinct.</p>
-    <h2>2. Concevoir puis préparer l'IaC</h2>
-    <pre><code>/squad request="Conçois le HLD et le LLD de cette application avec Azure Verified Modules et une organisation compatible avec une landing zone. Définis VNet, sous-réseaux et endpoints privés nécessaires. Justifie les choix de sécurité et l'intérêt éventuel des conteneurs. Ne déploie rien."
-/squad request="Écris le Bicep de ce LLD sous infra/bicep/demo avec des modules AVM. Ne déploie rien."</code></pre>
-    <p>La recherche et la planification précèdent l'implémentation. Vérifiez la traçabilité entre le LLD et les fichiers IaC ; ne prenez pas une génération de fichiers pour une preuve de compilation.</p>
-    <h2>3. Revoir et préparer le déploiement</h2>
-    <pre><code>/squad request="Revois le Bicep par rapport au LLD. Vérifie la compilation et signale les écarts."
-/squad request="Prépare le déploiement de infra/bicep/demo. Exécute le contrôle Azure Policy en lecture seule et présente le what-if ainsi que les contraintes. Attends mon approbation avant toute modification Azure."</code></pre>
-    <p>Le Deployer présente les politiques effectives et les refus anticipés, puis attend la validation requise. Pour une démonstration sans création de ressources, arrêtez-vous ici ou refusez le déploiement.</p>
-    <h2>4. Documenter l'existant</h2>
-    <pre><code>/squad request="Documente l'infrastructure déjà déployée dans rg-demo : inventaire, matrice de conformité Azure Policy, guide d'exploitation et plan de sauvegarde et reprise. Lecture seule, aucune modification."</code></pre>
-    <p>Remplacez <code>rg-demo</code> par un groupe autorisé. Le rôle As-Built collecte les preuves et prépare les documents sans déployer.</p>
-    <h2>5. Diagnostiquer un symptôme réel</h2>
-    <pre><code>/squad request="Analyse les erreurs 5xx de l'App Service dans rg-demo. Consulte Resource Health et les journaux récents, classe les causes plausibles et recommande des corrections. Ne modifie rien."</code></pre>
-    <p>Une recommandation n'autorise pas son application. Le diagnostic nécessite un symptôme réel ; n'inventez pas un incident pour compléter le scénario.</p>
-    <h2>Variante autopilot</h2>
-    <p>Après l'initialisation confirmée, formulez l'objectif complet :</p>
-    <pre><code>/squad profile=azure mode=autopilot request="Prépare une petite application interne sur Azure en West Europe avec frontend, backend, base SQL, secrets et stockage. Étudie le réseau privé, la sécurité, les contraintes de gouvernance et un objectif de coût mensuel inférieur à 60 USD. Produis l'architecture, l'IaC et sa revue, puis prépare l'exploitation. Signale les compromis ou contraintes incompatibles. Garde-moi décisionnaire pour tout coût cloud et toute modification de l'abonnement."</code></pre>
-    <p>Attendez des preuves de recherche, planification, revue et validation, pas seulement un résumé confiant. Sans abonnement disponible, restez sur les livrables locaux. Sans outillage de prix avancé, explicitez les limites de l'estimation.</p>
-    <div class="pager"><a class="prev" href="demo.html"><div class="dir">Retour</div><div class="ttl">Démonstrations</div></a><a class="next" href="demo-2.html"><div class="dir">Suite</div><div class="ttl">Migration autopilot</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html" class="active">Démonstrations</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../demo-1.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Demo selector — pinned at the top; the walkthrough below follows the demo you choose. -->
+  <div class="demo-bar">
+    <div class="container">
+      <div class="demo-switch">
+        <div class="label">Choisir une démo</div>
+        <!--
+          Multi-demo selector. To add a demo: give it the next "Demo N" number,
+          turn its chevron into a link (<a class="chev" href="demo-N.html">),
+          mark the current page's chevron .active, and drop the .soon class once
+          the demo page exists.
+        -->
+        <ul class="demo-chevrons">
+          <li><span class="chev active"><span class="step">Démo 1</span><span class="name">Squad Azure</span></span></li>
+          <li><a class="chev" href="demo-2.html"><span class="step">Démo 2</span><span class="name">Migration en autopilot</span></a></li>
+          <li><a class="chev" href="demo-3.html"><span class="step">Démo 3</span><span class="name">Squad produit</span></a></li>
+          <li><a class="chev" href="demo-4.html"><span class="step">Démo 4</span><span class="name">Moderniser .NET</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Parcours guidé</div>
+      <h1>Démo Squad Azure</h1>
+      <p class="lead">
+        Un scénario exécutable pour le profil <code>azure</code> qui mène un projet de l'estimation
+        des coûts à l'architecture, à l'IaC, au déploiement contrôlé par la gouvernance, à la
+        documentation de l'existant et au diagnostic — chaque étape depuis le point d'entrée unique
+        <code>/squad</code>. Le même parcours s'exécute aussi en une seule demande autonome. Tout
+        déploiement reste soumis à une validation humaine ; la documentation de l'existant et le
+        diagnostic s'effectuent strictement en lecture seule.
+      </p>
+      <a class="btn btn-primary" href="https://github.com/Peter-N91/hve-squad-demo1">Ouvrir le dépôt de la démo sur GitHub →</a>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+
+      <h2>Ce que vous démontrez</h2>
+      <p>
+        Chaque étape associe une capacité au rôle de la squad qui en est responsable. C'est le fil
+        conducteur de votre présentation — la différence tient au fait que l'ensemble est livré sous
+        forme de package APM installé dans <em>n'importe quel</em> dépôt, avec MCP facultatif, des
+        solutions de repli adaptées et une validation humaine pour chaque déploiement.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Capacité</th><th>Rôle de la squad</th><th>Remarques</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Estimation des coûts / tarification</td><td>Squad Cost Manager</td><td>MCP de tarification lorsqu'il est configuré, sinon repli sur l'API REST Azure Retail Prices.</td></tr>
+          <tr><td>Architecture (HLD / LLD)</td><td>Squad Azure Architect</td><td>Modules AVM + modèles de landing zone, Mermaid par défaut.</td></tr>
+          <tr><td>Génération de code IaC (Bicep / Terraform)</td><td>Squad IaC Author</td><td>Convertit le LLD dans <code>infra/{track}/{project}</code> ; ne déploie jamais.</td></tr>
+          <tr><td>Contrôle préalable de gouvernance + déploiement</td><td>Squad Deployer</td><td>Contrôle préalable Azure Policy en lecture seule <em>avant</em> la validation des actions à conséquences (Impactful-Action Gate).</td></tr>
+          <tr><td>Documentation de l'existant</td><td>Squad As-Built Author</td><td>Inventaire des ressources, matrice de conformité, guide d'exploitation, plan de reprise après sinistre — en lecture seule.</td></tr>
+          <tr><td>Diagnostic</td><td>Squad Azure Diagnose</td><td>Hypothèses classées à partir de Resource Health / Monitor / Resource Graph — en lecture seule.</td></tr>
+          <tr><td>Recherche → Planification → Implémentation → Revue</td><td>researcher, lead, developer, tester</td><td>L'ossature méthodologique, intégrée au profil <code>azure</code> aux côtés des spécialistes.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Avant de commencer</h2>
+      <p>
+        Orientez les étapes en lecture seule (documentation de l'existant, diagnostic) vers un
+        <strong>groupe de ressources existant</strong> dont vous disposez déjà. Elles produisent alors
+        des résultats réels sans déploiement, sans dépense et sans risque.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Prérequis</th><th>Pourquoi</th><th>Vérification</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>hve-squad <code>v0.8.1</code> installé</td><td>L'ossature méthodologique et les rôles de documentation de l'existant et de diagnostic nécessitent la version <code>0.8.1</code>.</td><td><code>apm install "Peter-N91/hve-squad#v0.8.1"</code></td></tr>
+          <tr><td>Abonnement Azure + <code>az login</code></td><td>Lectures réelles pour les coûts, la documentation de l'existant et le diagnostic ; déploiement facultatif.</td><td><code>az account show</code></td></tr>
+          <tr><td>Node.js + <code>npx</code></td><td>Exécute le serveur facultatif <code>@azure/mcp</code>.</td><td><code>node -v</code></td></tr>
+          <tr><td>VS Code + Copilot (mode agent)</td><td>La squad délègue aux sous-agents.</td><td>—</td></tr>
+          <tr><td>uv (ou Python) + Graphviz <small>(facultatif)</small></td><td>Uniquement pour les diagrammes d'architecture avec icônes Azure enregistrés dans Git via la compétence <code>python-diagrams</code> ; sans ces outils, la squad se replie sur Mermaid.</td><td><code>dot -V</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          <strong>Le MCP Azure est facultatif.</strong> Le contrôle préalable du Deployer, l'As-Built
+          Author et Azure Diagnose utilisent tous la capacité <code>azure-resource</code>, qui
+          privilégie <code>@azure/mcp</code> lorsqu'il est configuré et se replie automatiquement sur
+          la CLI <code>az</code> et l'API REST Azure Resource Graph. L'absence de MCP ne bloque jamais
+          la squad — soulignez que MCP est facultatif par conception.
+        </p>
+      </div>
+
+      <h3>Configurer le MCP Azure (facultatif)</h3>
+      <p>
+        Le package n'écrit jamais votre fichier <code>.vscode/mcp.json</code> à l'installation, et une
+        demande ordinaire à la squad ne le crée pas non plus en silence. Deux possibilités s'offrent à vous :
+      </p>
+      <ol>
+        <li>
+          <strong>Demandez au coordinateur de le préparer</strong> (fusion sur demande explicite,
+          présentée sous forme de diff avant enregistrement) :
+          <pre><code>/squad request="merge the squad MCP template into my VS Code workspace"</code></pre>
+        </li>
+        <li>
+          <strong>Créez-le manuellement</strong> — la version minimale exécutable se limite au serveur
+          officiel :
+          <pre><code>{
+  "servers": {
+    "azure": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@azure/mcp@latest", "server", "start"]
+    }
+  }
+}</code></pre>
+          Rechargez VS Code, puis vérifiez son fonctionnement : demandez à Copilot de lister vos groupes de ressources.
+        </li>
+      </ol>
+      <p>
+        Cette préparation est une <em>fusion</em>, jamais un écrasement : les serveurs déjà présents
+        sont donc conservés. Le bloc de tarification de <code>mcp.template.json</code> est un emplacement
+        réservé suivi dans Git, non exécutable — seul le serveur <code>@azure/mcp</code> ci-dessus est
+        prêt pour la démo.
+      </p>
+
+      <h3 id="icon-diagrams">Facultatif — Diagrammes d'architecture avec icônes Azure</h3>
+      <p>
+        Par défaut, Azure Architect produit le HLD en Mermaid. Si vous souhaitez plutôt un diagramme
+        avec <strong>icônes</strong> enregistré dans Git (PNG/SVG avec les véritables icônes des produits
+        Azure), l'architecte utilise la compétence <code>python-diagrams</code>, qui effectue le rendu
+        avec la bibliothèque Python <code>diagrams</code> et le moteur Graphviz. Cette option nécessite
+        une demande explicite et deux outils locaux :
+      </p>
+      <ul>
+        <li><strong>uv (ou Python)</strong> — exécute le générateur : <code>winget install astral-sh.uv</code>.</li>
+        <li><strong>Graphviz</strong> — le moteur de rendu, un binaire système : <code>winget install Graphviz.Graphviz</code> (exécutez avec élévation de privilèges, puis rouvrez le terminal pour que <code>dot</code> soit dans le PATH).</li>
+      </ul>
+      <p>
+        Ces deux outils interviennent uniquement avant le déploiement — sans connexion Azure ni dépense.
+        Sur une machine vierge, l'étape d'implémentation s'interrompt pour installer Graphviz (qui
+        nécessite une élévation de privilèges) ; préinstallez-le pour une exécution fluide. Pour déclencher
+        cette option, ajoutez une phrase à la demande de conception — vous indiquez le <em>résultat</em>,
+        pas les ressources, et l'architecte déduit le diagramme de sa propre conception et du Bicep,
+        puis enregistre dans Git les paires PNG + SVG sous <code>docs/architecture/</code> :
+      </p>
+      <pre><code>/squad request="... Also render the architecture you decide on as committed Azure-icon diagram images using the python-diagrams skill."</code></pre>
+      <p>Sans ces outils, l'architecte se replie simplement sur Mermaid ; rien ne bloque.</p>
+
+      <h2>Étape 0 — Initialiser la squad</h2>
+      <pre><code>/squad profile=azure request="Set up the squad for an Azure infrastructure project."</code></pre>
+      <p>
+        Le coordinateur découvre le dépôt, propose le profil <code>azure</code> et initialise la squad
+        après votre confirmation. <strong>À expliquer :</strong> « Une seule équipe — Cost Manager,
+        Architect, IaC Author, Deployer, As-Built et Diagnose — accompagnée de l'<em>ossature
+        méthodologique</em> : researcher, lead, developer, tester, pour que recherche → planification →
+        implémentation → revue reste toujours disponible. »
+      </p>
+
+      <h2>Étape 1 — Analyse des coûts</h2>
+      <pre><code>/squad request="Estimate the monthly Azure cost for a small internal web workload in West Europe: a frontend and a backend App Service, an Azure SQL Database, a Key Vault, and a Storage account, reached over private endpoints on a VNet. I need the monthly cost to stay under $60 — give an indicative figure and WAF cost-optimization recommendations to hit that target."</code></pre>
+      <p>
+        Le Cost Manager produit une estimation indicative par la voie de tarification (MCP s'il est
+        configuré, repli REST sinon), ainsi que la liste de contrôle d'optimisation des coûts du WAF.
+      </p>
+
+      <h2>Étape 2 — Architecture, puis IaC</h2>
+      <pre><code>/squad request="Design the HLD and LLD for that workload — frontend and backend web apps, Azure SQL, Key Vault, and Storage in West Europe — using Azure Verified Modules and a landing-zone-aligned layout. Configure the VNet and subnets, add private endpoints and private links where needed, follow security standards, and decide whether containerization is worth it."</code></pre>
+      <pre><code>/squad request="Author the Bicep for that LLD under infra/bicep/demo using AVM modules. Do not deploy."</code></pre>
+      <p>
+        Azure Architect produit le HLD Mermaid et le tableau LLD adapté à Bicep.
+        <strong>C'est ici que la méthodologie devient visible :</strong> « écrire le Bicep » est une
+        demande de niveau implémentation ; le contrôle d'implémentation (Implementation Gate) sollicite
+        donc le rôle <strong>researcher</strong> (modules AVM, landing zone), puis le rôle
+        <strong>lead</strong> (plan IaC), <em>avant</em> que l'IaC Author n'écrive une ligne. Il ne passe
+        jamais à l'implémentation sans préparation.
+      </p>
+      <p>
+        Vous préférez des diagrammes avec <strong>icônes Azure</strong> enregistrés dans Git plutôt que
+        Mermaid ? Ajoutez <em>« produis des images de diagrammes avec icônes Azure à l'aide de la compétence python-diagrams »</em>
+        à la demande de conception — consultez la section <a href="#icon-diagrams">Facultatif — Diagrammes d'architecture avec icônes Azure</a>
+        ci-dessus pour la configuration initiale de <code>uv</code> et de Graphviz.
+      </p>
+
+      <h2>Étape 2b — Revoir l'implémentation <small>(nouveauté de la version 0.8.1)</small></h2>
+      <p>
+        Une fois le Bicep livré par l'IaC Author, le <strong>suivi systématique de revue (Review Follow-Through)</strong>
+        sollicite <code>tester</code> (Implementation Validator ou Code Review Full) pour vérifier l'IaC
+        par rapport au LLD. La revue clôt désormais chaque implémentation, rendant le contrôle
+        symétrique — recherche et planification précèdent la réalisation, la revue la suit. Vous
+        pouvez aussi la demander explicitement :
+      </p>
+      <pre><code>/squad request="Review the Bicep we just authored against the LLD and flag any drift."</code></pre>
+
+      <h2>Étape 3 — Découvrir la gouvernance et déployer sous approbation</h2>
+      <pre><code>/squad request="Deploy infra/bicep/demo to my subscription. Run the policy precheck first and show me what governance constraints apply before the gate."</code></pre>
+      <p>
+        Le Deployer effectue un <strong>contrôle préalable Azure Policy en lecture seule</strong>
+        (affectations effectives et refus anticipés) <em>avant</em> la validation des actions à
+        conséquences (Impactful-Action Gate), puis s'arrête pour obtenir votre approbation.
+        <strong>À expliquer :</strong> « Il découvre les véritables stratégies de l'abonnement avant
+        de demander à déployer — et ne déploie jamais sans moi. » Pour une démo sans risque, refusez
+        au point de validation ; la valeur du contrôle préalable est déjà démontrée.
+      </p>
+
+      <h2>Étape 4 — Documentation de l'existant</h2>
+      <p>Ciblez un groupe de ressources <strong>existant</strong> pour que cette étape fonctionne sans déploiement :</p>
+      <pre><code>/squad request="Document the deployed Azure infrastructure in resource group rg-demo as as-built artifacts: a resource inventory, a compliance matrix from Azure Policy, an operations runbook, and a backup/DR plan."</code></pre>
+      <p>
+        L'As-Built Author établit l'inventaire via Resource Graph (en lecture seule), construit la matrice
+        de conformité et rédige le guide d'exploitation et le plan de reprise après sinistre pour le rôle
+        technical-writer &mdash; le tout livré sous forme d'un ensemble de documents Markdown.
+      </p>
+
+      <h2>Étape 5 — Diagnostic</h2>
+      <pre><code>/squad request="Diagnose why the App Service in resource group rg-demo is returning 5xx errors. Query Resource Health and recent logs, rank the likely causes, and recommend fixes — but do not change anything."</code></pre>
+      <p>
+        Le rôle Azure Diagnose interroge Resource Health, Azure Monitor (KQL) et Resource Graph,
+        renvoie des hypothèses classées et étayées, puis confie toute correction au Deployer soumis à
+        approbation ou à l'IaC Author — en restant strictement en lecture seule.
+      </p>
+
+      <h2>La version autonome en une demande</h2>
+      <p>
+        Le même parcours s'exécute à partir d'une seule demande autopilot qui exprime le <em>besoin</em>
+        sans nommer les étapes. La squad déduit elle-même leur enchaînement :
+      </p>
+      <pre><code>/squad mode=autopilot profile=azure request="Stand up a small, production-ready web app on Azure for an internal team — web apps for a frontend and a backend with a SQL database, secrets handling, and file storage in West Europe, I need you to configure vnets and subnets for that and decide on the resources that you prefer. Make sure to follow security standards and create private endpoints and private links when needed. I need monthly cost to stay under $60, the setup to respect our governance, and to be able to operate and troubleshoot it once it's live. So you are free to decide whether it is better to do containerization or not. Keep me in control of anything that spends money or changes my subscription. Also render the architecture you decide on as committed Azure-icon diagram images."</code></pre>
+      <p>À partir de cette seule ligne, autopilot organise le pipeline et ne s'arrête que lorsque c'est nécessaire :</p>
+      <ul>
+        <li><strong>Initialisation</strong> — propose le profil <code>azure</code> et attend votre confirmation.</li>
+        <li><strong>Recherche &rarr; Planification</strong> &mdash; le rôle researcher, puis le rôle lead.</li>
+        <li><strong>Conseil</strong> — architecture, sécurité et coûts donnent leur avis avant toute réalisation.</li>
+        <li><strong>Implémentation</strong> — Azure Architect et IaC Author produisent la conception et le Bicep.</li>
+        <li><strong>Revue</strong> — <code>tester</code> valide l'implémentation.</li>
+        <li><strong>Validation des actions à conséquences (Impactful-Action Gate)</strong> — s'arrête avant le déploiement et demande une approbation.</li>
+        <li><strong>Documentation de l'existant + validation du résultat final</strong> — documente le résultat et attend votre accord final.</li>
+      </ul>
+      <p>
+        Vous n'intervenez qu'à la confirmation du profil, à l'approbation du déploiement et à la
+        validation finale — c'est le mode « dites-le une fois, laissez-le travailler ».
+      </p>
+
+      <div class="callout warn">
+        <p>
+          <strong>Le diagnostic nécessite un symptôme.</strong> Sur un déploiement sans problème, rien
+          n'est en panne : l'exécution autonome couvre donc naturellement coûts → architecture → IaC →
+          revue → déploiement sous approbation → documentation de l'existant, mais <em>pas</em> un
+          diagnostic en direct. Gardez l'étape 5 comme demande réactive distincte lorsque vous voulez
+          la montrer — intégrer une fausse panne à la demande autonome donnerait une impression de mise en scène.
+        </p>
+      </div>
+
+      <h2>Solutions de repli en cas de problème</h2>
+      <table>
+        <thead>
+          <tr><th>Si…</th><th>Alors…</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>@azure/mcp</code> ne se charge pas</td><td>La squad se replie automatiquement sur la CLI <code>az</code> / l'API REST Retail Prices — soulignez que MCP est facultatif par conception.</td></tr>
+          <tr><td>Aucun abonnement disponible pour déployer</td><td>Arrêtez l'étape 3 au point de validation ; exécutez les étapes 4 et 5 sur un groupe de ressources existant.</td></tr>
+          <tr><td>Un rôle n'est pas sollicité</td><td>Vérifiez que la version <code>v0.8.1</code> est installée — les rôles de documentation de l'existant, de diagnostic et de modernisation ont rejoint la liste de délégation du coordinateur en <code>0.8.1</code>.</td></tr>
+          <tr><td>Une tarification approfondie (RI / spot / PTU) est demandée</td><td>Le MCP communautaire de tarification est à activer explicitement ; le repli REST Retail Prices couvre actuellement les tarifs publics.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Points clés pour conclure</h2>
+      <ul>
+        <li><strong>Pas de clonage.</strong> hve-squad s'installe par <code>apm install</code> dans <em>votre</em> dépôt — la squad vous accompagne.</li>
+        <li><strong>MCP facultatif.</strong> Chaque capacité Azure dispose d'une solution de repli sans MCP identifiée ; l'absence d'un serveur ne bloque donc jamais la squad.</li>
+        <li><strong>Sûr par conception.</strong> Les déploiements restent soumis à la validation des actions à conséquences (Impactful-Action Gate) ; la documentation de l'existant et le diagnostic s'effectuent strictement en lecture seule.</li>
+        <li><strong>Méthodologie complète.</strong> Recherche → planification → implémentation → revue s'exécute dans chaque profil : le travail Azure est planifié et revu, pas improvisé.</li>
+      </ul>
+
+      <div class="pager">
+        <a class="prev" href="demo.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Démonstrations</div>
+        </a>
+        <a class="next" href="demo-2.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Démo 2 — Migration en autopilot</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · fondé sur les agents et les conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
 </body>
 </html>

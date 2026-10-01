@@ -1,54 +1,283 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Migration autopilot | hve-squad</title><meta name="description" content="Retour sur une migration préparée par hve-squad puis arrêtée au contrôle de qualité avant déploiement." />
-  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../demo-2.html" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Démo 2 — hve-squad</title>
+  <meta name="description" content="Une seule demande autopilot planifie une migration Contoso → Azure de bout en bout — recherche, plan, conseil, IaC, coûts, sécurité, HLD/LLD — et le contrôle de revue s'arrête sur 5 blocages de mise en production au lieu de livrer un travail défectueux." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../demo-2.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html" class="active">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../demo-2.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Démonstration 02</div><h1>Migration autopilot</h1><p class="lead">Une demande produit un dossier de migration. La revue trouve des blocages et s'arrête : ce scénario montre une escalade, pas un déploiement réussi.</p></div></header>
-  <main class="content"><div class="container">
-    <p><a href="demo.html">Toutes les démonstrations</a> · <a href="demo-1.html">Azure</a> · <a href="demo-3.html">Produit</a> · <a href="demo-4.html">.NET</a></p>
-    <h2>Contexte et préparation</h2>
-    <p>Le parcours d'origine utilise le dépôt préparé <code>hve-squad-demo2</code>, des définitions de processus Contoso et des documents privés dans <code>knowledge-docs/</code>. Ces documents ne sont pas distribués avec ce site. Pour le reproduire, utilisez votre propre contexte autorisé et le profil <code>azure</code>.</p>
-    <p>Le périmètre porte sur l'étude et les fichiers de préparation, sans déploiement Azure. Vérifiez les agents disponibles et, pour les diagrammes avec icônes, Python ou uv et Graphviz. Mermaid reste possible sans ce rendu.</p>
-    <div class="callout warn"><p><strong>Un dossier ignoré par Git ne suffit pas à empêcher une fuite.</strong> Les documents privés sont un contexte de lecture ; examinez aussi les livrables et le diff pour vérifier qu'aucune donnée confidentielle n'a été reproduite.</p></div>
-    <h2>La demande</h2>
-    <p>Initialisez et confirmez d'abord l'équipe, puis envoyez la demande :</p>
-    <pre><code>/squad profile=azure mode=autopilot request="Planifie et prépare la migration de ce projet depuis l'environnement local vers Azure.
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html" class="active">Démonstrations</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../demo-2.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
 
-Contexte : lis les définitions de processus du dépôt et ./knowledge-docs pour comprendre le besoin.
+  <!-- Demo selector — pinned at the top; the walkthrough below follows the demo you choose. -->
+  <div class="demo-bar">
+    <div class="container">
+      <div class="demo-switch">
+        <div class="label">Choisir une démo</div>
+        <!--
+          Multi-demo selector. To add a demo: give it the next "Demo N" number,
+          turn its chevron into a link (<a class="chev" href="demo-N.html">),
+          mark the current page's chevron .active, and drop the .soon class once
+          the demo page exists.
+        -->
+        <ul class="demo-chevrons">
+          <li><a class="chev" href="demo-1.html"><span class="step">Démo 1</span><span class="name">Squad Azure</span></a></li>
+          <li><span class="chev active"><span class="step">Démo 2</span><span class="name">Migration en autopilot</span></span></li>
+          <li><a class="chev" href="demo-3.html"><span class="step">Démo 3</span><span class="name">Squad produit</span></a></li>
+          <li><a class="chev" href="demo-4.html"><span class="step">Démo 4</span><span class="name">Moderniser .NET</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
 
-Livrables : architecture cible justifiée, plan de migration concret, IaC sous infra/, estimation des coûts, revue de sécurité, HLD Mermaid et LLD avec icônes si l'outillage est disponible.
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Parcours guidé</div>
+      <h1>Démo Migration en autopilot</h1>
+      <p class="lead">
+        Une seule demande autopilot <code>/squad</code> — sans prompt à chaque étape — planifie une
+        migration complète <strong>Contoso&nbsp;Inc. → Azure</strong> : étude de faisabilité, plan par
+        phases, conseil avant implémentation (architecture, coûts, sécurité), IaC Bicep et diagrammes
+        HLD/LLD. Le fait marquant est ce qui s'est passé à la fin : le <strong>contrôle de revue a
+        détecté cinq blocages de mise en production et s'est arrêté</strong>, en sollicitant une
+        décision humaine plutôt qu'en livrant un travail défectueux. C'est la démonstration de la
+        sécurité du processus, exécutée en direct sur un véritable dépôt.
+      </p>
+      <a class="btn btn-primary" href="https://github.com/Peter-N91/hve-squad-demo2">Ouvrir le dépôt de la démo sur GitHub →</a>
+    </div>
+  </header>
 
-Contraintes : ./knowledge-docs est privé. Ne reproduis pas son contenu dans les fichiers suivis, livrables ou sorties à publier. Aucun déploiement. Arrête-toi sur les blocages et attends ma décision."</code></pre>
-    <h2>Résultats du parcours d'origine</h2>
-    <p>Ces observations décrivent le run documenté, pas une garantie de résultats identiques dans votre projet :</p>
-    <table><thead><tr><th>Étape</th><th>Livrable observé</th><th>État</th></tr></thead><tbody>
-      <tr><td>Recherche</td><td>Étude de faisabilité et correspondance des services pour un contexte de 117 clients.</td><td>Terminée</td></tr>
-      <tr><td>Plan</td><td>Six phases, montée en charge de 28 semaines et migration sur trois ans.</td><td>Terminé</td></tr>
-      <tr><td>Conseil</td><td>Quatre ADR, HLD/LLD, prévision de coût et examen de sécurité.</td><td>Accord conditionnel</td></tr>
-      <tr><td>Implémentation</td><td>Structure Bicep de 15 modules, workflows, tests et supervision.</td><td>Structure générée, non prête pour la production</td></tr>
-      <tr><td>Revue</td><td>Cinq blocages critiques.</td><td>Arrêt et escalade</td></tr>
-      <tr><td>Validation finale</td><td>Non atteinte.</td><td>Pas de livraison validée</td></tr>
-    </tbody></table>
-    <p>L'architecture proposée associait Azure Container Instances et PostgreSQL managé dans une organisation hub-spoke. La prévision historique était d'environ 598 000 à 648 000 USD la première année et 2,4 millions USD sur trois ans. Ces chiffres ne sont ni une tarification actuelle ni une estimation pour votre projet.</p>
-    <h2>Les cinq blocages de la revue</h2>
-    <table><thead><tr><th>Constat</th><th>Conséquence</th></tr></thead><tbody>
-      <tr><td>Erreurs de compilation Bicep</td><td>Portées, fonctions ou schémas incorrects : déploiement impossible.</td></tr>
-      <tr><td>Chemins CI/CD incohérents</td><td>Des workflows pointent vers des fichiers absents.</td></tr>
-      <tr><td>Validation de déploiement contournée</td><td>Un accord à deux personnes est documenté mais l'implémentation approuve automatiquement.</td></tr>
-      <tr><td>Tests d'intégration non mesurables</td><td>Les cinq scénarios attendent un déploiement réel ; leur succès n'est pas démontré.</td></tr>
-      <tr><td>Supervision incomplète</td><td>Cinq alertes implémentées pour quatorze annoncées.</td></tr>
-    </tbody></table>
-    <h2>La décision humaine</h2>
-    <p>La squad a proposé soit une remédiation avec responsables puis nouvelle revue, soit une synthèse d'escalade et l'arrêt. L'utilisateur a choisi l'escalade : aucune correction n'a été appliquée dans ce run et aucune validation finale n'a été obtenue.</p>
-    <p>La reprise prévue attribuait les erreurs Bicep à l'auteur IaC, les chemins CI/CD au Deployer, les tests au développeur, la supervision au rôle concerné et la revalidation au tester. Les estimations d'effort du parcours d'origine ne constituent pas un engagement pour une nouvelle exécution.</p>
-    <h2>Présenter honnêtement le résultat</h2>
-    <ul><li>Montrez les fichiers générés et leurs limites, pas seulement le résumé du coordinateur.</li><li>Si l'IaC ne compile pas, présentez le rapport de revue et l'escalade ; ne forcez pas un déploiement.</li><li>Si un agent ou un outil manque, consignez le blocage avant d'adapter l'équipe.</li><li>Ne présentez pas le contrôle de qualité comme une garantie absolue de détection.</li></ul>
-    <div class="pager"><a class="prev" href="demo-1.html"><div class="dir">Retour</div><div class="ttl">Squad Azure</div></a><a class="next" href="demo-3.html"><div class="dir">Suite</div><div class="ttl">Squad produit</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+  <main class="content">
+    <div class="container">
+
+      <h2>Ce que vous démontrez</h2>
+      <p>
+        Qu'une seule ligne autopilot peut partir d'un objectif métier de haut niveau et produire de
+        manière autonome un dossier de migration complet, examiné par le conseil — <em>et</em>, ce
+        qui est tout aussi important, que le contrôle de revue intégré détecte les problèmes de qualité
+        et <strong>s'arrête</strong> plutôt que de les livrer. Contrairement au parcours
+        <a href="demo-1.html">Squad Azure</a>, il n'y a pas d'étapes à demander séparément ici : tout a
+        été piloté par <strong>une seule demande</strong>, et la squad a déduit elle-même l'ensemble
+        du pipeline Recherche → Planification → Conseil → Implémentation → Revue.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Capacité</th><th>Membre de la squad (rôle)</th><th>Remarques</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Étude de faisabilité</td><td>Alpha (researcher)</td><td>Correspondance des services (ACI + PostgreSQL), contexte de migration de 117 clients.</td></tr>
+          <tr><td>Plan de migration</td><td>Beta (lead)</td><td>Plan en 6 phases — montée en charge sur 28 semaines + migration sur 3 ans — avec critères de validation.</td></tr>
+          <tr><td>Conseil (ADR, HLD/LLD)</td><td>Kappa, Epsilon (architecte, architecte Azure)</td><td>4 ADR, HLD Mermaid, LLD avec icônes Azure ; topologie hub-spoke, landing zone Azure CAF.</td></tr>
+          <tr><td>Examen des coûts et de la sécurité</td><td>Lambda, Mu (coûts, sécurité)</td><td>Prévision d'environ 2,4 M$ sur 3 ans ; chiffrement CMK, identité managée, RBAC, journalisation d'audit.</td></tr>
+          <tr><td>IaC + automatisation</td><td>Zeta, Eta, Gamma, Iota (IaC, déploiement, développement, supervision)</td><td>Bicep (15 modules), workflows CI/CD, tests d'intégration, supervision.</td></tr>
+          <tr><td>Revue qualité + contrôle de validation</td><td>Delta (tester)</td><td><strong>La vedette de cette démo</strong> — la validation Gate&nbsp;1 qui a suspendu le pipeline.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Avant de commencer</h2>
+      <p>
+        Cette démo s'exécute sur un dépôt préparé, <code>hve-squad-demo2</code>, qui contient déjà le
+        code source et les définitions de processus Contoso ainsi qu'un dossier privé
+        <code>knowledge-docs/</code>. L'ensemble de l'exécution ne produit que des <strong>livrables
+        de planification et une structure initiale</strong> — rien n'est déployé sur Azure, ce qui
+        permet de l'exécuter en direct sans risque.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Prérequis</th><th>Pourquoi</th><th>Vérification</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>hve-squad installé (avec le profil <code>azure</code>)</td><td>L'équipe de migration — recherche, pilotage, architecture, IaC, coûts, sécurité, tests — est initialisée par le profil <code>azure</code>.</td><td><code>apm install "Peter-N91/hve-squad"</code></td></tr>
+          <tr><td>VS Code + Copilot (mode agent)</td><td>Le coordinateur sollicite les membres de l'équipe en tant que sous-agents.</td><td>—</td></tr>
+          <tr><td>Le dépôt <code>hve-squad-demo2</code></td><td>Contient les définitions de processus Contoso et le contexte <code>knowledge-docs/</code> ignoré par Git.</td><td>Ouvrez-le comme espace de travail.</td></tr>
+          <tr><td>uv (ou Python) + Graphviz <small>(facultatif)</small></td><td>Uniquement pour le LLD avec icônes Azure via la compétence <code>python-diagrams</code> ; sans ces outils, repli sur Mermaid.</td><td><code>dot -V</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <p>
+          <strong>Le contexte privé reste privé.</strong> La squad lit
+          <code>./knowledge-docs</code> (notes de réunion, architecture de référence) <em>uniquement
+          pour le contexte</em>. Le garde-fou de la demande exclut son contenu de tout fichier
+          enregistré dans Git et de tout livrable généré — le dossier est ignoré par Git par
+          conception, et l'exécution respecte cette règle. Ne collez jamais son contenu dans la
+          présentation ni dans une sortie envoyée vers un dépôt distant.
+        </p>
+      </div>
+
+      <h2>La demande unique</h2>
+      <p>
+        Toute la démo tient dans cette seule ligne autopilot. Elle nomme le <em>résultat attendu</em>
+        et les garde-fous, pas les étapes — la squad organise elle-même le pipeline :
+      </p>
+      <pre><code>/squad profile=azure mode=autopilot request="Plan and prepare a migration of this project from on-premise Contoso Inc. to Azure.
+
+Where to look:
+- ./knowledge-docs — the private reference material (architecture, meeting notes). Read it for context only.
+- the existing Contoso Inc. source/process definitions in this repo.
+
+What I need:
+- A recommended target Azure architecture and a concrete migration plan (Contoso Inc. BPMN/workflows mapped to the appropriate Azure services).
+- IaC authored under infra/.
+- A cost view and a security pass on the proposed design.
+- A HLD diagram with mermaid and LLD diagram containing Azure icons.
+
+Guardrails:
+- Treat ./knowledge-docs as private: never copy its contents into committed files, generated artifacts, or any output that would be pushed. It is gitignored."</code></pre>
+      <p>
+        <strong>À expliquer :</strong> « Une seule ligne, sans surveillance permanente. Autopilot
+        exécute Recherche → Planification → Conseil → Implémentation → Revue, ne s'arrête que lorsque
+        c'est nécessaire et traite le dossier privé comme un contexte en lecture seule qu'il ne
+        divulguera jamais. »
+      </p>
+
+      <h2>Ce qu'autopilot a produit (étapes 1 à 4)</h2>
+      <p>
+        Les étapes 1 à 4 se sont achevées sans problème — recherche, plan, décisions du conseil et
+        structure d'implémentation — chacune confiée à un membre nommé et consignée dans les décisions
+        et l'historique sous <code>.copilot-tracking/squad/</code> :
+      </p>
+      <table>
+        <thead>
+          <tr><th>Étape</th><th>Responsable(s)</th><th>Résultat</th><th>État</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1 · Recherche</td><td>Alpha</td><td>Analyse de faisabilité, correspondance des services (ACI + PostgreSQL), contexte de migration de 117 clients.</td><td>✅ Terminée</td></tr>
+          <tr><td>2 · Planification</td><td>Beta</td><td>Plan en 6 phases (montée en charge sur 28 semaines + migration sur 3 ans) avec critères de validation.</td><td>✅ Terminée</td></tr>
+          <tr><td>3 · Conseil</td><td>Kappa, Epsilon, Lambda, Mu</td><td>4 ADR, diagrammes HLD/LLD, prévision de coûts d'environ 2,4 M$ sur 3 ans, posture de sécurité et de conformité.</td><td>✅ Feu vert conditionnel</td></tr>
+          <tr><td>4 · Implémentation</td><td>Zeta, Eta, Gamma, Iota</td><td>IaC Bicep (15 modules), workflows CI/CD, tests d'intégration, supervision.</td><td>✅ Structure complète</td></tr>
+          <tr><td>5 · Revue</td><td>Delta</td><td>Évaluation de la qualité + validation Gate 1.</td><td>🔴 Blocages détectés — décision humaine sollicitée</td></tr>
+          <tr><td>6 · Validation</td><td>—</td><td>Validation du résultat final.</td><td>⛔ Non atteinte</td></tr>
+        </tbody>
+      </table>
+      <p>
+        La cible proposée : <strong>Azure Container Instances + PostgreSQL managé</strong>, dans une
+        organisation des locataires en hub-spoke avec des groupes de ressources par client sur une
+        landing zone Azure CAF — le HLD en Mermaid, le LLD rendu avec de véritables icônes Azure.
+        L'estimation des coûts prévoyait environ <strong>598 à 648 k$ la première année</strong> et
+        <strong>environ 2,4 M$ sur trois ans</strong>.
+      </p>
+
+      <h2>Le point d'arrêt — le contrôle de revue</h2>
+      <p>
+        À l'étape 5, le réviseur (<strong>Delta</strong>) a effectué l'évaluation de qualité Gate 1
+        et détecté <strong>cinq blocages critiques de mise en production</strong>. Il ne les a pas
+        corrigés en silence et n'a pas laissé passer le travail. Il <strong>s'est arrêté au contrôle
+        des risques</strong> et a rendu la décision à l'humain :
+      </p>
+      <table>
+        <thead>
+          <tr><th>N°</th><th>Blocage</th><th>Pourquoi il empêche la mise en production</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>Erreurs de compilation Bicep</td><td>Mauvaise utilisation des portées/fonctions et incohérences de schéma — l'IaC ne compile pas, le déploiement ne peut donc pas continuer.</td></tr>
+          <tr><td>2</td><td>Dérive des chemins CI/CD</td><td>Les workflows font référence à des chemins de modèles inexistants ; la validation et le what-if ne peuvent pas s'exécuter.</td></tr>
+          <tr><td>3</td><td>Contournement du contrôle d'approbation</td><td>Le contrôle de déploiement exigeant deux approbateurs est documenté, mais codé en dur pour approuver automatiquement — aucune application effective.</td></tr>
+          <tr><td>4</td><td>Tests d'intégration bloqués</td><td>Les 5 scénarios sont impossibles à mesurer sans déploiement réel ; Gate 1 ne peut pas être validé.</td></tr>
+          <tr><td>5</td><td>IaC de supervision incomplet</td><td>14 alertes documentées, seulement 5 implémentées — la couverture d'observabilité ne correspond pas à ce qui est annoncé.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <p>
+          <strong>C'est tout l'intérêt de la démo.</strong> L'architecture et la planification étaient
+          solides, mais la structure initiale n'était pas prête pour la production — et le contrôle l'a
+          détecté. Un modèle qui se serait contenté de générer du code aurait livré un IaC défectueux
+          accompagné d'un résumé assuré. La squad s'est arrêtée, a identifié chaque blocage avec le
+          fichier et la ligne concernés, et a refusé de déclarer la réussite.
+        </p>
+      </div>
+
+      <h2>Le point de décision</h2>
+      <p>
+        Face aux blocages, la squad a proposé deux voies et laissé l'humain choisir — elle ne décide
+        jamais à votre place lors d'un contrôle des risques :
+      </p>
+      <ul>
+        <li><strong>Corriger maintenant</strong> — confier chaque blocage au membre qui en est responsable, avec une estimation d'effort par étape, corriger, puis refaire la revue.</li>
+        <li><strong>Faire remonter et arrêter</strong> — consigner les constats, les conséquences et la remédiation proposée dans un document unique destiné aux parties prenantes, puis arrêter.</li>
+      </ul>
+      <p>
+        Lors de l'exécution, l'utilisateur a choisi de <strong>faire remonter les blocages</strong> :
+        aucune correction n'a donc été appliquée et le pipeline s'est arrêté à l'étape 5. La synthèse
+        d'escalade consigne néanmoins les réaffectations prévues, afin de permettre une reprise
+        ultérieure si elle est approuvée :
+      </p>
+      <table>
+        <thead>
+          <tr><th>Étape de remédiation</th><th>Responsable</th><th>Effort</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Corriger les erreurs Bicep</td><td>Zeta (IaC Author)</td><td>1–2 h</td></tr>
+          <tr><td>Corriger les chemins CI/CD</td><td>Eta (Deployer)</td><td>1–2 h</td></tr>
+          <tr><td>Raccorder les tests d'intégration</td><td>Gamma (Developer)</td><td>2–3 h</td></tr>
+          <tr><td>Compléter l'IaC de supervision</td><td>Iota (Azure Diagnose)</td><td>1–2 h</td></tr>
+          <tr><td>Revalider de bout en bout</td><td>Delta (Tester)</td><td>2–3 h</td></tr>
+          <tr><td><strong>Total</strong></td><td>Tous les rôles</td><td><strong>6–12 h</strong></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Solutions de repli en cas de problème</h2>
+      <table>
+        <thead>
+          <tr><th>Si…</th><th>Alors…</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>L'IaC ne compile pas</td><td>C'est le moment clé de la démo — le contrôle de revue l'a détecté. Montrez la synthèse d'escalade plutôt que d'essayer de déployer.</td></tr>
+          <tr><td><code>@azure/mcp</code> n'est pas configuré</td><td>La squad se replie sur la CLI <code>az</code> / l'API REST Resource Graph ; recherche, planification et conseil ne sont pas affectés.</td></tr>
+          <tr><td>Graphviz n'est pas installé</td><td>Le LLD avec icônes Azure se replie sur Mermaid via <code>python-diagrams</code> ; rien ne bloque.</td></tr>
+          <tr><td>Quelqu'un demande « corrige et livre, tout simplement »</td><td>La squad propose une répartition des corrections (responsable + effort par blocage) — elle ne corrige et ne livre jamais en silence en contournant un contrôle des risques.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Points clés pour conclure</h2>
+      <ul>
+        <li><strong>Une demande, tout le pipeline.</strong> Une seule ligne autopilot a piloté Recherche → Planification → Conseil → Implémentation → Revue, sans prompt à chaque étape.</li>
+        <li><strong>Le contrôle est le produit.</strong> La revue a détecté cinq blocages de mise en production et s'est arrêtée — elle a sollicité une décision humaine au lieu de livrer un IaC défectueux accompagné d'un résumé assuré.</li>
+        <li><strong>Vous gardez le contrôle.</strong> Au contrôle des risques, la squad a proposé de corriger immédiatement ou de produire une synthèse d'escalade ; l'humain a choisi. Pas de correction automatique, pas de déploiement silencieux.</li>
+        <li><strong>Le privé reste privé.</strong> <code>./knowledge-docs</code> a été lu uniquement pour le contexte et n'a jamais été copié dans les livrables enregistrés dans Git — il est ignoré par Git par conception.</li>
+      </ul>
+
+      <div class="pager">
+        <a class="prev" href="demo-1.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Démo 1 — Squad Azure</div>
+        </a>
+        <a class="next" href="demo-3.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Démo 3 — Squad produit</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · fondé sur les agents et les conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
 </body>
 </html>
