@@ -392,7 +392,9 @@ BeforeAll {
 }
 '@
     $rateTemplate = Get-ShippedRateTemplate
-    $rateTemplate = $rateTemplate.Replace('Observed-on: <YYYY-MM-DD>', 'Observed-on: 2026-08-19')
+    $observedOnPattern = 'Observed-on: (<YYYY-MM-DD>|\d{4}-\d{2}-\d{2})'
+    if ($rateTemplate -notmatch $observedOnPattern) { throw "The shipped rate template has no 'Observed-on:' line matching $observedOnPattern." }
+    $rateTemplate = $rateTemplate -replace $observedOnPattern, 'Observed-on: 2026-08-19'
     $rateTemplate = $rateTemplate.Replace('last_reconciled: never', 'last_reconciled: 2026-08-19')
     $rateTemplate = $rateTemplate.Replace('observations: 0', 'observations: 1')
     $rateTemplate = $rateTemplate.Replace('calibration_basis: "<observed-on>|2"', 'calibration_basis: "2026-08-19|2"')

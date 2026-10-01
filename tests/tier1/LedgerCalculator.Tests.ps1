@@ -334,7 +334,9 @@ Describe 'Measure-SquadLedger -Write splices the derived fragment and run totals
 
         $result = Invoke-Ledger -SquadRoot $root -Write
         $result.ExitCode | Should -Not -Be 0
-        $result.Output | Should -Match "no 'estCreditsTotal' key"
+        # The child's error view wraps to the console width (narrow on CI) and prefixes each
+        # continuation line with '|', so compare against the message with that layout removed.
+        ($result.Output -replace '[\s|]+', ' ') | Should -Match "no 'estCreditsTotal' key"
         (Get-FileHash -LiteralPath $ledgerPath).Hash | Should -Be $ledgerBefore
     }
 

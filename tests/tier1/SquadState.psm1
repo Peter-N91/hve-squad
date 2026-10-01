@@ -420,6 +420,78 @@ function Get-RateTable {
     $rates
 }
 
+function Get-DispatchClassTable {
+    <#
+    .SYNOPSIS
+        Reads the canonical dispatch-size estimator table.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Content = ''
+    )
+
+    $classes = @{}
+    foreach ($table in (Get-MarkdownTable -Content $Content)) {
+        $required = @('Dispatch class', 'Internal turns', 'Base context', 'Growth/turn', 'Output/turn')
+        if (@($required | Where-Object { $_ -notin $table.Header }).Count -gt 0) { continue }
+
+        foreach ($row in $table.Rows) {
+            $name = $row['Dispatch class']
+            $numbers = @($required[1..4] | ForEach-Object { ConvertTo-LedgerNumber $row[$_] })
+            if (-not $name -or $numbers -contains $null) { continue }
+            $classes[$name] = @{
+                internal_turns = $numbers[0]
+                base_context   = $numbers[1]
+                growth         = $numbers[2]
+                output         = $numbers[3]
+            }
+        }
+    }
+
+    $classes
+}
+
+function Get-CostPreflightRecord {
+    <#
+    .SYNOPSIS
+        Reads every append-only Cost Preflight decision and its demand table.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Content = ''
+    )
+
+    foreach ($match in [regex]::Matches($Content, '(?ms)^## Cost Preflight (?<timestamp>\S+) (?<run>\S+) (?<round>\S+)\r?\n(?<body>.*?)(?=^## |\z)')) {
+        $body = $match.Groups['body'].Value
+        $fields = [ordered]@{}
+        foreach ($field in [regex]::Matches($body, '(?m)^\* (?<key>[^:]+):\s*(?<value>.*)\r?$')) {
+            $fields[$field.Groups['key'].Value] = $field.Groups['value'].Value.Trim()
+        }
+
+        $demand = @(Get-MarkdownTable -Content $body | Where-Object {
+                'Slot' -in $_.Header -and 'Projected Cost' -in $_.Header
+            } | Select-Object -First 1)
+        $permitted = @(
+            if ($fields['Permitted Next Dispatch Set'] -and $fields['Permitted Next Dispatch Set'] -ne 'none') {
+                $fields['Permitted Next Dispatch Set'] -split ',' | ForEach-Object { $_.Trim() }
+            }
+        )
+
+        [pscustomobject]@{
+            Timestamp      = $match.Groups['timestamp'].Value
+            RunId          = $match.Groups['run'].Value
+            RoundId        = $match.Groups['round'].Value
+            Fields         = $fields
+            PermittedSlots = $permitted
+            DemandRows     = @(if ($demand) { $demand[0].Rows })
+        }
+    }
+}
+
 function Get-SquadStateModel {
     <#
     .SYNOPSIS
@@ -488,78 +560,6 @@ function Get-SquadStateModel {
                 )
                 if ('Role' -in $table.Header -and $row['Role']) { $roleAgents[$row['Role']] = $names }
                 $names
-            }
-
-            function Get-DispatchClassTable {
-                <#
-                .SYNOPSIS
-                    Reads the canonical dispatch-size estimator table.
-                #>
-                [CmdletBinding()]
-                param(
-                    [AllowEmptyString()]
-                    [AllowNull()]
-                    [string]$Content = ''
-                )
-
-                $classes = @{}
-                foreach ($table in (Get-MarkdownTable -Content $Content)) {
-                    $required = @('Dispatch class', 'Internal turns', 'Base context', 'Growth/turn', 'Output/turn')
-                    if (@($required | Where-Object { $_ -notin $table.Header }).Count -gt 0) { continue }
-
-                    foreach ($row in $table.Rows) {
-                        $name = $row['Dispatch class']
-                        $numbers = @($required[1..4] | ForEach-Object { ConvertTo-LedgerNumber $row[$_] })
-                        if (-not $name -or $numbers -contains $null) { continue }
-                        $classes[$name] = @{
-                            internal_turns = $numbers[0]
-                            base_context   = $numbers[1]
-                            growth         = $numbers[2]
-                            output         = $numbers[3]
-                        }
-                    }
-                }
-
-                $classes
-            }
-
-            function Get-CostPreflightRecord {
-                <#
-                .SYNOPSIS
-                    Reads every append-only Cost Preflight decision and its demand table.
-                #>
-                [CmdletBinding()]
-                param(
-                    [AllowEmptyString()]
-                    [AllowNull()]
-                    [string]$Content = ''
-                )
-
-                foreach ($match in [regex]::Matches($Content, '(?ms)^## Cost Preflight (?<timestamp>\S+) (?<run>\S+) (?<round>\S+)\r?\n(?<body>.*?)(?=^## |\z)')) {
-                    $body = $match.Groups['body'].Value
-                    $fields = [ordered]@{}
-                    foreach ($field in [regex]::Matches($body, '(?m)^\* (?<key>[^:]+):\s*(?<value>.*)\r?$')) {
-                        $fields[$field.Groups['key'].Value] = $field.Groups['value'].Value.Trim()
-                    }
-
-                    $demand = @(Get-MarkdownTable -Content $body | Where-Object {
-                            'Slot' -in $_.Header -and 'Projected Cost' -in $_.Header
-                        } | Select-Object -First 1)
-                    $permitted = @(
-                        if ($fields['Permitted Next Dispatch Set'] -and $fields['Permitted Next Dispatch Set'] -ne 'none') {
-                            $fields['Permitted Next Dispatch Set'] -split ',' | ForEach-Object { $_.Trim() }
-                        }
-                    )
-
-                    [pscustomobject]@{
-                        Timestamp      = $match.Groups['timestamp'].Value
-                        RunId          = $match.Groups['run'].Value
-                        RoundId        = $match.Groups['round'].Value
-                        Fields         = $fields
-                        PermittedSlots = $permitted
-                        DemandRows     = @(if ($demand) { $demand[0].Rows })
-                    }
-                }
             }
         }
     ) | Sort-Object -Unique
