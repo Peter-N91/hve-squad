@@ -38,7 +38,7 @@ Detection precedence: `federation.md` present means federation; otherwise `team.
 
 The **Squad Scribe** performs every ordinary squad-state write. Confirmed initialization is setup outside Cost Preflight. After it completes, one deterministic exception gates work before its child and Scribe handoff: while no parallel writer exists, the owning coordinator may append one Cost Preflight entry to `decisions.md` and compare-and-swap only `state.json` `currentRun.costPreflight`. When that transaction upgrades a legacy single-squad `1.3` or federation `1.2` state, it may also change only `schemaVersion` to `1.4` or `1.3`, respectively. The coordinator compares the prior `updated` value, preserves every other field, reads both files back, and dispatches nothing on a collision, partial write, or mismatch.
 
-Every other mutation goes through the Scribe via `runSubagent` or `task`. After admission, the Scribe preserves the preflight object and links each child history entry to the exact admitted run and round. This keeps the exception narrow enough that parallel dispatch still has one writer.
+Every other mutation goes through the Scribe via `runSubagent` or `task`. After admission, the Scribe preserves the preflight object and links each child history entry to the exact admitted run and round. This keeps the exception narrow enough that parallel dispatch still has one writer. Under autopilot pipelining, hand-offs for different stages of the same squad root still funnel through this one writer — never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order and dispatch the next only once the current one has returned and verified clean.
 
 Append-only files are appended to and never edited or removed. A coordinator that edits `history/`, any prior decision, or any `state.json` field outside `currentRun.costPreflight` and the exact legacy schema bump has broken the contract, even when the edit is correct.
 
@@ -64,7 +64,7 @@ A roster row names one **Primary** agent and optionally some **Alternates**. The
 
 ## Proof of Dispatch
 
-A stage counts as run only when both exist: its domain artifact on disk at the role's `Deliverable Root`, and a `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block. No history entry means the stage did not happen and the turn cannot advance past it.
+The stage's domain artifact on disk at the role's `Deliverable Root` gates dispatching the next stage. A `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block additionally gates counting the stage as run. No history entry means the stage has not been proven complete — re-send its Scribe hand-off rather than re-running the stage that produced the artifact — and no barrier that reads Scribe-written state may proceed past it.
 
 A history file is created by the dispatch it records, with this preamble and nothing else above the first entry:
 
@@ -133,7 +133,7 @@ Three rules keep the block parseable, and each one has been broken by a real run
 
 ## Two Files the Ledger Reads Back
 
-`consumption-rates.md` is **copied verbatim** from the template in the `squad` skill's `references/consumption.md`, at Init and at every sub-squad seeding or federation promotion. It carries the per-model rate table, the tier-fallback table, the dispatch-size estimator, and the calibration block, and all four are load-bearing. A shortened, summarized, or hand-rewritten rate file leaves the Scribe pricing from a table that no longer contains what it needs.
+`consumption-rates.md` is **copied verbatim** from the template in the `squad` skill's `references/consumption-rates-template.md`, at Init and at every sub-squad seeding or federation promotion. It carries the per-model rate table, the tier-fallback table, the dispatch-size estimator, and the calibration block, and all four are load-bearing. A shortened, summarized, or hand-rewritten rate file leaves the Scribe pricing from a table that no longer contains what it needs.
 
 In `consumption.md`, the row covering the coordinator's and Scribe's own turns is labelled **`orchestration`** in both tables — never `scribe`, `coordinator`, or a split pair. It is derived from the `#### Consumption — Orchestration` blocks the same way every other row is derived from its dispatch blocks, so the Scribe writes one such block into `history/Squad Scribe.md` on every turn it writes state, including Init. No block means no row — an `orchestration` row carrying a figure no block accounts for is invented, and a zero row hides the cost of running the squad.
 
@@ -154,15 +154,15 @@ The ten-field block follows that heading, fenced as `json`, exactly as a dispatc
 
 The ledger is rewritten from **every** block recorded for the run, not from this turn's. So a role that has never been dispatched carries no row at all rather than a row of zeros; the run total is the sum of every block in `history/`; the `Run:` id in the heading is the current run, not the one Init seeded; and `state.json`'s `currentRun` cost figures equal that same total. A ledger rewritten from one turn silently drops every earlier role while still looking complete.
 
-**This file is the only place cost is derived.** For each row, sum that role's blocks into the `Turns` column and the four token columns — **five columns, not four** — then look up the rates once from the row `priced_as` names in `consumption-rates.md`. `Turns` accumulates exactly as the token columns do: a role dispatched twice with `internal_turns` of `15` and `4` carries `19`, never `4`. Only the four token columns are priced, which is why the fifth is the one most often left at the last block's value. Compute the four products separately, sum them, divide by `1e6`, then multiply by the `calibration_factor`. Worked example at a factor of `1.00`; the separators are only for reading:
+**This file is the only place cost is derived.** For each row, sum that role's blocks into the `Turns` column and the four token columns — **five columns, not four** — then look up the rates once from the row `priced_as` names in `consumption-rates.md`. `Turns` accumulates exactly as the token columns do: a role dispatched twice with `internal_turns` of `15` and `4` carries `19`, never `4`. Only the four token columns are priced, which is why the fifth is the one most often left at the last block's value. Compute the four products separately, sum them, divide by `1e6`, then multiply by the `calibration_factor`. Worked example at a factor of `1.00`, at a fictional "Example-Model X1" rate — the model name and every number here are synthetic and round on purpose, so this example can never be mistaken for a real dispatch's figures and copied into a live ledger; the separators are only for reading:
 
 ```text
- 57600 ×  3.00  =  172800
-230400 ×  0.30  =   69120
- 95200 ×  3.75  =  357000
- 15000 × 15.00  =  225000
+100000 ×  1.00  =  100000
+200000 ×  2.00  =  400000
+300000 ×  3.00  =  900000
+400000 ×  4.00  = 1600000
                   -------
-                   823920  / 1e6  =  0.82392 USD  ->  82.39 credits
+                  3000000  / 1e6  =  3.0000 USD  ->  300.00 credits
 ```
 
 Credits are `est_cost_usd / 0.01`. Read the row back and confirm the cost reproduces from its own four token columns and that row's rates. Divide by `1e6` exactly once — the commonest corruption here is a factor-of-ten slip, a row summing to `113520` written as `1.17` rather than `0.11352`, which survives every other check because the row is otherwise well formed. Compare the digits of your sum against the digits of what you wrote.

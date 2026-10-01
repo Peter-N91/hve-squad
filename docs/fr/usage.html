@@ -31,6 +31,7 @@
       <li><code>profile=</code> choisit le profil proposé à l'initialisation. Sans valeur, le coordinateur recommande un profil adapté au dépôt.</li>
       <li><code>pack=power-platform|m365-copilot|aws</code> ajoute des spécialistes technologiques. Plusieurs packs peuvent être séparés par des virgules.</li>
       <li><code>tier=fast|default</code> donne une préférence de niveau de modèle pour le tour.</li>
+      <li><code>routing=off|ranked|manual</code> choisit comment le modèle de chaque rôle est sélectionné ; le mode est enregistré dans <code>team.md</code> jusqu'à ce que vous le changiez. <code>off</code> (par défaut) n'applique aucune politique, <code>ranked</code> choisit le modèle le mieux adapté au travail de chaque rôle parmi ceux que votre hôte propose, et <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir <a href="#model-selection-per-role">Sélection des modèles par rôle</a> ci-dessous.</li>
       <li><code>discovery=quick|standard|deep|skip</code> choisit la profondeur de découverte ou la refuse.</li>
       <li><code>owner=&lt;Member Name&gt;</code> désigne un membre précis si plusieurs membres partagent le même rôle.</li>
       <li><code>mode=autonomous|autopilot</code> choisit le mode d'autonomie. Sans paramètre, le mode est interactif.</li>
@@ -39,7 +40,8 @@
     <pre><code>/squad request="Analyse les menaces du service d'authentification" profile=security
 /squad request="Conçois notre application d'approbation" profile=architecture pack=power-platform
 /squad request="Réduis les abandons pendant l'inscription" discovery=standard
-/squad request="Implémente le plan validé" mode=autopilot cost-ceiling=20</code></pre>
+/squad request="Implémente le plan validé" mode=autopilot cost-ceiling=20
+/squad request="Mène une recherche de sécurité et implémente" routing=manual</code></pre>
     <h2>Initialiser l'équipe</h2>
     <p>Sans <code>team.md</code>, le coordinateur propose un profil ou une équipe personnalisée composée d'agents réellement disponibles. Vous choisissez une squad unique ou une fédération, puis le canal d'approbation. Aucun fichier n'est créé avant votre confirmation.</p>
     <pre><code>/squad init</code></pre>
@@ -51,6 +53,73 @@
       <tr><td><code>mode=autopilot</code></td><td>Enchaînement du travail avec arrêts obligatoires pour les actions importantes, les risques à escalader et la validation finale.</td></tr>
     </tbody></table>
     <div class="callout warn"><p><strong>Autopilot n'est pas une autorisation générale.</strong> Déployer, pousser du code, fusionner ou modifier des données reste soumis aux contrôles prévus. Une question en lecture seule n'autorise pas une implémentation.</p></div>
+
+    <h2 id="autopilot-hand-off-pipelining">Chevauchement des remises du Scribe en autopilot</h2>
+      <p>
+        En <code>mode=autopilot</code>, le coordinateur dispatche la remise Scribe de l'étape N et
+        le rôle de l'étape N+1 ensemble, en deux appels dans un même bloc parallèle, dès qu'aucune
+        barrière ne s'applique et que trois conditions sont remplies : l'artefact propre
+        de l'étape N est confirmé sur disque, l'outil de dispatch de sous-agents de l'hôte peut être
+        appelé plusieurs fois dans un même bloc d'appels parallèles (<code>runSubagent</code> dans
+        VS Code, ou l'outil <code>task</code> de CLI Copilot avec ou sans <code>mode: background</code>),
+        et le chevauchement n'a pas été désactivé par un échec de vérification antérieur dans ce run.
+        Remettre au Scribe seul puis attendre est alors un défaut.
+      </p>
+      <p>
+        Un <code>cost-ceiling</code> ne désactive pas le chevauchement. Le tour de Cost Preflight qui
+        admet l'étape N+1 s'exécute entre les deux blocs parallèles et compte la dépense non encore
+        enregistrée de l'étape N comme une réservation en attente : le plafond ne sous-estime donc
+        jamais la dépense pendant qu'une remise est en cours. Un run interne sous autopilot de
+        fédération sans cible chevauche aussi, à la racine de sa propre sous-squad.
+      </p>
+      <p>
+        Le chevauchement reste <strong>désactivé</strong> dans les cas suivants :
+      </p>
+      <ul>
+        <li>Watch Mode</li>
+        <li>La squad est une racine de fédération (marquée par la présence de <code>federation.md</code>)</li>
+        <li>Le tour de Cost Preflight actif est <code>approved-over-ceiling</code>, dont les unités de dispatch restent séquentielles</li>
+        <li>L'hôte n'a aucun outil de dispatch de sous-agents acceptant plus d'un appel par bloc</li>
+        <li>Après l'échec de vérification d'une remise chevauchée (exécutée à côté d'un rôle) dans ce run ; une remise exécutée seule est corrigée sans désactiver le chevauchement</li>
+      </ul>
+      <p>
+        Quand le chevauchement est désactivé, le coordinateur dispatche la remise Scribe de l'étape N,
+        attend qu'elle se termine et soit vérifiée, puis seulement dispatche l'étape N+1 — exactement
+        comme dans les versions antérieures. Quand le chevauchement est actif, l'étape N+1 commence
+        tandis que la remise de l'étape N est en cours, mais l'étape N+2 ne commence pas avant que la
+        remise de l'étape N ait retourné et passé la vérification.
+      </p>
+      <h3>Vérification et barrières de sécurité</h3>
+      <p>
+        Un simple <code>Measure-SquadLedger.ps1 -Check</code> n'est pas suffisant pour la vérification
+        chevauchée. Le coordinateur prend plutôt un instantané pré-dispatch du nombre de rubriques du
+        fichier d'historique cible, puis vérifie avec <code>-ExpectedHistoryCounts</code> en ajoutant
+        cet instantané plus les entrées que cette remise doit ajouter. Le coordinateur utilise aussi
+        <code>-BaselinePath</code> pour préserver une ligne de base au niveau du contenu (Longueur,
+        SHA-256, nombre de rubriques) de chaque livrable écrit jusqu'à présent dans ce run, permettant
+        la détection de préfixes corrompus ou modifiés dans les écritures ultérieures.
+      </p>
+      <p>
+        Quand une remise chevauchée échoue à la vérification, le chevauchement est désactivé pour le reste du run. L'écriture
+        invalide n'est jamais réécrite par le Scribe ; au lieu de cela, une nouvelle entrée de correction
+        en ajout uniquement est dispatchée, et le livrable affecté est restauré en redispatchant son rôle
+        propriétaire (jamais en modifiant l'historique). Le run ne traverse pas la barrière suivante
+        jusqu'à ce qu'un humain approuve la correction.
+      </p>
+      <p>
+        <code>.copilot-tracking/squad/</code> et son contenu sont git-ignorés, donc l'état du registre
+        est une preuve locale, pas partie de l'historique révisé. Le code livré, les plans et les
+        enregistrements de révision dans <code>plans/</code>, <code>research/</code>, <code>reviews/</code>
+        et les fichiers du projet sont suivis normalement.
+      </p>
+      <h3>Harnais de repère</h3>
+      <p>
+        Un harnais de repère jumelé optionnel existe à
+        <code>tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1</code>
+        (nécessite <code>COPILOT_GITHUB_TOKEN</code>). Le repère en direct n'a pas encore produit de
+        résultat de base, donc le comportement de chevauchement est décrit ici et dans les références
+        source de la squad ; aucune affirmation de performance n'est faite.
+      </p>
     <h2 id="cost-admission-control">Contrôle du coût estimé</h2>
     <p><code>cost-ceiling</code> limite le coût estimé des modèles pour un run, pas la facture GitHub ni la consommation Azure. L'initialisation confirmée reste hors plafond : elle crée les fichiers d'état et de tarification nécessaires, et son coût estimé est enregistré.</p>
     <pre><code>budget restant = max(0, plafond - coût estimé cumulé)
@@ -75,6 +144,176 @@ coût d'admission = estimation du travail restant × 3.0</code></pre>
 /squad request="Continue sans plafond de coût" cost-ceiling=unset</code></pre>
     <p>Pour reprendre après un arrêt, relevez le plafond au-dessus du cumul, retirez-le explicitement, réduisez ou réévaluez la demande, ou démarrez un nouveau run. Réapprouver une limite déjà dépassée n'est pas une reprise valide.</p>
     <p>Consultez <code>currentRun.costPreflight</code> dans <code>state.json</code>, l'entrée <code>Cost Preflight</code> et sa <code>Decision Ref</code> dans <code>decisions.md</code>, les totaux dans <code>consumption.md</code> et les hypothèses dans <code>consumption-rates.md</code>. Les chiffres sont des estimations, pas une télémétrie de facturation.</p>
+    <h2 id="model-selection-per-role">Sélection des modèles par rôle (<code>routing=</code>)</h2>
+    <p>
+      <strong>Comportement par défaut (<code>routing=off</code>) :</strong> aucun paramètre
+      <code>model</code> n'est passé aux dispatches ; chaque agent s'exécute sur son propre modèle
+      frontmatter ou sur le modèle de session, exactement comme avant cette fonctionnalité.
+    </p>
+    <p>
+      <code>routing=</code> a trois modes. Le mode est <strong>enregistré dans <code>team.md</code></strong>
+      et reste actif pour les demandes suivantes jusqu'à ce que vous le changiez ; il suffit donc de le
+      passer une fois :
+    </p>
+    <ul>
+      <li>
+        <strong><code>off</code></strong> (par défaut) — aucun modèle n'est choisi ; <code>team.md</code>
+        n'a pas de colonne <code>Model</code>.
+      </li>
+      <li>
+        <strong><code>ranked</code></strong> — la squad choisit le modèle le mieux adapté au travail de
+        chaque rôle parmi ceux que votre hôte propose, et affiche chaque choix dans une colonne
+        <code>Model</code> sous une ligne <code>Model routing: ranked</code>.
+      </li>
+      <li>
+        <strong><code>manual</code></strong> — vous choisissez une fois, avec des suggestions
+        préremplies ; vos choix sont enregistrés dans la colonne <code>Model</code> sous une ligne
+        <code>Model routing: manual</code>.
+      </li>
+    </ul>
+    <p>
+      <strong>Choix classés.</strong> Chaque rôle correspond à une classe d'assignation
+      (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
+      <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Le catalogue note chaque
+      modèle de 0 à 3 pour chaque classe ; la squad retient la meilleure note, puis le coût mélangé le
+      plus bas, puis la génération la plus récente d'une même famille de modèles. Une égalité n'est
+      jamais départagée par le nom du modèle. Sur Copilot CLI, le roster initial donne par exemple
+      <code>researcher</code> → <code>claude-opus-5.5</code>, <code>lead</code> →
+      <code>gpt-5.6-sol</code>, <code>developer</code> → <code>gpt-5.3-codex</code>,
+      <code>intake-validator</code> → <code>claude-sonnet-5.5</code> et <code>scribe</code> →
+      <code>claude-haiku-4.5</code>.
+    </p>
+    <p>
+      <strong>Choix manuels.</strong> Quand vous passez à <code>routing=manual</code>, à la création de
+      la squad ou plus tard, le coordinateur vous interroge avant toute dispatch. Vous pouvez accepter
+      le modèle suggéré pour tous les rôles, choisir un modèle par classe d'assignation, puis ajuster
+      des rôles précis. Chaque question ne propose que les modèles <strong>que votre hôte peut
+      exécuter</strong> et qui respectent le plancher <code>Model Tier</code> du rôle. Sur Copilot CLI
+      et l'application GitHub Copilot, c'est la liste exacte annoncée par l'outil <code>task</code>.
+      VS Code n'annonce aucune liste ; la squad propose donc les modèles du catalogue dont le prix ne
+      dépasse pas celui de votre modèle de session. Si VS Code refuse un choix, la question est reposée
+      avec la liste renvoyée par VS Code.
+    </p>
+    <p>
+      <strong>Contenu d'une cellule <code>Model</code>.</strong> Un identifiant exact de la colonne
+      <code>Model ID</code> de <code>consumption-rates.md</code> (par exemple
+      <code>claude-sonnet-5.5</code>). Une cellule sous le plancher du rôle, un identifiant inconnu ou
+      contenant des métacaractères de shell ou de prompt est refusé et journalisé, jamais deviné.
+    </p>
+    <p><strong>Ordre de précédence</strong> (le plus élevé gagne, par rôle) :</p>
+    <ol>
+      <li><code>routing=manual</code> : la cellule <code>Model</code> valide du rôle.</li>
+      <li><code>routing=ranked</code> : le choix classé pour ce rôle.</li>
+      <li>
+        <code>tier=</code> (l'entrée de niveau statique existante) ou le <code>Model Tier</code> de
+        <code>team.md</code> — le repli actuel, inchangé.
+      </li>
+      <li>Omettre le paramètre — la politique par défaut.</li>
+    </ol>
+    <p>
+      <strong>Le dispatch recopie la cellule :</strong> en <code>ranked</code> ou <code>manual</code>,
+      chaque dispatch vers un agent du roster transmet exactement la cellule <code>Model</code> de sa
+      ligne, sauf le Scribe, dont l'épinglage de modèle s'applique. Dans la distribution plugin, le hook
+      <code>dispatch-guards</code> refuse un dispatch dont le <code>model</code> manque ou diffère de la
+      cellule, et nomme la cellule à recopier. Il compare seulement ; il ne remplit ni ne modifie
+      jamais une cellule.
+    </p>
+    <p>
+      <strong>Modèles non évalués :</strong> un modèle proposé par l'hôte mais absent du catalogue n'est
+      jamais classé ni suggéré. Vous pouvez tout de même le saisir comme choix manuel ; il est alors
+      étiqueté <code>unevaluated</code> dans le registre de dispatch.
+    </p>
+    <p>
+      <strong>Modèle de départ de la session.</strong> Le modèle choisi dans le chat, ou passé avec
+      <code>--model</code>, exécute le coordinateur : il lit le roster, planifie les étapes et
+      dispatche chaque rôle. <code>routing=</code> ne le change jamais. Démarrez sur un modèle fixe de
+      la classe <code>balanced</code> du catalogue (le niveau intermédiaire du fournisseur), aussi
+      capable que <code>claude-sonnet-5.5</code>. Choisissez n'importe quel modèle de cette classe
+      proposé par votre hôte, par exemple <code>claude-sonnet-5.5</code>, <code>gpt-6-sol</code>,
+      <code>gpt-5.6-terra</code>, <code>gemini-3.8-flash</code> ou <code>grok-4.7</code> ; le fichier
+      <code>references/model-catalog.md</code> du skill squad tient la liste à jour. Un modèle
+      <code>frontier-reasoning</code> alourdit le coût de chaque tour du coordinateur sans améliorer le
+      travail, que <code>ranked</code> envoie déjà aux modèles frontier là où c'est utile. Un modèle
+      <code>fast-lightweight</code> risque davantage d'omettre des étapes obligatoires, comme recopier
+      la cellule <code>Model</code> ou envoyer la passation du Scribe en même temps que l'étape
+      suivante. En <code>auto</code>, l'hôte peut changer le modèle du coordinateur en cours
+      d'exécution, et le registre ne peut pas chiffrer sa part.
+    </p>
+    <p>
+      L'ancien paramètre <code>models=&lt;clé&gt;:&lt;id&gt;,...</code> est retiré. S'il est passé, il
+      n'est pas appliqué et le coordinateur vous oriente vers <code>routing=manual</code>.
+    </p>
+    <p><strong>Exemples :</strong></p>
+    <pre><code># Passe en sélection classée ; team.md gagne une colonne Model avec le choix de chaque rôle.
+/squad request="implémenter la conception" routing=ranked
+
+# Passe en sélection manuelle ; les modèles vous sont demandés avant l'exécution.
+/squad request="concevoir la couche de données" routing=manual
+
+# Revient au comportement par défaut ; la colonne Model est retirée.
+/squad request="examiner l'implémentation" routing=off
+
+# Passe la sous-squad product en sélection manuelle ; chaque sous-squad garde ses propres choix.
+/squad-federation squad=product routing=manual</code></pre>
+
+    <h3>Validation du registre de consommation</h3>
+    <p>
+      Le Scribe exécute une auto-vérification d'exhaustivité des écritures exactement une fois par handoff,
+      après la persistance de tous les écritures. Cette vérification recompte les registres de dispatch
+      et les blocs de consommation dans chaque fichier d'historique touché pour confirmer qu'ils
+      correspondent à ce qui a été écrit, et vérifie que les lignes d'agrégation et de totaux du
+      registre de consommation se somment correctement à partir des blocs enregistrés sur disque.
+    </p>
+    <p>
+      Quand PowerShell 7+ est disponible, le coordinateur exécute aussi <code>Measure-SquadLedger.ps1
+      -SquadRoot &lt;root&gt; -Check</code> depuis le répertoire <code>scripts/</code> du skill squad.
+      Cet assistant en lecture seule redérive entièrement le registre des fichiers d'historique et
+      <code>consumption-rates.md</code>, et quitte avec un code non-zéro s'il détecte :
+    </p>
+    <ul>
+      <li>Une divergence entre le total du registre et la somme de ses propres lignes.</li>
+      <li>
+        Une divergence entre le total du registre et les totaux <code>currentRun</code> du fichier
+        <code>state.json</code>. Un fichier <code>state.json</code> manquant ou non-parsable fait échouer
+        la vérification ; une racine de fédération (marquée par <code>federation.md</code>) est enregistrée
+        comme non-applicable à la place.
+      </li>
+      <li>
+        Un défaut du garde-identité : les identités de blocs ordonnées enregistrées par fichier dans le
+        bloc <code>### Derivation</code> du registre doivent former un préfixe ordonné des identités
+        actuelles du fichier. Les réécritures, réordonnances ou suppressions d'entrées d'historique
+        échouent ce garde ; les ajouts en fin réussissent. Un <code>-Check</code> simple (sans
+        <code>-ExpectedHistoryCounts</code>) ne fait que prévenir sur les registres sans aucune identité
+        enregistrée (compatibilité format hérité). Combiné à <code>-ExpectedHistoryCounts</code> —
+        l'auto-vérification post-écriture propre au Scribe — une Derivation sans aucune identité, ou
+        n'en enregistrant que pour une partie des fichiers touchés (collage partiel), échoue au lieu de
+        prévenir.
+      </li>
+    </ul>
+    <p>
+      Le Scribe ne recopie pas ces chiffres à la main. Il les écrit uniquement avec
+      <code>Measure-SquadLedger.ps1 -Write</code>, qui remplace les sections Attribution, Usage &amp; Cost
+      et Derivation de <code>consumption.md</code> et fixe les deux totaux <code>currentRun</code> de
+      <code>state.json</code> à partir de la même dérivation. Tous les autres octets des deux fichiers
+      restent inchangés. L'assistant refuse et n'écrit rien sur une racine de fédération, avec
+      <code>-Check</code>, ou quand l'un des fichiers n'a pas la section qu'il remplace. Le coordinateur
+      place la commande exacte dans chaque remise au Scribe sous <code>ledgerCommand</code>, et le Scribe
+      l'exécute comme dernière écriture. Exécutez ensuite <code>-Check</code> pour confirmer l'écriture.
+    </p>
+    <p>
+      <strong>Consommation observée.</strong> Les estimations restent, et la consommation réelle
+      s'affiche à côté. Avec <code>-SessionLog auto</code>, que porte <code>ledgerCommand</code>, le
+      script lit le journal de session de l'hôte
+      (<code>~/.copilot/session-state/&lt;session&gt;/events.jsonl</code>, écrit par la CLI Copilot et
+      l'hôte d'agents VS Code) et ajoute une section <em>Observed Usage (host-reported)</em> à
+      <code>consumption.md</code>. Par agent, elle indique le modèle réellement exécuté, s'il correspond
+      au registre, et le total réel de tokens à côté de l'estimation. Elle donne aussi les unités d'IA
+      facturées par l'hôte pour toute la session, coordinateur compris. Un tableau <em>Without HVE
+      Squad</em> compare l'exécution observée au même travail des rôles sur un seul modèle, sans Scribe,
+      les deux étant valorisés avec le mélange pondéré du catalogue. L'hôte ne fournit qu'un total de
+      tokens par dispatch, sans séparer entrée, cache et sortie : cette comparaison est donc une
+      estimation à base égale, pas une facture.
+    </p>
     <h2>Découverte et validation des exigences</h2>
     <p>Sans document d'entrée, les profils <code>product</code> et <code>full</code> peuvent proposer une découverte pour un objectif encore ouvert. Elle est proposée une fois par sujet, jamais imposée : les agents vous interrogent et ne doivent pas inventer vos choix. Avec un document d'entrée, le contrôle de préparation évalue sa clarté, sa cohérence, son périmètre et sa testabilité.</p>
     <table><thead><tr><th>Profondeur</th><th>Résultat</th></tr></thead><tbody><tr><td><code>quick</code></td><td>Un brief produit par l'analyste.</td></tr><tr><td><code>standard</code></td><td>Cadrage et pistes avec le designer, puis brief.</td></tr><tr><td><code>deep</code></td><td>Objections, hypothèse risquée et expérimentation avant le brief. Le rôle challenger doit être disponible ou ajouté avec accord.</td></tr><tr><td><code>skip</code></td><td>Refus enregistré, sans séance de découverte.</td></tr></tbody></table>

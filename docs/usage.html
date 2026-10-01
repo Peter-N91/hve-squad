@@ -78,6 +78,13 @@
           coordinator's cost-first defaults.
         </li>
         <li>
+          <code>routing=off|ranked|manual</code> — how each role's model is chosen, saved in
+          <code>team.md</code> until you change it. <code>off</code> (default) applies no policy;
+          <code>ranked</code> picks the model that best fits each role's work among the models your
+          host offers; <code>manual</code> asks you to pick, with suggestions pre-filled. See
+          <a href="#model-selection-per-role">Model selection per role</a> below.
+        </li>
+        <li>
           <code>discovery=quick|standard|deep|skip</code> &mdash; runs the discovery gate at that
           depth without being asked, or skips it. See <em>Discovery gate</em> below.
         </li>
@@ -101,7 +108,8 @@
 /squad request="design the approvals app" profile=architecture pack=power-platform
 /squad request="summarize the data layer" tier=fast
 /squad request="reduce onboarding drop-off" discovery=standard
-/squad request="build the booking service end to end" mode=autopilot cost-ceiling=20</code></pre>
+/squad request="build the booking service end to end" mode=autopilot cost-ceiling=20
+/squad request="run security research and implement" routing=manual</code></pre>
 
       <figure class="video-figure">
         <video controls preload="metadata" playsinline>
@@ -146,6 +154,65 @@
         choose at build time (interactive mode pings you at every step instead).
       </p>
 
+
+      <h2 id="autopilot-hand-off-pipelining">Autopilot hand-off pipelining</h2>
+      <p>
+        Under <code>mode=autopilot</code>, the coordinator dispatches stage N's Scribe hand-off and
+        stage N+1's role together, as two calls in one parallel tool-call block, whenever no barrier
+        applies and three conditions hold: stage N's own artifact is confirmed on
+        disk, the host's subagent-dispatch tool can be called more than once in one parallel tool-call
+        block (VS Code's <code>runSubagent</code>, or Copilot CLI's <code>task</code> tool with or without
+        <code>mode: background</code>), and pipelining has not been disabled by a prior verification
+        failure in this run. Handing off to the Scribe alone and waiting is a defect in that case.
+      </p>
+      <p>
+        A <code>cost-ceiling</code> does not turn pipelining off. The Cost Preflight round that admits
+        stage N+1 runs between the two parallel blocks and counts stage N's not-yet-recorded spend as a
+        pending reservation, so the ceiling never under-counts spend while a hand-off is in flight.
+        An inner run under untargeted federation autopilot pipelines at its own sub-squad root too.
+      </p>
+      <p>
+        Pipelining remains <strong>off</strong> in the following cases:
+      </p>
+      <ul>
+        <li>Watch Mode</li>
+        <li>The squad is a federation root (marked by presence of <code>federation.md</code>)</li>
+        <li>The active Cost Preflight round is <code>approved-over-ceiling</code>, whose dispatch units stay sequential</li>
+        <li>The host has no subagent-dispatch tool that accepts more than one call per block</li>
+        <li>After a pipelined hand-off (one that ran beside a role) has failed verification in this run; a failed hand-off that ran alone is corrected without turning pipelining off</li>
+      </ul>
+      <p>
+        When pipelining is off, the coordinator dispatches stage N's Scribe hand-off, waits for it to
+        complete and be verified, and only then dispatches stage N+1 — exactly as in prior versions.
+        When pipelining is active, stage N+1 starts while stage N's hand-off is in flight, but stage
+        N+2 does not start until stage N's hand-off has returned and passed verification.
+      </p>
+      <h3>Verification and safety gates</h3>
+      <p>
+        A bare <code>Measure-SquadLedger.ps1 -Check</code> is not sufficient for pipelined verification.
+        Instead, the coordinator takes a pre-dispatch snapshot of the target history file's heading count,
+        then verifies using <code>-ExpectedHistoryCounts</code> with that snapshot plus the entries this
+        hand-off is expected to add. The coordinator also uses <code>-BaselinePath</code> to preserve a
+        content-level baseline (Length, SHA-256, heading count) of every deliverable written so far this run,
+        allowing detection of corrupted or modified prefixes in subsequent writes.
+      </p>
+      <p>
+        When a pipelined hand-off fails verification, pipelining is disabled for the rest of the run. The bad write is never
+        rewritten by the Scribe; instead, a new append-only correction entry is dispatched, and the
+        affected deliverable is restored by re-dispatching its owning role (not by editing history).
+        The run does not cross the next barrier until a human approves the fix.
+      </p>
+      <p>
+        <code>.copilot-tracking/squad/</code> and its contents are git-ignored, so ledger state is local
+        evidence, not part of reviewed history. The delivered code, plans, and review records in
+        <code>plans/</code>, <code>research/</code>, <code>reviews/</code> and project files are tracked normally.
+      </p>
+      <h3>Benchmark harness</h3>
+      <p>
+        An opt-in paired benchmark harness exists at <code>tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1</code>
+        (requires <code>COPILOT_GITHUB_TOKEN</code>). The live benchmark has not yet produced a baseline result,
+        so pipelining behavior is described here and in the squad source references; no performance claim is made.
+      </p>
       <h2 id="cost-admission-control">Cost admission control</h2>
       <p>
         <code>cost-ceiling</code> is an optional ceiling on <strong>estimated model spend for one
@@ -1402,6 +1469,165 @@ layouts:
         <code>currentRun</code>.
       </p>
 
+      <h3 id="model-selection-per-role">Model selection per role (<code>routing=</code>)</h3>
+      <p>
+        <strong>Default behavior (<code>routing=off</code>):</strong> No <code>model</code> parameter
+        is passed to any dispatch, so each agent runs on its own frontmatter model or the session
+        model, exactly as before this feature existed.
+      </p>
+      <p>
+        <code>routing=</code> has three modes. The mode is <strong>saved in <code>team.md</code></strong>
+        and stays in effect on later requests until you change it, so you pass it once:
+      </p>
+      <ul>
+        <li>
+          <strong><code>off</code></strong> (default) — no model is chosen; <code>team.md</code> has no
+          <code>Model</code> column.
+        </li>
+        <li>
+          <strong><code>ranked</code></strong> — the squad picks the model that best fits each role's
+          work, among the models your host offers, and shows each pick in a <code>Model</code> column
+          under a <code>Model routing: ranked</code> line.
+        </li>
+        <li>
+          <strong><code>manual</code></strong> — you pick once, with suggestions pre-filled; your picks
+          are stored in the <code>Model</code> column under a <code>Model routing: manual</code> line.
+        </li>
+      </ul>
+      <p>
+        <strong>How ranked picks are made.</strong> Each role maps to an assignment class
+        (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
+        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). The model catalog scores
+        every model 0–3 for each class, and the squad picks the highest fit, then the lowest blended
+        cost, then the newest generation of the same model family. It never breaks a tie by a
+        model's name. The roles themselves, and the agent behind each one, are listed in the squad
+        skill's <code>references/roster-catalog.md</code>. On the Copilot CLI the seeded roster resolves to, for example,
+        <code>researcher</code> → <code>claude-opus-5.5</code>, <code>lead</code> →
+        <code>gpt-5.6-sol</code>, <code>developer</code> → <code>gpt-5.3-codex</code>,
+        <code>intake-validator</code> → <code>claude-sonnet-5.5</code>, and <code>scribe</code> →
+        <code>claude-haiku-4.5</code>.
+      </p>
+      <p>
+        <strong>How manual picks are made.</strong> When you switch to <code>routing=manual</code>,
+        at squad creation or later, the coordinator asks before dispatching anything. You can accept
+        the suggested model for every role, choose one model per assignment class, and then override
+        individual roles. Every question lists only models <strong>your host can run</strong> that meet
+        the role's <code>Model Tier</code> floor. On the Copilot CLI and the GitHub Copilot app, that
+        is the exact list the <code>task</code> tool advertises. VS Code advertises no list, so the
+        squad offers catalog models priced at or below your session model; if VS Code rejects a
+        pick, you are asked again with the list VS Code reports.
+      </p>
+      <p>
+        <strong>What a <code>Model</code> cell holds.</strong> One exact model id from the
+        <code>Model ID</code> column of <code>consumption-rates.md</code> (for example
+        <code>claude-sonnet-5.5</code>). A cell below the role's floor, an unknown id, or an id
+        containing shell or prompt metacharacters is refused and logged, never guessed.
+      </p>
+      <p><strong>Precedence</strong> (highest wins, per role):</p>
+      <ol>
+        <li><code>routing=manual</code>: the role's valid <code>Model</code> cell.</li>
+        <li><code>routing=ranked</code>: the ranked pick for that role.</li>
+        <li>
+          <code>tier=</code> (the existing static-tier input) or the seeded <code>team.md</code> Model
+          Tier — today's fallback, unchanged.
+        </li>
+        <li>Omit the parameter — the no-policy default.</li>
+      </ol>
+      <p>
+        <strong>Dispatch copies the cell:</strong> under <code>ranked</code> or <code>manual</code>, every
+        dispatch to a roster agent passes that row's <code>Model</code> cell exactly, except the Scribe,
+        whose own model pin governs. In the plugin distribution, the <code>dispatch-guards</code> hook
+        refuses a dispatch whose <code>model</code> is missing or differs from the cell, and names the
+        cell to copy. It only compares; it never fills or changes a cell.
+      </p>
+      <p>
+        <strong>Unevaluated models:</strong> A model the host offers but the catalog does not carry is
+        never ranked or suggested. You can still type it as a manual pick; it is then labelled
+        <code>unevaluated</code> in the dispatch record.
+      </p>
+      <p>
+        <strong>Which model to start the session on.</strong> The model you pick in the chat, or pass
+        with <code>--model</code>, runs the coordinator: it reads the roster, plans the stages, and
+        dispatches every role. <code>routing=</code> never changes it. Start on a fixed model from the
+        catalog's <code>balanced</code> class (the vendor's mid tier), as capable as
+        <code>claude-sonnet-5.5</code>. Pick any model of that class your host offers, for example
+        <code>claude-sonnet-5.5</code>, <code>gpt-6-sol</code>, <code>gpt-5.6-terra</code>,
+        <code>gemini-3.8-flash</code>, or <code>grok-4.7</code>; the squad skill's
+        <code>references/model-catalog.md</code> holds the current list. A
+        <code>frontier-reasoning</code> model adds cost to every coordinator turn without improving the
+        work, which <code>ranked</code> already sends to frontier models where it pays off. A
+        <code>fast-lightweight</code> model is more likely to miss required steps, such as copying the
+        <code>Model</code> cell or sending the Scribe hand-off together with the next stage. Under
+        <code>auto</code>, the host can switch the coordinator's model mid-run, and the ledger cannot
+        price its share (see <a href="#fixed-model-versus-auto">Fixed model versus auto</a>).
+      </p>
+      <p>
+        The former <code>models=&lt;key&gt;:&lt;id&gt;,...</code> input is retired. If you pass it,
+        it is not applied, and the coordinator points you to <code>routing=manual</code>.
+      </p>
+      <p><strong>Examples:</strong></p>
+      <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
+/squad request="implement the design" routing=ranked
+
+# Switch to manual selection; you are asked for the models before the request runs.
+/squad request="design the data layer" routing=manual
+
+# Return to the default; the Model column is removed.
+/squad request="review the implementation" routing=off
+
+# Switch the product sub-squad to manual selection; each sub-squad keeps its own picks.
+/squad-federation squad=product routing=manual</code></pre>
+
+      <h3>Ledger validation</h3>
+      <p>
+        The Scribe runs a write-completeness Self-Check exactly once per hand-off, after all writes
+        are persisted. This check re-counts dispatch records and consumption blocks in every touched history file
+        to confirm they match what was written, and verifies the consumption ledger's per-role and run-total rows
+        sum correctly from the blocks recorded on disk.
+      </p>
+      <p>
+        When PowerShell 7+ is available, the coordinator also runs the helper script
+        <code>Measure-SquadLedger.ps1 -Check</code> (with <code>-SquadRoot &lt;root&gt;</code> pointing to a squad
+        root) from the squad skill's <code>scripts/</code> directory. This read-only helper
+        re-derives the entire ledger from the history files and <code>consumption-rates.md</code>, and exits
+        non-zero if it detects any of these conditions:
+      </p>
+      <ul>
+        <li>A divergence between the ledger's run total and the sum of its own rows.</li>
+        <li>A divergence between the ledger's run total and <code>state.json</code>'s <code>currentRun</code>
+        totals. Missing or unparseable <code>state.json</code> fails the check; a federation root (marked by
+        <code>federation.md</code>) is logged as not-applicable instead.</li>
+        <li>An identity-guard failure: recorded per-file ordered block identities in the ledger
+        <code>### Derivation</code> block must form an ordered prefix of that file's current identities.
+        Overwrites, reorders, or removals of history entries fail this guard; appends pass. A plain
+        <code>-Check</code> (no <code>-ExpectedHistoryCounts</code>) only warns on ledgers with no recorded
+        identities at all (legacy format compatibility). Combined with <code>-ExpectedHistoryCounts</code> — the
+        Scribe's own post-write self-check — a Derivation missing identities entirely, or missing them for only
+        some of the touched files (a partial paste), fails instead of warning.</li>
+      </ul>
+      <p>
+        The Scribe does not hand-copy these figures. Its only write path for them is
+        <code>Measure-SquadLedger.ps1 -Write</code>, which replaces the Attribution, Usage &amp; Cost, and
+        Derivation sections of <code>consumption.md</code> and sets <code>state.json</code>'s two
+        <code>currentRun</code> totals from the same derivation. Every other byte of both files is left
+        unchanged. It refuses and writes nothing on a federation root, beside <code>-Check</code>, or when either
+        file lacks the section it replaces. The coordinator puts the exact command in each Scribe hand-off
+        as <code>ledgerCommand</code>, and the Scribe runs it as its last write. Run <code>-Check</code>
+        afterwards to confirm the write.
+      </p>
+      <p>
+        <strong>Observed usage.</strong> The estimates stay, and real usage sits beside them. With
+        <code>-SessionLog auto</code>, which <code>ledgerCommand</code> carries, the script reads the host's
+        own session log (<code>~/.copilot/session-state/&lt;session&gt;/events.jsonl</code>, written by
+        the Copilot CLI and the VS Code agent host) and adds an <em>Observed Usage (host-reported)</em>
+        section to <code>consumption.md</code>. Per agent, it lists the model that actually ran, whether
+        it matches the ledger, and real total tokens beside the estimated ones. It also gives the host's
+        billed AI units for the whole session, coordinator included. A <em>Without HVE Squad</em> table
+        compares the observed run with the same role work on one model and no Scribe, both priced with
+        the catalog's blended mix. The host reports one token total per dispatch, not the input, cached,
+        and output split, so that comparison is a like-for-like estimate rather than a bill.
+      </p>
+
       <h3>Requirements for running the squad</h3>
       <ul>
         <li>A <code>runSubagent</code> or <code>task</code> tool must be enabled so the coordinator can dispatch the cast.</li>
@@ -1509,7 +1735,7 @@ layouts:
         </li>
       </ul>
 
-      <h3>Fixed model versus auto</h3>
+      <h3 id="fixed-model-versus-auto">Fixed model versus auto</h3>
       <p>
         Under automatic model selection the host routes each request itself and <strong>overrides a
         subagent's pinned model</strong>: a role pinned to Sonnet can be measured running a different

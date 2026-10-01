@@ -1,11 +1,11 @@
 ---
 name: squad-consumption
-description: "Squad consumption ledger templates and the dispatch-size cost estimator, formula, and calibration guidance."
+description: "Squad consumption ledger templates, the dispatch-size cost estimator, cost formula, and Cost Preflight; the per-model rate table, tier fallback, and calibration block live in consumption-rates-template.md."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-08-14"
+  last_updated: "2026-09-28"
 ---
 
 # Squad Consumption Ledger
@@ -43,12 +43,17 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 ### Derivation
 
 ```text
+history/<agent>.md — 0 block(s) — identities: (none)
+history/Squad Scribe.md — 0 block(s) — identities: (none)
+
 <role>         turns 0        0 × 0.00 +      0 × 0.00 +      0 × 0.00 +     0 × 0.00 =        0 / 1e6 = 0.0000
 orchestration  turns 0+0=0    0 × 0.00 +      0 × 0.00 +      0 × 0.00 +     0 × 0.00 =        0 / 1e6 = 0.0000
                                                                                        total = 0.0000
 ```
 
 > Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API. `Model` is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md` and is never invented — `unknown` where it could not be resolved. `Model Source` is `cli-pinned`, `operator-declared`, `dispatch-reported`, `agent-pinned`, `session-inherited`, or `unresolved`; an `agent-pinned` row legitimately differs from the session model. `Priced As` is the rate row used and differs from `Model` only on a fallback. `Turns` is the estimated internal tool-loop turn count, because a dispatch is many model calls and not one; it accumulates across a role's blocks exactly as the token columns do, so a role dispatched twice at `15` and `4` carries `19`. The two tables share the same `Role` order so a row in one lines up with the same row in the other. Token rates and the dispatch-size estimator come from `consumption-rates.md` (observed <date>). Calibration factor <factor> (<observations> reconciled run(s)). 1 AI credit = $0.01 USD.
+>
+> The `history/<file> — <n> block(s) — identities: <hash>,<hash>,...` line above each file's derivation is not decoration: it is the ledger's own record of which `###` entries it has already folded in, one short deterministic hash per entry in file order. A rewrite that finds this run's recorded identities are not an ordered prefix of the file's current identities — same count but different hashes, or fewer current entries than recorded — means an entry was overwritten, reordered, or removed since the last rewrite rather than only appended to, and `Measure-SquadLedger.ps1 -Check` (or render mode) refuses rather than silently accepting it. A pre-existing ledger with no recorded identities at all (an older-format entry) only warns when checked plainly; it never fails on that account alone. But the Scribe's own post-write self-check always runs `-Check` together with `-ExpectedHistoryCounts` (*scribe-procedure.md*'s Write-Completeness Self-Check Step 3), and in that combination a Derivation missing identities entirely, or missing them for only some of the touched files (a partial paste), FAILS instead of warning — that call always follows a fresh write, so a missing or partial paste there is this run's own defect, never a genuinely old ledger.
 
 ## Cost Comparison (illustrative)
 
@@ -61,83 +66,7 @@ This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** a
 
 ## consumption-rates.md
 
-Single maintainable rate table that isolates volatile per-model token pricing from agent logic, plus the dispatch-size estimator and the calibration factor. Uses replace semantics. The Scribe seeds it from this template when the file is missing **or when the existing file does not carry the required sections** (see the Scribe's Step 7 shape check), so a hand-edited or drifted table can never silently degrade every estimate. Because only this file holds token rates, a price change updates one table and never touches an agent prompt.
-
-````markdown
----
-description: "Per-model token rates, dispatch-size estimator, and calibration factor for squad consumption estimates"
----
-
-# Consumption Rates (verify against the current GitHub Copilot "Models and pricing" docs)
-
-* Billing model: usage-based billing (UBB), token-metered, effective 2026-06-01.
-* Observed-on: <YYYY-MM-DD>. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
-* Credit conversion: 1 AI credit = $0.01 USD (fixed).
-* All rates are USD per 1M tokens. Anthropic models bill a separate cache-write rate on top of cached input; models without one leave the column at 0.
-
-## Per-model token rates in USD per 1M tokens (volatile, verify before commit)
-
-| Model (as routed) | Tier     | Input | Cached | Cache write | Output | Notes                      |
-| ----------------- | -------- | ----- | ------ | ----------- | ------ | -------------------------- |
-| GPT-5.4 nano      | fast     | 0.20  | 0.02   | 0           | 1.25   | lightweight, read-heavy    |
-| GPT-5.4 mini      | fast     | 0.75  | 0.075  | 0           | 4.50   | lightweight                |
-| Claude Haiku 4.5  | fast     | 1.00  | 0.10   | 1.25        | 5.00   | lightweight reasoning      |
-| Claude Sonnet 4.6 | default  | 3.00  | 0.30   | 3.75        | 15.00  | versatile                  |
-| Claude Sonnet 5   | default  | 2.00  | 0.20   | 2.50        | 10.00  | versatile (promo pricing)  |
-| GPT-5.4           | default  | 2.50  | 0.25   | 0           | 15.00  | versatile                  |
-| Gemini 3.1 Pro    | default  | 2.00  | 0.20   | 0           | 12.00  | versatile                  |
-| Claude Opus 4.8   | extended | 5.00  | 0.50   | 6.25        | 25.00  | high-capability reasoning  |
-| Claude Opus 5     | extended | 5.00  | 0.50   | 6.25        | 25.00  | high-capability reasoning  |
-| GPT-5.5           | extended | 5.00  | 0.50   | 0           | 30.00  | high-capability reasoning  |
-| (additional)      |          |       |        |             |        | update when GitHub changes |
-
-## Tier fallback rates (used only when `basis: tier-default`)
-
-A tier is a routing preference, not a price. When the actual model is unknown, price the tier at its **most expensive member** rather than a blend: the observed failure mode of this ledger is undercounting, so the fallback is deliberately conservative-high and every row it produces is flagged `basis: tier-default`.
-
-The `Priced as` column below names a model for **pricing only**. Never write it into a consumption block's `model` field — that field records what actually ran and is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md`, or left as the literal `unknown`. Copying a `Priced as` name into `model` is exactly the fabrication that makes a ledger report spend against a model the operator never chose.
-
-| Tier     | Priced as         | Input | Cached | Cache write | Output |
-| -------- | ----------------- | ----- | ------ | ----------- | ------ |
-| fast     | Claude Haiku 4.5  | 1.00  | 0.10   | 1.25        | 5.00   |
-| default  | Claude Sonnet 4.6 | 3.00  | 0.30   | 3.75        | 15.00  |
-| extended | Claude Opus 5     | 5.00  | 0.50   | 6.25        | 25.00  |
-
-## Dispatch-size estimator
-
-A dispatch is **not one model call**. A dispatched subagent runs an internal tool loop, and every internal turn resends the accumulated context. Input therefore scales with `internal_turns × average_context`, not with a single prompt-and-reply pair. Pricing a dispatch as one call is what makes a ledger read an order of magnitude below the bill.
-
-```text
-tokens(bytes)      = bytes / 4
-base_context       = agent prompt + auto-applied instructions + loaded skill content
-average_context    = base_context + growth_per_turn × (internal_turns - 1) / 2
-gross_input        = internal_turns × average_context
-```
-
-Split `gross_input` across the billed rates. Turn 1 is fully uncached; on turns 2..n the carried-forward prefix is a cached read and only the new tool result is fresh input:
-
-```text
-cached_tokens      = gross_input × 0.80
-input_tokens       = gross_input × 0.20
-cache_write_tokens = base_context + growth_per_turn × (internal_turns - 1)   (Anthropic models only; 0 otherwise)
-output_tokens      = internal_turns × output_per_turn
-```
-
-Estimate `internal_turns` and `base_context` from what the dispatch actually reported. These class rows are **floors, not fallbacks** — start here and raise, never start below:
-
-| Dispatch class            | Internal turns | Base context | Growth/turn | Output/turn |
-| ------------------------- | -------------- | ------------ | ----------- | ----------- |
-| Lookup / single-file read | 3              | 20,000       | 3,000       | 800         |
-| Research / file survey    | 12             | 40,000       | 4,000       | 1,250       |
-| Plan / synthesis          | 15             | 60,000       | 4,000       | 2,000       |
-| Implement / edit loop     | 35             | 60,000       | 6,000       | 2,000       |
-| Review / verification     | 18             | 50,000       | 4,000       | 1,500       |
-| Council member opinion    | 10             | 50,000       | 4,000       | 1,500       |
-| Scribe state write        | 4              | 15,000       | 3,000       | 800         |
-
-Observable proxies that raise a floor whenever available: the number of files the agent reported reading and their byte size, the byte size of artifacts it wrote, the count of tool calls it reported, and the length of the findings it returned.
-
-**Validity check.** After estimating, confirm `gross_input / internal_turns >= base_context` for the class. A derived average context below the floor means the dispatch was sized from the summary the coordinator handed over rather than from the dispatch's own context. That summary is a report *about* the dispatch, not the context the dispatch ran on — an agent's prompt plus its auto-applied instructions already exceeds most floors before it reads a single file. When the check fails, raise the numbers and recompute rather than recording the smaller figure.
+Single maintainable rate table that isolates volatile per-model token pricing from agent logic, plus the dispatch-size estimator and the calibration factor. Uses replace semantics. The Scribe seeds it from the template in [consumption-rates-template.md](consumption-rates-template.md) — a **cold** file, read only on initialization or at a Step 7.1 reseed, never on an ordinary decision or history dispatch — when the file is missing **or when the existing file does not carry the required sections** (see the Scribe's Step 7 shape check: a per-model rate table with `Input`, `Cached`, `Cache write`, and `Output` columns, a tier-fallback table, a dispatch-size estimator, and a calibration block), so a hand-edited or drifted table can never silently degrade every estimate. Because only this file holds token rates, a price change updates one table and never touches an agent prompt. Coordinators' Cost Preflight prices from the squad root's own `consumption-rates.md`, never from the template file.
 
 ## Orchestration overhead
 
@@ -158,21 +87,7 @@ est_cost_usd = raw_cost_usd × calibration_factor
 est_credits  = est_cost_usd / 0.01
 ```
 
-A rate is a property of the model, so it belongs to the one file that lists models. Copying it into every block restates the same fact once per dispatch and gives it that many chances to be restated wrong, and a cost stored beside its own inputs is a second copy of a number the inputs already determine.
-
-## Calibration
-
-```yaml
-calibration_factor: 1.00
-last_reconciled: never
-observations: 0
-estimator_revision: 2
-calibration_basis: "<observed-on>|2"
-```
-
-The factor is the running mean of `observed_credits / estimated_credits` across reconciled runs, clamped to the range 0.25-10.0. To reconcile: read the per-user aggregate `ai_credits_used` from the Copilot usage-metrics REST API immediately before and after a run, take the delta as `observed_credits`, divide by the run's `est_credits` total, fold that ratio into the mean, and rewrite this block. Until `observations` is at least 1 the factor stays 1.00 and the ledger carries an "uncalibrated" note.
-
-`calibration_basis` binds those observations to the rate table's `Observed-on` value and `estimator_revision`, joined with `|`. A calibration is eligible for Cost Preflight only when `observations` is positive, `last_reconciled` is not `never`, and the stored basis exactly matches the current rate and estimator basis. When a rate-table reseed or estimator revision changes that basis, reset `calibration_factor` to `1.00`, `last_reconciled` to `never`, and `observations` to `0` rather than applying an old factor to a new calculation.
+A rate is a property of the model, so it belongs to the one file that lists models. Copying it into every block restates the same fact once per dispatch and gives it that many chances to be restated wrong, and a cost stored beside its own inputs is a second copy of a number the inputs already determine. `calibration_factor` is read from the squad root's own `consumption-rates.md` — its calibration block and reconciliation procedure are documented in the template at [consumption-rates-template.md](consumption-rates-template.md), read only on initialization or a Step 7.1 reseed.
 
 ## Cost Preflight
 
@@ -198,7 +113,7 @@ Build the complete manifest through the selected mode boundary before pricing it
 3. Before a Plan artifact identifies deliverable fan-out, reserve every artifact-owning roster role other than `researcher`, `lead`, and `tester`. If that conservative set cannot be enumerated, return `cannot-confirm`. After Plan, replace it with the exact fan-out and recalculate before dispatch.
 4. Assign exactly one dispatch class to every row: research and discovery use `Research / file survey`; plan and remediation use `Plan / synthesis`; implementation and artifact-producing roles use `Implement / edit loop`; review and intake validation use `Review / verification`; council roles use `Council member opinion`; Scribe uses `Scribe state write`; coordinator rounds use `Lookup / single-file read`. An unmapped stage makes the manifest incomplete and returns `cannot-confirm`.
 5. Use the class row's exact `Internal turns`, `Base context`, `Growth/turn`, and `Output/turn` values unless a larger bound is already known before dispatch. Post-dispatch reports refine the ledger, never the preflight that admitted that dispatch.
-6. Resolve pricing only from facts knowable before dispatch. For an unpinned agent under a fixed session model, use that model's row. For a pinned agent under a fixed session model, price the more expensive of the pin and session model so an entitlement fallback cannot make the reservation cheaper. Include an operator-declared candidate the same way. `auto`, an unresolved model, a missing candidate rate, or an invalid rate table is low confidence and cannot admit work.
+6. Resolve pricing only from facts knowable before dispatch. For an unpinned agent under a fixed session model, use that model's row. For a pinned agent under a fixed session model, price the more expensive of the pin and session model so an entitlement fallback cannot make the reservation cheaper. Include an operator-declared candidate the same way. `auto`, an unresolved model, a missing candidate rate, or an invalid rate table is low confidence and cannot admit work. When `routing=ranked` or `routing=manual` resolved a routed id for the role, price the rate row whose `Model ID` matches it instead, per `model-routing.md`'s Cost Preflight Pricing.
 
 Every readable Cost Preflight record uses this table shape. `Projected Cost` is the calibrated point estimate before the policy reserve; row calculations retain full precision.
 
@@ -211,13 +126,16 @@ Every readable Cost Preflight record uses this table shape. `Projected Cost` is 
 Calculate rows through the existing dispatch-size and cost formulas. Apply the eligible `calibration_factor` exactly once to each unrounded row cost, then sum unrounded row values:
 
 ```text
-remaining_usd       = max(0, ceiling_usd - currentRun.estCostUsd)
+evaluated_spend_usd = currentRun.estCostUsd + pending_usd
+remaining_usd       = max(0, ceiling_usd - evaluated_spend_usd)
 projected_cost_usd  = sum(unrounded calibrated manifest row costs)
 reserve_multiplier  = 3.0
 admission_cost_usd  = projected_cost_usd * reserve_multiplier
 ```
 
 The factor-of-three reserve matches the repository's material uncertainty band for estimated ledger figures. It is a policy reserve, not a statistical confidence interval. Round displayed and persisted totals to four decimal places only after all rows are summed; never sum rounded display values.
+
+**Pending reservation.** `pending_usd` is `0` whenever every child that has returned also has a verified Scribe hand-off, which is always the case without autopilot hand-off pipelining. Under pipelining, the round that admits stage N+1 runs after stage N's child has returned but before stage N's Scribe hand-off is dispatched, so `currentRun.estCostUsd` does not yet include stage N. For each such returned-but-unrecorded child slot, add its admitted unrounded `Projected Cost` times `reserve_multiplier` to `pending_usd`. The persisted `evaluatedSpendUsd` is `evaluated_spend_usd`, so `remainingUsd = ceilingUsd - evaluatedSpendUsd` still holds. Once that hand-off verifies, the recorded ledger figure replaces the reservation at the next round, which bounds any estimate drift to one stage. Never subtract a reservation from recorded spend or carry it into `currentRun.estCostUsd`.
 
 Cost Preflight confidence is `medium` only when all of these are true:
 
@@ -241,7 +159,7 @@ When the user chooses proceed, preserve the `over-ceiling` record and append a n
 
 The approval remains valid for later rounds only while the run id and ceiling are unchanged, confidence remains medium, every remaining demand row is unchanged and belongs to the approved manifest, and the demand set only shrinks. Under those conditions, append a fresh `approved-over-ceiling` round for the next sequential unit without asking again. A changed ceiling, expanded or repriced demand, different model input, low confidence, or missing approval provenance requires a new gate; `cannot-confirm` is never approvable.
 
-Immediately before each dispatch unit, read `currentRun.estCostUsd` again. When it is at or above `ceilingUsd`, append the terminal `over-ceiling` round, permit no slot, and stop. An in-flight unit cannot be interrupted, so its final recorded estimate may cross the ceiling; no later substantive child starts. If later routing expands beyond the approved manifest, stop before dispatch and recalculate.
+Immediately before each dispatch unit, read `currentRun.estCostUsd` again and add any pending reservation. When that evaluated spend is at or above `ceilingUsd`, append the terminal `over-ceiling` round, permit no slot, and stop. An in-flight unit cannot be interrupted, so its final recorded estimate may cross the ceiling; no later substantive child starts. If later routing expands beyond the approved manifest, stop before dispatch and recalculate.
 
 ### Worked single-squad example
 
@@ -278,5 +196,21 @@ The federation readable table displays all three terms. Federation `currentRun.e
 * `manual_baseline = expected_iterations × baseline_model_cost_per_turn`, where a manual turn is itself priced through the dispatch-size estimator rather than as a single call
 * `savings_pct = 1 - (squad_cost / manual_baseline)`
 
-All values are labeled estimated, and token counts are estimated because no per-dispatch telemetry exists.
-````
+All values above are labeled estimated, and token counts are estimated because the coordinator never sees per-dispatch telemetry.
+
+## Observed usage (host-reported)
+
+The estimates stay; observed usage sits beside them. When the coordinator has `pwsh` 7+, its `ledgerCommand` carries `-SessionLog auto`, and `Measure-SquadLedger.ps1` reads the host's own session log (`events.jsonl` under `$COPILOT_HOME/session-state/<session id>/`, written by the Copilot CLI and the VS Code agent host) for the session whose workspace is this repository. It writes an `## Observed Usage (host-reported)` section into `consumption.md`, before `## Cost Comparison`, and replaces it on every later rewrite:
+
+* **Per agent:** dispatches, the model the host actually ran, the model the history blocks record, whether the two match, real total tokens, the estimated tokens beside them, minutes, and a blended USD figure. A `no` in the match column, also printed as a warning, is the evidence for an *Identity mismatch* in `model-routing.md`: an id passed that differs from the routed cell, or a dispatch that omitted `model` and ran on the session model.
+* **Session total:** the host's billed AI units for the whole chat session, coordinator included, read from the last `session.usage_checkpoint`. It converts at 0.01 USD per unit, the same convention as 1 AI credit. The coordinator's own turns appear only here.
+* **Without HVE Squad:** the routed run's observed tokens, roles plus Scribe at their real models, compared with the same role tokens run on one model and no Scribe. The baseline defaults to the most expensive model by blended rate that any role ran on; `-BaselineModel` overrides it.
+
+```text
+blended_rate(model) = 0.20 × input + 0.80 × cached + 0.08 × cache_write + 0.02 × output   (model-catalog.md)
+with_squad_usd      = Σ over observed dispatches of total_tokens × blended_rate(observed model) / 1e6
+without_squad_usd   = Σ over observed role dispatches of total_tokens × blended_rate(baseline) / 1e6
+difference_pct      = (without_squad_usd − with_squad_usd) / without_squad_usd
+```
+
+The host reports one token total per dispatch, never the input, cached, and output split, so both sides use the same blended mix. Neither side includes coordinator turns, and the single-model side adds no extra context growth or rework, so it is a floor for that scenario rather than a forecast. A sub-squad root counts only dispatches whose prompt names its `members/<name>/` root. Without a matching session log the section is omitted and the estimates stand alone.

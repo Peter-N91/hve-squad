@@ -99,6 +99,93 @@ for estimation, approval, stopping, and federation behavior. Fresh-squad initial
 admission. Ordinary federation routing applies the ceiling independently to each selected sub-squad;
 only untargeted federation autopilot uses one aggregate federation ceiling.
 
+### Choosing models per role (`routing=`)
+
+**Default behavior (`routing=off`):** No `model` parameter is passed to any dispatch, so each agent runs on its own frontmatter model or the session model, exactly as before this feature existed.
+
+`routing=` has three modes. The mode is **saved in `team.md`** and stays in effect on later requests until you change it, so you pass it once:
+
+| Mode | How each role's model is chosen | What `team.md` shows |
+|------|---------------------------------|----------------------|
+| `off` (default) | Not chosen; the agent's own pin or the session model runs | No `Model` column |
+| `ranked` | The squad picks the model that best fits the role's work, among the models your host offers | `Model routing: ranked` and a `Model` column listing each pick |
+| `manual` | You pick, once, with suggestions pre-filled | `Model routing: manual` and a `Model` column holding your picks |
+
+**How ranked picks are made.** Each role maps to an assignment class (`research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`). The model catalog scores every model 0–3 for each class, and the squad picks the highest fit, then the lowest blended cost, then the newest generation of the same model family. It never breaks a tie by a model's name. On the Copilot CLI the seeded roster resolves to, for example, `researcher` → `claude-opus-5.5`, `lead` → `gpt-5.6-sol`, `developer` → `gpt-5.3-codex`, `tester` → `gpt-6-sol`, `architect` → `gpt-5.5`, `intake-validator` → `claude-sonnet-5.5`, and `scribe` → `claude-haiku-4.5`.
+
+**How manual picks are made.** When you switch to `routing=manual`, whether at squad creation or later, the coordinator asks before dispatching anything:
+
+1. Accept the suggested model for every role (the ranked picks), or
+2. choose one model per assignment class, then
+3. override any individual role.
+
+Every question lists only models **your host can run** and that meet the role's `Model Tier` floor. On the Copilot CLI and the GitHub Copilot app, that is the exact list the `task` tool advertises. VS Code does not advertise a list, so the squad offers catalog models priced at or below your session model; VS Code rejects a subagent model above the session's cost tier. If VS Code rejects a pick, you are asked again with the list VS Code reports. You can also edit a `Model` cell by hand; the squad validates it on every read.
+
+**What a `Model` cell holds.** One exact model id from the `Model ID` column of `consumption-rates.md` (for example `claude-sonnet-5.5`). A cell below the role's floor, an unknown id, or an id containing shell or prompt metacharacters is refused and logged, never guessed. That role then falls back to its `Model Tier`, and the next interactive turn asks again.
+
+**Precedence** (highest wins, per role):
+1. `routing=manual`: the role's valid `Model` cell.
+2. `routing=ranked`: the ranked pick for that role.
+3. `tier=` or the role's `team.md` Model Tier — today's fallback, unchanged.
+4. Omit the parameter — the no-policy default.
+
+**Unevaluated models:** A model the host offers but the catalog does not carry is never ranked or suggested. You can still type it as a manual pick; it is then labelled `unevaluated` in the dispatch record.
+
+**Which model to start the session on.** The model you pick in the chat, or pass with `--model`, runs the coordinator: it reads the roster, plans the stages, and dispatches every role. `routing=` never changes it. Start on a fixed model from the catalog's `balanced` class (the vendor's mid tier), as capable as `claude-sonnet-5.5`. Pick any model of that class your host offers, for example `claude-sonnet-5.5`, `gpt-6-sol`, `gpt-5.6-terra`, `gemini-3.8-flash`, or `grok-4.7`; the squad skill's `references/model-catalog.md` holds the current list. A `frontier-reasoning` model adds cost to every coordinator turn without improving the work, which `ranked` already sends to frontier models where it pays off. A `fast-lightweight` model is more likely to miss required steps, such as copying the `Model` cell or sending the Scribe hand-off together with the next stage. Under `auto`, the host can switch the coordinator's model mid-run, and the ledger cannot price its share.
+
+**Examples:**
+
+```text
+/squad request="..." routing=ranked
+```
+Switch to ranked selection; `team.md` gains a `Model` column showing each role's pick.
+
+```text
+/squad request="..." routing=manual
+```
+Switch to manual selection; you are asked for the models before the request runs, and later requests reuse your picks.
+
+```text
+/squad request="..." routing=off
+```
+Return to the default; the `Model` column is removed, and the decision log keeps your previous picks so switching back to `manual` can offer them again.
+
+```text
+/squad-federation squad=product routing=manual
+```
+Switch the `product` sub-squad to manual selection; each sub-squad keeps its own picks.
+
+The former `models=<key>:<id>,...` input is retired. If you pass it, it is not applied, and the coordinator points you to `routing=manual`.
+
+**Full catalog:** See `squad-src/.github/skills/squad/references/model-catalog.md`. It is a dated snapshot (retrieved 2026-09-30) with capability classes, per-class fit scores, pricing, and host-availability notes. After 90 days the catalog counts as stale, and ranking falls back to static tier pricing.
+
+**Deterministic helper:** `.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1 -SquadRoot .copilot-tracking/squad` (PowerShell 7+, read-only) prints each role's class, floor, ranked pick, and `Model` cell status. On the CLI, pass `-AvailableModels` with your host's model ids; on VS Code, pass `-SessionModel`.
+
+**History and identity bullets:**
+
+The squad records which model routing requested, which model actually ran (if the host substituted one), and which model the host reported. These details appear in `.copilot-tracking/squad/history/` (single squad) or `.copilot-tracking/squad/members/<name>/history/` (federation) only while routing is `ranked` or `manual`. See the identity bullets in those history files for: Requested model, Effective model, Observed model, and Route rationale.
+
+**Important notes:**
+
+- **Estimates, not bills** — Token counts and cost figures are estimated from a dispatch-size model, not from runtime telemetry. Premium-request multipliers and long-context pricing come from the catalog and are estimates. See `squad-src/.github/skills/squad/references/model-catalog.md` and `consumption-rates.md` for methodology.
+- **Availability sources** — The catalog cites three GitHub official documentation pages (fetched at catalog build time): Supported AI models, Models and pricing, and AI model comparison. URLs are listed in the catalog header.
+
+**Optional ledger check:**
+
+After a squad run, you can verify the consumed and estimated consumption against the recorded history using the read-only script:
+
+```powershell
+.github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check
+```
+
+Or, for a sub-squad in a federation:
+
+```powershell
+.github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/<name> -Check
+```
+
+This script (PowerShell 7+) validates that every recorded dispatch has a consumption block, that token counts and cost derivations round-trip correctly, and that the aggregated ledger totals match the sum of all recorded history entries. The `-Check` audit is optional, never required, and is useful for post-run audits or when troubleshooting cost reporting. During a run the Scribe calls the same script with `-Write`, which rewrites the ledger sections and the two `state.json` run totals from the history files, so no model copies a derived figure by hand. Add `-SessionLog auto` (the Scribe's `ledgerCommand` already does) to also record real host-reported usage beside the estimates: the model each dispatch actually ran on, real token totals, the session's billed AI units, and a comparison with the same work run on one model without HVE Squad.
+
 The `/` picker lists two entries named `squad`: pick the **prompt** ("Hands a request to the Squad
 Coordinator...") to run the squad. The **skill** ("Operating procedure for...") only loads the squad
 procedure as context and is normally loaded by the coordinator itself.

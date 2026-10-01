@@ -63,7 +63,7 @@ description: "Append-only log of squad federation routing decisions and their ra
 
 Entries are appended below in chronological order. Each entry records which sub-squad(s) a request was routed to, the matched meta-routing pattern or explicit `squad=` target, the turn it was made on, and a reference to the sub-squad's own decision entries. Prior entries are never edited or removed.
 
-<!-- Append new federation decision entries below this line. -->
+<!-- Append each new federation decision at the end of this file, after the last entry. -->
 ```
 
 ### state.json (federation root)
@@ -120,7 +120,7 @@ Read legacy federation schema `1.2` without `costPreflight` as an unset ceiling 
 
 ### consumption-rates.md (federation root)
 
-Copy the complete `consumption-rates.md` template from [consumption.md](consumption.md) when the federation is created or promoted. This root copy is dormant for ordinary and targeted routing. Untargeted federation autopilot uses it to price every imported inner-demand row and federation coordinator/root-writer row with one rate basis and one calibration factor, applied once.
+Copy the complete `consumption-rates.md` template from [consumption-rates-template.md](consumption-rates-template.md) when the federation is created or promoted. This root copy is dormant for ordinary and targeted routing. Untargeted federation autopilot uses it to price every imported inner-demand row and federation coordinator/root-writer row with one rate basis and one calibration factor, applied once.
 
 Reconcile this calibration only from a completed federation meta-run's aggregate observed credits divided by that run's aggregate estimated credits. Until the root calibration is eligible for the current rate and estimator basis, an aggregate configured ceiling returns `cannot-confirm`; per-sub-squad ceilings remain independent and unaffected.
 

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.4",
+  "updated": "2026-09-28T09:00:00Z",
+  "turn": 1,
+  "mode": "interactive",
+  "activeRoles": [],
+  "openEscalations": [],
+  "currentRun": {
+    "sessionModel": "",
+    "modelOverrides": {},
+    "estCostUsd": 0.6000,
+    "estCreditsTotal": 60.00,
+    "costPreflight": {
+      "runId": "",
+      "roundId": "",
+      "ceilingUsd": null,
+      "evaluatedSpendUsd": 0,
+      "remainingUsd": null,
+      "plannedDispatches": 0,
+      "projectedCostUsd": 0,
+      "reserveMultiplier": 3.0,
+      "admissionCostUsd": 0,
+      "confidence": "not-applicable",
+      "basis": "not-requested",
+      "decision": "not-requested",
+      "reason": "No cost ceiling configured."
+    }
+  },
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": {
+      "handle": "",
+      "repo": ""
+    }
+  }
+}

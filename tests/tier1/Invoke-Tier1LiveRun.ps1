@@ -18,6 +18,15 @@
     single nondeterministic run cannot distinguish a flake from a regression; both
     attempts are kept.
 
+    A scenario definition carrying a 'pipeliningIntegrity' block (see
+    scenarios/autopilot-pipelining.json) additionally runs
+    PipeliningIntegrity.Tests.ps1 against the live workspace for that attempt, on top
+    of the generic state contract. Those checks hold whether or not the coordinator
+    actually overlapped a Scribe hand-off with the next stage's dispatch; proving
+    overlap itself is the paired benchmark driver's job
+    (tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1), which is opt-in and spends
+    a live BEFORE/AFTER comparison rather than running as part of this scenario matrix.
+
     The assertions never read the run's prose. They read files. See
     tests/squad-behavior-contract.md.
 .PARAMETER Ref
@@ -210,6 +219,37 @@ foreach ($file in $scenarioFiles) {
                     $produced = Join-Path $PSScriptRoot 'tier1-results.xml'
                     if (Test-Path -LiteralPath $produced) {
                         Move-Item -LiteralPath $produced -Destination (Join-Path $attemptRoot "contract-$name.xml") -Force
+                    }
+
+                    # U5 (routing-performance plan, Amendment 3 §5, P04-T01): a scenario
+                    # opts into the extra Scribe Hand-off Pipelining integrity checks by
+                    # carrying a 'pipeliningIntegrity' block. This runs against
+                    # $install.Root while it still holds the run's real file mtimes -
+                    # the state-$name copy below is for archival, not for this check, so
+                    # a future change to Copy-Item's timestamp behavior cannot silently
+                    # invalidate the stage-order assertions.
+                    if ($definition.PSObject.Properties.Name -contains 'pipeliningIntegrity') {
+                        $integrityRunner = Join-Path $PSScriptRoot 'PipeliningIntegrity.Tests.ps1'
+                        $integrityConfig = New-PesterConfiguration
+                        $integrityConfig.Run.Container = New-PesterContainer -Path $integrityRunner -Data @{
+                            WorkspaceRoot     = $install.Root
+                            SquadRoot         = $root
+                            Stages            = @($definition.pipeliningIntegrity.stages)
+                            BarrierAfterStage = [string]$definition.pipeliningIntegrity.barrierAfterStage
+                            ScribeAgentFile   = [string]$definition.pipeliningIntegrity.scribeAgentFile
+                        }
+                        $integrityConfig.Run.PassThru = $true
+                        $integrityConfig.Output.Verbosity = 'Detailed'
+                        $integrityConfig.TestResult.Enabled = $true
+                        $integrityConfig.TestResult.OutputPath = Join-Path $attemptRoot "pipelining-integrity-$name.xml"
+
+                        $integrityResult = Invoke-Pester -Configuration $integrityConfig
+                        $integrityResult | ConvertTo-Json -Depth 4 |
+                            Set-Content -LiteralPath (Join-Path $attemptRoot "pipelining-integrity-$name-summary.json") -Encoding utf8NoBOM
+
+                        if ($integrityResult.FailedCount -gt 0 -or $integrityResult.TotalCount -eq 0) {
+                            $failures += "pipelining integrity checks failed for '$name' ($($integrityResult.FailedCount) of $($integrityResult.TotalCount))"
+                        }
                     }
                 }
 

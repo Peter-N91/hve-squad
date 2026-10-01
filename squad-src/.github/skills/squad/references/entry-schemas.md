@@ -1,11 +1,11 @@
 ---
 name: squad-entry-schemas
-description: "Recurring squad write schemas: decisions.md entries and verdicts, history files, the autonomous-loop and autopilot-run summaries, notifications.md, and state.json."
+description: "Recurring squad write schemas read every dispatch: decisions.md base entries, history/<agent>.md, and state.json. Verdict placeholders, the autonomous-loop and autopilot-run summaries, and notifications.md moved to scribe-cold-gates-and-verdicts.md."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-08-18"
+  last_updated: "2026-09-27"
 ---
 
 # Entry Schemas
@@ -16,9 +16,11 @@ These schemas are separate from [seed-templates.md](seed-templates.md), which st
 
 Write semantics follow the state layout: `decisions.md`, `history/<agent>.md`, `history/autonomous-loop-<id>.md`, `history/autopilot-run-<id>.md`, and `notifications.md` are append-only; `state.json` uses replace semantics.
 
+**This file now carries only the shapes read every dispatch.** The Cost Preflight, Council Verdict, and Intake Readiness Verdict placeholders, the autonomous-loop-cycle history variant, the `history/autonomous-loop-<id>.md` and `history/autopilot-run-<id>.md` full schemas, and `notifications.md` moved to [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) — read that file only for the payload types named in its own trigger note (also enumerated in the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md)).
+
 ## decisions.md
 
-Append-only log. The header is written once; every decision is appended below it and prior entries are never edited. Council Verdicts (from the Council Procedure) use the same append-only contract but a fixed schema; the placeholder below shows the shape the Scribe stamps in.
+Append-only log. The header is written once; every decision is appended below it and prior entries are never edited. Council Verdicts (from the Council Procedure) use the same append-only contract but a fixed schema; the placeholder shapes are in [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md).
 
 ```markdown
 ---
@@ -29,102 +31,7 @@ description: "Append-only log of squad decisions and their rationale"
 
 Entries are appended below in chronological order. Each entry records the decision, its rationale, the turn it was made on, and a reference to an ADR when the decision is architecturally significant. Council Verdicts use the `## Council Verdict <timestamp> <topic-id>` heading and the schema in `.github/instructions/squad/squad-council.instructions.md`; Discovery Verdicts and Intake Readiness Verdicts use their own headings and schemas from `.github/instructions/squad/squad-discovery-gate.instructions.md` and `.github/instructions/squad/squad-intake-gate.instructions.md`. Prior entries are never edited or removed.
 
-<!-- Append new decision entries below this line. -->
-
-<!--
-Cost Preflight placeholder (the coordinator stamps this shape before post-initialization work dispatch):
-
-## Cost Preflight <timestamp> <run-id> <round-id>
-
-* Ceiling USD: <positive number>
-* Estimated Spend So Far USD: <currentRun.estCostUsd>
-* Remaining USD: <max(0, ceiling - spend)>
-* Projected Cost USD: <calibrated point estimate>
-* Reserve Multiplier: 3.0
-* Admission Cost USD: <projected cost x 3.0>
-* Confidence: low | medium
-* Basis: estimated | calibrated
-* Decision: within-ceiling | over-ceiling | approved-over-ceiling | cannot-confirm
-* Approved From: <prior over-ceiling Decision Ref; approved-over-ceiling only>
-* Approval Ref: <in-chat or remote human approval reference; approved-over-ceiling only>
-* Reason: <one-line reproducible reason>
-* Evaluated Dispatch Set: <ordered slot ids>
-* Permitted Next Dispatch Set: <ordered slot ids or none>
-* Estimate Notice: Forecast only; not billed cost.
-
-### Planned Demand
-
-| Slot | Stage | Role | Count | Dispatch Class | Pricing Basis | Internal Turns | Base Context | Growth/Turn | Output/Turn | Projected Cost |
-|------|-------|------|------:|----------------|---------------|---------------:|-------------:|------------:|------------:|---------------:|
-| <id> | <stage> | <role> | <n> | <class> | <model or max-candidate set> | <turns> | <tokens> | <tokens> | <tokens> | <usd> |
-
--->
-
-<!--
-Council Verdict placeholder (Scribe stamps this shape when a council runs):
-
-## Council Verdict <timestamp> <topic-id>
-
-* Topic: <one-line summary of the proposal>
-* Proposal Ref: <path-to-plan-or-design>
-* Council Members Dispatched: architect, security, cost-manager, product-owner
-* Verdict: Go | Go-With-Conditions | Stop
-
-### Findings by Role
-
-| Role          | Verdict | Risk        | Blocking Issues | Conditions | Suggested Follow-ups |
-|---------------|---------|-------------|-----------------|------------|----------------------|
-| architect     | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| security      | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| cost-manager  | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| product-owner | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-
-### Synthesis
-
-* Blocking Issues: <consolidated list with role attribution; empty when verdict is Go>
-* Conditions: <consolidated list with role attribution; empty when verdict is Go>
-* Suggested Follow-ups: <consolidated list with role attribution>
-
-### Implementation Gate
-
-* Permits Implementation Dispatch: yes (Go, Go-With-Conditions) | no (Stop)
-* Conditions Outstanding: <count>
--->
-
-<!--
-Intake Readiness Verdict placeholder (Scribe stamps this shape when the intake gate runs):
-
-## Intake Readiness Verdict <timestamp> <topic-id>
-
-* Topic: <one-line summary of the work the inputs ground>
-* Inputs Reviewed: <comma-separated artifact paths or references>
-* Validator Dispatched: <resolved agent name>
-* Verdict: Ready | Ready-With-Gaps | Not-Ready
-* Remediation Cycles: <0, 1, or 2>
-
-### Findings
-
-| Dimension        | Result    | Blocking Gaps  | Non-Blocking Gaps |
-|------------------|-----------|----------------|-------------------|
-| Completeness     | pass/fail | <list-or-none> | <list-or-none>    |
-| Clarity          | pass/fail | <list-or-none> | <list-or-none>    |
-| Testability      | pass/fail | <list-or-none> | <list-or-none>    |
-| Consistency      | pass/fail | <list-or-none> | <list-or-none>    |
-| Scope Boundaries | pass/fail | <list-or-none> | <list-or-none>    |
-
-### Clarifying Questions
-
-* <question for the user; empty when verdict is Ready>
-
-### Recorded Assumptions
-
-* <assumption carried into downstream work; empty when none>
-
-### Intake Gate
-
-* Permits Downstream Dispatch: yes (Ready, Ready-With-Gaps) | no (Not-Ready)
-* Blocking Gaps Outstanding: <count>
--->
+<!-- Append each new decision at the end of this file, after the last entry. -->
 ```
 
 ## history/<agent>.md
@@ -163,7 +70,7 @@ description: "Append-only dispatch history for a single squad agent"
 
 Each entry records a request this agent handled, the findings or outcome it returned, and the turn it was dispatched on. Entries are appended in chronological order and never edited.
 
-<!-- Append new dispatch entries below this line. -->
+<!-- Append each new dispatch entry at the end of this file, after the last entry. -->
 ```
 
 **The heading is literally `# History: <agent>`.** Not the bare agent name, not a role-flavored rewrite of the description. A later turn locates a history file by that heading, and a file headed `# Squad Researcher` reads as a file with no header at all.
@@ -200,108 +107,20 @@ Every appended dispatch entry uses exactly this shape. The `#### Consumption` he
 
 Field order is contractual and every numeric field is a bare number. The block records consumption only: rates, `est_cost_usd`, and `est_credits` are the ledger's, and `priced_as` is what tells it which rate row to use. See *Consumption Accounting* in [scribe-procedure.md](scribe-procedure.md) for how each value is resolved and how the ledger prices them.
 
+**Optional identity bullets.** When `routing=ranked` or `routing=manual` resolved this dispatch's model, the entry additionally carries four narrative bullets immediately beneath the `#### Consumption` block, using exactly this wording, per [model-routing.md](model-routing.md) § *Identity Bullets*:
+
+```markdown
+* **Requested model** — <id routing resolved, or "none (parameter omitted)">
+* **Effective model** — <the `model` value this entry's Consumption block actually recorded>
+* **Observed model** — <what the host reported, per the Model Attribution ladder rung 1, or `unreported`/`unverified`>
+* **Route rationale** — <assignment class, rank/override source, floor applied, `identity-mismatch:` token when applicable>
+```
+
+These bullets are additive and never a new JSON key — the closed ten-field block above is unchanged whether or not they are present. Omit all four entirely when no routing policy applied to this dispatch: a no-policy entry keeps exactly the block shape above with nothing beneath it.
+
 When Cost Preflight is configured, the `Cost Preflight Ref` and `Cost Preflight Slot` pair is also unique across history. One admitted slot authorizes one dispatch; a second entry carrying the same run, round, and slot is a replay and must be rejected before any write.
 
-An autonomous-loop cycle replaces the entry body above with the shape below and still carries its own `#### Consumption` block:
-
-```markdown
-### <timestamp> autonomous-loop:<topic-id> cycle:<1|2>
-
-* Request: <scoped request the agent received>
-* Verdict Returned: <label> (Risk: <level>)
-* Blocking Issues: <list-or-none>
-* Conditions: <list-or-none>
-* Outcome: <one-line summary>
-* See: `.copilot-tracking/squad/history/autonomous-loop-<topic-id>.md`
-```
-
-## history/autonomous-loop-<id>.md
-
-One file per autonomous-loop topic. Append-only by topic-id: subsequent runs against the same topic append a new dated `## Iterations` section rather than overwriting. The Scribe writes this file only when the coordinator runs in `mode=autonomous`.
-
-```markdown
----
-description: "Autonomous-loop summary for topic <id>"
----
-
-# Autonomous Loop: <id>
-
-* Topic: <one-line summary>
-* Opt-In: mode=autonomous
-* Cost Ceiling: <value or unset>
-* Outcome: converged (Go) | converged (Go-With-Conditions) | escalated (<reason>)
-
-## Cost Preflight Rounds
-
-| Round | Decision | Confidence | Remaining USD | Admission USD | Decision Ref |
-|-------|----------|------------|--------------:|--------------:|--------------|
-| <round-id> | <within-ceiling / over-ceiling / approved-over-ceiling / cannot-confirm> | <low / medium> | <usd> | <usd> | `decisions.md#cost-preflight-<timestamp>-<run-id>-<round-id>` |
-
-## Iterations
-
-| Cycle | Verdict                        | Blocking Issues | Conditions     | Notes                    |
-|-------|--------------------------------|-----------------|----------------|--------------------------|
-| 1     | Go / Go-With-Conditions / Stop | <list-or-none>  | <list-or-none> | <one-line cycle summary> |
-| 2     | (when run)                     | <list-or-none>  | <list-or-none> | <one-line cycle summary> |
-
-## Final Verdict Reference
-
-* Council Verdict: see `decisions.md` under `## Council Verdict <timestamp> <id>`
-```
-
-## history/autopilot-run-<id>.md
-
-One file per autopilot run. Append-only by topic-id: subsequent runs against the same topic append a new dated `## Stages` section rather than overwriting. The Scribe writes this file only when the coordinator runs in `mode=autopilot`.
-
-```markdown
----
-description: "Autopilot-run summary for topic <id>"
----
-
-# Autopilot Run: <id>
-
-* Topic: <one-line summary>
-* Opt-In: mode=autopilot
-* Cost Ceiling: <value or unset>
-* Outcome: completed (awaiting final validation) | incomplete (<n> stage(s) without a dispatch record) | escalated (<reason>) | stopped (<reason>)
-
-## Cost Preflight Rounds
-
-| Round | Evaluated Dispatch Set | Permitted Next Dispatch Set | Decision | Confidence | Remaining USD | Admission USD | Decision Ref |
-|-------|------------------------|-----------------------------|----------|------------|--------------:|--------------:|--------------|
-| <round-id> | <ordered slot ids> | <ordered slot ids or none> | <within-ceiling / over-ceiling / approved-over-ceiling / cannot-confirm> | <low / medium> | <usd> | <usd> | `decisions.md#cost-preflight-<timestamp>-<run-id>-<round-id>` |
-
-## Stages
-
-| Stage     | Role(s)     | Dispatch Record              | Result                          | Gate Fired                 |
-|-----------|-------------|------------------------------|---------------------------------|----------------------------|
-| research  | <agent(s)>  | `history/<agent>.md`         | <one-line outcome>              | none                       |
-| plan      | <agent>     | `history/<agent>.md`         | <one-line outcome>              | none                       |
-| council   | <roles>     | `history/<agent>.md` each    | <verdict-or-skipped>            | <none or Risk Gate reason> |
-| implement | <agent>     | `history/<agent>.md`         | <one-line outcome>              | <none or Impactful-Action> |
-| review    | <agent>     | `history/<agent>.md`         | <one-line outcome>              | none                       |
-| final     | coordinator | n/a                          | notified <recipient-or-in-chat> | Final-Outcome Validation   |
-```
-
-`Dispatch Record` names the history file the Scribe wrote for that stage, and is filled from `history/` rather than from the coordinator's account of the run. A stage with no such file carries the literal `— none recorded`, and any such cell forces the `incomplete` outcome above. This is the run's own report that its cast was not dispatched, written by the only participant that knows.
-
-In a deliverable fan-out run, the single `implement` row expands into one row per deliverable (`implement: <deliverable>` with its owning agent).
-
-## notifications.md
-
-Append-only log of notifications (pings) the squad fired. The header is written once; every notification is appended below it. Records the trigger, the recipient, the resolved channel, and the decision awaited.
-
-```markdown
----
-description: "Append-only log of squad notifications (pings) and their delivery channel"
----
-
-# Squad Notifications
-
-Each entry records a notification the squad fired: when, to whom, the trigger, the channel it resolved to, and the decision awaited. Entries are appended in chronological order and never edited.
-
-<!-- Append new notification entries below this line. -->
-```
+An autonomous-loop cycle replaces the entry body above with a shape that still carries its own `#### Consumption` block — see [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) for the exact placeholder, `history/autonomous-loop-<id>.md`, `history/autopilot-run-<id>.md`, and `notifications.md`, read only for the payload types named there.
 
 ## state.json
 
@@ -349,6 +168,8 @@ Machine-readable squad status. Uses replace semantics. The Scribe owns ordinary 
   }
 }
 ```
+
+`currentRun.modelOverrides` is always present as a key — it is never omitted — and its value is `{}` unless the user volunteered a model for a role this run; a populated map (`{"<role or agent>": "<id>"}`) records that declaration. Routed ids live in `team.md`'s `Model` column instead — see [model-routing.md](model-routing.md).
 
 Watch Mode runs additionally carry an optional, additive `trigger` object recording the event that started the run; interactive, autonomous, and autopilot runs omit it. See `.github/instructions/squad/squad-watch-mode.instructions.md`.
 

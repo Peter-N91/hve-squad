@@ -1,0 +1,13 @@
+{
+  "decisionHeadings": [],
+  "decisionContains": ["two-role"],
+  "historyMinCounts": {
+    "Squad Researcher": 1,
+    "Squad Scribe": 1
+  },
+  "schemaVersion": "1.4",
+  "minTurn": 2,
+  "updatedNotBefore": "2026-09-27T10:00:00Z",
+  "expectedActiveRoles": ["Squad Researcher"],
+  "timeWindowMinutes": 180
+}

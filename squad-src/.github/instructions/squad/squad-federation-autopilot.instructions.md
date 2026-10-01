@@ -73,6 +73,7 @@ Before advancing the meta-pipeline past a sub-squad's inner run, confirm all of 
 1. the inner run left its Review record and its per-stage `members/<name>/history/<agent>.md` entries (the inner run's own proof-of-dispatch is satisfied);
 2. the federation-level `history/<sub-squad>.md` meta-transition entry was written by the Scribe;
 3. **any Impactful-Action or Risk Gate raised inside the inner run was surfaced to the federation level, is attributed to the owning sub-squad, and is awaiting human approval.**
+4. the sub-squad's own `members/<name>/state.json` is read back fresh past its own barrier — never reused from a copy cached earlier in the meta-run.
 
 Item 3 is mandatory and safety-critical: never advance the meta-pipeline past an inner gate that was not lifted to the federation level and approved. When any item is unmet, pause the meta-pipeline, re-verify, or escalate — a lighter model must not narrate an inner run as complete, or an inner gate as cleared, without this check.
 
@@ -89,6 +90,8 @@ federation admission cost = sum(selected inner admission costs) + federation met
 Persist the aggregate decision directly at the federation root before starting any child. `within-ceiling` starts its permitted set. `over-ceiling` offers stop or bounded proceed; explicit proceed appends `approved-over-ceiling` and starts one sequential sub-squad plus its root-writer handoff at a time until accumulated estimated spend reaches the ceiling. `cannot-confirm` remains blocked, including while the root calibration is ineligible. A later expansion of the selected set invalidates the approval and requires recalculation.
 
 Each sub-squad ledger remains unchanged. Federation `currentRun.estCostUsd` is the sum of realized inner-ledger totals plus completed federation meta slots across every Cost Preflight round in the active meta-run. Count each run/round/slot tuple once from its history reference; shrinking later manifests never erase earlier completed cost. Future slots remain reserved only in `admissionCostUsd`. Reconcile the root calibration from complete aggregate runs only.
+
+This aggregate ceiling does not disable an inner run's Scribe hand-off pipelining, per the Enablement Predicate in `.github/instructions/squad/squad-autopilot.instructions.md`. Before any meta round reads an inner ledger, that inner run's last Scribe hand-off must have returned and verified, so realized inner totals never lag.
 
 ## Consolidated Final-Outcome Validation
 

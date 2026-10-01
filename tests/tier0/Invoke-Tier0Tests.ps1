@@ -48,7 +48,8 @@
 .EXAMPLE
     ./Invoke-Tier0Tests.ps1 -SourceRoot .
 .NOTES
-    See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-14).
+    See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-15,
+    GATE-22..GATE-28).
 #>
 [CmdletBinding(DefaultParameterSetName = 'Install')]
 param(
@@ -113,6 +114,9 @@ $containers = @(
         InstallLog   = $installLog
         ExpectPinned = [bool]$expectPinned
     }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ScribeHandoffPipelining.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
 )
 
 # Manifest coverage is a property of the working copy, not of an installed tree.
@@ -121,6 +125,12 @@ if ($PSCmdlet.ParameterSetName -eq 'Source') {
         SourceRoot = $SourceRoot
     }
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Build-SquadPlugin.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Performance.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Packaging.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
 }

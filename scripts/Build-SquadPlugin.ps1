@@ -749,7 +749,7 @@ None required. Optionally accepts **scope** (`all` default, or a single domain n
 
 3. **Report per-domain, not just an aggregate.** For each domain: `present` (name the resolved agent) or `absent`. Never report a domain `present` on the strength of the squad's own `squad-*` glue agents (`Squad Reviewer`, `Squad Lead`, etc.) — those dispatch *to* the domain's agents and are not a substitute for them being present.
 4. **Name the fix for every absent domain**, without vendoring the content itself: installing the `hve-squad-hve-core` marketplace entry (pinned to the commit this hve-squad release was validated against), or `apm install github/microsoft/hve-core` for an apm consumer, resolves all seven at once.
-5. **Cross-check the mapping's currency.** This table mirrors `skills/squad/references/rules/squad-roster.md`'s cast catalog as of this plugin's build. If the roster changes which Primary a role resolves to, this table drifts — note that possibility in the report rather than presenting the table as infallible.
+5. **Cross-check the mapping's currency.** This table mirrors the cast catalog canonical in `skills/squad/references/roster-catalog.md` as of this plugin's build. If the roster changes which Primary a role resolves to, this table drifts — note that possibility in the report rather than presenting the table as infallible.
 
 ## Output
 

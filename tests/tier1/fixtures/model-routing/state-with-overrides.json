@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.4",
+  "updated": "2026-09-27T10:00:05Z",
+  "turn": 4,
+  "mode": "autopilot",
+  "activeRoles": [ "developer" ],
+  "openEscalations": [],
+  "currentRun": {
+    "sessionModel": "Claude Opus 5",
+    "modelOverrides": { "developer": "claude-opus-5" },
+    "estCostUsd": 0.0923,
+    "estCreditsTotal": 9.23,
+    "costPreflight": {
+      "runId": "rp-autopilot-20260927",
+      "roundId": "round-004",
+      "ceilingUsd": 10.0,
+      "evaluatedSpendUsd": 0.0,
+      "remainingUsd": 10.0,
+      "plannedDispatches": 1,
+      "projectedCostUsd": 0.0923,
+      "reserveMultiplier": 3.0,
+      "admissionCostUsd": 0.2769,
+      "confidence": "medium",
+      "basis": "calibrated",
+      "decision": "within-ceiling",
+      "reason": "A single fixed-model dispatch fits the remaining ceiling."
+    }
+  },
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": { "handle": "", "repo": "" }
+  }
+}

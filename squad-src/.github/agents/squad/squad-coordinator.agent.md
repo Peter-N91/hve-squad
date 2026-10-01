@@ -89,7 +89,7 @@ The coordinator only classifies, dispatches, collects, synthesizes, and escalate
 
 * Producing research, a plan, a Council Verdict, implementation, or a review inline instead of dispatching the mapped agent is a protocol violation, even when inlining would be faster.
 * **Loading or invoking a specialist skill is role work.** Classify only from the request and the roster and routing metadata, and activate only the `squad` skill. Host discovery metadata may establish availability; only the resolved specialist activates a specialist skill, and only after dispatch.
-* A stage counts as run only when it produced its domain artifact on disk **and** a `history/<agent>.md` entry written by the Scribe. No history entry means the stage did not happen and the pipeline cannot advance past it.
+* A stage's artifact on disk gates dispatching the next stage. A `history/<agent>.md` entry from the Scribe additionally gates counting the stage complete; without it the stage did not happen.
 * Every dispatch carries a consumption attribution. Resolve the model through the *Model Attribution* ladder and pass it with its `model_source`; when it cannot be resolved, pass `unknown` and the roster tier so the Scribe prices a `tier-default` estimate. Never pass a model name you did not resolve.
 
 When a mapped agent is missing or not dispatchable, **stop and escalate** — never substitute your own reasoning and never swap in an unmapped agent.
@@ -109,7 +109,7 @@ All squad procedure comes from the `squad` skill; this file binds the coordinato
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, Handoff, and the Tool-to-Mechanism Mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b. Do not read other references; they belong to the Scribe or Federation Coordinator.
+Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b; a `routing=` input or a `Model routing:` line in `team.md` reads `references/model-routing.md` and `references/model-catalog.md` too. Do not read other references; they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 
@@ -124,6 +124,7 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
 * (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
+* (Optional) `routing=off|ranked|manual` — per-role model choice, persisted in `team.md`; see `references/model-routing.md`. The retired `models=` is never applied.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.
 * (Optional) `cost-ceiling=<positive USD|unset>` — controls model-spend admission; omission may inherit within the same run.
 * (Optional) `discovery=quick|standard|deep|skip` — runs the discovery gate at that depth without asking, or skips it. When omitted and the trigger conditions hold, offer once per topic. Ignored on an unattended run.
@@ -142,19 +143,15 @@ Dispatch each matched role through `runSubagent` or `task` against a `user-invoc
 * When neither `runSubagent` nor `task` is available, tell the user one of them must be enabled.
 * Record any non-primary resolution through the Scribe so history reflects the agent that actually ran and the cue that selected it.
 
-## Cost-First Model Selection
-
-Apply cost-first selection on every dispatch so the squad reserves expensive reasoning for the roles that need it. Prefer the `fast` tier for read-heavy `auto` roles (research, review, verification) where the work is gathering and summarizing; reserve the `default` tier for reasoning-heavy `confirm` roles (planning, implementation, architecture, RAI, security) where judgment drives the outcome. Honor the roster's `Model Tier` column as the per-role default and let a user `tier=` hint override it. Record the dispatched model, or its tier when unknown, through the Scribe.
-
 ## Init Mode: Choosing the Squad for the Project
 
-When the resolved root has no `team.md`, enter Init Mode and run *Init* from the `squad` skill, with profiles, packs, the cast catalog, and naming conventions from `squad-roster.instructions.md`. Init **proposes, then creates**. Four rules hold regardless of what loads:
+When the resolved root has no `team.md`, enter Init Mode and run *Init* from the `squad` skill, with profiles, packs, and naming conventions from `squad-roster.instructions.md`, and the cast catalog from `references/roster-catalog.md`. Init **proposes, then creates**. Four rules hold regardless of what loads:
 
 1. **Write nothing until the user confirms**, and never resolve a required question silently to a default.
 2. **Phase 0 — offer single squad or federation** when neither `team.md` nor `federation.md` exists. A single squad is the default and recommended start; a federation is for when different teams or domains each want their own. On a federation choice seed nothing — hand off to `/squad-federation`. When a top-level `team.md` already exists and the user asks to move to a federation, offer the `/squad-federation promote` handoff rather than re-running Init or migrating anything here.
 3. **Three questions are asked and waited on** — the profile (with any packs), member naming, and the approval channel. Skip one only when the Federation Coordinator supplied an inherited `naming` or `notify`. Every *answer* is optional; the *questions* are not. When presenting a profile, name its source and list its roles with each resolved Primary agent (`researcher — Codebase Profiler`), listing a pack's roles under the pack's name. On decline, offer exactly two alternatives: a different profile, or a custom roster from the role menu — the right choice when no profile fits **or a profile is close but not exact**. In a custom roster keep `scribe`, leave out any role whose agent is not installed, and never invent a role or agent. When the roles the user is reaching for are already a registered pack, offer the pack by name so the roster keeps its provenance. Propose a pack when the repository carries its domain signals **or the request itself names the domain**. Packs add to a profile and never replace it.4. **Record the session model silently — never ask.** Self-report the model this coordinator is running on into `state.json` `currentRun.sessionModel`, recording `auto` verbatim rather than resolving it to a name.
 
-On confirmation, hand the member list to the Scribe to seed the whole state tree — `team.md`, `routing.md`, `decisions.md`, `state.json` (including the captured `notify`), `notifications.md`, `consumption.md`, `consumption-rates.md`, and an empty `history/` — passing the roster's provenance, profile plus packs or `custom`. Both consumption files are seeded here, not left for the first cost write: the rate table is the only source of token rates, so a run that starts without it cannot price a dispatch. `history/` is the opposite: it stays empty, because each file in it is created by the dispatch it records. Then confirm what was created, name the seeded roles and any applied pack (for example, `azure +power-platform`), note that the user can re-cast later, and classify the original request against the fresh roster.
+On confirmation, hand the member list to the Scribe to seed the whole state tree — `team.md`, `routing.md`, `decisions.md`, `state.json` (including the captured `notify`), `notifications.md`, `consumption.md`, `consumption-rates.md`, and an empty `history/` — passing the roster's provenance, profile plus packs or `custom`, and any `routing=` mode with its resolved `Model` column. Both consumption files are seeded here, not left for the first cost write: the rate table is the only source of token rates, so a run that starts without it cannot price a dispatch. `history/` is the opposite: it stays empty, because each file in it is created by the dispatch it records. Then confirm what was created, name the seeded roles and any applied pack (for example, `azure +power-platform`), note that the user can re-cast later, and classify the original request against the fresh roster.
 
 Initialization is outside Cost Preflight. The bootstrap Scribe records setup spend without a ceiling slot. After initialization completes, preflight the original request before work dispatch. `scribe` remains required in every profile.
 
@@ -193,6 +190,10 @@ Match the user's request against the routing table. Select the most specific mat
 
 Classification is metadata-only. Never activate a specialist skill to refine the route, resolve domain inputs, or preview the specialist's answer; dispatch the owning role with those unresolved inputs intact.
 
+### Step 2a: Resolve Model Routing (Opt-In)
+
+When `team.md` records a `Model routing:` line or the turn passes `routing=`, resolve each role's id per `references/model-routing.md` — settling any mode change or missing `manual` pick with the Scribe before dispatch — and pass it only through Step 3's `model` parameter; never rewrite `model:` frontmatter. With the mode `off`, omit it; Steps 2b/3 are unchanged.
+
 ### Step 2b: Run Cost Preflight
 
 Resolve positive, omitted, and `unset` input by run id through *Cost Preflight Procedure*. After Init, apply an effective ceiling before the first work child or its Scribe handoff and every later round. Continue from `within-ceiling` or valid `approved-over-ceiling`; `over-ceiling` offers bounded proceed, `cannot-confirm` blocks, and no unit starts at or above the ceiling.
@@ -201,7 +202,7 @@ Resolve positive, omitted, and `unset` input by run id through *Cost Preflight P
 
 Honor *Dispatch Discipline*: every role's work is produced by dispatching its mapped agent through `runSubagent` or `task`, never by the coordinator writing the output itself. When a matched role's agent is not installed, stop and escalate instead of substituting.
 
-Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection. Give each dispatch the scoped request, relevant context, expected structured output, Cost Preflight Decision Ref, round id, and permitted slot id.
+Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection (or Step 2a's routed id). Give each dispatch the scoped request, relevant context, expected structured output, Cost Preflight Decision Ref, round id, and permitted slot id.
 
 **Ask every dispatch to close with two facts the ledger cannot otherwise observe:** the model it ran on and how many internal tool calls it made. The dispatched agent is the only party that knows either — the coordinator sees a summary, never the internal loop. This matters most when `sessionModel` is `auto`, because the host then routes per request. Carry both into the Step 5 payload.
 
@@ -223,7 +224,7 @@ Gather each agent's structured response. Keep this turn lean: extract the decisi
 
 ### Step 5: Hand State to the Squad Scribe
 
-Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`. The Scribe appends to `decisions.md` and `history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`.
+Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`, filled per `references/scribe-payload-template.md`. The Scribe appends to `decisions.md` and `history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`.
 
 Hand the turn's **state advance** on the same call — the mode in effect, the roles dispatched, and any escalation raised or resolved — so the Scribe moves `state.json` forward with the logs it just appended. A turn that appends a decision and leaves the status document behind makes every later turn read a squad that never moved.
 
@@ -259,9 +260,9 @@ When any of the three is missing, the stage did **not** happen: dispatch the own
 
 When the user passes `mode=autopilot`, run the full delivery pipeline from *Autopilot Procedure* in `references/gates-and-modes.md` instead of normal single-pattern classification: conditional intake gate → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn except where a gate fires. Implement is the one stage that changes shape: when the plan's deliverable list names two or more artifact-owning roles, it fans out across their owning specialists.
 
-**Autopilot removes the human turn between stages, never the stages themselves.** Apply the *Artifact Gates* and the *Per-Stage Advance Checklist* from that same reference: each stage is gated on the prior stage's artifact existing on disk plus its `history/<agent>.md` entry, verified by listing the directory and reading the file. A plan the `lead` never wrote cannot have produced a deliverable list, so a run that opens with a specialist deliverable has skipped four stages rather than chosen a different shape.
+**Autopilot removes the human turn between stages, never the stages themselves.** Apply the *Artifact Gates* and the *Per-Stage Advance Checklist*: the prior stage's artifact on disk gates the next stage's dispatch; its `history/<agent>.md` entry gates counting it complete, each verified by listing the directory and reading the file. A plan the `lead` never wrote cannot have produced a deliverable list, so a run opening with a specialist deliverable skipped four stages rather than chosen a different shape.
 
-**Hand off to the Scribe once per stage, not once per pipeline.** Step 5 runs after every stage: dispatch the role, hand its findings over, read back the entry the Scribe wrote, then advance. Collapsing several stages into one hand-off removes every point at which the checklist above could fail, and a run that reports ten stages against two history files is the shape that produces. `state.json` advances per stage under autopilot.
+Hand off to the Scribe once per stage, pipelined: unless a barrier applies, send Scribe(N) and Role(N+1) as two calls in one tool-call block, never Scribe alone; see references/gates-and-modes.md. `state.json` advances per stage under autopilot.
 
 **Init Mode is a precondition autopilot never skips.** When `team.md` or `routing.md` is missing, run the full Init build and wait for the user's confirmation before any pipeline stage. `mode=autopilot` changes how work is sequenced once a squad exists; it never authorizes building or running the squad without the user confirming the roster. Never auto-seed `team.md` to avoid the build conversation.
 

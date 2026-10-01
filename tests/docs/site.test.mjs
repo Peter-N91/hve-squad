@@ -179,6 +179,76 @@ test('multiline quoted content, embedded slash commands and escaped quotes remai
   } finally { dom.window.close(); }
 });
 
+test('usage.html documents roster-catalog.md and the routing= modes', () => {
+  const dom = openPage('usage.html', { scripts: false });
+  try {
+    const document = dom.window.document;
+    const content = document.body.textContent;
+    assert.ok(content.includes('roster-catalog.md'), 'usage.html mentions roster-catalog.md reference');
+    assert.ok(content.includes('routing='), 'usage.html documents routing= parameter');
+    assert.ok(content.includes('routing=manual'), 'usage.html documents routing=manual');
+    assert.ok(content.includes('Model routing: manual'), 'usage.html documents the persisted team.md mode line');
+    assert.ok(content.includes('Model selection per role'), 'usage.html has Model selection per role section');
+  } finally { dom.window.close(); }
+});
+
+test('fr/usage.html documents the routing= modes', () => {
+  const dom = openPage('fr/usage.html', { scripts: false });
+  try {
+    const document = dom.window.document;
+    const content = document.body.textContent;
+    assert.ok(content.includes('routing='), 'fr/usage.html documents routing= parameter');
+    assert.ok(content.includes('routing=manual'), 'fr/usage.html documents routing=manual');
+    assert.ok(content.includes('Model routing: manual'), 'fr/usage.html documents the persisted team.md mode line');
+  } finally { dom.window.close(); }
+});
+
+test('usage.html documents ledger validation and Measure-SquadLedger -Check', () => {
+  const dom = openPage('usage.html', { scripts: false });
+  try {
+    const document = dom.window.document;
+    const content = document.body.textContent;
+    assert.ok(content.includes('Ledger validation'), 'usage.html has Ledger validation section');
+    assert.ok(content.includes('Measure-SquadLedger.ps1 -Check'), 'usage.html documents Measure-SquadLedger -Check');
+    assert.ok(content.includes('Self-Check'), 'usage.html mentions Self-Check procedure');
+  } finally { dom.window.close(); }
+});
+
+test('fr/usage.html documents ledger validation and Measure-SquadLedger', () => {
+  const dom = openPage('fr/usage.html', { scripts: false });
+  try {
+    const document = dom.window.document;
+    const content = document.body.textContent;
+    assert.ok(content.includes('Measure-SquadLedger.ps1'), 'fr/usage.html mentions Measure-SquadLedger.ps1');
+    assert.ok(content.includes('-Check'), 'fr/usage.html mentions -Check');
+    assert.ok(content.includes('Validation du registre'), 'fr/usage.html has ledger validation section');
+  } finally { dom.window.close(); }
+});
+
+test('maintaining.html and fr/maintaining.html document roster-catalog.md and byte-budget-baseline.json', () => {
+  for (const page of ['maintaining.html', 'fr/maintaining.html']) {
+    const dom = openPage(page, { scripts: false });
+    try {
+      const document = dom.window.document;
+      const content = document.body.textContent;
+      assert.ok(content.includes('roster-catalog.md'), `${page} mentions roster-catalog.md`);
+      assert.ok(content.includes('byte-budget-baseline.json'), `${page} mentions byte-budget-baseline.json`);
+    } finally { dom.window.close(); }
+  }
+});
+
+test('no docs page contains squad-src/ internal paths (consumer-facing only)', () => {
+  const consumerPages = ['usage.html', 'troubleshooting.html', 'fr/usage.html', 'fr/troubleshooting.html'];
+  for (const page of consumerPages) {
+    const dom = openPage(page, { scripts: false });
+    try {
+      const document = dom.window.document;
+      const content = document.body.textContent;
+      assert.ok(!content.includes('squad-src/'), `${page} does not contain squad-src/ (internal path)`);
+    } finally { dom.window.close(); }
+  }
+});
+
 test('formatter indentation and comments do not hide executable examples', () => {
   const dom = renderExample('# First request\n    /squad init\n\n    # A separate federation request\n    /squad-federation promote');
   try {

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.4",
+  "updated": "2026-09-27T09:00:00Z",
+  "turn": 1,
+  "currentRun": {
+    "estCostUsd": 0.3000,
+    "estCreditsTotal": 30.00,
+  }
+  this is not valid JSON
+}

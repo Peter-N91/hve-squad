@@ -48,6 +48,49 @@ apm lock</code></pre>
 ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
 git diff --check</code></pre>
     <p>Les tests déterministes ne prouvent pas les résultats d'une exécution avec modèles. Les runs live constituent une vérification séparée et consomment des requêtes Copilot.</p>
+    <h2>Maintenance du skill squad et des références</h2>
+    <p>
+      Les fichiers d'instruction et de référence du skill squad pilotent le comportement du roster, la sélection des modèles
+      et la validation du registre. Les modifications ici se propagent à chaque consommateur à la prochaine
+      <code>apm install</code>.
+    </p>
+    <p>
+      <strong>Division du roster :</strong> <code>squad-src/.github/instructions/squad/squad-roster.instructions.md</code>
+      porte le résumé de sécurité inline, les règles de dispatchabilité et Profils/Packs. Le catalogue des rôles (anciennement
+      sections Cast Catalog, External Cast et Building a Custom Roster) vit désormais dans le fichier canonique
+      <code>squad-src/.github/skills/squad/references/roster-catalog.md</code> (lu à la demande). Quand vous ajoutez un nouvel
+      agent au cast, modifiez <code>references/roster-catalog.md</code> pour ajouter la ligne de rôle et lier le fichier
+      d'agent sous <code>.github/agents/</code>.
+    </p>
+    <p>
+      <strong>Catalogue des modèles et routage :</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
+      énumère les modèles, niveaux et disponibilités. <code>references/model-routing.md</code> définit l'algorithme de classement
+      et la chaîne de précédence. Le Scribe ne doit pas hériter du modèle de session frontière (épinglé à Claude Haiku 4.5 dans
+      son frontmatter ; la classe d'assignation bookkeeping s'étage à partir du Model Tier rapide sélectionné). Quand la gamme
+      de modèles GitHub Copilot change, mettez à jour la date <code>Retrieved</code> du catalogue ; une date >90 jours stale
+      replie sur les niveaux statiques. Gardez la date d'extraction et le catalogue synchronisés.
+    </p>
+    <p>
+      <strong>Portail Tier 0 byte-budget :</strong> <code>tests/tier0/baselines/byte-budget-baseline.json</code> (voir
+      Performance.Tests.ps1 L507) fixe des limites (roster 61 170 B ; cœur chaud Scribe 82 000 B ; 5% de tolérance).
+      Éditez <code>budgetBytes</code> et <code>note</code> à la main quand un changement de taille intentionnel survient.
+      La baseline <code>tests/tier0/baselines/prefill-baseline.json</code> est régénérée avec
+      <code>./scripts/Measure-SquadPerformance.ps1 -SourceRoot . -UpdateBaseline</code> (voir Measure-SquadPerformance.ps1
+      L52–56) ; après régénération, diffez-la pour confirmer que seules les phrases normatives et en-têtes intentionnels ont changé
+      (une phrase normative supprimée échoue le portail superset dans Performance.Tests.ps1 L507 sauf si c'était une correction intentionnelle).
+    </p>
+    <p>
+      <strong>Assistant registre et gardes :</strong> Le script <code>Measure-SquadLedger.ps1 -SquadRoot &lt;racine&gt; -Check</code>
+      valide l'arithmétique du registre, la divergence registre↔state.json (strict ; state.json manquant/non-analysable échoue ;
+      une racine de fédération marquée par <code>federation.md</code> est enregistrée comme non-applicable), le garde identité
+      (les identités de blocs ordonnées enregistrées par fichier doivent former un préfixe ordonné des identités actuelles ;
+      les réécritures/suppressions échouent ; les ajouts réussissent ; un <code>-Check</code> simple ne fait que prévenir
+      quand aucune identité n'est enregistrée — registres hérités), et est appelé par le Scribe avec
+      <code>-ExpectedHistoryCounts &lt;nombres d'entrées par agent&gt;</code> (scribe-procedure.md L166), ce qui transforme
+      ces mêmes avertissements d'identité manquante en échecs — totalement absentes, ou n'étant enregistrées que pour une
+      partie des fichiers touchés (collage partiel) — puisque cet appel suit toujours une écriture fraîche.
+      Les fixtures de test sous <code>tests/fixtures/ledger-*</code> exercent chaque condition de garde.
+    </p>
     <h2>Documentation bilingue</h2>
     <p>Le site reste en HTML statique. Les pages anglaises sont dans <code>docs/</code> et leurs correspondantes françaises dans <code>docs/fr/</code>, avec les mêmes noms de fichiers. Les styles et contrôles communs sont dans <code>docs/assets/style.css</code>, <code>theme.js</code> et <code>site.js</code>.</p>
     <p>Mettez à jour les deux langues dans la même PR, conservez les identifiants d'ancre et les commandes, puis testez les onglets, la navigation mobile et les liens de langue. Les onglets sont placés sur chaque exemple et partagent le choix de l'environnement. Les rapports historiques et vidéos gardent leur langue d'origine, explicitement indiquée. Les pages restent lisibles sans JavaScript.</p>
@@ -59,6 +102,21 @@ git diff --check</code></pre>
     <p>Une PR ajoute un nouveau fragment dans <code>.changes/unreleased/</code>, sans modifier <code>CHANGELOG.md</code> ni <code>version:</code> dans <code>apm.yml</code>. Le niveau suit les concepts : une extension ordinaire est généralement un <code>patch</code>, une nouvelle idée un <code>minor</code>, une rupture consommateur un <code>major</code>.</p>
     <p>La validation de PR contrôle les fragments et les déplacements de pin non autorisés. Une fusion alimente la préversion glissante ; elle ne publie pas une version stable. Un mainteneur déclenche <strong>Release Prep</strong> quand le lot est prêt. Le workflow assemble le changelog, calcule la version, consomme les fragments et lance la publication du tag.</p>
     <p>Un correctif isolé doit partir d'une branche issue du dernier tag si <code>main</code> contient du travail non publiable. Sélectionner des fragments ne sélectionne pas le code livré. Voir <a href="contributing.html">Contribuer</a> et la <a href="../maintaining.html" lang="en">référence détaillée de maintenance en anglais</a> pour les options avancées des workflows.</p>
+
+      <h2>Incidents connus du test de chevauchement</h2>
+      <p>
+        Lors du développement et des tests du chevauchement des remises Scribe (mode autopilot), cinq incidents d'intégrité de la piste d'audit ont été observés et détectés. Ces incidents ont éclairé la conception des barrières de vérification par-écriture et des contrôles correctifs. Ils sont enregistrés ici pour les mainteneurs travaillant avec l'état de la squad et les dispatches Scribe :
+      </p>
+      <ul>
+        <li><strong>Incident 3 (turn 15) :</strong> Le dispatch Scribe au démarrage du run a réduit <code>history/Squad Scribe.md</code> de 48 blocs à 8 ; un simple <code>Measure-SquadLedger.ps1 -Check</code> a réussi car le registre avait été réécrit pour correspondre. Le contenu original était irrécupérable car <code>.copilot-tracking/</code> est git-ignoré.</li>
+        <li><strong>Incident 4 (turn 18) :</strong> Scribe a écrit à la main <code>consumption.md</code> en forme invalide avec une cellule Attribution Agent vide qui a causé l'écrasement de <code>Measure-SquadLedger -Check</code> ; la comparaison d'instantané pré-écriture du coordinateur l'a détecté et le fichier a été réécrit à partir de la sortie de l'assistant. Séparément, un triple ajout de rubrique dans un fichier d'historique a reçu une entrée de correction en ajout uniquement.</li>
+        <li><strong>Incident 5 (turn 21) :</strong> Les octets existants dans les premiers 4 937 octets de <code>history/System Architecture Reviewer.md</code> ont été modifiés par Scribe. <code>Measure-SquadLedger -Check -ExpectedHistoryCounts</code> a réussi malgré le changement de préfixe ; seule la vérification SHA-256 du préfixe hors bande du coordinateur l'a détecté. Les octets d'origine étaient irrécupérables, et cet incident a conduit à l'adoption de vérifications de base du préfixe du contenu au niveau de l'outil (<code>-EmitBaseline</code> / <code>-BaselinePath</code>).</li>
+        <li><strong>Incident 6 (turn 23) :</strong> Scribe a écrasé <code>plans/2026-09-28-scribe-pipelining-plan-amendment-2.md</code> (99 355 octets à 8 659 octets) car sa charge n'énumérait pas un ensemble explicite autorisé à l'écriture. Le rôle propriétaire (Squad Lead) a réécrit le plan ; l'outil applique maintenant une portée d'artefact protégée via la comparaison de la ligne de base du contenu.</li>
+        <li><strong>Incident 7 (turn 25) :</strong> Scribe a ajouté six lignes de rubrique par fichier d'historique du conseil (au lieu d'une), a émis des corrections void/re-append, a incorporé des entrées dans des lignes de rubrique et a inclus des valeurs divisées par des nouvelles lignes. Une décision humaine a adopté les charges Scribe pré-rendues (création du coordinateur, ajout uniquement du Scribe) pour le reste de ce run.</li>
+      </ul>
+      <p>
+        Chaque incident a été détecté et corrigé par des entrées d'historique en ajout uniquement ou en redispatchant le rôle propriétaire. Les octets d'origine des incidents 3 et 5 n'ont pas pu être récupérés. Les contrôles correctifs sont maintenant intégrés au contrat de vérification du chevauchement Scribe : <code>Measure-SquadLedger.ps1 -Check -ExpectedHistoryCounts -BaselinePath</code> (pas simple <code>-Check</code>), préservation et vérification du préfixe du contenu via instantanés de base, et redispatch de rôle sur vérification échouée.
+      </p>
     <div class="pager"><a class="prev" href="ecosystem.html"><div class="dir">Retour</div><div class="ttl">Écosystème</div></a><a class="next" href="troubleshooting.html"><div class="dir">Suite</div><div class="ttl">Dépannage</div></a></div>
   </div></main>
   <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>

@@ -50,7 +50,7 @@ Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches t
 
 The coordinator advances stage-to-stage by reading the prior stage's findings; it hands every stage transition to the Scribe, which records it in the autopilot-run history file and updates `state.json`.
 
-**One Scribe hand-off per stage — never one per pipeline.** Dispatch the stage's role, hand its findings to the Scribe, and only then read the stage's history entry and advance. Batching several stages into a single hand-off is what makes the *Per-Stage Advance Checklist* below unreachable: a turn that covers research, plan, architecture, council, three fan-out deliverables, a security review, a review, and a remediation has no point at which stage N's entry can be missing, because stage N and stage N+1 are the same write. The observed failure is a run whose Scribe recorded seven turns for ten stages and whose cast left no history at all. Under autopilot `state.json` advances per stage, so its `turn` counts stages rather than human turns.
+**One Scribe hand-off per stage — never one per pipeline.** Dispatch the stage's role and hand its findings to the Scribe; once the stage's own artifact is on disk, the next stage's dispatch must share a parallel tool-call block with that hand-off whenever the Enablement Predicate holds and no barrier applies (see *Scribe Hand-off Pipelining* in `references/operating-procedure.md`), and the stage counts as run only once its history entry is read back and verified. Batching several stages into a single hand-off is what makes the *Per-Stage Advance Checklist* below unreachable: a turn that covers research, plan, architecture, council, three fan-out deliverables, a security review, a review, and a remediation has no point at which stage N's entry can be missing, because stage N and stage N+1 are the same write. The observed failure is a run whose Scribe recorded seven turns for ten stages and whose cast left no history at all. Under autopilot `state.json` advances per stage, so its `turn` counts stages rather than human turns.
 
 ## Deliverable Fan-Out (Multi-Artifact Runs)
 
@@ -72,7 +72,7 @@ Much of the squad's work delivers its value through several distinct, specialist
 
 ## Artifact Gates (Evidence Required)
 
-Each pipeline stage is gated on the prior stage's artifact existing on disk. The coordinator confirms the evidence before advancing; a stage with no artifact and no `history/<agent>.md` entry did not run, and the pipeline cannot skip it. This is what makes the methodology auditable rather than assumed.
+Each pipeline stage's artifact existing on disk gates dispatching the next stage; the stage itself counts as run only once its `history/<agent>.md` entry also lands (see *Scribe Hand-off Pipelining* in `references/operating-procedure.md`). The coordinator confirms both before treating the stage as complete, and the pipeline cannot skip a stage with neither. This is what makes the methodology auditable rather than assumed.
 
 Artifact paths below are the **single-squad** paths. In a federation they are rebased under the sub-squad's `squadRoot` per *Deliverable Roots* in `.github/instructions/squad/squad-roster.instructions.md` — a `product` sub-squad's plan lands at `.copilot-tracking/squad/members/product/plans/`, not at the repository-root tracking path. A sub-squad artifact written to the repository-root path has escaped its root and the stage does not count.
 
@@ -92,7 +92,7 @@ For a **deliverable fan-out** run (see above), the single `implement` row expand
 
 ## Per-Stage Advance Checklist (Run After Every Stage)
 
-Do not advance from stage N to stage N+1 until, for stage N, both are confirmed on disk: (a) the required artifact from the *Artifact Gates* table above, at the owning role's `Deliverable Root`, and (b) a `history/<agent>.md` entry with its consumption block. When either is absent, re-dispatch the owning role or fire the Risk Gate — never advance on assumed completion. State the confirmed evidence (the artifact path and the history entry) when reporting the stage, and quote only paths this run actually enumerated. For a deliverable fan-out run, apply this check per deliverable before the Review stage begins. This restates the Artifact Gates as a mechanical per-stage loop so a lighter model cannot skip a stage by narrating it as done.
+Stage N's required artifact from the *Artifact Gates* table above, at the owning role's `Deliverable Root`, gates dispatching stage N+1. Stage N's `history/<agent>.md` entry with its consumption block additionally gates counting stage N complete. When the artifact is absent, re-dispatch the owning role or fire the Risk Gate — never advance on assumed completion. When the artifact exists but the history entry does not, re-send the Scribe hand-off for that stage — never re-run the stage that produced the artifact. State the confirmed evidence (the artifact path and the history entry) when reporting the stage, and quote only paths this run actually enumerated. For a deliverable fan-out run, apply this check per deliverable before the Review stage begins. This restates the Artifact Gates as a mechanical per-stage loop so a lighter model cannot skip a stage by narrating it as done.
 
 **Count the history entries.** At the end of the run, the number of `history/<agent>.md` entries must be at least the number of stages plus deliverables the run claims to have executed. A run that produced polished deliverables but left one or two history files did not dispatch its cast — it was authored inline, which is the *Dispatch Discipline* violation the pipeline exists to prevent. Report that as a failed run rather than a completed one.
 
@@ -139,6 +139,8 @@ A single qualifying trigger is enough to fire the gate, no matter how many other
 Before research and before every later dispatch round, apply the *Cost Preflight Procedure* in the `squad` skill's `references/gates-and-modes.md`. The initial manifest includes every applicable intake and both remediation attempts, Research, Plan, council, conservative pre-Plan deliverable fan-out, implementation validation cycles, Review, final validation, and coordinator/Scribe orchestration. Once Plan identifies exact fan-out, replace the conservative set and recalculate.
 
 Only a persisted `within-ceiling` or valid `approved-over-ceiling` round permits its named next slots. `over-ceiling` offers stop or bounded proceed; explicit proceed runs sequential child-plus-Scribe units until accumulated estimated spend reaches the ceiling. `cannot-confirm` remains non-admitting, and changed or expanded demand requires a new approval.
+
+A Cost Preflight round is never issued in the same parallel block as a Scribe hand-off. A configured cost ceiling no longer disables Scribe hand-off pipelining: the round admitting stage N+1 runs between blocks and counts stage N's unrecorded spend as a pending reservation, per the Enablement Predicate in `references/gates-and-modes.md`. An `approved-over-ceiling` round still runs one sequential child-plus-Scribe unit at a time.
 
 ## What Autopilot Does Not Do
 

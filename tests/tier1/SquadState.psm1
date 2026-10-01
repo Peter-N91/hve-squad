@@ -89,6 +89,41 @@ function Get-ConsumptionBlock {
     }
 }
 
+function Get-RoutingIdentityBullets {
+    <#
+    .SYNOPSIS
+        Extracts the optional routing-identity bullets beneath each Consumption block
+        in a history file, per model-routing.md's Identity Bullets contract.
+    .DESCRIPTION
+        The four bullets - Requested model, Effective model, Observed model, Route
+        rationale - are additive narrative content, never a JSON key. A no-policy
+        dispatch omits all four, so absence is a valid, expected result rather than a
+        parse failure: callers assert on HasBullets, not on this returning nothing.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $raw = Get-Content -LiteralPath $Path -Raw
+
+    foreach ($match in [regex]::Matches($raw, '(?ms)^####\s+Consumption(?:\s+[-\u2014]\s+Orchestration)?\s*$\r?\n+```json\r?\n.*?\r?\n```(?<bullets>(?:\r?\n[ \t]*\*[ \t]*\*\*[^\r\n]+)*)')) {
+        $bulletBlock = $match.Groups['bullets'].Value
+        $labels = @(
+            [regex]::Matches($bulletBlock, '(?m)^[ \t]*\*[ \t]*\*\*(?<label>[^*]+)\*\*[ \t]*(?:\u2014|-)[ \t]*(?<value>.+)$') |
+            ForEach-Object { [pscustomobject]@{ Label = $_.Groups['label'].Value.Trim(); Value = $_.Groups['value'].Value.Trim() } }
+        )
+
+        [pscustomobject]@{
+            Source     = Split-Path $Path -Leaf
+            HasBullets = $labels.Count -gt 0
+            Labels     = @($labels | ForEach-Object { $_.Label })
+            Values     = $labels
+        }
+    }
+}
+
 function Get-HistoryEntry {
     <#
     .SYNOPSIS
@@ -385,6 +420,78 @@ function Get-RateTable {
     $rates
 }
 
+function Get-DispatchClassTable {
+    <#
+    .SYNOPSIS
+        Reads the canonical dispatch-size estimator table.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Content = ''
+    )
+
+    $classes = @{}
+    foreach ($table in (Get-MarkdownTable -Content $Content)) {
+        $required = @('Dispatch class', 'Internal turns', 'Base context', 'Growth/turn', 'Output/turn')
+        if (@($required | Where-Object { $_ -notin $table.Header }).Count -gt 0) { continue }
+
+        foreach ($row in $table.Rows) {
+            $name = $row['Dispatch class']
+            $numbers = @($required[1..4] | ForEach-Object { ConvertTo-LedgerNumber $row[$_] })
+            if (-not $name -or $numbers -contains $null) { continue }
+            $classes[$name] = @{
+                internal_turns = $numbers[0]
+                base_context   = $numbers[1]
+                growth         = $numbers[2]
+                output         = $numbers[3]
+            }
+        }
+    }
+
+    $classes
+}
+
+function Get-CostPreflightRecord {
+    <#
+    .SYNOPSIS
+        Reads every append-only Cost Preflight decision and its demand table.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Content = ''
+    )
+
+    foreach ($match in [regex]::Matches($Content, '(?ms)^## Cost Preflight (?<timestamp>\S+) (?<run>\S+) (?<round>\S+)\r?\n(?<body>.*?)(?=^## |\z)')) {
+        $body = $match.Groups['body'].Value
+        $fields = [ordered]@{}
+        foreach ($field in [regex]::Matches($body, '(?m)^\* (?<key>[^:]+):\s*(?<value>.*)\r?$')) {
+            $fields[$field.Groups['key'].Value] = $field.Groups['value'].Value.Trim()
+        }
+
+        $demand = @(Get-MarkdownTable -Content $body | Where-Object {
+                'Slot' -in $_.Header -and 'Projected Cost' -in $_.Header
+            } | Select-Object -First 1)
+        $permitted = @(
+            if ($fields['Permitted Next Dispatch Set'] -and $fields['Permitted Next Dispatch Set'] -ne 'none') {
+                $fields['Permitted Next Dispatch Set'] -split ',' | ForEach-Object { $_.Trim() }
+            }
+        )
+
+        [pscustomobject]@{
+            Timestamp      = $match.Groups['timestamp'].Value
+            RunId          = $match.Groups['run'].Value
+            RoundId        = $match.Groups['round'].Value
+            Fields         = $fields
+            PermittedSlots = $permitted
+            DemandRows     = @(if ($demand) { $demand[0].Rows })
+        }
+    }
+}
+
 function Get-SquadStateModel {
     <#
     .SYNOPSIS
@@ -453,78 +560,6 @@ function Get-SquadStateModel {
                 )
                 if ('Role' -in $table.Header -and $row['Role']) { $roleAgents[$row['Role']] = $names }
                 $names
-            }
-
-            function Get-DispatchClassTable {
-                <#
-                .SYNOPSIS
-                    Reads the canonical dispatch-size estimator table.
-                #>
-                [CmdletBinding()]
-                param(
-                    [AllowEmptyString()]
-                    [AllowNull()]
-                    [string]$Content = ''
-                )
-
-                $classes = @{}
-                foreach ($table in (Get-MarkdownTable -Content $Content)) {
-                    $required = @('Dispatch class', 'Internal turns', 'Base context', 'Growth/turn', 'Output/turn')
-                    if (@($required | Where-Object { $_ -notin $table.Header }).Count -gt 0) { continue }
-
-                    foreach ($row in $table.Rows) {
-                        $name = $row['Dispatch class']
-                        $numbers = @($required[1..4] | ForEach-Object { ConvertTo-LedgerNumber $row[$_] })
-                        if (-not $name -or $numbers -contains $null) { continue }
-                        $classes[$name] = @{
-                            internal_turns = $numbers[0]
-                            base_context   = $numbers[1]
-                            growth         = $numbers[2]
-                            output         = $numbers[3]
-                        }
-                    }
-                }
-
-                $classes
-            }
-
-            function Get-CostPreflightRecord {
-                <#
-                .SYNOPSIS
-                    Reads every append-only Cost Preflight decision and its demand table.
-                #>
-                [CmdletBinding()]
-                param(
-                    [AllowEmptyString()]
-                    [AllowNull()]
-                    [string]$Content = ''
-                )
-
-                foreach ($match in [regex]::Matches($Content, '(?ms)^## Cost Preflight (?<timestamp>\S+) (?<run>\S+) (?<round>\S+)\r?\n(?<body>.*?)(?=^## |\z)')) {
-                    $body = $match.Groups['body'].Value
-                    $fields = [ordered]@{}
-                    foreach ($field in [regex]::Matches($body, '(?m)^\* (?<key>[^:]+):\s*(?<value>.*)\r?$')) {
-                        $fields[$field.Groups['key'].Value] = $field.Groups['value'].Value.Trim()
-                    }
-
-                    $demand = @(Get-MarkdownTable -Content $body | Where-Object {
-                            'Slot' -in $_.Header -and 'Projected Cost' -in $_.Header
-                        } | Select-Object -First 1)
-                    $permitted = @(
-                        if ($fields['Permitted Next Dispatch Set'] -and $fields['Permitted Next Dispatch Set'] -ne 'none') {
-                            $fields['Permitted Next Dispatch Set'] -split ',' | ForEach-Object { $_.Trim() }
-                        }
-                    )
-
-                    [pscustomobject]@{
-                        Timestamp      = $match.Groups['timestamp'].Value
-                        RunId          = $match.Groups['run'].Value
-                        RoundId        = $match.Groups['round'].Value
-                        Fields         = $fields
-                        PermittedSlots = $permitted
-                        DemandRows     = @(if ($demand) { $demand[0].Rows })
-                    }
-                }
             }
         }
     ) | Sort-Object -Unique
@@ -749,4 +784,4 @@ function Get-SquadStateModel {
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, Get-DispatchClassTable, Get-CostPreflightRecord, ConvertTo-LedgerNumber, Get-LedgerDecimal
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-RoutingIdentityBullets, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, Get-DispatchClassTable, Get-CostPreflightRecord, ConvertTo-LedgerNumber, Get-LedgerDecimal

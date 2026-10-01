@@ -353,6 +353,49 @@ git diff --check</code></pre>
         existing fragment does not satisfy the pull-request gate for a separate pull request.
       </p>
 
+      <h3>Squad skill and reference maintenance</h3>
+      <p>
+        The squad skill's instruction and reference files drive roster, model selection, and ledger behavior.
+        Edits here propagate to every consumer on the next <code>apm install</code>.
+      </p>
+      <p>
+        <strong>Roster split:</strong> <code>squad-src/.github/instructions/squad/squad-roster.instructions.md</code>
+        carries inline safety summary, dispatchability rules, and Profiles/Packs. The cast catalog (formerly
+        Cast Catalog, External Cast, and Building a Custom Roster sections) now lives in the canonical
+        <code>squad-src/.github/skills/squad/references/roster-catalog.md</code> (read on demand). When adding a
+        new cast agent, edit <code>references/roster-catalog.md</code> to append the role row and link the agent
+        file under <code>.github/agents/</code>.
+      </p>
+      <p>
+        <strong>Model catalog and routing:</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
+        enumerates supported models, tiers, and availability. <code>references/model-routing.md</code> defines the
+        ranked selection algorithm and precedence chain. The Scribe must not inherit the frontier session model
+        (pinned to Claude Haiku 4.5 in its frontmatter; bookkeeping assignment class floors at seeded fast Model Tier).
+        When GitHub Copilot's model lineup changes, update the catalog's <code>Retrieved</code> date; a date >90 days
+        stale falls back to static tiers. Keep the retrieval date and the catalog synchronized.
+      </p>
+      <p>
+        <strong>Tier 0 byte-budget gate:</strong> <code>tests/tier0/baselines/byte-budget-baseline.json</code> (see
+        Performance.Tests.ps1 L507) sets size limits (roster 61,170 B; Scribe hot core 82,000 B; 5% tolerance). Edit
+        <code>budgetBytes</code> and <code>note</code> by hand when an intentional size change occurs. The
+        <code>tests/tier0/baselines/prefill-baseline.json</code> baseline is regenerated with
+        <code>./scripts/Measure-SquadPerformance.ps1 -SourceRoot . -UpdateBaseline</code> (see Measure-SquadPerformance.ps1
+        L52–56); after regenerating, diff it to confirm only intended normative sentences and headings changed (a removed
+        normative sentence fails the superset gate in Performance.Tests.ps1 L507 unless it was an intentional correction).
+      </p>
+      <p>
+        <strong>Ledger helper and guards:</strong> The <code>Measure-SquadLedger.ps1 -SquadRoot &lt;root&gt; -Check</code>
+        script validates ledger arithmetic, ledger↔state.json divergence (strict; missing/unparseable state.json fails;
+        a federation root marked by <code>federation.md</code> is logged not-applicable), the identity guard (recorded
+        per-file ordered block identities must form an ordered prefix of current identities; overwrites/removals fail;
+        appends pass; a plain <code>-Check</code> only warns when no identities are recorded at all — legacy ledgers),
+        and is called by the Scribe with
+        <code>-ExpectedHistoryCounts &lt;per-agent entry counts&gt;</code> (scribe-procedure.md L166), which turns those
+        same missing-identity warnings into failures — entirely missing, or missing for only some of the touched files
+        (a partial paste) — since that call always follows a fresh write. Test fixtures under
+        <code>tests/fixtures/ledger-*</code> exercise each guard condition.
+      </p>
+
       <h3>Why the source is separate from the deployed <code>.github/</code> tree</h3>
       <p>
         <code>apm install</code> deploys agents and prompts <em>flattened</em> into the consumer's
@@ -598,6 +641,20 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0    # force an exact ver
         <code>main</code>.
       </p>
 
+      <h2>Known incidents from pipelining testing</h2>
+      <p>
+        During the development and testing of Scribe hand-off pipelining (autopilot mode), five audit-trail integrity incidents were observed and detected. These incidents informed the design of per-write verification barriers and corrective controls. They are recorded here for maintainers working with squad state and Scribe dispatches:
+      </p>
+      <ul>
+        <li><strong>Incident 3 (turn 15):</strong> The run-start Scribe dispatch cut <code>history/Squad Scribe.md</code> from 48 blocks to 8; a bare <code>Measure-SquadLedger.ps1 -Check</code> passed because the ledger had been rewritten to match. The original content was unrecoverable because <code>.copilot-tracking/</code> is git-ignored.</li>
+        <li><strong>Incident 4 (turn 18):</strong> The Scribe hand-wrote <code>consumption.md</code> in an invalid shape with an empty Attribution Agent cell that caused <code>Measure-SquadLedger -Check</code> to throw; the coordinator's pre-write snapshot comparison detected it and the file was rewritten from the helper's output. Separately, a triple heading append in a history file received an append-only correction entry.</li>
+        <li><strong>Incident 5 (turn 21):</strong> Existing bytes in the first 4,937 bytes of <code>history/System Architecture Reviewer.md</code> were modified by the Scribe. <code>Measure-SquadLedger -Check -ExpectedHistoryCounts</code> passed despite the prefix change; only the coordinator's out-of-band SHA-256 prefix check detected it. The original bytes were unrecoverable, and this incident led to the adoption of tool-level content-prefix baseline checks (<code>-EmitBaseline</code> / <code>-BaselinePath</code>).</li>
+        <li><strong>Incident 6 (turn 23):</strong> The Scribe overwrote <code>plans/2026-09-28-scribe-pipelining-plan-amendment-2.md</code> (99,355 bytes to 8,659 bytes) because its payload did not enumerate an explicit allowed-write set. The owning role (Squad Lead) re-authored the plan; the tool now enforces a protected-artifact scope via content-baseline comparison.</li>
+        <li><strong>Incident 7 (turn 25):</strong> The Scribe appended six heading lines per council history file (instead of one), issued void/re-append corrections, embedded entries inside heading lines, and included newline-split values. A human decision adopted pre-rendered Scribe payloads (coordinator authorship, Scribe append-only) for the rest of that run.</li>
+      </ul>
+      <p>
+        Each incident was detected and corrected with append-only history entries or by re-dispatching the owning role. The original bytes for incidents 3 and 5 could not be recovered. The corrective controls are now integrated into the Scribe pipelining verification contract: <code>Measure-SquadLedger.ps1 -Check -ExpectedHistoryCounts -BaselinePath</code> (not bare <code>-Check</code>), content-prefix preservation and checking via baseline snapshots, and role re-dispatch on failed verification.
+      </p>
       <div class="pager">
         <a class="prev" href="ecosystem.html">
           <div class="dir">← Back</div>
