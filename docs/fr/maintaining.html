@@ -1,124 +1,684 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Maintenance | hve-squad</title><meta name="description" content="Maintenir les sources hve-squad, les dépendances HVE Core, les tests, les versions et la documentation bilingue." />
-  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../maintaining.html" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maintenance — hve-squad</title>
+  <meta name="description" content="Procédure de maintenance, génération des dépendances, organisation des sources de la squad, personnalisation et processus de publication." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../maintaining.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html" class="active">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../maintaining.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Guide mainteneur</div><h1>Maintenir le package</h1><p class="lead">Travaillez sur les sources, vérifiez les agents réellement disponibles et publiez depuis une référence reproductible.</p></div></header>
-  <main class="content"><div class="container">
-    <h2>Structure du dépôt</h2>
-    <table><thead><tr><th>Chemin</th><th>Responsabilité</th></tr></thead><tbody>
-      <tr><td><code>apm.yml</code></td><td>Métadonnées, dépendances et scripts du package.</td></tr><tr><td><code>apm.lock.yaml</code></td><td>Références résolues par APM.</td></tr>
-      <tr><td><code>squad-src/.github/</code></td><td>Sources des agents, prompts, instructions et skills de la squad.</td></tr>
-      <tr><td><code>scripts/Update-ApmDependencies.ps1</code></td><td>Générateur de dépendances.</td></tr>
-      <tr><td><code>scripts/Get-HveCoreCastDelta.ps1</code></td><td>Comparaison des agents déployables entre références HVE Core.</td></tr>
-      <tr><td><code>.changes/unreleased/</code></td><td>Fragments en attente d'une publication.</td></tr>
-      <tr><td><code>apm_modules/</code> et <code>.github/</code></td><td>Dépendances et ressources déployées ; ne pas les confondre avec les sources.</td></tr>
-      <tr><td><code>.copilot-tracking/</code></td><td>État de travail local ; certaines traces Watch Mode sont suivies pour l'audit.</td></tr>
-      <tr><td><code>docs/</code></td><td>Documentation statique publiée sur GitHub Pages.</td></tr>
-    </tbody></table>
-    <h2>Cycle local</h2>
-    <pre><code>apm run sync-deps
-apm install
-apm lock</code></pre>
-    <p><code>install-sync</code> combine génération et installation. <code>apm pack</code> est facultatif pour produire un artefact, notamment pour le plugin. <code>apm run change</code> prépare un fragment. <code>release-prep</code> assemble une publication ; ne le lancez pas comme simple étape de développement.</p>
-    <p>Le générateur parcourt les agents, instructions, prompts et skills de HVE Core à la référence choisie, filtre les ressources Markdown et réécrit <code>dependencies.apm</code>. Par défaut, il conserve le SHA déjà épinglé.</p>
-    <h2>Mettre HVE Core à jour</h2>
-    <p>Les rôles désignent les agents par leur nom exact. Avant de changer le SHA, vérifiez si un agent référencé a disparu, changé de nom ou perdu sa capacité de délégation :</p>
-    <pre><code>./scripts/Get-HveCoreCastDelta.ps1
-./scripts/Get-HveCoreCastDelta.ps1 -ToRef main -MarkdownPath delta.md</code></pre>
-    <h3>Évolution mécanique</h3>
-    <p>Sans changement bloquant du catalogue, la synchronisation déplace le pin et ajoute un fragment. Elle ne publie pas automatiquement une version stable. La modification attend la prochaine publication décidée par un mainteneur.</p>
-    <h3>Adaptation du catalogue</h3>
-    <p>En cas de rupture, la synchronisation ne modifie pas le manifeste : elle crée une issue <code>squad/auto</code> avec le diagnostic et les critères d'acceptation. Watch Mode travaille dans <code>issue-&lt;N&gt;</code> et ouvre une PR en brouillon. Le label <code>squad/review</code> déclenche une revue distincte sous <code>pr-&lt;N&gt;</code>.</p>
-    <p>Examinez les nouvelles correspondances de rôles et l'historique de chaque délégation. Un agent marqué <code>disable-model-invocation: true</code> ne peut pas remplir un rôle délégué. Un historique vide ne prouve pas que les spécialistes ont réellement travaillé.</p>
-    <h3>Exécution sans utilisateur</h3>
-    <p>Les transitions reposent sur les preuves. Les conclusions et risques sont portés dans la PR en brouillon ; ils ne deviennent pas une approbation humaine. Aucune fusion, aucun déploiement, force-push, changement de données, rotation de secret ou écriture dans un backlog externe n'est autorisé par ce mode.</p>
-    <p>Configurez les secrets <code>COPILOT_GITHUB_TOKEN</code> et <code>SYNC_DEPS_TOKEN</code> selon les workflows, les labels, les droits de création de PR et la protection de branche. Épinglez le modèle CLI via <code>--model</code> ou le paramètre prévu par le workflow ; le frontmatter d'un agent ne suffit pas à fixer le modèle d'un run sans interface.</p>
-    <h2>Sources et références reproductibles</h2>
-    <p>Modifiez <code>squad-src/.github/agents/squad/</code>, <code>instructions/squad/</code>, <code>prompts/squad/</code> ou <code>skills/squad/</code> sous cette même racine. APM aplatit le contenu vers <code>.github/</code> lors du déploiement : modifier cette sortie exposerait vos changements à un écrasement.</p>
-    <p><code>SquadSourceRoot</code>, <code>SquadRepoSlug</code> et <code>SquadRef</code> contrôlent les auto-références de la squad. <code>RepoSlug</code>, <code>Ref</code>, <code>IncludeRoots</code> et <code>IncludeRegex</code> contrôlent la découverte HVE Core. Utilisez <code>-DryRun</code> pour inspecter le résultat sans écrire.</p>
-    <p>Depuis v0.15.2, le workflow de publication épingle les auto-références avec <code>Set-SquadSelfRefPin.ps1</code> dans un commit propre au tag ; <code>main</code> garde ses références de développement. Les anciens tags ne garantissent pas cette reproductibilité. Vérifiez une installation depuis un clone frais du tag, pas seulement depuis l'arbre de travail.</p>
-    <h2>Contrats et tests</h2>
-    <p>Lors d'une évolution du plafond de coût, gardez synchronisés les paramètres des prompts, <code>references/consumption.md</code>, <code>gates-and-modes.md</code>, les schémas d'entrée, les modèles de fédération, la procédure du Scribe et les coordinateurs. L'initialisation reste hors plafond et seul l'autopilot de fédération non ciblé porte un contrôle agrégé.</p>
-    <pre><code>./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot .
-./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
-git diff --check</code></pre>
-    <p>Les tests déterministes ne prouvent pas les résultats d'une exécution avec modèles. Les runs live constituent une vérification séparée et consomment des requêtes Copilot.</p>
-    <h2>Maintenance du skill squad et des références</h2>
-    <p>
-      Les fichiers d'instruction et de référence du skill squad pilotent le comportement du roster, la sélection des modèles
-      et la validation du registre. Les modifications ici se propagent à chaque consommateur à la prochaine
-      <code>apm install</code>.
-    </p>
-    <p>
-      <strong>Division du roster :</strong> <code>squad-src/.github/instructions/squad/squad-roster.instructions.md</code>
-      porte le résumé de sécurité inline, les règles de dispatchabilité et Profils/Packs. Le catalogue des rôles (anciennement
-      sections Cast Catalog, External Cast et Building a Custom Roster) vit désormais dans le fichier canonique
-      <code>squad-src/.github/skills/squad/references/roster-catalog.md</code> (lu à la demande). Quand vous ajoutez un nouvel
-      agent au cast, modifiez <code>references/roster-catalog.md</code> pour ajouter la ligne de rôle et lier le fichier
-      d'agent sous <code>.github/agents/</code>.
-    </p>
-    <p>
-      <strong>Catalogue des modèles et routage :</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
-      énumère les modèles, niveaux et disponibilités. <code>references/model-routing.md</code> définit l'algorithme de classement
-      et la chaîne de précédence. Le Scribe ne doit pas hériter du modèle de session frontière (épinglé à Claude Haiku 4.5 dans
-      son frontmatter ; la classe d'assignation bookkeeping s'étage à partir du Model Tier rapide sélectionné). Quand la gamme
-      de modèles GitHub Copilot change, mettez à jour la date <code>Retrieved</code> du catalogue ; une date >90 jours stale
-      replie sur les niveaux statiques. Gardez la date d'extraction et le catalogue synchronisés.
-    </p>
-    <p>
-      <strong>Portail Tier 0 byte-budget :</strong> <code>tests/tier0/baselines/byte-budget-baseline.json</code> (voir
-      Performance.Tests.ps1 L507) fixe des limites (roster 61 170 B ; cœur chaud Scribe 82 000 B ; 5% de tolérance).
-      Éditez <code>budgetBytes</code> et <code>note</code> à la main quand un changement de taille intentionnel survient.
-      La baseline <code>tests/tier0/baselines/prefill-baseline.json</code> est régénérée avec
-      <code>./scripts/Measure-SquadPerformance.ps1 -SourceRoot . -UpdateBaseline</code> (voir Measure-SquadPerformance.ps1
-      L52–56) ; après régénération, diffez-la pour confirmer que seules les phrases normatives et en-têtes intentionnels ont changé
-      (une phrase normative supprimée échoue le portail superset dans Performance.Tests.ps1 L507 sauf si c'était une correction intentionnelle).
-    </p>
-    <p>
-      <strong>Assistant registre et gardes :</strong> Le script <code>Measure-SquadLedger.ps1 -SquadRoot &lt;racine&gt; -Check</code>
-      valide l'arithmétique du registre, la divergence registre↔state.json (strict ; state.json manquant/non-analysable échoue ;
-      une racine de fédération marquée par <code>federation.md</code> est enregistrée comme non-applicable), le garde identité
-      (les identités de blocs ordonnées enregistrées par fichier doivent former un préfixe ordonné des identités actuelles ;
-      les réécritures/suppressions échouent ; les ajouts réussissent ; un <code>-Check</code> simple ne fait que prévenir
-      quand aucune identité n'est enregistrée — registres hérités), et est appelé par le Scribe avec
-      <code>-ExpectedHistoryCounts &lt;nombres d'entrées par agent&gt;</code> (scribe-procedure.md L166), ce qui transforme
-      ces mêmes avertissements d'identité manquante en échecs — totalement absentes, ou n'étant enregistrées que pour une
-      partie des fichiers touchés (collage partiel) — puisque cet appel suit toujours une écriture fraîche.
-      Les fixtures de test sous <code>tests/fixtures/ledger-*</code> exercent chaque condition de garde.
-    </p>
-    <h2>Documentation bilingue</h2>
-    <p>Le site reste en HTML statique. Les pages anglaises sont dans <code>docs/</code> et leurs correspondantes françaises dans <code>docs/fr/</code>, avec les mêmes noms de fichiers. Les styles et contrôles communs sont dans <code>docs/assets/style.css</code>, <code>theme.js</code> et <code>site.js</code>.</p>
-    <p>Mettez à jour les deux langues dans la même PR, conservez les identifiants d'ancre et les commandes, puis testez les onglets, la navigation mobile et les liens de langue. Les onglets sont placés sur chaque exemple et partagent le choix de l'environnement. Les rapports historiques et vidéos gardent leur langue d'origine, explicitement indiquée. Les pages restent lisibles sans JavaScript.</p>
-    <p>Écrivez les exemples exécutables de la squad dans des blocs <code>pre &gt; code</code> avec la syntaxe des prompts VS Code. Le script partagé conserve cette source et produit les demandes CLI/App avec le bon agent, sans modifier les arguments ni le texte multiligne. Séparez les commandes shell et les déclencheurs de commentaires GitHub. Utilisez <code>data-host-reference</code> pour les tableaux comparant explicitement les hôtes. Sans JavaScript, les prompts d'origine restent lisibles.</p>
-    <pre><code>npm --prefix tests/docs ci --ignore-scripts
-  npm --prefix tests/docs test</code></pre>
-    <p>Ouvrez <code>docs/index.html</code> directement dans le navigateur. Aucun serveur ni build React n'est requis. Le workflow <code>.github/workflows/docs.yml</code> publie le dossier <code>docs</code> sur GitHub Pages.</p>
-    <h2>Fragments et publications</h2>
-    <p>Une PR ajoute un nouveau fragment dans <code>.changes/unreleased/</code>, sans modifier <code>CHANGELOG.md</code> ni <code>version:</code> dans <code>apm.yml</code>. Le niveau suit les concepts : une extension ordinaire est généralement un <code>patch</code>, une nouvelle idée un <code>minor</code>, une rupture consommateur un <code>major</code>.</p>
-    <p>La validation de PR contrôle les fragments et les déplacements de pin non autorisés. Une fusion alimente la préversion glissante ; elle ne publie pas une version stable. Un mainteneur déclenche <strong>Release Prep</strong> quand le lot est prêt. Le workflow assemble le changelog, calcule la version, consomme les fragments et lance la publication du tag.</p>
-    <p>Un correctif isolé doit partir d'une branche issue du dernier tag si <code>main</code> contient du travail non publiable. Sélectionner des fragments ne sélectionne pas le code livré. Voir <a href="contributing.html">Contribuer</a> et la <a href="../maintaining.html" lang="en">référence détaillée de maintenance en anglais</a> pour les options avancées des workflows.</p>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html">Démonstrations</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="maintaining.html" class="active">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../maintaining.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
 
-      <h2>Incidents connus du test de chevauchement</h2>
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Guide des auteurs</div>
+      <h1>Maintenir le package</h1>
+      <p class="lead">
+        La procédure de régénération des dépendances pour les auteurs, l’organisation des sources de la squad, les paramètres
+        de personnalisation et le processus de publication fondé sur les tags.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>Structure du dépôt</h2>
+      <ul>
+        <li><code>apm.yml</code> : métadonnées du package, liste des dépendances et scripts</li>
+        <li><code>apm.lock.yaml</code> : fichier de verrouillage des dépendances résolues</li>
+        <li><code>scripts/Update-ApmDependencies.ps1</code> : générateur de dépendances</li>
+        <li><code>scripts/Get-HveCoreCastDelta.ps1</code> : compare les agents déployables entre deux références hve-core</li>
+        <li><code>scripts/New-ChangeFragment.ps1</code> : écrit un fragment de changement pour une pull request</li>
+        <li><code>scripts/Invoke-ReleasePrep.ps1</code> : assemble les fragments en attente dans une section CHANGELOG et incrémente <code>apm.yml</code></li>
+        <li><code>.changes/unreleased/</code> : fragments de changement en attente ; vide entre les publications</li>
+        <li><code>squad-src/.github/</code> : sources de la squad rédigées localement (agents, prompts, instructions, skills)</li>
+        <li><code>apm_modules/</code> : dépendances installées (ignorées par git)</li>
+        <li><code>.github/</code> : ressources locales générées ou déployées (ignorées par git, sauf <code>.github/workflows/</code> si ce dossier est suivi)</li>
+        <li>
+          <code>.copilot-tracking/</code> : état de travail des agents. <strong>Ignoré par défaut</strong> &mdash;
+          vos recherches, plans et exécutions interactives de la squad restent locaux sans intervention de votre part.
+          L’exception est la piste d’audit d’une exécution sans surveillance en Watch Mode, que <code>.gitignore</code>
+          réinclut aux deux niveaux, car la preuve de délégation comporte deux niveaux :
+          <code>squad/members/issue-*/</code> et <code>squad/members/pr-*/</code> (l’exécution interne), plus
+          <code>squad/history/issue-*.md</code> et <code>squad/history/pr-*.md</code> (la
+          méta-transition au niveau de la fédération). Les fichiers d’état scalaires à la racine de la fédération
+          (<code>federation.md</code>, <code>meta-routing.md</code>, <code>state.json</code> et les
+          registres agrégés) restent locaux : ils fonctionnent par remplacement, donc les inclure dans des commits
+          provoquerait immanquablement des conflits entre exécutions simultanées, et l’amorçage les reconstruit.
+        </li>
+        <li><code>docs/</code> : ce site de documentation (servi par GitHub Pages)</li>
+      </ul>
+
+      <h2>Scripts</h2>
+      <h3>Site de documentation</h3>
+      <p>Le site est en HTML statique avec du CSS partagé et du JavaScript d’amélioration progressive, publié directement depuis <code>docs/</code>. Ouvrez <code>docs/index.html</code> localement ; aucune compilation frontend ni aucun serveur n’est nécessaire. Les pages anglaises se trouvent dans <code>docs/</code> et leurs équivalents français dans <code>docs/fr/</code>, avec les mêmes noms de fichiers et des identifiants d’ancre communs.</p>
+      <p>Mettez à jour les deux langues dans le même changement. Conservez les noms et paramètres des commandes, et signalez les liens vers les guides externes, rapports historiques et vidéos disponibles uniquement en anglais. La présentation et les contrôles communs se trouvent dans <code>docs/assets/style.css</code>, <code>theme.js</code> et <code>site.js</code>. Les onglets d’environnement appartiennent à chaque exemple de commande et partagent l’environnement sélectionné entre les exemples et les pages ; le changement de langue conserve la page courante.</p>
+      <p>Rédigez les exemples Squad exécutables dans des blocs <code>pre &gt; code</code> avec la syntaxe des prompts VS Code. Le moteur de rendu partagé conserve cette source et crée les requêtes CLI/App avec l’agent correspondant, en préservant les arguments et le texte multiligne. Séparez les commandes shell et les déclencheurs par commentaire GitHub ; marquez les références qui comparent explicitement les environnements avec <code>data-host-reference</code>. Sans JavaScript, les exemples de prompts d’origine restent lisibles.</p>
+      <pre><code>npm --prefix tests/docs ci --ignore-scripts
+    npm --prefix tests/docs test</code></pre>
+      <p>La dépendance de test isolée n’est pas distribuée sur GitHub Pages. Les tests vérifient les paires de langues, les liens et ressources locaux, les onglets au clavier, les préférences enregistrées et le contenu de configuration sans script. Le workflow Pages les exécute pour les pull requests de documentation et avant le déploiement. Vérifiez aussi les mises en page pour ordinateur et mobile dans un navigateur après toute modification visuelle.</p>
+      <h3>Scripts du package</h3>
+      <p>Définis dans <code>apm.yml</code> :</p>
+      <ul>
+        <li><code>sync-deps</code> — régénère <code>dependencies.apm</code> à partir du contenu HVE Core.</li>
+        <li><code>install-sync</code> — régénère <code>dependencies.apm</code> et exécute <code>apm install</code>.</li>
+        <li><code>change</code> — crée un fragment de changement dans <code>.changes/unreleased/</code> pour la pull request en cours.</li>
+        <li><code>release-prep</code> — assemble les fragments en attente pour une publication : section CHANGELOG, incrémentation de version, suppression des fragments.</li>
+      </ul>
+
+      <h2>Procédure de maintenance</h2>
+      <ol>
+        <li>
+          Régénérez les dépendances :
+          <pre><code>apm run sync-deps</code></pre>
+        </li>
+        <li>
+          Installez les dépendances localement :
+          <pre><code>apm install
+# or
+apm run install-sync</code></pre>
+        </li>
+        <li>
+          Actualisez le fichier de verrouillage :
+          <pre><code>apm lock</code></pre>
+        </li>
+        <li>
+          [FACULTATIF] Construisez l’artefact du package (nécessaire uniquement pour construire un plugin) :
+          <pre><code>apm pack</code></pre>
+        </li>
+        <li>
+          [FACULTATIF] Publiez (le cas échéant) :
+          <pre><code>apm publish</code></pre>
+        </li>
+      </ol>
+      <p>Séquence recommandée avant une publication :</p>
+      <ol>
+        <li><code>apm run sync-deps</code></li>
+        <li><code>apm lock</code></li>
+        <li><code>apm pack</code> (facultatif)</li>
+        <li><code>apm run release-prep</code> — ou exécutez le workflow <strong>Release Prep</strong>, qui fait la même chose et pousse les changements.</li>
+      </ol>
+
+      <h2>Fonctionnement de la génération des dépendances</h2>
+      <p>Le script de génération :</p>
+      <ul>
+        <li>Se connecte à <code>microsoft/hve-core</code> sur une référence cible (par défaut : le SHA déjà épinglé dans <code>apm.yml</code>)</li>
+        <li>Énumère les fichiers de <code>.github/agents</code>, <code>.github/instructions</code>, <code>.github/prompts</code> et <code>.github/skills</code></li>
+        <li>Filtre les artefacts Markdown</li>
+        <li>Réécrit uniquement <code>dependencies.apm</code> dans <code>apm.yml</code></li>
+      </ul>
+      <p>Les métadonnées du package restent ainsi stables tandis que la liste des dépendances est mise à jour de manière sûre.</p>
+
+      <h2>Mettre hve-core à jour : les deux voies</h2>
       <p>
-        Lors du développement et des tests du chevauchement des remises Scribe (mode autopilot), cinq incidents d'intégrité de la piste d'audit ont été observés et détectés. Ces incidents ont éclairé la conception des barrières de vérification par-écriture et des contrôles correctifs. Ils sont enregistrés ici pour les mainteneurs travaillant avec l'état de la squad et les dispatches Scribe :
+        Le roster de la squad associe chaque rôle à un agent hve-core par la valeur exacte de <code>name:</code>
+        dans son frontmatter. Une mise à jour de hve-core recouvre donc deux opérations différentes en
+        apparence semblables, dont une seule peut être automatisée de bout en bout sans risque. La distinction repose sur une
+        question : <em>cette révision de hve-core déplace-t-elle un agent que la squad désigne encore ?</em>
+      </p>
+      <div class="mermaid">
+flowchart TD
+    A["Cron 06:00 UTC<br/>sync-hve-core.yml"] --> B["Get-HveCoreCastDelta.ps1<br/>pinned SHA vs hve-core main"]
+    B --> C{"Does squad-src still reference<br/>a removed or un-dispatched agent?"}
+
+    C -- "no (mechanical)" --> D["Bump pin + assemble release<br/>from .changes fragments + push"]
+    D --> E["release.yml<br/>tag + GitHub Release"]
+
+    C -- "yes (breaking)" --> F["Open issue labeled squad/auto<br/>body = full adaptation brief"]
+    F --> G["squad-watch.yml<br/>fires on the label"]
+    G --> H["Sub-squad issue-N<br/>autopilot, unattended"]
+    H --> I["DRAFT PR that closes the issue"]
+    I --> J{"Label the PR squad/review?"}
+    J -- yes --> K["squad-watch.yml again<br/>sub-squad pr-N, tester role"]
+    K --> L["Review comments on the PR"]
+    L --> M["Human merges"]
+    J -- no --> M
+      </div>
+      <p>
+        Notez qu’<strong>aucune tâche cron n’exécute de squad</strong>. La seule tâche planifiée est la synchronisation mécanique ;
+        lorsqu’elle trouve une différence entraînant une rupture, elle crée une issue et s’arrête. L’issue sert à la fois de déclencheur et
+        de cahier des charges : la description de la tâche de la squad est donc un artefact durable et révisable, plutôt qu’une
+        chaîne enfouie dans un fichier de workflow.
+      </p>
+
+      <h3>Voie 1 &mdash; mécanique (aucun changement des agents fournis)</h3>
+      <p>
+        <code>sync-hve-core.yml</code> déplace le SHA épinglé et enregistre ce déplacement dans un fragment de changement,
+        exactement comme le ferait un contributeur &mdash; la modification de la référence épinglée rejoint ainsi les contributions
+        fusionnées ce jour-là et est livrée avec la prochaine version préparée par quelqu’un, au lieu de produire
+        sa propre version chaque matin. Le workflow pousse les changements et s’arrête là. Une nouveauté par rapport au comportement antérieur : il exécute
+        d’abord le script de comparaison des agents comme <strong>garde-fou</strong>. Un déplacement de SHA ne peut pas réaffecter une ligne du roster,
+        et le publier malgré tout distribue une squad dont les rôles ne correspondent à rien &mdash; c’est exactement
+        ce qui s’est passé dans <code>0.10.11</code>.
+      </p>
+
+      <h3>Voie 2 &mdash; adaptative (les agents fournis ont changé)</h3>
+      <p>
+        Le workflow de synchronisation ne touche <strong>pas</strong> à <code>apm.yml</code>. Il ouvre une issue
+        portant le label <code>squad/auto</code>, dont le corps contient tout le cahier des charges : ce qui a changé et pourquoi cela
+        crée une rupture, huit étapes numérotées, les contraintes de modification, les critères d’acceptation et le tableau
+        généré des différences entre agents. Une seule issue ouverte par SHA cible &mdash; si la tâche cron retrouve une différence non résolue,
+        elle ajoute un commentaire plutôt que de créer un doublon.
+      </p>
+      <p>
+        <code>squad-watch.yml</code> se déclenche sur ce label, exécute la squad sans interface dans la sous-squad
+        <code>issue-&lt;N&gt;</code> et ouvre une PR en <strong>brouillon</strong> qui clôt l’issue.
+        L’ajout du label <code>squad/review</code> à cette PR déclenche à nouveau le même workflow dans la sous-squad
+        <code>pr-&lt;N&gt;</code>, avec routage vers le rôle de testeur, qui publie ses constats en commentaires de la PR.
+      </p>
+      <p>
+        La PR d’adaptation contient un fragment dans <code>.changes/unreleased/</code> avec
+        <code>bump: minor</code>, car un changement des agents fournis signifie que le roster distribué n’est plus celui
+        de la version précédente. Elle ne modifie <em>pas</em> <code>apm.yml</code> <code>version:</code> ni
+        <code>CHANGELOG.md</code> &mdash; c’est la même règle que pour tous les contributeurs,
+        et <code>pr-validation.yml</code> l’impose ici aussi. Si une exécution l’oublie, le workflow écrit un
+        fragment provisoire de niveau patch pour permettre à la PR de passer les contrôles, marqué
+        <code>PLACEHOLDER, rewrite before merging</code>.
+      </p>
+      <div class="callout">
+        <p>
+          Fusionner la pull request d’adaptation <strong>suffit à mettre la version mineure en attente</strong>. Le
+          fragment arrive dans <code>.changes/unreleased/</code> sur <code>main</code>, où
+          <strong>Rolling Preview</strong> le publie en préversion installable en quelques minutes.
+          Il est livré aux utilisateurs avec la prochaine version que vous préparez.
+        </p>
+      </div>
+
+      <h3>Comportement des points de validation sans surveillance</h3>
+      <p>
+        Une exécution sans surveillance ne peut pas attendre une approbation qui n’arrivera jamais. Watch Mode déplace donc
+        <em>l’endroit</em> où le point de validation est satisfait plutôt que de le supprimer. Voir
+        <em>Unattended Gate Disposition</em> dans les instructions de Watch Mode.
       </p>
       <ul>
-        <li><strong>Incident 3 (turn 15) :</strong> Le dispatch Scribe au démarrage du run a réduit <code>history/Squad Scribe.md</code> de 48 blocs à 8 ; un simple <code>Measure-SquadLedger.ps1 -Check</code> a réussi car le registre avait été réécrit pour correspondre. Le contenu original était irrécupérable car <code>.copilot-tracking/</code> est git-ignoré.</li>
-        <li><strong>Incident 4 (turn 18) :</strong> Scribe a écrit à la main <code>consumption.md</code> en forme invalide avec une cellule Attribution Agent vide qui a causé l'écrasement de <code>Measure-SquadLedger -Check</code> ; la comparaison d'instantané pré-écriture du coordinateur l'a détecté et le fichier a été réécrit à partir de la sortie de l'assistant. Séparément, un triple ajout de rubrique dans un fichier d'historique a reçu une entrée de correction en ajout uniquement.</li>
-        <li><strong>Incident 5 (turn 21) :</strong> Les octets existants dans les premiers 4 937 octets de <code>history/System Architecture Reviewer.md</code> ont été modifiés par Scribe. <code>Measure-SquadLedger -Check -ExpectedHistoryCounts</code> a réussi malgré le changement de préfixe ; seule la vérification SHA-256 du préfixe hors bande du coordinateur l'a détecté. Les octets d'origine étaient irrécupérables, et cet incident a conduit à l'adoption de vérifications de base du préfixe du contenu au niveau de l'outil (<code>-EmitBaseline</code> / <code>-BaselinePath</code>).</li>
-        <li><strong>Incident 6 (turn 23) :</strong> Scribe a écrasé <code>plans/2026-09-28-scribe-pipelining-plan-amendment-2.md</code> (99 355 octets à 8 659 octets) car sa charge n'énumérait pas un ensemble explicite autorisé à l'écriture. Le rôle propriétaire (Squad Lead) a réécrit le plan ; l'outil applique maintenant une portée d'artefact protégée via la comparaison de la ligne de base du contenu.</li>
-        <li><strong>Incident 7 (turn 25) :</strong> Scribe a ajouté six lignes de rubrique par fichier d'historique du conseil (au lieu d'une), a émis des corrections void/re-append, a incorporé des entrées dans des lignes de rubrique et a inclus des valeurs divisées par des nouvelles lignes. Une décision humaine a adopté les charges Scribe pré-rendues (création du coordinateur, ajout uniquement du Scribe) pour le reste de ce run.</li>
+        <li><strong>Transitions entre étapes</strong> &mdash; se poursuivent sur la base des preuves apportées par les artefacts, comme dans toute exécution autopilot.</li>
+        <li><strong>Validation du résultat final</strong> &mdash; satisfaite par la PR en brouillon. L’exécution compile son résultat dans le corps de la PR au lieu de se mettre en pause.</li>
+        <li><strong>Risk Gate</strong> &mdash; consigné, non bloquant. Les constats sont enregistrés dans <code>decisions.md</code> et reproduits dans le corps de la PR sous <em>Blocking findings</em> ; la PR reste en brouillon.</li>
+        <li>
+          <strong>Impactful-Action Gate</strong> &mdash; <strong>n’autorise jamais la poursuite</strong>. Aucune fusion, aucun
+          déploiement, aucun push forcé, aucune migration, aucune rotation de secret, aucune écriture dans un outil de suivi actif,
+          et aucune charge utile ne peut changer cela. Cette règle
+          est imposée de trois manières : le contrat, l’absence de toute information d’identification de déploiement sur le runner,
+          et la protection de branche sur <code>main</code>.
+        </li>
+      </ul>
+
+      <p>Exécutez vous-même le contrôle des différences à tout moment :</p>
+      <pre><code>./scripts/Get-HveCoreCastDelta.ps1
+./scripts/Get-HveCoreCastDelta.ps1 -ToRef main -MarkdownPath delta.md</code></pre>
+
+      <h3>Configuration requise</h3>
+      <ul>
+        <li>
+          <strong>Secrets.</strong> <code>COPILOT_GITHUB_TOKEN</code> &mdash; un PAT à granularité fine avec
+          l’autorisation <em>Copilot Requests</em> (le jeton Actions intégré ne peut pas authentifier Copilot).
+          <code>SYNC_DEPS_TOKEN</code> &mdash; utilisé pour lire <code>microsoft/hve-core</code> et pousser le
+          commit de publication.
+        </li>
+        <li>
+          <strong>Labels.</strong> Créez <code>squad/auto</code> et <code>squad/review</code>. Ce sont
+          les deux déclencheurs ; sans eux, rien ne se lance.
+        </li>
+        <li>
+          <strong>Settings &rarr; Actions &rarr; General &rarr; Workflow permissions :</strong> activez
+          <em>&ldquo;Allow GitHub Actions to create and approve pull requests.&rdquo;</em> Sans cette autorisation,
+          <code>gh pr create</code> renvoie 403 et l’exécution se termine avec une branche mais sans PR.
+        </li>
+        <li>
+          <strong>Ensemble de règles de branche sur <code>main</code> :</strong> exige une pull request, avec
+          le rôle d’administrateur du dépôt comme seul acteur autorisé à les contourner. C’est la troisième couche d’application
+          de l’Impactful-Action Gate, et celle dont la configuration reste le plus souvent incomplète &mdash; une règle qui
+          interdit seulement les pushs forcés et les suppressions n’empêche <em>pas</em> un push direct vers
+          <code>main</code> : elle en limite les dégâts. Le contournement réservé à l’administrateur sépare les deux
+          automatisations : <code>sync-hve-core.yml</code> pousse avec le PAT d’un mainteneur et passe
+          directement, tandis que Watch Mode pousse sous l’identité <code>github-actions[bot]</code>, qui ne détient
+          aucun rôle dans le dépôt et ne peut pas du tout atteindre <code>main</code>. Le nombre d’approbations requises est fixé
+          délibérément à zéro pour qu’un mainteneur seul ne soit pas empêché de fusionner sa propre pull request.
+        </li>
+        <li>
+          <strong>Modèle épinglé (déjà configuré).</strong> <code>squad-watch.yml</code> transmet
+          <code>--model</code> à Copilot CLI à partir de la variable <code>SQUAD_MODEL</code>
+          définie au niveau du workflow. Ne laissez pas ce choix à <code>auto</code> : le coordinateur est l’agent
+          du système qui porte le plus d’instructions, et une sélection automatique du modèle route précisément cet agent
+          vers ce qui coûte le moins cher &mdash; c’est ainsi qu’une exécution se retrouve à rédiger les livrables elle-même
+          au lieu de les déléguer à ses agents. L’ordre de priorité dans la CLI est
+          <code>--model</code> &gt; <code>COPILOT_MODEL</code> &gt;
+          <code>~/.copilot/settings.json</code> ; seul le paramètre est propre au dépôt, car lui seul
+          réside dans le dépôt. Confirmez les identifiants disponibles avec votre offre en exécutant
+          <code>copilot</code> en mode interactif puis en saisissant <code>/model</code> &mdash; ce sont des identifiants en minuscules
+          comme <code>claude-sonnet-5</code>, et non les noms affichés utilisés dans le frontmatter des agents.
+          Une exécution <code>workflow_dispatch</code> peut remplacer le modèle épinglé pour une seule exécution.
+        </li>
+        <li>
+          <strong>Surveillance des approbations (facultative) :</strong> copiez
+          <code>.github/skills/squad/github-approval-watcher.workflow.yml</code> dans
+          <code>.github/workflows/</code> si vous souhaitez aussi pouvoir approuver les exécutions interactives depuis un téléphone.
+        </li>
+      </ul>
+
+      <h3>Tester la boucle manuellement</h3>
+      <p>
+        Lancez <strong>Squad Watch</strong> depuis l’onglet Actions avec le paramètre <code>issue_number</code> pour
+        tester le parcours complet sur une issue que vous avez rédigée vous-même, sans attendre de changement
+        en amont. Faites-le une fois avant de vous fier à la tâche cron.
+      </p>
+
+      <h3>Examiner une PR d’adaptation</h3>
+      <p>Le corps de la PR contient la liste de contrôle ; les deux points les plus importants sont les suivants :</p>
+      <ul>
+        <li>Aucun agent Primary ou Alternate du roster ne définit <code>disable-model-invocation: true</code> &mdash; ces agents ne peuvent pas recevoir de délégation.</li>
+        <li>
+          <code>.copilot-tracking/squad/members/&lt;sub-squad&gt;/history/</code> contient une entrée par
+          rôle auquel une tâche a été déléguée. Un historique peu fourni signifie que l’exécution a rédigé les changements elle-même au lieu de
+          les déléguer à ses agents, et le diff ne doit pas être considéré comme fiable à lui seul.
+        </li>
+      </ul>
+
+      <h2>Sources de la squad</h2>
+      <p>
+        En plus des dépendances <code>microsoft/hve-core</code>, ce package fournit une « squad »
+        rédigée localement — un Squad Coordinator accompagné d’agents de soutien, d’instructions, d’un prompt et d’un
+        skill. Les sources de la squad se trouvent dans :
+      </p>
+      <ul>
+        <li><code>squad-src/.github/agents/squad/</code></li>
+        <li><code>squad-src/.github/instructions/squad/</code></li>
+        <li><code>squad-src/.github/prompts/squad/</code></li>
+        <li><code>squad-src/.github/skills/squad/</code></li>
+      </ul>
+
+      <h3>Contrat de plafond de coût et tests</h3>
+      <p>
+        Le contrôle d’admission fondé sur le coût couvre plusieurs types d’artefacts, mais chaque aspect a un responsable principal. Gardez
+        l’interface des prompts, le calcul de référence, le point de contrôle du coordinateur, la validation du Scribe, le schéma d’état
+        et les tests synchronisés lorsque le paramètre change.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Aspect</th><th>Responsable principal</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Invocation et transmission</td><td><code>squad.prompt.md</code> et <code>squad-federation.prompt.md</code></td></tr>
+          <tr><td>Plafond effectif, estimation, confiance, approbation et règles d’arrêt</td><td><code>references/consumption.md</code></td></tr>
+          <tr><td>Procédure au point de délégation</td><td><code>references/gates-and-modes.md</code></td></tr>
+          <tr><td>Formats des enregistrements machine et lisibles</td><td><code>references/entry-schemas.md</code> et <code>references/federation-templates.md</code></td></tr>
+          <tr><td>Contrôle des créneaux après admission</td><td><code>references/scribe-procedure.md</code></td></tr>
+          <tr><td>Orchestration d’une squad unique et de la fédération</td><td><code>squad-coordinator.agent.md</code> et <code>squad-federation-coordinator.agent.md</code></td></tr>
+          <tr><td>Taux agrégés et étalonnage de la fédération</td><td><code>consumption-rates.md</code> à la racine de la fédération, initialisé à partir de <code>references/federation-templates.md</code> et utilisé uniquement par l’autopilot de fédération non ciblé</td></tr>
+          <tr><td>Identifiants de comportement stables</td><td><code>tests/squad-behavior-contract.md</code></td></tr>
+          <tr><td>Contrôles du package, de l’état, de la chronologie et des mutations</td><td><code>tests/tier0/SquadPackage.Tests.ps1</code> et <code>tests/tier1/</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Gardez la répartition des responsabilités explicite. L’initialisation est une dépense de configuration hors du contrôle d’admission. Le routage
+        ordinaire et le routage ciblé de la fédération transmettent un plafond indépendant à chaque sous-squad sélectionnée.
+        Seul l’autopilot de fédération non ciblé lit ou écrit l’état agrégé de Cost Preflight à la
+        racine de la fédération. Son méta-coût déjà engagé est reconstruit sur l’ensemble des tours, pas seulement à partir du
+        dernier manifeste, dont le périmètre diminue.
+      </p>
+      <p>Exécutez les couches de validation locales sans risque après un changement :</p>
+      <pre><code># Prompt, package, reference, and body-cap conformance
+./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot .
+
+# Valid state plus adversarial transition fixtures
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
+
+# Whitespace and malformed patch output
+git diff --check</code></pre>
+      <p>
+        Les exécutions Tier 1 en conditions réelles invoquent des modèles et constituent une voie de mesure manuelle distincte. L’autocontrôle ci-dessus
+        est déterministe et prouve que chaque assertion du contrat peut rejeter une arborescence volontairement corrompue.
+        Un changement de comportement nécessite aussi un nouveau fichier dans <code>.changes/unreleased/</code> ; modifier un
+        fragment existant ne satisfait pas le contrôle d’une pull request distincte.
+      </p>
+
+      <h3>Maintenance du skill squad et des références</h3>
+      <p>
+        Les fichiers d’instructions et de référence du skill squad pilotent le roster, la sélection des modèles et le comportement du registre.
+        Les modifications apportées ici se propagent à tous les utilisateurs lors du prochain <code>apm install</code>.
+      </p>
+      <p>
+        <strong>Répartition du roster :</strong> <code>squad-src/.github/instructions/squad/squad-roster.instructions.md</code>
+        contient le résumé de sécurité intégré, les règles d’éligibilité à la délégation et Profiles/Packs. Le catalogue des agents (anciennement
+        les sections Cast Catalog, External Cast et Building a Custom Roster) se trouve désormais dans le fichier de référence
+        <code>squad-src/.github/skills/squad/references/roster-catalog.md</code> (lu à la demande). Lorsque vous ajoutez un
+        agent au catalogue, modifiez <code>references/roster-catalog.md</code> pour ajouter la ligne du rôle et lier le fichier
+        de l’agent dans <code>.github/agents/</code>.
+      </p>
+      <p>
+        <strong>Catalogue des modèles et routage :</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
+        énumère les modèles pris en charge, les niveaux et leur disponibilité. <code>references/model-routing.md</code> définit
+        l’algorithme de sélection par classement et l’ordre de priorité. Le Scribe ne doit pas hériter du modèle de pointe de la session
+        (épinglé à Claude Haiku 4.5 dans son frontmatter ; la classe d’affectation bookkeeping a pour plancher le Model Tier rapide initialisé).
+        Lorsque l’offre de modèles GitHub Copilot change, mettez à jour la date <code>Retrieved</code> du catalogue ; une date
+        vieille de plus de 90 jours entraîne un repli sur les niveaux statiques. Gardez la date de récupération et le catalogue synchronisés.
+      </p>
+      <p>
+        <strong>Contrôle Tier 0 du budget en octets :</strong> <code>tests/tier0/baselines/byte-budget-baseline.json</code> (voir
+        Performance.Tests.ps1 L507) fixe des limites de taille (roster : 61 170 octets ; noyau actif du Scribe : 82 000 octets ; tolérance de 5 %). Modifiez
+        <code>budgetBytes</code> et <code>note</code> manuellement lors d’un changement de taille intentionnel. La référence
+        <code>tests/tier0/baselines/prefill-baseline.json</code> est régénérée avec
+        <code>./scripts/Measure-SquadPerformance.ps1 -SourceRoot . -UpdateBaseline</code> (voir Measure-SquadPerformance.ps1
+        L52–56) ; après la régénération, examinez le diff pour confirmer que seules les phrases normatives et les titres voulus ont changé (la suppression
+        d’une phrase normative fait échouer le contrôle d’inclusion dans Performance.Tests.ps1 L507, sauf s’il s’agissait d’une correction intentionnelle).
+      </p>
+      <p>
+        <strong>Utilitaire de registre et garde-fous :</strong> le script <code>Measure-SquadLedger.ps1 -SquadRoot &lt;root&gt; -Check</code>
+        valide l’arithmétique du registre, la divergence entre le registre et state.json (contrôle strict ; un state.json absent ou impossible à analyser provoque un échec ;
+        une racine de fédération signalée par <code>federation.md</code> est consignée comme non applicable), ainsi que le contrôle d’identité (les identités
+        ordonnées des blocs enregistrées par fichier doivent former un préfixe ordonné des identités actuelles ; les écrasements et suppressions échouent ;
+        les ajouts réussissent ; un simple <code>-Check</code> n’émet qu’un avertissement lorsqu’aucune identité n’est enregistrée — cas des anciens registres).
+        Le Scribe l’appelle avec
+        <code>-ExpectedHistoryCounts &lt;per-agent entry counts&gt;</code> (scribe-procedure.md L166), ce qui transforme
+        ces mêmes avertissements d’identité manquante en échecs — que les identités soient totalement absentes ou absentes seulement pour certains des fichiers modifiés
+        (un collage partiel) — puisque cet appel suit toujours une nouvelle écriture. Les jeux de données de test dans
+        <code>tests/fixtures/ledger-*</code> exercent chaque condition de protection.
+      </p>
+
+      <h3>Pourquoi les sources sont séparées de l’arborescence <code>.github/</code> déployée</h3>
+      <p>
+        <code>apm install</code> déploie les agents et les prompts en les <em>aplatissant</em> dans l’arborescence
+        <code>.github/</code> de l’utilisateur. Si les sources de la squad se trouvaient directement dans le dossier de premier niveau
+        <code>.github/agents/</code> (ou <code>.github/prompts/</code>), un <code>apm install</code> ultérieur
+        les écraserait. Conserver les sources rédigées dans <code>squad-src/.github/...</code> les place
+        hors de la zone d’aplatissement du déploiement tout en préservant le préfixe
+        <code>.github/{agents,prompts,instructions,skills}/</code> attendu par la correspondance de déploiement.
+        L’<em>état</em> d’exécution de la squad est créé par projet dans <code>.copilot-tracking/squad/</code>
+        et n’est jamais inclus dans le package.
+      </p>
+
+      <h3>Génération des entrées de la squad</h3>
+      <p>
+        <code>Update-ApmDependencies.ps1</code> énumère les sources de la squad depuis le système de fichiers <em>local</em>
+        (elles ne sont pas clonées, car elles se trouvent dans cette arborescence de travail et peuvent ne pas
+        encore avoir été poussées). Les entrées de la squad sont produites sous forme de chemins virtuels distants
+        <code>&lt;SquadRepoSlug&gt;/&lt;SquadSourceRoot&gt;/.github/...</code>, par exemple
+        <code>Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md</code>.
+        Elles sont ajoutées après les entrées hve-core dans <code>dependencies.apm</code>.
+      </p>
+      <p>La commande de synchronisation accepte les paramètres suivants, propres à la squad :</p>
+      <pre><code>pwsh -File scripts/Update-ApmDependencies.ps1 `
+  -SquadSourceRoot squad-src `
+  -SquadRepoSlug Peter-N91/hve-squad `
+  -SquadRef vX.Y.Z</code></pre>
+      <ul>
+        <li><code>SquadSourceRoot</code> : chemin local de l’arborescence des sources de la squad (par défaut : <code>squad-src</code>). Si le chemin n’existe pas, l’énumération de la squad est ignorée sans erreur.</li>
+        <li><code>SquadRepoSlug</code> : <code>owner/repo</code> qui héberge les sources de la squad (par défaut : <code>Peter-N91/hve-squad</code>).</li>
+        <li><code>SquadRef</code> : référence git facultative qui épingle les autoréférences de la squad sous la forme <code>#&lt;ref&gt;</code>. En général, vous n’y touchez pas &mdash; <strong>le workflow Release les épingle automatiquement</strong> (voir <em>Tags de version reproductibles</em> ci-dessous). Ce paramètre reste disponible pour épingler un manifeste manuellement.</li>
+      </ul>
+      <p>Utilisez <code>-DryRun</code> pour prévisualiser à la fois les entrées hve-core et celles de la squad sans écrire dans <code>apm.yml</code>.</p>
+
+      <h3>Tags de version reproductibles</h3>
+      <p>
+        Les autoréférences de la squad sont distribuées sous forme de chemins sans référence sur <code>main</code>, et APM résout un tel chemin
+        sur la branche par défaut. Sans intervention, un tag figerait la <em>liste</em> des dépendances, mais pas
+        leur <em>contenu</em> : il a été constaté qu’une installation de <code>#v0.14.0</code> renvoyait
+        le coordinateur de <code>main</code>, alors que les entrées hve-core du même manifeste étaient résolues
+        correctement parce qu’elles portent <code>#&lt;sha&gt;</code>. APM le signale directement &mdash;
+        <code>47 dependencies unpinned: Peter-N91/hve-squad</code>.
+      </p>
+      <p>
+        <code>release.yml</code> corrige ce problème sans aucune étape manuelle. Avant de créer la publication, il exécute
+        <code>scripts/Set-SquadSelfRefPin.ps1 -Ref vX.Y.Z</code>, crée un commit du manifeste épinglé et pousse
+        ce commit <strong>directement vers <code>refs/tags/vX.Y.Z</code></strong>. Un manifeste ne peut pas désigner son
+        propre tag avant que celui-ci n’existe ; la référence épinglée réside donc dans un commit vers lequel seul le tag pointe.
+        <code>main</code> ne le reçoit jamais et conserve le manifeste non épinglé, de sorte que les installations de développement
+        continuent de suivre <code>main</code>.
+      </p>
+      <div class="callout warn">
+        <p>
+          Cela s’applique à partir de <strong>v0.15.2</strong>. Chaque tag antérieur résout les fichiers de sa squad
+          depuis <code>main</code> et n’est pas reproductible. Corriger l’un d’eux rétroactivement implique de déplacer
+          son tag de force, ce qui change la cible de sa GitHub Release.
+        </p>
+      </div>
+
+      <div class="callout">
+        <p>
+          <code>apm lock</code> et <code>apm install</code> ne peuvent résoudre les chemins virtuels de la squad
+          qu’une fois l’arborescence <code>squad-src/</code> poussée vers le dépôt distant <code>SquadRepoSlug</code>.
+          Les tags de version sont épinglés automatiquement par <code>release.yml</code> : vérifiez donc
+          <code>apm install</code> depuis un clone neuf du tag plutôt que depuis l’arborescence de travail.
+        </p>
+      </div>
+
+      <h3>Références épinglées reproductibles</h3>
+      <p>
+        Chaque entrée <code>microsoft/hve-core</code> générée est épinglée au SHA exact du commit vers lequel
+        <code>-Ref</code> pointe (ajouté sous la forme <code>#&lt;sha&gt;</code>) : une version publiée continue donc
+        de résoudre les mêmes fichiers même après l’évolution de <code>main</code> dans hve-core. Sans cela,
+        un chemin non épinglé que hve-core renomme ou supprime par la suite fait échouer l’installation pour tous les utilisateurs
+        de cette version. En l’absence de <code>-Ref</code>, le script réutilise la référence déjà épinglée dans
+        <code>apm.yml</code> ; transmettez <code>-Ref &lt;hve-core-ref&gt;</code> pour la déplacer vers un
+        commit, un tag ou une branche précis.
+      </p>
+
+      <h2>Personnalisation</h2>
+      <p>Vous pouvez ajuster le comportement de génération dans <code>scripts/Update-ApmDependencies.ps1</code> :</p>
+      <ul>
+        <li><code>RepoSlug</code> : dépôt source</li>
+        <li><code>Ref</code> : branche, tag ou commit à parcourir. Par défaut, le SHA déjà épinglé dans <code>apm.yml</code> est utilisé ; une régénération ordinaire ne déplace donc jamais la référence épinglée. Fournissez ce paramètre explicitement pour la déplacer.</li>
+        <li><code>IncludeRoots</code> : dossiers inclus dans la découverte</li>
+        <li><code>IncludeRegex</code> : motif de filtrage des fichiers</li>
+        <li><code>SquadSourceRoot</code> : chemin local de l’arborescence des sources de la squad</li>
+        <li><code>SquadRepoSlug</code> : <code>owner/repo</code> hébergeant les sources de la squad</li>
+        <li><code>SquadRef</code> : tag de version ou commit facultatif qui épingle les autoréférences de la squad</li>
+      </ul>
+
+      <h2>Fragments de changement</h2>
+      <p>
+        La version et le changelog sont des <strong>sorties de publication</strong>, pas des éléments qu’une pull request modifie.
+        La version occupe une seule ligne et le titre le plus récent du changelog une seule position : deux
+        pull requests qui les modifient entrent donc toujours en conflit &mdash; et la seconde à être fusionnée réutilise
+        silencieusement un numéro de version déjà pris par la première. Changer de branche cible n’aide pas : deux
+        pull requests incrémentant vers le même numéro sur une branche <code>develop</code> entrent en conflit de la même manière.
+        La solution est de retirer entièrement l’état partagé de la pull request.
+      </p>
+      <p>
+        Chaque pull request ajoute à la place <strong>un nouveau fichier</strong> dans
+        <code>.changes/unreleased/</code>, généré par <code>apm run change</code>. Deux pull requests
+        ajoutant deux fichiers de noms différents n’entrent jamais en conflit. Le format est documenté dans
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/.changes/README.md">.changes/README.md</a>
+        et repris pour les contributeurs sur la page <a href="contributing.html">Contribuer</a>.
+      </p>
+      <p><code>pr-validation.yml</code> transforme la règle en contrôle mécanique plutôt qu’en commentaire de revue :</p>
+      <ul>
+        <li>Modifier <code>CHANGELOG.md</code> dans une pull request fait échouer le contrôle.</li>
+        <li>Modifier la ligne <code>version:</code> dans <code>apm.yml</code> fait échouer le contrôle.</li>
+        <li>
+          Déplacer la référence épinglée de <code>microsoft/hve-core</code> fait échouer le contrôle, sauf si la branche est une branche
+          d’adaptation Watch Mode (<code>squad/issue-*</code>). Modifier <code>dependencies:</code> est
+          autrement autorisé &mdash; un contributeur qui ajoute un skill doit le faire, via <code>apm run sync-deps</code>,
+          qui conserve par défaut la référence épinglée actuelle. Le contrôle sert de dernier garde-fou face à un
+          <code>-Ref main</code> explicite qui contourne le contrôle des différences entre agents ; son message indique le SHA à transmettre
+          à la place.
+        </li>
+        <li>Une pull request sans nouveau fragment échoue, sauf si elle porte le label <code>skip-changelog</code>. Ce label évite aussi l’incrémentation de version, car celle-ci est calculée à partir des fragments &mdash; une pull request qui n’apporte aucun fragment n’apporte aucune incrémentation.</li>
+        <li>Chaque fragment en attente est analysé avec <code>Invoke-ReleasePrep.ps1 -DryRun</code> : un fragment mal formé est ainsi détecté dans la pull request plutôt qu’au moment de la publication.</li>
       </ul>
       <p>
-        Chaque incident a été détecté et corrigé par des entrées d'historique en ajout uniquement ou en redispatchant le rôle propriétaire. Les octets d'origine des incidents 3 et 5 n'ont pas pu être récupérés. Les contrôles correctifs sont maintenant intégrés au contrat de vérification du chevauchement Scribe : <code>Measure-SquadLedger.ps1 -Check -ExpectedHistoryCounts -BaselinePath</code> (pas simple <code>-Check</code>), préservation et vérification du préfixe du contenu via instantanés de base, et redispatch de rôle sur vérification échouée.
+        Le workflow s’exécute sur <code>pull_request</code>, pas sur <code>pull_request_target</code> : les pull requests issues de forks
+        reçoivent un jeton en lecture seule et aucun secret, et le contrôle n’a besoin ni d’un accès en écriture ni de secrets. Créez le
+        label <code>skip-changelog</code> avant de compter sur cette exception.
       </p>
-    <div class="pager"><a class="prev" href="ecosystem.html"><div class="dir">Retour</div><div class="ttl">Écosystème</div></a><a class="next" href="troubleshooting.html"><div class="dir">Suite</div><div class="ttl">Dépannage</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+
+      <h3>Qui décide du niveau de version</h3>
+      <p>
+        Le niveau de version suit les <strong>idées, pas les artefacts</strong>. <code>0.10.0</code> correspondait à la
+        fédération et <code>0.11.0</code> au remaniement du rattachement de hve-core, car chacun introduisait
+        un concept qui n’existait pas auparavant. Tout agent, skill, rôle ou instruction ajouté
+        <em>dans le cadre</em> de l’une de ces idées relève d’un correctif, quel que soit le nombre de fichiers concernés. Un contributeur
+        qui ajoute un rôle de squad à la fédération prolonge une idée déjà distribuée.
+      </p>
+      <p>
+        Le <code>bump</code> d’un fragment est une <em>suggestion</em> et, puisque la fusion publie
+        immédiatement, <strong>c’est dans la pull request que vous le remplacez</strong>. Deux éléments
+        facilitent cela :
+      </p>
+      <ul>
+        <li>
+          <code>pr-validation.yml</code> écrit le résultat dans le résumé de la tâche du contrôle &mdash;
+          <em>Version : 0.11.12 -&gt; 0.12.0 (minor)</em> &mdash; de sorte qu’une version mineure ne puisse jamais passer
+          inaperçue.
+        </li>
+        <li>
+          Vous n’êtes pas d’accord ? Ouvrez le fragment dans l’onglet <strong>Files changed</strong> de la pull request, cliquez sur
+          le crayon, remplacez <code>bump: minor</code> par <code>bump: patch</code>, puis créez un commit. Une ligne,
+          sans extraction locale. Les pull requests issues de forks l’autorisent par défaut (<em>Allow edits by maintainers</em>).
+        </li>
+      </ul>
+      <p>
+        Les substitutions au moment de la publication restent disponibles pour le lot que vous assemblez vous-même, et pour tout
+        ce qui a atteint <code>main</code> sans publication :
+      </p>
+      <pre><code>pwsh -File scripts/Invoke-ReleasePrep.ps1 -Bump minor -DryRun   # this batch adds up to a new idea
+pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, overrides everything</code></pre>
+      <p>
+        Le workflow <strong>Release Prep</strong> propose le même choix dans une liste déroulante <code>bump</code>,
+        dont la valeur par défaut est <code>fragments</code>. Le script affiche <em>&ldquo;Bump override:
+        fragments resolved to X, releasing as Y&rdquo;</em> chaque fois que vous remplacez leur résultat, pour que la décision
+        soit visible dans le journal d’exécution.
+      </p>
+
+      <h2>Processus de publication</h2>
+      <p>
+        Les publications suivent un processus fondé sur des tags à partir de la branche par défaut (<code>main</code>). Le tag est
+        l’artefact de version que les utilisateurs installent avec <code>apm install "Peter-N91/hve-squad#vX.Y.Z"</code>.
+        Vous ne choisissez pas le numéro de version manuellement &mdash; c’est le <code>bump</code> le plus élevé parmi les
+        fragments en attente qui le détermine.
+      </p>
+      <p>
+        <strong>Les publications sont déclenchées manuellement.</strong> Fusionner une pull request qui contient un fragment
+        le pousse dans <code>.changes/unreleased/</code> sur <code>main</code> et ne publie rien.
+        Aucune publication n’est non plus déclenchée par une minuterie. Lorsque le lot en attente est prêt, vous lancez
+        <strong>Release Prep</strong>, qui le livre en une seule version : il calcule le niveau, ajoute en tête
+        la section CHANGELOG avec le bloc d’installation pour les utilisateurs et la référence du lien, écrit
+        <code>version:</code> dans <code>apm.yml</code>, supprime les fragments consommés, crée le commit
+        <code>chore(release): X.Y.Z</code>, déclenche <code>release.yml</code> pour créer le tag et la
+        GitHub Release, puis retire la préversion.
+      </p>
+      <p>
+        La publication devient ainsi une décision sur l’état de préparation plutôt qu’une date. Un correctif rapide est livré dès
+        que vous l’avez vérifié dans la préversion ; un changement plus important y reste jusqu’à ce qu’il soit prêt, et
+        tout ce qui est fusionné entre-temps est livré avec lui.
+      </p>
+      <p>
+        <strong>Entre les publications, <code>main</code> est installable.</strong> Chaque fusion déclenche
+        <strong>Rolling Preview</strong>, qui regroupe les fragments en attente dans une seule préversion GitHub
+        portant le tag de la version qu’ils déterminent (<code>v0.15.0-pre</code>) et déplace de force
+        ce tag vers la nouvelle tête de branche. Ce workflow ne fait que lire : aucun fragment n’est consommé, aucune version n’est incrémentée et
+        <code>CHANGELOG.md</code> reste intact. Une seule préversion est ouverte à la fois ; lorsqu’un
+        fragment <code>minor</code> est intégré, l’ancienne est donc supprimée et le nouveau nom prend sa place.
+        Une pull request sans fragment (portant le label <code>skip-changelog</code>) n’apporte aucune incrémentation.
+      </p>
+      <p>
+        Cochez <em>dry run</em> au lancement pour voir la version calculée et la section assemblée
+        sans créer de commit. Utilisez les paramètres <code>bump</code> et <code>version</code> pour
+        remplacer le niveau calculé à partir des fragments ou épingler un numéro exact.
+      </p>
+      <p>
+        Ne conservez pas de branche <code>release</code> de longue durée. Créez une branche éphémère
+        <code>hotfix/vX.Y.Z</code> à partir d’un tag existant uniquement lorsque <code>main</code> contient du travail
+        qui ne doit pas encore être publié et qu’un correctif ne peut pas attendre &mdash; une version livre un commit : un tag
+        créé depuis <code>main</code> emporte donc ce travail en attente avec le correctif.
+      </p>
+      <pre><code>git switch --detach v0.14.0
+git switch -c hotfix/v0.14.1
+# apply the fix, then record it
+apm run change            # Type: Fixed, Bump: patch
+git push -u origin hotfix/v0.14.1</code></pre>
+      <p>
+        Déclenchez <strong>Release Prep</strong> avec <code>ref</code> défini sur <code>hotfix/v0.14.1</code>.
+        Il ne consomme que les fragments de cette branche, y incrémente <code>apm.yml</code> et crée le tag
+        depuis cette branche ; <code>release.yml</code> reçoit la même référence et attribue le tag au commit qu’il a
+        extrait. La préversion glissante n’est délibérément <em>pas</em> retirée, car le lot qu’elle
+        décrit reste en attente sur <code>main</code>.
+      </p>
+      <p>
+        Fusionnez ensuite la branche en retour pour que le correctif survive à la prochaine publication, et attribuez à cette pull
+        request le label <code>release-merge-back</code>. Ce label constitue la seule exception aux contrôles
+        de <code>CHANGELOG.md</code> et de <code>version:</code> dans <code>pr-validation.yml</code>,
+        et il existe précisément parce que Release Prep &mdash; et non une personne &mdash; a écrit les deux. Si une
+        version supérieure a déjà été publiée, le workflow de publication compare les versions et transmet
+        <code>--latest=false</code> pour que le correctif ne prenne pas le badge <strong>Latest</strong> à
+        la version qui le remplace.
+      </p>
+      <p>Release Prep peut aussi être exécuté directement :</p>
+      <pre><code>apm run release-prep                        # resolve version, assemble, write
+pwsh -File scripts/Invoke-ReleasePrep.ps1 -DryRun           # preview only
+pwsh -File scripts/Invoke-ReleasePrep.ps1 -Bump minor       # overrule the fragments
+pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0    # force an exact version</code></pre>
+      <p>
+        Avant une publication qui réépingle aussi hve-core, régénérez d’abord la liste :
+        <code>pwsh -File scripts/Update-ApmDependencies.ps1 -Ref main</code> épingle chaque entrée hve-core au
+        SHA du commit de <code>main</code>. Actualisez le fichier de verrouillage avec <code>apm lock</code>. Les autoréférences
+        de la squad ne nécessitent aucune intervention &mdash; <code>release.yml</code> les épingle dans le commit portant le tag.
+      </p>
+      <p>
+        Évitez une branche <code>release</code> de longue durée. Ne créez <code>release/vX.Y.Z</code> à partir d’un
+        tag existant que lorsque vous devez corriger une ancienne version après l’intégration de travaux plus récents sur
+        <code>main</code>.
+      </p>
+
+      <h2>Incidents connus lors des tests de chevauchement</h2>
+      <p>
+        Pendant le développement et les tests du chevauchement des passages de relais au Scribe (mode autopilot), cinq incidents d’intégrité de la piste d’audit ont été observés et détectés. Ces incidents ont orienté la conception des barrières de vérification à chaque écriture et des contrôles correctifs. Ils sont consignés ici pour les mainteneurs qui travaillent sur l’état de la squad et les délégations au Scribe :
+      </p>
+      <ul>
+        <li><strong>Incident 3 (tour 15) :</strong> la délégation au Scribe en début d’exécution a réduit <code>history/Squad Scribe.md</code> de 48 blocs à 8 ; un simple <code>Measure-SquadLedger.ps1 -Check</code> a réussi parce que le registre avait été réécrit pour correspondre. Le contenu d’origine était irrécupérable, car <code>.copilot-tracking/</code> est ignoré par git.</li>
+        <li><strong>Incident 4 (tour 18) :</strong> le Scribe a rédigé manuellement <code>consumption.md</code> dans un format invalide, avec une cellule Attribution Agent vide qui a provoqué une exception dans <code>Measure-SquadLedger -Check</code> ; la comparaison avec l’instantané pris avant écriture par le coordinateur l’a détectée, et le fichier a été réécrit à partir de la sortie de l’utilitaire. Par ailleurs, un triple ajout de titre dans un fichier d’historique a fait l’objet d’une entrée corrective en ajout uniquement.</li>
+        <li><strong>Incident 5 (tour 21) :</strong> le Scribe a modifié des octets existants parmi les 4 937 premiers octets de <code>history/System Architecture Reviewer.md</code>. <code>Measure-SquadLedger -Check -ExpectedHistoryCounts</code> a réussi malgré la modification du préfixe ; seul le contrôle SHA-256 du préfixe effectué hors bande par le coordinateur l’a détectée. Les octets d’origine étaient irrécupérables, et cet incident a conduit à l’adoption de contrôles du préfixe du contenu par rapport à une référence au niveau de l’outil (<code>-EmitBaseline</code> / <code>-BaselinePath</code>).</li>
+        <li><strong>Incident 6 (tour 23) :</strong> le Scribe a écrasé <code>plans/2026-09-28-scribe-pipelining-plan-amendment-2.md</code> (de 99 355 à 8 659 octets), car sa charge utile n’énumérait pas explicitement l’ensemble des fichiers autorisés en écriture. Le rôle responsable (Squad Lead) a rédigé de nouveau le plan ; l’outil impose désormais un périmètre d’artefacts protégés par comparaison avec une référence de contenu.</li>
+        <li><strong>Incident 7 (tour 25) :</strong> le Scribe a ajouté six lignes de titre par fichier d’historique du conseil (au lieu d’une), produit des corrections par annulation et nouvel ajout, inséré des entrées à l’intérieur de lignes de titre et inclus des valeurs coupées par des retours à la ligne. Une décision humaine a adopté des charges utiles Scribe prérendues (rédaction par le coordinateur, ajout uniquement par le Scribe) pour le reste de cette exécution.</li>
+      </ul>
+      <p>
+        Chaque incident a été détecté et corrigé par des entrées d’historique en ajout uniquement ou par une nouvelle délégation au rôle responsable. Les octets d’origine des incidents 3 et 5 n’ont pas pu être récupérés. Les contrôles correctifs sont désormais intégrés au contrat de vérification du chevauchement des tâches du Scribe : <code>Measure-SquadLedger.ps1 -Check -ExpectedHistoryCounts -BaselinePath</code> (et non un simple <code>-Check</code>), préservation et contrôle du préfixe du contenu au moyen d’instantanés de référence, et nouvelle délégation au rôle en cas d’échec de la vérification.
+      </p>
+      <div class="pager">
+        <a class="prev" href="ecosystem.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Écosystème</div>
+        </a>
+        <a class="next" href="troubleshooting.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Dépannage</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · basé sur les agents et conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'strict' });
+  </script>
 </body>
 </html>

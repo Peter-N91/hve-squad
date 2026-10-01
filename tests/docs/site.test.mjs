@@ -278,14 +278,19 @@ test('local command examples select the correct agent and preserve request argum
     assert.equal(document.querySelector('.hero [role="tablist"]'), null);
     const examples = [...document.querySelectorAll('.command-example')];
     assert.ok(examples.length > 1);
-    const mixed = examples.find(example => example.querySelector('[data-host="vscode"]').textContent.includes('/squad-document request='));
-    const app = mixed.querySelector('[data-host="app"]');
+    const documentExample = examples.find(example => example.querySelector('[data-host="vscode"]').textContent.includes('/squad-document request='));
+    const governanceExample = examples.find(example => example.querySelector('[data-host="vscode"]').textContent.includes('/squad-governance-report'));
+    const app = documentExample.querySelector('[data-host="app"]');
+    const governanceApp = governanceExample.querySelector('[data-host="app"]');
     assert.equal(app.hidden, false);
+    assert.equal(governanceApp.hidden, false);
     assert.match(app.textContent, /Squad Document/);
-    assert.match(app.textContent, /Squad Governance Report/);
-    for (const code of app.querySelectorAll('pre code')) assert.doesNotMatch(code.textContent, /^\/squad/m);
-    assert.match(app.textContent, /format=docx outputPath=docs\/synthese.docx/);
-    assert.match(app.textContent, /period=30d output=docs\/gouvernance.html/);
+    assert.match(governanceApp.textContent, /Squad Governance Report/);
+    for (const panel of [app, governanceApp]) {
+      for (const code of panel.querySelectorAll('pre code')) assert.doesNotMatch(code.textContent, /^\/squad/m);
+    }
+    assert.match(app.textContent, /format=docx outputPath=docs\/briefing.docx/);
+    assert.match(governanceApp.textContent, /output=docs\/governance.html period=30d/);
   } finally { dom.window.close(); }
 });
 

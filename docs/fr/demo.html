@@ -1,27 +1,167 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Démonstrations | hve-squad</title><meta name="description" content="Quatre démonstrations hve-squad en français : Azure, migration, produit et modernisation .NET." />
-  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../demo.html" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Démonstrations — hve-squad</title>
+  <meta name="description" content="Choisissez un parcours hve-squad à exécuter : la démo Squad Azure (coûts, architecture, IaC, déploiement soumis à approbation, documentation de l'existant, diagnostic), la démo Migration en autopilot (une migration Contoso → Azure en une demande, dont le contrôle de revue s'arrête sur les blocages), ou la démo non technique Squad produit (découverte, exigences, feuille de route, expérimentation, présentation)." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../demo.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html" class="active">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../demo.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Parcours pratiques</div><h1>Démonstrations</h1><p class="lead">Suivez un objectif de bout en bout, examinez les preuves et observez où la squad attend une décision humaine.</p></div></header>
-  <main class="content"><div class="container">
-    <h2>Choisir un parcours</h2>
-    <div class="demo-hub">
-      <a class="card" href="demo-1.html"><span class="step">01 · Azure</span><h3>De l'architecture à l'exploitation</h3><p>Coûts indicatifs, HLD/LLD, IaC, revue, déploiement soumis à approbation et diagnostic en lecture seule.</p></a>
-      <a class="card" href="demo-2.html"><span class="step">02 · Migration</span><h3>Autopilot et arrêt sur risques</h3><p>Une demande de migration produit un dossier complet, puis la revue identifie des blocages et arrête le travail.</p></a>
-      <a class="card" href="demo-3.html"><span class="step">03 · Produit</span><h3>Du besoin aux livrables métier</h3><p>Découverte, exigences, feuille de route, backlog, expérience minimale et synthèse pour les décideurs.</p></a>
-      <a class="card" href="demo-4.html"><span class="step">04 · .NET</span><h3>Modernisation et boucle de revue</h3><p>Une mise à niveau sur place, une approbation conditionnelle et une nouvelle revue après correction.</p></a>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html" class="active">Démonstrations</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../demo.html" lang="en">English</a>
+      </div>
     </div>
-    <h2>Préparer votre session</h2>
-    <ol><li>Installez la distribution adaptée à votre environnement dans <a href="getting-started.html">Bien démarrer</a>.</li><li>Travaillez dans votre propre dépôt et ne fournissez que des documents autorisés.</li><li>Initialisez l'équipe, confirmez ses rôles et vérifiez les capacités disponibles.</li><li>Envoyez la demande de travail séparément. Ne confondez pas une demande d'étude et une autorisation de déploiement.</li><li>Conservez les décisions, tests et limites ; vérifiez les résultats réellement obtenus.</li></ol>
-    <p>Les demandes métier peuvent être formulées en français. Envoyez-les dans Copilot Chat ou dans la conversation de l'agent sélectionné dans CLI ou App, pas dans un terminal système.</p>
-    <figure class="video-figure"><video controls preload="metadata" playsinline><source src="../assets/hve-squad-single-squad.mp4" type="video/mp4" /><a href="../assets/hve-squad-single-squad.mp4">Télécharger la vidéo</a></video><figcaption>Exécution d'une squad ; enregistrement d'origine en anglais.</figcaption></figure>
-    <div class="pager"><a class="prev" href="usage.html"><div class="dir">Retour</div><div class="ttl">Utilisation</div></a><a class="next" href="demo-1.html"><div class="dir">Suite</div><div class="ttl">Démonstration Azure</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+  </nav>
+
+  <!-- Demo selector — pinned at the top; pick a chevron and the walkthrough opens on its own page. -->
+  <div class="demo-bar">
+    <div class="container">
+      <div class="demo-switch">
+        <div class="label">Choisir une démo</div>
+        <!--
+          Multi-demo selector. To add a demo: give it the next "Demo N" number,
+          turn its chevron into a link (<a class="chev" href="demo-N.html">), and
+          drop the .soon class once the demo page exists. This parent page leaves
+          every existing demo as a link (none .active) so it reads as a hub.
+        -->
+        <ul class="demo-chevrons">
+          <li><a class="chev" href="demo-1.html"><span class="step">Démo 1</span><span class="name">Squad Azure</span></a></li>
+          <li><a class="chev" href="demo-2.html"><span class="step">Démo 2</span><span class="name">Migration en autopilot</span></a></li>
+          <li><a class="chev" href="demo-3.html"><span class="step">Démo 3</span><span class="name">Squad produit</span></a></li>
+          <li><a class="chev" href="demo-4.html"><span class="step">Démo 4</span><span class="name">Moderniser .NET</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Parcours guidé</div>
+      <h1>Choisir une démo de squad</h1>
+      <p class="lead">
+        Chaque démo est un scénario exécutable qui mène un projet de bout en bout depuis le point
+        d'entrée unique <code>/squad</code> — recherche → planification → implémentation → revue en
+        arrière-plan, avec une validation humaine pour chaque action à conséquences. Choisissez un
+        chevron ci-dessus ou une carte ci-dessous ; le parcours s'ouvre sur sa propre page pour que
+        vous puissiez l'exécuter étape par étape.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+
+      <h2>Les démonstrations</h2>
+      <div class="demo-hub">
+        <a class="card" href="demo-1.html">
+          <div class="step">Démo 1</div>
+          <h3>Squad Azure</h3>
+          <p>
+            Un projet Azure, de l'estimation des coûts à l'architecture, à l'IaC, au déploiement contrôlé
+            par la gouvernance, à la documentation de l'existant et au diagnostic. MCP facultatif avec
+            des solutions de repli adaptées ; tout déploiement reste soumis à une validation humaine ;
+            documentation de l'existant et diagnostic s'effectuent strictement en lecture seule.
+          </p>
+          <span class="tag">Technique · Azure · profile=azure</span>
+        </a>
+        <a class="card" href="demo-2.html">
+          <div class="step">Démo 2</div>
+          <h3>Migration en autopilot</h3>
+          <p>
+            Une seule demande autopilot planifie une migration Contoso Inc. → Azure de bout en bout —
+            recherche, plan, conseil, IaC Bicep, coûts, sécurité et diagrammes HLD/LLD — puis le contrôle
+            de revue détecte cinq blocages de mise en production et s'arrête, en sollicitant une
+            décision humaine plutôt qu'en livrant un travail défectueux.
+          </p>
+          <span class="tag">Technique · Migration · mode=autopilot</span>
+        </a>
+        <a class="card" href="demo-3.html">
+          <div class="step">Démo 3</div>
+          <h3>Squad produit</h3>
+          <p>
+            Une idée métier, de la découverte au document d'exigences, à la feuille de route et au
+            backlog, à une expérimentation de validation peu coûteuse, à une revue de préparation et à
+            une présentation prête pour le conseil d'administration. Sans cloud, sans code, sans
+            dépense — conçue pour convaincre un public non technique.
+          </p>
+          <span class="tag">Non technique · Produit · profile=product</span>
+        </a>
+        <a class="card" href="demo-4.html">
+          <div class="step">Démo 4</div>
+          <h3>Moderniser .NET</h3>
+          <p>
+            Une seule demande autopilot met à niveau sur place une application ancienne de .NET
+            Framework 4.8 vers .NET 10 — recherche, conseil avant implémentation, contrôle des risques
+            de sécurité approuvé par un humain, conversion au format SDK et boucle de revue qui
+            corrige tous les constats jusqu'à n'en laisser aucun avant le feu vert.
+          </p>
+          <span class="tag">Technique · Modernisation · mode=autopilot</span>
+        </a>
+      </div>
+
+      <h2>Comment lire une démo</h2>
+      <p>
+        Les deux démos suivent la même structure : après en avoir exécuté une, les autres vous seront familières :
+      </p>
+      <table>
+        <thead>
+          <tr><th>Section</th><th>Ce qu'elle vous apporte</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Ce que vous démontrez</td><td>Le fil conducteur de votre présentation — chaque étape associée au rôle de la squad qui en est responsable.</td></tr>
+          <tr><td>Avant de commencer</td><td>Les prérequis et la manière d'exécuter la démo en direct, sans risque et sans dépense.</td></tr>
+          <tr><td>Étape 0 → Étape N</td><td>Les demandes <code>/squad</code> à exécuter dans l'ordre, avec les explications à donner à chaque étape.</td></tr>
+          <tr><td>La version en une demande</td><td>Le même parcours en une seule exécution autopilot, qui ne s'arrête que lorsque c'est nécessaire.</td></tr>
+          <tr><td>Solutions de repli en cas de problème</td><td>Que faire lorsque l'outillage rencontre un problème, pour que la présentation ne perde jamais son fil.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          <strong>Même méthodologie, public différent.</strong> La démo Azure démontre les capacités de
+          la squad sur l'infrastructure ; la démo produit démontre la <em>même</em> ossature recherche →
+          planification → réalisation → revue sur des travaux métier non techniques. Choisissez celle
+          qui correspond aux personnes présentes.
+        </p>
+      </div>
+
+      <div class="pager">
+        <a class="prev" href="usage.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Utilisation</div>
+        </a>
+        <a class="next" href="demo-1.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Démo 1 — Squad Azure</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · fondé sur les agents et les conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
 </body>
 </html>

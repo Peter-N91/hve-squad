@@ -1,100 +1,351 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dépannage | hve-squad</title><meta name="description" content="Résoudre les problèmes d'installation, de plugins, d'agents, de coût estimé et de diagrammes hve-squad." />
-  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../troubleshooting.html" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dépannage — hve-squad</title>
+  <meta name="description" content="Problèmes connus d'installation et de fonctionnement de la squad avec correctifs à copier-coller, reprise après un arrêt lié au plafond de coût, gestion des versions et notes sur le dépôt." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../troubleshooting.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html" class="active">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../troubleshooting.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Référence</div><h1>Dépannage</h1><p class="lead">Identifiez l'environnement utilisé, l'étape en échec et les preuves disponibles avant de relancer le travail.</p></div></header>
-  <main class="content"><div class="container">
-    <h2>Plugins et agents</h2>
-    <h3>Le coordinateur est introuvable dans CLI ou App</h3>
-    <p>Vérifiez que <code>hve-squad</code> et <code>hve-squad-hve-core</code> sont tous deux installés dans le client courant. L'application peut utiliser un autre <code>COPILOT_HOME</code>. Dans CLI, saisissez <code>/agent</code> et cherchez <code>Squad Coordinator</code> ou <code>hve-squad:squad-coordinator</code>.</p>
-    <h3><code>/squad</code> charge du texte mais ne lance pas l'équipe</h3>
-    <p>Vous avez probablement sélectionné le skill. Dans VS Code, choisissez le prompt « Hands a request to the Squad Coordinator… ». Dans CLI ou App, sélectionnez directement l'agent coordinateur, puis envoyez les arguments sans préfixe.</p>
-    <h3>Un spécialiste manque ou ne produit aucun livrable</h3>
-    <p>Demandez <code>squad-doctor</code>. La distribution plugin peut manquer de domaines HVE Core ; le remède documenté est <code>apm install github/microsoft/hve-core --target copilot</code> dans le dépôt. Ne remplacez pas silencieusement le spécialiste par un autre agent.</p>
-    <p>Vérifiez le <code>Primary</code> du rôle dans <code>.copilot-tracking/squad/team.md</code>, sa disponibilité et son dossier de livrables. Un agent délégué peut aussi refuser une demande faute de contrat d'entrée complet. Après une évolution HVE Core, les mainteneurs peuvent comparer les agents avec <code>scripts/Get-HveCoreCastDelta.ps1</code>.</p>
-    <h3>Le compagnon affiche <code>already at latest</code></h3>
-    <p>La version propre à HVE Core peut rester identique alors que le SHA du marketplace a changé. Désinstallez puis réinstallez <code>hve-squad-hve-core</code> dans chaque environnement concerné. Ne cumulez pas ce compagnon avec le plugin officiel <code>hve-core</code>. Voir <a href="getting-started.html?host=cli">les commandes de mise à jour</a>.</p>
-    <h2>Installation APM</h2>
-    <h3>Exactement 11 dépendances échouent pendant <code>apm install</code></h3>
-    <p>Il s'agit d'une régression connue d'APM, et non d'un problème de réseau ou d'environnement projet. Les résultats vérifiés sont :</p>
-    <table><thead><tr><th>APM CLI</th><th>Résultat</th></tr></thead><tbody><tr><td>0.28.0</td><td>Fonctionne</td></tr><tr><td><strong>0.29.0</strong></td><td><strong>Fonctionne — dernière version fonctionnelle connue</strong></td></tr><tr><td>0.29.1</td><td>Échec avec 11 erreurs de dépendances</td></tr><tr><td>0.30.0</td><td>Échec avec 11 erreurs de dépendances</td></tr></tbody></table>
-    <p>Épinglez APM CLI 0.29.0, supprimez l'état partiel puis réinstallez la version HVE Squad souhaitée. La version de l'outil APM est distincte de celle du package dans <code>Peter-N91/hve-squad#vX.Y.z</code>.</p>
-    <p><strong>Windows (PowerShell)</strong></p>
-    <pre><code># 1. Installer la version APM CLI requise.
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html">Démonstration</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html" class="active">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../troubleshooting.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Référence</div>
+      <h1>Dépannage</h1>
+      <p class="lead">Problèmes connus et correctifs à copier-coller, ainsi que des notes sur la gestion des versions et le dépôt.</p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>Problèmes courants</h2>
+      <h3>CLI ou App ne trouve pas le coordinateur ou un spécialiste</h3>
+      <p>Vérifiez que <code>hve-squad</code> et <code>hve-squad-hve-core</code> sont tous deux installés dans le répertoire de plugins du client actuel. Sélectionnez l'agent coordinateur, et non un skill, puis demandez <code>squad-doctor</code>. Suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">guide du plugin</a> pour les domaines manquants et les réinstallations du compagnon. Une mise à jour depuis le terminal ne met pas à jour une application utilisant un autre <code>COPILOT_HOME</code>.</p>
+
+      <h3>Exactement 11 dépendances échouent pendant <code>apm install</code></h3>
+      <p>
+        Il s'agit d'une régression connue d'APM, et non d'un problème de réseau ou d'environnement du projet. Les résultats
+        des tests de compatibilité sont les suivants :
+      </p>
+      <table>
+        <thead><tr><th>APM CLI</th><th>Résultat</th></tr></thead>
+        <tbody>
+          <tr><td>0.28.0</td><td>Fonctionne</td></tr>
+          <tr><td><strong>0.29.0</strong></td><td><strong>Fonctionne — dernière version fonctionnelle connue</strong></td></tr>
+          <tr><td>0.29.1</td><td>Échec avec 11 erreurs de dépendances</td></tr>
+          <tr><td>0.30.0</td><td>Échec avec 11 erreurs de dépendances</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Épinglez APM CLI 0.29.0, supprimez l'état partiel des dépendances et réinstallez le package
+        HVE Squad. La version épinglée du CLI est distincte de celle du package dans
+        <code>Peter-N91/hve-squad#vX.Y.z</code>.
+      </p>
+
+      <p><strong>Windows (PowerShell)</strong></p>
+      <pre><code># 1. Install the required APM CLI version.
 $env:VERSION = 'v0.29.0'; irm https://aka.ms/apm-windows | iex
 
-# 2. Vérifier. Ouvrez d'abord un nouveau terminal si une autre version apparaît encore.
+# 2. Verify it. Open a new terminal first if this still reports another version.
 apm --version
 
-# 3. Depuis la racine du projet concerné, supprimer l'état APM partiel.
+# 3. From the affected project root, remove the partial APM state.
 Set-Location C:\Temp\myapp
 Remove-Item -Recurse -Force apm_modules, apm.lock.yaml, apm.yml -ErrorAction SilentlyContinue
 
-# 4. Réinstaller la version HVE Squad souhaitée.
+# 4. Reinstall the HVE Squad release you need.
 apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
-    <p><strong>macOS (Apple Silicon ou Intel)</strong></p>
-    <pre><code># 1. Supprimer la copie Homebrew si elle est installée ; l'installateur épinglé ne peut pas l'écraser.
+
+      <p><strong>macOS (Apple Silicon ou Intel)</strong></p>
+      <pre><code># 1. Remove the Homebrew copy if it is installed; the pinned installer cannot overwrite it.
 brew uninstall apm
 
-# 2. Installer la version APM CLI requise.
+# 2. Install the required APM CLI version.
 curl -sSL https://aka.ms/apm-unix | sh -s -- @v0.29.0
 
-# 3. Rendre l'installation visible dans ce shell et vérifier.
+# 3. Make the install visible to this shell and verify it.
 export PATH="$HOME/.local/bin:$PATH"
 hash -r
 apm --version
 
-# 4. Depuis la racine du projet concerné, supprimer l'état APM partiel et réinstaller.
-cd /chemin/vers/myapp
+# 4. From the affected project root, remove the partial APM state and reinstall.
+cd /path/to/myapp
 rm -rf apm_modules apm.lock.yaml apm.yml
 apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
-    <p>Ajoutez <code>export PATH="$HOME/.local/bin:$PATH"</code> à <code>~/.zshrc</code> pour conserver ce chemin après la réouverture du terminal. Comme solution isolée, utilisez <code>uv tool install apm-cli@0.29.0</code>.</p>
-    <div class="callout warn"><p><strong>Protégez la configuration propre au projet.</strong> Les commandes de nettoyage ci-dessus suppriment <code>apm.yml</code>. Si vous avez créé ce fichier ou s'il contient d'autres paramètres que ceux de l'installation d'atelier en échec, sauvegardez-le d'abord puis restaurez les paramètres nécessaires, ou retirez uniquement l'entrée HVE Squad en échec au lieu de supprimer le fichier.</p></div>
-    <p>Pour la version d'atelier qui a révélé le problème (<code>v0.16.2</code>), une installation saine affichait <code>Installed 302 APM dependencies</code> après environ une à deux minutes. Une version HVE Squad ultérieure peut annoncer un nombre différent.</p>
-    <h3>L'installation dépasse 30 minutes sans erreur</h3>
-    <p>La cause habituelle est la limite GitHub de 60 requêtes par heure sans authentification. APM attend la réinitialisation de la fenêtre. Authentifiez-vous, puis relancez :</p>
-    <pre><code>gh auth login
+      <p>
+        Ajoutez <code>export PATH="$HOME/.local/bin:$PATH"</code> à <code>~/.zshrc</code> pour conserver le
+        chemin après la réouverture du terminal. Pour une installation isolée, utilisez
+        <code>uv tool install apm-cli@0.29.0</code>.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>Protégez la configuration propre au projet.</strong> Les commandes de nettoyage ci-dessus suppriment
+          <code>apm.yml</code>. Si vous avez créé ce fichier ou s'il contient d'autres paramètres que ceux de
+          l'installation d'atelier en échec, sauvegardez-le d'abord et restaurez ensuite les paramètres nécessaires, ou
+          retirez uniquement l'entrée HVE Squad en échec au lieu de supprimer le fichier.
+        </p>
+      </div>
+      <p>
+        Pour la version d'atelier qui a révélé ce problème (<code>v0.16.2</code>), une installation saine
+        affichait <code>Installed 302 APM dependencies</code> après environ une à deux minutes. Les versions
+        HVE Squad ultérieures peuvent afficher un nombre de dépendances différent.
+      </p>
+
+      <h3>La première exécution d'<code>apm install</code> prend plus de 30 minutes (sans jamais signaler d'erreur)</h3>
+      <p>
+        Il s'agit presque toujours de la limitation du débit de l'API GitHub. Ce package référence des centaines de fichiers individuels
+        de <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a>, et APM récupère
+        chacun d'eux via HTTP sur GitHub. Les appels non authentifiés sont limités à
+        <strong>60 requêtes par heure</strong> ; une fois cette limite atteinte, APM attend la réinitialisation de la fenêtre
+        (en respectant l'en-tête <code>Retry-After</code> de GitHub) puis continue : l'installation avance donc très lentement
+        au lieu d'échouer. Sur une nouvelle machine, le cache APM est également vide, et chaque fichier doit être récupéré.
+      </p>
+      <p>Authentifiez-vous avant l'installation pour porter la limite à 5 000 requêtes par heure :</p>
+      <pre><code>gh auth login            # recommended — APM picks it up automatically
+# or set a token (public read is enough; hve-core is public)
+$env:GITHUB_TOKEN = "ghp_xxx"
 apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
-    <p>Remplacez le tag par une version publiée. Le cache évite de retélécharger les fichiers déjà présents. Augmenter le parallélisme ne supprime pas la limite horaire.</p>
-    <p>L'ordre de recherche du jeton APM est <code>GITHUB_APM_PAT_&lt;ORG&gt;</code>, <code>GITHUB_APM_PAT</code>, <code>GITHUB_TOKEN</code>, <code>GH_TOKEN</code>, <code>gh auth token</code>, puis l'assistant d'identifiants Git. Vérifiez votre configuration sans afficher de secret dans une conversation ou un journal partagé.</p>
-    <h3>Quelques téléchargements échouent avec HTTP 502 ou 503</h3>
-    <p>Il s'agit généralement d'un incident temporaire côté GitHub, pas d'un changement de pin. Relancez <code>apm install --target copilot</code> ; les fichiers en cache sont conservés. Si les erreurs persistent, consultez <a href="https://www.githubstatus.com/">GitHub Status</a>. Une erreur 404 indique plutôt un fichier absent à la référence demandée.</p>
-    <h3><code>No harness detected</code> ou dossier <code>.github/</code> vide</h3>
-    <p>Depuis APM 0.18.0, un projet sans marqueur d'environnement n'est plus déployé implicitement vers Copilot. Les sources peuvent déjà être présentes dans <code>apm_modules/</code>. Relancez avec <code>--target copilot</code> ou ajoutez <code>targets: [copilot]</code> dans <code>apm.yml</code>. Voir <a href="getting-started.html?host=vscode">Bien démarrer</a>.</p>
-    <h3>Scripts absents, accès refusé ou dépendances anciennes</h3>
-    <p><code>apm list</code> affiche les scripts déclarés. Vérifiez l'authentification Git et l'accès au dépôt. En tant qu'utilisateur, réinstallez la version souhaitée. En tant que mainteneur du package, régénérez les dépendances avec <code>apm run sync-deps</code>, puis <code>apm lock</code>.</p>
-    <h2>Plafond de coût estimé</h2>
-    <h3>L'initialisation précède le contrôle du plafond</h3>
-    <p>C'est prévu : elle crée les fichiers nécessaires au calcul et reste hors plafond. Sa consommation estimée est néanmoins enregistrée. Le contrôle précède la première unité de travail après cette configuration.</p>
-    <h3>Le run s'arrête avec <code>over-ceiling</code></h3>
-    <p>Il s'agit d'une prévision, pas d'une preuve de facturation. Ouvrez la <code>Decision Ref</code> vers <code>decisions.md</code>, puis examinez <code>consumption.md</code> et <code>consumption-rates.md</code>. Le contrôle applique une réserve de 3 à l'estimation restante.</p>
-    <p>Si le cumul reste sous le plafond et la prévision est suffisamment fondée, vous pouvez approuver une poursuite séquentielle bornée. Avec <code>cannot-confirm</code>, corrigez d'abord les données manquantes ; l'approbation ne peut pas les remplacer.</p>
-    <h3>Une nouvelle demande garde l'ancien plafond</h3>
-    <p>Dans le même run, l'omission signifie héritage. Remplacez la valeur ou retirez-la explicitement :</p>
-    <pre><code>/squad request="Continue sans plafond de coût" cost-ceiling=unset</code></pre>
-    <p>Un nouveau run sans plafond fourni démarre avec <code>not-requested</code>.</p>
-    <h3>Le dernier appel a dépassé la limite</h3>
-    <p>Un appel en cours ne peut pas être interrompu par ce contrôle. Le Scribe enregistre son coût, puis aucune unité suivante ne démarre. Relevez la limite au-dessus du cumul, retirez-la, réduisez le travail ou démarrez un nouveau run. Un plafond de 10 USD avec 10,80 USD déjà estimés laisse zéro budget disponible.</p>
-    <h3>Chaque sous-squad reçoit le plafond</h3>
-    <p>C'est le comportement normal du routage ciblé ou ordinaire : le plafond s'applique séparément à chaque sous-squad. Seul l'autopilot de fédération sans <code>squad=</code> utilise un plafond agrégé à la racine. Voir <a href="usage.html#cost-admission-control">le contrat de coût</a>.</p>
-    <h2>Diagrammes et fichiers suivis</h2>
-    <h3>Les diagrammes Azure avec icônes ne se génèrent pas</h3>
-    <p>Le rendu optionnel repose sur Python, la bibliothèque <code>diagrams</code> et le binaire Graphviz <code>dot</code>. Si <code>python</code> lance le raccourci Microsoft Store, utilisez <code>uv</code> :</p>
-    <pre><code>uv run --with diagrams python docs/architecture/your-diagram.py
-dot -V</code></pre>
-    <p>Si Graphviz manque, installez-le avec la procédure autorisée sur votre poste puis rouvrez le terminal. Sans cet outillage, utilisez Mermaid. Le contrôle fourni par le skill est <code>uv run --with diagrams python .github/skills/python-diagrams/scripts/verify_installation.py</code>.</p>
-    <h3><code>.github/</code> apparaît encore après ajout au fichier d'exclusion Git</h3>
-    <p>Un fichier déjà suivi n'est pas retiré de l'index par <code>.gitignore</code>. Examinez d'abord les chemins suivis. Ne retirez de l'index que les ressources générées concernées et conservez vos workflows ; une suppression globale peut désindexer des fichiers écrits à la main.</p>
-    <h2>Versions et état local</h2>
-    <p>Épinglez un tag publié pour un usage reproductible. La préversion glissante change à chaque fusion et ne remplace pas une version stable. Le <a href="https://github.com/Peter-N91/hve-squad/blob/main/CHANGELOG.md">journal des versions (anglais)</a> décrit les changements.</p>
-    <p><code>apm_modules/</code> et les ressources générées sont exclus selon les règles du dépôt ; les workflows restent suivis. L'état de la squad est distinct du package. Une réinstallation n'est pas une raison de supprimer vos décisions ou votre historique.</p>
-    <div class="pager"><a class="prev" href="maintaining.html"><div class="dir">Retour</div><div class="ttl">Maintenance</div></a><a class="next" href="contributing.html"><div class="dir">Suite</div><div class="ttl">Contribuer</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+      <p>
+        L'ordre de priorité des jetons GitHub dans APM est <code>GITHUB_APM_PAT_&lt;ORG&gt;</code> →
+        <code>GITHUB_APM_PAT</code> → <code>GITHUB_TOKEN</code> → <code>GH_TOKEN</code> →
+        <code>gh auth token</code> → votre assistant d'identifiants Git. Une fois authentifiée, l'installation
+        se termine rapidement, et le cache désormais alimenté rend les installations suivantes quasi instantanées.
+      </p>
+      <p>
+        Augmenter <code>--parallel-downloads</code> n'aide <em>pas</em> une installation non authentifiée —
+        la limite est horaire, donc davantage de parallélisme ne fait que l'atteindre plus vite.
+      </p>
+
+      <h3>Quelques packages échouent avec <code>HTTP 502</code> (ou 503) — <em>Failed to download virtual package</em></h3>
+      <pre><code>[x] 2 packages failed:
+    +- hve-core-github-execute-backlog -- Failed to download virtual package:
+       Failed to download .github/prompts/github/github-execute-backlog.prompt.md: HTTP 502</code></pre>
+      <p>
+        Il s'agit d'une <strong>erreur temporaire du serveur GitHub</strong>, pas d'un problème de manifeste ou
+        de références épinglées. <code>502 Bad Gateway</code> (et <code>503</code>) signifient que le point de terminaison de fichiers de GitHub
+        n'a brièvement pas répondu pendant qu'APM récupérait l'un des centaines de fichiers individuels référencés
+        par ce package. L'indice révélateur de son caractère temporaire : seuls quelques packages échouent alors que les autres
+        réussissent, et l'échec survient à l'étape de <em>téléchargement</em> alors que la référence épinglée a bien été résolue.
+      </p>
+      <p>Relancez simplement l'installation — les fichiers en cache sont ignorés, donc seuls les packages manquants sont retentés :</p>
+      <pre><code>apm install</code></pre>
+      <p>
+        Ne confondez <em>pas</em> ce cas avec <code>404</code> / <em>"File not found (tried refs: main,
+        master)"</em>, qui signifie qu'un fichier n'existe plus à cette référence (dérive en amont ou mauvaise référence épinglée), ni
+        avec le cas de limitation de débit décrit plus haut, lent mais sans erreur. Si les erreurs 502 persistent après plusieurs tentatives,
+        GitHub lui-même peut subir une dégradation de service — consultez <a href="https://www.githubstatus.com">githubstatus.com</a>.
+        S'authentifier d'abord (<code>gh auth login</code>) rend également les installations plus résilientes.
+      </p>
+
+      <h3><code>[x] No harness detected</code> après <code>apm install</code> (APM 0.18.0 et versions ultérieures)</h3>
+      <p>
+        APM a téléchargé les sources dans <code>apm_modules/</code> mais a ignoré l'étape de déploiement, car
+        aucun marqueur d'environnement n'a été trouvé dans votre projet (pas de <code>.github/agents/</code>,
+        <code>.github/prompts/</code>, <code>.claude/</code>, <code>.cursor/</code>, etc.). Relancez avec
+        <code>--target copilot</code> :
+      </p>
+      <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+      <p>
+        Vous pouvez aussi ajouter un bloc <code>targets:</code> au fichier <code>apm.yml</code> de votre projet pour que les prochaines installations
+        fonctionnent sans cette option (voir <a href="getting-started.html">Bien démarrer → Option B</a>).
+      </p>
+
+      <h3><code>apm_modules/</code> contient des fichiers mais <code>.github/</code> est vide, sans erreur visible</h3>
+      <p>
+        La cause est la même que ci-dessus — remontez dans votre terminal pour trouver le message <code>No harness detected</code>
+        et appliquez le correctif <code>--target copilot</code>.
+      </p>
+
+      <h3>Aucun script trouvé</h3>
+      <p>Vérifiez le bloc <code>scripts</code> dans <code>apm.yml</code> et exécutez <code>apm list</code>.</p>
+
+      <h3>Échecs d'accès à HVE Core</h3>
+      <p>Vérifiez l'authentification Git et la visibilité du dépôt.</p>
+
+      <h3>Les dépendances semblent obsolètes</h3>
+      <p>Exécutez <code>apm run sync-deps</code>, puis <code>apm lock</code>.</p>
+
+      <h3>Un rôle ne produit jamais son artefact, ou le coordinateur « réaiguille » discrètement vers un autre agent</h3>
+      <p>
+        Symptômes : une étape se déclare bloquée mais l'exécution continue malgré tout ; aucune entrée
+        <code>history/&lt;agent&gt;.md</code> pour ce rôle ; les contrôles ultérieurs passent sans preuve. La cause habituelle
+        est une ligne de l'équipe dont l'agent principal (Primary) ne peut pas accepter une délégation limitée au périmètre du rôle — soit l'agent n'est
+        plus déployé après une mise à niveau de HVE Core, soit il s'agit d'un <em>agent de travail délégué</em> qui refuse d'agir
+        sans contrat d'entrée complet. Les deux cas se présentent de la même façon à l'exécution.
+      </p>
+      <p>
+        Comparez l'agent Primary du rôle dans <code>.copilot-tracking/squad/team.md</code> au catalogue des agents dans
+        <code>references/roster-catalog.md</code> du skill squad, et vérifiez que le fichier de l'agent existe
+        sous <code>.github/agents/</code>. Le fichier <code>squad-roster.instructions.md</code> du skill squad contient toujours
+        les règles de délégation et de sécurité. Une ligne dont l'agent Primary ne peut pas écrire dans la <em>racine des livrables (Deliverable Root)</em>
+        du rôle est toujours incorrecte. Après toute montée de version de hve-core, relancez <code>apm install</code> et comparez les agents
+        avec <code>scripts/Get-HveCoreCastDelta.ps1</code>.
+      </p>
+
+      <h2>Problèmes liés au plafond de coût</h2>
+
+      <h3>Une nouvelle squad s'est initialisée avant d'afficher le résultat de son contrôle préalable des coûts</h3>
+      <p>
+        C'est le comportement attendu. L'initialisation échappe au contrôle d'admission, car elle crée les fichiers d'état
+        et de tarifs nécessaires à l'estimation. La délégation au Scribe pour la configuration est tout de même comptabilisée dans les dépenses estimées,
+        mais ne consomme aucun créneau du plafond. Le plafond fourni s'applique à la demande initiale avant
+        sa première délégation de travail après l'initialisation.
+      </p>
+
+      <h3>L'exécution s'arrête avec <code>over-ceiling</code> avant le début de l'implémentation</h3>
+      <p>
+        Il s'agit d'une décision fondée sur une prévision, et non d'une preuve que le montant a déjà été facturé. Le contrôle préalable des coûts (Cost Preflight)
+        chiffre le manifeste des délégations prévues, applique la calibration admissible et multiplie l'estimation
+        ponctuelle par le facteur de réserve prudent de <code>3.0</code> pour l'admission. Ouvrez la référence de décision (Decision Ref) dans le
+        message du contrôle et examinez le tableau de demande de <code>## Cost Preflight</code> dans
+        <code>.copilot-tracking/squad/decisions.md</code>. L'estimation actuelle figure dans
+        <code>consumption.md</code> ; les tarifs et la calibration se trouvent dans <code>consumption-rates.md</code>.
+      </p>
+      <p>
+        Avec un niveau de confiance moyen et des dépenses estimées cumulées encore inférieures au plafond, vous pouvez arrêter
+        ou approuver une poursuite bornée. Avec <code>cannot-confirm</code>, corrigez d'abord le modèle non résolu, le
+        tarif manquant, la demande incomplète, le tableau invalide ou la calibration obsolète. L'approbation ne remplace pas
+        les éléments probants que la prévision n'a pas pu établir. Consultez
+        <a href="usage.html#cost-admission-control">Contrôle d'admission par le coût</a>.
+      </p>
+
+      <h3>Une demande ultérieure utilise encore l'ancien plafond de manière inattendue</h3>
+      <p>
+        L'omission signifie <strong>héritage</strong> lorsque la demande poursuit la même exécution. Cela évite qu'un
+        garde-fou disparaisse simplement parce qu'un prompt ultérieur ne le répète pas. Remplacez-le par une autre
+        valeur positive, ou supprimez-le explicitement :
+      </p>
+
+      <h3>Un plafond de fédération apparaît dans chaque sous-squad sélectionnée</h3>
+      <p>
+        C'est le contrat habituel de la fédération. Les demandes ciblées et celles passant par le méta-routage transmettent le même
+        cycle de vie du plafond à chaque sous-squad sélectionnée, et chacune le compare à sa propre
+        estimation cumulée. Un plafond agrégé partagé n'existe que pour le mode
+        <code>mode=autopilot</code> sans cible. Ce mode utilise le fichier
+        <code>consumption-rates.md</code> de la racine de fédération et n'applique pas une seconde fois le plafond dans les exécutions enfants.
+      </p>
+      <pre><code>/squad request="continue without a cost ceiling" cost-ceiling=unset</code></pre>
+      <p>
+        Un nouvel identifiant d'exécution sans valeur fournie démarre à l'état <code>not-requested</code>. Les plafonds ne sont pas transmis
+        d'un identifiant d'exécution à un autre.
+      </p>
+
+      <h3>La dernière délégation a fait dépasser le plafond aux dépenses estimées</h3>
+      <p>
+        Le contrôle s'applique entre les unités de délégation, car un appel de modèle en cours ne peut pas être arrêté
+        en toute sécurité et sa transmission au Scribe doit consigner la consommation. Le coordinateur enregistre le
+        total actualisé, consigne un cycle terminal <code>over-ceiling</code> et ne lance aucun agent enfant supplémentaire. Ce dépassement
+        borné est attendu.
+      </p>
+      <p>
+        L'exécution n'est pas bloquée définitivement. Fixez un nouveau plafond supérieur à l'estimation actuelle, utilisez
+        <code>cost-ceiling=unset</code>, réduisez ou rechiffrez la demande restante, ou démarrez une nouvelle exécution.
+        Réapprouver la valeur déjà dépassée n'est pas autorisé, car cette valeur ne peut plus servir
+        de limite d'arrêt.
+      </p>
+
+      <h3>Un plafond de 10 USD provoque un arrêt immédiat après une demande précédente sans contrôle ayant dépensé 10,80 USD</h3>
+      <p>
+        Un plafond ajouté à une exécution existante est comparé à l'estimation cumulée de cette exécution, et pas seulement
+        à la demande la plus récente. Le budget restant est <code>max(0, 10.00 - 10.80) = 0.00</code>, donc aucune nouvelle
+        délégation ne démarre. Relevez ou supprimez le plafond, ou démarrez une nouvelle exécution si la nouvelle demande doit disposer
+        d'une limite budgétaire indépendante.
+      </p>
+
+      <h3><code>.github</code> apparaît encore dans l'état Git après son ajout aux exclusions</h3>
+      <p>
+        Exécutez une fois <code>git rm -r --cached .github</code>, puis
+        <code>git add .github/workflows</code> (si vous suivez les workflows ici), puis créez un commit.
+      </p>
+
+      <h3>Les diagrammes avec icônes Azure (HLD/LLD) ne se génèrent pas</h3>
+      <p>
+        Lorsque le Squad Azure Architect produit un PNG/SVG enregistré dans Git avec de véritables icônes Azure via le
+        skill <code>python-diagrams</code>, le rendu nécessite à la fois Python et le binaire
+        <code>dot</code> de Graphviz. Sur un poste de développement Windows classique, deux éléments le bloquent souvent :
+      </p>
+      <ul>
+        <li>
+          <strong><code>python</code> est le lanceur factice du Microsoft Store.</strong> Exécuter <code>python</code>
+          affiche <em>"Python was not found"</em> et ne fait rien. Utilisez le lanceur <code>py</code>, ou,
+          mieux, <code>uv</code> — qui fournit son propre Python et le package <code>diagrams</code>,
+          même si aucun des deux n'est dans PATH :
+          <pre><code>uv run --with diagrams python docs/architecture/your-diagram.py</code></pre>
+        </li>
+        <li>
+          <strong>Graphviz est installé mais absent de PATH.</strong> Le rendu échoue avec
+          <code>ExecutableNotFound</code> / "dot not found". Installez-le et rouvrez le shell, ou ajoutez
+          son chemin en tête de PATH pour la session :
+          <pre><code>winget install Graphviz.Graphviz   # then reopen the terminal
+# or, for the current session only:
+$env:PATH = "C:\Program Files\Graphviz\bin;$env:PATH"</code></pre>
+        </li>
+      </ul>
+      <p>
+        Avant de créer un diagramme, vérifiez la chaîne d'outils avec le contrôleur du skill :
+        <code>uv run --with diagrams python .github/skills/python-diagrams/scripts/verify_installation.py</code>.
+        Si le diagramme ne se génère toujours pas et que vous avez seulement besoin d'un visuel rapide, l'architecte se rabat
+        automatiquement sur un diagramme Mermaid intégré.
+      </p>
+
+      <h2>Gestion des versions</h2>
+      <ul>
+        <li>Les versions suivent le <a href="https://semver.org/">versionnement sémantique</a>.</li>
+        <li>Consultez <a href="https://github.com/Peter-N91/hve-squad/blob/main/CHANGELOG.md">CHANGELOG.md</a> pour connaître le contenu de chaque version.</li>
+        <li>Les utilisateurs peuvent épingler une version étiquetée, par exemple <code>apm install "Peter-N91/hve-squad#vX.Y.z"</code>.</li>
+        <li>Les versions sont publiées manuellement lorsque les travaux en attente sont jugés prêts, et non selon un calendrier.</li>
+        <li>Entre les versions, tout ce qui a déjà été fusionné est installable depuis une préversion glissante : <code>apm install "Peter-N91/hve-squad#vX.Y.z-pre"</code>. Ce tag change à chaque fusion : il sert donc aux tests, et non aux travaux dont vous dépendez. Une préversion n'apparaît jamais comme <strong>Latest</strong>.</li>
+        <li>Une installation sans aucune référence pointe vers la branche par défaut, pas vers la dernière version publiée, et APM avertit du risque de dérive. Épinglez toujours une version.</li>
+      </ul>
+
+      <h2>Notes</h2>
+      <ul>
+        <li><code>.gitignore</code> exclut <code>apm_modules/</code> et les ressources générées dans <code>.github</code>, tout en conservant le suivi de <code>.github/workflows/</code>.</li>
+        <li>Le package reste reproductible grâce à <code>apm.lock.yaml</code>.</li>
+      </ul>
+
+      <div class="pager">
+        <a class="prev" href="maintaining.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Maintenance</div>
+        </a>
+        <a class="next" href="contributing.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Contribuer</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · construit sur les agents et conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
 </body>
 </html>

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utilisation | hve-squad</title>
-  <meta name="description" content="Piloter hve-squad : profils, autonomie, coûts estimés, validations, fédération, Watch Mode et livrables." />
+  <title>Utilisation — hve-squad</title>
+  <meta name="description" content="Exécuter la squad : paramètres, profils, modes d'autonomie, contrôle d'admission des coûts, approbation à distance, mode d'initialisation, fédération de sous-squads et présentations PowerPoint aux couleurs de votre marque." />
   <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
   <script src="../assets/theme.js"></script>
   <link rel="stylesheet" href="../assets/style.css" />
@@ -12,376 +12,1767 @@
   <link rel="alternate" hreflang="en" href="../usage.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html" class="active">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../usage.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Guide utilisateur</div><h1>Utiliser la squad</h1><p class="lead">Exprimez le résultat attendu. Le coordinateur répartit le travail entre les agents HVE Core et conserve les rôles, décisions et historiques dans <code>.copilot-tracking/squad/</code>.</p></div></header>
-  <main class="content"><div class="container">
-    <h2>Envoyer une demande</h2>
-    <p>Envoyez les demandes dans la conversation de l'agent, pas dans un terminal système. VS Code utilise les prompts ; CLI et App utilisent l'agent correspondant.</p>
-    <table data-host-reference><thead><tr><th>Objectif</th><th>Prompt VS Code</th><th>Agent dans CLI ou App</th></tr></thead><tbody>
-      <tr><td>Piloter une squad</td><td><code>/squad</code></td><td>Squad Coordinator</td></tr>
-      <tr><td>Piloter une fédération</td><td><code>/squad-federation</code></td><td>Squad Federation Coordinator</td></tr>
-      <tr><td>Rechercher et exporter</td><td><code>/squad-document</code></td><td>Squad Document</td></tr>
-      <tr><td>Rapport de gouvernance</td><td><code>/squad-governance-report</code></td><td>Squad Governance Report</td></tr>
-      <tr><td>Partager un apprentissage</td><td><code>/squad-learn</code></td><td>Squad Learn</td></tr>
-    </tbody></table>
-    <pre><code>/squad request="Ajoute une validation des champs au formulaire de connexion"</code></pre>
-    <p>Le skill <code>squad</code> charge la procédure dans l'agent courant ; il ne remplace pas le coordinateur. Dans VS Code, choisissez bien le prompt. Dans CLI, utilisez <code>/agent</code> ; les noms peuvent être préfixés par le nom du plugin.</p>
-    <h3>Paramètres</h3>
-    <ul>
-      <li><code>profile=</code> choisit le profil proposé à l'initialisation. Sans valeur, le coordinateur recommande un profil adapté au dépôt.</li>
-      <li><code>pack=power-platform|m365-copilot|aws</code> ajoute des spécialistes technologiques. Plusieurs packs peuvent être séparés par des virgules.</li>
-      <li><code>tier=fast|default</code> donne une préférence de niveau de modèle pour le tour.</li>
-      <li><code>routing=off|ranked|manual</code> choisit comment le modèle de chaque rôle est sélectionné ; le mode est enregistré dans <code>team.md</code> jusqu'à ce que vous le changiez. <code>off</code> (par défaut) n'applique aucune politique, <code>ranked</code> choisit le modèle le mieux adapté au travail de chaque rôle parmi ceux que votre hôte propose, et <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir <a href="#model-selection-per-role">Sélection des modèles par rôle</a> ci-dessous.</li>
-      <li><code>discovery=quick|standard|deep|skip</code> choisit la profondeur de découverte ou la refuse.</li>
-      <li><code>owner=&lt;Member Name&gt;</code> désigne un membre précis si plusieurs membres partagent le même rôle.</li>
-      <li><code>mode=autonomous|autopilot</code> choisit le mode d'autonomie. Sans paramètre, le mode est interactif.</li>
-      <li><code>cost-ceiling=&lt;positive USD&gt;|unset</code> fixe ou retire un plafond de coût estimé pour le run.</li>
-    </ul>
-    <pre><code>/squad request="Analyse les menaces du service d'authentification" profile=security
-/squad request="Conçois notre application d'approbation" profile=architecture pack=power-platform
-/squad request="Réduis les abandons pendant l'inscription" discovery=standard
-/squad request="Implémente le plan validé" mode=autopilot cost-ceiling=20
-/squad request="Mène une recherche de sécurité et implémente" routing=manual</code></pre>
-    <h2>Initialiser l'équipe</h2>
-    <p>Sans <code>team.md</code>, le coordinateur propose un profil ou une équipe personnalisée composée d'agents réellement disponibles. Vous choisissez une squad unique ou une fédération, puis le canal d'approbation. Aucun fichier n'est créé avant votre confirmation.</p>
-    <pre><code>/squad init</code></pre>
-    <p>La squad crée <code>team.md</code>, <code>routing.md</code>, <code>decisions.md</code>, <code>notifications.md</code>, <code>state.json</code> et <code>history/</code>. Gardez l'initialisation et la promotion séparées des demandes de travail.</p>
-    <h2>Modes d'autonomie</h2>
-    <table><thead><tr><th>Mode</th><th>Comportement</th></tr></thead><tbody>
-      <tr><td>Interactif, sans <code>mode</code></td><td>Vous approuvez chaque étape : recherche, plan, implémentation et revue.</td></tr>
-      <tr><td><code>mode=autonomous</code></td><td>Boucle de validation ciblée sur un livrable, au maximum deux cycles.</td></tr>
-      <tr><td><code>mode=autopilot</code></td><td>Enchaînement du travail avec arrêts obligatoires pour les actions importantes, les risques à escalader et la validation finale.</td></tr>
-    </tbody></table>
-    <div class="callout warn"><p><strong>Autopilot n'est pas une autorisation générale.</strong> Déployer, pousser du code, fusionner ou modifier des données reste soumis aux contrôles prévus. Une question en lecture seule n'autorise pas une implémentation.</p></div>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html" class="active">Utilisation</a>
+        <a href="demo.html">Démonstration</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../usage.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
 
-    <h2 id="autopilot-hand-off-pipelining">Chevauchement des remises du Scribe en autopilot</h2>
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Guide utilisateur</div>
+      <h1>Exécuter la squad</h1>
+      <p class="lead">
+        Le Squad Coordinator oriente votre demande vers une équipe d'agents HVE Core, exécute les rôles
+        éligibles en parallèle et conserve la composition de l'équipe, le routage, les décisions et l'historique dans
+        <code>.copilot-tracking/squad/</code>.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>Appeler le coordinateur</h2>
+      <p>Adressez vos demandes Squad dans la conversation du coordinateur, et non dans le terminal de votre système. VS Code appelle des prompts ; la CLI et l'application utilisent l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
+      <pre><code>/squad request="add input validation to the login form"</code></pre>
+
+      <div class="callout">
+        <p>
+          <strong>Deux entrées nommées <code>squad</code> dans VS Code ?</strong> Le sélecteur <code>/</code> de VS Code répertorie
+          les prompts et les skills, et le package en fournit un de chaque. Choisissez le
+          <strong>prompt</strong> — décrit comme <em>« Transmet une demande au Squad Coordinator… »</em> —
+          pour réellement exécuter la squad. Le <strong>skill</strong> — <em>« Procédure de fonctionnement du HVE
+          Core Squad Coordinator… »</em> — charge uniquement la procédure de la squad dans l'agent avec lequel
+          vous discutez déjà ; le coordinateur et ses sous-agents la chargent eux-mêmes, vous avez donc rarement
+          besoin de la sélectionner.
+        </p>
+      </div>
+
+      <h3>Paramètres facultatifs</h3>
+      <ul>
+        <li>
+          <code>profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product</code> &mdash; détermine l'équipe
+          créée lors de la première exécution. Si ce paramètre est omis dans un nouveau projet, le coordinateur inspecte votre dépôt et
+          propose un profil recommandé avant toute création.
+        </li>
+        <li>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code> ou <code>pack=aws</code>
+          &mdash; ajoute au profil
+          les rôles spécialisés d'un domaine technologique. Un pack ne remplace jamais le profil, et vous
+          pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
+        </li>
+        <li>
+          <code>tier=fast|default</code> — une indication de niveau de modèle valable pour ce tour, qui prend le pas sur
+          les réglages par défaut du coordinateur privilégiant le coût.
+        </li>
+        <li>
+          <code>routing=off|ranked|manual</code> — la méthode de sélection du modèle de chaque rôle, enregistrée dans
+          <code>team.md</code> jusqu'à ce que vous la changiez. <code>off</code> (par défaut) n'applique aucune politique ;
+          <code>ranked</code> choisit le modèle le mieux adapté au travail de chaque rôle parmi ceux
+          que propose votre hôte ; <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir
+          <a href="#model-selection-per-role">Sélection du modèle par rôle</a> ci-dessous.
+        </li>
+        <li>
+          <code>discovery=quick|standard|deep|skip</code> &mdash; lance l'étape de découverte à la profondeur indiquée
+          sans poser la question, ou l'ignore. Voir <em>Étape de découverte</em> ci-dessous.
+        </li>
+        <li>
+          <code>owner=&lt;Member Name&gt;</code> &mdash; sélectionne un membre précis par son nom lorsque deux lignes de
+          <code>team.md</code> partagent le même <code>Role</code> (par exemple <code>owner=Beta</code>
+          lorsque l'équipe comporte deux lignes <code>developer</code>).
+        </li>
+        <li>
+          <code>mode=autonomous|autopilot</code> — le mode d'autonomie de ce tour. Omettez-le pour travailler
+          en mode interactif, en approuvant chaque étape.
+        </li>
+        <li>
+          <code>cost-ceiling=&lt;positive USD&gt;|unset</code> &mdash; définit, remplace ou supprime explicitement
+          le plafond de dépense estimée en modèles pour l'exécution en cours. En cas d'omission, un plafond actif
+          n'est hérité qu'au sein de la même exécution. Voir <a href="#cost-admission-control">Contrôle d'admission
+          des coûts</a> ci-dessous.
+        </li>
+      </ul>
+      <pre><code>/squad request="threat-model the auth service" profile=security
+/squad request="design the approvals app" profile=architecture pack=power-platform
+/squad request="summarize the data layer" tier=fast
+/squad request="reduce onboarding drop-off" discovery=standard
+/squad request="build the booking service end to end" mode=autopilot cost-ceiling=20
+/squad request="run security research and implement" routing=manual</code></pre>
+
+      <figure class="video-figure">
+        <video controls preload="metadata" playsinline>
+          <source src="../assets/hve-squad-single-squad.mp4" type="video/mp4" />
+          Votre navigateur ne prend pas en charge la balise vidéo. Vous pouvez
+          <a href="../assets/hve-squad-single-squad.mp4">télécharger la vidéo</a> à la place.
+        </video>
+        <figcaption>
+          <span class="step">À voir</span>Exécution d'une squad unique de bout en bout depuis le
+          point d'entrée <code>/squad</code>.
+        </figcaption>
+      </figure>
+
+      <h2>Modes d'autonomie</h2>
+      <p>Ce que la squad fait avant de vous solliciter :</p>
+      <table>
+        <thead>
+          <tr><th>Mode</th><th>Comment le lancer</th><th>Qui approuve quoi</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Interactif (par défaut)</td>
+            <td>sans paramètre <code>mode</code></td>
+            <td>Vous approuvez <strong>chaque étape</strong> (recherche, planification, implémentation, revue). Une notification est envoyée à chaque point de validation.</td>
+          </tr>
+          <tr>
+            <td><code>mode=autonomous</code></td>
+            <td><code>mode=autonomous</code></td>
+            <td>Une boucle de validation ciblée : le conseil revalide un résultat de l'implémenteur (2 cycles maximum), puis rend la main.</td>
+          </tr>
+          <tr>
+            <td><code>mode=autopilot</code></td>
+            <td><code>mode=autopilot</code></td>
+            <td>La squad enchaîne recherche → planification → implémentation → revue de manière autonome et vous sollicite <strong>uniquement</strong> pour les actions à impact (déploiement, <code>git push</code>, fusion, modifications de schéma ou de données) et pour valider le <strong>résultat final</strong>.</td>
+          </tr>
+        </tbody>
+      </table>
       <p>
-        En <code>mode=autopilot</code>, le coordinateur dispatche la remise Scribe de l'étape N et
-        le rôle de l'étape N+1 ensemble, en deux appels dans un même bloc parallèle, dès qu'aucune
-        barrière ne s'applique et que trois conditions sont remplies : l'artefact propre
-        de l'étape N est confirmé sur disque, l'outil de dispatch de sous-agents de l'hôte peut être
-        appelé plusieurs fois dans un même bloc d'appels parallèles (<code>runSubagent</code> dans
-        VS Code, ou l'outil <code>task</code> de CLI Copilot avec ou sans <code>mode: background</code>),
-        et le chevauchement n'a pas été désactivé par un échec de vérification antérieur dans ce run.
-        Remettre au Scribe seul puis attendre est alors un défaut.
+        Autopilot est le mode « dites-le une fois, laissez-le travailler » : il orchestre l'ensemble du pipeline
+        de manière autonome, mais s'arrête toujours pour obtenir une validation humaine avant toute action irréversible et avant la publication.
+        Les deux points d'arrêt — action à impact et résultat final — déclenchent une notification via le canal d'approbation que vous
+        choisissez à la création (le mode interactif vous notifie, lui, à chaque étape).
+      </p>
+
+
+      <h2 id="autopilot-hand-off-pipelining">Chevauchement des transmissions en mode autopilot</h2>
+      <p>
+        En <code>mode=autopilot</code>, le coordinateur lance simultanément la transmission au Scribe de l'étape N et
+        le rôle de l'étape N+1, sous forme de deux appels dans un même bloc d'appels d'outils parallèles, lorsqu'aucune barrière
+        ne s'applique et que trois conditions sont réunies : l'artefact propre à l'étape N est confirmé sur
+        disque, l'outil de lancement de sous-agents de l'hôte peut être appelé plusieurs fois dans un même bloc d'appels
+        d'outils parallèles (<code>runSubagent</code> de VS Code ou l'outil <code>task</code> de Copilot CLI, avec ou sans
+        <code>mode: background</code>), et le chevauchement n'a pas été désactivé à la suite d'un échec de vérification
+        survenu plus tôt dans cette exécution. Dans ce cas, transmettre uniquement au Scribe puis attendre constitue un défaut.
       </p>
       <p>
-        Un <code>cost-ceiling</code> ne désactive pas le chevauchement. Le tour de Cost Preflight qui
-        admet l'étape N+1 s'exécute entre les deux blocs parallèles et compte la dépense non encore
-        enregistrée de l'étape N comme une réservation en attente : le plafond ne sous-estime donc
-        jamais la dépense pendant qu'une remise est en cours. Un run interne sous autopilot de
-        fédération sans cible chevauche aussi, à la racine de sa propre sous-squad.
+        Un <code>cost-ceiling</code> ne désactive pas le chevauchement. Le cycle Cost Preflight qui autorise
+        l'étape N+1 intervient entre les deux blocs parallèles et compte la dépense de l'étape N qui n'a pas encore été enregistrée
+        comme une réservation en attente : le contrôle du plafond ne sous-estime donc jamais la dépense pendant une transmission.
+        Une exécution interne en autopilot de fédération sans cible explicite utilise aussi ce chevauchement à la racine de sa propre sous-squad.
       </p>
       <p>
         Le chevauchement reste <strong>désactivé</strong> dans les cas suivants :
       </p>
       <ul>
-        <li>Watch Mode</li>
-        <li>La squad est une racine de fédération (marquée par la présence de <code>federation.md</code>)</li>
-        <li>Le tour de Cost Preflight actif est <code>approved-over-ceiling</code>, dont les unités de dispatch restent séquentielles</li>
-        <li>L'hôte n'a aucun outil de dispatch de sous-agents acceptant plus d'un appel par bloc</li>
-        <li>Après l'échec de vérification d'une remise chevauchée (exécutée à côté d'un rôle) dans ce run ; une remise exécutée seule est corrigée sans désactiver le chevauchement</li>
+        <li>Mode Watch</li>
+        <li>La squad est une racine de fédération (signalée par la présence de <code>federation.md</code>)</li>
+        <li>Le cycle Cost Preflight actif est <code>approved-over-ceiling</code>, dont les unités de lancement restent séquentielles</li>
+        <li>L'hôte ne dispose d'aucun outil de lancement de sous-agents acceptant plusieurs appels par bloc</li>
+        <li>Après l'échec de vérification d'une transmission en chevauchement (exécutée parallèlement à un rôle) pendant cette exécution ; l'échec d'une transmission exécutée seule est corrigé sans désactiver le chevauchement</li>
       </ul>
       <p>
-        Quand le chevauchement est désactivé, le coordinateur dispatche la remise Scribe de l'étape N,
-        attend qu'elle se termine et soit vérifiée, puis seulement dispatche l'étape N+1 — exactement
-        comme dans les versions antérieures. Quand le chevauchement est actif, l'étape N+1 commence
-        tandis que la remise de l'étape N est en cours, mais l'étape N+2 ne commence pas avant que la
-        remise de l'étape N ait retourné et passé la vérification.
+        Lorsque le chevauchement est désactivé, le coordinateur lance la transmission au Scribe de l'étape N, attend
+        qu'elle soit terminée et vérifiée, puis lance l'étape N+1 — exactement comme dans les versions précédentes.
+        Lorsque le chevauchement est actif, l'étape N+1 commence pendant la transmission de l'étape N, mais l'étape
+        N+2 ne commence qu'après le retour de cette transmission et la réussite de sa vérification.
       </p>
-      <h3>Vérification et barrières de sécurité</h3>
+      <h3>Vérification et points de contrôle de sécurité</h3>
       <p>
-        Un simple <code>Measure-SquadLedger.ps1 -Check</code> n'est pas suffisant pour la vérification
-        chevauchée. Le coordinateur prend plutôt un instantané pré-dispatch du nombre de rubriques du
-        fichier d'historique cible, puis vérifie avec <code>-ExpectedHistoryCounts</code> en ajoutant
-        cet instantané plus les entrées que cette remise doit ajouter. Le coordinateur utilise aussi
-        <code>-BaselinePath</code> pour préserver une ligne de base au niveau du contenu (Longueur,
-        SHA-256, nombre de rubriques) de chaque livrable écrit jusqu'à présent dans ce run, permettant
-        la détection de préfixes corrompus ou modifiés dans les écritures ultérieures.
+        Un simple <code>Measure-SquadLedger.ps1 -Check</code> ne suffit pas à vérifier les transmissions en chevauchement.
+        Le coordinateur relève donc, avant le lancement, le nombre de titres du fichier d'historique cible,
+        puis effectue la vérification avec <code>-ExpectedHistoryCounts</code>, en ajoutant à ce relevé les entrées que
+        cette transmission doit créer. Le coordinateur utilise aussi <code>-BaselinePath</code> pour conserver une
+        référence du contenu (longueur, SHA-256, nombre de titres) de chaque livrable écrit depuis le début de l'exécution,
+        afin de détecter les préfixes corrompus ou modifiés lors des écritures suivantes.
       </p>
       <p>
-        Quand une remise chevauchée échoue à la vérification, le chevauchement est désactivé pour le reste du run. L'écriture
-        invalide n'est jamais réécrite par le Scribe ; au lieu de cela, une nouvelle entrée de correction
-        en ajout uniquement est dispatchée, et le livrable affecté est restauré en redispatchant son rôle
-        propriétaire (jamais en modifiant l'historique). Le run ne traverse pas la barrière suivante
-        jusqu'à ce qu'un humain approuve la correction.
+        Si la vérification d'une transmission en chevauchement échoue, le chevauchement est désactivé pour le reste de l'exécution. Le Scribe ne réécrit jamais
+        l'écriture erronée ; une nouvelle entrée corrective, en ajout uniquement, est demandée, et
+        le livrable concerné est restauré en relançant le rôle qui en est responsable (et non en modifiant l'historique).
+        L'exécution ne franchit pas la barrière suivante avant qu'une personne ait approuvé la correction.
       </p>
       <p>
-        <code>.copilot-tracking/squad/</code> et son contenu sont git-ignorés, donc l'état du registre
-        est une preuve locale, pas partie de l'historique révisé. Le code livré, les plans et les
-        enregistrements de révision dans <code>plans/</code>, <code>research/</code>, <code>reviews/</code>
-        et les fichiers du projet sont suivis normalement.
+        <code>.copilot-tracking/squad/</code> et son contenu sont ignorés par Git : l'état du registre constitue donc une
+        preuve locale, pas un élément de l'historique soumis à revue. Le code livré, les plans et les comptes rendus de revue dans
+        <code>plans/</code>, <code>research/</code>, <code>reviews/</code> et les fichiers du projet sont suivis normalement.
       </p>
-      <h3>Harnais de repère</h3>
+      <h3>Banc de mesure comparative</h3>
       <p>
-        Un harnais de repère jumelé optionnel existe à
-        <code>tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1</code>
-        (nécessite <code>COPILOT_GITHUB_TOKEN</code>). Le repère en direct n'a pas encore produit de
-        résultat de base, donc le comportement de chevauchement est décrit ici et dans les références
-        source de la squad ; aucune affirmation de performance n'est faite.
+        Un banc de mesure comparative par paires, à activer explicitement, est disponible dans <code>tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1</code>
+        (nécessite <code>COPILOT_GITHUB_TOKEN</code>). Les mesures en conditions réelles n'ont pas encore produit de résultat de référence ;
+        le fonctionnement du chevauchement est donc décrit ici et dans les références du code source de la squad, sans aucune affirmation de performance.
       </p>
-    <h2 id="cost-admission-control">Contrôle du coût estimé</h2>
-    <p><code>cost-ceiling</code> limite le coût estimé des modèles pour un run, pas la facture GitHub ni la consommation Azure. L'initialisation confirmée reste hors plafond : elle crée les fichiers d'état et de tarification nécessaires, et son coût estimé est enregistré.</p>
-    <pre><code>budget restant = max(0, plafond - coût estimé cumulé)
-coût d'admission = estimation du travail restant × 3.0</code></pre>
-    <p>La réserve de 3 est une politique prudente, pas un intervalle de confiance statistique. Une prévision défendable exige un périmètre borné, des modèles et tarifs connus, une table valide et une calibration compatible.</p>
-    <table><thead><tr><th>Entrée</th><th>Effet</th></tr></thead><tbody>
-      <tr><td><code>cost-ceiling=20</code></td><td>Fixe ou remplace le plafond du run par 20 USD.</td></tr>
-      <tr><td>Paramètre omis, même run</td><td>Conserve le plafond existant.</td></tr>
-      <tr><td><code>cost-ceiling=unset</code></td><td>Retire explicitement le plafond sans effacer la consommation cumulée.</td></tr>
-      <tr><td>Paramètre omis, nouveau run</td><td>Aucun plafond hérité ; état <code>not-requested</code>.</td></tr>
-    </tbody></table>
-    <table><thead><tr><th>Décision</th><th>Conséquence</th></tr></thead><tbody>
-      <tr><td><code>not-requested</code></td><td>Pas de contrôle de plafond ; les autres validations restent applicables.</td></tr>
-      <tr><td><code>within-ceiling</code></td><td>Seules les unités prévues pour ce tour peuvent démarrer.</td></tr>
-      <tr><td><code>over-ceiling</code></td><td>Prévision trop élevée ou plafond déjà atteint. Le travail attend.</td></tr>
-      <tr><td><code>approved-over-ceiling</code></td><td>Après accord sur une prévision connue, exécution séquentielle bornée tant que le cumul reste sous le plafond.</td></tr>
-      <tr><td><code>cannot-confirm</code></td><td>Données insuffisantes : corrigez les tarifs, modèles, périmètre ou calibration. Une approbation ne remplace pas ces preuves.</td></tr>
-    </tbody></table>
-    <p>Le contrôle s'effectue entre les unités. Un appel déjà en cours et son enregistrement par le Scribe peuvent dépasser la limite ; aucune unité suivante ne démarre. Si le cumul vaut déjà 10,80 USD, ajouter un plafond de 10 USD ne crée pas un nouveau budget de 10 USD.</p>
-    <pre><code>/squad request="Implémente le plan validé" mode=autopilot cost-ceiling=20
-/squad request="Applique les corrections de la revue"
-/squad request="Continue sans plafond de coût" cost-ceiling=unset</code></pre>
-    <p>Pour reprendre après un arrêt, relevez le plafond au-dessus du cumul, retirez-le explicitement, réduisez ou réévaluez la demande, ou démarrez un nouveau run. Réapprouver une limite déjà dépassée n'est pas une reprise valide.</p>
-    <p>Consultez <code>currentRun.costPreflight</code> dans <code>state.json</code>, l'entrée <code>Cost Preflight</code> et sa <code>Decision Ref</code> dans <code>decisions.md</code>, les totaux dans <code>consumption.md</code> et les hypothèses dans <code>consumption-rates.md</code>. Les chiffres sont des estimations, pas une télémétrie de facturation.</p>
-    <h2 id="model-selection-per-role">Sélection des modèles par rôle (<code>routing=</code>)</h2>
-    <p>
-      <strong>Comportement par défaut (<code>routing=off</code>) :</strong> aucun paramètre
-      <code>model</code> n'est passé aux dispatches ; chaque agent s'exécute sur son propre modèle
-      frontmatter ou sur le modèle de session, exactement comme avant cette fonctionnalité.
-    </p>
-    <p>
-      <code>routing=</code> a trois modes. Le mode est <strong>enregistré dans <code>team.md</code></strong>
-      et reste actif pour les demandes suivantes jusqu'à ce que vous le changiez ; il suffit donc de le
-      passer une fois :
-    </p>
-    <ul>
-      <li>
-        <strong><code>off</code></strong> (par défaut) — aucun modèle n'est choisi ; <code>team.md</code>
-        n'a pas de colonne <code>Model</code>.
-      </li>
-      <li>
-        <strong><code>ranked</code></strong> — la squad choisit le modèle le mieux adapté au travail de
-        chaque rôle parmi ceux que votre hôte propose, et affiche chaque choix dans une colonne
-        <code>Model</code> sous une ligne <code>Model routing: ranked</code>.
-      </li>
-      <li>
-        <strong><code>manual</code></strong> — vous choisissez une fois, avec des suggestions
-        préremplies ; vos choix sont enregistrés dans la colonne <code>Model</code> sous une ligne
-        <code>Model routing: manual</code>.
-      </li>
-    </ul>
-    <p>
-      <strong>Choix classés.</strong> Chaque rôle correspond à une classe d'assignation
-      (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
-      <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Le catalogue note chaque
-      modèle de 0 à 3 pour chaque classe ; la squad retient la meilleure note, puis le coût mélangé le
-      plus bas, puis la génération la plus récente d'une même famille de modèles. Une égalité n'est
-      jamais départagée par le nom du modèle. Sur Copilot CLI, le roster initial donne par exemple
-      <code>researcher</code> → <code>claude-opus-5.5</code>, <code>lead</code> →
-      <code>gpt-5.6-sol</code>, <code>developer</code> → <code>gpt-5.3-codex</code>,
-      <code>intake-validator</code> → <code>claude-sonnet-5.5</code> et <code>scribe</code> →
-      <code>claude-haiku-4.5</code>.
-    </p>
-    <p>
-      <strong>Choix manuels.</strong> Quand vous passez à <code>routing=manual</code>, à la création de
-      la squad ou plus tard, le coordinateur vous interroge avant toute dispatch. Vous pouvez accepter
-      le modèle suggéré pour tous les rôles, choisir un modèle par classe d'assignation, puis ajuster
-      des rôles précis. Chaque question ne propose que les modèles <strong>que votre hôte peut
-      exécuter</strong> et qui respectent le plancher <code>Model Tier</code> du rôle. Sur Copilot CLI
-      et l'application GitHub Copilot, c'est la liste exacte annoncée par l'outil <code>task</code>.
-      VS Code n'annonce aucune liste ; la squad propose donc les modèles du catalogue dont le prix ne
-      dépasse pas celui de votre modèle de session. Si VS Code refuse un choix, la question est reposée
-      avec la liste renvoyée par VS Code.
-    </p>
-    <p>
-      <strong>Contenu d'une cellule <code>Model</code>.</strong> Un identifiant exact de la colonne
-      <code>Model ID</code> de <code>consumption-rates.md</code> (par exemple
-      <code>claude-sonnet-5.5</code>). Une cellule sous le plancher du rôle, un identifiant inconnu ou
-      contenant des métacaractères de shell ou de prompt est refusé et journalisé, jamais deviné.
-    </p>
-    <p><strong>Ordre de précédence</strong> (le plus élevé gagne, par rôle) :</p>
-    <ol>
-      <li><code>routing=manual</code> : la cellule <code>Model</code> valide du rôle.</li>
-      <li><code>routing=ranked</code> : le choix classé pour ce rôle.</li>
-      <li>
-        <code>tier=</code> (l'entrée de niveau statique existante) ou le <code>Model Tier</code> de
-        <code>team.md</code> — le repli actuel, inchangé.
-      </li>
-      <li>Omettre le paramètre — la politique par défaut.</li>
-    </ol>
-    <p>
-      <strong>Le dispatch recopie la cellule :</strong> en <code>ranked</code> ou <code>manual</code>,
-      chaque dispatch vers un agent du roster transmet exactement la cellule <code>Model</code> de sa
-      ligne, sauf le Scribe, dont l'épinglage de modèle s'applique. Dans la distribution plugin, le hook
-      <code>dispatch-guards</code> refuse un dispatch dont le <code>model</code> manque ou diffère de la
-      cellule, et nomme la cellule à recopier. Il compare seulement ; il ne remplit ni ne modifie
-      jamais une cellule.
-    </p>
-    <p>
-      <strong>Modèles non évalués :</strong> un modèle proposé par l'hôte mais absent du catalogue n'est
-      jamais classé ni suggéré. Vous pouvez tout de même le saisir comme choix manuel ; il est alors
-      étiqueté <code>unevaluated</code> dans le registre de dispatch.
-    </p>
-    <p>
-      <strong>Modèle de départ de la session.</strong> Le modèle choisi dans le chat, ou passé avec
-      <code>--model</code>, exécute le coordinateur : il lit le roster, planifie les étapes et
-      dispatche chaque rôle. <code>routing=</code> ne le change jamais. Démarrez sur un modèle fixe de
-      la classe <code>balanced</code> du catalogue (le niveau intermédiaire du fournisseur), aussi
-      capable que <code>claude-sonnet-5.5</code>. Choisissez n'importe quel modèle de cette classe
-      proposé par votre hôte, par exemple <code>claude-sonnet-5.5</code>, <code>gpt-6-sol</code>,
-      <code>gpt-5.6-terra</code>, <code>gemini-3.8-flash</code> ou <code>grok-4.7</code> ; le fichier
-      <code>references/model-catalog.md</code> du skill squad tient la liste à jour. Un modèle
-      <code>frontier-reasoning</code> alourdit le coût de chaque tour du coordinateur sans améliorer le
-      travail, que <code>ranked</code> envoie déjà aux modèles frontier là où c'est utile. Un modèle
-      <code>fast-lightweight</code> risque davantage d'omettre des étapes obligatoires, comme recopier
-      la cellule <code>Model</code> ou envoyer la passation du Scribe en même temps que l'étape
-      suivante. En <code>auto</code>, l'hôte peut changer le modèle du coordinateur en cours
-      d'exécution, et le registre ne peut pas chiffrer sa part.
-    </p>
-    <p>
-      L'ancien paramètre <code>models=&lt;clé&gt;:&lt;id&gt;,...</code> est retiré. S'il est passé, il
-      n'est pas appliqué et le coordinateur vous oriente vers <code>routing=manual</code>.
-    </p>
-    <p><strong>Exemples :</strong></p>
-    <pre><code># Passe en sélection classée ; team.md gagne une colonne Model avec le choix de chaque rôle.
-/squad request="implémenter la conception" routing=ranked
+      <h2 id="cost-admission-control">Contrôle d'admission des coûts</h2>
+      <p>
+        <code>cost-ceiling</code> est un plafond facultatif de <strong>dépense estimée en modèles pour une
+        exécution</strong>. L'initialisation est hors plafond : le lancement du Scribe confirmé pour la configuration
+        crée les fichiers de composition d'équipe, d'état et de tarification, et enregistre la dépense de cette configuration sans consommer
+        de créneau soumis au plafond. Après l'initialisation, avant le premier lancement de travail et chaque cycle suivant,
+        Cost Preflight construit un manifeste de la demande à partir des rôles prévus, des classes de lancement, des tarifs
+        fixes des modèles, de l'orchestration, du nombre maximal de cycles conditionnels et du calibrage admissible.
+        Il ne fournit pas de devis du coût facturé, ne plafonne pas la facture GitHub et ne régit pas les ressources Azure que
+        votre implémentation pourrait créer.
+      </p>
+      <pre><code>remaining USD      = max(0, ceiling USD - accumulated estimated spend)
+projected cost USD = sum(calibrated planned-dispatch estimates)
+admission cost USD = projected cost USD × 3.0</code></pre>
+      <p>
+        La réserve d'admission d'un facteur trois est une marge de prudence prévue par la politique face à l'incertitude sur
+        l'utilisation future des tokens, et non un intervalle de confiance statistique. Les totaux affichés ne sont arrondis qu'après
+        addition des estimations de chaque ligne. Une prévision n'atteint le niveau de confiance <code>medium</code> que si la demande est
+        bornée, les modèles et leurs tarifs sont connus, la table des tarifs est valide et le calibrage correspond à la
+        révision actuelle de l'estimateur. Sinon, la squad indique <code>cannot-confirm</code> plutôt que
+        de présenter une réponse optimiste.
+      </p>
 
-# Passe en sélection manuelle ; les modèles vous sont demandés avant l'exécution.
-/squad request="concevoir la couche de données" routing=manual
+      <h3>Définir, hériter, remplacer ou supprimer un plafond</h3>
+      <table>
+        <thead>
+          <tr><th>Paramètre</th><th>Comportement effectif</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>cost-ceiling=20</code></td>
+            <td>Définit ou remplace le plafond de l'exécution active à 20 USD.</td>
+          </tr>
+          <tr>
+            <td>Paramètre omis, même exécution</td>
+            <td>Hérite du plafond positif actif. Une omission ne supprime jamais silencieusement une protection.</td>
+          </tr>
+          <tr>
+            <td><code>cost-ceiling=unset</code></td>
+            <td>Supprime explicitement le plafond tout en conservant les totaux de consommation cumulée.</td>
+          </tr>
+          <tr>
+            <td>Paramètre omis, nouvelle exécution</td>
+            <td>Démarre en <code>not-requested</code> ; aucune comparaison au plafond de coût ni aucun arrêt associé ne s'applique.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        L'héritage est lié à l'identifiant d'exécution enregistré. Une demande ultérieure qui poursuit cette exécution conserve
+        son plafond ; un nouveau sujet en autopilot, un événement Watch ou une méta-exécution de fédération reçoit un nouvel identifiant et
+        n'en hérite pas. La consommation estimée reste enregistrée même sans plafond actif, et tous
+        les points de contrôle autres que ceux liés au coût continuent de s'appliquer.
+      </p>
+      <pre><code># Set a $20 ceiling for this run
+/squad request="implement the approved plan" mode=autopilot cost-ceiling=20
 
-# Revient au comportement par défaut ; la colonne Model est retirée.
-/squad request="examiner l'implémentation" routing=off
+# Same run: $20 remains active because omission means inherit
+/squad request="apply the review fixes"
 
-# Passe la sous-squad product en sélection manuelle ; chaque sous-squad garde ses propres choix.
+# Same run: remove the guard explicitly
+/squad request="continue without a cost ceiling" cost-ceiling=unset</code></pre>
+
+      <h3>Signification de chaque décision</h3>
+      <table>
+        <thead>
+          <tr><th>Décision</th><th>Signification</th><th>Le travail peut-il être lancé ?</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>not-requested</code></td>
+            <td>Aucun plafond effectif n'existe pour cette exécution.</td>
+            <td>Oui, sous réserve des points de contrôle habituels sans rapport avec le coût.</td>
+          </tr>
+          <tr>
+            <td><code>within-ceiling</code></td>
+            <td>Le coût d'admission prudent reste dans le montant disponible.</td>
+            <td>Oui, mais uniquement pour les créneaux désignés par ce cycle.</td>
+          </tr>
+          <tr>
+            <td><code>over-ceiling</code></td>
+            <td>La prévision connue dépasse le montant disponible, ou la dépense cumulée a atteint la limite.</td>
+            <td>Non. Avant d'atteindre la limite, l'utilisateur peut choisir une poursuite encadrée.</td>
+          </tr>
+          <tr>
+            <td><code>approved-over-ceiling</code></td>
+            <td>L'utilisateur a accepté un dépassement connu pour une demande et des données tarifaires inchangées.</td>
+            <td>Oui, une unité de lancement séquentielle à la fois, tant que la dépense reste inférieure au plafond.</td>
+          </tr>
+          <tr>
+            <td><code>cannot-confirm</code></td>
+            <td>La demande, la tarification des modèles, la structure de la table des tarifs ou le calibrage ne permettent pas d'établir une prévision défendable.</td>
+            <td>Non. Modifiez les données incertaines ; une approbation ne peut pas dispenser des éléments probants manquants.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Poursuivre après une prévision de dépassement du plafond</h3>
+      <p>
+        Avant de vous poser la question, la squad affiche le plafond, la dépense estimée cumulée, le montant disponible,
+        le coût projeté de la demande restante, le coût d'admission prudent et la limite du mécanisme d'arrêt. Si vous
+        poursuivez, elle conserve l'enregistrement <code>over-ceiling</code> d'origine et ajoute un cycle
+        <code>approved-over-ceiling</code> auditable, lié à votre approbation. Celle-ci ne s'applique qu'au
+        manifeste et à la base tarifaire inchangés ; une demande élargie, réévaluée en prix ou à faible niveau de confiance déclenche un nouveau
+        point de contrôle.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>Le plafond est vérifié entre les unités de lancement.</strong> Un appel de modèle déjà
+          en cours ne peut pas être interrompu. Le dernier sous-agent et la transmission comptable obligatoire au Scribe qui lui est associée
+          peuvent donc porter l'estimation enregistrée au-delà du plafond. Le coordinateur enregistre alors
+          un cycle terminal <code>over-ceiling</code> et ne lance aucun autre sous-agent.
+        </p>
+      </div>
+      <p>
+        Atteindre la limite ne bloque pas le projet indéfiniment. Pour reprendre, définissez un nouveau plafond positif
+        supérieur à la dépense cumulée actuelle, supprimez explicitement le plafond avec
+        <code>cost-ceiling=unset</code>, réduisez ou réévaluez en prix la demande restante puis relancez le contrôle préalable,
+        ou commencez une nouvelle exécution. Réapprouver une valeur déjà dépassée n'est volontairement pas possible,
+        car elle ne définirait plus une limite d'arrêt.
+      </p>
+
+      <h3>Exemples avec dépense cumulée</h3>
+      <table>
+        <thead>
+          <tr><th>État actuel</th><th>Demande suivante</th><th>Résultat</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Aucun plafond antérieur ; dépense estimée de 10,80 USD</td>
+            <td><code>cost-ceiling=10</code> sur la même exécution</td>
+            <td>Le montant disponible est de 0,00 USD et la nouvelle demande ne lance aucun travail tant que le plafond n'est pas modifié ou supprimé.</td>
+          </tr>
+          <tr>
+            <td>Plafond de 20 USD ; dépense estimée de 10,80 USD</td>
+            <td>Paramètre de plafond omis sur la même exécution</td>
+            <td>Le plafond de 20 USD est hérité ; il reste 9,20 USD avant de prendre en compte la nouvelle demande.</td>
+          </tr>
+          <tr>
+            <td>Plafond de 20 USD ; dépense estimée de 10,80 USD</td>
+            <td><code>cost-ceiling=unset</code></td>
+            <td>La protection est supprimée ; les 10,80 USD restent enregistrés et le travail ultérieur n'est plus soumis au contrôle des coûts.</td>
+          </tr>
+          <tr>
+            <td>Une nouvelle exécution commence</td>
+            <td>Paramètre de plafond omis</td>
+            <td>La nouvelle exécution enregistre <code>not-requested</code> et se poursuit sans plafond de coût.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Où consulter la décision</h3>
+      <p>
+        La dernière décision synthétique se trouve dans <code>state.json</code>, sous
+        <code>currentRun.costPreflight</code>. L'enregistrement reproductible est l'entrée
+        <code>## Cost Preflight</code> correspondante dans <code>decisions.md</code>, avec sa table de demande,
+        les ensembles de créneaux évalués et autorisés, le motif et la référence de décision. Chaque entrée d'historique admise
+        porte cette référence et consomme un créneau autorisé une seule fois, exactement. Les totaux
+        estimés cumulés restent dans <code>consumption.md</code> ; les tarifs des modèles, les hypothèses de taille des lancements
+        et le calibrage se trouvent dans <code>consumption-rates.md</code>.
+      </p>
+
+      <h3>Périmètre en fédération</h3>
+      <p>
+        Le routage ordinaire d'une fédération applique le plafond fourni indépendamment à chaque
+        sous-squad sélectionnée, que vous en désigniez une avec <code>squad=</code> ou que le méta-routage en sélectionne une ou
+        plusieurs. Chaque sous-squad sélectionnée utilise son propre état, son estimation cumulée, son cycle de vie et sa
+        limite d'arrêt, exactement comme une squad simple. La racine de la fédération enregistre le routage et les totaux
+        de synthèse, mais conserve son Cost Preflight agrégé à <code>not-requested</code>.
+      </p>
+      <p>
+        Seul le <code>mode=autopilot</code> à l'échelle de la fédération, sans cible <code>squad=</code>, applique
+        un plafond global à toutes les exécutions internes sélectionnées ainsi qu'à l'orchestration du coordinateur de fédération et du
+        rédacteur de la racine. Il utilise le fichier
+        <code>consumption-rates.md</code> de la racine de la fédération, ne transmet pas en plus le plafond aux exécutions enfants et compte
+        les méta-créneaux terminés sur l'ensemble des cycles. Un dépassement global approuvé exécute une seule unité associant une sous-squad
+        et le rédacteur de la racine à la fois, afin que la fédération puisse s'arrêter à la limite commune.
+      </p>
+
+      <h2>Étape de découverte &mdash; lorsqu'aucun document n'existe encore</h2>
+      <p>
+        Deux points de contrôle précèdent le travail et répondent à des déclencheurs <strong>opposés</strong>. L'étape
+        de découverte se déclenche lorsqu'il n'y a <strong>aucun</strong> artefact d'entrée et en <em>produit</em>
+        un ; le contrôle des entrées se déclenche lorsqu'il y <strong>en a</strong> un et le <em>valide</em>. Le
+        brief rédigé lors d'une session de découverte constitue lui-même un artefact d'entrée : il passe donc directement
+        au contrôle des entrées.
+      </p>
+      <pre><code>no input artifact  →  discovery gate  →  brief  →  intake gate  →  research → plan → implement → review
+   input artifact  →                              intake gate  →  research → plan → implement → review</code></pre>
+
+      <div class="callout">
+        <p>
+          <strong>La validation peut être automatique. L'idéation ne le peut pas.</strong> Le contrôle des entrées se déclenche
+          tout seul, car un agent peut évaluer un artefact de manière autonome. La découverte est proposée
+          plutôt qu'automatisée, car la valeur d'un brainstorming réside dans <em>vos</em> idées et votre contexte.
+          Une étape de découverte automatique reviendrait à laisser l'IA réfléchir seule pour vous remettre
+          un brief assuré que personne n'aurait approuvé.
+        </p>
+      </div>
+
+      <h3>Quand elle vous est proposée</h3>
+      <p>Le coordinateur ne propose cette étape que si les quatre conditions suivantes sont réunies :</p>
+      <ul>
+        <li>L'équipe utilise le profil <code>product</code> ou <code>full</code> &mdash; ce sont les seuls profils qui incluent d'emblée <code>analyst</code>, le rôle qui rédige le brief.</li>
+        <li>Aucun PRD, BRD, spécification, user story, document de conception, transcription ou fichier que vous avez indiqué ne sert de base au tour.</li>
+        <li>Le tour vise à faire avancer un plan, une réalisation ou un livrable &mdash; pas à répondre à une question ni à rechercher une information.</li>
+        <li>La demande énonce un <strong>objectif</strong> (<em>réduire les abandons lors de l'intégration</em>) plutôt qu'une <strong>tâche</strong> définie (<em>ajouter une nouvelle tentative au client webhook</em>).</li>
+      </ul>
+      <p>
+        Dans tous les autres profils, cette étape reste <strong>silencieuse</strong> &mdash; aucune proposition, routage normal.
+        C'est une différence volontaire avec le contrôle des entrées, qui demande une intervention lorsque son rôle
+        manque : les entrées existantes ne doivent pas échapper à la validation, mais ne pas tenir un brainstorming que personne n'a demandé
+        ne revient pas à omettre un contrôle. La question vous est posée <strong>une seule fois par sujet</strong> ; votre refus est enregistré et
+        la proposition n'est jamais répétée.
+      </p>
+      <p>
+        Fournir <code>discovery=</code> fonctionne toujours, quel que soit le profil et même après un refus. Il s'agit
+        d'une commande, et non d'une proposition : une squad autre que <code>product</code> nomme donc les rôles qu'elle doit
+        ajouter et vous demande une fois votre accord avant de les lancer.
+      </p>
+
+      <h3>Niveaux de profondeur</h3>
+      <table>
+        <thead>
+          <tr><th>Profondeur</th><th>Rôles lancés, dans l'ordre</th><th>Résultat produit</th><th>À utiliser lorsque</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>quick</code> (par défaut)</td>
+            <td>analyst</td>
+            <td>brief</td>
+            <td>L'objectif est clair ; seuls le périmètre, les utilisateurs et la mesure de réussite restent à définir.</td>
+          </tr>
+          <tr>
+            <td><code>standard</code></td>
+            <td>designer → analyst</td>
+            <td>cadrage, pistes de solution, brief</td>
+            <td>Le problème lui-même reste ouvert et plusieurs orientations méritent d'abord d'être explorées.</td>
+          </tr>
+          <tr>
+            <td><code>deep</code></td>
+            <td>designer → challenger + experimenter → analyst</td>
+            <td>cadrage, pistes, objections, hypothèse la plus risquée, brief</td>
+            <td>L'orientation est coûteuse ou difficile à inverser et mérite une mise à l'épreuve ainsi qu'un test peu coûteux.</td>
+          </tr>
+          <tr>
+            <td><code>skip</code></td>
+            <td>aucun</td>
+            <td>un verdict <code>Depth: skip</code> qui consigne le refus</td>
+            <td>Vous ne souhaitez pas de session, ou le cadrage a déjà été établi ailleurs.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>deep</code> nécessite <code>challenger</code>, que seul <code>full</code> inclut d'emblée. Si vous le choisissez
+        dans une squad <code>product</code>, le coordinateur propose d'ajouter le rôle ou d'exécuter
+        <code>standard</code> à la place &mdash; il ne retire jamais silencieusement un rôle du niveau que vous avez choisi.
+      </p>
+
+      <h3>Ce que vous obtenez</h3>
+      <p>
+        Les rôles lancés <strong>vous interrogent</strong>, une question à la fois, et s'arrêtent plutôt
+        que de deviner lorsqu'ils ne peuvent pas vous joindre. Seul l'analyste écrit un fichier : un brief succinct nommé
+        <code>&lt;date&gt;-&lt;topic-id&gt;-brief.md</code> à la racine de ses livrables, qui présente
+        le problème, les raisons d'agir maintenant, les limites du périmètre, la mesure de réussite, les options envisagées, l'orientation
+        retenue, les hypothèses et les questions ouvertes. Une entrée <code>## Discovery Verdict</code> est ajoutée
+        dans <code>decisions.md</code> en parallèle.
+      </p>
+      <p>
+        Les <strong>options écartées</strong> sont la partie à préserver. La valeur durable d'un brainstorming
+        n'est pas l'idée retenue — celle-ci subsiste d'elle-même — mais la trace de ce qui a
+        été rejeté et pourquoi. C'est ce qui évite que la squad rediscute les mêmes orientations trois tours
+        plus tard.
+      </p>
+      <p>
+        Cette étape ne s'exécute jamais dans un parcours <strong>sans présence humaine</strong>. Personne n'est là pour répondre à la
+        proposition : les données de l'événement déclencheur deviennent donc l'artefact d'entrée, que le contrôle des entrées évalue
+        à la place.
+      </p>
+
+      <h2>Contrôle des exigences en entrée</h2>
+      <p>
+        Lorsqu'une exécution s'appuie sur des artefacts d'exigences ou d'entrée &mdash; PRD, BRD, spécification, user
+        story, document de conception, transcription ou fichier que vous indiquez à la squad &mdash; le coordinateur effectue
+        un <strong>contrôle des entrées</strong> avant toute planification ou réalisation, pour vérifier
+        leur exhaustivité, leur clarté, leur testabilité, leur cohérence et leur périmètre. Il enregistre un
+        <code>## Intake Readiness Verdict</code> dans <code>decisions.md</code>
+        (<code>Ready</code>, <code>Ready-With-Gaps</code> ou <code>Not-Ready</code>).
+      </p>
+      <p>
+        En cas de <code>Not-Ready</code>, la squad ne construit pas sur des bases fragiles : elle sollicite l'analyste
+        ou le responsable produit pour combler les lacunes bloquantes, puis revalide (dans une limite de deux cycles),
+        et vous sollicite lorsqu'une lacune exige une décision humaine. Si aucun artefact d'entrée ne fonde l'exécution,
+        ce contrôle reste silencieux et sans effet. Il est fourni avec les profils <code>product</code> et <code>full</code> ;
+        les autres profils se voient proposer le rôle lorsqu'une exécution s'avère guidée par des exigences.
+      </p>
+      <p>
+        Lorsque l'entrée est un brief que l'étape de découverte vient de produire, la validation est confiée à un
+        agent <strong>différent</strong> de celui qui l'a rédigé &mdash; par exemple le PRD Quality Reviewer
+        pour vérifier un brief du PRD Builder. Un contrôle qui valide son propre résultat est une
+        formalité, pas une vérification.
+      </p>
+
+      <h2>Approuver à distance (exécutions sans présence humaine ou sur VM)</h2>
+      <p>
+        Si vous exécutez la squad sur une VM pour un travail de longue durée, choisissez le canal d'approbation <code>github-issue</code>
+        lors de la création. À chaque point de contrôle, la squad ouvre une issue GitHub, vous l'attribue et vous @mentionne
+        (vous recevez ainsi une notification push sur GitHub mobile), puis attend. Vous approuvez depuis votre téléphone par un commentaire —
+        <code>/approve</code>, <code>/approve-all</code>, <code>/changes: &lt;note&gt;</code> ou
+        <code>/stop</code> — ou une étiquette <code>squad/*</code>, sans toucher à la VM. Seul votre
+        identifiant enregistré (ou un collaborateur du dépôt) peut approuver, et seuls ces mots-clés produisent un effet.
+      </p>
+      <p>
+        Les autres canaux sont <code>webhook</code> (uniquement une notification sortante Teams/Slack/Discord) et
+        <code>in-chat</code> (le canal par défaut, qui exige votre présence devant le PC). Aucun canal n'exige que le package
+        fournisse un mécanisme de transport d'e-mails ou de messages — si les outils d'un canal sont absents, l'approbation revient
+        à la conversation, et la squad ne poursuit jamais à l'expiration d'un délai.
+      </p>
+
+      <h3>Configurer l'approbation à distance (une seule fois, uniquement pour <code>github-issue</code>)</h3>
+      <p>Les exécutions locales et les approbations dans la conversation n'exigent rien de plus. Pour approuver à distance une exécution sur VM, configurez le canal une fois :</p>
+      <ol>
+        <li>
+          <strong>Authentifiez-vous auprès de GitHub sur l'hôte d'exécution.</strong> Exécutez <code>gh auth login</code>
+          (la CLI <code>gh</code> suffit sur une VM sans interface graphique) ou configurez le serveur MCP
+          <code>github</code> officiel. Le package fournit une entrée de référence dans
+          <code>.github/skills/squad/mcp.template.json</code>, que vous pouvez fusionner dans votre
+          <code>.vscode/mcp.json</code> ; le MCP GitHub est privilégié lorsqu'il est présent, puis la squad se rabat
+          sur <code>gh</code>, et enfin sur la conversation. Le jeton doit disposer des étendues <code>repo</code> +
+          <code>issues</code>.
+        </li>
+        <li>
+          <strong>Installez le dispositif de surveillance des approbations.</strong> Copiez le workflow de référence
+          <code>.github/skills/squad/github-approval-watcher.workflow.yml</code> vers
+          <code>.github/workflows/squad-approval-watcher.yml</code> dans le dépôt qui héberge vos
+          issues d'approbation, puis créez un commit. Il transmet votre réponse <code>/approve</code>,
+          <code>/approve-all</code>, <code>/changes:</code> ou <code>/stop</code> pour que
+          l'exécution reprenne — et seul un mot-clé reconnu provenant d'un identifiant autorisé produit un effet (le texte libre d'un commentaire
+          n'est jamais exécuté comme une commande).
+        </li>
+        <li>
+          <strong>Choisissez <code>github-issue</code> lors de la création</strong> et indiquez au coordinateur
+          l'identifiant GitHub à @mentionner ainsi que le <code>owner/repo</code> des issues d'approbation (par défaut,
+          le dépôt actuel).
+        </li>
+      </ol>
+
+      <h2>Mode Watch &mdash; déclencher la squad depuis une nouvelle issue</h2>
+      <p>
+        Le mode Watch est le volet événementiel, « IA en continu », de la squad : au lieu de saisir
+        <code>/squad</code>, c'est un événement du dépôt qui lance l'exécution. Le modèle fourni transforme une
+        <strong>nouvelle issue étiquetée <code>squad/auto</code></strong> en exécution sans interface
+        <code>mode=autopilot</code> qui ouvre une <strong>pull request en brouillon</strong> fermant
+        l'issue. Il réutilise tout ce que vous avez déjà configuré &mdash; le pipeline autopilot,
+        le conseil et le canal d'approbation <code>github-issue</code> &mdash; de sorte qu'un point de contrôle suspend toujours le travail en attendant
+        votre approbation depuis un téléphone.
+      </p>
+      <div class="mermaid">
+flowchart TD
+    A["Issue labeled squad/auto"] --> B{"Write collaborator?"}
+    B -- no --> X["Ignored, comment left on issue"]
+    B -- yes --> C["Copilot CLI runs Squad Coordinator with mode=autopilot"]
+    C --> D["Profile inferred from the issue (fallback: default)"]
+    D --> E["Research, Plan, Implement, Review"]
+    E --> F{"Impactful or Risk Gate?"}
+    F -- yes --> G["Approve from phone via github-issue"]
+    G --> E
+    F -- no --> H["Open DRAFT pull request that closes the issue"]
+    H --> I["You review and merge"]
+      </div>
+      <p>
+        Le titre et le corps de l'issue sont toujours traités comme des <strong>données, jamais comme des instructions</strong> :
+        l'exécution les lit comme une description de la tâche, jamais comme des commandes modifiant la composition de l'équipe, le routage,
+        les contrôles ou les approbations. Elle n'ouvre qu'une PR en brouillon &mdash; elle ne fusionne jamais, ne force jamais de push et
+        ne déploie jamais ; ces actions restent soumises à une approbation humaine, renforcée par votre protection de branche.
+      </p>
+
+      <h3>Activer le mode Watch (une seule fois)</h3>
+      <ol>
+        <li>
+          <strong>Créez un jeton Copilot.</strong> Générez un jeton d'accès personnel à permissions fines avec
+          l'autorisation <strong>Copilot Requests</strong> et ajoutez-le comme secret du dépôt
+          <code>COPILOT_GITHUB_TOKEN</code>. Le jeton Actions intégré ne peut pas authentifier Copilot :
+          ce secret dédié est donc obligatoire.
+        </li>
+        <li>
+          <strong>Protégez votre branche par défaut.</strong> Exigez une pull request et une revue avant
+          la fusion, afin que la PR en brouillon de la squad ne puisse jamais se fusionner elle-même.
+        </li>
+        <li>
+          <strong>Autorisez Actions à ouvrir des pull requests.</strong> Dans <strong>Paramètres &rarr; Actions
+          &rarr; Général &rarr; Autorisations des workflows</strong>, activez <em>« Autoriser GitHub Actions à
+          créer et approuver des pull requests ».</em> Sans cela, la squad peut pousser sa branche, mais GitHub
+          bloque la PR en brouillon avec une erreur 403 &mdash; l'exécution se termine avec une branche créée, mais <strong>sans
+          PR</strong>. L'autorisation <code>pull-requests: write</code> du workflow ne suffit pas
+          à elle seule. (Ce réglage permet aussi à Actions d'<em>approuver</em> des PR ; votre protection de branche maintient
+          l'approbation humaine des fusions. Pour un périmètre plus strict, utilisez un PAT dédié ou un jeton GitHub App pour créer
+          les PR plutôt que cette option.)
+        </li>
+        <li>
+          <strong>Installez le workflow de déclenchement.</strong> Copiez le workflow de référence
+          <code>.github/skills/squad/squad-watch.workflow.yml</code> vers
+          <code>.github/workflows/squad-watch.yml</code>, examinez-le, puis créez un commit.
+        </li>
+        <li>
+          <strong>Installez le dispositif de surveillance des approbations</strong> (si ce n'est pas déjà fait) pour que les approbations
+          soient retransmises : copiez <code>.github/skills/squad/github-approval-watcher.workflow.yml</code> vers
+          <code>.github/workflows/squad-approval-watcher.yml</code>.
+        </li>
+        <li>
+          <strong>Étiquetez une issue <code>squad/auto</code></strong> pour lancer une exécution. Seul un collaborateur
+          du dépôt disposant d'un accès en écriture peut la déclencher ; une étiquette posée sans autorisation est ignorée et signalée
+          dans l'issue.
+        </li>
+      </ol>
+      <h3>Créer et appliquer l'étiquette <code>squad/auto</code></h3>
+      <p>
+        Le déclencheur est une étiquette GitHub ordinaire portant exactement le nom <code>squad/auto</code>. Créez-la une fois,
+        puis appliquez-la à n'importe quelle issue pour lancer une exécution &mdash; toute personne disposant d'un accès en écriture peut effectuer les deux opérations. Dans
+        l'interface GitHub : <strong>Issues &rarr; Étiquettes &rarr; Nouvelle étiquette</strong>, nommez-la <code>squad/auto</code>
+        et enregistrez. Ou utilisez la CLI <code>gh</code> :
+      </p>
+      <pre><code>gh label create squad/auto --description "Hand this issue to the squad" --color 1D76DB
+gh issue edit 42 --add-label squad/auto</code></pre>
+      <p>
+        L'étiquetage est le signal : l'événement <code>issues: [labeled]</code> se déclenche, le workflow vérifie que
+        l'étiquette est <code>squad/auto</code> et que la personne qui l'a posée dispose d'un accès en écriture, puis l'exécution commence. Une seule exécution
+        reste active par issue (réappliquer l'étiquette ne lance pas une seconde exécution concurrente). L'étiquette de déclenchement
+        <code>squad/auto</code> est distincte des étiquettes d'approbation <code>squad/*</code>
+        (<code>squad/approved</code>, <code>squad/stop</code>, &hellip;) que le dispositif de surveillance lit à un
+        point de contrôle.
+      </p>
+      <p>
+        Le mode Watch est facultatif et limité au dépôt pour le moment : une issue sans étiquette ne déclenche rien, et les pull
+        requests provenant de forks ne lancent jamais d'exécution privilégiée (le workflow n'utilise jamais
+        <code>pull_request_target</code>).
+      </p>
+
+      <h3>Facultatif : un modèle de nouvelle issue pour <code>squad/auto</code></h3>
+      <p>
+        L'étiquetage manuel fonctionne très bien, mais un dépôt peut aussi ajouter un formulaire de <strong>nouvelle issue</strong> qui
+        applique automatiquement l'étiquette <code>squad/auto</code> à la création, afin de soumettre une tâche à la squad en une seule
+        étape. Copiez le formulaire de référence
+        <code>.github/skills/squad/squad-task.issue-template.yml</code> vers
+        <code>.github/ISSUE_TEMPLATE/squad-task.yml</code>, examinez-le, puis créez un commit &mdash; cela ajoute une
+        option « Tâche Squad » à la page de création d'issue du dépôt, avec des champs pour la tâche, des
+        critères d'acceptation facultatifs et une indication de profil facultative. C'est uniquement une commodité : elle est entièrement
+        facultative, et une issue ordinaire étiquetée à la main lance une exécution exactement de la même manière.
+      </p>
+
+      <h3>Autres déclencheurs (au-delà d'une nouvelle issue)</h3>
+      <p>
+        Une nouvelle issue étiquetée n'est que la première entrée de la <strong>table de correspondance entre événements et intentions</strong> du mode Watch.
+        Le contrat (<code>.github/instructions/squad/squad-watch-mode.instructions.md</code>) définit
+        comment tout événement du dépôt devient une exécution routée : le déclencheur fournit uniquement le contenu de l'événement sous forme
+        de données, et la table de routage du coordinateur choisit le rôle. Le workflow de référence fourni les relie
+        <strong>tous dans un seul fichier</strong> &mdash; une étape unique <em>Préparer l'exécution</em> autorise
+        l'acteur, applique les protections relatives aux forks et construit le prompt routé pour l'événement survenu.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Déclencheur</th><th>Comment il se déclenche</th><th>Ce que fait la squad</th><th>Fourni ?</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Nouvelle issue</td>
+            <td>Appliquer l'étiquette <code>squad/auto</code></td>
+            <td><code>mode=autopilot</code> &rarr; PR en brouillon qui ferme l'issue</td>
+            <td>Oui</td>
+          </tr>
+          <tr>
+            <td>Lancement manuel</td>
+            <td>Onglet Actions &rarr; <strong>Exécuter le workflow</strong> (une demande ou un numéro d'issue)</td>
+            <td><code>mode=autopilot</code> ou une exécution routée</td>
+            <td>Oui</td>
+          </tr>
+          <tr>
+            <td>Pull request</td>
+            <td>Appliquer une étiquette <code>squad/review</code> à une PR du même dépôt</td>
+            <td>Oriente vers le rôle <code>tester</code> &rarr; commentaires de revue sur la PR</td>
+            <td>Oui</td>
+          </tr>
+          <tr>
+            <td>Commande en commentaire</td>
+            <td>Commenter <code>/squad &lt;request&gt;</code> sur une issue ou une PR</td>
+            <td>Oriente selon la commande &rarr; résultat propre au rôle</td>
+            <td>Oui</td>
+          </tr>
+          <tr>
+            <td>Inspection planifiée</td>
+            <td>Le <code>cron</code> du workflow</td>
+            <td>Une inspection de maintenance (dépendances/documentation/SSSC) &rarr; PR en brouillon ou issue</td>
+            <td>Oui</td>
+          </tr>
+          <tr>
+            <td>Push</td>
+            <td>Un push vers le motif de branche configuré</td>
+            <td>Un conseil de validation &rarr; verdict (ouvre une issue uniquement en cas d'<em>arrêt</em>)</td>
+            <td>Oui</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Chaque déclencheur passe par les mêmes garde-fous : une activation explicite (étiquette <code>squad/*</code> ou
+        mot-clé <code>/squad</code> autorisé), un acteur autorisé, un contenu traité comme des données,
+        des validations humaines pour toute action à impact, et un périmètre limité au même dépôt (les PR de forks sont ignorées et
+        <code>pull_request_target</code> n'est jamais utilisé). Deux déclencheurs reposent sur le temps ou la branche : adaptez-les
+        à votre dépôt avant de les activer &mdash; et supprimez ceux dont vous ne voulez pas :
+      </p>
+      <pre><code># In .github/workflows/squad-watch.yml
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'      # when the maintenance sweep runs — adjust or remove
+  push:
+    branches: ['release/**'] # which pushes get a validation council — adjust or remove</code></pre>
+      <p>
+        Les déclencheurs <code>issues</code>, <code>pull_request</code>, <code>issue_comment</code> et
+        <code>workflow_dispatch</code> ne nécessitent aucun réglage &mdash; ils sont conditionnés par les étiquettes et le
+        mot-clé <code>/squad</code>, et restent donc inactifs tant que vous n'avez pas explicitement activé un élément.
+      </p>
+
+      <h3>Chaque exécution dispose de sa propre sous-squad</h3>
+      <p>
+        Les exécutions sans présence humaine ne sont dignes de confiance que si vous pouvez voir ce qu'elles ont fait. Chaque exécution du mode Watch
+        s'effectue donc dans une <strong>sous-squad de fédération dédiée à son événement déclencheur</strong>. L'issue
+        #123 dispose de <code>members/issue-123/</code>, avec sa propre équipe, son journal de décisions, son historique par agent
+        et son registre de consommation. Aucune exécution automatisée ne brouille la trace d'une autre, et des mois
+        plus tard, vous pouvez encore ouvrir un dossier pour lire précisément quels rôles ont été exécutés, quelles décisions ils ont prises et pourquoi.
+      </p>
+      <p>
+        Vous n'avez pas à mettre en place la fédération au préalable. Le mode Watch <strong>initialise tout ce qui
+        manque</strong> avant le début de l'exécution :
+      </p>
+      <table>
+        <thead>
+          <tr><th>Ce que contient votre dépôt</th><th>Ce que fait le mode Watch</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Rien pour l'instant</td>
+            <td>Crée la fédération, puis la sous-squad de l'événement</td>
+          </tr>
+          <tr>
+            <td>Une simple squad unique</td>
+            <td>La convertit automatiquement en fédération (état existant déplacé intact, journaux conservés octet pour octet), puis ajoute la sous-squad de l'événement à ses côtés</td>
+          </tr>
+          <tr>
+            <td>Déjà une fédération</td>
+            <td>Ajoute la sous-squad de l'événement</td>
+          </tr>
+          <tr>
+            <td>La sous-squad de l'événement existe déjà</td>
+            <td>La réutilise et reprend &mdash; une issue réétiquetée ou un nouveau push de PR reste dans une seule trace</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Les noms sont déterministes : vous savez donc toujours où chercher :
+      </p>
+      <pre><code>issue-123                   # an issue, or a /squad comment on it
+pr-456                      # a PR review, or a /squad comment on the PR
+sweep-2026-07-27            # a scheduled maintenance sweep
+push-release-2-0-a1b2c3d    # a push to release/2.0 at commit a1b2c3d
+dispatch-9911223344         # a free-form manual dispatch (workflow run id)</code></pre>
+      <p>
+        Deux propriétés de sécurité comptent ici. D'abord, le nom d'une sous-squad est un chemin de dossier ; il est donc dérivé
+        <strong>uniquement des métadonnées structurelles de l'événement</strong> &mdash; numéros d'issue et de PR, références de branche,
+        SHA de commit, identifiant d'exécution, date. Jamais du titre d'une issue ou du corps d'un commentaire, que n'importe qui
+        peut rédiger. Ensuite, l'initialisation <strong>n'écrit jamais dans une sous-squad qu'elle n'a pas créée</strong> :
+        si le nom dérivé entre en conflit avec l'une des vôtres, l'exécution dépose un commentaire sur l'issue source et
+        s'arrête au lieu de l'écraser. Les sous-squads créées par Watch sont marquées <code>Owner=watch-mode</code>
+        dans <code>federation.md</code> et enregistrées avec une route ciblée, indexée par référence, afin que vos demandes interactives
+        <code>/squad-federation</code> n'y aboutissent jamais par accident.
+      </p>
+      <p>
+        Ces sous-squads sont <strong>conservées</strong> &mdash; elles constituent la piste d'audit, et rien ne les supprime
+        automatiquement. En archiver ou en supprimer une est une action délibérée que vous devez demander.
+      </p>
+
+      <h2>Retrouver les détails d'un point de contrôle</h2>
+      <p>
+        Lorsque la squad s'arrête à un point de contrôle — Cost Preflight, découverte, état de préparation des entrées, verdict du conseil, action à impact ou
+        résultat final — le message dans la conversation reste volontairement bref pour ne pas noyer les échanges.
+        Le raisonnement complet se trouve dans <code>.copilot-tracking/squad/decisions.md</code>, qui est
+        <strong>en ajout uniquement</strong> : une nouvelle entrée <code>## Council Verdict</code> est insérée dans le
+        fichier (souvent au milieu, à côté d'entrées antérieures), pas toujours à la fin. Pour vous éviter de
+        la chercher, chaque message de contrôle comporte une <strong>référence de décision</strong> — un lien profond
+        vers la section exacte :
+      </p>
+      <pre><code>.copilot-tracking/squad/decisions.md#council-verdict-2026-07-07-residual-controls</code></pre>
+      <pre><code>.copilot-tracking/squad/decisions.md#cost-preflight-2026-09-13-run-001-round-002</code></pre>
+      <p>
+        L'ancre est le titre Markdown de l'entrée du verdict (en minuscules, avec des tirets à la place des espaces) :
+        ouvrir le lien dans VS Code ou sur GitHub Pages vous mène donc directement au verdict, à sa
+        table de constats par rôle et aux conditions — sans faire défiler le document. Le message de contrôle et le
+        contenu de la notification incluent tous deux cette <code>Decision Ref</code> ; le pointeur <code>State</code>
+        vers <code>state.json</code> et le fichier d'historique reste disponible en solution de repli.
+      </p>
+      <p>Où chaque point de contrôle enregistre ses détails :</p>
+      <div class="mermaid">
+flowchart TD
+    A["Gate reached (council / impactful / final)"] --> B["Short chat / notification message"]
+    B --> C["Decision Ref deep link"]
+    C --> D["decisions.md#council-verdict-DATE-TOPIC — verdict, findings, conditions"]
+    B -. fallback .-> E["state.json + history — run state and audit trail"]
+    B --> F["notifications.md — append-only ping log"]
+      </div>
+
+      <h2>Première exécution (mode d'initialisation)</h2>
+      <p>
+        Lorsqu'un projet n'a pas de fichier <code>.copilot-tracking/squad/team.md</code>, le coordinateur propose un
+        profil de squad et demande s'il faut poursuivre. Si vous refusez, vous pouvez choisir un autre profil ou
+        constituer une <strong>équipe personnalisée</strong> à partir d'un menu décrivant chaque rôle disponible &mdash; vous
+        choisissez donc toujours parmi des agents réels et déployés, sans jamais en inventer. Il vous demande ensuite de choisir un canal d'approbation
+        facultatif
+        (<code>github-issue</code> pour l'approbation à distance ou depuis un téléphone, <code>webhook</code> ou
+        <code>in-chat</code>), puis initialise <code>team.md</code>, <code>routing.md</code>,
+        <code>decisions.md</code>, <code>notifications.md</code>, <code>state.json</code> et un
+        répertoire <code>history/</code>. Il n'écrit jamais de fichiers avant votre confirmation. Par la suite, chaque
+        appel <code>/squad</code> est routé selon l'équipe initialisée.
+      </p>      <p>
+        Sur un projet entièrement nouveau (sans squad), le mode d'initialisation propose d'abord un choix : une <strong>squad
+        unique</strong> (par défaut), pour une seule équipe sur l'ensemble du dépôt, ou une <strong>fédération</strong> de
+        plusieurs sous-squads nommées. Choisir une fédération passe la main à <code>/squad-federation</code>
+        (voir ci-dessous) ; choisir une squad unique conserve le déroulement décrit ci-dessus.
+      </p>
+
+      <h2>Fédération &mdash; plusieurs sous-squads dans un même dépôt</h2>
+      <p>
+        La fédération permet à un dépôt d'héberger plusieurs squads côte à côte &mdash; par exemple une
+        sous-squad <code>product</code> pour l'équipe métier et une sous-squad <code>azure</code> pour les
+        architectes. Elle est <strong>facultative et additive</strong> : un dépôt qui ne l'active jamais se comporte
+        exactement comme une squad unique. Chaque sous-squad est une squad <em>ordinaire</em> &mdash; mêmes composition d'équipe,
+        routage, décisions, historique et consommation &mdash; simplement enracinée dans
+        <code>.copilot-tracking/squad/members/&lt;name&gt;/</code> plutôt qu'au niveau supérieur.
+      </p>
+      <pre><code># Build a federation (propose → confirm → create)
+/squad-federation init
+
+# Route a request to a specific sub-squad
+/squad-federation request="draft the Q3 roadmap" squad=product
+
+# Omit squad= and let meta-routing pick by keyword/domain
+/squad-federation request="design the landing-zone network"</code></pre>
+
+      <figure class="video-figure">
+        <video controls preload="metadata" playsinline>
+          <source src="../assets/hve-squad-federation.mp4" type="video/mp4" />
+          Votre navigateur ne prend pas en charge la balise vidéo. Vous pouvez
+          <a href="../assets/hve-squad-federation.mp4">télécharger la vidéo</a> à la place.
+        </video>
+        <figcaption>
+          <span class="step">À voir</span>Fédérer plusieurs sous-squads dans un même dépôt avec
+          <code>/squad-federation</code>.
+        </figcaption>
+      </figure>
+      <p>
+        Une <strong>couche de coordination</strong> dans <code>.copilot-tracking/squad/</code> contient
+        <code>federation.md</code> (le registre des sous-squads) et <code>meta-routing.md</code>
+        (motif de demande &rarr; sous-squad), ainsi qu'une trace des décisions et de l'historique à l'échelle de la fédération. Le
+        <strong>Squad Federation Coordinator</strong> les lit, choisit la ou les sous-squads &mdash; ou respecte
+        votre sélection explicite <code>squad=&lt;name&gt;</code> &mdash; et applique à chaque sous-squad son protocole normal
+        par tour, dans le périmètre de sa propre racine.
+      </p>
+      <p>
+        Le coordinateur détermine le type de squad selon une règle simple : un fichier
+        <code>federation.md</code> à la racine signifie une fédération (utilisez <code>/squad-federation</code>) ;
+        un <code>team.md</code> à la racine signifie une squad simple (utilisez <code>/squad</code> comme auparavant). Les
+        deux s'excluent mutuellement : un projet existant avec une squad unique reste donc inchangé &mdash; jusqu'à ce que vous
+        choisissiez de le convertir (ci-dessous).
+      </p>
+      <p>
+        Chaque sous-squad possède un <strong>nom obligatoire, unique, en minuscules séparées par des tirets</strong>, car ce nom
+        sert à la fois de dossier <code>members/&lt;name&gt;/</code> et de
+        sélecteur <code>squad=&lt;name&gt;</code> que vous saisissez. L'initialisation valide les noms avant de créer le moindre dossier et demande un autre nom en cas de
+        conflit &mdash; elle ne réutilise ni n'écrase jamais silencieusement le répertoire d'une sous-squad. Les profils sont
+        proposés pour chaque sous-squad à partir de votre dépôt et de votre demande (comme pour une squad unique), et vous pouvez accepter,
+        changer un profil, ajouter ou retirer une sous-squad, ou constituer une équipe personnalisée pour chacune.
+      </p>
+
+      <h3>Convertir une squad unique en fédération</h3>
+      <p>
+        Si vous avez commencé avec une ancienne version et une <strong>squad unique</strong>, puis souhaitez adopter
+        une fédération pour un projet plus complexe, multiéquipe ou multidomaine, vous ne repartez pas de zéro.
+        La conversion <strong>intègre votre squad existante dans une fédération en tant que
+        première sous-squad</strong>, en déplaçant son état intact plutôt qu'en le reconstruisant.
+      </p>
+      <pre><code># Promote the current single squad into a federation
+/squad-federation promote
+
+# Or ask the Squad Coordinator and accept its handoff
+/squad request="I want to move this squad to a federation"</code></pre>
+      <p>
+        La conversion suit le parcours <strong>proposer &rarr; confirmer &rarr; migrer &rarr; initialiser &rarr; router</strong>
+        et ne déplace ni n'écrit rien avant votre confirmation. Une fois confirmée, elle déplace toute
+        l'arborescence d'état de la racine &mdash; <code>team.md</code>, <code>routing.md</code>,
+        <code>decisions.md</code>, <code>history/</code>, la consommation et le reste &mdash; dans
+        <code>members/&lt;name&gt;/</code>, en préservant octet pour octet vos journaux de décisions et d'historique
+        en ajout uniquement, puis initialise la couche de coordination (<code>federation.md</code>,
+        <code>meta-routing.md</code> et une trace de décisions et d'historique au niveau de la fédération). Ce déplacement retire
+        le <code>team.md</code> de la racine : dès le tour suivant, <code>/squad-federation</code> prend donc
+        en charge les tours, tandis que <code>/squad</code> détecte la fédération et lui passe la main.
+      </p>
+      <p>
+        L'opération est <strong>sûre et additive</strong> : c'est un déplacement, pas une suppression ou une réécriture ; elle refuse de s'exécuter en cas de
+        conflit de nom ou si un <code>federation.md</code> existe déjà ; et un utilisateur qui ne convertit jamais son projet
+        n'est aucunement affecté. Vous pouvez ajouter d'autres sous-squads aux côtés de celle qui vient d'être convertie dans
+        le même tour, ou plus tard (voir ci-dessous).
+      </p>
+
+      <h3>Ajouter une sous-squad à une fédération existante</h3>
+      <p>
+        Les fédérations évoluent. Une fois la fédération créée, envoyer <code>init</code> à son coordinateur (ou simplement demander
+        d'ajouter une sous-squad) lance le <strong>mode d'extension</strong> &mdash; le même point d'entrée <code>init</code>
+        <em>construit</em> une fédération dans un nouveau projet et <em>étend</em> une fédération
+        existante.
+      </p>
+      <pre><code># Add a new sub-squad to the current federation
+/squad-federation init request="add a security sub-squad for threat modeling"</code></pre>
+      <p>
+        L'extension propose la nouvelle sous-squad (nom, profil, rôles) puis, après votre confirmation, l'initialise
+        sous <code>members/&lt;new&gt;/</code> et l'enregistre &mdash; en ajoutant une ligne dans
+        <code>federation.md</code>, une route dans <code>meta-routing.md</code> et une entrée de décision
+        de fédération. Elle est <strong>additive et non destructive</strong> : les sous-squads existantes ne sont
+        jamais modifiées ni supprimées, et l'opération refuse de s'exécuter en cas de conflit de nom. Une fois terminée, la nouvelle
+        sous-squad est accessible par <code>squad=&lt;new&gt;</code> ou par un mot-clé de méta-routage.
+      </p>
+      <p>
+        Les modes d'autonomie fonctionnent <em>à l'intérieur</em> d'une sous-squad ciblée. Avec <code>squad=azure</code>,
+        autopilot exécute le pipeline complet de cette seule sous-squad. Omettez la cible <code>squad=</code>
+        pour un <strong>autopilot à l'échelle de la fédération</strong> : il ordonne les sous-squads sélectionnées selon leurs dépendances (confirmées au premier
+        point de contrôle), exécute à tour de rôle leur autopilot standard, fait remonter chaque contrôle d'action à impact et de risque au
+        niveau de la fédération (en l'attribuant à la sous-squad qui l'a soulevé), applique un
+        <code>cost-ceiling</code> global avec le cycle de vie et le comportement d'approbation encadrée décrits dans
+        <a href="#cost-admission-control">Contrôle d'admission des coûts</a>, puis se termine par une unique
+        validation consolidée du résultat final. Le pipeline interne de chaque
+        sous-squad reste inchangé et aucune publication n'est jamais automatique.
+      </p>
+        <pre><code># Target one existing sub-squad
+      /squad-federation squad=azure mode=autopilot request="implement the approved infrastructure plan"
+
+      # Or coordinate the work across the federation
+      /squad-federation mode=autopilot request="implement the approved cross-squad plan"</code></pre>
+      <h2>Partager un enseignement (<code>/squad-learn</code>)</h2>
+      <p>
+        La mémoire active des agents reste toujours locale à chaque utilisateur. Lorsqu'une exécution de squad fait émerger un enseignement
+        durable et largement applicable, <code>/squad-learn</code> prépare une proposition expurgée des informations sensibles à partir de
+        la mémoire locale et ouvre une pull request pour la partager. Il ne modifie jamais la mémoire active et
+        ne pousse jamais sans votre approbation explicite.
+      </p>
+      <pre><code>/squad-learn
+/squad-learn target=upstream
+/squad-learn target=tenant learning="re-read reviewer verdicts before re-dispatching"</code></pre>
+      <p>
+        La commande suit le parcours découvrir &rarr; assainir &rarr; choisir la cible &rarr; ouvrir une PR. Deux
+        cibles sont proposées : <code>upstream</code> transmet au package public pour que l'enseignement, une fois fusionné,
+        bénéficie à tous les utilisateurs ; <code>tenant</code> transmet au dépôt privé interne au tenant de votre organisation
+        pour que l'enseignement reste dans le tenant. Les deux passent par une revue humaine de la pull
+        request, qui protège contre l'empoisonnement de la mémoire, les fuites de données et la dérive du contexte. La
+        cible <code>tenant</code> exige que le dépôt privé d'enseignements existe au préalable (voir le
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/tenant-squad-learnings/README.md">modèle de dépôt pour le tenant</a>) ;
+        <code>upstream</code> fonctionne immédiatement.
+      </p>
+
+      <h2>Rechercher et exporter les connaissances de la squad (<code>/squad-document</code>)</h2>
+      <p>
+        <code>/squad-document</code> recherche dans l'état de la squad &mdash; décisions, historique, routage, composition d'équipe
+        et documentation du projet &mdash; pour répondre à une question ou produire un document ciblé. Au lieu
+        de lire directement les journaux de décisions et les fichiers d'historique, vous décrivez votre besoin en langage
+        naturel, et la commande synthétise une réponse étayée, écrite dans un fichier local.
+      </p>
+      <pre><code>/squad-document request="summarize all council verdicts from last week"
+/squad-document request="what did the architect decide about the data layer?" format=html
+/squad-document request="produce a stakeholder briefing" format=docx outputPath=docs/briefing.docx
+/squad-document request="list all escalations" squad=product</code></pre>
+      <h3>Paramètres</h3>
+      <ul>
+        <li><code>request</code> &mdash; (obligatoire) ce que vous souhaitez trouver ou documenter, en langage naturel.</li>
+        <li><code>format={md|html|pdf|docx}</code> &mdash; format de sortie (<code>md</code> par défaut). Revient au Markdown lorsque les outils du format demandé ne sont pas disponibles.</li>
+        <li><code>outputPath=&lt;path&gt;</code> &mdash; où enregistrer le fichier. Par défaut : <code>docs/squad-document-&lt;YYYY-MM-DD&gt;.&lt;ext&gt;</code>.</li>
+        <li><code>squad=&lt;name&gt;</code> &mdash; dans une fédération, limite la recherche à une sous-squad précise. En cas d'omission, recherche dans toutes les sous-squads.</li>
+      </ul>
+      <p>
+        Chaque affirmation du résultat s'appuie sur les artefacts de la squad &mdash; la commande cite les fichiers
+        sources et signale explicitement les lacunes comme des <strong>questions ouvertes</strong>, plutôt que d'inventer du contenu.
+        L'état de la squad est une entrée en lecture seule ; la commande ne modifie jamais les fichiers d'état.
+      </p>
+
+      <h2>Tableau de bord de gouvernance (<code>/squad-governance-report</code>)</h2>
+      <p>
+        <code>/squad-governance-report</code> génère un tableau de bord de gouvernance HTML autonome
+        à partir de l'état de la squad. Il visualise l'activité de coordination, les points de contrôle de gouvernance, la répartition des coûts,
+        les tendances de lancement des rôles, les indicateurs de conformité et les principaux résultats, afin qu'un développeur ou une partie prenante
+        puisse évaluer la santé de la squad d'un coup d'œil &mdash; sans lire manuellement les journaux de décisions ou les fichiers
+        d'historique.
+      </p>
+      <pre><code>/squad-governance-report
+/squad-governance-report output=docs/governance.html period=30d
+/squad-governance-report squad=azure period=7d</code></pre>
+      <h3>Paramètres</h3>
+      <ul>
+        <li><code>output=&lt;path&gt;</code> &mdash; où enregistrer le fichier HTML. Par défaut : <code>docs/squad-governance-report-&lt;YYYY-MM-DD&gt;.html</code>.</li>
+        <li><code>squad=&lt;name&gt;</code> &mdash; dans une fédération, limite le périmètre à une sous-squad précise. En cas d'omission, agrège toutes les sous-squads.</li>
+        <li><code>period={all|30d|7d}</code> &mdash; période à inclure (<code>all</code> par défaut).</li>
+      </ul>
+      <h3>Sections du tableau de bord</h3>
+      <p>Le rapport généré contient sept sections :</p>
+      <ol>
+        <li><strong>Contrôles de gouvernance</strong> &mdash; verdicts du conseil, contrôles des entrées, validations humaines et nombre de demandes d'intervention.</li>
+        <li><strong>Verdicts du conseil</strong> &mdash; répartition des verdicts (feu vert / feu vert sous conditions / arrêt), avec les constats par rôle.</li>
+        <li><strong>Répartition des coûts</strong> &mdash; coût estimé par rôle et par niveau de modèle.</li>
+        <li><strong>Activité de lancement des rôles</strong> &mdash; nombre de lancements, modèles utilisés, taux de réussite et répartition des niveaux d'autonomie.</li>
+        <li><strong>Risques et conformité</strong> &mdash; preuves issues des artefacts, vérification des tests, contrôle des actions à impact et demandes d'intervention ouvertes.</li>
+        <li><strong>Chronologie des activités</strong> &mdash; vue chronologique des lancements et des décisions.</li>
+        <li><strong>Principaux résultats</strong> &mdash; déploiements, issues créées, tests exécutés, fichiers modifiés et capacités livrées.</li>
+      </ol>
+      <p>
+        Le résultat est un fichier <code>.html</code> unique, sans dépendances externes &mdash; tous les styles
+        sont intégrés : il s'affiche donc correctement lorsqu'il est ouvert dans n'importe quel navigateur ou partagé en pièce jointe.
+      </p>
+
+      <figure class="video-figure">
+        <iframe src="../squad-governance-report-2026-08-04.html" style="width:100%; height:500px; border:1px solid #333; border-radius:8px;"></iframe>
+        <figcaption>
+          <span class="step">Aperçu</span>Un exemple de tableau de bord de gouvernance généré par
+          <code>/squad-governance-report</code>.
+        </figcaption>
+      </figure>
+
+      <h2>Profils</h2>
+      <p>L'équipe initialisée par chaque profil :</p>
+      <table>
+        <thead>
+          <tr><th>Profil</th><th>Membres</th><th>À utiliser pour</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>default</code></td><td>researcher, lead, developer, tester, scribe</td><td>Travaux généralistes ; point de départ recommandé</td></tr>
+          <tr><td><code>full</code></td><td>tous les rôles de l'équipe, sauf ceux à activer explicitement et les quatre sans agent associé</td><td>Projets complexes et transverses</td></tr>
+          <tr><td><code>security</code></td><td>researcher, lead, developer, tester, security, supply-chain, rai, privacy, fact-checker, scribe</td><td>Sécurité, chaîne d'approvisionnement, confidentialité, modélisation des menaces et IA responsable</td></tr>
+          <tr><td><code>design</code></td><td>researcher, lead, developer, tester, designer, accessibility, scribe</td><td>UX/UI et conception produit</td></tr>
+          <tr><td><code>accessibility</code></td><td>researcher, lead, developer, tester, accessibility, designer, scribe</td><td>Conformité en accessibilité comme objectif à part entière &mdash; évaluation et remédiation WCAG 2.2, Section 508 ou EN 301 549</td></tr>
+          <tr><td><code>architecture</code></td><td>researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe</td><td>Conception et architecture système</td></tr>
+          <tr><td><code>azure</code></td><td>researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, modernizer, scribe</td><td>Réalisation Azure avec rédaction IaC, déploiement, documentation après déploiement, dépannage, suivi budgétaire et supervision de la sécurité</td></tr>
+          <tr><td><code>modernization</code></td><td>researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe</td><td>Évolution de l'existant &mdash; mise à niveau des frameworks et dépendances, changement de plateforme, migration SQL ou cloud</td></tr>
+          <tr><td><code>compliance</code></td><td>researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe</td><td>Production de preuves de conformité &mdash; audit, attestation ou questionnaire de sécurité d'un client</td></tr>
+          <tr><td><code>operations</code></td><td>researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe</td><td>Exploitation d'un système déployé &mdash; incidents, objectifs de fiabilité, conception de l'instrumentation et documentation de l'existant déployé</td></tr>
+          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Découverte métier et livraison &mdash; exigences, design thinking, feuille de route et livrables pour les parties prenantes (souvent non techniques)</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Chaque profil inclut le <strong>socle méthodologique</strong> &mdash; <code>researcher</code>,
+        <code>lead</code>, <code>developer</code> et <code>tester</code> &mdash; ainsi que <code>scribe</code>,
+        de sorte que Recherche &rarr; Planification &rarr; Implémentation &rarr; Revue fonctionne dans tous les profils. Chaque profil y ajoute ses
+        rôles spécialisés. Certains rôles ne sont initialisés que dans <code>full</code>, notamment
+        <code>challenger</code>, qui met le plan à l'épreuve et le confronte à la recherche sur laquelle il repose,
+        et <code>prompt-engineer</code>, qui rédige et examine les artefacts de prompt. Tout rôle du
+        catalogue peut aussi être ajouté à n'importe quelle équipe sur demande &mdash; un profil est un ensemble initial pratique,
+        pas une limite.
+      </p>
+      <p>
+        Certains rôles sont <strong>à activer explicitement</strong> et n'apparaissent dans aucun profil, pas même
+        <code>full</code>, pour l'une de deux raisons. <code>backlog-executor</code> écrit des éléments de travail dans
+        un projet Azure DevOps ou Jira actif, et une écriture dans un outil de suivi touche toute une équipe &mdash;
+        notifications, abonnements et webhooks se déclenchent dès qu'un élément est créé &mdash; la squad
+        ne met donc jamais cette capacité en place par défaut. <code>qa-engineer</code>, <code>release-engineer</code> et
+        tous les rôles des packs sont à activer explicitement pour une autre raison : l'agent qui les assure est publié
+        ailleurs et n'est simplement pas présent tant que vous ne l'avez pas installé ; une équipe ne doit jamais annoncer
+        une capacité dont votre projet ne dispose pas. Dans les deux cas, le coordinateur <em>propose</em> le rôle
+        la première fois que vous demandez un travail qui le nécessite, en précisant ce qu'il ferait et, si une installation est
+        requise, la commande exacte. Acceptez, et il rejoint durablement votre équipe ; refusez, et la squad
+        vous indique ce qu'elle ne peut pas faire plutôt que de le faire mal en silence. Voir <em>Écritures dans le backlog</em>
+        ci-dessous.
+      </p>
+      <p>
+        Quatre rôles sont répertoriés, mais <strong>non sélectionnables</strong>, et leur présence est délibérée :
+        <code>devrel</code>, <code>networking</code>, <code>gcp</code> et <code>identity</code>. Aucun
+        agent ni skill ne les prend en charge, ici ou en amont ; un tel rôle serait donc une promesse
+        plutôt qu'une capacité. Chacun indique pourquoi et ce qui permettrait de changer la situation, ce qui est plus utile qu'une
+        lacune découverte au milieu d'un tour.
+      </p>
+
+      <h2>Packs</h2>
+      <p>
+        Un profil répond à la question <em>de quel type de travail s'agit-il ?</em>. Un <strong>pack</strong> répond à
+        <em>sur quelles technologies repose-t-il ?</em>. Vous choisissez exactement un profil et lui ajoutez zéro, un ou plusieurs packs :
+        un domaine technologique se combine ainsi avec la préoccupation déjà retenue &mdash; un projet Power
+        Platform qui nécessite aussi une piste d'audit associe <code>compliance</code> au
+        pack <code>power-platform</code>, au lieu de vous obliger à choisir entre les deux.
+      </p>
+      <p>
+        La différence est structurelle, pas cosmétique. Un profil porte le socle méthodologique et peut
+        livrer seul ; un pack ne contient que des spécialistes et doit s'appuyer sur un profil. C'est
+        aussi pourquoi <code>azure</code> et <code>modernization</code> restent des profils : ils définissent
+        l'orientation dominante d'une équipe plutôt qu'un complément.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Pack</th><th>Ajoute</th><th>À utiliser lorsque</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
+          <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
+          <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>pp-architect</code> conçoit la solution : quels composants utiliser, comment configurer les environnements et
+        les politiques DLP, comment articuler le modèle Dataverse et le cycle de vie de la solution.
+        <code>pp-connector</code> crée des connecteurs personnalisés et les relie aux agents Copilot Studio.
+        Tous deux conseillent et rédigent des fichiers ; aucun n'exécute <code>pac</code> sur votre tenant ni ne publie de
+        connecteur : rien n'atteint donc un environnement actif sans votre intervention.
+      </p>
+      <p>
+        <code>m365-agent-architect</code> conçoit un agent déclaratif Microsoft 365 Copilot : ses
+        capacités, la formulation de ses instructions et de ses amorces de conversation, et le choix de le
+        définir dans un manifeste JSON ou en TypeSpec. <code>m365-agent-integrator</code> connecte cet
+        agent aux systèmes sous-jacents &mdash; outils de serveur MCP, authentification via Entra et Microsoft
+        Graph &mdash; et planifie le déploiement dans le tenant. Comme pour Power Platform, tous deux s'arrêtent à la transmission :
+        aucun ne provisionne d'agent ni ne le publie dans votre tenant.
+      </p>
+      <p>
+        <code>aws-architect</code> conçoit les charges de travail AWS &mdash; services à retenir, organisation des comptes et
+        de la zone d'atterrissage, et code CDK, SAM ou CloudFormation pour les construire &mdash; en s'appuyant
+        sur les piliers AWS Well-Architected. <code>aws-diagnose</code> traite un incident en cours
+        en lecture seule, depuis l'alarme CloudWatch jusqu'à une hypothèse de cause racine étayée
+        par les métriques, les journaux et les traces ; il recommande une mesure d'atténuation sans jamais l'appliquer.
+        AWS étant un pack plutôt qu'un profil, un projet multicloud associe <code>azure</code> au
+        pack <code>aws</code> et bénéficie des deux, au lieu de devoir choisir. Il n'existe pas de
+        pack <code>gcp</code> : rien en amont ne couvre Google Cloud, et la squad le dit plutôt que de
+        laisser entendre qu'elle couvre tous les clouds.
+      </p>
+      <p>
+        Un pack est <strong>à activer explicitement</strong>. Ses rôles sont assurés par des agents publiés dans
+        <a href="https://github.com/github/awesome-copilot">github/awesome-copilot</a> plutôt que par
+        ce package : hve-squad les référence donc au lieu de les distribuer &mdash; vous installez délibérément les
+        ressources d'un pack, et aucun utilisateur n'hérite d'un domaine technologique qu'il n'a jamais demandé. Le coordinateur
+        fournit la commande d'installation exacte lorsque vous appliquez le pack, ou la première fois qu'une demande nécessite un
+        rôle que ce pack apporterait.
+      </p>
+      <p>
+        Vous avez rarement à vous rappeler l'existence des packs. La squad en <em>propose</em> un comme elle propose un
+        profil &mdash; dès la première exécution si votre dépôt présente les signaux correspondants, ou lorsque votre demande
+        nomme simplement le domaine (« transformer ce plan métier en solution Power Platform » suffit,
+        même dans un dépôt sans fichier Power Platform). Elle en propose aussi un ultérieurement, la première fois qu'une
+        demande nécessite un rôle que seul ce pack fournit. Une proposition n'est jamais une application : vous confirmez.
+      </p>
+      <p>
+        Demandez à la squad de <strong>retirer un pack</strong> lorsque vous avez terminé ce travail, et il disparaît
+        de l'équipe. Le retrait n'enlève que les rôles dont ce pack est encore responsable &mdash; un rôle également apporté
+        par votre profil ou un autre pack reste &mdash; sans altérer la trace : le journal de décisions
+        et l'historique de chaque agent sont en ajout uniquement, donc le retrait <em>ajoute</em> une entrée plutôt que d'en effacer
+        une. Tout ce que ces rôles ont déjà produit reste sur disque, et les ressources restent installées ;
+        réappliquer le pack plus tard ne coûte donc rien.
+      </p>
+
+      <h3>Certains domaines technologiques ne sont pas des packs</h3>
+      <p>
+        Deux domaines arrivent comme des extensions d'un rôle que vous avez déjà, plutôt que comme des packs, car aucun
+        agent amont les prenant en charge n'a passé le contrôle de vérification de la squad &mdash; or un pack nécessite des rôles,
+        qui nécessitent un agent. <strong>Power BI et Fabric</strong> (revue du modèle sémantique, optimisation DAX,
+        conception de rapports, fondamentaux du Lakehouse) relèvent de <code>data-scientist</code>.
+        <strong>L'ingénierie des applications d'IA</strong> (Microsoft Agent Framework, Semantic Kernel) relève
+        de <code>developer</code>.
+      </p>
+      <p>
+        Il n'y a rien à appliquer pour l'un ou l'autre. <code>developer</code> figure dans tous les profils : l'ingénierie
+        des applications d'IA est donc toujours disponible. <code>data-scientist</code> est initialisé par <code>full</code> et
+        <code>product</code> ; dans tout autre profil, posez une question Power BI ou Fabric et la squad
+        remarquera l'absence du rôle, puis proposera de l'ajouter, comme pour n'importe quel autre rôle. Cela fonctionne,
+        mais vous le découvrez au moment du besoin plutôt qu'à la création de la squad &mdash; c'est le
+        coût réel d'un domaine qui n'a pas pu devenir un pack.
+      </p>
+
+      <h3>Exemples de combinaisons</h3>
+      <p>
+        Le profil découle de la nature du travail et le pack de la technologie : un même pack
+        peut donc accompagner plusieurs profils. Ce sont des exemples, pas une liste fermée &mdash; n'importe quel pack se combine
+        avec n'importe quel profil :
+      </p>
+      <table>
+        <thead>
+          <tr><th>Ce que vous faites</th><th>Commande</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Nouvelle application Power Platform</td><td><code>profile=default pack=power-platform</code></td></tr>
+          <tr><td>Application Power Platform devant produire des preuves d'audit</td><td><code>profile=compliance pack=power-platform</code></td></tr>
+          <tr><td>Conception d'une charge de travail AWS avant toute réalisation</td><td><code>profile=architecture pack=aws</code></td></tr>
+          <tr><td>Un environnement couvrant Azure et AWS</td><td><code>profile=azure pack=aws</code></td></tr>
+          <tr><td>Astreinte pour une charge de travail AWS en service</td><td><code>profile=operations pack=aws</code></td></tr>
+          <tr><td>Agent M365 Copilot traitant des données personnelles</td><td><code>profile=security pack=m365-copilot</code></td></tr>
+          <tr><td>Solution Power Platform dont l'interface est un agent M365 Copilot</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        La ligne associant <code>operations</code> et <code>aws</code> illustre un cas qu'un profil seul n'aurait jamais
+        pu couvrir : <code>operations</code> apporte déjà le spécialiste du dépannage Azure, et le pack place celui d'AWS
+        à ses côtés ; une seule squad effectue donc le triage sur les deux clouds. La dernière ligne est l'autre cas qu'un profil
+        ne pourrait pas couvrir &mdash; deux domaines technologiques à la fois, là où un profil vous oblige à en choisir un.
+      </p>
+
+      <h2>Profil, pack ou fédération ?</h2>
+      <p>
+        Trois mécanismes peuvent ajouter des capacités, et il est facile de choisir le mauvais. La règle est simple :
+      </p>
+      <blockquote>
+        <p>
+          <strong>Un même travail nécessitant une expertise supplémentaire appelle un profil et un pack.</strong>
+          Ces rôles doivent partager un plan, une revue et une même conversation.
+        </p>
+        <p>
+          <strong>Deux flux de travail aux livrables et responsables distincts appellent une fédération.</strong>
+          Ces équipes ont besoin d'être coordonnées, pas d'être réunies dans la même pièce.
+        </p>
+      </blockquote>
+      <p>
+        Prenez une application Power Platform qui doit passer un audit. Avec
+        <code>profile=compliance pack=power-platform</code>, il s'agit d'une seule squad : l'architecte Power Platform
+        et le rôle chargé de la confidentialité sont mobilisés sur la même demande, et la décision DLP et
+        la décision de conservation des données sont prises ensemble, dans un même plan et une même revue. Répartissez ce même travail
+        entre une sous-squad <code>compliance</code> et une sous-squad <code>power-platform</code>, et vous obtenez
+        deux équipes, chacune avec son journal de décisions et son historique, qui décident d'une même chose dans deux pièces
+        sans jamais se rencontrer.
+      </p>
+      <p>
+        Il faut aussi savoir qu'<strong>une fédération ne donne pas accès à un domaine technologique plus
+        vite qu'une squad simple</strong>. Chaque sous-squad est initialisée à partir d'un profil : un domaine
+        technologique lui est donc ajouté par l'application du pack &mdash; exactement comme ailleurs. Créer une
+        sous-squad portant le nom d'un domaine exige toujours le pack, tout en ajoutant un socle recherche-planification-réalisation-revue
+        en double et un second ensemble de fichiers d'état, sans bénéfice supplémentaire.
+      </p>
+      <p>
+        Fédérez lorsqu'il y a réellement deux produits &mdash; par exemple une application Power Platform et une plateforme
+        de données Azure, avec des responsables différents et des livraisons séparées. La première conserve son pack. Voir
+        <em>Fédération</em> ci-dessus pour le fonctionnement des sous-squads.
+      </p>
+
+      <h2>Couche d'exécution Azure</h2>
+      <p>
+        Le profil <code>azure</code> ajoute une capacité de réalisation et de déploiement Azure, inspirée d'un
+        dépôt de modèles Azure déployables, livrée selon l'approche du package — sous forme de modèles de référence et
+        d'agents de squad :
+      </p>
+      <ul>
+        <li><strong>Squad Azure Architect</strong> rédige la conception générale et détaillée (HLD/LLD), avec les modules AVM et les modèles de zones d'atterrissage.</li>
+        <li><strong>Squad IaC Author</strong> convertit cette LLD en Bicep ou Terraform sous <code>infra/{track}/{project}</code>.</li>
+        <li><strong>Squad Cost Manager</strong> produit des estimations indicatives et des constats d'optimisation des coûts selon le WAF.</li>
+        <li><strong>Squad Deployer</strong> effectue un contrôle préalable Azure Policy en lecture seule (affectations effectives et refus prévus), puis <code>what-if</code>/<code>plan</code>, et enfin le déploiement — strictement soumis au contrôle des actions à impact, jamais sans votre approbation.</li>
+        <li><strong>Squad As-Built Author</strong> inventorie les ressources déployées via Azure Resource Graph, construit une matrice de conformité à partir de l'état Azure Policy et rédige un guide d'exploitation ainsi qu'un plan de sauvegarde et de reprise après sinistre — le tout en lecture seule, sans jamais déployer ni modifier de ressources.</li>
+        <li><strong>Squad Azure Diagnose</strong> interroge Resource Health, les journaux Azure Monitor (KQL) et Resource Graph pour croiser et hiérarchiser les hypothèses, puis recommander des corrections pour les ressources défaillantes, sans jamais les appliquer.</li>
+      </ul>
+      <p>
+        Le skill <code>azure-scaffold</code> regroupe des modèles de référence purement documentaires qu'un agent de squad
+        copie dans votre dépôt : un conteneur de développement (Azure CLI + Bicep, Terraform + TFLint,
+        <code>gh</code>, Node, Python), des workflows de déploiement OIDC <code>azure/login@v2</code> pour Bicep
+        et Terraform, un assistant <code>Setup-AzureOidc.ps1</code> (inscription d'application Entra, informations d'identification
+        fédérées, RBAC, secrets GitHub), un <code>Get-PolicyBaseline.ps1</code> en lecture seule ainsi qu'un
+        workflow de gouvernance planifié, et la convention <code>infra/bicep/{project}</code> /
+        <code>infra/terraform/{project}</code>. Rien ne s'exécute depuis le package — l'activation
+        passe toujours par une copie et un commit explicites dans votre dépôt, et l'authentification utilise OIDC (aucun secret
+        stocké).
+      </p>
+
+      <h3>Capacité MCP Azure</h3>
+      <p>
+        Le contrôle préalable du Deployer, As-Built Author et Azure Diagnose utilisent tous la
+        capacité <code>azure-resource</code>, qui privilégie le serveur officiel
+        <code>@azure/mcp</code> lorsqu'il est configuré et se rabat automatiquement sur la CLI <code>az</code>
+        et l'API REST Azure Resource Graph dans le cas contraire. La squad ne se bloque jamais
+        à cause d'un MCP manquant pour une capacité de lecture comme celle-ci.
+      </p>
+      <p>
+        Pour connecter le serveur MCP Azure, fusionnez l'entrée de serveur <code>azure</code> de
+        <code>.github/skills/squad/mcp.template.json</code> dans votre
+        <code>.vscode/mcp.json</code> et rechargez VS Code. Le serveur s'authentifie via
+        <code>az login</code> (<code>DefaultAzureCredential</code>) — aucun secret stocké. Vous pouvez
+        demander au coordinateur de préparer cette configuration pour votre espace de travail VS Code :
+      </p>
+      <pre><code>/squad request="merge the squad MCP template into my VS Code workspace"</code></pre>
+
+      <h2>Écritures dans le backlog (Azure DevOps et Jira)</h2>
+      <p>
+        Le rôle <code>product-owner</code> planifie un backlog et s'arrête à un fichier de transmission finalisé. Transformer
+        ce plan en véritables éléments de travail est une étape séparée, soumise à approbation, qui relève du rôle
+        <code>backlog-executor</code>, à activer explicitement &mdash; selon le même schéma que l'Azure Deployer : prévisualiser,
+        approuver, puis écrire.
+      </p>
+      <ol>
+        <li><strong>Demandez.</strong> Une fois le backlog planifié, demandez à la squad de créer les éléments :
+          <pre><code>/squad request="create these work items in Azure DevOps"</code></pre>
+        </li>
+        <li><strong>Acceptez le rôle.</strong> Si votre squad ne possède pas <code>backlog-executor</code>, le coordinateur propose de l'ajouter et précise l'outil de suivi et le projet dans lesquels il écrirait.</li>
+        <li><strong>Examinez l'aperçu.</strong> Le rôle lit votre fichier de transmission et affiche chaque élément qu'il créerait ou modifierait &mdash; type, titre, parent, projet cible et champs qu'il renseignerait &mdash; ainsi que le nombre total. Rien n'a encore été écrit.</li>
+        <li><strong>Vérifiez les avertissements.</strong> Il recherche également les éléments correspondants dans l'outil de suivi actif, signale les doublons probables avec leurs identifiants existants et retire les références internes de planification du texte sortant, afin qu'aucun chemin de suivi ni identifiant provisoire n'arrive dans votre backlog.</li>
+        <li><strong>Approuvez.</strong> Une approbation couvre un seul lot. Modifiez la transmission, relancez l'opération ou ciblez un autre projet, et vous obtenez un nouvel aperçu et une nouvelle demande d'approbation.</li>
+      </ol>
+      <p>
+        Les écritures sont enregistrées élément par élément dans un fichier journal à côté de votre transmission : un lot qui échoue
+        en cours de route reprend donc au premier élément non écrit, au lieu de créer des doublons. Rien n'est
+        annulé automatiquement &mdash; tout ce qui a effectivement été écrit vous est signalé.
+      </p>
+      <p>
+        Deux limites sont volontaires. L'écriture exige que le serveur MCP Azure DevOps (ou, pour Jira, le
+        skill <code>jira</code>) soit configuré ; contrairement aux capacités de lecture, il n'y a <strong>aucune
+        solution de repli</strong> &mdash; le rôle s'arrête et vous indique ce qui manque au lieu d'accéder à votre
+        outil de suivi par une voie que vous n'avez jamais configurée. Et puisque l'écriture dans un outil de suivi est une action à impact, une
+        exécution du mode Watch sans présence humaine produit l'aperçu et s'arrête là ; l'écriture attend toujours
+        une personne.
+      </p>
+
+      <h2>Modernisation</h2>
+      <p>
+        Le rôle <code>modernizer</code> planifie les travaux de modernisation et les oriente vers le bon
+        moteur d'exécution, depuis le seul point d'entrée <code>/squad</code> :
+      </p>
+      <ul>
+        <li><strong>Modernisation à pile technologique constante</strong> — mises à niveau des frameworks et dépendances, remplacement des API obsolètes, conteneurisation et préparation à la migration Azure. Le plan recommande le rôle <code>developer</code> de la squad pour les modifications ciblées, ou l'extension et la CLI officielles GitHub Copilot App Modernization de Microsoft pour les mises à niveau en masse.</li>
+        <li><strong>Changement de pile technologique</strong> — réécritures vers d'autres langages ou frameworks (par exemple un backend Node.js reconstruit en .NET, ou une application React reconstruite en Angular). Le plan formalise un contrat de comportement pour le système actuel, séquence une réécriture incrémentale selon le modèle du figuier étrangleur et confie l'exécution aux rôles <code>developer</code> et <code>architect</code> sous revue du conseil — jamais aux outils officiels de mise à niveau.</li>
+      </ul>
+      <p>
+        La modernisation s'exécute au niveau <code>confirm</code> : le rôle produit un plan qui conditionne
+        l'implémentation, et les phases transverses passent par le conseil avant toute modification du code.
+      </p>
+
+      <h2>Présentations PowerPoint aux couleurs de votre marque</h2>
+      <p>
+        Le rôle <code>presenter</code> (initialisé par les profils <code>product</code> et <code>full</code>)
+        génère des présentations à partir de votre contenu. Fournissez-lui une fois votre <code>.pptx</code> de marque, et
+        chaque présentation héritera de vos masques de diapositives, dispositions, couleurs de thème et polices. La règle de personnalisation graphique
+        est fournie avec hve-squad et s'active automatiquement &mdash; vous n'avez jamais à copier un fichier, modifier une configuration ou
+        repréciser le modèle à chaque demande.
+      </p>
+      <p>
+        Lorsque vous demandez une présentation, le coordinateur lance le <strong>PowerPoint Subagent</strong>,
+        qui exécute le script du skill <code>powerpoint</code> nommé <code>build_deck.py</code>. La personnalisation graphique est appliquée
+        au moyen du paramètre <code>--template</code> (<code>-TemplatePath</code> en PowerShell) : la génération
+        hérite des <strong>masques de diapositives, des dispositions et du thème</strong> du modèle, élimine les
+        diapositives d'exemple du modèle, puis ajoute uniquement celles définies dans votre contenu.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Le modèle fait toute la différence.</strong> Une présentation soignée dépend bien davantage d'un modèle
+          bien conçu que du générateur. Consacrez vos efforts au masque et aux dispositions dans
+          PowerPoint : la squad les remplit ensuite de manière cohérente.
+        </p>
+      </div>
+
+      <h3>1 &mdash; Préparer un modèle de marque</h3>
+      <p>Ouvrez PowerPoint, créez un modèle 16:9 et enregistrez-le en <code>.pptx</code> avec :</p>
+      <ul>
+        <li>
+          <strong>Des masques de diapositives</strong> portant vos arrière-plans, l'emplacement du logo et le pied de page &mdash;
+          définis dans <em>Affichage &rarr; Masque des diapositives</em>.
+        </li>
+        <li>
+          <strong>Des dispositions nommées</strong> auxquelles le générateur peut faire correspondre le contenu, au minimum <code>Title Slide</code>,
+          <code>Title and Content</code> et <code>Section Header</code>.
+        </li>
+        <li>
+          <strong>Des couleurs et polices de thème</strong> définies dans le thème
+          (<em>Masque des diapositives &rarr; Couleurs / Polices</em>), afin que les références <code>@theme_name</code> correspondent
+          à la palette de votre marque.
+        </li>
+      </ul>
+      <p>
+        Vous n'avez pas besoin de laisser des diapositives d'exemple dans le fichier &mdash; une génération avec <code>--template</code>
+        les élimine et ne conserve que les masques, les dispositions et le thème.
+      </p>
+
+      <h3>2 &mdash; Le placer à un emplacement stable</h3>
+      <p>Le modèle se trouve à un chemin fixe, pour que la squad sache toujours où le trouver :</p>
+      <pre><code>.github/brand/pptx-brand-template.pptx</code></pre>
+      <p>
+        Vous n'avez pas à créer ce dossier vous-même. Si vous fournissez simplement votre
+        <code>.pptx</code> à la squad (ou lui en indiquez un), elle propose d'y enregistrer une copie pour vous.
+      </p>
+
+      <h3>3 &mdash; Il s'applique automatiquement</h3>
+      <p>
+        hve-squad fournit l'instruction de personnalisation graphique dans le package : lors d'un <code>apm install</code>,
+        elle arrive dans <code>.github/instructions/pptx-brand-template.instructions.md</code> et s'active
+        automatiquement. Son <code>applyTo</code> correspond à <code>**/.copilot-tracking/ppt/**</code> :
+        le PowerPoint Subagent la lit donc chaque fois qu'il travaille sur une présentation &mdash; en utilisant votre modèle avec
+        <code>--template</code> pour les reconstructions complètes et <code>--source</code> pour les reconstructions partielles. Si aucun
+        modèle n'est encore présent, le générateur ne se rabat pas silencieusement sur une présentation neutre : il demande
+        si vous disposez d'un <code>.pptx</code> de marque et propose de l'enregistrer pour vous.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>Reconstruction complète ou partielle.</strong> <code>--template</code> crée une nouvelle
+          présentation et ne conserve que les masques, les dispositions et le thème &mdash; utilisez-le pour les nouvelles présentations et les
+          régénérations complètes. Pour mettre à jour quelques diapositives d'une présentation existante, le générateur utilise
+          plutôt <code>--source</code> avec <code>--slides</code>. Ne combinez jamais les deux : s'ils sont présents ensemble,
+          <code>--template</code> l'emporte et toute diapositive non répertoriée est perdue.
+        </p>
+      </div>
+
+      <h3>4 &mdash; Aligner le contenu sur le modèle <span style="font-weight:400;font-size:0.7em;opacity:0.7;">(facultatif, technique)</span></h3>
+      <p>
+        Vous pouvez ignorer cette étape &mdash; la squad s'en charge pour vous. Pour un contrôle plus fin, déclarez le
+        modèle et associez les noms de disposition dans <code>content/global/style.yaml</code> :
+      </p>
+      <pre><code>template:
+  path: ".github/brand/pptx-brand-template.pptx"
+  preserve_dimensions: true
+layouts:
+  title:   "Title Slide"
+  content: "Title and Content"
+  section: "Section Header"</code></pre>
+      <p>
+        Puis, dans le <code>content.yaml</code> de chaque diapositive, référencez les couleurs avec <code>@theme_name</code>
+        plutôt qu'avec des valeurs hexadécimales codées en dur, afin que chaque diapositive s'adapte au thème défini par le modèle.
+      </p>
+
+      <h3>5 &mdash; Toujours valider</h3>
+      <p>
+        La passe de validation du skill PowerPoint transforme une présentation correcte en présentation soignée. Elle
+        effectue des contrôles géométriques (marges, débordements, espacements) et, en option, des contrôles visuels (chevauchements,
+        contraste, alignement, espaces réservés non remplacés), puis itère pour corriger les problèmes. Laissez-la procéder par itérations
+        plutôt que d'accepter la première génération &mdash; cette boucle fait la différence entre « c'est
+        généré » et « c'est réussi ».
+      </p>
+      <p>
+        Ensuite, demandez une présentation conforme à votre marque sans reconfigurer le modèle à chaque demande :
+      </p>
+      <pre><code>/squad request="build a 6-slide overview deck for the booking service"</code></pre>
+
+      <h2>Registre des coûts d'exécution</h2>
+      <p>
+        Chaque exécution estime le coût des modèles et la consommation de crédits IA de chaque lancement, afin qu'un projet
+        puisse voir ce qu'une exécution a dépensé. Le Squad Scribe l'enregistre à trois endroits sous
+        <code>.copilot-tracking/squad/</code> :
+      </p>
+      <ul>
+        <li>
+          un bloc de consommation par lancement, ajouté à <code>history/&lt;agent&gt;.md</code>, avec
+          le modèle retenu, la manière dont il a été déterminé, le niveau, l'estimation du nombre de tours de la boucle interne d'outils,
+          les tokens estimés en entrée, en cache, en écriture de cache et en sortie, le coût estimé et les crédits estimés ;
+        </li>
+        <li>
+          un registre agrégé <code>consumption.md</code> des membres, modèles et crédits, réparti
+          entre une table <em>Attribution</em> (qui a été exécuté et avec quel modèle) et une table <em>Utilisation et coût</em>
+          (tours, tokens, coût, crédits), avec le même ordre de lignes, des totaux pour l'exécution
+          et une ligne de comparaison des coûts avec une référence manuelle à modèle unique ;
+        </li>
+        <li>
+          une table des tarifs par token et par modèle dans <code>consumption-rates.md</code> &mdash; le seul endroit à
+          mettre à jour lorsque les tarifs de GitHub Copilot changent.
+        </li>
+      </ul>
+      <p>
+        Chaque chiffre est une <strong>estimation, et non un montant facturé</strong> : aucune télémétrie des tokens
+        par lancement n'existe ; les nombres de tokens sont donc estimés, puis les coûts et les crédits en sont déduits (1 crédit IA
+        = 0,01 USD). Les totaux de l'exécution apparaissent aussi dans <code>state.json</code>, sous
+        <code>currentRun</code>.
+      </p>
+
+      <h3 id="model-selection-per-role">Sélection du modèle par rôle (<code>routing=</code>)</h3>
+      <p>
+        <strong>Comportement par défaut (<code>routing=off</code>) :</strong> aucun paramètre <code>model</code>
+        n'est transmis aux lancements ; chaque agent utilise donc le modèle de son propre frontmatter ou celui de la
+        session, exactement comme avant l'existence de cette fonctionnalité.
+      </p>
+      <p>
+        <code>routing=</code> propose trois modes. Le mode est <strong>enregistré dans <code>team.md</code></strong>
+        et reste actif pour les demandes suivantes jusqu'à ce que vous le changiez : il suffit donc de le fournir une fois :
+      </p>
+      <ul>
+        <li>
+          <strong><code>off</code></strong> (par défaut) — aucun modèle n'est choisi ; <code>team.md</code> n'a pas de
+          colonne <code>Model</code>.
+        </li>
+        <li>
+          <strong><code>ranked</code></strong> — la squad choisit le modèle le mieux adapté au travail
+          de chaque rôle parmi ceux proposés par votre hôte, et affiche chaque choix dans une colonne <code>Model</code>
+          sous une ligne <code>Model routing: ranked</code>.
+        </li>
+        <li>
+          <strong><code>manual</code></strong> — vous choisissez une fois, avec des suggestions préremplies ; vos choix
+          sont enregistrés dans la colonne <code>Model</code> sous une ligne <code>Model routing: manual</code>.
+        </li>
+      </ul>
+      <p>
+        <strong>Comment les choix classés sont établis.</strong> Chaque rôle correspond à une classe de mission
+        (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
+        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Le catalogue des modèles attribue
+        à chaque modèle une note de 0 à 3 pour chaque classe. La squad choisit d'abord la meilleure adéquation, puis le coût
+        pondéré le plus bas, puis la génération la plus récente au sein de la même famille de modèles. Elle ne départage jamais les ex æquo
+        par le nom du modèle. Les rôles eux-mêmes et l'agent derrière chacun sont répertoriés dans
+        <code>references/roster-catalog.md</code> du skill squad. Sur Copilot CLI, l'équipe initialisée utilise, par exemple,
+        <code>researcher</code> → <code>claude-opus-5.5</code>, <code>lead</code> →
+        <code>gpt-5.6-sol</code>, <code>developer</code> → <code>gpt-5.3-codex</code>,
+        <code>intake-validator</code> → <code>claude-sonnet-5.5</code> et <code>scribe</code> →
+        <code>claude-haiku-4.5</code>.
+      </p>
+      <p>
+        <strong>Comment les choix manuels sont établis.</strong> Lorsque vous passez à <code>routing=manual</code>,
+        à la création de la squad ou plus tard, le coordinateur vous interroge avant tout lancement. Vous pouvez accepter
+        le modèle suggéré pour chaque rôle, choisir un modèle par classe de mission, puis modifier
+        certains rôles individuellement. Chaque question ne présente que des modèles <strong>que votre hôte peut exécuter</strong> et qui respectent
+        le seuil minimal <code>Model Tier</code> du rôle. Sur Copilot CLI et l'application GitHub Copilot, il
+        s'agit de la liste exacte annoncée par l'outil <code>task</code>. VS Code n'annonce aucune liste : la
+        squad propose donc des modèles du catalogue dont le prix est inférieur ou égal à celui du modèle de votre session ; si VS Code refuse un
+        choix, la question vous est reposée avec la liste signalée par VS Code.
+      </p>
+      <p>
+        <strong>Ce que contient une cellule <code>Model</code>.</strong> Un identifiant de modèle exact issu de la
+        colonne <code>Model ID</code> de <code>consumption-rates.md</code> (par exemple
+        <code>claude-sonnet-5.5</code>). Une valeur inférieure au seuil minimal du rôle, un identifiant inconnu ou un identifiant
+        contenant des métacaractères de shell ou de prompt est refusé et consigné, jamais deviné.
+      </p>
+      <p><strong>Ordre de priorité</strong> (le plus élevé l'emporte, pour chaque rôle) :</p>
+      <ol>
+        <li><code>routing=manual</code> : la cellule <code>Model</code> valide du rôle.</li>
+        <li><code>routing=ranked</code> : le choix classé pour ce rôle.</li>
+        <li>
+          <code>tier=</code> (le paramètre de niveau statique existant) ou le niveau de modèle initialisé dans <code>team.md</code>
+          — le mécanisme de repli actuel, inchangé.
+        </li>
+        <li>Omettre le paramètre — le comportement par défaut sans politique.</li>
+      </ol>
+      <p>
+        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code> ou <code>manual</code>, chaque
+        lancement d'un agent de l'équipe transmet exactement la cellule <code>Model</code> de sa ligne, sauf pour le Scribe,
+        dont le propre modèle fixé prévaut. Dans la distribution plugin, le hook <code>dispatch-guards</code>
+        refuse un lancement dont le <code>model</code> manque ou diffère de la cellule, et indique la
+        cellule à copier. Il se contente de comparer ; il ne remplit ni ne modifie jamais une cellule.
+      </p>
+      <p>
+        <strong>Modèles non évalués :</strong> un modèle proposé par l'hôte mais absent du catalogue n'est
+        jamais classé ni suggéré. Vous pouvez toutefois le saisir comme choix manuel ; il est alors marqué
+        <code>unevaluated</code> dans l'enregistrement du lancement.
+      </p>
+      <p>
+        <strong>Avec quel modèle démarrer la session.</strong> Le modèle choisi dans la conversation, ou transmis
+        avec <code>--model</code>, exécute le coordinateur : il lit la composition de l'équipe, planifie les étapes et
+        lance chaque rôle. <code>routing=</code> ne le change jamais. Démarrez sur un modèle fixe de la
+        classe <code>balanced</code> du catalogue (le niveau intermédiaire du fournisseur), aussi performant que
+        <code>claude-sonnet-5.5</code>. Choisissez n'importe quel modèle de cette classe proposé par votre hôte, par exemple
+        <code>claude-sonnet-5.5</code>, <code>gpt-6-sol</code>, <code>gpt-5.6-terra</code>,
+        <code>gemini-3.8-flash</code> ou <code>grok-4.7</code> ; le fichier
+        <code>references/model-catalog.md</code> du skill squad contient la liste actuelle. Un
+        modèle <code>frontier-reasoning</code> ajoute un coût à chaque tour du coordinateur sans améliorer le
+        travail, que <code>ranked</code> confie déjà aux modèles de pointe lorsque cela apporte un bénéfice. Un
+        modèle <code>fast-lightweight</code> risque davantage d'oublier des étapes obligatoires, comme copier la
+        cellule <code>Model</code> ou transmettre au Scribe en même temps qu'il lance l'étape suivante. En
+        <code>auto</code>, l'hôte peut changer le modèle du coordinateur en cours d'exécution, et le registre ne peut pas
+        chiffrer sa part (voir <a href="#fixed-model-versus-auto">Modèle fixe ou auto</a>).
+      </p>
+      <p>
+        L'ancien paramètre <code>models=&lt;key&gt;:&lt;id&gt;,...</code> a été retiré. Si vous le fournissez,
+        il n'est pas appliqué et le coordinateur vous oriente vers <code>routing=manual</code>.
+      </p>
+      <p><strong>Exemples :</strong></p>
+      <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
+/squad request="implement the design" routing=ranked
+
+# Switch to manual selection; you are asked for the models before the request runs.
+/squad request="design the data layer" routing=manual
+
+# Return to the default; the Model column is removed.
+/squad request="review the implementation" routing=off
+
+# Switch the product sub-squad to manual selection; each sub-squad keeps its own picks.
 /squad-federation squad=product routing=manual</code></pre>
 
-    <h3>Validation du registre de consommation</h3>
-    <p>
-      Le Scribe exécute une auto-vérification d'exhaustivité des écritures exactement une fois par handoff,
-      après la persistance de tous les écritures. Cette vérification recompte les registres de dispatch
-      et les blocs de consommation dans chaque fichier d'historique touché pour confirmer qu'ils
-      correspondent à ce qui a été écrit, et vérifie que les lignes d'agrégation et de totaux du
-      registre de consommation se somment correctement à partir des blocs enregistrés sur disque.
-    </p>
-    <p>
-      Quand PowerShell 7+ est disponible, le coordinateur exécute aussi <code>Measure-SquadLedger.ps1
-      -SquadRoot &lt;root&gt; -Check</code> depuis le répertoire <code>scripts/</code> du skill squad.
-      Cet assistant en lecture seule redérive entièrement le registre des fichiers d'historique et
-      <code>consumption-rates.md</code>, et quitte avec un code non-zéro s'il détecte :
-    </p>
-    <ul>
-      <li>Une divergence entre le total du registre et la somme de ses propres lignes.</li>
-      <li>
-        Une divergence entre le total du registre et les totaux <code>currentRun</code> du fichier
-        <code>state.json</code>. Un fichier <code>state.json</code> manquant ou non-parsable fait échouer
-        la vérification ; une racine de fédération (marquée par <code>federation.md</code>) est enregistrée
-        comme non-applicable à la place.
-      </li>
-      <li>
-        Un défaut du garde-identité : les identités de blocs ordonnées enregistrées par fichier dans le
-        bloc <code>### Derivation</code> du registre doivent former un préfixe ordonné des identités
-        actuelles du fichier. Les réécritures, réordonnances ou suppressions d'entrées d'historique
-        échouent ce garde ; les ajouts en fin réussissent. Un <code>-Check</code> simple (sans
-        <code>-ExpectedHistoryCounts</code>) ne fait que prévenir sur les registres sans aucune identité
-        enregistrée (compatibilité format hérité). Combiné à <code>-ExpectedHistoryCounts</code> —
-        l'auto-vérification post-écriture propre au Scribe — une Derivation sans aucune identité, ou
-        n'en enregistrant que pour une partie des fichiers touchés (collage partiel), échoue au lieu de
-        prévenir.
-      </li>
-    </ul>
-    <p>
-      Le Scribe ne recopie pas ces chiffres à la main. Il les écrit uniquement avec
-      <code>Measure-SquadLedger.ps1 -Write</code>, qui remplace les sections Attribution, Usage &amp; Cost
-      et Derivation de <code>consumption.md</code> et fixe les deux totaux <code>currentRun</code> de
-      <code>state.json</code> à partir de la même dérivation. Tous les autres octets des deux fichiers
-      restent inchangés. L'assistant refuse et n'écrit rien sur une racine de fédération, avec
-      <code>-Check</code>, ou quand l'un des fichiers n'a pas la section qu'il remplace. Le coordinateur
-      place la commande exacte dans chaque remise au Scribe sous <code>ledgerCommand</code>, et le Scribe
-      l'exécute comme dernière écriture. Exécutez ensuite <code>-Check</code> pour confirmer l'écriture.
-    </p>
-    <p>
-      <strong>Consommation observée.</strong> Les estimations restent, et la consommation réelle
-      s'affiche à côté. Avec <code>-SessionLog auto</code>, que porte <code>ledgerCommand</code>, le
-      script lit le journal de session de l'hôte
-      (<code>~/.copilot/session-state/&lt;session&gt;/events.jsonl</code>, écrit par la CLI Copilot et
-      l'hôte d'agents VS Code) et ajoute une section <em>Observed Usage (host-reported)</em> à
-      <code>consumption.md</code>. Par agent, elle indique le modèle réellement exécuté, s'il correspond
-      au registre, et le total réel de tokens à côté de l'estimation. Elle donne aussi les unités d'IA
-      facturées par l'hôte pour toute la session, coordinateur compris. Un tableau <em>Without HVE
-      Squad</em> compare l'exécution observée au même travail des rôles sur un seul modèle, sans Scribe,
-      les deux étant valorisés avec le mélange pondéré du catalogue. L'hôte ne fournit qu'un total de
-      tokens par dispatch, sans séparer entrée, cache et sortie : cette comparaison est donc une
-      estimation à base égale, pas une facture.
-    </p>
-    <h2>Découverte et validation des exigences</h2>
-    <p>Sans document d'entrée, les profils <code>product</code> et <code>full</code> peuvent proposer une découverte pour un objectif encore ouvert. Elle est proposée une fois par sujet, jamais imposée : les agents vous interrogent et ne doivent pas inventer vos choix. Avec un document d'entrée, le contrôle de préparation évalue sa clarté, sa cohérence, son périmètre et sa testabilité.</p>
-    <table><thead><tr><th>Profondeur</th><th>Résultat</th></tr></thead><tbody><tr><td><code>quick</code></td><td>Un brief produit par l'analyste.</td></tr><tr><td><code>standard</code></td><td>Cadrage et pistes avec le designer, puis brief.</td></tr><tr><td><code>deep</code></td><td>Objections, hypothèse risquée et expérimentation avant le brief. Le rôle challenger doit être disponible ou ajouté avec accord.</td></tr><tr><td><code>skip</code></td><td>Refus enregistré, sans séance de découverte.</td></tr></tbody></table>
-    <p>Un <code>discovery=</code> explicite fonctionne avec tout profil ; les rôles manquants sont proposés avant l'exécution. La découverte n'est pas exécutée sans utilisateur pour répondre.</p>
-    <p>Le contrôle d'entrée produit <code>Ready</code>, <code>Ready-With-Gaps</code> ou <code>Not-Ready</code> dans <code>decisions.md</code>. Les lacunes bloquantes sont corrigées puis réévaluées, au maximum deux cycles ; les décisions humaines sont escaladées. Le validateur d'un brief doit être différent de son auteur.</p>
-    <h2>Profils et packs</h2>
-    <table><thead><tr><th>Profil</th><th>Usage principal</th></tr></thead><tbody>
-      <tr><td><code>default</code></td><td>Travail général : researcher, lead, developer, tester et scribe.</td></tr>
-      <tr><td><code>full</code></td><td>Travail transverse avec les spécialistes disponibles, hors rôles explicitement optionnels ou non pris en charge.</td></tr>
-      <tr><td><code>security</code></td><td>Sécurité, chaîne logicielle, vie privée et IA responsable.</td></tr>
-      <tr><td><code>design</code></td><td>Conception UX/UI et produit.</td></tr>
-      <tr><td><code>accessibility</code></td><td>Évaluation et correction de l'accessibilité.</td></tr>
-      <tr><td><code>architecture</code></td><td>Architecture système, Azure et coûts.</td></tr>
-      <tr><td><code>azure</code></td><td>Architecture, IaC, déploiement validé, documentation et diagnostic.</td></tr>
-      <tr><td><code>modernization</code></td><td>Évolution de frameworks, dépendances, plateformes et migrations.</td></tr>
-      <tr><td><code>compliance</code></td><td>Preuves de conformité, risques et audits.</td></tr>
-      <tr><td><code>operations</code></td><td>Incidents, fiabilité, observabilité et exploitation.</td></tr>
-      <tr><td><code>product</code></td><td>Découverte, exigences, backlog, expérimentation, données et livrables métier.</td></tr>
-    </tbody></table>
-    <p>Un profil détermine la nature du travail. Un pack ajoute une spécialité technique : <code>power-platform</code>, <code>m365-copilot</code> ou <code>aws</code>. Les ressources correspondantes nécessitent une installation explicite ; le coordinateur propose la commande. Il ne promet pas des agents absents.</p>
-    <pre><code>/squad request="Conçois une application Power Platform auditable" profile=compliance pack=power-platform
-/squad request="Analyse notre architecture Azure et AWS" profile=azure pack=aws</code></pre>
-    <p>Power BI et Fabric relèvent du rôle <code>data-scientist</code>, l'ingénierie d'applications IA du rôle <code>developer</code>. Ils ne sont pas des packs. Les rôles <code>devrel</code>, <code>networking</code>, <code>gcp</code> et <code>identity</code> sont répertoriés mais non sélectionnables faute d'agents associés.</p>
-    <p>Retirer un pack enlève uniquement les rôles qu'il possède encore, sans effacer les livrables ni l'historique. Les rôles optionnels comme <code>backlog-executor</code> attendent votre accord ; les rôles fournis ailleurs nécessitent leur installation.</p>
-    <h2>Fédération</h2>
-    <p>Une fédération convient à plusieurs flux avec des responsables et livrables distincts. Une expertise supplémentaire sur le même travail appelle plutôt un profil et un pack. Chaque sous-squad possède un nom unique en minuscules avec tirets et un état sous <code>.copilot-tracking/squad/members/&lt;name&gt;/</code>.</p>
-    <pre><code>/squad-federation init
-/squad-federation request="Prépare la feuille de route" squad=product
-/squad-federation request="Implémente le plan validé" squad=delivery mode=autopilot</code></pre>
-    <p>Remplacez <code>product</code> et <code>delivery</code> par les noms réellement confirmés à l'initialisation.</p>
-    <h3>Promouvoir ou étendre</h3>
-    <pre><code>/squad-federation promote
-/squad-federation init request="Ajoute une sous-squad de sécurité"</code></pre>
-    <p>La promotion propose puis fait confirmer le déplacement de la squad existante. Elle conserve ses journaux et refuse les collisions de noms. Après promotion, <code>federation.md</code> et <code>meta-routing.md</code> pilotent le routage. L'expansion ajoute une sous-squad sans réécrire les autres.</p>
-    <p>Le routage ordinaire applique le plafond indépendamment à chaque sous-squad choisie. Seul le mode <code>mode=autopilot</code> de fédération sans cible <code>squad=</code> utilise un plafond agrégé couvrant les runs sélectionnés et l'orchestration racine, sans doubler le contrôle chez les enfants. Les dépendances sont confirmées, les validations importantes remontent à la fédération et la validation finale est consolidée.</p>
-    <figure class="video-figure"><video controls preload="metadata" playsinline><source src="../assets/hve-squad-federation.mp4" type="video/mp4" /><a href="../assets/hve-squad-federation.mp4">Télécharger la vidéo</a></video><figcaption>Démonstration enregistrée de la fédération ; interface et narration d'origine en anglais.</figcaption></figure>
-    <h2>Approbations à distance</h2>
-    <p>Choisissez <code>github-issue</code> lors de la configuration pour recevoir une issue et répondre avec <code>/approve</code>, <code>/approve-all</code>, <code>/changes: &lt;note&gt;</code> ou <code>/stop</code>. Seules les réponses reconnues d'une personne autorisée agissent. Un délai dépassé n'autorise jamais la poursuite.</p>
-    <ol><li>Authentifiez <code>gh</code> sur l'hôte d'exécution ou configurez le serveur MCP GitHub avec les droits nécessaires au dépôt et aux issues.</li><li>Copiez <code>.github/skills/squad/github-approval-watcher.workflow.yml</code> vers <code>.github/workflows/squad-approval-watcher.yml</code>, puis examinez et validez le workflow.</li><li>Indiquez le compte à mentionner et le dépôt qui reçoit les approbations.</li></ol>
-    <p><code>webhook</code> envoie uniquement une notification Teams, Slack ou Discord ; ce n'est pas un canal d'approbation entrant. <code>in-chat</code> reste le mode par défaut et le repli lorsque l'outillage manque.</p>
-    <h2>Watch Mode</h2>
-    <p>Un événement autorisé peut déclencher un run sans interface, par exemple une issue portant <code>squad/auto</code>. Le résultat attendu est une pull request <strong>en brouillon</strong>, pas une fusion ni un déploiement automatique.</p>
-    <ol><li>Ajoutez le secret de dépôt <code>COPILOT_GITHUB_TOKEN</code> avec la permission Copilot Requests. Le jeton Actions standard n'authentifie pas Copilot.</li><li>Protégez la branche par défaut et exigez une revue humaine.</li><li>Autorisez la création de pull requests par Actions dans les paramètres du dépôt, ou configurez un jeton dédié correctement limité.</li><li>Copiez <code>.github/skills/squad/squad-watch.workflow.yml</code> vers <code>.github/workflows/squad-watch.yml</code> et installez le workflow d'approbation.</li><li>Examinez les déclencheurs, supprimez ceux qui ne sont pas souhaités et appliquez <code>squad/auto</code> uniquement lorsque vous voulez lancer le travail.</li></ol>
-    <p>Le workflow de référence prend aussi en charge le déclenchement manuel, <code>squad/review</code> sur une PR du même dépôt, les commentaires <code>/squad</code>, un balayage planifié et les pushes configurés. Les acteurs sont autorisés, les PR de forks sont exclues et le contenu des événements est traité comme des données, jamais comme des instructions modifiant les règles.</p>
-    <p>Chaque événement possède sa sous-squad, par exemple <code>issue-123</code> ou <code>pr-456</code>. Watch Mode prépare la fédération si nécessaire, conserve l'état existant lors d'une promotion et refuse d'écraser une sous-squad qu'il n'a pas créée. Les journaux sont conservés ; leur suppression est une décision explicite.</p>
-    <h2>Retrouver les décisions et les livrables</h2>
-    <p>Une validation fournit une <code>Decision Ref</code> vers les conclusions, conditions et preuves dans <code>decisions.md</code>. Utilisez aussi <code>state.json</code>, <code>history/</code> et <code>notifications.md</code> pour comprendre un arrêt.</p>
-    <pre><code>/squad-document request="Résume les décisions de la semaine" format=html
-/squad-document request="Prépare une synthèse pour les parties prenantes" format=docx outputPath=docs/synthese.docx
-/squad-governance-report period=30d output=docs/gouvernance.html</code></pre>
-    <p><code>squad-document</code> lit l'état sans le modifier et produit un fichier fondé sur ses sources. Les formats sont <code>md</code>, <code>html</code>, <code>pdf</code> et <code>docx</code>, avec repli Markdown si l'outillage manque. <code>squad=</code> limite la recherche à une sous-squad.</p>
-    <p>Le rapport de gouvernance couvre contrôles, verdicts, coûts estimés, activité des rôles, risques, chronologie et résultats. <code>period</code> accepte <code>all</code>, <code>30d</code> ou <code>7d</code>. <a href="../squad-governance-report-2026-08-04.html" lang="en">Exemple historique du 4 août 2026 (anglais)</a>.</p>
-    <h2>Azure, backlog et modernisation</h2>
-    <p>Le profil Azure couvre HLD/LLD, Bicep ou Terraform, estimation indicative, contrôle Azure Policy, <code>what-if</code> ou <code>plan</code>, puis déploiement après accord. Documentation de l'existant et diagnostic restent en lecture seule. La capacité Azure privilégie le MCP configuré et peut utiliser Azure CLI ou REST en repli.</p>
-    <p>Le backlog local est distinct de sa publication. Le rôle optionnel <code>backlog-executor</code> présente les éléments, destinations et doublons possibles avant une approbation par lot. Un changement de périmètre exige une nouvelle prévisualisation. Les écritures sont journalisées pour reprendre sans dupliquer ; sans connecteur configuré, le rôle s'arrête. Un run sans utilisateur ne publie pas à votre place.</p>
-    <p>La modernisation produit d'abord un plan. Les changements ciblés vont au développeur ; les grandes mises à niveau compatibles peuvent passer par l'outillage officiel. Une réécriture entre technologies nécessite un contrat de comportement, des étapes incrémentales et une revue d'architecture.</p>
-    <h2>Présentations à votre image</h2>
-    <p>Le rôle <code>presenter</code> des profils <code>product</code> et <code>full</code> peut utiliser <code>.github/brand/pptx-brand-template.pptx</code>. Préparez un modèle 16:9 avec masques, dispositions nommées et thème. S'il manque, le générateur doit vous demander un modèle.</p>
-    <p>Une reconstruction complète utilise <code>--template</code> et conserve les masques, dispositions et thème, pas les diapositives d'exemple. Une mise à jour partielle utilise <code>--source</code> avec <code>--slides</code>. Ne combinez pas ces modes : le modèle pourrait remplacer les diapositives non sélectionnées. Vérifiez toujours les débordements, alignements et contenus.</p>
-    <h2>Partager un apprentissage</h2>
-    <pre><code>/squad-learn target=upstream
-/squad-learn target=tenant learning="Relire les verdicts avant une nouvelle délégation"</code></pre>
-    <p>La mémoire active reste locale. La promotion prépare une proposition nettoyée et une PR soumise à revue humaine, vers le package public ou un dépôt privé du tenant. Retirez secrets, noms de clients, chemins internes et données personnelles avant tout partage. Voir <a href="contributing.html">Contribuer</a>.</p>
-    <h2>Prérequis d'exécution et limites des hôtes</h2>
-    <p>Le coordinateur doit disposer de <code>runSubagent</code> ou <code>task</code> pour déléguer. L'outil mémoire permet des notes durables. Hors VS Code, les corps d'agents sont limités à 30 000 caractères, <code>model:</code> est une chaîne unique et la substitution <code>${input:…}</code> n'est pas disponible. Les agents exposent donc leurs arguments directement.</p>
-    <p>Les questions passent par le chat lorsque l'outil de questions n'existe pas. Un run sans utilisateur ne peut pas inventer une réponse. Vérifiez les domaines manquants avec <code>squad-doctor</code> dans les distributions plugin.</p>
-    <div class="pager"><a class="prev" href="getting-started.html"><div class="dir">Retour</div><div class="ttl">Bien démarrer</div></a><a class="next" href="demo.html"><div class="dir">Suite</div><div class="ttl">Démonstrations</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+      <h3>Validation du registre</h3>
+      <p>
+        Le Scribe effectue un autocontrôle d'exhaustivité des écritures exactement une fois par transmission, après que toutes les écritures
+        ont été enregistrées. Ce contrôle recompte les enregistrements de lancement et les blocs de consommation dans chaque fichier d'historique touché
+        pour confirmer qu'ils correspondent à ce qui a été écrit, et vérifie que les lignes par rôle et le total d'exécution du registre
+        de consommation correspondent bien à la somme des blocs enregistrés sur disque.
+      </p>
+      <p>
+        Lorsque PowerShell 7+ est disponible, le coordinateur exécute aussi le script utilitaire
+        <code>Measure-SquadLedger.ps1 -Check</code> (avec <code>-SquadRoot &lt;root&gt;</code> pointant vers la racine
+        d'une squad) depuis le répertoire <code>scripts/</code> du skill squad. Cet utilitaire en lecture seule
+        recalcule tout le registre à partir des fichiers d'historique et de <code>consumption-rates.md</code>, et renvoie
+        un code de sortie non nul s'il détecte l'une des conditions suivantes :
+      </p>
+      <ul>
+        <li>Un écart entre le total d'exécution du registre et la somme de ses propres lignes.</li>
+        <li>Un écart entre le total d'exécution du registre et, dans <code>state.json</code>, les totaux de <code>currentRun</code>.
+        Un <code>state.json</code> manquant ou impossible à analyser fait échouer le contrôle ; une racine de fédération (signalée par
+        <code>federation.md</code>) est en revanche consignée comme non applicable.</li>
+        <li>Un échec du contrôle d'identité : les identités ordonnées des blocs de chaque fichier enregistrées dans le bloc
+        <code>### Derivation</code> du registre doivent former un préfixe ordonné des identités actuelles de ce fichier.
+        Les écrasements, réordonnancements ou suppressions d'entrées d'historique font échouer ce contrôle ; les ajouts sont acceptés. Un simple
+        <code>-Check</code> (sans <code>-ExpectedHistoryCounts</code>) n'émet qu'un avertissement pour les registres ne contenant aucune
+        identité enregistrée (compatibilité avec l'ancien format). Combiné à <code>-ExpectedHistoryCounts</code> — l'autocontrôle
+        du Scribe après écriture —, une section de dérivation sans aucune identité, ou sans identité pour
+        certains seulement des fichiers touchés (collage partiel), provoque un échec plutôt qu'un avertissement.</li>
+      </ul>
+      <p>
+        Le Scribe ne recopie pas ces chiffres à la main. Sa seule voie d'écriture pour eux est
+        <code>Measure-SquadLedger.ps1 -Write</code>, qui remplace les sections Attribution, Utilisation et coût, et
+        Dérivation de <code>consumption.md</code>, puis définit dans <code>state.json</code> les deux totaux
+        <code>currentRun</code> à partir du même calcul. Tous les autres octets des deux fichiers restent
+        inchangés. Il refuse de s'exécuter et n'écrit rien sur une racine de fédération, en présence de <code>-Check</code> ou si l'un des
+        fichiers ne contient pas la section à remplacer. Le coordinateur place la commande exacte dans chaque transmission au Scribe
+        sous <code>ledgerCommand</code>, et le Scribe l'exécute en dernière écriture. Lancez <code>-Check</code>
+        ensuite pour confirmer l'écriture.
+      </p>
+      <p>
+        <strong>Utilisation observée.</strong> Les estimations restent en place et l'utilisation réelle apparaît à côté. Avec
+        <code>-SessionLog auto</code>, inclus dans <code>ledgerCommand</code>, le script lit le propre journal
+        de session de l'hôte (<code>~/.copilot/session-state/&lt;session&gt;/events.jsonl</code>, écrit par
+        Copilot CLI et l'hôte d'agents de VS Code), puis ajoute une section <em>Utilisation observée (signalée par l'hôte)</em>
+        à <code>consumption.md</code>. Pour chaque agent, elle indique le modèle réellement exécuté, sa concordance éventuelle
+        avec le registre et le total réel des tokens à côté de l'estimation. Elle fournit également les
+        unités IA facturées par l'hôte pour l'ensemble de la session, coordinateur compris. Une table <em>Sans HVE Squad</em>
+        compare l'exécution observée au même travail des rôles effectué avec un modèle unique et sans Scribe, les deux étant chiffrés selon
+        la combinaison pondérée du catalogue. L'hôte rapporte un total de tokens par lancement, sans ventilation entre entrée, cache
+        et sortie : cette comparaison est donc une estimation à périmètre comparable, pas une facture.
+      </p>
+
+      <h3>Conditions requises pour exécuter la squad</h3>
+      <ul>
+        <li>Un outil <code>runSubagent</code> ou <code>task</code> doit être activé pour que le coordinateur puisse lancer les membres de l'équipe.</li>
+        <li>L'outil de mémoire devrait être disponible pour les notes durables de chaque agent sous <code>/memories/repo/</code>.</li>
+        <li>Pour le canal d'approbation <code>github-issue</code> uniquement : une CLI <code>gh</code> ou un MCP <code>github</code> authentifié sur l'hôte d'exécution, ainsi que le workflow de surveillance des approbations installé. Les exécutions interactives et les approbations dans la conversation n'exigent ni l'un ni l'autre.</li>
+      </ul>
+      <p>
+        Vous pouvez recomposer la squad ultérieurement en modifiant <code>.copilot-tracking/squad/team.md</code> ou
+        en demandant au coordinateur de changer de profil.
+      </p>
+
+      <h2>Exécuter sur d'autres hôtes</h2>
+      <p>
+        La squad fournit à la fois des prompts et des agents. <strong>Les fichiers de prompt sont une fonctionnalité de VS Code</strong> —
+        GitHub Copilot CLI et l'application GitHub Copilot ne les lisent jamais. Chaque point d'entrée de la squad
+        existe donc aussi sous forme d'<strong>agent</strong>, et sélectionner l'agent est la seule
+        méthode d'appel qui fonctionne partout.
+      </p>
+
+      <table data-host-reference>
+        <thead>
+          <tr><th>Point d'entrée</th><th>VS Code</th><th>Copilot CLI et application Copilot</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Exécuter une squad</td>
+            <td><code>/squad request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Coordinator</strong></td>
+          </tr>
+          <tr>
+            <td>Exécuter une fédération</td>
+            <td><code>/squad-federation request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Federation Coordinator</strong></td>
+          </tr>
+          <tr>
+            <td>Rechercher et exporter</td>
+            <td><code>/squad-document request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Document</strong></td>
+          </tr>
+          <tr>
+            <td>Tableau de bord de gouvernance</td>
+            <td><code>/squad-governance-report</code></td>
+            <td>sélectionner l'agent <strong>Squad Governance Report</strong></td>
+          </tr>
+          <tr>
+            <td>Partager un enseignement</td>
+            <td><code>/squad-learn</code></td>
+            <td>sélectionner l'agent <strong>Squad Learn</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        Sur la CLI, vous pouvez sélectionner un agent de manière interactive avec <code>/agent</code>, ou lancer une exécution
+        sans interface avec <code>--agent</code> :
+      </p>
+      <pre><code>copilot --agent="Squad Coordinator" --prompt 'request="add input validation to the login form" profile=security'</code></pre>
+
+      <div class="callout">
+        <p>
+          <strong>Les paramètres nommés restent valables.</strong> <code>request=</code>,
+          <code>profile=</code>, <code>pack=</code>, <code>tier=</code>, <code>mode=</code>,
+          <code>owner=</code>, <code>format=</code>, <code>period=</code> et les autres sont interprétés par
+          la section <em>Paramètres</em> propre à chaque agent, et non par le fichier de prompt. Saisissez-les dans le texte de la demande :
+          ils fonctionnent de manière identique sur tous les hôtes.
+        </p>
+      </div>
+
+      <p>
+        Le skill <code>squad</code> est aussi découvert sur la CLI : <code>/squad</code> charge donc la
+        procédure de fonctionnement de la squad dans l'agent avec lequel vous discutez déjà. Ce n'est pas la même chose
+        qu'exécuter le coordinateur — sélectionnez l'agent lorsque vous voulez un véritable tour de squad.
+      </p>
+
+      <h3>Limites connues des hôtes</h3>
+      <ul>
+        <li>
+          <strong>Le corps des agents est limité à 30 000 caractères</strong> hors de VS Code. Tous les agents de la squad
+          sont fournis en dessous de cette limite ; la procédure se trouve dans le skill <code>squad</code> et est
+          récupérée à la demande plutôt qu'injectée à chaque tour.
+        </li>
+        <li>
+          <strong><code>model:</code> doit être une chaîne unique.</strong> VS Code accepte aussi un tableau
+          YAML ; la CLI rejette entièrement le fichier, et l'agent ne se charge jamais. La préférence de modèle par rôle
+          doit figurer dans la colonne <code>Model Tier</code> de <code>team.md</code>.
+        </li>
+        <li>
+          <strong>Les instructions limitées à un chemin ne se chargent que si <code>applyTo</code> correspond</strong> hors
+          de VS Code ; un agent qui n'a pas encore touché l'état de la squad peut donc fonctionner sans elles. Le package
+          fournit pour cette raison <code>squad-floor.instructions.md</code> avec le périmètre <code>**</code> :
+          ce fichier porte la discipline de lancement, la règle du Scribe comme rédacteur unique, les chemins d'état et la preuve de
+          lancement, et s'applique quel que soit le fichier concerné.
+        </li>
+        <li>
+          <strong>La substitution <code>${input:…}</code> est réservée à VS Code.</strong> Les agents reprennent
+          donc leurs entrées sous forme de noms de paramètres simples.
+        </li>
+        <li>
+          <strong>Il n'existe pas d'outil de questionnement hors de VS Code.</strong> Les étapes de découverte et de contrôle des entrées
+          vous interrogent une question à la fois ; dans VS Code, cela passe par
+          <code>vscode_askQuestions</code>. Copilot CLI et l'application ne fournissent aucun équivalent : le
+          rôle lancé renvoie donc sa question, et le coordinateur la pose dans le texte de sa réponse
+          à la place. La discipline est la même sur tous les hôtes : une question bloquante sans réponse arrête
+          le tour plutôt que de devenir une hypothèse enregistrée.
+        </li>
+      </ul>
+
+      <h3 id="fixed-model-versus-auto">Modèle fixe ou auto</h3>
+      <p>
+        Avec la sélection automatique du modèle, l'hôte route lui-même chaque demande et <strong>remplace le
+        modèle fixé d'un sous-agent</strong> : un rôle fixé sur Sonnet peut être observé en train d'exécuter un modèle
+        totalement différent. Le frontmatter est une demande, pas une garantie — pour un compte qui n'a pas accès
+        au modèle fixé, le modèle de session est substitué silencieusement lors du lancement.
+      </p>
+      <p>
+        Le registre consigne donc ce que <em>l'hôte a signalé</em> pour chaque lancement, et non ce que
+        la composition d'équipe demandait. Lorsque l'attribution des coûts compte, utilisez un modèle de session fixe
+        (<code>--model &lt;id&gt;</code> sur la CLI, ou un modèle fixé dans le sélecteur de VS Code), afin que les
+        niveaux privilégiant le coût définis pour l'équipe prennent réellement effet.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="getting-started.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Bien démarrer</div>
+        </a>
+        <a class="next" href="demo.html">
+          <div class="dir">Suivant →</div>
+          <div class="ttl">Démonstration</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · fondé sur les agents et les conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'strict' });
+  </script>
 </body>
 </html>

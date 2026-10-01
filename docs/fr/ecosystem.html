@@ -1,41 +1,237 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Écosystème | hve-squad</title>
-  <meta name="description" content="Choisir entre le package APM hve-squad, les plugins Copilot et le serveur MCP." />
-  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" /><script src="../assets/theme.js"></script><link rel="stylesheet" href="../assets/style.css" /><script src="../assets/site.js" defer></script><link rel="alternate" hreflang="en" href="../ecosystem.html" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Écosystème — hve-squad</title>
+  <meta name="description" content="Les trois dépôts hve-squad — le package APM, le serveur MCP et le plugin Copilot CLI — leur rôle et l'emplacement de leur documentation." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../assets/site.js" defer></script>
+  <link rel="alternate" hreflang="en" href="../ecosystem.html" />
 </head>
 <body>
-  <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a><div class="nav-links"><a href="index.html">Accueil</a><a href="getting-started.html">Bien démarrer</a><a href="usage.html">Utilisation</a><a href="demo.html">Démonstrations</a><a href="ecosystem.html" class="active">Écosystème</a><a href="maintaining.html">Maintenance</a><a href="troubleshooting.html">Dépannage</a><a href="contributing.html">Contribuer</a><a href="https://github.com/Peter-N91/hve-squad">GitHub</a><a class="language-link" href="../ecosystem.html" lang="en">English</a></div></div></nav>
-  <header class="hero"><div class="container"><div class="eyebrow">Référence</div><h1>Écosystème</h1><p class="lead">Une source commune, trois distributions. Choisissez l'accès adapté à votre environnement sans confondre leurs capacités d'exécution.</p></div></header>
-  <main class="content"><div class="container">
-    <h2>Les trois dépôts</h2>
-    <table><thead><tr><th>Dépôt</th><th>Rôle</th><th>Usage</th></tr></thead><tbody>
-      <tr><td><a href="https://github.com/Peter-N91/hve-squad">hve-squad</a></td><td>Sources de la squad dans <code>squad-src/</code> et package APM.</td><td>Installer le contenu complet dans votre dépôt pour VS Code.</td></tr>
-      <tr><td><a href="https://github.com/Peter-N91/hve-squad-plugin">hve-squad-plugin</a></td><td>Distribution générée depuis un tag publié ; marketplace de plugins.</td><td>Utiliser les agents dans Copilot CLI ou App.</td></tr>
-      <tr><td><a href="https://github.com/Peter-N91/hve-squad-mcp">hve-squad-mcp</a></td><td>Serveur Model Context Protocol exposant les intentions de la squad comme outils.</td><td>Intégration à un hôte MCP, notamment Copilot Studio selon le mode.</td></tr>
-    </tbody></table>
-    <p>Les distributions dérivées ne sont pas des forks indépendants. Elles sont construites à partir d'une version identifiée de hve-squad ; leurs limites restent toutefois propres à chaque hôte.</p>
-    <h2>Package APM</h2>
-    <p>Choisissez cette voie pour utiliser <code>/squad</code> dans Copilot Chat avec les ressources installées dans le dépôt. Les versions publiées sont épinglées ; une installation sans référence suit la branche par défaut. Voir <a href="getting-started.html?host=vscode">l'installation VS Code</a>.</p>
-    <h2>Plugins CLI et App</h2>
-    <p>Le marketplace publie deux entrées à installer ensemble :</p>
-    <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html">Démonstration</a>
+        <a href="ecosystem.html" class="active">Écosystème</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../ecosystem.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Référence</div>
+      <h1>Écosystème</h1>
+      <p class="lead">
+        La squad est distribuée via trois dépôts. Celui-ci est la source de référence ; les deux autres
+        sont des modes de distribution qui rendent le même ensemble d'agents accessible aux hôtes qu'une installation APM ne peut pas atteindre.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2>Les trois dépôts</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Dépôt</th>
+            <th>Description</th>
+            <th>Documentation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="https://github.com/Peter-N91/hve-squad"><code>hve-squad</code></a></td>
+            <td>Ce dépôt. Le package APM et les sources de la squad (<code>squad-src/</code>) à partir desquels les deux autres dépôts sont construits.</td>
+            <td><a href="index.html">peter-n91.github.io/hve-squad</a></td>
+          </tr>
+          <tr>
+            <td><a href="https://github.com/Peter-N91/hve-squad-mcp"><code>hve-squad-mcp</code></a></td>
+            <td>Un serveur Model Context Protocol sortant qui expose la squad sous forme d'outils invocables par un modèle, pour permettre aux hôtes MCP de l'appeler.</td>
+            <td><a href="https://peter-n91.github.io/hve-squad-mcp/">peter-n91.github.io/hve-squad-mcp</a></td>
+          </tr>
+          <tr>
+            <td><a href="https://github.com/Peter-N91/hve-squad-plugin"><code>hve-squad-plugin</code></a></td>
+            <td>Un miroir généré de l'arborescence du plugin GitHub Copilot CLI de la squad, publié uniquement lors des sorties de versions, sous forme de marketplace de plugins.</td>
+            <td><a href="https://peter-n91.github.io/hve-squad-plugin/">peter-n91.github.io/hve-squad-plugin</a></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          <strong>Une équipe d'agents, trois portes d'entrée.</strong> La composition de l'équipe, les tables de routage et les contrôles sont définis
+          une seule fois ici. Le serveur MCP et le plugin ne dérivent pas ce comportement dans des forks &mdash; chacun est construit
+          à partir d'une version étiquetée de <code>hve-squad</code>, de sorte qu'une version donnée de chaque mode de distribution correspond
+          à une version connue de ce package.
+        </p>
+      </div>
+
+      <h2>Quel mode de distribution choisir ?</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Si vous souhaitez&hellip;</th>
+            <th>Utilisez</th>
+            <th>Installation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Exécuter <code>/squad</code> dans Copilot Chat pour VS Code avec l'ensemble des agents dans votre dépôt</td>
+            <td>Ce package APM</td>
+            <td><code>apm install</code> &mdash; voir <a href="getting-started.html">Bien démarrer</a></td>
+          </tr>
+          <tr>
+            <td>Exécuter la squad depuis GitHub Copilot CLI ou l'application de bureau, sans installation APM</td>
+            <td><code>hve-squad-plugin</code></td>
+            <td><code>copilot plugin marketplace add</code></td>
+          </tr>
+          <tr>
+            <td>Appeler la squad sous forme d'outils depuis un hôte MCP tel que Copilot Studio</td>
+            <td><code>hve-squad-mcp</code></td>
+            <td>Serveur stdio local ou point de terminaison HTTP déployé</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>hve-squad-mcp — le serveur MCP</h2>
+
+      <p>
+        <a href="https://github.com/Peter-N91/hve-squad-mcp">github.com/Peter-N91/hve-squad-mcp</a>
+        &middot;
+        <a href="https://peter-n91.github.io/hve-squad-mcp/">site de documentation</a>
+      </p>
+
+      <p>
+        Le serveur expose des outils de haut niveau invocables par un modèle, qui correspondent aux intentions de routage
+        de la squad plutôt qu'aux agents individuels : <code>squad_research</code>, <code>squad_plan</code>,
+        <code>squad_review</code>, <code>squad_architect</code>, <code>squad_run</code> et
+        <code>squad_federate</code>, ainsi qu'un outil déterministe de production de fichiers <code>squad_render_pptx</code>.
+        Les entrées de chaque outil reprennent les arguments du prompt <code>/squad</code>.
+      </p>
+
+      <p>Il fonctionne selon deux modes, à des niveaux de maturité différents :</p>
+
+      <ul>
+        <li>
+          <strong>Délégué (stdio)</strong> &mdash; VS Code délègue aux véritables agents déployés, ce qui
+          reproduit le comportement du package complet. Leur installation est nécessaire.
+        </li>
+        <li>
+          <strong>Embarqué (Streamable HTTP distant + Entra)</strong> &mdash; accessible à des hôtes tels que
+          Copilot Studio, ce mode résout les personas côté serveur à partir des agents inclus, avec authentification, contrôles,
+          isolation des locataires et plafonds de coût. Le périmètre est <em>consultatif</em> : des livrables textuels finalisés, et non
+          de l'implémentation ou du déploiement exécutant du code.
+        </li>
+      </ul>
+
+      <div class="callout warn">
+        <p>
+          <strong>Lisez d'abord le tableau d'état.</strong> Le README et le site de documentation du serveur indiquent explicitement
+          ce qui fonctionne aujourd'hui et les extensions d'exécution reportées. Fondez-vous sur ces sources,
+          plutôt que sur cette page, pour connaître les capacités du mode distant.
+        </p>
+      </div>
+
+      <p>
+        Points d'entrée utiles sur son site :
+        <a href="https://peter-n91.github.io/hve-squad-mcp/getting-started.html">Bien démarrer</a>,
+        <a href="https://peter-n91.github.io/hve-squad-mcp/tools.html">Outils</a>,
+        <a href="https://peter-n91.github.io/hve-squad-mcp/configuration.html">Configuration</a> et
+        <a href="https://peter-n91.github.io/hve-squad-mcp/deploy.html">Déploiement</a>.
+      </p>
+
+      <h2>hve-squad-plugin — le plugin Copilot CLI</h2>
+
+      <p>
+        <a href="https://github.com/Peter-N91/hve-squad-plugin">github.com/Peter-N91/hve-squad-plugin</a>
+        &middot;
+        <a href="https://peter-n91.github.io/hve-squad-plugin/">site de documentation</a>
+      </p>
+
+      <p>
+        Ce dépôt contient du contenu généré, jamais modifié à la main. Ses dossiers <code>agents/</code>,
+        <code>skills/</code> et son fichier <code>.github/plugin/plugin.json</code> sont régénérés par
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/scripts/Build-SquadPlugin.ps1"><code>scripts/Build-SquadPlugin.ps1</code></a>
+        uniquement lorsqu'une version de ce dépôt est publiée, par extraction du tag Git immuable de cette version.
+        Il permet de conserver l'arborescence de distribution hors de cette arborescence de travail, sur le modèle
+        du dépôt compagnon <code>hve-squad-mcp</code>.
+      </p>
+
+      <p>Le marketplace publie <strong>deux entrées à installer ensemble</strong> :</p>
+
+      <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
 copilot plugin install hve-squad@hve-squad-plugin
 copilot plugin install hve-squad-hve-core@hve-squad-plugin</code></pre>
-    <p>Sélectionnez ensuite l'agent <strong>Squad Coordinator</strong>. Les prompts VS Code ne sont pas lus par ces hôtes. Un skill nommé <code>squad</code> n'est pas une invocation du coordinateur.</p>
-    <div class="callout warn"><p><strong>Deux règles de mise à jour :</strong> réinstallez <code>hve-squad-hve-core</code> lorsque son commit épinglé change, et n'installez pas le plugin officiel <code>hve-core</code> à côté. Vérifiez le <code>COPILOT_HOME</code> réellement utilisé par chaque client.</p></div>
-    <p>La distribution plugin peut manquer de domaines HVE Core. Faites vérifier les capacités par <code>squad-doctor</code> ; la solution documentée pour les domaines absents est l'installation du package HVE Core complet dans le dépôt.</p>
-    <p>Guides de la distribution, en anglais : <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">CLI</a>, <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">application de bureau</a>, <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">notes VS Code</a> et <a href="https://peter-n91.github.io/hve-squad-plugin/enterprise-push.html">distribution en entreprise</a>.</p>
-    <h2>Serveur MCP</h2>
-    <p>Les outils principaux sont <code>squad_research</code>, <code>squad_plan</code>, <code>squad_review</code>, <code>squad_architect</code>, <code>squad_run</code>, <code>squad_federate</code> et <code>squad_render_pptx</code>. Leurs entrées reprennent les intentions et paramètres de la squad.</p>
-    <ul><li><strong>Mode délégué, stdio :</strong> VS Code délègue aux vrais agents installés. Leur installation reste nécessaire.</li><li><strong>Mode distant embarqué, Streamable HTTP avec Entra :</strong> accès à des réponses et livrables textuels sous authentification, isolation et plafonds. Le périmètre est consultatif, pas une exécution de code ou un déploiement distant.</li></ul>
-    <p>Consultez les capacités actuelles dans la <a href="https://peter-n91.github.io/hve-squad-mcp/">documentation MCP (anglais)</a> avant de concevoir une intégration. Un outil nommé « run » n'est pas à lui seul une garantie d'exécution sur l'hôte distant.</p>
-    <h2>Alignement des versions</h2>
-    <p>Le script <code>scripts/Build-SquadPlugin.ps1</code> extrait les sources d'un tag immuable lors d'une publication. Le contenu généré ne doit pas être modifié à la main dans le dépôt de distribution. Le tag source permet de relier une version du plugin ou du serveur à la version du package.</p>
-    <div class="pager"><a class="prev" href="demo.html"><div class="dir">Retour</div><div class="ttl">Démonstrations</div></a><a class="next" href="maintaining.html"><div class="dir">Suite</div><div class="ttl">Maintenance</div></a></div>
-  </div></main>
-  <footer class="footer"><div class="container"><p>hve-squad · basé sur <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a> · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a></p></div></footer>
+
+      <div class="callout warn">
+        <p>
+          <strong>Deux règles régissent toutes les mises à jour ultérieures.</strong> <code>hve-squad-hve-core</code> doit être
+          désinstallé puis réinstallé plutôt que mis à jour &mdash; <code>copilot plugin update</code>
+          compare la version propre à hve-core en amont : si la référence épinglée change, la commande indique <code>already at latest</code>
+          et les fichiers restent inchangés. N'installez pas <em>également</em> le plugin officiel <code>hve-core</code>
+          à côté, sinon une délégation pourrait aboutir à une seconde copie non épinglée de chaque agent hve-core.
+          Ces deux règles sont expliquées en détail dans
+          <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">Installation : Copilot CLI</a>.
+        </p>
+      </div>
+
+      <p>
+        Points d'entrée utiles sur son site :
+        <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">Installation : Copilot CLI</a>,
+        <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">Installation : application de bureau</a>,
+        <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">Installation : notes VS Code</a>,
+        <a href="https://peter-n91.github.io/hve-squad-plugin/architecture.html">Architecture</a> et
+        <a href="https://peter-n91.github.io/hve-squad-plugin/enterprise-push.html">Distribution en entreprise</a>.
+      </p>
+
+      <h2>Comment les versions restent alignées</h2>
+
+      <p>
+        Aucun des deux dépôts compagnons n'est un fork. Tous deux sont produits à partir d'une version étiquetée de
+        <code>hve-squad</code> et chacun consigne le tag utilisé pour sa construction &mdash; le dépôt du plugin
+        indique son tag source et sa date d'extraction dans son README, et chaque version MCP est
+        épinglée à une version correspondante du package. Lorsqu'une version est publiée dans ce dépôt, les modes de distribution
+        en aval sont régénérés à partir de celle-ci, plutôt que d'évoluer séparément selon leur propre calendrier. Consultez
+        <a href="maintaining.html">Maintenance</a> pour le processus de publication de ce côté.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="demo.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Démonstration</div>
+        </a>
+        <a class="next" href="maintaining.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Maintenance</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · construit sur les agents et conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
 </body>
 </html>

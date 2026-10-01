@@ -1,0 +1,109 @@
+---
+pagination:
+  data: pages
+  size: 1
+  alias: doc
+permalink: "{{ doc.outputPath }}"
+eleventyExcludeFromCollections: true
+---
+<!doctype html>
+<html lang="{{ doc.language }}" dir="{{ doc.direction }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="{{ doc.rootPrefix }}assets/theme.js"></script>
+  <title>{{ doc.title }}</title>
+  <meta name="description" content="{{ doc.description }}">
+  <meta name="theme-color" content="#2563EB">
+  <link rel="canonical" href="{{ doc.canonical }}">
+  {% for language in doc.languages %}<link rel="alternate" hreflang="{{ language.code }}" href="{{ language.canonical }}">
+  {% endfor %}<link rel="alternate" hreflang="x-default" href="{{ doc.defaultCanonical }}">
+  <link rel="icon" type="image/svg+xml" href="{{ doc.rootPrefix }}assets/favicon.svg">
+  <link rel="preload" href="{{ doc.rootPrefix }}fonts/Manrope-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ doc.rootPrefix }}fonts/SourceSans3-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ doc.rootPrefix }}assets/site.css">
+  <link rel="stylesheet" href="{{ doc.rootPrefix }}assets/squad.css">
+  <script defer src="{{ doc.rootPrefix }}assets/hosts.js"></script>
+  <script defer src="{{ doc.rootPrefix }}assets/site.js"></script>
+  {% if doc.hasDiagrams %}<script defer src="{{ doc.rootPrefix }}assets/vendor/mermaid.min.js"></script>
+  <script defer src="{{ doc.rootPrefix }}assets/diagrams.js"></script>{% endif %}
+</head>
+<body class="docs-site" data-page="{{ doc.slug }}" data-root="{{ doc.rootPrefix }}">
+  <a class="skip-link" href="#{{ doc.mainId }}">{{ doc.ui.skip }}</a>
+  <header class="site-header" data-pagefind-ignore>
+    <div class="header-inner">
+      <details class="mobile-navigation">
+        <summary class="menu-button">{{ doc.ui.menu }}</summary>
+        <nav class="mobile-nav" aria-label="{{ doc.ui.navigation }}">
+          {% include "navigation.njk" %}
+        </nav>
+      </details>
+      <a class="brand" href="index.html" aria-label="HVE Squad">
+        <img src="{{ doc.rootPrefix }}assets/logo.svg" width="48" height="48" alt="">
+        <span class="brand-name">HVE Squad</span>
+      </a>
+      <div class="header-actions">
+        <button class="search-trigger js-only" type="button" aria-label="{{ doc.ui.search }}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
+          <span>{{ doc.ui.searchShort }}</span><kbd>/</kbd>
+        </button>
+        <div class="language-picker js-only">
+          <label class="sr-only" for="language-select">{{ doc.ui.language }}</label>
+          <select id="language-select" class="locale-select">
+            {% for language in doc.languages %}<option value="{{ language.url }}"{% if language.code == doc.language %} selected{% endif %} lang="{{ language.code }}">{{ language.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <noscript><nav class="language-links" aria-label="{{ doc.ui.language }}">{% for language in doc.languages %}<a href="{{ language.url }}" lang="{{ language.code }}">{{ language.name }}</a> {% endfor %}</nav></noscript>
+        <div class="theme-picker js-only">
+          <label class="sr-only" for="theme-select">{{ doc.ui.theme }}</label>
+          <select id="theme-select" class="theme-select" aria-label="{{ doc.ui.theme }}">
+            <option value="system">{{ doc.ui.system }}</option>
+            <option value="light">{{ doc.ui.light }}</option>
+            <option value="dark">{{ doc.ui.dark }}</option>
+          </select>
+        </div>
+        <a class="github-link" href="https://github.com/Peter-N91/hve-squad" aria-label="GitHub">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 19c-4 1-4-2-6-2m12 5v-4c0-1 .2-1.7-.5-2.5 3.4-.4 7-1.7 7-7A5.5 5.5 0 0 0 19 5c.2-1.1.1-2.3-.4-3.3 0 0-1.3-.4-4 1.5a14 14 0 0 0-7.2 0c-2.7-1.9-4-1.5-4-1.5A5.5 5.5 0 0 0 3 5a5.5 5.5 0 0 0-1.5 3.5c0 5.3 3.6 6.6 7 7-.6.6-.6 1.5-.5 2.5v4"/></svg>
+        </a>
+      </div>
+    </div>
+  </header>
+  <div class="docs-shell">
+    <aside class="sidebar" data-pagefind-ignore>
+      <div class="sidebar-inner">
+        <p class="nav-caption">{{ doc.ui.documentation }}</p>
+        <nav class="docs-nav" aria-label="{{ doc.ui.navigation }}">{% include "navigation.njk" %}</nav>
+        <div class="sidebar-footer"><span>{{ doc.ui.version }}</span> <code>v{{ doc.version }}</code><p>{{ doc.ui.ecosystem }}</p></div>
+      </div>
+    </aside>
+    <main id="{{ doc.mainId }}" class="doc-main" tabindex="-1">
+      <div class="doc-breadcrumb" data-pagefind-ignore>{{ doc.ui.documentation }} <span aria-hidden="true">/</span> {{ doc.label }}</div>
+      {% if doc.toc.length %}<details class="mobile-toc" data-pagefind-ignore>
+        <summary>{{ doc.ui.onThisPage }}</summary>
+        <nav aria-label="{{ doc.ui.onThisPage }}">{% include "toc-links.njk" %}</nav>
+      </details>{% endif %}
+      <article class="doc-content" data-pagefind-body>{{ doc.content | safe }}</article>
+      {% if not doc.hasPageEnd %}<nav class="page-navigation" aria-label="{{ doc.ui.documentation }}" data-pagefind-ignore>
+        {% if doc.previous %}<a class="previous" href="{{ doc.previous.url }}"><span>{{ doc.ui.previous }}</span><strong>{{ doc.previous.title }}</strong></a>{% endif %}
+        {% if doc.next %}<a class="next" href="{{ doc.next.url }}"><span>{{ doc.ui.next }}</span><strong>{{ doc.next.title }}</strong></a>{% endif %}
+      </nav>{% endif %}
+      <div class="doc-meta" data-pagefind-ignore>
+        <a href="{{ doc.sourceUrl }}">{{ doc.ui.source }}</a>
+      </div>
+    </main>
+    {% if doc.toc.length %}<aside class="toc" data-pagefind-ignore><div class="toc-inner">
+      <p class="toc-title">{{ doc.ui.onThisPage }}</p>
+      <nav class="toc-links" aria-label="{{ doc.ui.onThisPage }}">{% include "toc-links.njk" %}</nav>
+    </div></aside>{% endif %}
+  </div>
+  {% include "footer.njk" %}
+  <dialog class="search-dialog" aria-labelledby="search-title">
+    <div class="search-header"><h2 id="search-title">{{ doc.ui.search }}</h2><button class="search-close" type="button">{{ doc.ui.close }}</button></div>
+    <p class="search-help">{{ doc.ui.searchHelp }}</p>
+    <p class="search-state" role="status">{{ doc.ui.searchLoading }}</p>
+    <div id="search-results"></div>
+  </dialog>
+  <p class="sr-only" id="site-status" role="status" aria-live="polite"></p>
+  <script type="application/json" id="site-ui">{{ doc.ui | jsonScript | safe }}</script>
+</body>
+</html>

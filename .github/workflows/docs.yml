@@ -7,6 +7,13 @@ on:
     paths:
       - 'docs/**'
       - 'tests/docs/**'
+      - 'site/**'
+      - 'scripts/*docs*.mjs'
+      - 'scripts/diagram-locales.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'eleventy.config.js'
+      - 'apm.yml'
       - '.github/workflows/docs.yml'
   pull_request:
     branches:
@@ -14,6 +21,13 @@ on:
     paths:
       - 'docs/**'
       - 'tests/docs/**'
+      - 'site/**'
+      - 'scripts/*docs*.mjs'
+      - 'scripts/diagram-locales.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'eleventy.config.js'
+      - 'apm.yml'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -21,13 +35,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.event.pull_request.number || 'deploy' }}
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   validate:
-    name: Validate Documentation
+    name: Build and validate documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,17 +53,28 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
+          cache: npm
 
-      - name: Install test dependencies
-        run: npm --prefix tests/docs ci --ignore-scripts
+      - name: Install documentation dependencies
+        run: npm ci
 
       - name: Check documentation
-        run: npm --prefix tests/docs test
+        run: npm run docs:test
+
+      - name: Build bilingual site and search
+        run: npm run docs:build
+
+      - name: Upload artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+          retention-days: 1
 
   deploy:
     name: Build and Deploy
     needs: validate
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -58,20 +84,10 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         with:
           enablement: true
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: docs
 
       - name: Deploy to GitHub Pages
         id: deployment
