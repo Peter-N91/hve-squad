@@ -101,5 +101,5 @@ expectedPostWriteCounts:
   historyEntriesAddedByAgent:
     <agent name>: <n>
   consumptionBlocksAdded: <n>
-ledgerCommand: pwsh -NoProfile -File "<skill root>/scripts/Measure-SquadLedger.ps1" -SquadRoot "<squadRoot>" -Write  # omit only without pwsh 7+
+ledgerCommand: pwsh -NoProfile -File "<skill root>/scripts/Measure-SquadLedger.ps1" -SquadRoot "<squadRoot>" -Write -SessionLog auto  # omit only without pwsh 7+
 ```

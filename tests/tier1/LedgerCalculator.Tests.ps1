@@ -1486,3 +1486,201 @@ description: "Append-only dispatch history for a single squad agent"
         $result.Output | Should -Match "Attribution:.*role 'architect'"
     }
 }
+
+Describe 'Measure-SquadLedger prices spelling variants and falls back to the block model' {
+    BeforeAll {
+        function Initialize-PricingRootLocal {
+            param([string]$PricedAs, [string]$Model)
+            $dest = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $dest -Recurse
+            $historyPath = Join-Path $dest 'history/Squad Researcher.md'
+            $raw = Get-Content -LiteralPath $historyPath -Raw
+            $raw = $raw.Replace('"priced_as": "Claude Sonnet 4.6"', "`"priced_as`": `"$PricedAs`"").Replace('"model": "Claude Sonnet 4.6"', "`"model`": `"$Model`"")
+            Set-Content -LiteralPath $historyPath -Value $raw -NoNewline
+            $dest
+        }
+    }
+
+    It 'prices "claude-sonnet-4.6 (copilot)" at the Claude Sonnet 4.6 row with no tier-fallback warning (a live run wrote "GPT-5.3 Codex" for the "GPT-5.3-Codex" row)' {
+        $root = Initialize-PricingRootLocal -PricedAs 'claude-sonnet-4.6 (copilot)' -Model 'Claude Sonnet 4.6'
+        $result = Invoke-Ledger -SquadRoot $root -Format json
+        ($result.Output | ConvertFrom-Json).total.estCostUsd | Should -Be 0.3171
+        $result.Output | Should -Not -Match 'tier fallback'
+    }
+
+    It 'prices an unresolvable priced_as at the block''s own model, with a warning, before any tier fallback' {
+        $root = Initialize-PricingRootLocal -PricedAs 'Not A Row' -Model 'Claude Sonnet 4.6'
+        $result = Invoke-Ledger -SquadRoot $root -Format json
+        $result.Output | Should -Match "priced at its recorded model 'Claude Sonnet 4.6'"
+        ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_.total.estCostUsd } | Should -Be 0.3171
+    }
+}
+
+Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the estimates' {
+    BeforeAll {
+        function New-SessionFixtureLocal {
+            <#
+            .SYNOPSIS
+                A repo with the applied fixture as its squad root, plus a fake
+                session-state directory whose workspace.yaml points at that repo.
+            #>
+            param([string]$Member, [string[]]$EventLines)
+            $repo = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+            $squad = Join-Path $repo '.copilot-tracking/squad'
+            $root = if ($Member) { Join-Path $squad "members/$Member" } else { $squad }
+            New-Item -ItemType Directory -Path (Split-Path -Parent $root) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+
+            $copilotHome = Join-Path $repo '_copilot_home'
+            $sessionDir = Join-Path $copilotHome 'session-state/sess-0001'
+            New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $sessionDir 'workspace.yaml') -Value "id: sess-0001`ncwd: $repo`n"
+            Set-Content -LiteralPath (Join-Path $sessionDir 'events.jsonl') -Value ($EventLines -join "`n")
+            [pscustomobject]@{ Repo = $repo; Root = $root; Home = $copilotHome; SessionDir = $sessionDir }
+        }
+
+        function Invoke-LedgerWithSessionLocal {
+            param([string]$Root, [string]$SessionLog, [string]$CopilotHome, [switch]$Write, [string]$Format, [string]$BaselineModel)
+            $parts = @("& '$script:LedgerScript' -SquadRoot '$Root' -SessionLog '$SessionLog'")
+            if ($Write) { $parts += '-Write' }
+            if ($Format) { $parts += "-Format $Format" }
+            if ($BaselineModel) { $parts += "-BaselineModel '$BaselineModel'" }
+            $command = $parts -join ' '
+            if ($CopilotHome) { $command = "`$env:COPILOT_HOME = '$CopilotHome'; $command" }
+            $output = & pwsh -NoProfile -Command $command 2>&1 | Out-String
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+        }
+
+        $script:BaseEvents = @(
+            '{"type":"session.start","data":{},"timestamp":"2026-10-01T10:00:00.000Z"}'
+            '{"type":"tool.execution_start","data":{"toolCallId":"t1","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/research/x.md"}},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"t1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":500000,"durationMs":120000},"timestamp":"2026-10-01T10:02:01.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"t2","agentName":"Squad Scribe","model":"claude-haiku-4.5","totalTokens":300000,"durationMs":60000},"timestamp":"2026-10-01T10:03:01.000Z"}'
+            '{"type":"session.usage_checkpoint","data":{"totalNanoAiu":123450000000},"timestamp":"2026-10-01T10:04:00.000Z"}'
+            '{"type":"assistant.message","data":{"content":"partial'
+        )
+    }
+
+    It 'writes the observed section with real tokens, blended cost, session AI units, and the without-HVE-Squad comparison, and -Check still passes' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match '(?m)^## Observed Usage \(host-reported\)\s*$'
+        $ledger | Should -Match '\| Squad Researcher \| 1 \| claude-sonnet-4\.6 \| Claude Sonnet 4\.6 \| yes \| 500,000 \|'
+        $ledger | Should -Match '\| Squad Scribe \| 1 \| claude-haiku-4\.5 \|'
+        $ledger | Should -Match '\*\*Subagents total\*\* \| \*\*2\*\* \| \| \| \| \*\*800,000\*\*'
+        $ledger | Should -Match '\*\*0\.8640\*\*'
+        $ledger | Should -Match '\*\*123\.45 AI units\*\*'
+        $ledger | Should -Match 'Without HVE Squad: the same role work on one model, no Scribe \| 500,000 \| claude-sonnet-4\.6 \| 0\.7200'
+        $ledger.IndexOf('## Observed Usage') | Should -BeLessThan $ledger.IndexOf('## Cost Comparison')
+        $ledger | Should -Match '\*\*0\.3171\*\*' -Because 'the estimated tables are kept unchanged'
+
+        $check = Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+    }
+
+    It 'replaces the section on a later rewrite instead of appending a second one' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+        $first = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+        $second = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        @([regex]::Matches($second, '(?m)^## Observed Usage')).Count | Should -Be 1
+        $second | Should -Be $first
+    }
+
+    It 'finds the session with -SessionLog auto through COPILOT_HOME and the workspace cwd' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Format json
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.observed.sessionId | Should -Be 'sess-0001'
+        $json.observed.observedTokens | Should -Be 800000
+        $json.observed.baselineModel | Should -Be 'claude-sonnet-4.6'
+    }
+
+    It 'warns and adds nothing when auto finds no session for this repository' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        Set-Content -LiteralPath (Join-Path $f.SessionDir 'workspace.yaml') -Value "cwd: C:\elsewhere`n"
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'found no Copilot session'
+        (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Not -Match 'Observed Usage'
+    }
+
+    It 'flags a dispatch whose observed model differs from the model its history records' {
+        $events = $script:BaseEvents.Clone()
+        $events[2] = $events[2].Replace('"model":"claude-sonnet-4.6"', '"model":"claude-opus-5"')
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.Output | Should -Match "observed model for 'Squad Researcher' is claude-opus-5 but its history blocks record Claude Sonnet 4\.6"
+        (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Match '\| Squad Researcher \| 1 \| claude-opus-5 \| Claude Sonnet 4\.6 \| no \|'
+    }
+
+    It 'prices the comparison at -BaselineModel when supplied' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json -BaselineModel 'Claude Opus 5'
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.observed.baselineModel | Should -Be 'Claude Opus 5'
+        $json.observed.baselineCostUsd | Should -Be 1.2 -Because '500,000 tokens x (0.20x5 + 0.80x0.5 + 0.08x6.25 + 0.02x25 = 2.40) / 1e6'
+    }
+
+    It 'counts only dispatches whose prompt names the sub-squad root' {
+        $events = @(
+            '{"type":"tool.execution_start","data":{"toolCallId":"p1","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/squad/members/product/research/x.md"}},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"p1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":400000,"durationMs":1000},"timestamp":"2026-10-01T10:00:02.000Z"}'
+            '{"type":"tool.execution_start","data":{"toolCallId":"a1","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/squad/members/azure/research/y.md"}},"timestamp":"2026-10-01T10:00:03.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"a1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":900000,"durationMs":1000},"timestamp":"2026-10-01T10:00:04.000Z"}'
+        )
+        $f = New-SessionFixtureLocal -Member 'product' -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.observed.observedTokens | Should -Be 400000
+    }
+}
+Describe 'Measure-SquadLedger names an insert-above-the-end as an ordering defect, not lost content' {
+    It 'reports entries inserted inside the file, with every original byte kept, distinctly from a prefix edit' {
+        $root = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        $historyPath = Join-Path $root 'history/Squad Researcher.md'
+        $baselinePath = Join-Path $TestDrive "$([System.Guid]::NewGuid().ToString('N')).json"
+        (Invoke-Ledger -SquadRoot $root -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+
+        # A live Scribe inserted its new entry directly under the "below this line" marker,
+        # above the existing entry, instead of after it.
+        $raw = Get-Content -LiteralPath $historyPath -Raw
+        $raw = $raw.Replace('# History: Squad Researcher', "# History: Squad Researcher`n`n### 2026-10-01T16:10:00Z Inserted above the older entry`n`n* Turn: 3")
+        Set-Content -LiteralPath $historyPath -Value $raw -NoNewline
+
+        $result = Invoke-Ledger -SquadRoot $root -Check -BaselinePath $baselinePath
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "entries were inserted inside the file, not appended: 'history/Squad Researcher\.md' keeps every original byte"
+        $result.Output | Should -Not -Match 'a prefix edit, not only an append'
+    }
+}
+
+Describe 'Measure-SquadLedger puts the billed session total next to the estimated total' {
+    It 'adds a billed line with the estimate-to-billed ratio under the Usage & Cost total, and -Check still passes' {
+        $repo = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+        $root = Join-Path $repo '.copilot-tracking/squad'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $root) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        $sessionDir = Join-Path $repo 'session'
+        New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $sessionDir 'events.jsonl') -Value (@(
+                '{"type":"subagent.completed","data":{"toolCallId":"t1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":100000,"durationMs":1000},"timestamp":"2026-10-01T10:00:00.000Z"}'
+                '{"type":"session.usage_checkpoint","data":{"totalNanoAiu":15855000000},"timestamp":"2026-10-01T10:01:00.000Z"}'
+            ) -join "`n")
+
+        $output = & pwsh -NoProfile -Command "& '$script:LedgerScript' -SquadRoot '$root' -Write -SessionLog '$sessionDir'" 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $output
+        $ledger = Get-Content -LiteralPath (Join-Path $root 'consumption.md') -Raw
+        $ledger | Should -Match '(?s)\*\*0\.3171\*\*.*?> \*\*Billed by the host for this session so far: 15\.86 AI units, about 0\.16 USD\.\*\* The estimate above is 2\.00x that figure\.'
+        $ledger.IndexOf('Billed by the host') | Should -BeLessThan $ledger.IndexOf('### Derivation')
+
+        $check = Invoke-Ledger -SquadRoot $root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+    }
+}

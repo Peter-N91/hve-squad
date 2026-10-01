@@ -209,12 +209,33 @@
     embed it is a separate, contract-text task outside this script's scope.
     No other switch (`-Check`, `-EmitBaseline`, `-BaselinePath`, `-Format`
     aside) is honored in this mode.
+.PARAMETER SessionLog
+    Optional host session log holding real per-dispatch usage: a Copilot CLI /
+    VS Code agent-host `events.jsonl`, the session directory that contains it,
+    or `auto` to pick the most recently written session under
+    `$COPILOT_HOME/session-state` (default `~/.copilot/session-state`) whose
+    `workspace.yaml` `cwd` is this squad root's repository. Each
+    `subagent.completed` event gives the dispatch's real model and total
+    tokens; the last `session.usage_checkpoint` gives the session's billed AI
+    units. The estimates are kept unchanged: markdown and -Write add an
+    `## Observed Usage (host-reported)` section beside them (inserted before
+    `## Cost Comparison`, or replaced when already present), -Format json adds
+    an `observed` object, and -Check ignores the section. A sub-squad root under
+    `members/<name>/` counts only dispatches whose prompt names that root. When
+    `auto` finds no session, a warning is printed and nothing observed is added.
+.PARAMETER BaselineModel
+    Model id that prices the "without HVE Squad" comparison in the observed
+    section: the same role work run on this one model, with no Scribe. Defaults
+    to the most expensive model, by blended rate, that any role dispatch
+    actually ran on.
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/routing-performance
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/product -Write
+.EXAMPLE
+    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Write -SessionLog auto
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -EmitBaseline $env:TEMP/squad-baseline.json -ProtectedPath 'research/2026-09-27-topic.md'
 .EXAMPLE
@@ -255,7 +276,11 @@ param(
 
     [string]$LookupStage,
 
-    [string]$LookupSlot
+    [string]$LookupSlot,
+
+    [string]$SessionLog,
+
+    [string]$BaselineModel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -353,7 +378,8 @@ function Get-RateTableLocal {
 
     $byModel = @{}
     $byTier = @{}
-    if (-not $Content) { return [pscustomobject]@{ ByModel = $byModel; ByTier = $byTier } }
+    $byNormalized = @{}
+    if (-not $Content) { return [pscustomobject]@{ ByModel = $byModel; ByTier = $byTier; ByNormalized = $byNormalized } }
 
     $rateColumns = @('Input', 'Cached', 'Cache write', 'Output')
 
@@ -387,6 +413,8 @@ function Get-RateTableLocal {
             if ($isTierTable) {
                 if ('Tier' -in $table.Header) { $rate['tier'] = $row['Tier'] }
                 if (-not $byModel.ContainsKey($key)) { $byModel[$key] = $rate }
+                $normalizedTierKey = ConvertTo-RateKeyLocal $key
+                if (-not $byNormalized.ContainsKey($normalizedTierKey)) { $byNormalized[$normalizedTierKey] = $rate }
                 if ($rate.tier -and -not $byTier.ContainsKey($rate.tier)) { $byTier[$rate.tier] = $rate }
             }
             else {
@@ -398,7 +426,9 @@ function Get-RateTableLocal {
                 if ('Model ID' -in $table.Header) {
                     $modelId = ($row['Model ID'] -replace '`', '').Trim()
                     if ($modelId -and $modelId -ne '—' -and -not $byModel.ContainsKey($modelId)) { $byModel[$modelId] = $rate }
+                    if ($modelId -and $modelId -ne '—') { $byNormalized[(ConvertTo-RateKeyLocal $modelId)] = $rate }
                 }
+                $byNormalized[(ConvertTo-RateKeyLocal $key)] = $rate
                 if ('Tier' -in $table.Header -and $row['Tier'] -and -not $byTier.ContainsKey($row['Tier'])) {
                     $byTier[$row['Tier']] = $rate
                 }
@@ -406,7 +436,19 @@ function Get-RateTableLocal {
         }
     }
 
-    [pscustomobject]@{ ByModel = $byModel; ByTier = $byTier }
+    [pscustomobject]@{ ByModel = $byModel; ByTier = $byTier; ByNormalized = $byNormalized }
+}
+
+function ConvertTo-RateKeyLocal {
+    <#
+    .SYNOPSIS
+        Spelling-insensitive rate-row key: 'GPT-5.3 Codex', 'GPT-5.3-Codex',
+        '`gpt-5.3-codex`', and 'Claude Sonnet 5.5 (copilot)' all reduce to the
+        same lowercase hyphenated id.
+    #>
+    param([AllowEmptyString()][string]$Value)
+    $text = ($Value -replace '`', '' -replace '\((copilot|preview)\)', '').Trim().ToLowerInvariant()
+    return ($text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
 }
 
 function Get-CalibrationFactorLocal {
@@ -826,6 +868,18 @@ function Resolve-RateForBlockLocal {
         $Warnings.Add("WARN: $($Block.Source): priced_as '$pricedAsRaw' only resolves to a rate row after trimming surrounding whitespace (to '$pricedAsTrimmed').")
         return $Rates.ByModel[$pricedAsTrimmed]
     }
+    # Spelling variants of a real row ('GPT-5.3 Codex' for 'GPT-5.3-Codex') resolve
+    # silently; then the block's own resolved `model` id, before any tier fallback.
+    $byNormalized = if ($Rates.PSObject.Properties['ByNormalized']) { $Rates.ByNormalized } else { @{} }
+    $pricedAsKey = ConvertTo-RateKeyLocal $pricedAsRaw
+    if ($pricedAsKey -and $byNormalized.ContainsKey($pricedAsKey)) {
+        return $byNormalized[$pricedAsKey]
+    }
+    $modelKey = ConvertTo-RateKeyLocal ([string]$Block.Fields['model'])
+    if ($modelKey -and $modelKey -ne 'unknown' -and $byNormalized.ContainsKey($modelKey)) {
+        $Warnings.Add("WARN: $($Block.Source): priced_as '$pricedAsRaw' has no rate row; priced at its recorded model '$($Block.Fields['model'])' instead.")
+        return $byNormalized[$modelKey]
+    }
 
     $tierRaw = [string]$Block.Fields['model_tier']
     $tierTrimmed = $tierRaw.Trim()
@@ -1146,6 +1200,27 @@ function Copy-BaselineSourceFilesLocal {
     }
 }
 
+function Get-InsertionOffsetLocal {
+    <#
+    .SYNOPSIS
+        Returns the byte offset where new text was inserted when Current is
+        exactly Original with one run of bytes added somewhere before its end
+        (every original byte kept, in order); $null otherwise.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Original,
+        [Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Current
+    )
+    if ($Current.Length -le $Original.Length) { return $null }
+    $prefix = 0
+    while ($prefix -lt $Original.Length -and $Original[$prefix] -eq $Current[$prefix]) { $prefix++ }
+    if ($prefix -eq $Original.Length) { return $null }
+    $suffix = 0
+    while ($suffix -lt ($Original.Length - $prefix) -and $Original[$Original.Length - 1 - $suffix] -eq $Current[$Current.Length - 1 - $suffix]) { $suffix++ }
+    if ($prefix + $suffix -eq $Original.Length) { return $prefix }
+    return $null
+}
+
 function Test-SquadLedgerBaselineLocal {
     <#
     .SYNOPSIS
@@ -1168,7 +1243,8 @@ function Test-SquadLedgerBaselineLocal {
         [Parameter(Mandatory)][string]$SquadRoot,
         [Parameter(Mandatory)]$HistoryFiles,
         [string[]]$ProtectedPath = @(),
-        [string[]]$AllowedWritePath = @()
+        [string[]]$AllowedWritePath = @(),
+        [string]$BaselineFilesRoot
     )
 
     $failures = [System.Collections.Generic.List[string]]::new()
@@ -1196,7 +1272,17 @@ function Test-SquadLedgerBaselineLocal {
             $prefixBytes = $bytes[0..($baselineLength - 1)]
             $prefixHash = Get-Sha256HexLocal -Bytes $prefixBytes
             if ($prefixHash -ne $baseEntry.sha256) {
-                $failures.Add("Append-only file's original content changed: '$relPath' first $baselineLength byte(s) no longer hash to the baseline's recorded SHA-256 (a prefix edit, not only an append).")
+                $insertedAt = $null
+                $originalCopy = if ($BaselineFilesRoot) { Join-Path $BaselineFilesRoot $relPath } else { $null }
+                if ($originalCopy -and (Test-Path -LiteralPath $originalCopy -PathType Leaf)) {
+                    $insertedAt = Get-InsertionOffsetLocal -Original ([System.IO.File]::ReadAllBytes($originalCopy)) -Current $bytes
+                }
+                if ($null -ne $insertedAt) {
+                    $failures.Add("Append-only file's entries were inserted inside the file, not appended: '$relPath' keeps every original byte, but new text starts at byte $insertedAt of $baselineLength instead of at the end. Append new entries after the last existing entry, never directly under the file's marker comment.")
+                }
+                else {
+                    $failures.Add("Append-only file's original content changed: '$relPath' first $baselineLength byte(s) no longer hash to the baseline's recorded SHA-256 (a prefix edit, not only an append).")
+                }
             }
         }
     }
@@ -1424,6 +1510,308 @@ function Get-StateRunTotalUpdateLocal {
         $text = $text.Substring(0, $r.Index) + $r.Value + $text.Substring($r.Index + $r.Length)
     }
     return [pscustomobject]@{ Path = $StatePath; Text = $text; Encoding = $encoding }
+}
+
+# ---------------------------------------------------------------------------
+# -SessionLog: real per-dispatch usage from the host's session log, reported
+# beside the estimates (never replacing them).
+# ---------------------------------------------------------------------------
+
+function Resolve-SessionLogPathLocal {
+    <#
+    .SYNOPSIS
+        Resolves -SessionLog to an events.jsonl path, or $null when `auto` finds
+        no session whose workspace cwd is this squad root's repository.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$SessionLog,
+        [Parameter(Mandatory)][string]$SquadRoot
+    )
+    if ($SessionLog -ne 'auto') {
+        $candidate = if (Test-Path -LiteralPath $SessionLog -PathType Container) { Join-Path $SessionLog 'events.jsonl' } else { $SessionLog }
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            throw "Measure-SquadLedger: -SessionLog '$SessionLog' does not resolve to an events.jsonl file."
+        }
+        return (Resolve-Path -LiteralPath $candidate).Path
+    }
+
+    $marker = [regex]::Match($SquadRoot, '^(?<repo>.*?)[\\/]\.copilot-tracking([\\/]|$)')
+    $repoRoot = if ($marker.Success) { $marker.Groups['repo'].Value } else { (Get-Location).Path }
+    $repoRoot = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/')
+
+    $copilotHome = if ($env:COPILOT_HOME) { $env:COPILOT_HOME } else { Join-Path $HOME '.copilot' }
+    $stateDir = Join-Path $copilotHome 'session-state'
+    if (-not (Test-Path -LiteralPath $stateDir -PathType Container)) { return $null }
+
+    $best = $null
+    foreach ($dir in Get-ChildItem -LiteralPath $stateDir -Directory) {
+        $events = Join-Path $dir.FullName 'events.jsonl'
+        $workspace = Join-Path $dir.FullName 'workspace.yaml'
+        if (-not (Test-Path -LiteralPath $events -PathType Leaf) -or -not (Test-Path -LiteralPath $workspace -PathType Leaf)) { continue }
+        $cwdMatch = [regex]::Match((Get-Content -LiteralPath $workspace -Raw), '(?m)^cwd:\s*(?<cwd>.+?)\s*$')
+        if (-not $cwdMatch.Success) { continue }
+        $cwd = $cwdMatch.Groups['cwd'].Value.Trim('"', "'")
+        try { $cwd = [System.IO.Path]::GetFullPath($cwd).TrimEnd('\', '/') } catch { continue }
+        if (-not [string]::Equals($cwd, $repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+        $item = Get-Item -LiteralPath $events
+        if (-not $best -or $item.LastWriteTimeUtc -gt $best.LastWriteTimeUtc) { $best = $item }
+    }
+    if ($best) { return $best.FullName }
+    return $null
+}
+
+function Read-SessionUsageLocal {
+    <#
+    .SYNOPSIS
+        Reads subagent.completed and session.usage_checkpoint events from a host
+        session log. A sub-squad root counts only dispatches whose task prompt
+        names its `members/<name>` root. Opened with shared read so a live
+        session can keep writing; an unparseable (partially written) line is skipped.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$SquadRoot
+    )
+    $memberMatch = [regex]::Match($SquadRoot, '[\\/]members[\\/](?<name>[^\\/]+)[\\/]?$')
+    $memberPattern = if ($memberMatch.Success) { 'members[\\/]+' + [regex]::Escape($memberMatch.Groups['name'].Value) + '([\\/]|\b)' } else { $null }
+
+    $dispatches = [System.Collections.Generic.List[pscustomobject]]::new()
+    $prompts = @{}
+    $nanoAiu = $null
+    $first = $null
+    $last = $null
+
+    $stream = [System.IO.FileStream]::new($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    $reader = [System.IO.StreamReader]::new($stream)
+    try {
+        while ($null -ne ($line = $reader.ReadLine())) {
+            $typeMatch = [regex]::Match($line, '"type"\s*:\s*"(?<type>subagent\.completed|session\.usage_checkpoint|tool\.execution_start)"')
+            $timeMatch = [regex]::Match($line, '"timestamp"\s*:\s*"(?<ts>[^"]+)"')
+            if ($timeMatch.Success) {
+                if (-not $first) { $first = $timeMatch.Groups['ts'].Value }
+                $last = $timeMatch.Groups['ts'].Value
+            }
+            if (-not $typeMatch.Success) { continue }
+            $type = $typeMatch.Groups['type'].Value
+            if ($type -eq 'tool.execution_start' -and (-not $memberPattern -or $line -notmatch '"toolName"\s*:\s*"task"')) { continue }
+            try { $sessionEvent = $line | ConvertFrom-Json -AsHashtable } catch { continue }
+            $data = $sessionEvent['data']
+            if (-not $data) { continue }
+            switch ($type) {
+                'tool.execution_start' {
+                    $prompts[[string]$data['toolCallId']] = ($data['arguments'] | ConvertTo-Json -Depth 6 -Compress)
+                }
+                'session.usage_checkpoint' {
+                    if ($null -ne $data['totalNanoAiu']) { $nanoAiu = [double]$data['totalNanoAiu'] }
+                }
+                'subagent.completed' {
+                    $dispatches.Add([pscustomobject]@{
+                            ToolCallId = [string]$data['toolCallId']
+                            AgentName  = [string]$data['agentName']
+                            Model      = [string]$data['model']
+                            Tokens     = [double]$data['totalTokens']
+                            DurationMs = [double]$data['durationMs']
+                        })
+                }
+            }
+        }
+    }
+    finally {
+        $reader.Dispose()
+        $stream.Dispose()
+    }
+
+    if ($memberPattern) {
+        $kept = @($dispatches | Where-Object { $prompts.ContainsKey($_.ToolCallId) -and $prompts[$_.ToolCallId] -match $memberPattern })
+        $dispatches = [System.Collections.Generic.List[pscustomobject]]::new()
+        foreach ($d in $kept) { $dispatches.Add($d) }
+    }
+
+    [pscustomobject]@{
+        Path       = $Path
+        SessionId  = Split-Path -Leaf (Split-Path -Parent $Path)
+        Dispatches = $dispatches
+        NanoAiu    = $nanoAiu
+        First      = $first
+        Last       = $last
+        MemberName = if ($memberMatch.Success) { $memberMatch.Groups['name'].Value } else { $null }
+    }
+}
+
+function Get-BlendedRateLocal {
+    <#
+    .SYNOPSIS
+        USD per 1M tokens of a representative agentic dispatch for a model id,
+        using model-catalog.md's Blended formula over this root's rate row:
+        0.20 x Input + 0.80 x Cached + 0.08 x Cache write + 0.02 x Output.
+        Returns $null when the id has no rate row.
+    #>
+    param([AllowEmptyString()][string]$Model, [Parameter(Mandatory)]$Rates)
+    $key = ConvertTo-RateKeyLocal $Model
+    $byNormalized = if ($Rates.PSObject.Properties['ByNormalized']) { $Rates.ByNormalized } else { @{} }
+    if (-not $key -or -not $byNormalized.ContainsKey($key)) { return $null }
+    $r = $byNormalized[$key]
+    return 0.20 * $r.input + 0.80 * $r.cached + 0.08 * $r.cache_write + 0.02 * $r.output
+}
+
+function Get-ObservedUsageLocal {
+    <#
+    .SYNOPSIS
+        Joins the session log's per-dispatch totals to this root's history
+        aggregates and prices both the routed run and a single-model baseline
+        at blended rates. Returns $null when there is nothing observed.
+    #>
+    param(
+        [Parameter(Mandatory)]$Session,
+        [Parameter(Mandatory)]$Rates,
+        [AllowEmptyCollection()][object[]]$OrderedAggregates = @(),
+        $OrchestrationAggregate,
+        [AllowEmptyString()][string]$BaselineModel,
+        [System.Collections.Generic.List[string]]$Warnings
+    )
+    if ($Session.Dispatches.Count -eq 0 -and $null -eq $Session.NanoAiu) { return $null }
+
+    $estimatedByAgent = @{}
+    $ledgerModelsByAgent = @{}
+    foreach ($entry in $OrderedAggregates) {
+        $agg = $entry.Aggregate
+        $estimatedByAgent[$entry.AgentName] = $agg.Input + $agg.Cached + $agg.CacheWrite + $agg.Output
+        $ledgerModelsByAgent[$entry.AgentName] = @($agg.Models)
+    }
+    if ($OrchestrationAggregate) {
+        $estimatedByAgent['Squad Scribe'] = $OrchestrationAggregate.Input + $OrchestrationAggregate.Cached + $OrchestrationAggregate.CacheWrite + $OrchestrationAggregate.Output
+        $ledgerModelsByAgent['Squad Scribe'] = @($OrchestrationAggregate.Models)
+    }
+
+    $unpriced = [System.Collections.Generic.List[string]]::new()
+    $rows = [System.Collections.Generic.List[pscustomobject]]::new()
+    foreach ($group in ($Session.Dispatches | Group-Object AgentName)) {
+        $observedModels = @($group.Group | ForEach-Object { $_.Model } | Where-Object { $_ } | Select-Object -Unique)
+        $cost = 0.0
+        foreach ($d in $group.Group) {
+            $blended = Get-BlendedRateLocal -Model $d.Model -Rates $Rates
+            if ($null -eq $blended) { if ($d.Model -notin $unpriced) { $unpriced.Add($d.Model) }; continue }
+            $cost += $d.Tokens * $blended / 1e6
+        }
+        $ledgerModels = @(if ($ledgerModelsByAgent.ContainsKey($group.Name)) { $ledgerModelsByAgent[$group.Name] })
+        $observedKeys = @($observedModels | ForEach-Object { ConvertTo-RateKeyLocal $_ })
+        $ledgerKeys = @($ledgerModels | ForEach-Object { ConvertTo-RateKeyLocal $_ } | Where-Object { $_ -and $_ -ne 'unknown' })
+        $match = if ($ledgerKeys.Count -eq 0) { 'n/a' }
+        elseif (@($ledgerKeys | Where-Object { $_ -notin $observedKeys }).Count -eq 0 -and @($observedKeys | Where-Object { $_ -notin $ledgerKeys }).Count -eq 0) { 'yes' }
+        else { 'no' }
+        if ($match -eq 'no') {
+            $Warnings.Add("WARN: observed model for '$($group.Name)' is $($observedModels -join ', ') but its history blocks record $($ledgerModels -join ', ').")
+        }
+        $rows.Add([pscustomobject]@{
+                Agent          = $group.Name
+                IsScribe       = ($group.Name -eq 'Squad Scribe')
+                Dispatches     = $group.Count
+                ObservedModels = $observedModels
+                LedgerModels   = $ledgerModels
+                Match          = $match
+                Tokens         = ($group.Group | Measure-Object Tokens -Sum).Sum
+                Estimated      = if ($estimatedByAgent.ContainsKey($group.Name)) { $estimatedByAgent[$group.Name] } else { 0.0 }
+                Minutes        = ($group.Group | Measure-Object DurationMs -Sum).Sum / 60000.0
+                CostUsd        = $cost
+            })
+    }
+    foreach ($m in $unpriced) { $Warnings.Add("WARN: observed model '$m' has no rate row in consumption-rates.md; its tokens are left out of the blended cost.") }
+
+    $roleRows = @($rows | Where-Object { -not $_.IsScribe })
+    $roleTokens = ($roleRows | Measure-Object Tokens -Sum).Sum
+    if ($null -eq $roleTokens) { $roleTokens = 0.0 }
+
+    $baseline = $BaselineModel
+    if (-not $baseline) {
+        $baseline = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique |
+                Sort-Object { $rate = Get-BlendedRateLocal -Model $_ -Rates $Rates; if ($null -eq $rate) { -1 } else { $rate } } -Descending |
+                Select-Object -First 1)[0]
+    }
+    $baselineRate = if ($baseline) { Get-BlendedRateLocal -Model $baseline -Rates $Rates } else { $null }
+    if ($baseline -and $null -eq $baselineRate) { $Warnings.Add("WARN: baseline model '$baseline' has no rate row; the without-HVE-Squad comparison is omitted.") }
+
+    [pscustomobject]@{
+        Session          = $Session
+        Rows             = $rows
+        ObservedTokens   = ($rows | Measure-Object Tokens -Sum).Sum
+        EstimatedTokens  = ($rows | Measure-Object Estimated -Sum).Sum
+        SquadCostUsd     = ($rows | Measure-Object CostUsd -Sum).Sum
+        RoleTokens       = $roleTokens
+        BaselineModel    = $baseline
+        BaselineCostUsd  = if ($null -ne $baselineRate) { $roleTokens * $baselineRate / 1e6 } else { $null }
+        SessionAiu       = if ($null -ne $Session.NanoAiu) { $Session.NanoAiu / 1e9 } else { $null }
+    }
+}
+
+function Get-ObservedSectionLinesLocal {
+    <#
+    .SYNOPSIS
+        Renders the `## Observed Usage (host-reported)` section. Column names avoid
+        `Turns`/`Basis`/`Model Source`/`Priced As`, which -Check uses to find the
+        estimated tables.
+    #>
+    param([Parameter(Mandatory)]$Observed)
+    $s = $Observed.Session
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add('## Observed Usage (host-reported)')
+    $lines.Add('')
+    $scope = if ($s.MemberName) { " Only dispatches whose prompt names ``members/$($s.MemberName)`` are counted." } else { '' }
+    $lines.Add("Source: Copilot session ``$($s.SessionId)`` (``events.jsonl``, $($s.First) to $($s.Last)). The host reports one real token total per dispatch, not split into input, cached, and output, so these figures sit beside the estimates above rather than replacing them. Blended USD prices each total with model-catalog.md's blended mix (0.20 input, 0.80 cached, 0.08 cache write, 0.02 output) over this root's rate rows.$scope")
+    $lines.Add('')
+    $lines.Add('| Agent | Dispatches | Observed Model | Ledger Model | Match | Observed Tokens | Estimated Tokens | Minutes | Blended USD |')
+    $lines.Add('| ----- | ---------- | -------------- | ------------ | ----- | --------------- | ---------------- | ------- | ----------- |')
+    foreach ($r in ($Observed.Rows | Sort-Object IsScribe, Agent)) {
+        $ledger = if ($r.LedgerModels.Count -gt 0) { $r.LedgerModels -join ', ' } else { '—' }
+        $lines.Add(('| {0} | {1} | {2} | {3} | {4} | {5:N0} | {6:N0} | {7:N1} | {8:N4} |' -f $r.Agent, $r.Dispatches, ($r.ObservedModels -join ', '), $ledger, $r.Match, $r.Tokens, $r.Estimated, $r.Minutes, $r.CostUsd))
+    }
+    $lines.Add(('| **Subagents total** | **{0}** | | | | **{1:N0}** | **{2:N0}** | | **{3:N4}** |' -f ($Observed.Rows | Measure-Object Dispatches -Sum).Sum, $Observed.ObservedTokens, $Observed.EstimatedTokens, $Observed.SquadCostUsd))
+    $lines.Add('')
+    if ($null -ne $Observed.SessionAiu) {
+        $lines.Add(('Session total billed by the host, coordinator included: **{0:N2} AI units** (about {1:N2} USD at 0.01 USD per unit, the same convention as 1 AI credit). The coordinator''s own turns appear only in this figure, never in the table.' -f $Observed.SessionAiu, ($Observed.SessionAiu * 0.01)))
+        $lines.Add('')
+    }
+    if ($null -ne $Observed.BaselineCostUsd) {
+        $lines.Add('### Without HVE Squad')
+        $lines.Add('')
+        $lines.Add('| Scenario | Tokens | Model | Blended USD |')
+        $lines.Add('| -------- | ------ | ----- | ----------- |')
+        $lines.Add(('| With HVE Squad: routed roles plus Scribe, as observed | {0:N0} | as routed | {1:N4} |' -f $Observed.ObservedTokens, $Observed.SquadCostUsd))
+        $lines.Add(('| Without HVE Squad: the same role work on one model, no Scribe | {0:N0} | {1} | {2:N4} |' -f $Observed.RoleTokens, $Observed.BaselineModel, $Observed.BaselineCostUsd))
+        $lines.Add('')
+        $delta = $Observed.BaselineCostUsd - $Observed.SquadCostUsd
+        $pct = if ($Observed.BaselineCostUsd -gt 0) { [math]::Abs($delta) / $Observed.BaselineCostUsd * 100 } else { 0 }
+        $direction = if ($delta -ge 0) { 'lower' } else { 'higher' }
+        $lines.Add(('HVE Squad is **{0:N4} USD ({1:N1}%) {2}** than running the same role work on `{3}`. Both rows use the same blended mix; neither includes coordinator turns, and the single-model row adds no context growth or rework a long single chat would carry, so it is a floor for that scenario rather than a forecast.' -f [math]::Abs($delta), $pct, $direction, $Observed.BaselineModel))
+        $lines.Add('')
+    }
+    return $lines.ToArray()
+}
+
+function Get-ConsumptionWithObservedLocal {
+    <#
+    .SYNOPSIS
+        Replaces an existing Observed Usage section, or inserts one before
+        `## Cost Comparison` (or at the end), in consumption.md text.
+    #>
+    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][AllowEmptyString()][string[]]$SectionLines)
+    $newline = if ($Text.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $lines = [System.Collections.Generic.List[string]]::new()
+    foreach ($l in ($Text -split '\r?\n')) { $lines.Add($l) }
+
+    $start = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^##\s+Observed Usage \(host-reported\)\s*$') { $start = $i; break } }
+    if ($start -ge 0) {
+        $end = $lines.Count
+        for ($j = $start + 1; $j -lt $lines.Count; $j++) { if ($lines[$j] -match '^##\s') { $end = $j; break } }
+        $lines.RemoveRange($start, $end - $start)
+        $insertAt = $start
+    }
+    else {
+        $insertAt = $lines.Count
+        for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^##\s+Cost Comparison') { $insertAt = $i; break } }
+    }
+    $lines.InsertRange($insertAt, [string[]]$SectionLines)
+    return ($lines -join $newline)
 }
 
 # ---------------------------------------------------------------------------
@@ -1751,7 +2139,7 @@ if ($Check) {
             $mismatches.Add("Baseline file '$BaselinePath' not found.")
         }
         else {
-            $baselineFailures = @(Test-SquadLedgerBaselineLocal -SquadRoot $SquadRoot -Baseline $loadedBaseline -HistoryFiles $historyFiles -ProtectedPath $ProtectedPath -AllowedWritePath $AllowedWritePath)
+            $baselineFailures = @(Test-SquadLedgerBaselineLocal -SquadRoot $SquadRoot -Baseline $loadedBaseline -HistoryFiles $historyFiles -ProtectedPath $ProtectedPath -AllowedWritePath $AllowedWritePath -BaselineFilesRoot "$([System.IO.Path]::GetFullPath($BaselinePath)).files")
             foreach ($f in $baselineFailures) { $mismatches.Add("Baseline: $f") }
         }
     }
@@ -2008,6 +2396,18 @@ if ($Check) {
 # splices the same markdown fragment into consumption.md itself).
 # ---------------------------------------------------------------------------
 
+$observed = $null
+if ($SessionLog) {
+    $sessionPath = Resolve-SessionLogPathLocal -SessionLog $SessionLog -SquadRoot $SquadRoot
+    if ($sessionPath) {
+        $session = Read-SessionUsageLocal -Path $sessionPath -SquadRoot $SquadRoot
+        $observed = Get-ObservedUsageLocal -Session $session -Rates $rates -OrderedAggregates @($ordered) -OrchestrationAggregate $orchestrationAggregate -BaselineModel $BaselineModel -Warnings $warnings
+    }
+    else {
+        $warnings.Add("WARN: -SessionLog auto found no Copilot session whose workspace is this squad root's repository; no observed usage was added.")
+    }
+}
+
 $fragmentLines = [System.Collections.Generic.List[string]]::new()
 $fragmentLines.Add('## Attribution')
 $fragmentLines.Add('')
@@ -2028,6 +2428,11 @@ foreach ($agg in $roleAggregates) {
 }
 $fragmentLines.Add(('| **Total** | **{0:N0}** | **{1:N0}** | **{2:N0}** | **{3:N0}** | **{4:N0}** | **{5:N4}** | **{6:N2}** | |' -f `
             $totalTurns, $totalInput, $totalCached, $totalCacheWrite, $totalOutput, $totalCost, $totalCredits))
+if ($observed -and $null -ne $observed.SessionAiu -and $observed.SessionAiu -gt 0) {
+    $billedUsd = $observed.SessionAiu * 0.01
+    $fragmentLines.Add('')
+    $fragmentLines.Add(('> **Billed by the host for this session so far: {0:N2} AI units, about {1:N2} USD.** The estimate above is {2:N2}x that figure. Estimates come from dispatch-size guesses; the billed figure is the host''s own count, coordinator included. See *Observed Usage (host-reported)* below.' -f $observed.SessionAiu, $billedUsd, ($totalCost / $billedUsd)))
+}
 $fragmentLines.Add('')
 $fragmentLines.Add('### Derivation')
 $fragmentLines.Add('')
@@ -2058,6 +2463,9 @@ if ($Write) {
         Get-ConsumptionFragmentUpdateLocal -ConsumptionPath $consumptionPath -FragmentLines $fragmentLines.ToArray()
         Get-StateRunTotalUpdateLocal -StatePath $statePath -CostUsd $totalCost -Credits $totalCredits
     )
+    if ($observed) {
+        $updates[0].Text = Get-ConsumptionWithObservedLocal -Text $updates[0].Text -SectionLines (Get-ObservedSectionLinesLocal -Observed $observed)
+    }
     foreach ($u in $updates) { [System.IO.File]::WriteAllText($u.Path, $u.Text, $u.Encoding) }
     foreach ($w in $warnings) { Write-Warning $w }
     Write-Host ("Measure-SquadLedger -Write: rewrote the Attribution, Usage & Cost, and Derivation sections of consumption.md and set run totals in state.json (estCostUsd={0:F4}, estCreditsTotal={1:F2})." -f $totalCost, $totalCredits) -ForegroundColor Green
@@ -2108,6 +2516,24 @@ if ($Format -eq 'json') {
         historyCounts     = $historyCounts
         stateEstCostUsd   = $stateCostUsd
         stateEstCredits   = $stateCreditsTotal
+        observed          = if ($observed) {
+            [ordered]@{
+                sessionId       = $observed.Session.SessionId
+                sessionLog      = $observed.Session.Path
+                sessionAiu      = $observed.SessionAiu
+                observedTokens  = $observed.ObservedTokens
+                estimatedTokens = $observed.EstimatedTokens
+                blendedCostUsd  = [math]::Round($observed.SquadCostUsd, 4)
+                baselineModel   = $observed.BaselineModel
+                baselineCostUsd = if ($null -ne $observed.BaselineCostUsd) { [math]::Round($observed.BaselineCostUsd, 4) } else { $null }
+                agents          = @(
+                    foreach ($r in $observed.Rows) {
+                        [ordered]@{ agent = $r.Agent; dispatches = $r.Dispatches; observedModels = @($r.ObservedModels); ledgerModels = @($r.LedgerModels); match = $r.Match; observedTokens = $r.Tokens; estimatedTokens = $r.Estimated; blendedCostUsd = [math]::Round($r.CostUsd, 4) }
+                    }
+                )
+            }
+        }
+        else { $null }
         warnings          = @($warnings)
     }
     $result | ConvertTo-Json -Depth 6
@@ -2115,6 +2541,10 @@ if ($Format -eq 'json') {
 }
 
 foreach ($line in $fragmentLines) { Write-Host $line }
+if ($observed) {
+    Write-Host ''
+    foreach ($line in (Get-ObservedSectionLinesLocal -Observed $observed)) { Write-Host $line }
+}
 
 # Diagnostics only, never on the success stream: this keeps stdout a paste-safe
 # `## Attribution` / `## Usage & Cost` / `### Derivation` fragment that can never be

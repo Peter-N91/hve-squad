@@ -62,6 +62,8 @@ Highest wins, per role, evaluated independently for every dispatch:
 3. `tier=` (the existing static-tier input) or the seeded `team.md` Model Tier — today's fallback, unchanged.
 4. Omit the parameter — the no-policy default.
 
+**Dispatch copies the cell; it never retypes it.** Under `ranked` or `manual`, every dispatch to a roster agent (Primary or Alternate) passes that row's `Model` cell, copied character for character from `team.md` as read this turn — never recalled, never omitted, never adjusted to a "similar" id. The Scribe is the one exception: its own model pin governs. A live run resolved `claude-opus-5.5` for `researcher`, then typed `claude-sonnet-5.5` into the call, and omitted `model` entirely for `intake-validator`, which ran on the session model. In the plugin distribution, the `dispatch-guards` `preToolUse` hook denies such a dispatch and names the cell to copy; it only compares and never fills or changes a cell, so how cells are chosen is unchanged. **Requested model** in the identity bullets is the value actually passed, never the cell it should have been.
+
 ## Assignment Classes
 
 Every role maps to one of the seven fixed assignment classes: `research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`. The class selects which fit column ranks the role:

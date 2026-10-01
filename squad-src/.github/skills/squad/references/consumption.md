@@ -196,4 +196,21 @@ The federation readable table displays all three terms. Federation `currentRun.e
 * `manual_baseline = expected_iterations × baseline_model_cost_per_turn`, where a manual turn is itself priced through the dispatch-size estimator rather than as a single call
 * `savings_pct = 1 - (squad_cost / manual_baseline)`
 
-All values are labeled estimated, and token counts are estimated because no per-dispatch telemetry exists.
+All values above are labeled estimated, and token counts are estimated because the coordinator never sees per-dispatch telemetry.
+
+## Observed usage (host-reported)
+
+The estimates stay; observed usage sits beside them. When the coordinator has `pwsh` 7+, its `ledgerCommand` carries `-SessionLog auto`, and `Measure-SquadLedger.ps1` reads the host's own session log (`events.jsonl` under `$COPILOT_HOME/session-state/<session id>/`, written by the Copilot CLI and the VS Code agent host) for the session whose workspace is this repository. It writes an `## Observed Usage (host-reported)` section into `consumption.md`, before `## Cost Comparison`, and replaces it on every later rewrite:
+
+* **Per agent:** dispatches, the model the host actually ran, the model the history blocks record, whether the two match, real total tokens, the estimated tokens beside them, minutes, and a blended USD figure. A `no` in the match column, also printed as a warning, is the evidence for an *Identity mismatch* in `model-routing.md`: an id passed that differs from the routed cell, or a dispatch that omitted `model` and ran on the session model.
+* **Session total:** the host's billed AI units for the whole chat session, coordinator included, read from the last `session.usage_checkpoint`. It converts at 0.01 USD per unit, the same convention as 1 AI credit. The coordinator's own turns appear only here.
+* **Without HVE Squad:** the routed run's observed tokens, roles plus Scribe at their real models, compared with the same role tokens run on one model and no Scribe. The baseline defaults to the most expensive model by blended rate that any role ran on; `-BaselineModel` overrides it.
+
+```text
+blended_rate(model) = 0.20 × input + 0.80 × cached + 0.08 × cache_write + 0.02 × output   (model-catalog.md)
+with_squad_usd      = Σ over observed dispatches of total_tokens × blended_rate(observed model) / 1e6
+without_squad_usd   = Σ over observed role dispatches of total_tokens × blended_rate(baseline) / 1e6
+difference_pct      = (without_squad_usd − with_squad_usd) / without_squad_usd
+```
+
+The host reports one token total per dispatch, never the input, cached, and output split, so both sides use the same blended mix. Neither side includes coordinator turns, and the single-model side adds no extra context growth or rework, so it is a floor for that scenario rather than a forecast. A sub-squad root counts only dispatches whose prompt names its `members/<name>/` root. Without a matching session log the section is omitted and the estimates stand alone.

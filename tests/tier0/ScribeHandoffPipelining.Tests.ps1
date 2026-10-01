@@ -112,7 +112,7 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
         It 'the coordinator hands the Scribe a ledgerCommand and the Scribe runs it instead of hand-writing the ledger' {
             $payloadTemplate = Get-SquadReferenceBody -Name 'scribe-payload-template.md'
             $payloadTemplate | Should -Match ([regex]::Escape('### 1.8 Ledger Command'))
-            $payloadTemplate | Should -Match ([regex]::Escape('ledgerCommand: pwsh -NoProfile -File "<skill root>/scripts/Measure-SquadLedger.ps1" -SquadRoot "<squadRoot>" -Write'))
+            $payloadTemplate | Should -Match ([regex]::Escape('ledgerCommand: pwsh -NoProfile -File "<skill root>/scripts/Measure-SquadLedger.ps1" -SquadRoot "<squadRoot>" -Write -SessionLog auto'))
             $scribe = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0]
             $scribe.Body | Should -Match ([regex]::Escape('**When the payload carries `ledgerCommand`, run it verbatim with the shell tool immediately after Step 13.**'))
             (Get-SquadReferenceBody -Name 'scribe-procedure.md') | Should -Match ([regex]::Escape('this entire step is that one command, run after Step 13'))
@@ -148,6 +148,12 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
             $script:OperatingProcedureBody | Should -Match ([regex]::Escape('A bare `-Check` or a count-only `-Check -ExpectedHistoryCounts` is not a write verification by itself'))
             $script:OperatingProcedureBody | Should -Match ([regex]::Escape('Pair it with `-BaselinePath`'))
             $script:GatesAndModesBody | Should -Match ([regex]::Escape('verified (`-Check -ExpectedHistoryCounts` plus `-BaselinePath`)'))
+        }
+
+        It 'only a failed pipelined hand-off latches pipelining off; a failed hand-off that ran alone does not' {
+            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('A failed verification of a hand-off that ran alone, such as the roster refresh or any other barrier write, says nothing about concurrency'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('no pipelined hand-off has failed verification this run (a failed hand-off that ran alone does not count)'))
+            $script:GatesAndModesBody | Should -Not -Match ([regex]::Escape('no fail-closed event has occurred this run'))
         }
 
         It 'a failed verification is corrected append-only, never by re-running the originating stage' {

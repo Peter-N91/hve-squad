@@ -131,6 +131,8 @@ Every question lists only models **your host can run** and that meet the role's 
 
 **Unevaluated models:** A model the host offers but the catalog does not carry is never ranked or suggested. You can still type it as a manual pick; it is then labelled `unevaluated` in the dispatch record.
 
+**Which model to start the session on.** The model you pick in the chat, or pass with `--model`, runs the coordinator: it reads the roster, plans the stages, and dispatches every role. `routing=` never changes it. Start on a fixed model from the catalog's `balanced` class (the vendor's mid tier), as capable as `claude-sonnet-5.5`. Pick any model of that class your host offers, for example `claude-sonnet-5.5`, `gpt-6-sol`, `gpt-5.6-terra`, `gemini-3.8-flash`, or `grok-4.7`; the squad skill's `references/model-catalog.md` holds the current list. A `frontier-reasoning` model adds cost to every coordinator turn without improving the work, which `ranked` already sends to frontier models where it pays off. A `fast-lightweight` model is more likely to miss required steps, such as copying the `Model` cell or sending the Scribe hand-off together with the next stage. Under `auto`, the host can switch the coordinator's model mid-run, and the ledger cannot price its share.
+
 **Examples:**
 
 ```text
@@ -182,7 +184,7 @@ Or, for a sub-squad in a federation:
 .github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/<name> -Check
 ```
 
-This script (PowerShell 7+) validates that every recorded dispatch has a consumption block, that token counts and cost derivations round-trip correctly, and that the aggregated ledger totals match the sum of all recorded history entries. The `-Check` audit is optional, never required, and is useful for post-run audits or when troubleshooting cost reporting. During a run the Scribe calls the same script with `-Write`, which rewrites the ledger sections and the two `state.json` run totals from the history files, so no model copies a derived figure by hand.
+This script (PowerShell 7+) validates that every recorded dispatch has a consumption block, that token counts and cost derivations round-trip correctly, and that the aggregated ledger totals match the sum of all recorded history entries. The `-Check` audit is optional, never required, and is useful for post-run audits or when troubleshooting cost reporting. During a run the Scribe calls the same script with `-Write`, which rewrites the ledger sections and the two `state.json` run totals from the history files, so no model copies a derived figure by hand. Add `-SessionLog auto` (the Scribe's `ledgerCommand` already does) to also record real host-reported usage beside the estimates: the model each dispatch actually ran on, real token totals, the session's billed AI units, and a comparison with the same work run on one model without HVE Squad.
 
 The `/` picker lists two entries named `squad`: pick the **prompt** ("Hands a request to the Squad
 Coordinator...") to run the squad. The **skill** ("Operating procedure for...") only loads the squad
