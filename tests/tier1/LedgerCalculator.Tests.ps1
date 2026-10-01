@@ -38,6 +38,7 @@ BeforeAll {
         param(
             [Parameter(Mandatory)][string]$SquadRoot,
             [switch]$Check,
+            [switch]$Write,
             [string]$Format,
             [hashtable]$ExpectedHistoryCounts,
             # U1 (Amendment 3 §2): -EmitBaseline / -BaselinePath / -ProtectedPath /
@@ -66,6 +67,7 @@ BeforeAll {
         else {
             $scriptArgs = @('-NoProfile', '-File', $script:LedgerScript, '-SquadRoot', $SquadRoot)
             if ($Check) { $scriptArgs += '-Check' }
+            if ($Write) { $scriptArgs += '-Write' }
             if ($Format) { $scriptArgs += @('-Format', $Format) }
             if ($EmitBaseline) { $scriptArgs += @('-EmitBaseline', $EmitBaseline) }
             if ($BaselinePath) { $scriptArgs += @('-BaselinePath', $BaselinePath) }
@@ -214,6 +216,157 @@ Describe 'Measure-SquadLedger is read-only' {
         Invoke-Ledger -SquadRoot $root -Check | Out-Null
         $after = Get-ChildItem -LiteralPath $root -Recurse -File | ForEach-Object { "$($_.FullName)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" } | Sort-Object
         (Compare-Object $before $after) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Measure-SquadLedger -Write splices the derived fragment and run totals' {
+    BeforeAll {
+        function Initialize-WriteTestRootLocal {
+            param([string]$Fixture = 'mutated')
+            $dest = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot $Fixture) -Destination $dest -Recurse
+            $dest
+        }
+
+        function Edit-StateTotalLocal {
+            param([string]$Root, [string]$Cost, [string]$Cents)
+            $statePath = Join-Path $Root 'state.json'
+            $raw = Get-Content -LiteralPath $statePath -Raw
+            $raw = $raw -replace '"estCostUsd"\s*:\s*[0-9.]+', "`"estCostUsd`": $Cost"
+            $raw = $raw -replace '"estCreditsTotal"\s*:\s*[0-9.]+', "`"estCreditsTotal`": $Cents"
+            Set-Content -LiteralPath $statePath -Value $raw -NoNewline
+        }
+    }
+
+    It 'repairs a wrong-arithmetic ledger and stale state totals so a post-write -Check passes' {
+        $root = Initialize-WriteTestRootLocal
+        Edit-StateTotalLocal -Root $root -Cost '9.9999' -Cents '999.99'
+        (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 1
+
+        $result = Invoke-Ledger -SquadRoot $root -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+
+        $check = Invoke-Ledger -SquadRoot $root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $state = Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json
+        $state.currentRun.estCostUsd | Should -Be 0.3171
+        $state.currentRun.estCreditsTotal | Should -Be 31.71
+    }
+
+    It 'leaves the frontmatter, H1, Basis note, and Cost Comparison section byte-identical' {
+        $root = Initialize-WriteTestRootLocal
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $before = Get-Content -LiteralPath $ledgerPath -Raw
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+        $after = Get-Content -LiteralPath $ledgerPath -Raw
+
+        $headOf = { param($text) $text.Substring(0, $text.IndexOf('## Attribution')) }
+        $tailOf = { param($text) $text.Substring($text.IndexOf('## Cost Comparison')) }
+        (& $headOf $after) | Should -Be (& $headOf $before)
+        (& $tailOf $after) | Should -Be (& $tailOf $before)
+        $after | Should -Match '(?m)^Squad Researcher\.md — 1 block\(s\) — identities: '
+        $after | Should -Match '\*\*0\.3171\*\*'
+    }
+
+    It 'changes only the two currentRun values in state.json, preserving every other byte' {
+        $root = Initialize-WriteTestRootLocal
+        Edit-StateTotalLocal -Root $root -Cost '1.5' -Cents '150'
+        $statePath = Join-Path $root 'state.json'
+        $before = Get-Content -LiteralPath $statePath -Raw
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+        $after = Get-Content -LiteralPath $statePath -Raw
+
+        $normalize = { param($text) ($text -replace '"estCostUsd"\s*:\s*[0-9.]+', '"estCostUsd": X') -replace '"estCreditsTotal"\s*:\s*[0-9.]+', '"estCreditsTotal": X' }
+        (& $normalize $after) | Should -Be (& $normalize $before)
+        $after | Should -Match '"estCostUsd": 0\.3171'
+        $after | Should -Match '"estCreditsTotal": 31\.71'
+    }
+
+    It 'is idempotent: a second -Write produces identical bytes' {
+        $root = Initialize-WriteTestRootLocal
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+        $first = (Get-FileHash -LiteralPath (Join-Path $root 'consumption.md')).Hash
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+        (Get-FileHash -LiteralPath (Join-Path $root 'consumption.md')).Hash | Should -Be $first
+    }
+
+    It 'refuses -Write combined with -Check, writing nothing' {
+        $root = Initialize-WriteTestRootLocal
+        $before = (Get-FileHash -LiteralPath (Join-Path $root 'consumption.md')).Hash
+        $output = & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $root -Write -Check 2>&1 | Out-String
+        $LASTEXITCODE | Should -Not -Be 0
+        $output | Should -Match 'cannot be combined with -Check'
+        (Get-FileHash -LiteralPath (Join-Path $root 'consumption.md')).Hash | Should -Be $before
+    }
+
+    It 'refuses a federation root' {
+        $root = Initialize-WriteTestRootLocal
+        Set-Content -LiteralPath (Join-Path $root 'federation.md') -Value '# Federation'
+        $result = Invoke-Ledger -SquadRoot $root -Write
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'does not apply to a federation root'
+    }
+
+    It 'refuses a consumption.md missing its Derivation block, writing neither file' {
+        $root = Initialize-WriteTestRootLocal
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $statePath = Join-Path $root 'state.json'
+        $stripped = (Get-Content -LiteralPath $ledgerPath -Raw) -replace '(?s)### Derivation.*?```text.*?```', ''
+        Set-Content -LiteralPath $ledgerPath -Value $stripped -NoNewline
+        Edit-StateTotalLocal -Root $root -Cost '1.5' -Cents '150'
+        $stateBefore = (Get-FileHash -LiteralPath $statePath).Hash
+
+        $result = Invoke-Ledger -SquadRoot $root -Write
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'nothing was written'
+        (Get-Content -LiteralPath $ledgerPath -Raw) | Should -Be $stripped
+        (Get-FileHash -LiteralPath $statePath).Hash | Should -Be $stateBefore
+    }
+
+    It 'refuses a state.json missing a currentRun total, leaving consumption.md untouched too' {
+        $root = Initialize-WriteTestRootLocal
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $statePath = Join-Path $root 'state.json'
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+        $state['currentRun'].Remove('estCreditsTotal')
+        $state | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $statePath -NoNewline
+        $ledgerBefore = (Get-FileHash -LiteralPath $ledgerPath).Hash
+
+        $result = Invoke-Ledger -SquadRoot $root -Write
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match "no 'estCreditsTotal' key"
+        (Get-FileHash -LiteralPath $ledgerPath).Hash | Should -Be $ledgerBefore
+    }
+
+    It 'repairs a hand-written ledger whose Derivation carries placeholder identities instead of hashes' {
+        # A live run's Scribe hand-wrote 'identities: unreported' and 'identities:
+        # dispatch-reported'; the guard read those labels as hashes, failed them as
+        # overwrites, and refused every later -Write.
+        $root = Initialize-WriteTestRootLocal -Fixture 'applied'
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $raw = Get-Content -LiteralPath $ledgerPath -Raw
+        $raw = $raw.Replace('```text', "``````text`nSquad Researcher.md — 1 block(s) — identities: unreported`nSquad Scribe.md — 1 block(s) — identities: dispatch-reported")
+        Set-Content -LiteralPath $ledgerPath -Value $raw -NoNewline
+
+        $result = Invoke-Ledger -SquadRoot $root -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $check = Invoke-Ledger -SquadRoot $root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+    }
+}
+
+Describe 'Measure-SquadLedger -Check reports a role missing from the ledger instead of crashing' {
+    It 'names the missing Attribution row (a live hand-written ledger dropped the intake-validator row and -Check threw on $null.Count)' {
+        $root = Join-Path $TestDrive 'missing-role-row'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $lines = Get-Content -LiteralPath $ledgerPath | Where-Object { $_ -notmatch '^\| researcher\s+\| Alpha' }
+        Set-Content -LiteralPath $ledgerPath -Value $lines
+
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "missing a row for role 'researcher'"
+        $result.Output | Should -Not -Match 'Count'
     }
 }
 
@@ -756,7 +909,7 @@ Describe 'Measure-SquadLedger C2 history-identity guard: post-write (-Check + -E
         $result = Invoke-Ledger -SquadRoot $script:MissingPostWriteRoot -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1 }
         $result.ExitCode | Should -Be 1
         $result.Output | Should -Match 'FAIL'
-        $result.Output | Should -Match 'paste the helper''s Derivation verbatim including identity lines'
+        $result.Output | Should -Match 'rerun this helper with -Write, which writes identity lines for every history file'
     }
 
     It 'a partial paste (one file''s identities recorded, another file''s missing entirely), without -ExpectedHistoryCounts, only warns and still passes -Check' {

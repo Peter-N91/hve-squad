@@ -208,8 +208,8 @@ function Test-CostPrecheck {
         Harness-level cost precheck (Amendment 2 §11 "Harness precheck"): running sum
         plus the next run's estimate reaching the ceiling aborts remaining runs. This
         is the 150 USD *harness* limit named by the human, never a squad Cost
-        Preflight ceiling (a squad ceiling would itself latch pipelining off for the
-        AFTER arm, per the Enablement Predicate -- see the run's human decision).
+        Preflight ceiling (the benchmark keeps squad ceilings out of both arms so it
+        isolates hand-off pipelining -- see the run's human decision).
     .PARAMETER RunningTotalUsd
         Sum of actual (or, absent actual figures, estimated) cost for every run
         completed so far, across both arms.

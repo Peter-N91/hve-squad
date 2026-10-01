@@ -157,21 +157,28 @@
 
       <h2 id="autopilot-hand-off-pipelining">Autopilot hand-off pipelining</h2>
       <p>
-        Under <code>mode=autopilot</code>, the coordinator may dispatch stage N's Scribe hand-off and
-        stage N+1's role in parallel when three conditions hold: stage N's own artifact is confirmed on
-        disk, the host's dispatch tool advertises a background or asynchronous execution mode (such as
-        Copilot CLI's <code>task</code> tool with <code>mode: background</code>), and pipelining has not been
-        disabled by a prior verification failure in this run.
+        Under <code>mode=autopilot</code>, the coordinator dispatches stage N's Scribe hand-off and
+        stage N+1's role together, as two calls in one parallel tool-call block, whenever no barrier
+        applies and three conditions hold: stage N's own artifact is confirmed on
+        disk, the host's subagent-dispatch tool can be called more than once in one parallel tool-call
+        block (VS Code's <code>runSubagent</code>, or Copilot CLI's <code>task</code> tool with or without
+        <code>mode: background</code>), and pipelining has not been disabled by a prior verification
+        failure in this run. Handing off to the Scribe alone and waiting is a defect in that case.
+      </p>
+      <p>
+        A <code>cost-ceiling</code> does not turn pipelining off. The Cost Preflight round that admits
+        stage N+1 runs between the two parallel blocks and counts stage N's not-yet-recorded spend as a
+        pending reservation, so the ceiling never under-counts spend while a hand-off is in flight.
+        An inner run under untargeted federation autopilot pipelines at its own sub-squad root too.
       </p>
       <p>
         Pipelining remains <strong>off</strong> in the following cases:
       </p>
       <ul>
         <li>Watch Mode</li>
-        <li>Any <code>cost-ceiling</code> has been configured at any point in this run (latched; once true, stays true)</li>
         <li>The squad is a federation root (marked by presence of <code>federation.md</code>)</li>
-        <li>An inner run under untargeted federation autopilot with an aggregate ceiling</li>
-        <li>The host's dispatch tool does not advertise an asynchronous execution mode</li>
+        <li>The active Cost Preflight round is <code>approved-over-ceiling</code>, whose dispatch units stay sequential</li>
+        <li>The host has no subagent-dispatch tool that accepts more than one call per block</li>
         <li>After a verification failure has occurred in this run</li>
       </ul>
       <p>
@@ -1575,6 +1582,16 @@ layouts:
         Scribe's own post-write self-check — a Derivation missing identities entirely, or missing them for only
         some of the touched files (a partial paste), fails instead of warning.</li>
       </ul>
+      <p>
+        The Scribe does not hand-copy these figures. Its only write path for them is
+        <code>Measure-SquadLedger.ps1 -Write</code>, which replaces the Attribution, Usage &amp; Cost, and
+        Derivation sections of <code>consumption.md</code> and sets <code>state.json</code>'s two
+        <code>currentRun</code> totals from the same derivation. Every other byte of both files is left
+        unchanged. It refuses and writes nothing on a federation root, beside <code>-Check</code>, or when either
+        file lacks the section it replaces. The coordinator puts the exact command in each Scribe hand-off
+        as <code>ledgerCommand</code>, and the Scribe runs it as its last write. Run <code>-Check</code>
+        afterwards to confirm the write.
+      </p>
 
       <h3>Requirements for running the squad</h3>
       <ul>

@@ -38,9 +38,9 @@
     before -CopyReportTo copies anything into the repository -- a scan failure is
     fail-closed and the copy is refused.
 
-    No squad Cost Preflight ceiling is ever configured in either arm's turns (a squad
-    ceiling would itself latch pipelining off for the AFTER arm, per the Enablement
-    Predicate -- this run's human decision). The only spend limit is this harness's
+    No squad Cost Preflight ceiling is ever configured in either arm's turns (the
+    comparison isolates hand-off pipelining from pending-reservation admission --
+    this run's human decision). The only spend limit is this harness's
     own -CostCeilingUsd, checked between runs via Test-CostPrecheck, independent of
     anything the squad's own state tracks.
 

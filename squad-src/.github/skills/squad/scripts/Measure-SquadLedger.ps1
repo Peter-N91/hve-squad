@@ -17,10 +17,13 @@
     `consumption.md` unchanged or used to verify a Scribe write that already happened.
 
     It ships inside the squad skill's `scripts/` directory, alongside the reference
-    files it re-derives, so a consumer with the skill installed already has it. It is
-    read-only: it never writes `consumption.md`, `consumption-rates.md`, or any other
-    squad-state file. The Scribe remains the single writer of squad state; this script
-    only computes what the Scribe should write, or checks what it did write.
+    files it re-derives, so a consumer with the skill installed already has it. By
+    default it is read-only: it never writes `consumption.md`, `consumption-rates.md`,
+    or any other squad-state file, and only computes what the Scribe should write, or
+    checks what it did write. The one exception is `-Write`, which the Scribe itself
+    runs as its own tool: it splices the derived fragment into `consumption.md` and
+    sets the two `state.json` `currentRun` totals, so the Scribe remains the single
+    writer of squad state while no model transcribes a derived number by hand.
 
     Field order for a `#### Consumption` (or `#### Consumption — Orchestration`) block
     is contractual and validated in order: `model`, `model_source`, `priced_as`,
@@ -109,6 +112,20 @@
     extension, e.g. `'Squad Researcher'` or `'Squad Researcher.md'`) whose value is
     the expected `###` dispatch-entry count for that file. Compared only when -Check
     is also supplied.
+.PARAMETER Write
+    Scribe-invoked write mode. Derives the same fragment the default markdown mode
+    prints, then replaces the existing `## Attribution` heading through the closing
+    fence of the `### Derivation` block inside the squad root's `consumption.md`,
+    leaving the H1, frontmatter, Basis note, and Cost Comparison section untouched,
+    and sets only `currentRun.estCostUsd` and `currentRun.estCreditsTotal` in
+    `state.json` to the derived run totals (a value-only replacement, so every other
+    byte of `state.json`, including date strings, is preserved). Refuses, writing
+    nothing, when combined with -Check or key-lookup mode, on a federation root
+    (marked by `federation.md`), when `consumption.md` lacks those anchors or
+    `state.json` lacks exactly one of each `currentRun` key, and in every case the
+    render mode already refuses (a failing history-identity guard or an unreadable
+    post-baseline block). Run it after every other write the hand-off makes to
+    `state.json`, then run -Check -ExpectedHistoryCounts as the self-check.
 .PARAMETER Format
     Output shape: `markdown` (default) prints the pasteable table and Derivation
     block; `json` prints the same figures as a structured object instead, for a
@@ -197,6 +214,8 @@
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
 .EXAMPLE
+    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/product -Write
+.EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -EmitBaseline $env:TEMP/squad-baseline.json -ProtectedPath 'research/2026-09-27-topic.md'
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -BaselinePath $env:TEMP/squad-baseline.json -ProtectedPath 'research/2026-09-27-topic.md' -AllowedWritePath 'research/2026-09-28-next.md'
@@ -214,6 +233,8 @@ param(
     [string]$SquadRoot,
 
     [switch]$Check,
+
+    [switch]$Write,
 
     [hashtable]$ExpectedHistoryCounts = @{},
 
@@ -587,7 +608,7 @@ function Test-HistoryIdentityGuardLocal {
         if ($PostWrite) {
             return [pscustomobject]@{
                 Legacy   = $true
-                Failures = @("History identity guard: consumption.md's ### Derivation block records no history-entry identities. This is the Scribe's post-write self-check (-ExpectedHistoryCounts was supplied), which always follows a fresh write, so a missing Derivation here is a bad paste, not a legacy ledger -- paste the helper's Derivation verbatim including identity lines.")
+                Failures = @("History identity guard: consumption.md's ### Derivation block records no history-entry identities. This is the Scribe's post-write self-check (-ExpectedHistoryCounts was supplied), which always follows a fresh write, so a missing Derivation here is a bad paste, not a legacy ledger -- rerun this helper with -Write, which writes identity lines for every history file.")
                 Warnings = @()
             }
         }
@@ -604,7 +625,12 @@ function Test-HistoryIdentityGuardLocal {
         $idsMatch = [regex]::Match($lineMatch.Groups['rest'].Value, '— identities: (?<ids>.*)$')
         if (-not $idsMatch.Success) { continue }
         $idsText = $idsMatch.Groups['ids'].Value.Trim()
-        $recordedByFile[$fileName] = if (-not $idsText -or $idsText -eq '(none)') { @() } else { @($idsText -split ',' | ForEach-Object { $_.Trim() }) }
+        $ids = if (-not $idsText -or $idsText -eq '(none)') { @() } else { @($idsText -split ',' | ForEach-Object { $_.Trim() }) }
+        # Only this script writes identities, always as 8-hex hashes. A hand-written
+        # placeholder ('unreported', a model source) carries no record, so the file is
+        # treated as unrecorded (the partial-paste path below) instead of as a rewrite.
+        if (@($ids | Where-Object { $_ -notmatch '^[0-9a-f]{8}$' }).Count -gt 0) { continue }
+        $recordedByFile[$fileName] = $ids
     }
 
     # Partial paste: a file this run enumerates with at least one history entry
@@ -618,7 +644,7 @@ function Test-HistoryIdentityGuardLocal {
         if ($recordedByFile.ContainsKey($fileName)) { continue }
         $message = "consumption.md's ### Derivation block has no recorded identities for '$fileName', even though other history files in the same block carry them (a partial paste); the C2 guard cannot check '$fileName' this run."
         if ($PostWrite) {
-            $failures.Add("History identity guard: $message This is the Scribe's post-write self-check, so a partial paste must not pass -- paste the helper's Derivation verbatim including identity lines for every history file, not just some.")
+            $failures.Add("History identity guard: $message This is the Scribe's post-write self-check, so a partial paste must not pass -- rerun this helper with -Write, which writes identity lines for every history file, not just some.")
         }
         else {
             $guardWarnings.Add($message)
@@ -1298,6 +1324,109 @@ function Invoke-SquadLedgerLookupLocal {
 }
 
 # ---------------------------------------------------------------------------
+# -Write mode helpers: the Scribe's own deterministic writer for the two
+# derived files, so no model transcribes a derived figure by hand.
+# ---------------------------------------------------------------------------
+
+function Get-Utf8EncodingForFileLocal {
+    <#
+    .SYNOPSIS
+        Returns a UTF-8 encoding that preserves whether the file carried a BOM.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $hasBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+    return [System.Text.UTF8Encoding]::new($hasBom)
+}
+
+function Get-ConsumptionFragmentUpdateLocal {
+    <#
+    .SYNOPSIS
+        Returns consumption.md's new text with `## Attribution` through the closing
+        fence of `### Derivation` replaced by the derived fragment, preserving every
+        other line and the file's newline style and BOM. Writes nothing.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$ConsumptionPath,
+        [Parameter(Mandatory)][AllowEmptyString()][string[]]$FragmentLines
+    )
+    if (-not (Test-Path -LiteralPath $ConsumptionPath -PathType Leaf)) {
+        throw "Measure-SquadLedger -Write: consumption.md not found at '$ConsumptionPath'. Seed it from the consumption.md template in references/consumption.md first."
+    }
+    $encoding = Get-Utf8EncodingForFileLocal -Path $ConsumptionPath
+    $content = [System.IO.File]::ReadAllText($ConsumptionPath, $encoding)
+    $newline = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $lines = $content -split '\r?\n'
+
+    $start = -1; $derivation = -1; $open = -1; $close = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($start -lt 0) {
+            if ($lines[$i] -match '^##\s+Attribution\s*$') { $start = $i }
+        }
+        elseif ($derivation -lt 0) {
+            if ($lines[$i] -match '^###\s+Derivation\s*$') { $derivation = $i }
+        }
+        elseif ($open -lt 0) {
+            if ($lines[$i] -match '^```') { $open = $i }
+            elseif ($lines[$i] -match '^#{1,3}\s') { break }
+        }
+        elseif ($lines[$i] -match '^```\s*$') { $close = $i; break }
+    }
+    if ($start -lt 0 -or $derivation -lt 0 -or $open -lt 0 -or $close -lt 0) {
+        throw "Measure-SquadLedger -Write: consumption.md at '$ConsumptionPath' lacks the '## Attribution' ... '### Derivation' fenced block this mode replaces; nothing was written. Restore its shape from the consumption.md template in references/consumption.md first."
+    }
+
+    $head = if ($start -gt 0) { $lines[0..($start - 1)] } else { @() }
+    $tail = if ($close -lt $lines.Count - 1) { $lines[($close + 1)..($lines.Count - 1)] } else { @() }
+    $text = (@($head) + @($FragmentLines) + @($tail)) -join $newline
+    return [pscustomobject]@{ Path = $ConsumptionPath; Text = $text; Encoding = $encoding }
+}
+
+function Get-StateRunTotalUpdateLocal {
+    <#
+    .SYNOPSIS
+        Returns state.json's new text with only currentRun.estCostUsd and
+        currentRun.estCreditsTotal replaced in place, so no other byte of the file
+        changes. Writes nothing.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$StatePath,
+        [Parameter(Mandatory)][double]$CostUsd,
+        [Parameter(Mandatory)][double]$Credits
+    )
+    if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
+        throw "Measure-SquadLedger -Write: state.json not found at '$StatePath'."
+    }
+    $encoding = Get-Utf8EncodingForFileLocal -Path $StatePath
+    $text = [System.IO.File]::ReadAllText($StatePath, $encoding)
+    try { $parsed = $text | ConvertFrom-Json -AsHashtable }
+    catch { throw "Measure-SquadLedger -Write: state.json at '$StatePath' failed to parse: $($_.Exception.Message)" }
+    if (-not $parsed.ContainsKey('currentRun') -or $parsed['currentRun'] -isnot [System.Collections.IDictionary]) {
+        throw "Measure-SquadLedger -Write: state.json at '$StatePath' has no 'currentRun' object; nothing was written."
+    }
+
+    $invariant = [System.Globalization.CultureInfo]::InvariantCulture
+    $values = [ordered]@{
+        estCostUsd      = $CostUsd.ToString('F4', $invariant)
+        estCreditsTotal = $Credits.ToString('F2', $invariant)
+    }
+    $replacements = foreach ($key in $values.Keys) {
+        if (-not $parsed['currentRun'].Contains($key)) {
+            throw "Measure-SquadLedger -Write: state.json currentRun has no '$key' key; nothing was written."
+        }
+        $found = [regex]::Matches($text, '"' + $key + '"\s*:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|null)')
+        if ($found.Count -ne 1) {
+            throw "Measure-SquadLedger -Write: expected exactly one numeric '$key' in state.json, found $($found.Count); nothing was written."
+        }
+        [pscustomobject]@{ Index = $found[0].Groups[1].Index; Length = $found[0].Groups[1].Length; Value = $values[$key] }
+    }
+    foreach ($r in @($replacements | Sort-Object Index -Descending)) {
+        $text = $text.Substring(0, $r.Index) + $r.Value + $text.Substring($r.Index + $r.Length)
+    }
+    return [pscustomobject]@{ Path = $StatePath; Text = $text; Encoding = $encoding }
+}
+
+# ---------------------------------------------------------------------------
 # Main.
 # ---------------------------------------------------------------------------
 
@@ -1305,6 +1434,18 @@ if (-not (Test-Path -LiteralPath $SquadRoot -PathType Container)) {
     throw "Measure-SquadLedger: squad root not found at '$SquadRoot'."
 }
 $SquadRoot = (Resolve-Path -LiteralPath $SquadRoot).Path
+
+if ($Write) {
+    if ($Check) {
+        throw 'Measure-SquadLedger: -Write cannot be combined with -Check. Run -Write, then run -Check -ExpectedHistoryCounts separately as the self-check.'
+    }
+    if (@('LookupRunId', 'LookupTopic', 'LookupStage', 'LookupSlot' | Where-Object { $PSBoundParameters.ContainsKey($_) }).Count -gt 0) {
+        throw 'Measure-SquadLedger: -Write cannot be combined with key-lookup mode.'
+    }
+    if (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') -PathType Leaf) {
+        throw "Measure-SquadLedger: -Write does not apply to a federation root ('$SquadRoot'); federation totals aggregate member ledgers per the federation autopilot contract. Run it against a squad or sub-squad root."
+    }
+}
 
 # ---------------------------------------------------------------------------
 # Key-lookup mode (Amendment 3 §2 item 2): a self-contained early exit. All
@@ -1713,7 +1854,7 @@ if ($Check) {
             foreach ($agg in $roleAggregates) {
                 $roleKeyLower = $agg.Label.Trim().ToLowerInvariant()
                 $agentLabel = ([string]$agg.Agent).Trim()
-                $candidates = if ($ledgerRowsByRole.ContainsKey($roleKeyLower)) { $ledgerRowsByRole[$roleKeyLower] } else { @() }
+                $candidates = @(if ($ledgerRowsByRole.ContainsKey($roleKeyLower)) { $ledgerRowsByRole[$roleKeyLower] })
                 # Disambiguation by Agent is only required when a collision
                 # actually exists on either side -- more than one aggregate for
                 # this Role, or more than one ledger row for it.
@@ -1863,8 +2004,65 @@ if ($Check) {
 }
 
 # ---------------------------------------------------------------------------
-# Output (markdown, pasteable into consumption.md; or json).
+# Output (markdown, pasteable into consumption.md; json; or -Write, which
+# splices the same markdown fragment into consumption.md itself).
 # ---------------------------------------------------------------------------
+
+$fragmentLines = [System.Collections.Generic.List[string]]::new()
+$fragmentLines.Add('## Attribution')
+$fragmentLines.Add('')
+$fragmentLines.Add('| Role | Member | Agent | Model | Model Source | Priced As | Tier |')
+$fragmentLines.Add('| ---- | ------ | ----- | ----- | ------------ | --------- | ---- |')
+foreach ($agg in $roleAggregates) {
+    $fragmentLines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} |' -f `
+                $agg.Label, $agg.Member, $agg.Agent, ($agg.Models -join ', '), ($agg.ModelSources -join ', '), ($agg.PricedAsUsed -join ', '), $agg.Tier))
+}
+$fragmentLines.Add('')
+$fragmentLines.Add('## Usage & Cost')
+$fragmentLines.Add('')
+$fragmentLines.Add('| Role | Turns | In Tokens | Cached | Cache Wr | Out Tokens | Est. Cost (USD) | Est. Credits | Basis |')
+$fragmentLines.Add('| ---- | ----- | --------- | ------ | -------- | ---------- | ---------------- | ------------ | ----- |')
+foreach ($agg in $roleAggregates) {
+    $fragmentLines.Add(('| {0} | {1:N0} | {2:N0} | {3:N0} | {4:N0} | {5:N0} | {6:N4} | {7:N2} | {8} |' -f `
+                $agg.Label, $agg.Turns, $agg.Input, $agg.Cached, $agg.CacheWrite, $agg.Output, $agg.Cost, ($agg.Cost / 0.01), $agg.Basis))
+}
+$fragmentLines.Add(('| **Total** | **{0:N0}** | **{1:N0}** | **{2:N0}** | **{3:N0}** | **{4:N0}** | **{5:N4}** | **{6:N2}** | |' -f `
+            $totalTurns, $totalInput, $totalCached, $totalCacheWrite, $totalOutput, $totalCost, $totalCredits))
+$fragmentLines.Add('')
+$fragmentLines.Add('### Derivation')
+$fragmentLines.Add('')
+$fragmentLines.Add('```text')
+foreach ($line in $enumerationLines) { $fragmentLines.Add($line) }
+foreach ($agg in $roleAggregates) {
+    if ($agg.Blocks.Count -eq 0) { continue }
+    $firstRate = $agg.Blocks[0].Rate
+    $mismatch = @($agg.Blocks | Where-Object { $_.Rate.input -ne $firstRate.input -or $_.Rate.output -ne $firstRate.output }).Count -gt 0
+    if ($mismatch) {
+        $fragmentLines.Add("NOTE: $($agg.Label) blocks priced at more than one rate; the line below uses the first block's rate over the aggregated tokens, but the role's Cost column above sums each block at its own rate.")
+    }
+
+    $turnsPerBlock = @($agg.Blocks | ForEach-Object { [double]$_.Block.Fields['internal_turns'] })
+    $turnsExpr = if ($turnsPerBlock.Count -gt 1) { "$($turnsPerBlock -join '+')=$($agg.Turns)" } else { "$($agg.Turns)" }
+
+    $rawSum = [math]::Round($agg.Input * $firstRate.input + $agg.Cached * $firstRate.cached + $agg.CacheWrite * $firstRate.cache_write + $agg.Output * $firstRate.output, 4)
+    $rawLine = '{0} × {1:N2} + {2} × {3:N2} + {4} × {5:N2} + {6} × {7:N2} = {8} / 1e6 = {9:N4}' -f $agg.Input, $firstRate.input, $agg.Cached, $firstRate.cached, $agg.CacheWrite, $firstRate.cache_write, $agg.Output, $firstRate.output, $rawSum, $agg.Cost
+    $fragmentLines.Add(("{0,-14} turns {1,-12} {2}" -f $agg.Label, $turnsExpr, $rawLine))
+}
+$fragmentLines.Add(("{0,-14} {1,-12} {2,-59} total = {3:N4}" -f '', '', '', $totalCost))
+$fragmentLines.Add('```')
+
+if ($Write) {
+    # Both updates are computed before either file is written, so a refusal on
+    # one never leaves the other half-applied.
+    $updates = @(
+        Get-ConsumptionFragmentUpdateLocal -ConsumptionPath $consumptionPath -FragmentLines $fragmentLines.ToArray()
+        Get-StateRunTotalUpdateLocal -StatePath $statePath -CostUsd $totalCost -Credits $totalCredits
+    )
+    foreach ($u in $updates) { [System.IO.File]::WriteAllText($u.Path, $u.Text, $u.Encoding) }
+    foreach ($w in $warnings) { Write-Warning $w }
+    Write-Host ("Measure-SquadLedger -Write: rewrote the Attribution, Usage & Cost, and Derivation sections of consumption.md and set run totals in state.json (estCostUsd={0:F4}, estCreditsTotal={1:F2})." -f $totalCost, $totalCredits) -ForegroundColor Green
+    exit 0
+}
 
 if ($Format -eq 'json') {
     $result = [ordered]@{
@@ -1916,47 +2114,7 @@ if ($Format -eq 'json') {
     exit 0
 }
 
-Write-Host '## Attribution'
-Write-Host ''
-Write-Host '| Role | Member | Agent | Model | Model Source | Priced As | Tier |'
-Write-Host '| ---- | ------ | ----- | ----- | ------------ | --------- | ---- |'
-foreach ($agg in $roleAggregates) {
-    Write-Host ('| {0} | {1} | {2} | {3} | {4} | {5} | {6} |' -f `
-            $agg.Label, $agg.Member, $agg.Agent, ($agg.Models -join ', '), ($agg.ModelSources -join ', '), ($agg.PricedAsUsed -join ', '), $agg.Tier)
-}
-Write-Host ''
-Write-Host '## Usage & Cost'
-Write-Host ''
-Write-Host '| Role | Turns | In Tokens | Cached | Cache Wr | Out Tokens | Est. Cost (USD) | Est. Credits | Basis |'
-Write-Host '| ---- | ----- | --------- | ------ | -------- | ---------- | ---------------- | ------------ | ----- |'
-foreach ($agg in $roleAggregates) {
-    Write-Host ('| {0} | {1:N0} | {2:N0} | {3:N0} | {4:N0} | {5:N0} | {6:N4} | {7:N2} | {8} |' -f `
-            $agg.Label, $agg.Turns, $agg.Input, $agg.Cached, $agg.CacheWrite, $agg.Output, $agg.Cost, ($agg.Cost / 0.01), $agg.Basis)
-}
-Write-Host ('| **Total** | **{0:N0}** | **{1:N0}** | **{2:N0}** | **{3:N0}** | **{4:N0}** | **{5:N4}** | **{6:N2}** | |' -f `
-        $totalTurns, $totalInput, $totalCached, $totalCacheWrite, $totalOutput, $totalCost, $totalCredits)
-Write-Host ''
-Write-Host '### Derivation'
-Write-Host ''
-Write-Host '```text'
-foreach ($line in $enumerationLines) { Write-Host $line }
-foreach ($agg in $roleAggregates) {
-    if ($agg.Blocks.Count -eq 0) { continue }
-    $firstRate = $agg.Blocks[0].Rate
-    $mismatch = @($agg.Blocks | Where-Object { $_.Rate.input -ne $firstRate.input -or $_.Rate.output -ne $firstRate.output }).Count -gt 0
-    if ($mismatch) {
-        Write-Host "NOTE: $($agg.Label) blocks priced at more than one rate; the line below uses the first block's rate over the aggregated tokens, but the role's Cost column above sums each block at its own rate."
-    }
-
-    $turnsPerBlock = @($agg.Blocks | ForEach-Object { [double]$_.Block.Fields['internal_turns'] })
-    $turnsExpr = if ($turnsPerBlock.Count -gt 1) { "$($turnsPerBlock -join '+')=$($agg.Turns)" } else { "$($agg.Turns)" }
-
-    $rawSum = [math]::Round($agg.Input * $firstRate.input + $agg.Cached * $firstRate.cached + $agg.CacheWrite * $firstRate.cache_write + $agg.Output * $firstRate.output, 4)
-    $rawLine = '{0} × {1:N2} + {2} × {3:N2} + {4} × {5:N2} + {6} × {7:N2} = {8} / 1e6 = {9:N4}' -f $agg.Input, $firstRate.input, $agg.Cached, $firstRate.cached, $agg.CacheWrite, $firstRate.cache_write, $agg.Output, $firstRate.output, $rawSum, $agg.Cost
-    Write-Host ("{0,-14} turns {1,-12} {2}" -f $agg.Label, $turnsExpr, $rawLine)
-}
-Write-Host ("{0,-14} {1,-12} {2,-59} total = {3:N4}" -f '', '', '', $totalCost)
-Write-Host '```'
+foreach ($line in $fragmentLines) { Write-Host $line }
 
 # Diagnostics only, never on the success stream: this keeps stdout a paste-safe
 # `## Attribution` / `## Usage & Cost` / `### Derivation` fragment that can never be

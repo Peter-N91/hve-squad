@@ -56,22 +56,30 @@
 
     <h2 id="autopilot-hand-off-pipelining">Chevauchement des remises du Scribe en autopilot</h2>
       <p>
-        En <code>mode=autopilot</code>, le coordinateur peut dispatcher la remise Scribe de l'étape N et
-        le rôle de l'étape N+1 en parallèle quand trois conditions sont remplies : l'artefact propre
-        de l'étape N est confirmé sur disque, l'outil de dispatch de l'hôte annonce un mode d'exécution
-        d'arrière-plan ou asynchrone (par exemple, l'outil <code>task</code> de CLI Copilot avec
-        <code>mode: background</code>), et le chevauchement n'a pas été désactivé par un échec de
-        vérification antérieur dans ce run.
+        En <code>mode=autopilot</code>, le coordinateur dispatche la remise Scribe de l'étape N et
+        le rôle de l'étape N+1 ensemble, en deux appels dans un même bloc parallèle, dès qu'aucune
+        barrière ne s'applique et que trois conditions sont remplies : l'artefact propre
+        de l'étape N est confirmé sur disque, l'outil de dispatch de sous-agents de l'hôte peut être
+        appelé plusieurs fois dans un même bloc d'appels parallèles (<code>runSubagent</code> dans
+        VS Code, ou l'outil <code>task</code> de CLI Copilot avec ou sans <code>mode: background</code>),
+        et le chevauchement n'a pas été désactivé par un échec de vérification antérieur dans ce run.
+        Remettre au Scribe seul puis attendre est alors un défaut.
+      </p>
+      <p>
+        Un <code>cost-ceiling</code> ne désactive pas le chevauchement. Le tour de Cost Preflight qui
+        admet l'étape N+1 s'exécute entre les deux blocs parallèles et compte la dépense non encore
+        enregistrée de l'étape N comme une réservation en attente : le plafond ne sous-estime donc
+        jamais la dépense pendant qu'une remise est en cours. Un run interne sous autopilot de
+        fédération sans cible chevauche aussi, à la racine de sa propre sous-squad.
       </p>
       <p>
         Le chevauchement reste <strong>désactivé</strong> dans les cas suivants :
       </p>
       <ul>
         <li>Watch Mode</li>
-        <li>Tout <code>cost-ceiling</code> configuré à n'importe quel point de ce run (verrouillé ; une fois vrai, reste vrai)</li>
         <li>La squad est une racine de fédération (marquée par la présence de <code>federation.md</code>)</li>
-        <li>Un run interne sous autopilot de fédération sans cible avec plafond agrégé</li>
-        <li>L'outil de dispatch de l'hôte n'annonce pas un mode d'exécution asynchrone</li>
+        <li>Le tour de Cost Preflight actif est <code>approved-over-ceiling</code>, dont les unités de dispatch restent séquentielles</li>
+        <li>L'hôte n'a aucun outil de dispatch de sous-agents acceptant plus d'un appel par bloc</li>
         <li>Après un échec de vérification dans ce run</li>
       </ul>
       <p>
@@ -258,6 +266,16 @@ coût d'admission = estimation du travail restant × 3.0</code></pre>
         prévenir.
       </li>
     </ul>
+    <p>
+      Le Scribe ne recopie pas ces chiffres à la main. Il les écrit uniquement avec
+      <code>Measure-SquadLedger.ps1 -Write</code>, qui remplace les sections Attribution, Usage &amp; Cost
+      et Derivation de <code>consumption.md</code> et fixe les deux totaux <code>currentRun</code> de
+      <code>state.json</code> à partir de la même dérivation. Tous les autres octets des deux fichiers
+      restent inchangés. L'assistant refuse et n'écrit rien sur une racine de fédération, avec
+      <code>-Check</code>, ou quand l'un des fichiers n'a pas la section qu'il remplace. Le coordinateur
+      place la commande exacte dans chaque remise au Scribe sous <code>ledgerCommand</code>, et le Scribe
+      l'exécute comme dernière écriture. Exécutez ensuite <code>-Check</code> pour confirmer l'écriture.
+    </p>
     <h2>Découverte et validation des exigences</h2>
     <p>Sans document d'entrée, les profils <code>product</code> et <code>full</code> peuvent proposer une découverte pour un objectif encore ouvert. Elle est proposée une fois par sujet, jamais imposée : les agents vous interrogent et ne doivent pas inventer vos choix. Avec un document d'entrée, le contrôle de préparation évalue sa clarté, sa cohérence, son périmètre et sa testabilité.</p>
     <table><thead><tr><th>Profondeur</th><th>Résultat</th></tr></thead><tbody><tr><td><code>quick</code></td><td>Un brief produit par l'analyste.</td></tr><tr><td><code>standard</code></td><td>Cadrage et pistes avec le designer, puis brief.</td></tr><tr><td><code>deep</code></td><td>Objections, hypothèse risquée et expérimentation avant le brief. Le rôle challenger doit être disponible ou ajouté avec accord.</td></tr><tr><td><code>skip</code></td><td>Refus enregistré, sans séance de découverte.</td></tr></tbody></table>

@@ -210,7 +210,7 @@ Describe 'Consumption Accounting keeps its literal contract after the worked-exa
     # worked block); it must never remove the surrounding literal contract these
     # five phrases anchor. A regression here would mean the trim silently ate part
     # of the contract rather than just the redundant numbers.
-    It 'still states the exact-JSON-shape, Derivation, orchestration-row, append-only-pairing, and paste-helper-output contract phrases' {
+    It 'still states the exact-JSON-shape, Derivation, orchestration-row, append-only-pairing, and helper-written-ledger contract phrases' {
         $scribeReference = Join-Path $script:Model.SquadSkillRoot 'references/scribe-procedure.md'
         $referenceBody = Get-Content -LiteralPath $scribeReference -Raw
 
@@ -222,8 +222,10 @@ Describe 'Consumption Accounting keeps its literal contract after the worked-exa
             -Because 'the orchestration-row rule (every table carries an orchestration row alongside dispatched roles) must survive the trim'
         $referenceBody | Should -Match ([regex]::Escape('are inseparable')) `
             -Because 'the append-only history/consumption pairing rule must survive the trim'
-        $referenceBody | Should -Match ([regex]::Escape('Paste its rows')) `
-            -Because 'the instruction to paste the helper''s own output rather than hand-composing the ledger must survive the trim'
+        $referenceBody | Should -Match ([regex]::Escape('write these rows with the tool rather than by hand')) `
+            -Because 'the instruction to have the helper write the ledger rather than hand-composing it must survive the trim'
+        $referenceBody | Should -Match ([regex]::Escape('Measure-SquadLedger.ps1 -SquadRoot <squadRoot> -Write')) `
+            -Because 'the helper''s -Write mode is how the Scribe writes the ledger and run totals'
 
         $referenceBody | Should -Not -Match ([regex]::Escape('Example-Model X1')) `
             -Because 'C1 removes the worked-example arithmetic duplicated from squad-floor.instructions.md, not just trims around it'

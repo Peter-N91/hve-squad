@@ -259,7 +259,7 @@ Federation keeps ordinary writes under the Squad Scribe at both levels. Initiali
 
 No coordinator writes history, prior decisions, or any state field outside that preflight transaction. Every admitted child carries its preflight run, round, and slot to the Scribe. Each sub-squad's later writes stay inside its own root, so two sub-squads running in parallel never touch the same files.
 
-Scribe hand-off pipelining follows this same per-root scoping: the federation root itself never pipelines its own meta-transitions, and each sub-squad's inner run evaluates the Enablement Predicate (`.github/instructions/squad/squad-autopilot.instructions.md`) against its own root — an inner run selected under untargeted federation autopilot's aggregate ceiling always evaluates that predicate false and stays sequential, regardless of its own ceiling state.
+Scribe hand-off pipelining follows this same per-root scoping: the federation root itself never pipelines its own meta-transitions, and each sub-squad's inner run evaluates the Enablement Predicate (`.github/instructions/squad/squad-autopilot.instructions.md`) against its own root. An inner run selected under untargeted federation autopilot's aggregate ceiling may pipeline too, because that ceiling is evaluated only at meta rounds, and a meta round reads an inner ledger only after that inner run's last Scribe hand-off has returned and verified.
 
 ## Relationship to Multi-Repo Federation (deferred)
 

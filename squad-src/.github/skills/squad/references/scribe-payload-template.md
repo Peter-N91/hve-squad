@@ -48,6 +48,10 @@ State the roles dispatched this turn (`activeRoles`), any escalation raised or r
 
 State what the Scribe should find after writing: the number of history entries this turn is adding per agent file, and the number of consumption blocks this turn is adding. The Scribe's Write-Completeness Self-Check re-reads the files and compares its own count against these numbers before returning success — this field is what makes that check possible rather than advisory.
 
+### 1.8 Ledger Command (Every Payload That Appends to `history/`)
+
+When the coordinator has a shell with `pwsh` 7+, supply `ledgerCommand`: the exact `-Write` command with the installed squad skill's absolute script path, as in the YAML below. The Scribe runs it verbatim as its last write and never hand-writes `consumption.md` rows or the two `currentRun` totals while it is supplied.
+
 ## 2. Per-Dispatch Data (Volatile — Fill Every Turn)
 
 Everything below this line changes turn to turn and is appended after the stable prefix above.
@@ -97,4 +101,5 @@ expectedPostWriteCounts:
   historyEntriesAddedByAgent:
     <agent name>: <n>
   consumptionBlocksAdded: <n>
+ledgerCommand: pwsh -NoProfile -File "<skill root>/scripts/Measure-SquadLedger.ps1" -SquadRoot "<squadRoot>" -Write  # omit only without pwsh 7+
 ```

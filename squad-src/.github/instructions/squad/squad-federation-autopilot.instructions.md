@@ -91,7 +91,7 @@ Persist the aggregate decision directly at the federation root before starting a
 
 Each sub-squad ledger remains unchanged. Federation `currentRun.estCostUsd` is the sum of realized inner-ledger totals plus completed federation meta slots across every Cost Preflight round in the active meta-run. Count each run/round/slot tuple once from its history reference; shrinking later manifests never erase earlier completed cost. Future slots remain reserved only in `admissionCostUsd`. Reconcile the root calibration from complete aggregate runs only.
 
-This aggregate ceiling is exactly the condition that keeps every selected inner run's Scribe hand-off pipelining disabled for its duration, per the Enablement Predicate in `.github/instructions/squad/squad-autopilot.instructions.md`.
+This aggregate ceiling does not disable an inner run's Scribe hand-off pipelining, per the Enablement Predicate in `.github/instructions/squad/squad-autopilot.instructions.md`. Before any meta round reads an inner ledger, that inner run's last Scribe hand-off must have returned and verified, so realized inner totals never lag.
 
 ## Consolidated Final-Outcome Validation
 

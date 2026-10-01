@@ -262,7 +262,7 @@ When the user passes `mode=autopilot`, run the full delivery pipeline from *Auto
 
 **Autopilot removes the human turn between stages, never the stages themselves.** Apply the *Artifact Gates* and the *Per-Stage Advance Checklist*: the prior stage's artifact on disk gates the next stage's dispatch; its `history/<agent>.md` entry gates counting it complete, each verified by listing the directory and reading the file. A plan the `lead` never wrote cannot have produced a deliverable list, so a run opening with a specialist deliverable skipped four stages rather than chosen a different shape.
 
-Hand off to the Scribe once per stage; pipelining rules, barriers, and verification live in references/operating-procedure.md and references/gates-and-modes.md. `state.json` advances per stage under autopilot.
+Hand off to the Scribe once per stage, pipelined: unless a barrier applies, send Scribe(N) and Role(N+1) as two calls in one tool-call block, never Scribe alone; see references/gates-and-modes.md. `state.json` advances per stage under autopilot.
 
 **Init Mode is a precondition autopilot never skips.** When `team.md` or `routing.md` is missing, run the full Init build and wait for the user's confirmation before any pipeline stage. `mode=autopilot` changes how work is sequenced once a squad exists; it never authorizes building or running the squad without the user confirming the roster. Never auto-seed `team.md` to avoid the build conversation.
 

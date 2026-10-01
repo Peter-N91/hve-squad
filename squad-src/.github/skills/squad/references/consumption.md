@@ -126,13 +126,16 @@ Every readable Cost Preflight record uses this table shape. `Projected Cost` is 
 Calculate rows through the existing dispatch-size and cost formulas. Apply the eligible `calibration_factor` exactly once to each unrounded row cost, then sum unrounded row values:
 
 ```text
-remaining_usd       = max(0, ceiling_usd - currentRun.estCostUsd)
+evaluated_spend_usd = currentRun.estCostUsd + pending_usd
+remaining_usd       = max(0, ceiling_usd - evaluated_spend_usd)
 projected_cost_usd  = sum(unrounded calibrated manifest row costs)
 reserve_multiplier  = 3.0
 admission_cost_usd  = projected_cost_usd * reserve_multiplier
 ```
 
 The factor-of-three reserve matches the repository's material uncertainty band for estimated ledger figures. It is a policy reserve, not a statistical confidence interval. Round displayed and persisted totals to four decimal places only after all rows are summed; never sum rounded display values.
+
+**Pending reservation.** `pending_usd` is `0` whenever every child that has returned also has a verified Scribe hand-off, which is always the case without autopilot hand-off pipelining. Under pipelining, the round that admits stage N+1 runs after stage N's child has returned but before stage N's Scribe hand-off is dispatched, so `currentRun.estCostUsd` does not yet include stage N. For each such returned-but-unrecorded child slot, add its admitted unrounded `Projected Cost` times `reserve_multiplier` to `pending_usd`. The persisted `evaluatedSpendUsd` is `evaluated_spend_usd`, so `remainingUsd = ceilingUsd - evaluatedSpendUsd` still holds. Once that hand-off verifies, the recorded ledger figure replaces the reservation at the next round, which bounds any estimate drift to one stage. Never subtract a reservation from recorded spend or carry it into `currentRun.estCostUsd`.
 
 Cost Preflight confidence is `medium` only when all of these are true:
 
@@ -156,7 +159,7 @@ When the user chooses proceed, preserve the `over-ceiling` record and append a n
 
 The approval remains valid for later rounds only while the run id and ceiling are unchanged, confidence remains medium, every remaining demand row is unchanged and belongs to the approved manifest, and the demand set only shrinks. Under those conditions, append a fresh `approved-over-ceiling` round for the next sequential unit without asking again. A changed ceiling, expanded or repriced demand, different model input, low confidence, or missing approval provenance requires a new gate; `cannot-confirm` is never approvable.
 
-Immediately before each dispatch unit, read `currentRun.estCostUsd` again. When it is at or above `ceilingUsd`, append the terminal `over-ceiling` round, permit no slot, and stop. An in-flight unit cannot be interrupted, so its final recorded estimate may cross the ceiling; no later substantive child starts. If later routing expands beyond the approved manifest, stop before dispatch and recalculate.
+Immediately before each dispatch unit, read `currentRun.estCostUsd` again and add any pending reservation. When that evaluated spend is at or above `ceilingUsd`, append the terminal `over-ceiling` round, permit no slot, and stop. An in-flight unit cannot be interrupted, so its final recorded estimate may cross the ceiling; no later substantive child starts. If later routing expands beyond the approved manifest, stop before dispatch and recalculate.
 
 ### Worked single-squad example
 

@@ -46,6 +46,7 @@ BeforeAll {
     $script:GatesAndModesBody = Get-SquadReferenceBody -Name 'gates-and-modes.md'
     $script:OperatingProcedureBody = Get-SquadReferenceBody -Name 'operating-procedure.md'
     $script:FederationReferenceBody = Get-SquadReferenceBody -Name 'federation.md'
+    $script:ConsumptionReferenceBody = Get-SquadReferenceBody -Name 'consumption.md'
 }
 
 Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
@@ -57,7 +58,7 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
 
             $pointerSentence = ($pointerLine[0] -split '`state\.json`')[0].TrimEnd()
             $pointerSentence.Length | Should -BeLessOrEqual 200 -Because 'R-8/Condition 2 caps the coordinator pointer at 200 chars so PKG-04 headroom is not spent restating the contract inline'
-            $pointerLine[0] | Should -Match ([regex]::Escape('pipelining rules, barriers, and verification live in references/operating-procedure.md and references/gates-and-modes.md'))
+            $pointerLine[0] | Should -Match ([regex]::Escape('pipelined: unless a barrier applies, send Scribe(N) and Role(N+1) as two calls in one tool-call block, never Scribe alone; see references/gates-and-modes.md'))
         }
 
         It 'the pointer''s targets exist: both named sections are present in their reference files' {
@@ -65,24 +66,56 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
             $script:GatesAndModesBody | Should -Match '(?m)^### Scribe Hand-off Pipelining: Enablement Predicate and Barriers\s*$'
         }
 
-        It 'the Enablement Predicate defaults off and names the tool-schema host signal' {
-            $script:GatesAndModesBody | Should -Match ([regex]::Escape('**Enablement Predicate (`PipeliningEnabled`, default OFF).**'))
-            $script:GatesAndModesBody | Should -Match ([regex]::Escape("the coordinator's own dispatch tool advertises a background or asynchronous execution mode in its tool schema"))
+        It 'the Enablement Predicate is required whenever it holds and names the parallel-block host signal' {
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('**Enablement Predicate (`PipeliningEnabled`, required whenever it holds).**'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('Pipelining is required for a given hand-off — not optional — whenever **all** of the following hold'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape("the coordinator's own subagent-dispatch tool can be called more than once in a single parallel tool-call block"))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('`runSubagent`'))
             $script:GatesAndModesBody | Should -Match ([regex]::Escape('Copilot CLI'))
             $script:GatesAndModesBody | Should -Match ([regex]::Escape('mode: background'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('This term governs gain, not safety'))
         }
 
-        It 'a configured cost ceiling latches pipelining off for the rest of the run id' {
-            $script:GatesAndModesBody | Should -Match ([regex]::Escape('no cost ceiling has been configured at any point in this run id (latched'))
-            $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('Configuring any cost ceiling at any point in a run disables Scribe hand-off pipelining for the rest of that run id (latched)'))
+        It 'a configured cost ceiling keeps pipelining available through a pending reservation' {
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('A configured cost ceiling does not disable pipelining'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('the active Cost Preflight round is not `approved-over-ceiling`'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('Evaluated spend is `currentRun.estCostUsd` plus any pending reservation'))
+            $script:ConsumptionReferenceBody | Should -Match ([regex]::Escape('evaluated_spend_usd = currentRun.estCostUsd + pending_usd'))
+            $script:ConsumptionReferenceBody | Should -Match ([regex]::Escape('remaining_usd       = max(0, ceiling_usd - evaluated_spend_usd)'))
+            $script:ConsumptionReferenceBody | Should -Match ([regex]::Escape('**Pending reservation.**'))
+            $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('A configured cost ceiling no longer disables Scribe hand-off pipelining'))
         }
 
-        It 'excludes Watch Mode, the federation root, and an untargeted aggregate-ceiling inner run' {
+        It 'excludes Watch Mode and the federation root; an untargeted federation inner run pipelines at its own root' {
             $script:GatesAndModesBody | Should -Match ([regex]::Escape('not Watch Mode'))
-            $script:GatesAndModesBody | Should -Match ([regex]::Escape('not the federation root; not an inner run under untargeted federation autopilot with an aggregate ceiling'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('not the federation root'))
             $script:WatchModeInstructions.Body | Should -Match ([regex]::Escape('Scribe hand-off pipelining stays off.'))
-            $script:FederationAutopilotInstructions.Body | Should -Match ([regex]::Escape('keeps every selected inner run''s Scribe hand-off pipelining disabled for its duration'))
-            $script:FederationReferenceBody | Should -Match ([regex]::Escape('an inner run under an untargeted aggregate ceiling stays sequential'))
+            $script:FederationAutopilotInstructions.Body | Should -Match ([regex]::Escape('This aggregate ceiling does not disable an inner run''s Scribe hand-off pipelining'))
+            $script:FederationAutopilotInstructions.Body | Should -Match ([regex]::Escape('that inner run''s last Scribe hand-off must have returned and verified'))
+            $script:FederationInstructions.Body | Should -Match ([regex]::Escape('the federation root itself never pipelines its own meta-transitions'))
+            $script:FederationReferenceBody | Should -Match ([regex]::Escape('each inner run pipelines against its own root'))
+        }
+
+        It 'orders each pipelined step so the Cost Preflight round never overlaps a Scribe write' {
+            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('run the Cost Preflight round admitting stage N+1, counting stage N as a pending reservation'))
+            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('The preflight transaction therefore never overlaps a Scribe write'))
+        }
+
+        It 'makes the pipelined block mandatory, not optional, in both coordinators and the autopilot instructions' {
+            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('the coordinator must include stage N''s Scribe hand-off and stage N+1''s role dispatch in the same parallel tool-call block'))
+            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('Dispatching stage N''s Scribe alone and waiting for it is a defect while the predicate holds'))
+            $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('the next stage''s dispatch must share a parallel tool-call block with that hand-off whenever the Enablement Predicate holds'))
+            $federationCoordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
+            $federationCoordinator.Body | Should -Match ([regex]::Escape('Under autopilot, pipeline each inner run: unless a barrier applies, send Scribe(N) and Role(N+1) as two calls in one tool-call block, never Scribe alone.'))
+        }
+
+        It 'the coordinator hands the Scribe a ledgerCommand and the Scribe runs it instead of hand-writing the ledger' {
+            $payloadTemplate = Get-SquadReferenceBody -Name 'scribe-payload-template.md'
+            $payloadTemplate | Should -Match ([regex]::Escape('### 1.8 Ledger Command'))
+            $payloadTemplate | Should -Match ([regex]::Escape('ledgerCommand: pwsh -NoProfile -File "<skill root>/scripts/Measure-SquadLedger.ps1" -SquadRoot "<squadRoot>" -Write'))
+            $scribe = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0]
+            $scribe.Body | Should -Match ([regex]::Escape('**When the payload carries `ledgerCommand`, run it verbatim with the shell tool immediately after Step 13.**'))
+            (Get-SquadReferenceBody -Name 'scribe-procedure.md') | Should -Match ([regex]::Escape('this entire step is that one command, run after Step 13'))
         }
 
         It 'single-writer invariant: at most one Scribe hand-off in flight per squad root, queued in stage order' {
@@ -104,6 +137,7 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
             $barrierBlock | Should -Match 'An intake gate verdict\.'
             $barrierBlock | Should -Match 'A discovery gate verdict\.'
             $barrierBlock | Should -Match ([regex]::Escape('Every Cost Preflight write, CAS or check, with or without a ceiling.'))
+            $barrierBlock | Should -Match ([regex]::Escape('It drains the prior block: every Scribe hand-off already dispatched for the root has returned and verified.'))
             $barrierBlock | Should -Match ([regex]::Escape('The Risk Gate, before the approved action.'))
             $barrierBlock | Should -Match ([regex]::Escape('The Impactful-Action Gate, before the approved action.'))
             $barrierBlock | Should -Match ([regex]::Escape('The final-outcome gate, including the notification record and the autopilot-run summary.'))
@@ -126,8 +160,8 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
             $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('re-send the Scribe hand-off for that stage — never re-run the stage that produced the artifact'))
         }
 
-        It 'a host whose dispatch tool advertises no background/async mode stays fully sequential' {
-            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('Hosts whose dispatch tool does not advertise a background or asynchronous execution mode'))
+        It 'a host whose subagent-dispatch tool cannot be called more than once per block stays fully sequential' {
+            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('Hosts whose subagent-dispatch tool cannot be called more than once in one parallel tool-call block'))
             $script:OperatingProcedureBody | Should -Match ([regex]::Escape('keep dispatching stage N''s Scribe hand-off, waiting for it, and only then dispatching stage N+1 — exactly as today'))
         }
 
@@ -187,6 +221,18 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
 
         It 'the Enablement Predicate''s host term is never described as hardcoding false' {
             $script:GatesAndModesBody | Should -Not -Match ([regex]::Escape('hardcodes `false`'))
+        }
+
+        It 'the retired cost-ceiling latch and aggregate-ceiling sequential rule do not resurface' {
+            $script:GatesAndModesBody | Should -Not -Match ([regex]::Escape('`PipeliningEnabled`, default OFF'))
+            $script:OperatingProcedureBody | Should -Not -Match ([regex]::Escape('Pipelining is off by default'))
+            $script:GatesAndModesBody | Should -Not -Match ([regex]::Escape('no cost ceiling has been configured at any point in this run id'))
+            $script:GatesAndModesBody | Should -Not -Match ([regex]::Escape('not an inner run under untargeted federation autopilot with an aggregate ceiling'))
+            $script:GatesAndModesBody | Should -Not -Match ([regex]::Escape('advertises a background or asynchronous execution mode'))
+            $script:AutopilotInstructions.Body | Should -Not -Match ([regex]::Escape('Configuring any cost ceiling at any point in a run disables Scribe hand-off pipelining'))
+            $script:FederationInstructions.Body | Should -Not -Match ([regex]::Escape('always evaluates that predicate false and stays sequential'))
+            $script:FederationAutopilotInstructions.Body | Should -Not -Match ([regex]::Escape('keeps every selected inner run''s Scribe hand-off pipelining disabled'))
+            $script:FederationReferenceBody | Should -Not -Match ([regex]::Escape('an inner run under an untargeted aggregate ceiling stays sequential'))
         }
     }
 }
