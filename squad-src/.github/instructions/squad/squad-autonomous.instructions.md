@@ -30,10 +30,10 @@ When the input is absent, the coordinator runs the normal per-turn protocol from
 
 The autonomous loop is a fixed sequence the coordinator runs on a single turn:
 
-1. Council dispatch. Before the initial council and every re-validation, require the full quorum (`architect`, `security`, `cost-manager`, `product-owner`, optionally `rai`) in the roster. When a role is missing, make the quorum offer per `.github/instructions/squad/squad-council.instructions.md`; wait for accepted roster changes and verification before dispatch. A decline ends the loop with escalation and no partial council or implementation.
+1. Council dispatch. Before the initial council and every re-validation, propose the smallest membership that covers the material concerns in the current plan or implementation output, per `.github/instructions/squad/squad-council.instructions.md`. The user may accept, adjust, or decline; verify any accepted role additions and reuse the accepted membership for same-topic revalidation. A decline ends the loop with escalation and no council dispatch or implementation.
 2. Verdict synthesis. The coordinator hands the findings to the Scribe and the Scribe writes the Council Verdict to `decisions.md`. When the verdict is `Stop`, the loop ends and the coordinator escalates immediately; the loop never runs an implementer against a `Stop` verdict.
 3. Implementer dispatch. On `Go` or `Go-With-Conditions`, the coordinator dispatches the implementation role (typically `developer`) with the consolidated conditions attached as inputs.
-4. Council re-validation. The coordinator dispatches the same council in parallel against the implementer's output for one re-validation cycle.
+4. Council re-validation. The coordinator offers and dispatches the same accepted council membership in parallel against the implementer's output for one re-validation cycle, unless the review scope materially changed and requires a new user-approved set.
 5. Decision. On a `Go` re-validation, the loop converges; the coordinator hands the final history entry to the Scribe and reports back to the user. On `Go-With-Conditions` whose conditions are all satisfied in the implementer's output, the loop converges. On any other outcome, the coordinator either runs cycle 2 of re-validation or escalates per the cap below.
 
 The implementation role does not modify production resources, push to remote branches, or run irreversible commands inside the loop; those actions remain at `confirm` tier and require the user even when `mode=autonomous` is in effect.

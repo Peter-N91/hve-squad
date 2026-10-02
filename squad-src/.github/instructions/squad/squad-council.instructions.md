@@ -16,34 +16,23 @@ The coordinator dispatches a council when any of the following hold:
 * The user explicitly asks for a council, a pre-implementation review, a cross-check, a design review, a go/no-go, or a validation pass before implementation.
 * The user's request contains both implementation language (build, ship, deploy, roll out, merge, apply) and risk language (cost, security, compliance, AI, regulated data, production, irreversible).
 * A routing row in `routing.md` resolves to the council pattern (see `squad-routing.instructions.md` for the canonical row).
-* A prior turn produced a plan whose scope crosses two or more council-member domains (for example, an Azure landing-zone change that touches budget and security).
+* A prior turn produced a plan with a material review concern in one or more council-member domains (architecture, security, cost, product-fit, or responsible AI).
 
 When none of the triggers hold, the coordinator follows the normal routing table and does not pay the council-dispatch cost.
 
 ## Council Membership
 
-The default council is four roles dispatched in parallel:
+There is no fixed council quorum. For each review, the coordinator proposes the smallest role set that covers the material concerns in the plan or decision, using the role lenses in *Task-Fit Council Offers* in `.github/instructions/squad/squad-roster.instructions.md`. Membership may be one role, several relevant roles, or `rai` alone. Explain each role's review question and that the council validates the plan before implementation; the user may accept, adjust, or decline the proposed membership. If no role is clearly relevant to an explicit council request, ask which reviewer lens the user expects rather than silently skipping the offer or dispatching an arbitrary set.
 
-* `architect`
-* `security`
-* `cost-manager`
-* `product-owner`
+Each role resolves to its concrete agent through the roster's *Resolving a Role to an Agent* rules in `.github/instructions/squad/squad-roster.instructions.md`. A council membership change for a specific turn is acceptable (for example, swapping a Primary for an Alternate per a Selection Cue), but the exact accepted membership is recorded in the Council Verdict so the verdict is auditable.
 
-The council adds a fifth role when the request involves AI/ML behavior, model selection, training data, agent autonomy, or any RAI-relevant decision:
+### Council Offer Before Dispatch
 
-* `rai` (optional, conditional on RAI-relevance)
+Whenever a council trigger fires, always present the work-specific council proposal before dispatch, even if all recommended roles are already in `team.md`. Ask once for that roster and trigger/topic whether to accept, adjust, or decline; do not start dispatch while waiting. At Init, Promotion, and Expansion, present the same kind of proposal alongside the roster choice. Never add every absent council role by default.
 
-Each role resolves to its concrete agent through the roster's *Resolving a Role to an Agent* rules in `.github/instructions/squad/squad-roster.instructions.md`. A council membership change for a specific turn is acceptable (for example, swapping a Primary for an Alternate per a Selection Cue), but the council membership is recorded in the Council Verdict so the verdict is auditable.
+On acceptance or adjustment, hand the Scribe the exact user-approved membership, any missing role rows and filtered routing rows to add, and a `Council Role Offer` decision recording the roster role set, trigger/topic, proposed and accepted membership, role rationales, and outcome. Verify accepted roster updates and agent availability before dispatch. Dispatch exactly the accepted roles in parallel; this set is the complete council for this review. On decline, hand the Scribe a decision recording declination and escalate without dispatching any council role. Do not repeat a declined offer for the same roster role set and trigger/topic; a changed roster, scope, or trigger/topic is a new offer case. If an accepted addition cannot be installed, recorded, or verified, escalate instead of dispatching.
 
-When a council role is absent from the active roster (`team.md`), the coordinator follows *Quorum Offer Before Escalation* below. When a role is present but its mapped agent is not installed or available at dispatch time, the coordinator escalates without substituting. A council quorum is the full default membership (`architect`, `security`, `cost-manager`, `product-owner`); the optional `rai` slot is the only conditional role. The coordinator never synthesizes a Council Verdict from its own reasoning to cover a missing role, and never substitutes a non-mapped agent for an absent council member — a verdict assembled without the full quorum's dispatched findings is invalid and must not gate implementation.
-
-### Quorum Offer Before Escalation
-
-When any council trigger fires, first compare the active `team.md` with the four-role quorum and, when relevant, `rai`. If any role is absent, interactively offer to add each missing role by name and with its purpose from *Council Quorum Offers* in `squad-roster.instructions.md`. Explain that this pre-implementation council validates the plan before implementation. Ask once for the exact roster and trigger/topic; do not start any council dispatch while waiting.
-
-On acceptance, hand the Scribe the missing role rows and routing rows to append, plus a `Council Role Offer` decision recording acceptance, the roster role set, and trigger/topic. Verify the updated `team.md` and `routing.md` before continuing. On decline, hand the Scribe a `Council Role Offer` decision recording declination, missing roles, roster role set, and trigger/topic; escalate with the roles still needed. Do not re-offer after a recorded decline for the same roster role set and trigger/topic. A changed roster or a different council trigger/topic is a new offer case. If an accepted addition cannot be installed, recorded, or verified, escalate instead of dispatching.
-
-For Watch Mode and every other run with no interactive user available, make no offer and never auto-add roles. Escalate through the configured approval channel with the missing roles, why each is needed, and instructions to approve/add them before resuming. In all cases, missing roles mean no council dispatch and no synthesized verdict; this holds for explicit council triggers and the `autopilot` and `autonomous` council stages.
+For Watch Mode and every other run with no interactive user available, make no offer and never auto-add or infer approval for new membership. Reuse an explicitly accepted membership only for the same unchanged topic and scope, if its roles remain available; otherwise escalate through the configured approval channel with the proposed roles, their rationales, and instructions for an authorized user to approve or add them before resuming. Missing, unavailable, or unapproved roles mean no council dispatch and no synthesized verdict; this holds for explicit council triggers and the `autopilot` and `autonomous` council stages.
 
 ## Parallel Dispatch Contract
 
@@ -82,13 +71,9 @@ The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` un
 
 ### Findings by Role
 
-| Role           | Verdict     | Risk        | Blocking Issues | Conditions | Suggested Follow-ups |
-|----------------|-------------|-------------|-----------------|------------|----------------------|
-| architect      | <label>     | <risk>      | <list-or-none>  | <list>     | <list>               |
-| security       | <label>     | <risk>      | <list-or-none>  | <list>     | <list>               |
-| cost-manager   | <label>     | <risk>      | <list-or-none>  | <list>     | <list>               |
-| product-owner  | <label>     | <risk>      | <list-or-none>  | <list>     | <list>               |
-| rai (optional) | <label>     | <risk>      | <list-or-none>  | <list>     | <list>               |
+| Role            | Verdict     | Risk        | Blocking Issues | Conditions | Suggested Follow-ups |
+|-----------------|-------------|-------------|-----------------|------------|----------------------|
+| <accepted role> | <label>     | <risk>      | <list-or-none>  | <list>     | <list>               |
 
 ### Synthesis
 
@@ -109,7 +94,7 @@ Required fields:
 * The `Verdict` value is one of exactly `Go`, `Go-With-Conditions`, or `Stop`.
 * The Blocking Issues, Conditions, and Suggested Follow-ups lists carry role attribution inline (for example, `(security) rotate secrets weekly`).
 
-The schema is the contract: any Scribe write that omits one of these sections fails the council protocol and the coordinator escalates rather than proceeding.
+The schema is the contract: include exactly one findings row for every dispatched role and no row for an undispatched role. Any Scribe write that omits a dispatched role or includes an undispatched role fails the council protocol; the coordinator escalates rather than proceeding.
 
 ## Verdict Anchor and Decision Ref
 

@@ -267,22 +267,23 @@ An opt-in role is offered on demand rather than hidden. When a request matches a
 
 Adding an opt-in role is a roster change like any other: it persists for the project until the user removes it, and the Scribe records the addition so the roster stays the single source of truth. For a reason-two role the resource must be present first; a roster never advertises capability the project has not installed.
 
-### Council Quorum Offers
+### Task-Fit Council Offers
 
-Council roles are also offered as **roster-specific opt-ins** whenever the active roster lacks the default quorum. This is not a new profile or a permanent opt-in classification: `full` already seeds `architect`, `security`, `cost-manager`, and `product-owner`, while every other profile may carry some of them. Compare the actual `team.md` roles, including a custom roster, and offer only the missing members:
+No fixed quorum: propose only roles whose review lenses materially apply to the work. Membership may be one role, a subset, or `rai` alone; it is never determined by profile.
 
-| Role | Why the pre-implementation council needs it |
-|------|-----------------------------------------------|
-| `architect` | Validates architecture, technical boundaries, and fit of the proposed design. |
-| `security` | Identifies security, privacy, and threat risks before implementation. |
-| `cost-manager` | Checks cost, consumption, and budget implications before work proceeds. |
-| `product-owner` | Checks user value, scope, and product fit against the plan. |
+| Role | Offer when its review lens materially applies |
+|------|----------------------------------------------|
+| `architect` | Architecture, technical boundaries, interfaces, or design trade-offs need validation. |
+| `security` | Security, privacy, threat, identity, or data-protection risk needs review. |
+| `cost-manager` | Cost, consumption, pricing, or budget decisions need review. |
+| `product-owner` | User value, requirements, scope, or product-fit decisions need review. |
+| `rai` | AI/ML behavior, model selection, training data, agent autonomy, regulated data, or another responsible-AI concern needs review. |
 
-At Init, Promotion, and Expansion, make this offer with the proposed roster and explain that the council validates the plan before implementation. Add `rai` to the offer only when AI/ML behavior, model selection, training data, agent autonomy, regulated data, or another RAI-relevant decision is in scope; it is conditional, not part of the four-role quorum. On acceptance, the Scribe adds only the missing roles and their filtered routing rows; on decline, the roster remains unchanged and the Scribe records the decision.
+At Init, Promotion, and Expansion, always propose a council tailored to the request and discovery. Name relevant roles and their review reasons, explain that the council validates the plan before implementation, and ask the user to accept, adjust, or decline. Include roles already on the roster; add only accepted missing roles and filtered routing rows.
 
-When a council trigger or the council stage of `mode=autopilot` or `mode=autonomous` needs roles that are absent, offer those roles before escalating. An accepted offer must be written and verified before dispatch. A declined offer blocks that council; do not dispatch a partial council, synthesize a verdict, or proceed to implementation. Record the exact active-role set and trigger/topic with the offer so a decline is not repeated for the same roster and trigger; a roster change or a new council trigger permits a new offer.
+At each runtime council trigger (including autopilot/autonomous), follow `squad-council.instructions.md`: offer the task-fit roles even if already present, then dispatch exactly the accepted set in parallel. This set is the complete council for that review. Never add irrelevant roles, dispatch unaccepted roles, synthesize a verdict, or implement after decline. The Scribe records the roster, trigger/topic, proposed and accepted roles, rationales, and outcome. A repeated decline for the same roster and trigger/topic stops/escalates without re-offer.
 
-No offer can be made on an unattended or otherwise non-interactive run, including Watch Mode. Do not add roles automatically: stop before the council stage and escalate through the configured approval channel with the missing roles, their rationale, and the remediation needed (an authorized user must add/approve them, then resume the run).
+Unattended runs, including Watch Mode, never offer, auto-add, or infer new membership. Reuse only an explicitly accepted membership for the same unchanged topic and scope while its roles remain available; otherwise stop and escalate with role-specific remediation.
 
 ### Squad Packs
 

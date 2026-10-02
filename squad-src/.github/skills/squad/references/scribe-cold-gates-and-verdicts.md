@@ -21,15 +21,16 @@ Append this entry to `decisions.md` for every council-role offer, including Init
 ```markdown
 ## Council Role Offer <timestamp> <trigger-id>
 
-* Outcome: accepted | declined
+* Outcome: accepted | adjusted | declined
 * Roster Roles: <exact active role set, sorted>
 * Trigger: <lifecycle point or council topic/stage>
-* Missing Roles:
-  * <role> — <why the pre-implementation council needs it>
-* Added Roles: <accepted additions, or none>
+* Proposed Council:
+  * <role> — <work-specific review rationale>
+* Accepted Council: <exact user-approved role set, or none>
+* Added Roles: <accepted roles added to the roster, or none>
 ```
 
-For Init and Expansion, store this entry in the newly seeded sub-squad's `decisions.md`; for Promotion, append it to the existing squad's `decisions.md` before relocating the tree. When accepted, append only the supplied/catalog-resolved missing role rows and their filtered routing rows as part of the same Scribe operation; preserve every existing row and cell, and verify both files. Never invent an agent mapping or record a Council Verdict for an incomplete quorum.
+For Init and Expansion, store this entry in the newly seeded sub-squad's `decisions.md`; for Promotion, append it to the existing squad's `decisions.md` before relocating the tree. On acceptance, add only accepted roles absent from the roster, using supplied/catalog-resolved role rows and filtered routing rows as part of the same Scribe operation; preserve every existing row and cell, and verify both files. Never invent an agent mapping or record a Council Verdict for a membership that differs from the exact accepted set.
 
 Verdict entries (Council, Intake Readiness, Discovery) are appended to `decisions.md` using the exact schema in the matching instruction file, stamped into the shapes below:
 
@@ -80,17 +81,14 @@ The Scribe stamps this shape when a council runs:
 
 * Topic: <one-line summary of the proposal>
 * Proposal Ref: <path-to-plan-or-design>
-* Council Members Dispatched: architect, security, cost-manager, product-owner
+* Council Members Dispatched: <comma-separated user-approved role set>
 * Verdict: Go | Go-With-Conditions | Stop
 
 ### Findings by Role
 
-| Role          | Verdict | Risk        | Blocking Issues | Conditions | Suggested Follow-ups |
-|---------------|---------|-------------|-----------------|------------|----------------------|
-| architect     | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| security      | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| cost-manager  | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| product-owner | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
+| Role              | Verdict | Risk        | Blocking Issues | Conditions | Suggested Follow-ups |
+|-------------------|---------|-------------|-----------------|------------|----------------------|
+| <dispatched role> | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
 
 ### Synthesis
 

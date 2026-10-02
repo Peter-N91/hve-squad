@@ -27,7 +27,7 @@ A Watch Mode run **is** an autopilot run with four additions: an event-driven op
 
 There is exactly one autopilot stage a Watch Mode run does **not** reach: the **discovery gate** at stage 0a (`.github/instructions/squad/squad-discovery-gate.instructions.md`). That gate is an offer a human answers, and an unattended run has nobody to answer it — so no offer is made, a `discovery=` argument in an event payload is ignored and the reason recorded, and the triggering payload (the issue or pull-request body, read as data) becomes the run's input artifact instead. The **intake gate** at stage 0b then assesses that payload, so an unattended run is still gated at the front of the pipeline: by validation, which an agent can perform alone, rather than by ideation, which it cannot.
 
-The same no-human rule applies to a missing council quorum. Watch Mode never offers or auto-adds council roles. If the event sub-squad reaches a council stage without all four required roles (and `rai` when relevant), stop before dispatch or implementation and escalate through the configured approval channel, naming each missing role, why it is needed to validate the plan, and how an authorized user can add it before resuming.
+The same no-human rule applies to council membership. Watch Mode never offers, auto-adds, or infers approval for a new council membership. It may reuse only a Scribe-recorded, user-accepted membership for the same unchanged topic and scope, and only while every accepted role remains available. Otherwise stop before dispatch or implementation and escalate through the configured approval channel, naming the task-fit roles and why they are needed to validate the plan, and how an authorized user can approve/add them before resuming.
 
 ## Opt-In Surface
 

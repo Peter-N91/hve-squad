@@ -835,17 +835,16 @@ flowchart TD
         appel <code>/squad</code> est routé selon l'équipe initialisée.
       </p>
       <p>
-        Avant l'initialisation, le coordinateur vérifie également si l'équipe choisie peut former le conseil
-        préalable à l'implémentation : <code>architect</code>, <code>security</code>, <code>cost-manager</code>
-        et <code>product-owner</code>. Il propose chaque rôle manquant par son nom et explique en quoi il est
-        nécessaire pour valider le plan avant l'implémentation. Vous décidez de l'ajouter ou non ; une réponse
-        positive est enregistrée et met à jour <code>team.md</code> et <code>routing.md</code>. Le rôle
-        conditionnel <code>rai</code> n'est proposé que pour les sujets concernés par l'IA responsable. Lors
-        d'un déclencheur ultérieur du conseil, les rôles manquants sont proposés à nouveau pour ce nouveau
-        déclencheur ; un refus n'entraîne jamais un conseil partiel ni un verdict inventé. Watch Mode ne peut
-        pas poser la question : il s'arrête et indique les rôles qu'un utilisateur autorisé doit ajouter avant
-        la reprise. Seul le profil <code>full</code> fournit par défaut les quatre rôles du quorum ; les autres
-        profils sont évalués selon leurs membres effectifs.
+        Avant l'initialisation, le coordinateur propose toujours un conseil préalable à l'implémentation adapté
+        à la demande et à la découverte. Il nomme uniquement les rôles ayant des préoccupations importantes à
+        examiner et explique pourquoi ils valident le plan avant l'implémentation ; le conseil peut comprendre
+        un seul rôle, un sous-ensemble ciblé ou uniquement <code>rai</code>. Vous pouvez accepter, ajuster ou
+        refuser la composition. Seuls les rôles acceptés et absents sont ajoutés à <code>team.md</code> et
+        <code>routing.md</code>. Lors de chaque déclencheur ultérieur, le coordinateur propose une composition
+        adaptée au travail, même si tous les rôles sont déjà disponibles ; il ne lance que les rôles acceptés.
+        Un refus n'entraîne aucun conseil ni verdict inventé. Watch Mode ne peut ni poser la question ni ajouter
+        des rôles : il réutilise uniquement une composition explicitement acceptée pour le même sujet et le même
+        périmètre ; sinon, il s'arrête et indique les rôles proposés et comment un utilisateur autorisé peut les approuver.
       </p>
       <p>
         Sur un projet entièrement nouveau (sans squad), le mode d'initialisation propose d'abord un choix : une <strong>squad

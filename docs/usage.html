@@ -835,16 +835,16 @@ flowchart TD
         <code>/squad</code> call routes against the seeded roster.
       </p>
       <p>
-        Before seeding, the coordinator also checks whether your selected roster can form the
-        pre-implementation council: <code>architect</code>, <code>security</code>,
-        <code>cost-manager</code>, and <code>product-owner</code>. It offers each missing role by name
-        and explains why it is needed to validate the plan before implementation. You decide whether to
-        add them; an accepted offer is recorded and updates <code>team.md</code> and
-        <code>routing.md</code>. The conditional <code>rai</code> role is offered only for RAI-relevant
-        work. At a later council trigger, missing roles are offered again for that new trigger; declining
-        never runs a partial council or invents a verdict. Watch Mode cannot ask, so it stops and reports
-        exactly which roles an authorized user needs to add before resuming. Only <code>full</code> seeds
-        the complete four-role quorum; all other profiles are checked against their actual members.
+        Before seeding, the coordinator always proposes a task-fit pre-implementation council based on
+        your request and discovery. It names only the roles with material review concerns and explains
+        why they are needed to validate the plan before implementation; the proposed membership may be
+        one role, a focused subset, or <code>rai</code> alone. You can accept, adjust, or decline. Only
+        accepted roles that are not already present are added to <code>team.md</code> and
+        <code>routing.md</code>. At each later council trigger, the coordinator proposes membership for
+        that work even when all roles are already available; it dispatches exactly the roles you accepted.
+        A decline never dispatches a council or invents a verdict. Watch Mode cannot ask or add roles, so
+        it reuses only an explicitly accepted membership for the same unchanged topic and scope;
+        otherwise it stops and reports the proposed roles and how an authorized user can approve them.
       </p>
       <p>
         On a brand-new project (no squad yet), Init Mode first offers a choice: a <strong>single
@@ -920,9 +920,9 @@ flowchart TD
 /squad request="I want to move this squad to a federation"</code></pre>
       <p>
         Promotion runs a <strong>propose &rarr; confirm &rarr; migrate &rarr; seed &rarr; route</strong>
-        flow and never moves or writes anything before you confirm. It also offers any missing council
-        roles for the existing roster, explains why they validate the plan before implementation, and
-        records your accepted or declined choice. On confirmation it relocates the
+        flow and never moves or writes anything before you confirm. It also proposes a task-fit council
+        for the existing work, explains why each selected role validates the plan before implementation,
+        and records your accepted, adjusted, or declined choice. On confirmation it relocates the
         whole top-level state tree &mdash; <code>team.md</code>, <code>routing.md</code>,
         <code>decisions.md</code>, <code>history/</code>, consumption, and the rest &mdash; into
         <code>members/&lt;name&gt;/</code>, preserving your append-only decision and history logs
@@ -948,8 +948,8 @@ flowchart TD
       <pre><code># Add a new sub-squad to the current federation
 /squad-federation init request="add a security sub-squad for threat modeling"</code></pre>
       <p>
-        Expansion proposes the new sub-squad (name, profile, roles, and any missing council roles with
-        their purpose) and, on your confirmation, seeds it
+        Expansion proposes the new sub-squad (name, profile, roles, and a task-fit council with each
+        recommended role's purpose) and, on your confirmation, seeds it
         under <code>members/&lt;new&gt;/</code> and registers it &mdash; appending a row to
         <code>federation.md</code> and a route to <code>meta-routing.md</code>, plus a federation
         decision entry. It is <strong>additive and non-destructive</strong>: existing sub-squads are
