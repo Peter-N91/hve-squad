@@ -267,6 +267,23 @@ An opt-in role is offered on demand rather than hidden. When a request matches a
 
 Adding an opt-in role is a roster change like any other: it persists for the project until the user removes it, and the Scribe records the addition so the roster stays the single source of truth. For a reason-two role the resource must be present first; a roster never advertises capability the project has not installed.
 
+### Council Quorum Offers
+
+Council roles are also offered as **roster-specific opt-ins** whenever the active roster lacks the default quorum. This is not a new profile or a permanent opt-in classification: `full` already seeds `architect`, `security`, `cost-manager`, and `product-owner`, while every other profile may carry some of them. Compare the actual `team.md` roles, including a custom roster, and offer only the missing members:
+
+| Role | Why the pre-implementation council needs it |
+|------|-----------------------------------------------|
+| `architect` | Validates architecture, technical boundaries, and fit of the proposed design. |
+| `security` | Identifies security, privacy, and threat risks before implementation. |
+| `cost-manager` | Checks cost, consumption, and budget implications before work proceeds. |
+| `product-owner` | Checks user value, scope, and product fit against the plan. |
+
+At Init, Promotion, and Expansion, make this offer with the proposed roster and explain that the council validates the plan before implementation. Add `rai` to the offer only when AI/ML behavior, model selection, training data, agent autonomy, regulated data, or another RAI-relevant decision is in scope; it is conditional, not part of the four-role quorum. On acceptance, the Scribe adds only the missing roles and their filtered routing rows; on decline, the roster remains unchanged and the Scribe records the decision.
+
+When a council trigger or the council stage of `mode=autopilot` or `mode=autonomous` needs roles that are absent, offer those roles before escalating. An accepted offer must be written and verified before dispatch. A declined offer blocks that council; do not dispatch a partial council, synthesize a verdict, or proceed to implementation. Record the exact active-role set and trigger/topic with the offer so a decline is not repeated for the same roster and trigger; a roster change or a new council trigger permits a new offer.
+
+No offer can be made on an unattended or otherwise non-interactive run, including Watch Mode. Do not add roles automatically: stop before the council stage and escalate through the configured approval channel with the missing roles, their rationale, and the remediation needed (an authorized user must add/approve them, then resume the run).
+
 ### Squad Packs
 
 A **pack** is a named, additive set of catalog roles layered onto a profile. A profile answers *what kind of work is this*; a pack answers *what is it built on*. Technology verticals arrive as packs, because a profile is single-choice while a domain is not mutually exclusive with a concern — a Power Platform project can need `compliance` evidence exactly as easily as a general build can.
@@ -351,4 +368,3 @@ Power BI is deliberately absent from the `power-platform` pack. Its upstream age
 **Two adjacent Microsoft verticals were assessed and deliberately produced no pack.** Data and Power BI, and AI application engineering, both reached the verification gate with no agent surviving it: the four `power-bi-*-expert` agents fail gate step 3, and every AI-engineering candidate duplicates capability HVE Core already deploys. A pack selects roles, and a role needs a dispatchable Primary, so inventing one would have meant authoring a squad charter purely to make a pack exist — and in the AI-engineering case that charter would have claimed work `developer` already owns. Both verticals are therefore registered as skills against widened existing roles, and their surviving resources are listed in *Registered External Cast*. Revisit the pack shape only when an upstream agent in either domain passes the gate.
 
 There is no Power Platform ALM or solution-deployment role. No verified resource can perform a solution import, and a role with no resource behind it is aspirational rather than dispatchable. ALM *planning* — environment strategy, solution segmentation, managed versus unmanaged, pipeline design — sits with `pp-architect`, which advises and never executes. Should an ALM writing role ever be added, it inherits both existing write postures rather than a default: opt-in like `backlog-executor`, because a solution import is announced to everyone in the target environment the moment it lands, and preview-first like `deployer`, because the import itself is not cleanly reversible.
-

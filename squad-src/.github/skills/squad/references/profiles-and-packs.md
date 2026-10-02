@@ -16,6 +16,8 @@ A profile is a curated subset of the cast tailored to a kind of project. The coo
 
 One catalog role — `backlog-executor`, which writes work items into a live Azure DevOps or Jira project — is **opt-in** and appears in no profile, not even `full`, because a tracker write reaches a whole team's backlog. The coordinator offers to add it the first time a request needs a tracker write, and adds it only on the user's say-so. See *Opt-In Roles* in the roster conventions.
 
+Council coverage is evaluated from the active roster, not inferred from the profile label. When a roster lacks any of `architect`, `security`, `cost-manager`, or `product-owner`, Init and a council trigger offer the missing role(s), naming why they validate the plan before implementation. `rai` is offered only when RAI-relevance applies. The user may accept or decline; no partial council runs. See *Council Quorum Offers* in the roster conventions.
+
 | Profile         | Members                                                                                                                       | Use When                                                                                     |
 |-----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | `default`       | researcher, lead, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |

@@ -10,9 +10,26 @@ metadata:
 
 # Scribe Cold Section: Gates, Verdicts, and Run Summaries
 
-Read this file only when the turn's payload is one of: a **Council Verdict**, **Intake Readiness Verdict**, or **Discovery Verdict** (Payload-to-Step Map Steps 5, 9, 12), an **autonomous-loop summary** (Step 6), an **autopilot-run summary** at the single-squad root (Step 8), or a **notification**. An ordinary decision or history dispatch never needs this file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
+Read this file only when the turn's payload is one of: a **Council Role Offer**, **Council Verdict**, **Intake Readiness Verdict**, or **Discovery Verdict** (Payload-to-Step Map Steps 1, 5, 9, 12), an **autonomous-loop summary** (Step 6), an **autopilot-run summary** at the single-squad root (Step 8), or a **notification**. An ordinary decision or history dispatch never needs this file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
 
 ## Verdict Entries in decisions.md
+
+### Council Role Offer
+
+Append this entry to `decisions.md` for every council-role offer, including Init, Promotion, Expansion, and runtime offers. It is a decision, not a Council Verdict:
+
+```markdown
+## Council Role Offer <timestamp> <trigger-id>
+
+* Outcome: accepted | declined
+* Roster Roles: <exact active role set, sorted>
+* Trigger: <lifecycle point or council topic/stage>
+* Missing Roles:
+  * <role> — <why the pre-implementation council needs it>
+* Added Roles: <accepted additions, or none>
+```
+
+For Init and Expansion, store this entry in the newly seeded sub-squad's `decisions.md`; for Promotion, append it to the existing squad's `decisions.md` before relocating the tree. When accepted, append only the supplied/catalog-resolved missing role rows and their filtered routing rows as part of the same Scribe operation; preserve every existing row and cell, and verify both files. Never invent an agent mapping or record a Council Verdict for an incomplete quorum.
 
 Verdict entries (Council, Intake Readiness, Discovery) are appended to `decisions.md` using the exact schema in the matching instruction file, stamped into the shapes below:
 
