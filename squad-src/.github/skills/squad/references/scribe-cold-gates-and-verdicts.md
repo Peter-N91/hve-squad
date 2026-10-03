@@ -10,9 +10,27 @@ metadata:
 
 # Scribe Cold Section: Gates, Verdicts, and Run Summaries
 
-Read this file only when the turn's payload is one of: a **Council Verdict**, **Intake Readiness Verdict**, or **Discovery Verdict** (Payload-to-Step Map Steps 5, 9, 12), an **autonomous-loop summary** (Step 6), an **autopilot-run summary** at the single-squad root (Step 8), or a **notification**. An ordinary decision or history dispatch never needs this file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
+Read this file only when the turn's payload is one of: a **Council Role Offer**, **Council Verdict**, **Intake Readiness Verdict**, or **Discovery Verdict** (Payload-to-Step Map Steps 1, 5, 9, 12), an **autonomous-loop summary** (Step 6), an **autopilot-run summary** at the single-squad root (Step 8), or a **notification**. An ordinary decision or history dispatch never needs this file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
 
 ## Verdict Entries in decisions.md
+
+### Council Role Offer
+
+Append this entry to `decisions.md` for every council-role offer, including Init, Promotion, Expansion, and runtime offers. It is a decision, not a Council Verdict:
+
+```markdown
+## Council Role Offer <timestamp> <trigger-id>
+
+* Outcome: accepted | adjusted | declined
+* Roster Roles: <exact active role set, sorted>
+* Trigger: <lifecycle point or council topic/stage>
+* Proposed Council:
+  * <role> — <work-specific review rationale>
+* Accepted Council: <exact user-approved role set, or none>
+* Added Roles: <accepted roles added to the roster, or none>
+```
+
+For Init and Expansion, store this entry in the newly seeded sub-squad's `decisions.md`; for Promotion, append it to the existing squad's `decisions.md` before relocating the tree. On acceptance, add only accepted roles absent from the roster, using supplied/catalog-resolved role rows and filtered routing rows as part of the same Scribe operation; preserve every existing row and cell, and verify both files. Never invent an agent mapping or record a Council Verdict for a membership that differs from the exact accepted set.
 
 Verdict entries (Council, Intake Readiness, Discovery) are appended to `decisions.md` using the exact schema in the matching instruction file, stamped into the shapes below:
 
@@ -63,17 +81,14 @@ The Scribe stamps this shape when a council runs:
 
 * Topic: <one-line summary of the proposal>
 * Proposal Ref: <path-to-plan-or-design>
-* Council Members Dispatched: architect, security, cost-manager, product-owner
+* Council Members Dispatched: <comma-separated user-approved role set>
 * Verdict: Go | Go-With-Conditions | Stop
 
 ### Findings by Role
 
-| Role          | Verdict | Risk        | Blocking Issues | Conditions | Suggested Follow-ups |
-|---------------|---------|-------------|-----------------|------------|----------------------|
-| architect     | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| security      | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| cost-manager  | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| product-owner | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
+| Role              | Verdict | Risk        | Blocking Issues | Conditions | Suggested Follow-ups |
+|-------------------|---------|-------------|-----------------|------------|----------------------|
+| <dispatched role> | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
 
 ### Synthesis
 

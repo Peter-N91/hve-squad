@@ -833,7 +833,20 @@ flowchart TD
         <code>decisions.md</code>, <code>notifications.md</code>, <code>state.json</code> et un
         répertoire <code>history/</code>. Il n'écrit jamais de fichiers avant votre confirmation. Par la suite, chaque
         appel <code>/squad</code> est routé selon l'équipe initialisée.
-      </p>      <p>
+      </p>
+      <p>
+        Avant l'initialisation, le coordinateur propose toujours un conseil préalable à l'implémentation adapté
+        à la demande et à la découverte. Il nomme uniquement les rôles ayant des préoccupations importantes à
+        examiner et explique pourquoi ils valident le plan avant l'implémentation ; le conseil peut comprendre
+        un seul rôle, un sous-ensemble ciblé ou uniquement <code>rai</code>. Vous pouvez accepter, ajuster ou
+        refuser la composition. Seuls les rôles acceptés et absents sont ajoutés à <code>team.md</code> et
+        <code>routing.md</code>. Lors de chaque déclencheur ultérieur, le coordinateur propose une composition
+        adaptée au travail, même si tous les rôles sont déjà disponibles ; il ne lance que les rôles acceptés.
+        Un refus n'entraîne aucun conseil ni verdict inventé. Watch Mode ne peut ni poser la question ni ajouter
+        des rôles : il réutilise uniquement une composition explicitement acceptée pour le même sujet et le même
+        périmètre ; sinon, il s'arrête et indique les rôles proposés et comment un utilisateur autorisé peut les approuver.
+      </p>
+      <p>
         Sur un projet entièrement nouveau (sans squad), le mode d'initialisation propose d'abord un choix : une <strong>squad
         unique</strong> (par défaut), pour une seule équipe sur l'ensemble du dépôt, ou une <strong>fédération</strong> de
         plusieurs sous-squads nommées. Choisir une fédération passe la main à <code>/squad-federation</code>
@@ -907,7 +920,9 @@ flowchart TD
 /squad request="I want to move this squad to a federation"</code></pre>
       <p>
         La conversion suit le parcours <strong>proposer &rarr; confirmer &rarr; migrer &rarr; initialiser &rarr; router</strong>
-        et ne déplace ni n'écrit rien avant votre confirmation. Une fois confirmée, elle déplace toute
+        et ne déplace ni n'écrit rien avant votre confirmation. Elle propose également les rôles manquants du conseil
+        pour l'équipe existante, explique en quoi ils valident le plan avant l'implémentation et enregistre votre
+        acceptation ou votre refus. Une fois confirmée, elle déplace toute
         l'arborescence d'état de la racine &mdash; <code>team.md</code>, <code>routing.md</code>,
         <code>decisions.md</code>, <code>history/</code>, la consommation et le reste &mdash; dans
         <code>members/&lt;name&gt;/</code>, en préservant octet pour octet vos journaux de décisions et d'historique
@@ -933,7 +948,8 @@ flowchart TD
       <pre><code># Add a new sub-squad to the current federation
 /squad-federation init request="add a security sub-squad for threat modeling"</code></pre>
       <p>
-        L'extension propose la nouvelle sous-squad (nom, profil, rôles) puis, après votre confirmation, l'initialise
+        L'extension propose la nouvelle sous-squad (nom, profil, rôles et éventuels rôles manquants du conseil
+        avec leur justification) puis, après votre confirmation, l'initialise
         sous <code>members/&lt;new&gt;/</code> et l'enregistre &mdash; en ajoutant une ligne dans
         <code>federation.md</code>, une route dans <code>meta-routing.md</code> et une entrée de décision
         de fédération. Elle est <strong>additive et non destructive</strong> : les sous-squads existantes ne sont

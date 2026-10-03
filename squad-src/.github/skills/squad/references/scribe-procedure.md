@@ -35,6 +35,7 @@ These hold on every turn regardless of payload type. Each names its full definit
 | Payload present                | Step | Target                                                    | Semantics             |
 |--------------------------------|------|-----------------------------------------------------------|-----------------------|
 | decision                       | 1    | `decisions.md`                                            | append-only           |
+| Council Role Offer              | 1    | `decisions.md`, and on acceptance `team.md`, `routing.md` | append / roster-add   |
 | history                        | 2    | `history/<agent>.md`                                      | append-only           |
 | initialization or roster refresh | 3  | `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, `history/` | replace-on-request |
 | memory                         | 4    | `/memories/repo/squad-<agent>.md`                         | memory tool           |
@@ -55,14 +56,14 @@ The Scribe decides which cold file(s) to read from its own payload type — neve
 | Payload type (Step above)                                     | Also read                                                                |
 |-----------------------------------------------------------------|---------------------------------------------------------------------------|
 | decision, history, (always: Step 7 consumption + state.json)    | none — this hot core is sufficient                                        |
-| initialization or roster refresh (3)                             | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption-rates-template.md](consumption-rates-template.md), `seed-templates.md` (existing init-only conditional) |
+| initialization or roster refresh (3)                             | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption-rates-template.md](consumption-rates-template.md), `seed-templates.md` (existing init-only conditional); also [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) when the payload includes a Council Role Offer |
 | Step 7.1 rate-table seed/reseed, any payload type (`consumption-rates.md` missing or shape-check-failed) | [consumption-rates-template.md](consumption-rates-template.md) |
 | memory (4)                                                       | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md)         |
-| Council Verdict / Intake Readiness Verdict / Discovery Verdict (5, 9, 12) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md)     |
+| Council Role Offer / Council Verdict / Intake Readiness Verdict / Discovery Verdict (1, 5, 9, 12) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md)     |
 | autonomous-loop summary (6)                                      | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md)     |
 | autopilot-run summary, single-squad root (8)                     | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md)     |
 | autopilot-run summary, federation root (8)                       | [scribe-cold-federation.md](scribe-cold-federation.md)                     |
-| promotion (10)                                                   | [scribe-cold-federation.md](scribe-cold-federation.md), [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) (deliverable-root rebasing) |
+| promotion (10)                                                   | [scribe-cold-federation.md](scribe-cold-federation.md), [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) (deliverable-root rebasing), and [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) when the payload includes a Council Role Offer |
 | expansion (11)                                                   | [scribe-cold-federation.md](scribe-cold-federation.md), `federation-templates.md` (existing conditional) |
 | federation-level history payload (naming a sub-squad, Step 2)    | [scribe-cold-federation.md](scribe-cold-federation.md) § *Federation-Level History Payload* |
 | notification write                                               | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) § *notifications.md* |
@@ -70,6 +71,8 @@ The Scribe decides which cold file(s) to read from its own payload type — neve
 ### Decision, History, and Verdict Entries
 
 Append decisions and their rationale to the end of `decisions.md`; never edit or remove prior entries. When a decision is marked architecturally significant, note that the coordinator should additionally capture it as an ADR via the `adr-author` skill and reference that ADR from the entry.
+
+For a council proposal, append a `## Council Role Offer <timestamp> <trigger-id>` entry through this same decision payload. Record `Outcome: accepted|adjusted|declined`, the exact roster role set, trigger/topic id, each proposed role and its work-specific rationale, exact accepted membership, and (on acceptance or adjustment) roles added to `team.md` and `routing.md`. An accepted offer and its roster/routing updates are one Scribe operation; if any write or verification fails, report failure and do not permit council dispatch. The trigger id is stable for one lifecycle offer or council topic/stage. Do not re-offer a decline for the same roster role set and trigger id; a changed roster, review scope, or trigger id is eligible for a new proposal.
 
 Append each dispatch record to `history/<agent>.md`, creating the file with its agent heading when absent. A history append and its consumption block are inseparable — never append a dispatch record without also writing its block. When a ceiling is configured, the history payload also carries the Cost Preflight Decision Ref, run id, round id, and slot. Read the persisted preflight and every history entry first. Reject the child without a partial write unless its decision is `within-ceiling` or `approved-over-ceiling`, its readable permitted set contains that slot, and no history entry already records the same run, round, and slot. For `approved-over-ceiling`, also require medium confidence, `evaluatedSpendUsd < ceilingUsd`, a readable `Approved From` over-ceiling round with matching inputs, and an `Approval Ref`. A permitted slot is consumable exactly once.
 

@@ -116,7 +116,7 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | deploy, provision, what-if, terraform plan, terraform apply, az deployment | deployer | confirm | no |
 | as-built, resource inventory, compliance matrix, operations runbook, DR plan, document deployed infrastructure | asbuilt-author | confirm | no |
 | diagnose, troubleshoot, resource health, why is resource failing, investigate deployed, policy check, incident, outage, sev1, sev2, on-call, postmortem, root cause | azure-diagnose | auto | yes |
-| validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai (optional) | confirm | yes |
+| validate, cross-check, pre-implementation review, council, design review, go/no-go, implement-and-cost, implement-and-risk | architect, security, cost-manager, product-owner, rai | confirm | yes |
 | modernize, upgrade framework, migrate, port legacy, .NET upgrade, Java migration, dependency upgrade, containerize | modernizer | confirm | no |
 | sql migration, database migration, schema migration, data migration, sql server to azure, downtime migration plan, cutover strategy | modernizer | confirm | no |
 | re-platform, rewrite, port to, rebuild in, cross-stack rewrite, Node to .NET, React to Angular, convert to another language | modernizer | confirm | no |
@@ -128,4 +128,3 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | AWS, Lambda, S3, DynamoDB, EC2, ECS, EKS, Fargate, API Gateway, EventBridge, Step Functions, CloudFormation, AWS CDK, SAM, AWS landing zone, AWS Organizations, Control Tower, AWS Well-Architected | aws-architect | confirm | yes |
 | CloudWatch alarm, AWS incident, AWS outage, Lambda throttling, Logs Insights, X-Ray trace, AWS root cause | aws-diagnose | auto | yes |
 ```
-

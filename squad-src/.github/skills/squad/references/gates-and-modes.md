@@ -40,13 +40,17 @@ The intake gate is the operator's pre-work readiness check on the inputs a turn 
 
 ## Council Procedure
 
-The council is the operator's pre-implementation cross-check. The coordinator triggers it when the user explicitly asks for a council, a validation, a cross-check, or a pre-implementation review, or when a request mixes implementation language with risk language and crosses two or more council-member domains (architecture, security, cost, product-fit, RAI). The full protocol lives in `.github/instructions/squad/squad-council.instructions.md`; the operator's view is:
+The council is the operator's pre-implementation cross-check. The coordinator triggers it when the user explicitly asks for a council, a validation, a cross-check, or a pre-implementation review, or when a request mixes implementation language with material risk in one or more council-member domains (architecture, security, cost, product-fit, RAI). The full protocol lives in `.github/instructions/squad/squad-council.instructions.md`; the operator's view is:
 
-1. The coordinator dispatches the default council in a single parallel batch: `architect`, `security`, `cost-manager`, `product-owner`, plus optional `rai` when AI/ML, training data, agent autonomy, or regulated data is in scope.
-2. Each council role returns a finding with a verdict label (`Approve`, `Conditional`, `Concern`, `Block`) and a risk label (`Risk: Low`, `Risk: Medium`, `Risk: High`).
-3. The Squad Scribe synthesizes the findings using a most-restrictive-wins rule: any `Block` or any `Risk: High` drives a `Stop` verdict; any `Conditional` (with no blockers) drives `Go-With-Conditions`; otherwise the verdict is `Go`.
-4. The Scribe appends a single `## Council Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
-5. The verdict gates the next turn's implementation dispatch: `Go` or `Go-With-Conditions` permits dispatch (with conditions attached as inputs); `Stop` blocks dispatch and the coordinator escalates.
+1. For each council trigger (including autonomous re-validation), infer the relevant review lenses from the plan and propose the smallest fitting set from `architect`, `security`, `cost-manager`, `product-owner`, and `rai`. Membership may be one role, a subset, or `rai` alone. Explain each role's purpose and that the council validates the plan before implementation; ask the user to accept, adjust, or decline, even if all proposed roles are already present. Record the exact proposal and answer through the Scribe, keyed to the roster role set, topic/scope, and trigger. Do not repeat a decline for the same roster and trigger/topic.
+2. On acceptance or adjustment, wait for the Scribe to add only selected roles missing from the roster and verify them before dispatch. On decline, escalate without dispatching any council role. The accepted membership is the complete council for that review; do not dispatch unselected roles or synthesize a verdict.
+3. The coordinator dispatches exactly the accepted roles in a single parallel batch.
+4. Each council role returns a finding with a verdict label (`Approve`, `Conditional`, `Concern`, `Block`) and a risk label (`Risk: Low`, `Risk: Medium`, `Risk: High`).
+5. The Squad Scribe synthesizes the findings using a most-restrictive-wins rule: any `Block` or any `Risk: High` drives a `Stop` verdict; any `Conditional` (with no blockers) drives `Go-With-Conditions`; otherwise the verdict is `Go`.
+6. The Scribe appends a single `## Council Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
+7. The verdict gates the next turn's implementation dispatch: `Go` or `Go-With-Conditions` permits dispatch (with conditions attached as inputs); `Stop` blocks dispatch and the coordinator escalates.
+
+When no user can answer, including Watch Mode or any other unattended run, do not make an offer, auto-add roles, or infer approval. Reuse only a recorded, user-accepted membership for the same unchanged topic and scope when every selected role remains available; otherwise escalate through the configured approval channel with the proposed roles, their purposes, and the action an authorized user must take before the run resumes.
 
 ## Implementation Gate Procedure
 
@@ -56,7 +60,7 @@ The Implementation Gate is what makes the squad a methodology instead of a route
 2. **Implementation may not begin cold.** Confirm all three on disk, by listing the directory and reading the file, before dispatching the producing role:
    * a research artifact under the `researcher` Deliverable Root for the topic — if missing, dispatch `researcher` first;
    * a plan artifact under the `lead` Deliverable Root for the topic — if missing, dispatch `lead` first;
-   * a non-`Stop` Council Verdict for the topic when the request crosses two or more council-member domains — if missing, run the council row first.
+   * a non-`Stop` Council Verdict for the topic when a council trigger applies — if missing, propose and run the task-fit council first.
 3. When a precondition is unmet, dispatch the missing stage or escalate. **Never produce the missing research, plan, or verdict inline**, and never advance because the request "is only a document". Skipping research and plan to reach the deliverable faster is the single most common way a squad turn degrades into one model improvising, and it is invisible afterwards because the deliverable still looks finished.
 4. On the verdict: `Go` or `Go-With-Conditions` permits dispatch with the conditions attached as inputs; `Stop` escalates. A user may override `Stop`, and the override is recorded through the Scribe before any dispatch.
 
@@ -111,7 +115,7 @@ Autopilot removes the human turn between stages; it does not remove the stages. 
 2. **intake** — `intake-validator` (+`analyst` or `product-owner` on remediation) — a `## Intake Readiness Verdict` in `decisions.md` — requirement or input artifacts are in scope.
 3. **research** — `researcher` — a research artifact under the `researcher` Deliverable Root — the request is classified.
 4. **plan** — `lead` — a plan artifact under the `lead` Deliverable Root — a research artifact exists.
-5. **council** — `architect`, `security`, `cost-manager`, `product-owner` (+`rai` when relevant) — a `## Council Verdict` in `decisions.md` — a plan artifact exists.
+5. **council** — the accepted task-fit roles (one or more; may be `rai` alone) — a `## Council Verdict` in `decisions.md` — a plan artifact exists, the user accepted the membership, and every selected role is present and dispatchable. Never dispatch unselected roles or synthesize a verdict.
 6. **implement** — `developer`, or the fan-out specialists — the artifact at each producing role's Deliverable Root — a plan artifact and a non-`Stop` Council Verdict exist.
 7. **review** — `tester` — a review record plus its `history/<agent>.md` entry — the implement stage's artifacts exist.
 
