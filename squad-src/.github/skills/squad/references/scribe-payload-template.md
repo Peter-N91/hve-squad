@@ -20,7 +20,7 @@ Read, do not edit, this section on every dispatch. It is copied unmodified from 
 
 ### 1.1 Payload Type
 
-State exactly one payload type from the Payload-to-Step Map in [scribe-procedure.md](scribe-procedure.md): `decision`, `history`, `initialization`, `memory`, `Council Verdict`, `autonomous-loop summary`, `autopilot-run summary`, `Intake Readiness Verdict`, `promotion`, `expansion`, or `Discovery Verdict`. The Scribe uses this single field, not the shape of the data below it, to decide which cold file(s) the Cold-File Dispatch Table names — never guess a type from context.
+State exactly one payload type from the Payload-to-Step Map in [scribe-procedure.md](scribe-procedure.md): `decision`, `history`, `initialization`, `memory`, `Council Role Offer`, `Council Verdict`, `autonomous-loop summary`, `autopilot-run summary`, `Intake Readiness Verdict`, `promotion`, `expansion`, or `Discovery Verdict`. The Scribe uses this single field, not the shape of the data below it, to decide which cold file(s) the Cold-File Dispatch Table names — never guess a type from context.
 
 ### 1.2 Location
 
@@ -57,7 +57,7 @@ When the coordinator has a shell with `pwsh` 7+, supply `ledgerCommand`: the exa
 Everything below this line changes turn to turn and is appended after the stable prefix above.
 
 ```yaml
-payloadType: <decision|history|initialization|memory|Council Verdict|autonomous-loop summary|autopilot-run summary|Intake Readiness Verdict|promotion|expansion|Discovery Verdict>
+payloadType: <decision|history|initialization|memory|Council Role Offer|Council Verdict|autonomous-loop summary|autopilot-run summary|Intake Readiness Verdict|promotion|expansion|Discovery Verdict>
 squadRoot: <resolved path>
 runId: <id>
 turn: <n>

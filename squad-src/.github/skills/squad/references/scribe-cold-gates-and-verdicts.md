@@ -21,16 +21,21 @@ Append this entry to `decisions.md` for every council-role offer, including Init
 ```markdown
 ## Council Role Offer <timestamp> <trigger-id>
 
-* Outcome: accepted | adjusted | declined
+* Topic/Scope: <topic id and concise review scope>
+* Outcome: accepted | adjusted | declined | roster-selected
+* Selection Mode: interactive | autopilot-roster | autonomous-roster | watch-roster
 * Roster Roles: <exact active role set, sorted>
 * Trigger: <lifecycle point or council topic/stage>
 * Proposed Council:
   * <role> — <work-specific review rationale>
-* Accepted Council: <exact user-approved role set, or none>
+* Not Proposed:
+  * <role> — <reason its review lens is not material>
+* Selected Council: <exact selected role set, or none>
+* Council Waiver: waived by user | n/a
 * Added Roles: <accepted roles added to the roster, or none>
 ```
 
-For Init and Expansion, store this entry in the newly seeded sub-squad's `decisions.md`; for Promotion, append it to the existing squad's `decisions.md` before relocating the tree. On acceptance, add only accepted roles absent from the roster, using supplied/catalog-resolved role rows and filtered routing rows as part of the same Scribe operation; preserve every existing row and cell, and verify both files. Never invent an agent mapping or record a Council Verdict for a membership that differs from the exact accepted set.
+For Init and Expansion, store this entry in the newly seeded sub-squad's `decisions.md`; for Promotion, append it to the existing squad's `decisions.md` before relocating the tree. Record every proposed role and each council role not proposed with a rationale, including roster-based selections. On acceptance or adjustment, add only selected roles absent from the roster, using supplied/catalog-resolved role rows and filtered routing rows as part of the same Scribe operation; preserve every existing row and cell, and verify both files. A decline records `Council Waiver: waived by user`, adds no roles, and writes no Council Verdict. Never invent an agent mapping or record a Council Verdict for a membership that differs from the exact selected set. Return the outcome, topic, path, and decision reference after the append.
 
 Verdict entries (Council, Intake Readiness, Discovery) are appended to `decisions.md` using the exact schema in the matching instruction file, stamped into the shapes below:
 
@@ -38,7 +43,7 @@ Verdict entries (Council, Intake Readiness, Discovery) are appended to `decision
 * **Intake Readiness Verdict** — `squad-intake-gate.instructions.md`. `Verdict` is exactly `Ready`, `Ready-With-Gaps`, or `Not-Ready`.
 * **Discovery Verdict** — `squad-discovery-gate.instructions.md`. `Depth` is exactly `quick`, `standard`, `deep`, or `skip`; `Opt-In` is exactly `offer-accepted`, `explicit-input`, or `offer-declined`. Write the entry on a `skip` depth as well, with the body sections empty — a recorded declination is what stops the coordinator re-offering the gate for the same topic, so omitting it silently re-arms a question the user already answered. Preserve the reason attached to every discarded option verbatim rather than summarizing it away.
 
-For every verdict: when a required schema section is missing from the payload, do not write a partial verdict — return a failure note so the coordinator can re-assemble it. On success, return the verdict label, the topic id, the file path, and the **Decision Ref** (the file path plus the entry's Markdown heading anchor, for example `decisions.md#council-verdict-<timestamp>-<topic-id>`) so the coordinator can link straight to the section.
+For every Council Role Offer or verdict: when a required schema section is missing from the payload, do not write a partial entry — return a failure note so the coordinator can re-assemble it. On success, return the verdict label or waiver outcome, the topic id, the file path, and the **Decision Ref** (the file path plus the entry's Markdown heading anchor, for example `decisions.md#council-verdict-<timestamp>-<topic-id>` or `decisions.md#council-role-offer-<timestamp>-<trigger-id>`) so the coordinator can link straight to the section.
 
 The autonomous-loop summary uses the shape in `squad-autonomous.instructions.md` and is append-only by topic-id: when the file exists, append a new dated `## Iterations` section rather than overwriting prior runs. Hand each loop iteration's per-agent dispatch records through the normal history append so each role's file also reflects the cycle.
 
@@ -81,8 +86,12 @@ The Scribe stamps this shape when a council runs:
 
 * Topic: <one-line summary of the proposal>
 * Proposal Ref: <path-to-plan-or-design>
-* Council Members Dispatched: <comma-separated user-approved role set>
+* Council Members Dispatched: <comma-separated selected role set>
+* Selection Mode: interactive-accepted | autopilot-roster | autonomous-roster | watch-roster
 * Verdict: Go | Go-With-Conditions | Stop
+
+* Not Proposed:
+  * <role> — <reason its review lens is not material>
 
 ### Findings by Role
 
@@ -168,7 +177,7 @@ description: "Autonomous-loop summary for topic <id>"
 * Topic: <one-line summary>
 * Opt-In: mode=autonomous
 * Cost Ceiling: <value or unset>
-* Outcome: converged (Go) | converged (Go-With-Conditions) | escalated (<reason>)
+* Outcome: converged (Go) | converged (Go-With-Conditions) | waived (council waived by user) | escalated (<reason>)
 
 ## Cost Preflight Rounds
 
@@ -185,7 +194,7 @@ description: "Autonomous-loop summary for topic <id>"
 
 ## Final Verdict Reference
 
-* Council Verdict: see `decisions.md` under `## Council Verdict <timestamp> <id>`
+* Council Verdict or waiver: see `decisions.md` under `## Council Verdict <timestamp> <id>` or `## Council Role Offer <timestamp> <trigger-id>`
 ```
 
 ### Autopilot-Run Summary

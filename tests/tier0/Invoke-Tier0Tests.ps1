@@ -49,7 +49,7 @@
     ./Invoke-Tier0Tests.ps1 -SourceRoot .
 .NOTES
     See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-15,
-    GATE-22..GATE-28).
+    GATE-22..GATE-38).
 #>
 [CmdletBinding(DefaultParameterSetName = 'Install')]
 param(
@@ -115,6 +115,9 @@ $containers = @(
         ExpectPinned = [bool]$expectPinned
     }
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'ScribeHandoffPipelining.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'CouncilSelection.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
 )

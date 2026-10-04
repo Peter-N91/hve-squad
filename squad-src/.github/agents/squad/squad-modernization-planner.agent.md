@@ -66,7 +66,7 @@ This mode applies only when the request crosses stacks rather than upgrading wit
 * Execution routes to the squad `developer` role together with the `architect` role, never to the official App Modernization tooling. That tooling upgrades within a stack and cannot perform a cross-stack rewrite, so do not recommend it for this mode.
 * Before sequencing any rewrite phase, capture a behavior contract for the source system through the Squad Researcher: its external API surface, inputs and outputs, side effects, and the tests that pin current behavior. The behavior of the existing system is the specification for the rewritten one.
 * Sequence the rewrite incrementally — for example, a strangler-fig migration that ports one capability at a time behind a stable interface — rather than a single big-bang cutover, unless the codebase is small enough that a full rewrite is demonstrably lower risk.
-* Treat every re-platform as a large, high-risk effort. Always mark it for council review (`architect`, `security`, `cost-manager`, `product-owner`) before any implementation phase begins, even when a same-stack phase of comparable size would not require it.
+* Treat every re-platform as a large, high-risk effort. Always trigger a task-fit council review before any implementation phase begins, selecting only the relevant roles from the accepted roster; if a required lens is absent, offer it as an opt-in.
 * Record `re-platform` as the `modernization_mode` and set `execution_recommendation` to `developer` plus `architect`, with a one-line rationale that names the source and target stacks.
 
 ## Required Protocol

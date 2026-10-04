@@ -281,9 +281,9 @@ No fixed quorum: propose only roles whose review lenses materially apply to the 
 
 At Init, Promotion, and Expansion, always propose a council tailored to the request and discovery. Name relevant roles and their review reasons, explain that the council validates the plan before implementation, and ask the user to accept, adjust, or decline. Include roles already on the roster; add only accepted missing roles and filtered routing rows.
 
-At each runtime council trigger (including autopilot/autonomous), follow `squad-council.instructions.md`: offer the task-fit roles even if already present, then dispatch exactly the accepted set in parallel. This set is the complete council for that review. Never add irrelevant roles, dispatch unaccepted roles, synthesize a verdict, or implement after decline. The Scribe records the roster, trigger/topic, proposed and accepted roles, rationales, and outcome. A repeated decline for the same roster and trigger/topic stops/escalates without re-offer.
+At interactive runtime triggers, offer the task-fit roles even if already present; dispatch exactly the accepted set in parallel. In autopilot, autonomous, and Watch Mode, select from available roles already accepted on the roster without asking for membership confirmation. Offer or escalate only when a needed lens is absent. Never add irrelevant roles, dispatch unaccepted/unrostered roles, or synthesize a verdict. The Scribe records the roster, trigger/topic, selected and not-proposed roles, rationales, and outcome. An interactive decline waives the council for that topic and scope; do not re-offer the same declined proposal.
 
-Unattended runs, including Watch Mode, never offer, auto-add, or infer new membership. Reuse only an explicitly accepted membership for the same unchanged topic and scope while its roles remain available; otherwise stop and escalate with role-specific remediation.
+Unattended runs, including Watch Mode, never offer or auto-add roles. The roster itself is the accepted pool for each new topic; record the selected subset and escalate only when a needed lens is absent.
 
 ### Squad Packs
 

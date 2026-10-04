@@ -22,7 +22,7 @@ The routing table uses these columns:
 | Column            | Meaning                                                                              |
 |-------------------|--------------------------------------------------------------------------------------|
 | Pattern / Keyword | The request trigger the coordinator matches (intent keywords or phrasing)            |
-| Role(s)           | The squad role or roles dispatched for the match, resolved through the roster; the council row lists candidate roles, from which only the user-approved task-fit subset is dispatched per `squad-council.instructions.md` |
+| Role(s)           | The squad role or roles dispatched for the match, resolved through the roster; the council row lists candidate roles, from which interactive mode dispatches the user-approved task-fit subset and automated modes dispatch the task-fit subset from the accepted roster per `squad-council.instructions.md` |
 | Autonomy Tier     | How much latitude the role has: `auto`, `confirm`, or `escalate`                     |
 | Parallel-Eligible | `yes` when the role can run concurrently with other independent roles; `no` when not |
 
@@ -159,11 +159,11 @@ The coordinator first confirms the methodology artifacts exist on disk. Implemen
 
 * A research artifact exists under `.copilot-tracking/research/` for the topic. If missing, dispatch `researcher` first.
 * A plan artifact exists under `.copilot-tracking/plans/` for the topic. If missing, dispatch `lead` (planning) first.
-* A non-`Stop` Council Verdict exists for the topic when a council trigger applies under `squad-council.instructions.md`. If missing, propose the task-fit council and run the council row first.
+* A non-`Stop` Council Verdict exists for the topic when a council trigger applies under `squad-council.instructions.md`, or a matching `Council Waived: waived by user` is recorded. If neither exists, run the task-fit council first.
 
 When any precondition is unmet, the coordinator dispatches the missing stage (or escalates) instead of implementing. It never produces the missing research, plan, or verdict itself. With the preconditions met, the gate behavior is:
 
-* When no Council Verdict exists for the topic and a council trigger applies, the coordinator runs the user-approved task-fit council before the implementer.
+* When no Council Verdict or matching council waiver exists for the topic and a council trigger applies, the coordinator runs the task-fit council before the implementer.
 * When the latest verdict is `Go` or `Go-With-Conditions`, the coordinator dispatches the implementer and passes the consolidated conditions as inputs.
 * When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the Scribe before any implementer dispatches.
 

@@ -840,11 +840,12 @@ flowchart TD
         why they are needed to validate the plan before implementation; the proposed membership may be
         one role, a focused subset, or <code>rai</code> alone. You can accept, adjust, or decline. Only
         accepted roles that are not already present are added to <code>team.md</code> and
-        <code>routing.md</code>. At each later council trigger, the coordinator proposes membership for
-        that work even when all roles are already available; it dispatches exactly the roles you accepted.
-        A decline never dispatches a council or invents a verdict. Watch Mode cannot ask or add roles, so
-        it reuses only an explicitly accepted membership for the same unchanged topic and scope;
-        otherwise it stops and reports the proposed roles and how an authorized user can approve them.
+        <code>routing.md</code>. In interactive mode, each later council trigger proposes task-fit
+        membership and dispatches exactly the accepted roles. Autopilot, autonomous, and Watch Mode
+        select the task-fit subset from accepted roster roles without another membership question; an
+        absent needed role is offered only in interactive runs and never auto-added. A decline is recorded
+        as a council waiver, allowing work to continue unless an independent Risk Gate applies. Watch Mode
+        escalates only when a needed role is missing from its roster.
       </p>
       <p>
         On a brand-new project (no squad yet), Init Mode first offers a choice: a <strong>single

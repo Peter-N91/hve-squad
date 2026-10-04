@@ -40,17 +40,17 @@ The intake gate is the operator's pre-work readiness check on the inputs a turn 
 
 ## Council Procedure
 
-The council is the operator's pre-implementation cross-check. The coordinator triggers it when the user explicitly asks for a council, a validation, a cross-check, or a pre-implementation review, or when a request mixes implementation language with material risk in one or more council-member domains (architecture, security, cost, product-fit, RAI). The full protocol lives in `.github/instructions/squad/squad-council.instructions.md`; the operator's view is:
+The council is the operator's pre-implementation cross-check. The coordinator triggers it when the user explicitly asks for a council, a validation, a cross-check, or a pre-implementation review, or when a request combines implementation language with material concerns in at least two non-RAI council domains (architecture, security, cost, product-fit) or any responsible-AI concern. An explicit request may ask for a one-role council. The full protocol lives in `.github/instructions/squad/squad-council.instructions.md`; the operator's view is:
 
-1. For each council trigger (including autonomous re-validation), infer the relevant review lenses from the plan and propose the smallest fitting set from `architect`, `security`, `cost-manager`, `product-owner`, and `rai`. Membership may be one role, a subset, or `rai` alone. Explain each role's purpose and that the council validates the plan before implementation; ask the user to accept, adjust, or decline, even if all proposed roles are already present. Record the exact proposal and answer through the Scribe, keyed to the roster role set, topic/scope, and trigger. Do not repeat a decline for the same roster and trigger/topic.
-2. On acceptance or adjustment, wait for the Scribe to add only selected roles missing from the roster and verify them before dispatch. On decline, escalate without dispatching any council role. The accepted membership is the complete council for that review; do not dispatch unselected roles or synthesize a verdict.
-3. The coordinator dispatches exactly the accepted roles in a single parallel batch.
+1. In interactive mode, infer the relevant review lenses and propose the smallest fitting set; ask the user to accept, adjust, or decline. Record selected and not-proposed roles and rationales through the Scribe. A decline records `Council Waived: waived by user`, satisfying only the council precondition for that topic and scope.
+2. In `autopilot`, `autonomous`, and Watch Mode, select the task-fit subset from roles already on the accepted roster without asking for membership confirmation, and record the selection through the Scribe. If a needed role is missing, interactive autopilot/autonomous offers it as an opt-in; an unattended run escalates without adding it.
+3. Verify accepted role additions and agent availability, then dispatch exactly the selected membership in a single parallel batch. Never dispatch unrostered roles or synthesize a verdict. An independent Risk Gate still applies after a council waiver.
 4. Each council role returns a finding with a verdict label (`Approve`, `Conditional`, `Concern`, `Block`) and a risk label (`Risk: Low`, `Risk: Medium`, `Risk: High`).
 5. The Squad Scribe synthesizes the findings using a most-restrictive-wins rule: any `Block` or any `Risk: High` drives a `Stop` verdict; any `Conditional` (with no blockers) drives `Go-With-Conditions`; otherwise the verdict is `Go`.
 6. The Scribe appends a single `## Council Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
 7. The verdict gates the next turn's implementation dispatch: `Go` or `Go-With-Conditions` permits dispatch (with conditions attached as inputs); `Stop` blocks dispatch and the coordinator escalates.
 
-When no user can answer, including Watch Mode or any other unattended run, do not make an offer, auto-add roles, or infer approval. Reuse only a recorded, user-accepted membership for the same unchanged topic and scope when every selected role remains available; otherwise escalate through the configured approval channel with the proposed roles, their purposes, and the action an authorized user must take before the run resumes.
+In Watch Mode and other unattended runs, the roster is the accepted role pool: select the relevant subset and record it; no topic-specific prior approval is needed. Never auto-add. Escalate only if a needed lens has no available role on the roster.
 
 ## Implementation Gate Procedure
 
@@ -60,9 +60,9 @@ The Implementation Gate is what makes the squad a methodology instead of a route
 2. **Implementation may not begin cold.** Confirm all three on disk, by listing the directory and reading the file, before dispatching the producing role:
    * a research artifact under the `researcher` Deliverable Root for the topic — if missing, dispatch `researcher` first;
    * a plan artifact under the `lead` Deliverable Root for the topic — if missing, dispatch `lead` first;
-   * a non-`Stop` Council Verdict for the topic when a council trigger applies — if missing, propose and run the task-fit council first.
+   * a non-`Stop` Council Verdict for the topic when a council trigger applies, or a matching `Council Waived: waived by user` — if neither exists, run the task-fit council first.
 3. When a precondition is unmet, dispatch the missing stage or escalate. **Never produce the missing research, plan, or verdict inline**, and never advance because the request "is only a document". Skipping research and plan to reach the deliverable faster is the single most common way a squad turn degrades into one model improvising, and it is invisible afterwards because the deliverable still looks finished.
-4. On the verdict: `Go` or `Go-With-Conditions` permits dispatch with the conditions attached as inputs; `Stop` escalates. A user may override `Stop`, and the override is recorded through the Scribe before any dispatch.
+4. On the verdict: `Go` or `Go-With-Conditions` permits dispatch with the conditions attached as inputs; `Stop` escalates. A matching recorded council waiver also satisfies this precondition, but not an independent Risk Gate. A user may override `Stop`, and the override is recorded through the Scribe before any dispatch.
 
 ### Review Follow-Through
 
@@ -90,7 +90,7 @@ The current coordinator invocation is unavoidable and is included in the manifes
 The opt-in `auto-validated` tier lets a council validate a developer's output on the same turn, without an intervening user prompt. The full protocol lives in `.github/instructions/squad/squad-autonomous.instructions.md`; the operator's view is:
 
 1. The user opts in per turn by passing `mode=autonomous` to `/squad`. Without that input, the coordinator runs the normal six-step protocol.
-2. The coordinator runs the loop: council dispatch → verdict synthesis → implementer dispatch (on `Go` or `Go-With-Conditions`) → council re-validation (cycle 1) → optional council re-validation (cycle 2).
+2. The coordinator runs the loop: roster-based council dispatch (or a recorded waiver) → verdict synthesis → implementer dispatch (on `Go`, `Go-With-Conditions`, or a matching waiver) → council re-validation (cycle 1) → optional council re-validation (cycle 2); a matching waiver skips council re-validation for the same topic and scope.
 3. The re-validation cap is hard at two cycles; after cycle 2 the coordinator escalates regardless of outcome.
 4. The loop stops and escalates immediately on any mandatory trigger: a `Stop` verdict, a `Risk: High` from `security` / `cost-manager` / `rai`, any cost-impacting `confirm`-tier move, any compliance violation, or any irreversible write (production deploy, schema migration, data deletion, force-push).
 5. Divergence detection escalates immediately when two consecutive cycles produce different verdicts on the same issue, even before the cap.
@@ -115,8 +115,8 @@ Autopilot removes the human turn between stages; it does not remove the stages. 
 2. **intake** — `intake-validator` (+`analyst` or `product-owner` on remediation) — a `## Intake Readiness Verdict` in `decisions.md` — requirement or input artifacts are in scope.
 3. **research** — `researcher` — a research artifact under the `researcher` Deliverable Root — the request is classified.
 4. **plan** — `lead` — a plan artifact under the `lead` Deliverable Root — a research artifact exists.
-5. **council** — the accepted task-fit roles (one or more; may be `rai` alone) — a `## Council Verdict` in `decisions.md` — a plan artifact exists, the user accepted the membership, and every selected role is present and dispatchable. Never dispatch unselected roles or synthesize a verdict.
-6. **implement** — `developer`, or the fan-out specialists — the artifact at each producing role's Deliverable Root — a plan artifact and a non-`Stop` Council Verdict exist.
+5. **council** — the task-fit roles (one or more; may be `rai` alone) — a `## Council Verdict` in `decisions.md` — a plan artifact exists and every selected role is present and dispatchable; unattended modes select from the roster without asking. A matching recorded user waiver satisfies the council-only implementation precondition. Never dispatch unselected roles or synthesize a verdict.
+6. **implement** — `developer`, or the fan-out specialists — the artifact at each producing role's Deliverable Root — a plan artifact and a non-`Stop` Council Verdict or matching recorded council waiver exist.
 7. **review** — `tester` — a review record plus its `history/<agent>.md` entry — the implement stage's artifacts exist.
 
 **Deliverable fan-out replaces the implement row only.** When the plan's deliverable list names two or more artifact-owning roles on the team — a roster row whose `Deliverable Root` names a real path, counting every one except `researcher`, `lead`, and `tester` — dispatch each owning specialist in dependency order instead of a single `developer`, each a Scribe-recorded stage. The test is read off `team.md`, not off the profile name. Fan-out never replaces Research, Plan, council, or Review, and a plan the `lead` never wrote cannot have produced a deliverable list. A run that opens with a specialist deliverable has skipped four stages, not chosen a different shape.

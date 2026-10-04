@@ -840,11 +840,12 @@ flowchart TD
         examiner et explique pourquoi ils valident le plan avant l'implémentation ; le conseil peut comprendre
         un seul rôle, un sous-ensemble ciblé ou uniquement <code>rai</code>. Vous pouvez accepter, ajuster ou
         refuser la composition. Seuls les rôles acceptés et absents sont ajoutés à <code>team.md</code> et
-        <code>routing.md</code>. Lors de chaque déclencheur ultérieur, le coordinateur propose une composition
-        adaptée au travail, même si tous les rôles sont déjà disponibles ; il ne lance que les rôles acceptés.
-        Un refus n'entraîne aucun conseil ni verdict inventé. Watch Mode ne peut ni poser la question ni ajouter
-        des rôles : il réutilise uniquement une composition explicitement acceptée pour le même sujet et le même
-        périmètre ; sinon, il s'arrête et indique les rôles proposés et comment un utilisateur autorisé peut les approuver.
+        <code>routing.md</code>. En mode interactif, chaque déclencheur ultérieur propose une composition
+        adaptée au travail et seuls les rôles acceptés sont lancés. Autopilot, autonomous et Watch Mode
+        sélectionnent les rôles adaptés parmi ceux déjà acceptés dans l'équipe, sans nouvelle question ;
+        un rôle nécessaire absent est proposé uniquement en mode interactif et n'est jamais ajouté automatiquement.
+        Un refus est enregistré comme une dispense du conseil et permet de continuer, sauf si une porte de risque
+        indépendante s'applique. Watch Mode ne s'arrête que lorsqu'un rôle nécessaire manque à son roster.
       </p>
       <p>
         Sur un projet entièrement nouveau (sans squad), le mode d'initialisation propose d'abord un choix : une <strong>squad

@@ -7,32 +7,36 @@ applyTo: '**/.copilot-tracking/squad/**'
 
 These conventions define the pre-implementation council that the Squad Coordinator dispatches before any implementation-tier role acts on a non-trivial plan, design, or change. The council surfaces architecture, security, cost, product-fit, and (when AI/ML work is in scope) responsible-AI concerns in parallel so that the Squad Scribe can record a single, auditable verdict that downstream implementers consult.
 
-A council run produces exactly one durable artifact: a `## Council Verdict` entry appended to `.copilot-tracking/squad/decisions.md` by the Squad Scribe. The coordinator never writes that entry itself; the single-writer rule from `.github/instructions/squad/squad-state.instructions.md` still holds.
+A council run produces one durable `## Council Verdict` entry appended to `.copilot-tracking/squad/decisions.md` by the Squad Scribe; its membership choice is separately recorded as a `Council Role Offer` decision. The coordinator never writes either entry itself; the single-writer rule from `.github/instructions/squad/squad-state.instructions.md` still holds.
 
 ## Trigger Conditions
 
 The coordinator dispatches a council when any of the following hold:
 
 * The user explicitly asks for a council, a pre-implementation review, a cross-check, a design review, a go/no-go, or a validation pass before implementation.
-* The user's request contains both implementation language (build, ship, deploy, roll out, merge, apply) and risk language (cost, security, compliance, AI, regulated data, production, irreversible).
+* The user's request contains implementation language (build, ship, deploy, roll out, merge, apply) plus either material concerns in at least two non-RAI council domains (architecture, security, cost, product-fit) or any responsible-AI concern.
 * A routing row in `routing.md` resolves to the council pattern (see `squad-routing.instructions.md` for the canonical row).
-* A prior turn produced a plan with a material review concern in one or more council-member domains (architecture, security, cost, product-fit, or responsible AI).
+* A prior turn produced a plan with material review concerns in at least two council domains (architecture, security, cost, product-fit), or any responsible-AI concern.
 
-When none of the triggers hold, the coordinator follows the normal routing table and does not pay the council-dispatch cost.
+An explicit user request for council or validation may use a single review role. A single non-RAI concern alone does not automatically trigger a council; continue normal routing unless the user asks.
 
 ## Council Membership
 
 There is no fixed council quorum. For each review, the coordinator proposes the smallest role set that covers the material concerns in the plan or decision, using the role lenses in *Task-Fit Council Offers* in `.github/instructions/squad/squad-roster.instructions.md`. Membership may be one role, several relevant roles, or `rai` alone. Explain each role's review question and that the council validates the plan before implementation; the user may accept, adjust, or decline the proposed membership. If no role is clearly relevant to an explicit council request, ask which reviewer lens the user expects rather than silently skipping the offer or dispatching an arbitrary set.
 
-Each role resolves to its concrete agent through the roster's *Resolving a Role to an Agent* rules in `.github/instructions/squad/squad-roster.instructions.md`. A council membership change for a specific turn is acceptable (for example, swapping a Primary for an Alternate per a Selection Cue), but the exact accepted membership is recorded in the Council Verdict so the verdict is auditable.
+Each role resolves to its concrete agent through the roster's *Resolving a Role to an Agent* rules in `.github/instructions/squad/squad-roster.instructions.md`. A council membership change for a specific turn is acceptable (for example, swapping a Primary for an Alternate per a Selection Cue), but the exact selected membership and selection mode are recorded in the Council Verdict so the verdict is auditable.
 
-### Council Offer Before Dispatch
+### Task-Fit Selection and Opt-In
 
-Whenever a council trigger fires, always present the work-specific council proposal before dispatch, even if all recommended roles are already in `team.md`. Ask once for that roster and trigger/topic whether to accept, adjust, or decline; do not start dispatch while waiting. At Init, Promotion, and Expansion, present the same kind of proposal alongside the roster choice. Never add every absent council role by default.
+At interactive Init, Promotion, Expansion, or runtime council triggers, propose only roles whose review lenses materially apply. Name each role and rationale, include `Not Proposed` rationales for the other council roles, and explain that the council validates the plan before implementation. Ask the user to accept, adjust, or decline; roles already present are still proposed, while only accepted missing roles are added through the Scribe.
 
-On acceptance or adjustment, hand the Scribe the exact user-approved membership, any missing role rows and filtered routing rows to add, and a `Council Role Offer` decision recording the roster role set, trigger/topic, proposed and accepted membership, role rationales, and outcome. Verify accepted roster updates and agent availability before dispatch. Dispatch exactly the accepted roles in parallel; this set is the complete council for this review. On decline, hand the Scribe a decision recording declination and escalate without dispatching any council role. Do not repeat a declined offer for the same roster role set and trigger/topic; a changed roster, scope, or trigger/topic is a new offer case. If an accepted addition cannot be installed, recorded, or verified, escalate instead of dispatching.
+In `mode=autopilot`, `mode=autonomous`, and Watch Mode, do not ask the user to accept or adjust membership when all needed roles are present. Select the task-fit subset from roles already on the accepted active roster and record the selection, all considered-but-not-selected roles and rationales, trigger/topic, and selection mode through the Scribe. These modes may dispatch only rostered roles. If a needed lens has no role on the roster, interactive autopilot/autonomous offers that missing role as an opt-in and waits for the answer; an unattended run escalates through its approval channel with the missing role, its rationale, and remediation (an authorized user adds it before the run resumes), without auto-adding it.
 
-For Watch Mode and every other run with no interactive user available, make no offer and never auto-add or infer approval for new membership. Reuse an explicitly accepted membership only for the same unchanged topic and scope, if its roles remain available; otherwise escalate through the configured approval channel with the proposed roles, their rationales, and instructions for an authorized user to approve or add them before resuming. Missing, unavailable, or unapproved roles mean no council dispatch and no synthesized verdict; this holds for explicit council triggers and the `autopilot` and `autonomous` council stages.
+For an interactive decline, the Scribe records `Council Waived: waived by user` and the role selection as declined. Do not dispatch a council or synthesize a verdict. That waiver satisfies the council-only implementation precondition for the same topic and scope; it does not waive an independent Risk Gate, Impactful-Action Gate, or any other approval requirement. A new topic or materially changed scope requires a new offer. If the same declined offer recurs, cite the recorded waiver rather than asking again.
+
+Any accepted roster addition must be written and verified before dispatch. Dispatch exactly the selected council roles in parallel. An unavailable or nondispatchable role escalates; never substitute, dispatch a partial set relative to the selected membership, or synthesize a verdict.
+
+For Watch Mode and all other unattended runs, the roster itself is the prior user acceptance: select the task-fit subset from its existing roles and record the choice through the Scribe. Do not require a prior topic-matched council offer. Escalate only when a needed review lens has no available roster role; never auto-add a role.
 
 ## Parallel Dispatch Contract
 
@@ -66,8 +70,12 @@ The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` un
 
 * Topic: <one-line summary of the proposal>
 * Proposal Ref: <path-to-plan-or-design>
-* Council Members Dispatched: <comma-separated roles>
+* Council Members Dispatched: <comma-separated selected roles>
+* Selection Mode: interactive-accepted | autopilot-roster | autonomous-roster | watch-roster
 * Verdict: Go | Go-With-Conditions | Stop
+
+* Not Proposed:
+  * <role> — <reason its review lens is not material>
 
 ### Findings by Role
 
@@ -94,7 +102,7 @@ Required fields:
 * The `Verdict` value is one of exactly `Go`, `Go-With-Conditions`, or `Stop`.
 * The Blocking Issues, Conditions, and Suggested Follow-ups lists carry role attribution inline (for example, `(security) rotate secrets weekly`).
 
-The schema is the contract: include exactly one findings row for every dispatched role and no row for an undispatched role. Any Scribe write that omits a dispatched role or includes an undispatched role fails the council protocol; the coordinator escalates rather than proceeding.
+The schema is the contract: include exactly one findings row for every dispatched role and no row for an undispatched role. For an automated mode, all dispatched roles must come from the active roster. Any Scribe write that omits a dispatched role or includes an undispatched role fails the council protocol; the coordinator escalates rather than proceeding.
 
 ## Verdict Anchor and Decision Ref
 
@@ -116,10 +124,11 @@ When the Scribe receives a Council Verdict payload it writes the entry as an app
 
 ## Implementation Gate
 
-Implementation-tier roles (`developer`, `tester` when it acts as an implementer, or any role whose routing tier is `confirm` or `auto-validated` for an implementation pattern) consult the latest Council Verdict for the topic before they accept dispatch:
+Implementation-tier roles (`developer`, `tester` when it acts as an implementer, or any role whose routing tier is `confirm` or `auto-validated` for an implementation pattern) consult `decisions.md` for the latest council outcome on the topic before they accept dispatch:
 
 * `Go` permits dispatch on the next turn with no extra conditions.
 * `Go-With-Conditions` permits dispatch only when the implementer's payload acknowledges each consolidated condition (a condition may be satisfied in-flight or deferred with an explicit recorded acceptance).
 * `Stop` blocks dispatch entirely. The coordinator escalates to the user with the verdict, the blocking issues, the council membership, and the **Decision Ref** (per *Verdict Anchor and Decision Ref*) so the user can open the full verdict section directly.
+* `Council Waived: waived by user` satisfies this council-only precondition for the same topic and scope without a Council Verdict. An independent Risk Gate still blocks when its own trigger applies.
 
 The coordinator does not bypass the gate. When a user explicitly overrides a `Stop` verdict, the coordinator records the override decision through the Scribe before any implementer dispatches, so the audit trail shows both the verdict and the override.
