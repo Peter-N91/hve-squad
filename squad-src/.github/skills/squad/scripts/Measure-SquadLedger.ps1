@@ -115,7 +115,9 @@
     Optional hashtable keyed by history file name (with or without the `.md`
     extension, e.g. `'Squad Researcher'` or `'Squad Researcher.md'`) whose value is
     the expected `###` dispatch-entry count for that file. Compared only when -Check
-    is also supplied.
+    is also supplied. Under `pwsh -File` pass a string instead (a hashtable literal
+    cannot cross it): `'Squad Implementor=2;Squad Scribe=1'` (`,` also separates), or a
+    JSON object string. An unparseable string is an error.
 .PARAMETER Write
     Scribe-invoked write mode. Derives the same fragment the default markdown mode
     prints, then replaces the existing `## Attribution` heading through the closing
@@ -235,7 +237,7 @@
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/routing-performance
 .EXAMPLE
-    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
+    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -ExpectedHistoryCounts 'Squad Researcher=1;Squad Scribe=1'
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/product -Write
 .EXAMPLE
@@ -261,7 +263,7 @@ param(
 
     [switch]$Write,
 
-    [hashtable]$ExpectedHistoryCounts = @{},
+    [object]$ExpectedHistoryCounts = @{},
 
     [ValidateSet('markdown', 'json')]
     [string]$Format = 'markdown',
@@ -495,11 +497,13 @@ function Get-RosterLocal {
     $roster = [System.Collections.Generic.List[pscustomobject]]::new()
     foreach ($table in (Get-MarkdownTableLocal -Content $Content)) {
         if ('Role' -notin $table.Header) { continue }
+        # Model-written rosters drift from the template header; accept the same primary spellings Write-SquadHandoff.ps1 does.
+        $primaryHeader = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent') | Where-Object { $_ -in $table.Header } | Select-Object -First 1
 
         foreach ($row in $table.Rows) {
             $names = [System.Collections.Generic.List[string]]::new()
-            foreach ($column in @('Agent Name (Primary)', 'Alternate Agents')) {
-                if ($column -notin $table.Header) { continue }
+            foreach ($column in @($primaryHeader, 'Alternate Agents')) {
+                if (-not $column -or $column -notin $table.Header) { continue }
                 foreach ($name in ($row[$column] -split ',')) {
                     $trimmed = $name.Trim()
                     if ($trimmed -and $trimmed -ne '—' -and $trimmed -ne '-') { $names.Add($trimmed) }
@@ -507,7 +511,7 @@ function Get-RosterLocal {
             }
             if (-not $row['Role']) { continue }
             $memberName = if ('Member Name' -in $table.Header) { $row['Member Name'] } else { '' }
-            $primaryAgent = if ('Agent Name (Primary)' -in $table.Header) { $row['Agent Name (Primary)'] } else { '' }
+            $primaryAgent = if ($primaryHeader) { $row[$primaryHeader] } else { '' }
             $tier = if ('Model Tier' -in $table.Header) { $row['Model Tier'] } else { '' }
             $roster.Add([pscustomobject]@{
                     Role         = $row['Role']
@@ -1595,20 +1599,39 @@ function Resolve-SessionLogPathLocal {
     $stateDir = Join-Path $copilotHome 'session-state'
     if (-not (Test-Path -LiteralPath $stateDir -PathType Container)) { return $null }
 
-    $best = $null
-    foreach ($dir in Get-ChildItem -LiteralPath $stateDir -Directory) {
-        $events = Join-Path $dir.FullName 'events.jsonl'
-        $workspace = Join-Path $dir.FullName 'workspace.yaml'
-        if (-not (Test-Path -LiteralPath $events -PathType Leaf) -or -not (Test-Path -LiteralPath $workspace -PathType Leaf)) { continue }
-        $cwdMatch = [regex]::Match((Get-Content -LiteralPath $workspace -Raw), '(?m)^cwd:\s*(?<cwd>.+?)\s*$')
-        if (-not $cwdMatch.Success) { continue }
-        $cwd = $cwdMatch.Groups['cwd'].Value.Trim('"', "'")
-        try { $cwd = [System.IO.Path]::GetFullPath($cwd).TrimEnd('\', '/') } catch { continue }
-        if (-not [string]::Equals($cwd, $repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
-        $item = Get-Item -LiteralPath $events
-        if (-not $best -or $item.LastWriteTimeUtc -gt $best.LastWriteTimeUtc) { $best = $item }
+    # Local helper: does this session dir's workspace.yaml name the repo root as its cwd?
+    $testCwd = {
+        param([string]$dir)
+        $workspace = Join-Path $dir 'workspace.yaml'
+        if (-not (Test-Path -LiteralPath $workspace -PathType Leaf)) { return $false }
+        $cwdMatch = [regex]::Match([System.IO.File]::ReadAllText($workspace), '(?m)^cwd:\s*(?<cwd>.+?)\s*$')
+        if (-not $cwdMatch.Success) { return $false }
+        try { $cwd = [System.IO.Path]::GetFullPath($cwdMatch.Groups['cwd'].Value.Trim('"', "'")).TrimEnd('\', '/') } catch { return $false }
+        return [string]::Equals($cwd, $repoRoot, [System.StringComparison]::OrdinalIgnoreCase)
     }
-    if ($best) { return $best.FullName }
+
+    # The CLI exports the running session's id to its shell tool. Trust it only when it is a GUID naming a
+    # direct child of session-state whose cwd is this repo; an inherited or foreign id falls through to the scan.
+    $sessionId = $env:COPILOT_AGENT_SESSION_ID
+    if ($sessionId -and $sessionId -match '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
+        $ownDir = [System.IO.Path]::GetFullPath((Join-Path $stateDir $sessionId))
+        $stateFull = [System.IO.Path]::GetFullPath($stateDir).TrimEnd('\', '/')
+        $own = Join-Path $ownDir 'events.jsonl'
+        if ([string]::Equals([System.IO.Path]::GetDirectoryName($ownDir), $stateFull, [System.StringComparison]::OrdinalIgnoreCase) -and
+            (Test-Path -LiteralPath $own -PathType Leaf) -and (& $testCwd $ownDir)) { return $own }
+    }
+
+    # Newest events.jsonl first, so the first cwd match is the most recently written one and
+    # older sessions' workspace.yaml are never read (a machine can hold thousands).
+    $candidates = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+    foreach ($dirPath in [System.IO.Directory]::EnumerateDirectories($stateDir)) {
+        $info = [System.IO.FileInfo]::new([System.IO.Path]::Combine($dirPath, 'events.jsonl'))
+        if ($info.Exists) { $candidates.Add($info) }
+    }
+    $candidates.Sort([System.Comparison[System.IO.FileInfo]] { param($a, $b) $b.LastWriteTimeUtc.CompareTo($a.LastWriteTimeUtc) })
+    foreach ($item in $candidates) {
+        if (& $testCwd $item.DirectoryName) { return $item.FullName }
+    }
     return $null
 }
 
@@ -1886,6 +1909,55 @@ if (-not (Test-Path -LiteralPath $SquadRoot -PathType Container)) {
     throw "Measure-SquadLedger: squad root not found at '$SquadRoot'."
 }
 $SquadRoot = (Resolve-Path -LiteralPath $SquadRoot).Path
+
+# A hashtable literal cannot cross `pwsh -File`, so a string form is accepted too.
+function ConvertTo-ExpectedHistoryCountsLocal {
+    param($Value)
+    $result = @{}
+    if ($null -eq $Value) { return $result }
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($k in $Value.Keys) { $result[[string]$k] = $Value[$k] }
+        return $result
+    }
+    $text = ([string]$Value).Trim()
+    if ($text -eq '') { throw "Measure-SquadLedger: -ExpectedHistoryCounts is blank. Pass a hashtable, 'Squad Implementor=2;Squad Scribe=1', or a JSON object string." }
+    $pairs = [System.Collections.Generic.List[object]]::new()
+    if ($text.StartsWith('{')) {
+        # JsonDocument keeps duplicate keys, which ConvertFrom-Json would silently collapse.
+        try {
+            $doc = [System.Text.Json.JsonDocument]::Parse($text)
+            if ($doc.RootElement.ValueKind -ne 'Object') { throw 'not a JSON object' }
+            foreach ($prop in $doc.RootElement.EnumerateObject()) { $pairs.Add(@($prop.Name, $prop.Value.ToString())) }
+        }
+        catch { throw "Measure-SquadLedger: -ExpectedHistoryCounts JSON is not valid: $($_.Exception.Message)" }
+    }
+    else {
+        $body = $text -replace '^@\{\s*', '' -replace '\s*\}$', ''
+        foreach ($part in ($body -split '[;,]')) {
+            if ($part.Trim() -eq '') { continue }
+            $m = [regex]::Match($part, '^\s*[''"]?(?<k>[^=''"]+?)[''"]?\s*=\s*(?<v>\d+)\s*$')
+            if (-not $m.Success) {
+                throw "Measure-SquadLedger: -ExpectedHistoryCounts entry '$($part.Trim())' is not 'Agent Name=<count>'. Use a hashtable, 'Squad Implementor=2;Squad Scribe=1', or a JSON object string."
+            }
+            $pairs.Add(@($m.Groups['k'].Value.Trim(), [int]$m.Groups['v'].Value))
+        }
+    }
+    $seen = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($p in $pairs) {
+        $n = 0
+        if (-not [int]::TryParse([string]$p[1], [ref]$n) -or $n -lt 0) {
+            throw "Measure-SquadLedger: -ExpectedHistoryCounts count for '$($p[0])' must be a non-negative integer, got '$($p[1])'."
+        }
+        $key = [string]$p[0]
+        $norm = ($key -replace '\.md$', '').ToLowerInvariant()
+        if ($seen.Contains($norm)) { throw "Measure-SquadLedger: -ExpectedHistoryCounts names '$($key -replace '\.md$', '')' more than once." }
+        [void]$seen.Add($norm)
+        $result[$key] = $n
+    }
+    if ($result.Count -eq 0) { throw "Measure-SquadLedger: -ExpectedHistoryCounts '$text' contains no 'Agent Name=<count>' entries." }
+    return $result
+}
+$ExpectedHistoryCounts = ConvertTo-ExpectedHistoryCountsLocal -Value $ExpectedHistoryCounts
 
 if ($Write) {
     if ($Check) {

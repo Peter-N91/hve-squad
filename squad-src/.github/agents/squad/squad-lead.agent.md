@@ -59,6 +59,8 @@ State the assumptions the plan rests on, the decisions still open, and anything 
 
 Return to the coordinator:
 
+Send no text-only message until every edit, validation command, and the plan artifact are finished; your single final message is the report. Write the plan artifact last, ending with `Status: complete — <validation command> exit <n>`; the final message carries the files changed, the validation result, and the artifact path. Never announce what you will do next in a final message.
+
 * **Plan Artifact** — the path written under `.copilot-tracking/plans/`.
 * **Phases** — the numbered phases with a one-line outcome each.
 * **Deliverables** — a table of deliverable, owning role, expected artifact path, and dependencies, in execution order.

@@ -28,11 +28,11 @@ State the resolved `squadRoot` this payload targets. The default `.copilot-track
 
 ### 1.3 Run Identity
 
-State `run id`, `turn`, `stage` (when the run is autopilot or autonomous), and a `timestamp` in the format the target entry heading uses. These four identify which run and turn this payload belongs to and are carried into every entry, decision, and ledger row this dispatch writes.
+State `run id`, `turn`, `stage` (when the run is autopilot or autonomous), and the coordinator's `timestamp` (current UTC, `yyyy-MM-ddTHH:mm:ssZ`), written verbatim, never derived from local time. These carry into every entry, decision, and ledger row. A script hand-off derives an omitted `turn`, `timestamp`, and `mode`.
 
 ### 1.4 History Records (When Payload Type Is `history`)
 
-For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. Each history record's consumption JSON follows immediately, in the fixed field order from [entry-schemas.md](entry-schemas.md): `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Supply one consumption object per history record — never one without the other, per the `per-dispatch-history-and-consumption` rule.
+For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. Each history record's consumption JSON follows immediately, in the fixed field order from [entry-schemas.md](entry-schemas.md): `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Supply one consumption object per history record — never one without the other, per the `per-dispatch-history-and-consumption` rule. Fill `model`/`model_source` from what the coordinator knows, never the Scribe's guess: the agent's frontmatter pin (`agent-pinned`), the dispatch's passed `model` (`cli-pinned`), or the host-reported one (`dispatch-reported`). `priced_as` is a rate-row name, never `orchestration-overhead`; `orchestration` is never a `model_source`. A script hand-off derives an omitted `consumption` block (and `priced_as`, `model_tier`): supply one only from size signals the dispatch reported.
 
 When a routing policy resolved this dispatch's model, also supply its `routingIdentity` values (`requestedModel`, `effectiveModel`, `observedModel`, `routeRationale`) so the Scribe can render the four identity bullets `entry-schemas.md` defines. Omit `routingIdentity` entirely when no policy applied — never emit it for a no-policy dispatch.
 
@@ -52,6 +52,10 @@ State what the Scribe should find after writing: the number of history entries t
 
 When the coordinator has a shell with `pwsh` 7+, supply `ledgerCommand`: the exact `-Write` command with the installed squad skill's absolute script path, as in the YAML below — on initialization and roster refresh too, which append the Scribe's orchestration block. The Scribe runs it verbatim as its last write and never hand-writes `consumption.md` rows or the two `currentRun` totals while it is supplied.
 
+### 1.9 Script Hand-off (Scribe-Run, Ordinary Payloads Only)
+
+The Scribe writes a `decision` or `history` payload with `scripts/Write-SquadHandoff.ps1` (*Script Hand-off* in `scribe-procedure.md`); the coordinator hands over this same payload and never runs it. Closed keys: `runId`, `route`?, `since`?, `decision`? {`title`, `rationale`, `adrNoted`}, `historyRecords` [{`agent`, `request`, `deliverable` (one existing file path, optional `(size)`), `outcome`, `title`?, `memberName`?, `selectionCue`?, `passedModel`?, `routingIdentity`?, `consumption`?}], `orchestration`? {`request`?, `outcome`?, `consumption`?}, `stateAdvance` {`activeRoles`, `sessionModel`?, ...}. Derived when omitted: `turn` (state turn + 1), `timestamp` (current UTC), `mode` (`state.json`), each `consumption` (the role class's dispatch-size floors; `model` is `passedModel`, else the agent pin, else the session model; `model_tier` and `priced_as` from its rate row), and `orchestration` (bookkeeping floors at the session model). Anything supplied is validated strictly.
+
 ## 2. Per-Dispatch Data (Volatile — Fill Every Turn)
 
 Everything below this line changes turn to turn and is appended after the stable prefix above.
@@ -63,6 +67,7 @@ roster: <initialization/roster refresh only: every confirmed team.md row, cells 
 runId: <id>
 turn: <n>
 stage: <stage name, autopilot/autonomous runs only>
+costPreflightReset: <not-requested | omit>
 timestamp: <ISO or the entry-heading format in use>
 historyRecords:
   - agent: <name: frontmatter value, verbatim>
