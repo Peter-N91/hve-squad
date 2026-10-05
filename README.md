@@ -66,6 +66,13 @@ and the MCP server when another host should call the squad as tools. See
 
 ## Quick start
 
+**Prerequisite on every platform: PowerShell 7+ (`pwsh`).** The Squad Scribe's cost ledger
+(`Measure-SquadLedger.ps1`) and the `routing=` helper (`Resolve-SquadModelRoute.ps1`) require it;
+Windows PowerShell 5.1 is not enough. Without it the squad falls back to slower, less reliable
+hand-derived ledgers. Install it with `winget install --id Microsoft.PowerShell -e` (Windows),
+`brew install --cask powershell` (macOS) or your distribution's
+[package](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) (Linux).
+
 The APM installation path currently requires **APM CLI 0.29.0**. A regression in APM
 0.29.1 and 0.30.0 causes 11 HVE Squad dependencies to fail, so do not use an unversioned
 latest installation for now. Confirm the CLI version before installing the package:
