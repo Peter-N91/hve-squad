@@ -43,6 +43,25 @@
   <main class="content">
     <div class="container">
       <h2>1. Install for your environment</h2>
+      <div class="callout">
+        <p>
+          <strong>All hosts and platforms: install PowerShell 7+ (<code>pwsh</code>).</strong>
+          The Squad Scribe writes the cost ledger and runs its end-of-turn self-check with
+          <code>Measure-SquadLedger.ps1</code>, and <code>routing=ranked|manual</code> resolves models
+          with <code>Resolve-SquadModelRoute.ps1</code>. Both require PowerShell 7 or later — Windows
+          PowerShell 5.1 is not enough. Without <code>pwsh</code> the squad still runs, but falls back to
+          deriving the ledger by hand, which is slower, uses more tokens and is less reliable. The
+          optional Azure scaffold scripts require it outright. The plugin hooks do not need it: they ship
+          bash equivalents.
+        </p>
+        <p>
+          Windows: <code>winget install --id Microsoft.PowerShell -e</code> · macOS:
+          <code>brew install --cask powershell</code> · Linux: follow
+          <a href="https://learn.microsoft.com/powershell/scripting/install/installing-powershell">Installing PowerShell</a>.
+          Check with <code>pwsh --version</code>, then restart your Copilot client so it finds
+          <code>pwsh</code> on <code>PATH</code>.
+        </p>
+      </div>
       <div class="host-guide installation-guide">
       <section data-host="cli">
         <h2>Copilot CLI</h2>
@@ -69,7 +88,7 @@ copilot</code></pre>
       <p>Open your project in VS Code with GitHub Copilot Chat enabled and authenticated. This route installs the full cast into the repository through APM.</p>
       <h3>Prerequisites</h3>
       <ul>
-        <li>PowerShell 7+ on Windows, or a current <code>zsh</code>/<code>bash</code> shell on macOS</li>
+        <li>PowerShell 7+ (<code>pwsh</code>) on every platform — see the note above; on macOS and Linux the APM commands below run in your usual <code>zsh</code>/<code>bash</code> shell</li>
         <li>Git</li>
         <li>APM CLI <strong>0.29.0</strong> installed and available in <code>PATH</code></li>
         <li>Access to the <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a> repository</li>

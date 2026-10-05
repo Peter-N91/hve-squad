@@ -43,6 +43,25 @@
   <main class="content">
     <div class="container">
       <h2>1. Installer pour votre environnement</h2>
+      <div class="callout">
+        <p>
+          <strong>Tous les hôtes et toutes les plateformes : installez PowerShell 7 ou version ultérieure (<code>pwsh</code>).</strong>
+          Le Squad Scribe écrit le registre des coûts et exécute son autocontrôle de fin de tour avec
+          <code>Measure-SquadLedger.ps1</code>, et <code>routing=ranked|manual</code> résout les modèles avec
+          <code>Resolve-SquadModelRoute.ps1</code>. Ces deux scripts exigent PowerShell 7 ou version
+          ultérieure — Windows PowerShell 5.1 ne suffit pas. Sans <code>pwsh</code>, la squad fonctionne
+          toujours, mais calcule le registre à la main, ce qui est plus lent, consomme plus de jetons et
+          est moins fiable. Les scripts facultatifs de préparation Azure l'exigent dans tous les cas. Les
+          hooks du plugin n'en ont pas besoin : ils sont fournis avec des équivalents bash.
+        </p>
+        <p>
+          Windows : <code>winget install --id Microsoft.PowerShell -e</code> · macOS :
+          <code>brew install --cask powershell</code> · Linux : suivez
+          <a href="https://learn.microsoft.com/powershell/scripting/install/installing-powershell">Installing PowerShell</a>.
+          Vérifiez avec <code>pwsh --version</code>, puis redémarrez votre client Copilot pour qu'il trouve
+          <code>pwsh</code> dans le <code>PATH</code>.
+        </p>
+      </div>
       <div class="host-guide installation-guide">
       <section data-host="cli">
         <h2>Copilot CLI</h2>
@@ -69,7 +88,7 @@ copilot</code></pre>
       <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. Cette méthode installe l'ensemble des agents dans le dépôt via APM.</p>
       <h3>Prérequis</h3>
       <ul>
-        <li>PowerShell 7 ou version ultérieure sous Windows, ou un shell <code>zsh</code>/<code>bash</code> récent sous macOS</li>
+        <li>PowerShell 7 ou version ultérieure (<code>pwsh</code>) sur toutes les plateformes — voir la note ci-dessus ; sous macOS et Linux, les commandes APM ci-dessous s'exécutent dans votre shell <code>zsh</code>/<code>bash</code> habituel</li>
         <li>Git</li>
         <li>APM CLI <strong>0.29.0</strong> installé et disponible dans <code>PATH</code></li>
         <li>Accès au dépôt <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a></li>
