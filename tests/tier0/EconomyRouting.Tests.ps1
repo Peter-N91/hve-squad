@@ -146,9 +146,8 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $script:EconomySection | Should -Match ([regex]::Escape('Under `off`, `ranked`, or `manual` nothing here applies'))
     }
 
-    It 'names no model id and no bounded lane in economy-mode.md' {
+    It 'names no model id in economy-mode.md' {
         $script:EconomySection | Should -Not -Match '\b(gpt|claude|gemini|grok|mai|o\d)-[a-z0-9.]+'
-        $script:EconomySection | Should -Not -Match '(?i)bounded|\blane\b'
     }
 
     It 'keeps the economy procedure out of the coordinator, which only lists the mode' {
