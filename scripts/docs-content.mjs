@@ -8,7 +8,7 @@ export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "
 export const pageOrder = ["index", "getting-started", "usage", "demo", "demo-1", "demo-2", "demo-3", "demo-4", "ecosystem", "maintaining", "troubleshooting", "contributing"];
 export const navigationGroups = [
   { key: "start", pages: ["index", "getting-started", "usage"] },
-  { key: "guides", pages: ["demo", "demo-1", "demo-2", "demo-3", "demo-4"] },
+  { key: "guides", pages: ["demo", "demo-1", "demo-2", "demo-3", "demo-4"], links: [{ key: "workshop", url: "https://peter-n91.github.io/hve-squad-hands-on-workshop/" }] },
   { key: "reference", pages: ["ecosystem", "troubleshooting"] },
   { key: "project", pages: ["maintaining", "contributing"] },
 ];
@@ -205,7 +205,10 @@ export function buildPages(locales = readLocales()) {
         sourceUrl: `https://github.com/Peter-N91/hve-squad/blob/main/${sourcePath}`,
         nav: navigationGroups.map(group => ({
           label: locale.ui[group.key],
-          pages: group.pages.map(id => ({ id, label: locale.pages[id], url: `${id}.html`, subpage: /^demo-\d+$/.test(id) })),
+          pages: [
+            ...group.pages.map(id => ({ id, label: locale.pages[id], url: `${id}.html`, subpage: /^demo-\d+$/.test(id) })),
+            ...(group.links ?? []).map(link => ({ id: link.key, label: locale.ui[link.key], url: link.url, external: true })),
+          ],
         })),
         languages: Object.entries(locales).map(([code, item]) => ({
           code, name: item.name, url: `${rootPrefix}${item.prefix}${slug}.html`,

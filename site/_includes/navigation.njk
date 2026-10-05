@@ -1,6 +1,6 @@
 {% for group in doc.nav %}
 <div class="nav-section">
   <p class="nav-group">{{ group.label }}</p>
-  {% for item in group.pages %}<a class="nav-link{% if item.subpage %} nav-subpage{% endif %}" href="{{ item.url }}"{% if item.id == doc.slug %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
+  {% for item in group.pages %}{% if item.external %}<a class="nav-link nav-external" href="{{ item.url }}" target="_blank" rel="noopener">{{ item.label }} <span aria-hidden="true">↗</span></a>{% else %}<a class="nav-link{% if item.subpage %} nav-subpage{% endif %}" href="{{ item.url }}"{% if item.id == doc.slug %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endif %}{% endfor %}
 </div>
 {% endfor %}
