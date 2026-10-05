@@ -1,7 +1,7 @@
 ---
 description: "Hands a request to the Squad Federation Coordinator, which routes it to one or more named sub-squads and runs each scoped to its own squad root"
 agent: Squad Federation Coordinator
-argument-hint: "request=... [squad=<name>] [init] [promote] [watch=...] [profile=...] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|manual]"
+argument-hint: "request=... [squad=<name>] [init] [promote] [watch=...] [profile=...] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual]"
 ---
 
 # Squad Federation
@@ -19,7 +19,7 @@ argument-hint: "request=... [squad=<name>] [init] [promote] [watch=...] [profile
 * ${input:owner}: (Optional) A `Member Name` forwarded to the selected sub-squad's coordinator run to pick a specific named member when two rows share the same `Role`.
 * ${input:mode}: (Optional) The autonomy mode (`autonomous` or `autopilot`). With a single `squad=` target, or with `mode=autonomous`, it is forwarded to the selected sub-squad's coordinator run. With `mode=autopilot` and **no** `squad=` target, the coordinator runs the federation-level autopilot meta-pipeline across the meta-routing-selected sub-squads per `.github/instructions/squad/squad-federation-autopilot.instructions.md`. When omitted, the sub-squad uses the standard interactive tiers.
 * ${input:cost-ceiling}: (Optional) A finite positive USD model-spend ceiling or the literal `unset`. Ordinary and targeted routing applies it independently to every selected sub-squad. Untargeted `mode=autopilot` applies it once across the aggregate federation meta-run. Omission inherits only within the same run at the applicable sub-squad or aggregate scope; `cost-ceiling=unset` explicitly removes it.
-* ${input:routing}: (Optional) `off`, `ranked`, or `manual`, forwarded verbatim to every selected sub-squad's coordinator run per `references/model-routing.md`; each sub-squad persists it in its own `team.md`, and under `manual` asks for its own roster's models. A sub-squad may only narrow what it received, never widen or substitute it. Ignored on a Watch Mode or otherwise unattended run.
+* ${input:routing}: (Optional) `off`, `ranked`, `economy`, or `manual`, forwarded verbatim to every selected sub-squad's coordinator run per `references/model-routing.md`; each sub-squad persists it in its own `team.md`, and under `manual` asks for its own roster's models. A sub-squad may only narrow what it received, never widen or substitute it. Ignored on a Watch Mode or otherwise unattended run.
 
 ## Requirements
 

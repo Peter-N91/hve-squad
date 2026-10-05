@@ -124,7 +124,7 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
 * (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
-* (Optional) `routing=off|ranked|manual` — per-role model choice, persisted in `team.md`; see `references/model-routing.md`. The retired `models=` is never applied.
+* (Optional) `routing=off|ranked|economy|manual` — per-role model choice, persisted in `team.md`; see `references/model-routing.md`. The retired `models=` is never applied.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.
 * (Optional) `cost-ceiling=<positive USD|unset>` — controls model-spend admission; omission may inherit within the same run.
 * (Optional) `discovery=quick|standard|deep|skip` — runs the discovery gate at that depth without asking, or skips it. When omitted and the trigger conditions hold, offer once per topic. Ignored on an unattended run.
@@ -194,7 +194,7 @@ Classification is metadata-only. Never activate a specialist skill to refine the
 
 ### Step 2a: Resolve Model Routing (Opt-In)
 
-When `team.md` records a `Model routing:` line or the turn passes `routing=`, resolve each role's id per `references/model-routing.md` — settling any mode change or missing `manual` pick with the Scribe before dispatch — and pass it only through Step 3's `model` parameter; never rewrite `model:` frontmatter. With the mode `off`, omit it; Steps 2b/3 are unchanged.
+When `team.md` records a `Model routing:` line or the turn passes `routing=`, resolve each role's id per `references/model-routing.md` — settling any mode change or missing `manual` pick with the Scribe before dispatch — and pass it only through Step 3's `model` parameter; never rewrite `model:` frontmatter. With the mode `off`, omit it; Steps 2b/3 are unchanged. Under `economy`, after a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that `implementation` owner once on its ranked pick, which the Scribe writes into its `Model` cell first (*Economy Mode*).
 
 ### Step 2b: Run Cost Preflight
 

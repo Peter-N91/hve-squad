@@ -5,8 +5,9 @@
 
 <#
 .SYNOPSIS
-    Deterministically resolves each roster role's model under `routing=ranked`, and
-    validates or suggests `routing=manual` picks, exactly as model-routing.md defines.
+    Deterministically resolves each roster role's model under `routing=ranked` or
+    `routing=economy`, and validates or suggests `routing=manual` picks, exactly as
+    model-routing.md defines.
 .DESCRIPTION
     Reads a squad root's `team.md` (the `Model routing:` mode line, each row's
     `Role`, `Member Name`, `Model Tier`, and optional `Model` cell) together with the
@@ -23,6 +24,13 @@
     balanced, code-specialized, and frontier-reasoning rows; `extended` admits only
     frontier-reasoning; and under ranked selection a `fast` floor also excludes
     frontier-reasoning rows.
+
+    Under `economy` the same candidates are ordered cost first (*Economy Mode*): a
+    mapped `implementation`-class role takes the lowest-Blended id at fit 2 or better
+    within its own floor, and every other role keeps its ranked pick. Under `economy`
+    every role also reports `escalation` (for an economy pick, its ranked pick: the one
+    re-dispatch target; otherwise empty) and `pin` (its agent's frontmatter `model:`,
+    from the repository or the installed plugin's `agents/` folder).
 
     The script is read-only. It never writes `team.md` or any other squad-state file:
     the Squad Scribe remains the single writer, and this script only computes what the
@@ -41,8 +49,9 @@
     the session model's cost tier. `auto`, or an id the catalog cannot price, applies
     no such limit.
 .PARAMETER Mode
-    `ranked` or `manual`. Defaults to the mode recorded in `team.md`; when neither is
-    set the script still ranks, so a caller can preview suggestions before switching.
+    `ranked`, `economy`, or `manual`. Defaults to the mode recorded in `team.md`; when
+    neither is set the script still ranks, so a caller can preview suggestions before
+    switching.
 .PARAMETER Role
     Optional role ids to report; defaults to every roster row.
 .PARAMETER AsOf
@@ -61,7 +70,7 @@ param(
 
     [string]$SessionModel,
 
-    [ValidateSet('ranked', 'manual')]
+    [ValidateSet('ranked', 'economy', 'manual')]
     [string]$Mode,
 
     [string[]]$Role = @(),
@@ -235,7 +244,7 @@ function Get-RosterLocal {
     param([Parameter(Mandatory)][string]$Path)
 
     $raw = Get-Content -LiteralPath $Path -Raw
-    $modeMatch = [regex]::Match($raw, '(?m)^Model routing:\s*`?(?<mode>off|ranked|manual)`?\s*$')
+    $modeMatch = [regex]::Match($raw, '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
     $recordedMode = if ($modeMatch.Success) { $modeMatch.Groups['mode'].Value } else { 'off' }
 
     $members = @(Get-MarkdownTableLocal -Content $raw | Where-Object { 'Role' -in $_.Header -and 'Model Tier' -in $_.Header } | Select-Object -First 1)
@@ -269,17 +278,20 @@ function Get-AdmittedClassesLocal {
 function Get-RankedCandidatesLocal {
     <#
     .SYNOPSIS
-        Orders the eligible fit rows for one class and floor.
+        Orders the eligible fit rows for one class and floor: fit first (ranked), or
+        Blended first (economy, which also raises the minimum fit).
     #>
     param(
         [Parameter(Mandatory)]$Catalog,
         [Parameter(Mandatory)][string]$Class,
         [Parameter(Mandatory)][string[]]$Admitted,
-        [AllowNull()][System.Collections.Generic.HashSet[string]]$Available
+        [AllowNull()][System.Collections.Generic.HashSet[string]]$Available,
+        [ValidateSet('fit', 'cost')][string]$Order = 'fit',
+        [int]$MinFit = 1
     )
 
     $eligible = @($Catalog.Fit | Where-Object {
-            $_.Scores[$Class] -ge 1 -and
+            $_.Scores[$Class] -ge $MinFit -and
             $Catalog.Capability.ContainsKey($_.Id) -and
             $Catalog.Capability[$_.Id] -in $Admitted -and
             ($null -eq $Available -or $Available.Contains($_.Id))
@@ -291,9 +303,10 @@ function Get-RankedCandidatesLocal {
     $comparer = [System.Comparison[object]] {
         param($a, $b)
         $byFit = $b.Scores[$Class].CompareTo($a.Scores[$Class])
-        if ($byFit -ne 0) { return $byFit }
         $byCost = $a.Blended.CompareTo($b.Blended)
-        if ($byCost -ne 0) { return $byCost }
+        $first, $second = if ($Order -eq 'cost') { $byCost, $byFit } else { $byFit, $byCost }
+        if ($first -ne 0) { return $first }
+        if ($second -ne 0) { return $second }
         if ($a.Family -eq $b.Family) {
             $byGeneration = $b.Generation.CompareTo($a.Generation)
             if ($byGeneration -ne 0) { return $byGeneration }
@@ -304,6 +317,48 @@ function Get-RankedCandidatesLocal {
     $eligible | ForEach-Object { $list.Add($_) }
     $list.Sort($comparer)
     $list.ToArray()
+}
+
+function Get-AgentPinLocal {
+    <#
+    .SYNOPSIS
+        An agent's frontmatter `model:` (first entry, vendor suffix dropped), or $null, from the
+        repository agent folders above .copilot-tracking, then the installed plugin's agents/.
+    #>
+    param([string]$AgentName, [string]$Root)
+
+    if (-not $AgentName) { return $null }
+    # Same search order as Find-AgentPin in Write-SquadHandoff.ps1.
+    $bases = @()
+    $match = [regex]::Match(($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Root) -replace '\\', '/'), '^(?<repo>.*?)/\.copilot-tracking(/|$)')
+    if ($match.Success) { $bases += @('.github/agents', '.agents/agents', '.claude/agents') | ForEach-Object { Join-Path $match.Groups['repo'].Value $_ } }
+    $bases += @((Join-Path $PSScriptRoot '../../../agents'), (Join-Path $PSScriptRoot '../../agents'), (Join-Path $PSScriptRoot '../agents'))
+    foreach ($base in $bases) {
+        if (-not (Test-Path -LiteralPath $base -PathType Container)) { continue }
+        foreach ($file in (Get-ChildItem -LiteralPath $base -Recurse -File -Filter '*.md')) {
+            $lines = @([System.IO.File]::ReadLines($file.FullName) | Select-Object -First 40)
+            if ($lines.Count -lt 2 -or $lines[0].Trim() -ne '---') { continue }
+            $name = $null
+            $model = $null
+            for ($i = 1; $i -lt $lines.Count -and $lines[$i].Trim() -ne '---'; $i++) {
+                if ($lines[$i] -match '^name:\s*(.+?)\s*$') { $name = $Matches[1].Trim('"', "'") }
+                elseif ($lines[$i] -match '^model:\s*(.+?)\s*$') { $model = (($Matches[1].Trim('[', ']').Split(',')[0]).Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() }
+            }
+            if ($name -ceq $AgentName) { return $model }
+        }
+    }
+    return $null
+}
+
+function Get-EscalationTarget {
+    <#
+    .SYNOPSIS
+        The one economy re-dispatch target: the role's ranked pick, or $null when none resolves.
+    #>
+    param([object[]]$Ranked)
+
+    if (@($Ranked).Count -gt 0) { return $Ranked[0].Id }
+    return $null
 }
 
 $teamPath = Join-Path -Path $SquadRoot -ChildPath 'team.md'
@@ -362,6 +417,17 @@ $results = foreach ($row in $roster.Rows) {
     elseif (-not $suggested) { 'floor exhausted' }
     else { "rank 1 of $($ranked.Count) in $class at fit $($ranked[0].Scores[$class]), floor $tier" }
 
+    # Economy narrows only mapped implementation roles; an unmapped role's class is a guess.
+    $economyApplies = $effectiveMode -eq 'economy' -and $classSource -eq 'mapped' -and $class -eq 'implementation'
+    if ($economyApplies -and $suggested) {
+        $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -MinFit 2)
+        if ($economy.Count -gt 0) {
+            $suggested = $economy[0].Id
+            $rationale = "economy pick: rank 1 of $($economy.Count) in $class at fit $($economy[0].Scores[$class]) (fit >= 2, lowest Blended), floor $tier"
+        }
+        else { $rationale = "economy: no id at fit >= 2; $rationale" }
+    }
+
     $cell = if ($roster.HasModel) { ([string]$row['Model']).Trim() } else { '' }
     $cellStatus = 'empty'
     if ($cell) {
@@ -378,7 +444,7 @@ $results = foreach ($row in $roster.Rows) {
         default { $suggested }
     }
 
-    [pscustomobject][ordered]@{
+    $entry = [ordered]@{
         role        = $roleId
         memberName  = $row['Member Name']
         class       = $class
@@ -399,6 +465,12 @@ $results = foreach ($row in $roster.Rows) {
                 }
             })
     }
+    if ($effectiveMode -eq 'economy') {
+        $entry['escalation'] = if ($economyApplies) { Get-EscalationTarget -Ranked $ranked } else { $null }
+        $primaryName = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent' | ForEach-Object { [string]$row[$_] } | Where-Object { $_ }) | Select-Object -First 1
+        $entry['pin'] = Get-AgentPinLocal -AgentName ([string]$primaryName).Trim('`') -Root $SquadRoot
+    }
+    [pscustomobject]$entry
 }
 
 $report = [pscustomobject][ordered]@{
@@ -420,10 +492,13 @@ if ($Format -eq 'json') {
 "Model routing: $effectiveMode (recorded: $($roster.Mode)); availability: $availability"
 foreach ($warning in $warnings) { "WARN: $warning" }
 ''
-'| Role | Class | Floor | Suggested | Model cell | Cell status |'
-'|------|-------|-------|-----------|------------|-------------|'
+$economyHead = if ($effectiveMode -eq 'economy') { ' Escalation |' } else { '' }
+$economyRule = if ($effectiveMode -eq 'economy') { '------------|' } else { '' }
+"| Role | Class | Floor | Suggested | Model cell | Cell status |$economyHead"
+"|------|-------|-------|-----------|------------|-------------|$economyRule"
 foreach ($result in $results) {
     $suggestedText = if ($result.suggested) { $result.suggested } else { "— ($($result.rationale))" }
     $cellText = if ($result.modelCell) { $result.modelCell } else { '—' }
-    "| $($result.role) | $($result.class) | $($result.floor) | $suggestedText | $cellText | $($result.cellStatus) |"
+    $economyCell = if ($effectiveMode -eq 'economy') { " $(if ($result.escalation) { $result.escalation } else { '—' }) |" } else { '' }
+    "| $($result.role) | $($result.class) | $($result.floor) | $suggestedText | $cellText | $($result.cellStatus) |$economyCell"
 }

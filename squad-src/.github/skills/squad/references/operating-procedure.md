@@ -27,7 +27,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
 3. Resolve each matched role to a deployed agent through the roster. A role marked **thin charter needed** has no deployed agent — escalate instead of substituting.
 4. Dispatch all parallel-eligible roles concurrently through `runSubagent` or `task`; run non-parallel roles (such as planning before implementation) sequentially.
-5. Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn. When `team.md` records `Model routing: ranked|manual` or the turn passes `routing=`, `references/model-routing.md` resolves the dispatched id instead; with the mode `off`, this step is unchanged.
+5. Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn. When `team.md` records `Model routing: ranked|economy|manual` or the turn passes `routing=`, `references/model-routing.md` resolves the dispatched id instead; with the mode `off`, this step is unchanged.
 
 ### Ledger Reconciliation (before new work)
 

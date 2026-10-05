@@ -105,7 +105,7 @@ Every appended dispatch entry uses exactly this shape. The `#### Consumption` he
 
 Field order is contractual and every numeric field is a bare number. The block records consumption only: rates, `est_cost_usd`, and `est_credits` are the ledger's, and `priced_as` is what tells it which rate row to use. See *Consumption Accounting* in [scribe-procedure.md](scribe-procedure.md) for how each value is resolved and how the ledger prices them.
 
-**Optional identity bullets.** When `routing=ranked` or `routing=manual` resolved this dispatch's model, the entry additionally carries four narrative bullets immediately beneath the `#### Consumption` block, using exactly this wording, per [model-routing.md](model-routing.md) § *Identity Bullets*:
+**Optional identity bullets.** When a `routing=` mode other than `off` resolved this dispatch's model, the entry additionally carries four narrative bullets immediately beneath the `#### Consumption` block, using exactly this wording, per [model-routing.md](model-routing.md) § *Identity Bullets*:
 
 ```markdown
 * **Requested model** — <id routing resolved, or "none (parameter omitted)">
