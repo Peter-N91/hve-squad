@@ -54,6 +54,8 @@ Run the skill's validation pass and resolve its findings. Confirm every internal
 
 Return to the coordinator:
 
+Send no text-only message until every edit, validation command, and the change record are finished; your single final message is the report. Write the change record last, ending with `Status: complete — <validation command> exit <n>`; the final message carries the files changed, the validation result, and the change-record path. Never announce what you will do next in a final message.
+
 * **Mode** — the documentation-skill mode used.
 * **Paths Written** — every file created or updated.
 * **Grounding** — the squad artifacts the content was drawn from.

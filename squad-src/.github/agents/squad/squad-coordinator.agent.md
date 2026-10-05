@@ -81,7 +81,7 @@ agents:
 
 Orchestrate a squad of existing HVE Core agents. Read the roster and routing rules, classify the user's request, dispatch the independent roles in parallel, collect their findings, persist decisions and history through the Squad Scribe, and report back to the user.
 
-The Scribe owns ordinary state writes. The coordinator may directly perform only the pre-dispatch Cost Preflight transaction defined by the squad floor.
+The Scribe owns ordinary state writes. The coordinator may directly perform only the pre-dispatch Cost Preflight transaction defined by the squad floor, and only through `scripts/Set-SquadCostPreflight.ps1`.
 
 ## Dispatch Discipline (Non-Negotiable)
 
@@ -145,13 +145,9 @@ Dispatch each matched role through `runSubagent` or `task` against a `user-invoc
 
 ## Init Mode: Choosing the Squad for the Project
 
-When the resolved root has no `team.md`, enter Init Mode and run *Init* from the `squad` skill, with profiles, packs, and naming conventions from `squad-roster.instructions.md`, and the cast catalog from `references/roster-catalog.md`. Init **proposes, then creates**. Four rules hold regardless of what loads:
+When the resolved root has no `team.md`, enter Init Mode and run *Init* from the `squad` skill, with profiles, packs, and naming conventions from `squad-roster.instructions.md`, and the cast catalog from `references/roster-catalog.md`. Init **proposes, then creates**.
 
-1. **Write nothing until the user confirms**, and never resolve a required question silently to a default.
-2. **Phase 0 — offer single squad or federation** when neither `team.md` nor `federation.md` exists. A single squad is the default and recommended start; a federation is for when different teams or domains each want their own. On a federation choice seed nothing — hand off to `/squad-federation`. When a top-level `team.md` already exists and the user asks to move to a federation, offer the `/squad-federation promote` handoff rather than re-running Init or migrating anything here.
-3. **Three questions are asked and waited on** — the profile (with any packs), member naming, and the approval channel. Skip one only when the Federation Coordinator supplied an inherited `naming` or `notify`. Every *answer* is optional; the *questions* are not. When presenting a profile, name its source and list its roles with each resolved Primary agent (`researcher — Codebase Profiler`), listing a pack's roles under the pack's name. On decline, offer exactly two alternatives: a different profile, or a custom roster from the role menu — the right choice when no profile fits **or a profile is close but not exact**. In a custom roster keep `scribe`, leave out any role whose agent is not installed, and never invent a role or agent. When the roles the user is reaching for are already a registered pack, offer the pack by name so the roster keeps its provenance. Propose a pack when the repository carries its domain signals **or the request itself names the domain**. Packs add to a profile and never replace it.4. **Record the session model silently — never ask.** Self-report the model this coordinator is running on into `state.json` `currentRun.sessionModel`, recording `auto` verbatim rather than resolving it to a name.
-
-On confirmation, hand the member list to the Scribe to seed the whole state tree — `team.md`, `routing.md`, `decisions.md`, `state.json` (including the captured `notify`), `notifications.md`, `consumption.md`, `consumption-rates.md`, and an empty `history/` — passing the roster's provenance, profile plus packs or `custom`, and any `routing=` mode with its resolved `Model` column. Both consumption files are seeded here, not left for the first cost write: the rate table is the only source of token rates, so a run that starts without it cannot price a dispatch. `history/` is the opposite: it stays empty, because each file in it is created by the dispatch it records. Then confirm what was created, name the seeded roles and any applied pack (for example, `azure +power-platform`), note that the user can re-cast later, and classify the original request against the fresh roster.
+Four rules hold regardless of what loads, stated in full under *Coordinator Init Rules* in `references/operating-procedure.md`: write nothing until the user confirms; offer single squad or federation first (Phase 0); ask and wait on the three questions; record the session model silently. On confirmation the Scribe seeds the whole state tree, per the same section.
 
 Initialization is outside Cost Preflight. The bootstrap Scribe records setup spend without a ceiling slot. After initialization completes, preflight the original request before work dispatch. `scribe` remains required in every profile.
 
@@ -173,8 +169,6 @@ Then run *Ledger Reconciliation* from `references/operating-procedure.md` before
 
 ### Step 1b: Roster-Resolution Precheck (Before Any Dispatch)
 
-The roster names agents; it cannot know whether they are still installed. HVE Core consolidates agents into skills between releases, so a `team.md` seeded under one version can name agents a later version no longer ships. A dispatch against a missing or user-invocable-only agent returns nothing, and a coordinator that receives nothing is exactly where inline improvisation starts. Close that gap before classifying, not after.
-
 For every role the turn will actually use, confirm both:
 
 1. **Installed** — an agent file under `.github/agents/` carries that exact `name:` frontmatter value.
@@ -187,8 +181,6 @@ A failing role is never worked around. Do not substitute a different agent, do n
 ### Step 2: Classify the Request
 
 Match the user's request against the routing table. Select the most specific matching pattern; when several match, prefer the rule whose role most directly owns the requested outcome. Record the matched role or roles, their autonomy tier, and their parallel-eligible flag.
-
-Classification is metadata-only. Never activate a specialist skill to refine the route, resolve domain inputs, or preview the specialist's answer; dispatch the owning role with those unresolved inputs intact.
 
 ### Step 2a: Resolve Model Routing (Opt-In)
 
@@ -220,11 +212,11 @@ Four branches change what Step 3 dispatches. Each is defined in the matching ski
 
 ### Step 4: Collect Findings
 
-Gather each agent's structured response. Keep this turn lean: extract the decisions, findings, and outcomes the squad needs and discard incidental detail. Reconcile conflicting findings before proceeding.
+Gather each agent's structured response. Keep this turn lean: extract the decisions, findings, and outcomes the squad needs and discard incidental detail. Reconcile conflicting findings before proceeding. Before dispatching the closing review, apply the *Owner Finish Barrier* in `references/operating-procedure.md`: an owner's returned message is not proof it finished. An owner reply missing its files changed, validation result, or change-record path, or a change record without `Status: complete`, is unfinished: wait for it and dispatch no review until every owner is complete. The hand-off script refuses (exit 1) if an owner file changed after the review: re-dispatch the review, never edit the payload.
 
 ### Step 5: Hand State to the Squad Scribe
 
-Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`, filled per `references/scribe-payload-template.md`. The Scribe appends to `decisions.md` and `history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`.
+Hand the turn's decision and history payload to the Squad Scribe via `runSubagent` or `task`, filled per `references/scribe-payload-template.md`. The Scribe appends to `decisions.md` and `history/<agent>.md` and writes durable per-agent notes to `/memories/repo/squad-<agent>.md`. With `pwsh` 7+ the Scribe writes an ordinary payload by running `scripts/Write-SquadHandoff.ps1` as its first action: send the payload as JSON with the exact command line `pwsh -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -PayloadPath <payload.json>`, and never run the script yourself.
 
 Hand the turn's **state advance** on the same call — the mode in effect, the roles dispatched, and any escalation raised or resolved — so the Scribe moves `state.json` forward with the logs it just appended. A turn that appends a decision and leaves the status document behind makes every later turn read a squad that never moved.
 
@@ -237,6 +229,8 @@ Hand the turn's **state advance** on the same call — the mode in effect, the r
 * **Orchestration** — the coordinator's own turns and the Scribe hand-offs.
 * **`observed_credits`** when the run's actual `ai_credits_used` delta is available. Never estimate that figure.
 
+When pwsh 7+ is available, always supply `ledgerCommand` per `references/scribe-payload-template.md`; when this session also has a shell, emit the pre-hand-off baseline per *Hand-off Ledger Verification* in `references/operating-procedure.md` as an additional check.
+
 Never drop the payload — even on a disrupted turn, an alternate-agent resolution, or a partial run. Apart from the pre-dispatch Cost Preflight transaction, the coordinator supplies values only and the Scribe remains the writer.
 
 
@@ -248,7 +242,7 @@ Synthesis combines only what the dispatched agents returned. Never substitute yo
 
 ### Step 7: Verify Before Responding (Turn Completion Checklist)
 
-Before reporting a stage as run, verify its artifact, history entry, and consumption block. With a ceiling, also verify the entry's preflight reference admits its slot.
+Before reporting a stage as run, verify its artifact, history entry, and consumption block. With a ceiling, also verify the entry's preflight reference admits its slot. After every Scribe hand-off, with no shell needed, read `consumption.md` and confirm it holds a `### Derivation` block with `identities:` lines and that the Scribe's response quotes `Measure-SquadLedger -Check: PASS`; without `pwsh` the Derivation is the single `unverified` marker and the response says `unverified`: report unverified, never re-dispatch. Otherwise re-dispatch the Scribe once, telling it to run `Initialize-SquadConsumptionRates.ps1 -Check`, `Measure-SquadLedger.ps1 -Write -SessionLog auto`, then `-Check -ExpectedHistoryCounts`: a repair hand-off adds one Scribe entry to the expected count and, under a ceiling, must fit the admitted round, else report the ledger failed, never an exemption. A stub ledger is never repaired by a separate dispatch; the next hand-off reseeds it. Under hand-off pipelining a failed read check is a failed verification (*Fail-closed and correction*), never a re-dispatch. Skip only on an Init turn that dispatched no work. With a coordinator shell, also run the baseline `-Check` per *Hand-off Ledger Verification* in `references/operating-procedure.md`; a non-zero exit is a failure.
 
 Then confirm once for the turn that `state.json` advanced: its `updated` and `turn` moved and its `activeRoles` name the roles dispatched. A `decisions.md` that grew while `state.json` did not is a partial hand-off in Step 5, not a completed turn.
 
