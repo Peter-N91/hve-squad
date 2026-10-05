@@ -1719,3 +1719,209 @@ Describe 'Measure-SquadLedger puts the billed session total next to the estimate
         $check.ExitCode | Should -Be 0 -Because $check.Output
     }
 }
+
+Describe 'Unit economics (value) section' {
+    BeforeAll {
+        # Each block prices at exactly 30 credits (100,000 input tokens at 3.00 USD per 1M).
+        function New-UnitEconomicsRootLocal {
+            param([Parameter(Mandatory)][object[]]$Entries)
+            $root = New-BaselineTestRootLocal
+            Remove-Item -LiteralPath (Join-Path $root 'history') -Recurse -Force
+            New-Item -ItemType Directory -Path (Join-Path $root 'history') | Out-Null
+            $team = @(
+                '# Squad Roster', '', '## Members', '',
+                '| Role | Member Name | Agent Name (Primary) | Alternate Agents | Selection Cue | Invocation | Model Tier | Deliverable Root |',
+                '| ---- | ----------- | -------------------- | ---------------- | ------------- | ---------- | ---------- | ---------------- |',
+                '| implementor | Alpha | Squad Implementor | — | — | task | default | src/ |',
+                '| writer | Beta | Squad Writer | — | — | task | default | docs/ |',
+                '| tester | Gamma | Squad Tester | — | — | task | default | reviews/ |',
+                '| scribe | | Squad Scribe | — | — | task | default | (squad state) |'
+            ) -join "`n"
+            Set-Content -LiteralPath (Join-Path $root 'team.md') -Value $team -NoNewline
+            $fence = '```'
+            foreach ($group in ($Entries | Group-Object Agent)) {
+                $text = ''
+                foreach ($e in $group.Group) {
+                    $heading = if ($e.Agent -eq 'Squad Scribe') { '#### Consumption — Orchestration' } else { '#### Consumption' }
+                    $text += "`n### $($e.Stamp) Dispatch $($e.Stamp)`n`n* Turn: $($e.Turn)`n* Request: Synthetic.`n* Deliverable: ``$($e.Deliverable)```n* Outcome: $($e.Outcome)`n"
+                    if ($e.Workstream) { $text += "* Workstream: $($e.Workstream)`n" }
+                    $text += "`n$heading`n`n${fence}json`n{`n  `"model`": `"Claude Sonnet 4.6`",`n  `"model_source`": `"session-inherited`",`n  `"priced_as`": `"Claude Sonnet 4.6`",`n  `"model_tier`": `"default`",`n  `"internal_turns`": 1,`n  `"input_tokens`": 100000,`n  `"cached_tokens`": 0,`n  `"cache_write_tokens`": 0,`n  `"output_tokens`": 0,`n  `"basis`": `"estimated`"`n}`n${fence}`n"
+                }
+                Set-Content -LiteralPath (Join-Path $root "history/$($group.Name).md") -Value $text -NoNewline
+            }
+            # The fixture's recorded identities describe the removed history; drop them so the guard only warns.
+            $ledger = Join-Path $root 'consumption.md'
+            Set-Content -LiteralPath $ledger -Value ((Get-Content -LiteralPath $ledger -Raw) -replace ' — identities: [^\r\n]*', '') -NoNewline
+            (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+            $root
+        }
+
+        function New-EntryLocal {
+            param($Agent, $Stamp, $Turn, $Deliverable, $Outcome = 'Done.', $Workstream = '')
+            [pscustomobject]@{ Agent = $Agent; Stamp = "2026-10-04T$Stamp`:00Z"; Turn = $Turn; Deliverable = $Deliverable; Outcome = $Outcome; Workstream = $Workstream }
+        }
+
+        $script:AcceptedEntries = @(
+            New-EntryLocal 'Squad Implementor' '10:00' 2 'src/a.md'
+            New-EntryLocal 'Squad Writer' '10:05' 2 'docs/b.md'
+            New-EntryLocal 'Squad Tester' '10:10' 2 'reviews/r2.md' 'Verdict Pass, no findings.'
+            New-EntryLocal 'Squad Implementor' '11:00' 3 'src/c.md'
+            New-EntryLocal 'Squad Tester' '11:10' 3 'reviews/r3.md' 'Verdict FAIL: two defects.'
+            New-EntryLocal 'Squad Scribe' '12:00' 3 'decisions.md'
+        )
+        $script:ReworkEntries = @(
+            New-EntryLocal 'Squad Implementor' '10:00' 2 'src/a.md'
+            New-EntryLocal 'Squad Tester' '10:10' 2 'reviews/r2.md' 'Verdict Fail.'
+            New-EntryLocal 'Squad Implementor' '10:20' 2 'SRC\A.md'
+            New-EntryLocal 'Squad Tester' '10:30' 2 'reviews/r2b.md' 'Verdict Pass-with-findings.'
+            New-EntryLocal 'Squad Writer' '10:40' 5 'docs/b.md'
+            New-EntryLocal 'Squad Scribe' '12:00' 5 'decisions.md'
+        )
+    }
+
+    It 'counts accepted, rejected, and unreviewed deliverables and prices per accepted deliverable' {
+        $root = New-UnitEconomicsRootLocal -Entries $script:AcceptedEntries
+        $out = (Invoke-Ledger -SquadRoot $root).Output
+        $out | Should -Match '(?m)^## Unit Economics \(value\)\s*$'
+        $out | Should -Match '\| Deliverables produced \| 3 \| derived \|'
+        $out | Should -Match '\| Accepted by an independent review \| 2 \| derived \|'
+        $out | Should -Match '\| Rejected \| 1 \| derived \|'
+        $out | Should -Match '\| Unreviewed \| 0 \| derived \|'
+        $out | Should -Match '\| Dispatches \(excluding Scribe\) \| 5 \| derived \|'
+        $out | Should -Match '\| Rework dispatches \| 0 \| derived \|'
+        $out | Should -Match '\| First-pass yield \| 100\.0% \| derived \|'
+        $out | Should -Match '\| Est\. credits per accepted deliverable \| 90\.00 \| estimated \|'
+        $out | Should -Match '\| Orchestration share of est\. credits \| 16\.7% \| estimated \|'
+    }
+
+    It 'counts a re-dispatch on the same agent and deliverable as rework and excludes it from first-pass yield' {
+        $root = New-UnitEconomicsRootLocal -Entries $script:ReworkEntries
+        $out = (Invoke-Ledger -SquadRoot $root).Output
+        $out | Should -Match '\| Deliverables produced \| 2 \| derived \|'
+        $out | Should -Match '\| Accepted by an independent review \| 1 \| derived \|'
+        $out | Should -Match '\| Unreviewed \| 1 \| derived \|'
+        $out | Should -Match '\| Rework dispatches \| 1 \| derived \|'
+        $out | Should -Match '\| First-pass yield \| 0\.0% \| derived \|'
+        $out | Should -Match '\| Est\. credits per accepted deliverable \| 180\.00 \| estimated \|'
+        $out | Should -Match '\| Rework share of est\. credits \| 16\.7% \| estimated \|'
+    }
+
+    It 'requires the same Workstream, when either entry has one, for a review to cover a work entry' {
+        $entries = @(
+            New-EntryLocal 'Squad Implementor' '10:00' 2 'src/a.md' -Workstream 'ws1'
+            New-EntryLocal 'Squad Tester' '10:10' 2 'reviews/r2.md' 'Verdict Pass.' 'ws2'
+            New-EntryLocal 'Squad Scribe' '12:00' 2 'decisions.md'
+        )
+        $out = (Invoke-Ledger -SquadRoot (New-UnitEconomicsRootLocal -Entries $entries)).Output
+        $out | Should -Match '\| Accepted by an independent review \| 0 \| derived \|'
+        $out | Should -Match '\| Unreviewed \| 1 \| derived \|'
+        $out | Should -Match '\| Est\. credits per accepted deliverable \| n/a \| estimated \|'
+    }
+
+    It 'a review that names deliverables covers only those it names' {
+        $named = @(
+            New-EntryLocal 'Squad Implementor' '10:00' 2 'src/a.md'
+            New-EntryLocal 'Squad Writer' '10:05' 2 'docs/b.md'
+            New-EntryLocal 'Squad Tester' '10:10' 2 'reviews/r2.md' 'Verdict Pass for `src/a.md`.'
+            New-EntryLocal 'Squad Scribe' '12:00' 2 'decisions.md'
+        )
+        $out = (Invoke-Ledger -SquadRoot (New-UnitEconomicsRootLocal -Entries $named)).Output
+        $out | Should -Match '\| Accepted by an independent review \| 1 \| derived \|'
+        $out | Should -Match '\| Unreviewed \| 1 \| derived \|'
+
+        $split = @(
+            New-EntryLocal 'Squad Implementor' '10:00' 2 'src/a.md'
+            New-EntryLocal 'Squad Writer' '10:05' 2 'docs/b.md'
+            New-EntryLocal 'Squad Tester' '10:10' 2 'reviews/r2.md' 'Verdict Pass on a.md.'
+            New-EntryLocal 'Squad Tester' '10:20' 2 'reviews/r3.md' 'Verdict Fail on docs/b.md.'
+            New-EntryLocal 'Squad Scribe' '12:00' 2 'decisions.md'
+        )
+        $out = (Invoke-Ledger -SquadRoot (New-UnitEconomicsRootLocal -Entries $split)).Output
+        $out | Should -Match '\| Accepted by an independent review \| 1 \| derived \|'
+        $out | Should -Match '\| Rejected \| 1 \| derived \|'
+        $out | Should -Match '\| Unreviewed \| 0 \| derived \|'
+        $out | Should -Match ([regex]::Escape('A review that names deliverables covers only those it names.'))
+        $out | Should -Match ([regex]::Escape('so the rework figures are a floor'))
+    }
+
+    It '-Write reports that it rewrote the Unit Economics section' {
+        $root = New-UnitEconomicsRootLocal -Entries $script:AcceptedEntries
+        (Invoke-Ledger -SquadRoot $root -Write).Output | Should -Match ([regex]::Escape('Derivation, and Unit Economics (value) sections of consumption.md'))
+    }
+
+    It '-Format json exposes unitEconomics with numeric fields' {
+        $root = New-UnitEconomicsRootLocal -Entries $script:AcceptedEntries
+        $ue = ((Invoke-Ledger -SquadRoot $root -Format json).Output | ConvertFrom-Json).unitEconomics
+        $ue.deliverablesProduced | Should -Be 3
+        $ue.accepted | Should -Be 2
+        $ue.rejected | Should -Be 1
+        $ue.estCreditsPerAccepted | Should -Be 90
+        $ue.firstPassYieldPct | Should -Be 100
+        foreach ($name in 'deliverablesProduced', 'accepted', 'rejected', 'unreviewed', 'dispatches', 'reworkDispatches', 'firstPassYieldPct', 'estCreditsPerAccepted', 'reworkSharePct', 'orchestrationSharePct') {
+            $ue.$name | Should -Not -BeOfType [string] -Because $name
+        }
+    }
+
+    It '-Write inserts the section before Cost Comparison and a second -Write replaces rather than duplicates it' {
+        $root = New-UnitEconomicsRootLocal -Entries $script:AcceptedEntries
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $first = Get-Content -LiteralPath $ledgerPath -Raw
+        ([regex]::Matches($first, '(?m)^## Unit Economics \(value\)')).Count | Should -Be 1
+        $first.IndexOf('## Unit Economics (value)') | Should -BeGreaterThan $first.IndexOf('### Derivation')
+        $first.IndexOf('## Unit Economics (value)') | Should -BeLessThan $first.IndexOf('## Cost Comparison')
+
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+        $second = Get-Content -LiteralPath $ledgerPath -Raw
+        ([regex]::Matches($second, '(?m)^## Unit Economics \(value\)')).Count | Should -Be 1
+        $second | Should -Be $first
+    }
+
+    It '-Check ignores the section: the result is the same with and without it' {
+        $root = New-UnitEconomicsRootLocal -Entries $script:AcceptedEntries
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $with = Invoke-Ledger -SquadRoot $root -Check
+        $with.ExitCode | Should -Be 0 -Because $with.Output
+
+        $text = Get-Content -LiteralPath $ledgerPath -Raw
+        Set-Content -LiteralPath $ledgerPath -Value ($text -replace '(?s)## Unit Economics \(value\).*?(?=## Cost Comparison)', '') -NoNewline
+        (Get-Content -LiteralPath $ledgerPath -Raw) | Should -Not -Match 'Unit Economics'
+        $without = Invoke-Ledger -SquadRoot $root -Check
+        $without.ExitCode | Should -Be $with.ExitCode
+        $without.Output | Should -Be $with.Output
+    }
+    It 'counts value with the same review-class roles as Write-SquadHandoff.ps1' {
+        $scripts = Split-Path -Parent $script:LedgerScript
+        $listOf = {
+            param($Path, $Name)
+            $m = [regex]::Match((Get-Content -LiteralPath $Path -Raw), "(?m)^\`$$Name\s*=\s*@\((?<list>[^)]*)\)")
+            $m.Success | Should -BeTrue -Because "$Name is declared in $Path"
+            @([regex]::Matches($m.Groups['list'].Value, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+        }
+        $value = & $listOf $script:LedgerScript 'script:UnitEconomicsReviewRoles'
+        $handoff = & $listOf (Join-Path $scripts 'Write-SquadHandoff.ps1') 'ReviewRoles'
+        $value.Count | Should -BeGreaterThan 0
+        ($value -join ',') | Should -Be ($handoff -join ',')
+        (Get-Content -LiteralPath $script:LedgerScript -Raw) | Should -Match ([regex]::Escape('# Keep identical to $ReviewRoles in Write-SquadHandoff.ps1.'))
+    }
+}
+
+Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
+    BeforeAll {
+        $path = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath '..', 'squad-src', '.github', 'agents', 'squad', 'squad-cost-manager.agent.md'
+        $text = (Get-Content -LiteralPath $path -Raw) -replace "`r`n", "`n"
+        $script:CostManagerBody = $text.Substring($text.IndexOf("`n---", 4) + 5)
+    }
+
+    It 'has an AI spend review mode that measures cost per accepted deliverable, not per dispatch' {
+        $script:CostManagerBody | Should -Match ([regex]::Escape('An AI spend review (the squad''s own model spend, not an Azure workload) skips Steps 2 to 4 and runs Step 5.'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('A deliverable no review accepted carries zero value: never divide by dispatches or by deliverables merely produced.'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('`## Unit Economics (value)`'))
+    }
+
+    It 'labels every figure, compares medians of several like runs, and keeps pin, ceiling, and roster changes at confirm tier' {
+        $script:CostManagerBody | Should -Match ([regex]::Escape('Mark each number `measured`'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('with at least three runs per side, reporting medians and the spread'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('Each recommendation that changes a pin, a ceiling, or the roster is `confirm`-tier.'))
+        $script:CostManagerBody.Length | Should -BeLessOrEqual 30000
+    }
+}
