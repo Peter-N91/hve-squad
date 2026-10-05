@@ -5,6 +5,7 @@ user-invocable: true
 disable-model-invocation: true
 agents:
   - Squad Scribe
+  - Squad Workstream Lead
   - Squad Researcher
   - Squad Lead
   - Squad Implementor

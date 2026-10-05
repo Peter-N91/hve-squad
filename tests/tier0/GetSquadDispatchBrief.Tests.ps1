@@ -210,6 +210,18 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result = Invoke-Brief -Repo (New-BriefRepo -StubLedger)
         $result.Output | Should -Match ([regex]::Escape('ledger: stub (do not dispatch the Scribe to repair it'))
     }
+
+    It 'embeds the Background Workstreams section only with -Background, still under the inline output limit' {
+        $repo = New-BriefRepo
+        (Invoke-Brief -Repo $repo).Output | Should -Not -Match '(?m)^## Background Workstreams'
+        $before = Get-TreeHash -Root $repo
+        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'claude-sonnet-5', '-Background')
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match '(?m)^## Background Workstreams\s*$'
+        $result.Output | Should -Match ([regex]::Escape('`delivery=background` is honored only under economy'))
+        [System.Text.Encoding]::UTF8.GetByteCount($result.Output) | Should -BeLessThan 20480
+        Get-TreeHash -Root $repo | Should -Be $before
+    }
 }
 
 Describe 'Get-SquadDispatchBrief.ps1 consent and Route markers (B1)' {

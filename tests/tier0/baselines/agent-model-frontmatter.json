@@ -29,6 +29,7 @@
     "squad-scribe.agent.md": "Claude Haiku 4.5 (copilot)",
     "squad-sql-migration-advisor.agent.md": null,
     "squad-technical-writer.agent.md": "Claude Haiku 4.5 (copilot)",
-    "squad-vulnerability-manager.agent.md": "Claude Sonnet 5 (copilot)"
+    "squad-vulnerability-manager.agent.md": "Claude Sonnet 5 (copilot)",
+    "squad-workstream-lead.agent.md": "Claude Sonnet 5 (copilot)"
   }
 }
