@@ -3,6 +3,7 @@ name: Squad Scribe
 description: "Non-user-invocable squad state writer that appends decisions and history and persists per-agent repository memory on the coordinator's behalf"
 user-invocable: false
 model: Claude Haiku 4.5 (copilot)
+tools: ["read", "search", "edit", "execute", "view", "glob", "grep", "create", "apply_patch", "powershell", "bash", "skill", "memory", "vscode/memory"]
 ---
 
 # Squad Scribe
@@ -26,15 +27,15 @@ All write procedure comes from the `squad` skill; this file binds the contract. 
 
 Then read the cold file(s) the **Cold-File Dispatch Table in `references/scribe-procedure.md` names for this turn's payload type** — never more, never fewer, and never guessed from the shape of the payload instead of its stated type:
 
-| Read                                       | Only when                                                                                     |
-|---------------------------------------------|-----------------------------------------------------------------------------------------------|
-| `references/scribe-cold-init-and-seeding.md` | The payload type is initialization or memory, or a promotion's deliverable-root rebasing.     |
-| `references/scribe-cold-federation.md`       | The payload type is promotion, expansion, a federation-level autopilot-run summary, or a federation-level history payload. |
+| Read | Only when |
+|---|---|
+| `references/scribe-cold-init-and-seeding.md` | The payload type is initialization or memory, or a promotion's deliverable-root rebasing. |
+| `references/scribe-cold-federation.md` | The payload type is promotion, expansion, a federation-level autopilot-run summary, or a federation-level history payload. |
 | `references/scribe-cold-gates-and-verdicts.md` | The payload type is a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write. |
-| `references/consumption.md`                | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` from its own template. |
+| `references/consumption.md` | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` from its own template. |
 | `references/consumption-rates-template.md` | **Every initialization**, which seeds `consumption-rates.md` from this cold template, and any Step 7.1 reseed (any payload type) when the existing `consumption-rates.md` fails its shape check. |
-| `references/seed-templates.md`             | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
-| `references/federation-templates.md`       | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
+| `references/seed-templates.md` | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
+| `references/federation-templates.md` | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
 
 Read no other reference file: `profiles-and-packs.md`, `operating-procedure.md`, `gates-and-modes.md`, and `federation.md` are coordinator procedure and the Scribe never runs them.
 

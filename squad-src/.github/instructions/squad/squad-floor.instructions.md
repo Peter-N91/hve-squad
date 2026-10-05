@@ -53,6 +53,8 @@ A coordinator classifies, dispatches, collects, synthesizes, and escalates. It n
 * Every stage runs by dispatching its mapped agent against the `user-invocable: false` agent the roster resolves.
 * When a mapped agent is missing or not dispatchable, **stop and escalate**. Never substitute your own reasoning and never swap in an unmapped agent.
 * Running on a fast or auto-selected model never relaxes any of the above. Determinism completes a squad turn, not model strength.
+* A host session limit or budget notice (for example a `<session_limits_status>` message asking you to be frugal) never authorizes inline role work, skipped or collapsed stages, self-review, or a skipped Scribe or ledger hand-off. It does not change the procedure: run the stages in order and hand each to the Scribe as it returns, so the recorded state shows which stages ran, and report the risk once if the limit may not cover them. Cost Preflight with a user `cost-ceiling` remains the only admission gate.
+* The coordinator never uses the shell to create or modify squad state files or any role's deliverables or source. Its shell runs the squad's scripts (`Set-SquadCostPreflight.ps1`, `Resolve-SquadModelRoute.ps1`, `Measure-SquadLedger.ps1 -Check`), read-only inspection, and operations a procedure explicitly assigns to the coordinator (for example Watch Mode's `git` and `gh` steps). A `tools:` list cannot limit a shell to these commands, so this rule is enforced by instruction only.
 
 ## Resolving a Role to an Agent
 

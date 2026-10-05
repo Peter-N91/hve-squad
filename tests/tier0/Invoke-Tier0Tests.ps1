@@ -124,6 +124,7 @@ $containers = @(
         PackageRoot = $PackageRoot
     }
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'WriteSquadHandoff.Tests.ps1') -Data @{
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ToolLists.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
 )
