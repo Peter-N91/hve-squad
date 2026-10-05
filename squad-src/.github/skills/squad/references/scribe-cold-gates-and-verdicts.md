@@ -56,14 +56,15 @@ The coordinator stamps this shape into `decisions.md` before post-initialization
 
 ### Council Verdict Placeholder
 
-The Scribe stamps this shape when a council runs:
+The Scribe stamps this shape when a council runs. The council is task-fit, so the Findings by Role table carries one row per dispatched role only, and every lens left out is listed under `Council Members Not Proposed` with its reason:
 
 ```markdown
 ## Council Verdict <timestamp> <topic-id>
 
 * Topic: <one-line summary of the proposal>
 * Proposal Ref: <path-to-plan-or-design>
-* Council Members Dispatched: architect, security, cost-manager, product-owner
+* Council Members Dispatched: architect, security
+* Council Members Not Proposed: cost-manager — no billable change; product-owner — scope unchanged; rai — no AI/ML behavior
 * Verdict: Go | Go-With-Conditions | Stop
 
 ### Findings by Role
@@ -72,8 +73,6 @@ The Scribe stamps this shape when a council runs:
 |---------------|---------|-------------|-----------------|------------|----------------------|
 | architect     | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
 | security      | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| cost-manager  | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
-| product-owner | <label> | <risk>      | <list-or-none>  | <list>     | <list>               |
 
 ### Synthesis
 

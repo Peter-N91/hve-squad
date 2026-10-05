@@ -108,7 +108,7 @@ Thirteen default rows do not mean quite what their keywords suggest:
 
 ### Filtering to the Active Roster
 
-The seeded `routing.md` contains only the rules whose role exists in the project's `team.md`. When a profile (see *Squad Profiles* in `squad-roster.instructions.md`) seeds a subset of the cast, the Squad Scribe drops every routing row whose role is not on the seeded team. This keeps routing consistent with the chosen squad: the coordinator never matches a request to a role the project did not hire.
+The seeded `routing.md` contains only the rules whose role exists in the project's `team.md`. When a profile (see *Squad Profiles* in `squad-roster.instructions.md`) seeds a subset of the cast, the Squad Scribe drops every routing row whose role is not on the seeded team. This keeps routing consistent with the chosen squad: the coordinator never matches a request to a role the project did not hire. The council row is the one exception and is seeded on every roster: its membership is task-fit, so a council request always reaches the council protocol, which offers any missing role as a council extension (see *Council Membership* in `squad-council.instructions.md`).
 
 When a request matches a pattern whose role is absent from the active roster, the coordinator escalates (see Escalation) and offers to add the role or switch profiles rather than dispatching a role that is not on the team.
 
@@ -159,11 +159,11 @@ The coordinator first confirms the methodology artifacts exist on disk. Implemen
 
 * A research artifact exists under `.copilot-tracking/research/` for the topic. If missing, dispatch `researcher` first.
 * A plan artifact exists under `.copilot-tracking/plans/` for the topic. If missing, dispatch `lead` (planning) first.
-* A non-`Stop` Council Verdict exists for the topic when the request crosses two or more council-member domains. If missing, run the council row first.
+* A non-`Stop` Council Verdict, or a user's `## Council Waiver`, exists for the topic when the request crosses two or more council-member domains. If neither exists, run the council row first.
 
 When any precondition is unmet, the coordinator dispatches the missing stage (or escalates) instead of implementing. It never produces the missing research, plan, or verdict itself. With the preconditions met, the gate behavior is:
 
-* When no Council Verdict exists for the topic and the request crosses two or more council-member domains (architecture, security, cost, product-fit, RAI), the coordinator runs the council row before the implementer.
+* When no Council Verdict or Council Waiver exists for the topic and the request crosses two or more council-member domains (architecture, security, cost, product-fit) or raises any RAI concern, the coordinator runs the council row before the implementer, sized to the work per *Council Membership* in `squad-council.instructions.md`.
 * When the latest verdict is `Go` or `Go-With-Conditions`, the coordinator dispatches the implementer and passes the consolidated conditions as inputs.
 * When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the Scribe before any implementer dispatches.
 
