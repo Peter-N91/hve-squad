@@ -5,6 +5,104 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-10-05
+
+### Added
+
+- **Roster split**: Cast Catalog, External Cast, and Building a Custom Roster sections moved to canonical `skills/squad/references/roster-catalog.md` (read on demand; inline safety summary, Dispatchability, and Profiles/Packs remain in `squad-roster.instructions.md`)
+- **Ledger determinism guards**: `Measure-SquadLedger.ps1 -Check` now fails when ledger total diverges from `state.json` `currentRun` (missing/unparseable state.json fails; a federation root marked by `federation.md` is logged not-applicable), or when recorded per-file ordered block identities are overwritten/removed (per-history-file ordered block identities recorded in Derivation); a plain `-Check` (no `-ExpectedHistoryCounts`) only warns on legacy ledgers with no recorded identities. Combined with `-ExpectedHistoryCounts` — the Scribe's own post-write self-check — a Derivation missing identities entirely, or missing them for only some of the touched files (a partial paste), fails instead of warning
+- **Scribe Self-Check**: Write-Completeness Self-Check now runs exactly once per hand-off after the last write, not per append; `currentRun` totals copied from helper output
+- **Model routing rule**: "The Scribe must not inherit the frontier session model" (its `model:` frontmatter pins Claude Haiku 4.5; `bookkeeping` assignment class floors at seeded `fast` Model Tier; no routing input nor the no-policy default ever substitutes)
+- **Performance measurement**: Static byte-budget reduction demonstrated (vscode-apm ~96–98 KB drop for coordinator/federation/Scribe hot core; plugin-cli ~flat +0.5–1.9 KB); wall-clock improvement not demonstrated (prior live benchmark voided). Perf label: static byte / step reduction; wall-clock improvement not demonstrated.
+- **Deferred**: Single/Cascade/Critique routing patterns, task-class table, batched stage writes, verbatim scribe-append/lifecycle split, moving Profiles/Packs cold, merging routing files, live instrumented wall-clock re-measurement (branch `feature/adaptive-model-routing-performance` 3a26f5d not adopted)
+
+- Opt-in capability-ranked model routing with `routing=ranked`
+- Squad Scribe hot/cold reference split: about 7% fewer reference bytes read per history write (computed); no wall-clock improvement was demonstrated (see [ADR-0007](docs/architecture/adr/0007-capability-ranked-model-routing-and-scribe-ledger-determinism.md))
+- Optional deterministic ledger helper `Measure-SquadLedger.ps1` (PowerShell 7+, read-only)
+- Coordinator runs the optional read-only ledger check after Scribe writes when PowerShell 7+ is available, instead of trusting the Scribe's self-report
+- Default behavior unchanged when no policy is supplied
+
+### Changed
+
+- Updated hve-core dependency pin to `a68edb5` (a68edb5434f45bd70081f0e8288779c4fc81415c).
+
+- Updated hve-core dependency pin to `5e21810` (5e21810ed3b0a665bbce096a8f04f43abda4f5dd).
+
+- Updated hve-core dependency pin to `781852f` (781852fa24a70969f04827c063da2248d19db6aa).
+
+- Updated hve-core dependency pin to `97e9925` (97e9925fa7da6785b91eb2abe4c64c9190ef0e11).
+
+- Updated hve-core dependency pin to `5e7f576` (5e7f576952f18bfd3e4340c772734bb662a34567).
+
+- Updated hve-core dependency pin to `a146d8d` (a146d8d01ad1e38f82d5d8eebb7fa8d1d88c4092).
+
+- **Autopilot hand-off pipelining** — Under `mode=autopilot`, the coordinator may dispatch stage N's Scribe hand-off and stage N+1's role in parallel when stage N's artifact is confirmed, the host's dispatch tool advertises background/asynchronous execution (e.g., Copilot CLI `task` with `mode: background`), and no verification failure has occurred. Pipelining is inactive in Watch Mode, with any `cost-ceiling`, as a federation root, in untargeted federation autopilot with aggregate ceiling, when the host dispatch tool lacks async support, or after a verification failure. See `squad-src/.github/skills/squad/references/operating-procedure.md` and `gates-and-modes.md`.
+
+- **Per-write verification with content baselines** — Scribe dispatch verification requires `Measure-SquadLedger.ps1 -Check -ExpectedHistoryCounts -BaselinePath`, not bare `-Check`. The coordinator snapshots target history file heading counts and content-level baselines (Length, SHA-256, heading count) before dispatch, then verifies with expected counts plus additions. Failed verification disables pipelining for the remainder of the run; the bad write is not edited, but instead an append-only correction entry is dispatched and the owning role is re-dispatched to restore the deliverable. The run does not cross the next barrier until a human approves the fix. See `scripts/Measure-SquadLedger.ps1`.
+
+- **Append-only ledger state** — Squad state under `.copilot-tracking/squad/` remains git-ignored (local evidence, not reviewed history). All Scribe writes are append-only; prefix edits and deliverable rewrites are detected by the coordinator's content-baseline checks (`-BaselinePath`) and the Scribe's explicit allowed-write-set enumeration (via `-AllowedWritePath`). Detection is followed by fail-closed handling: the run blocks at the next barrier until a human approves. Legacy malformed consumption blocks from pipelining testing are reported as warnings and excluded from post-baseline verification.
+
+- **Documentation and incidents** — Added pipelining behavior, enablement predicate, and verification contract to `docs/usage.html` and `docs/fr/usage.html`. Added incident disclosures (incidents 3–7 from pipelining testing) to `docs/maintaining.html` and `docs/fr/maintaining.html`. Incidents inform the design of content-baseline preservation, allowed-write enumeration, and append-only recovery; original bytes for incidents 3 and 5 were unrecoverable because `.copilot-tracking/` is git-ignored.
+
+- **Opt-in benchmark harness** — A paired baseline-and-after benchmark harness exists at `tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1` (requires `COPILOT_GITHUB_TOKEN`). The live benchmark was deferred and not run (0 USD); pipelining behavior is described; no performance claim is made.
+
+- Updated hve-core dependency pin to `180c854` (180c85492b5a20380927200ddf926fd712e7d9d1).
+
+- **The `graph-research` prompt was removed outright from hve-core.** It was never a dispatchable roster entry, only a user entry point the `researcher` role Selection Cue referenced for escalation; that reference now says so instead of naming a `/graph-research` command that no longer exists (`squad-src/.github/skills/squad/references/roster-catalog.md`). No agent, skill, or roster row required adaptation. `apm.yml` now pins hve-core `5c7f9a7d2c0da3d8bbd3562cb89b7a7811acd2eb`.
+
+- **Ranked routing picked models by price and spelling, not by fit.** Ranking went capability class, then cheapest input rate, then alphabetical Catalog ID. So every lightweight role landed on `gemini-3.6-flash`, and every frontier role landed on `claude-opus-5.5`. The catalog now scores every model 0–3 for each assignment class (*Catalog: Assignment Fit*). Ranking goes by fit, then a blended per-dispatch rate, then the newer generation within a family, and never by name (`squad-src/.github/skills/squad/references/model-catalog.md`, `squad-src/.github/skills/squad/references/model-routing.md`).
+- **Per-role models now live in `team.md`.** `routing=off|ranked|manual` is persisted as a `Model routing:` line in `team.md`, and a `Model` column shows each role's model: the ranked pick, or the user's own pick. `routing=manual` asks before any dispatch: accept all suggestions, pick per assignment class, then per-role exceptions. It offers only models the host can run: the `task` enum on the Copilot CLI and the GitHub Copilot app, or models priced at or below the session model on VS Code. The comma-separated `models=` input is retired (`squad-src/.github/agents/squad/squad-coordinator.agent.md`, `squad-src/.github/prompts/squad/squad.prompt.md`).
+- **`consumption-rates.md` gains a `Model ID` column** holding the exact dispatch id for every priced model, so a `Model` cell maps straight to its rate row (`squad-src/.github/skills/squad/references/consumption-rates-template.md`).
+- **`intake-validator` now seeds at the `default` floor instead of `fast`.** Its readiness verdict gates every later stage, so it no longer runs on lightweight models (`squad-src/.github/skills/squad/references/seed-templates.md`).
+- **New read-only helper `Resolve-SquadModelRoute.ps1`** (PowerShell 7+). It computes each role's ranked pick, candidate list, and `Model` cell status deterministically (`squad-src/.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1`).
+- **Catalog re-verified 2026-09-30**, adding GA models Claude Sonnet 5.5 and GPT-6.1 Sol.
+
+- **Scribe hand-off pipelining now runs under a cost ceiling** — A configured `cost-ceiling` no longer disables autopilot pipelining. The Cost Preflight round admitting stage N+1 runs between parallel blocks and adds stage N's not-yet-recorded spend as a pending reservation (`evaluated_spend_usd = currentRun.estCostUsd + pending_usd`), so the ceiling never under-counts while stage N's Scribe hand-off overlaps stage N+1. Only an `approved-over-ceiling` round stays sequential. See `squad-src/.github/skills/squad/references/gates-and-modes.md` and `consumption.md`.
+- **Federation inner runs pipeline** — An inner run under untargeted federation autopilot now pipelines at its own sub-squad root; the aggregate ceiling is read only after that inner run's last Scribe hand-off verifies. The federation root and Watch Mode stay sequential.
+- **Host signal matches the mechanism** — The Enablement Predicate's host term is now "the subagent-dispatch tool can be called more than once in one parallel tool-call block" (VS Code `runSubagent`, Copilot CLI `task`), not "advertises a background mode". The term governs gain, not safety: a host that serializes a block degrades to sequential timing with every barrier intact.
+- **`Measure-SquadLedger.ps1 -Write`** — The Scribe now writes the `consumption.md` Attribution, Usage & Cost, and Derivation sections and the two `state.json` `currentRun` totals with the ledger script instead of pasting them by hand. Both updates are computed before either file is written; every other byte is preserved, and the mode refuses on a federation root, beside `-Check`, or when either file lacks its anchor. Covered by new cases in `tests/tier1/LedgerCalculator.Tests.ps1`.
+- **Pipelining is required, not optional** — A live autopilot run read the pipelining contract and still handed every stage to the Scribe alone ("Handing this dispatch to the Scribe, then proceeding"), because the rule said "may" and "default OFF". Both coordinators now carry a direct instruction to send Scribe(N) and Role(N+1) as two calls in one tool-call block unless a barrier applies; dispatching the Scribe alone while the predicate holds is defined as a defect.
+- **Coordinator hands the Scribe a `ledgerCommand`** — The same run's Scribe (Claude Haiku 4.5) read the `-Write` instruction and hand-wrote the ledger anyway, recording $1.3551 where the history derives $1.5758 and dropping a role row. The payload template now carries the exact `Measure-SquadLedger.ps1 -Write` command, and the Scribe charter makes running it a protocol step; the manual derivation is explicitly the no-shell fallback. The Scribe hot core shrank to 82,132 bytes.
+- **Ledger script fixes from live data** — `-Check` no longer crashes (`$null.Count`) when a role is missing from the ledger, and placeholder identities such as `unreported` in a hand-written Derivation no longer make `-Write` refuse forever.
+
+- **Observed usage beside the estimates** — `Measure-SquadLedger.ps1 -SessionLog <path|auto>` reads the host's session log (`events.jsonl` from the Copilot CLI or VS Code agent host) and adds an `## Observed Usage (host-reported)` section to `consumption.md`: per agent, the model that actually ran, whether it matches the ledger, real total tokens beside the estimated ones, and blended USD; the session's billed AI units, coordinator included; and a *Without HVE Squad* comparison of the observed run against the same role tokens on one model with no Scribe (`-BaselineModel`, defaulting to the most expensive model a role ran on). Estimates are unchanged and `-Check` ignores the section. The payload template's `ledgerCommand` now carries `-SessionLog auto`. On the last live run, recorded estimates were about 320,000 tokens against 19.8M observed.
+- **Rate lookup tolerates spelling** — `priced_as` resolves case-, space-, and hyphen-insensitively against display names and Model IDs (`GPT-5.3 Codex` → `GPT-5.3-Codex`), then the block's own `model`, before any tier fallback. A live run had priced every Codex dispatch at the Claude Sonnet 4.6 fallback.
+- **Dispatch copies the routed `Model` cell** — `model-routing.md` now states that under `ranked` or `manual` every non-Scribe dispatch passes the row's `Model` cell verbatim. A live run resolved `claude-opus-5.5` for the researcher but sent `claude-sonnet-5.5`, and sent no model for the intake-validator. How cells are filled is unchanged.
+- **A failed hand-off that ran alone no longer turns pipelining off** — The fail-closed latch now applies only to a Scribe hand-off that ran in the same block as a role. A live run latched pipelining off at its very first, sequential roster-refresh hand-off and ran every later stage one at a time.
+- **Append markers say where to append** — Seed markers read "Append each new ... at the end of this file, after the last entry" instead of "below this line", and the Scribe's append-only rule says the same; a live Scribe had inserted its entry directly under the old marker, above the existing ones. `-Check -BaselinePath` now reports that case as "entries were inserted inside the file, not appended" (every original byte kept) rather than as a prefix edit.
+- **Billed total next to the estimate** — With `-SessionLog`, the Usage & Cost total is followed by the host's billed AI units and the estimate-to-billed ratio, and the Scribe takes the Cost Comparison figures from the observed section. A live run showed an estimated 13.05 USD against about 5.69 USD billed.
+- **Session model guidance** — The README and usage pages now say to start the session, which runs the coordinator, on a fixed model from the catalog's `balanced` class, as capable as `claude-sonnet-5.5`, rather than a frontier, fast-lightweight, or `auto` model, and point to `model-catalog.md` for the current list.
+
+- Updated hve-core dependency pin to `7e2de1a` (7e2de1aa135133acc4e9592adffc220cad9bdfdf).
+
+- Updated hve-core dependency pin to `34c1e6c` (34c1e6cdf467e6474729983b74b29aad308693ee).
+
+- Updated hve-core dependency pin to `c225d2b` (c225d2b78d67e7859f8fe35219dedc7b490bf443).
+
+- Updated hve-core dependency pin to `18f5ac7` (18f5ac75a1556e49f1e90647a4816d17499e1d7f).
+
+- **Task-fit council** — The pre-implementation council no longer requires a fixed four-role quorum. Each lens the work touches (architecture, security, cost, product-fit, RAI) maps to one role, and only those roles are dispatched, so a council can be two roles, all five, or `rai` alone. The verdict lists every lens left out under `Council Members Not Proposed` with its reason. The automatic trigger is unchanged: two or more council-member domains, or any responsible-AI concern.
+
+- **Council extension** — When the work needs a council role the roster does not carry, the coordinator offers it as a council extension, the same way it offers `intake-validator` and the opt-in roles. At Init the offer rides in the existing profile confirmation when the opening request already signals a council, for profiles, packs, custom rosters, and federation sub-squads alike. In interactive mode the council's `confirm` step proposes the task-fit council. Autopilot and autonomous runs select from the roster without asking and stop only when a needed role is missing. Watch Mode reports the role to add and never adds it.
+
+- **Council waiver** — Declining the council records a `## Council Waiver` decision that satisfies the Implementation Gate for the topic. It never clears a Risk Gate or an Impactful-Action Gate. The council routing row is now seeded on every roster so a council request always reaches the offer.
+
+### Fixed
+
+- **Unversioned APM setup guidance selected releases that fail to install 11 HVE Squad dependencies.**
+  Pin the documented APM CLI prerequisite to `0.29.0` and add Windows and macOS installation,
+  cleanup, PATH, and recovery steps to the user and troubleshooting guides.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.18.0"
+```
+
+[0.18.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.18.0
+
 ## [0.17.0] - 2026-09-21
 
 ### Added
