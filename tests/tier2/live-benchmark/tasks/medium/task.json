@@ -1,0 +1,12 @@
+{
+  "level": "medium",
+  "mutants": ["release-noop", "ignore-reserved"],
+  "doc": {
+    "path": "docs/CONCURRENCY.md",
+    "concepts": [
+      { "name": "race", "pattern": "(?i)\\brace\\b|interleav" },
+      { "name": "fix", "pattern": "(?i)\\block|mutex|atomic|compare-and-swap|transaction|serializ" },
+      { "name": "trade-off", "pattern": "(?i)trade-?off|contention|throughput|latency|downside|cost of" }
+    ]
+  }
+}
