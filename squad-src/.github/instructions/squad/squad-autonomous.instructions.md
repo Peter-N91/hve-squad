@@ -30,7 +30,7 @@ When the input is absent, the coordinator runs the normal per-turn protocol from
 
 The autonomous loop is a fixed sequence the coordinator runs on a single turn:
 
-1. Council dispatch. The coordinator dispatches the default council (`architect`, `security`, `cost-manager`, `product-owner`, optionally `rai`) in parallel against the proposal under review and waits for findings, per `.github/instructions/squad/squad-council.instructions.md`.
+1. Council dispatch. The coordinator dispatches the task-fit council (the roles from the roster for the lenses the proposal touches, out of `architect`, `security`, `cost-manager`, `product-owner`, and `rai`) in parallel against the proposal under review and waits for findings, per `.github/instructions/squad/squad-council.instructions.md`. It selects the roles without asking and stops only when a needed role is absent from the roster, offering it as a council extension; a waived council ends the loop for the turn.
 2. Verdict synthesis. The coordinator hands the findings to the Scribe and the Scribe writes the Council Verdict to `decisions.md`. When the verdict is `Stop`, the loop ends and the coordinator escalates immediately; the loop never runs an implementer against a `Stop` verdict.
 3. Implementer dispatch. On `Go` or `Go-With-Conditions`, the coordinator dispatches the implementation role (typically `developer`) with the consolidated conditions attached as inputs.
 4. Council re-validation. The coordinator dispatches the same council in parallel against the implementer's output for one re-validation cycle.

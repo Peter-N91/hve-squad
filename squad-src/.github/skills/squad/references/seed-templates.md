@@ -69,7 +69,7 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 
 ## routing.md
 
-Seeded from the default routing rules. Each rule points at a role that exists in `team.md`. The canonical rule set is *Default Routing Rules* in `.github/instructions/squad/squad-routing.instructions.md`; the table below mirrors it in full, and the instructions win on any difference. The Scribe drops every row whose role is not on the seeded team, so a narrow profile writes only its own subset.
+Seeded from the default routing rules. Each rule points at a role that exists in `team.md`. The canonical rule set is *Default Routing Rules* in `.github/instructions/squad/squad-routing.instructions.md`; the table below mirrors it in full, and the instructions win on any difference. The Scribe drops every row whose role is not on the seeded team, except the council row, which every roster keeps, so a narrow profile writes only its own subset.
 
 **The `Role(s)` column holds role ids, never agent names.** `team.md` is keyed on the role id, so the id is what carries the row's `Member Name`, `Model Tier`, Selection Cues, and `Deliverable Root`. Writing an agent name here resolves to no roster row and the dispatch silently loses all four — most visibly the output path, which then falls back to the agent's own default. Copy the ids below verbatim; the concrete agent is resolved at dispatch time.
 

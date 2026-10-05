@@ -1087,6 +1087,19 @@ flowchart TD
         ci-dessous.
       </p>
       <p>
+        <strong>Le conseil est dimensionné selon le travail, et non selon un quorum fixe.</strong> Seul
+        <code>full</code> initialise tous les rôles du conseil (<code>architect</code>, <code>security</code>,
+        <code>cost-manager</code>, <code>product-owner</code>, <code>rai</code>), et aucun autre profil
+        n'en a besoin. Un conseil ne mobilise que les rôles correspondant aux angles que le travail touche &mdash;
+        deux d'entre eux, les cinq, ou <code>rai</code> seul &mdash; et consigne chaque angle écarté avec sa
+        raison. Lorsqu'un rôle du conseil nécessaire ne figure pas dans votre équipe, le coordinateur le propose
+        comme <em>extension du conseil</em>. Si votre demande initiale appelle déjà un conseil, la proposition
+        arrive à l'initialisation, dans la même confirmation que votre profil ; sinon, elle arrive lorsque le
+        conseil se réunit. En mode autopilot, la squad ne pose la question que si un rôle nécessaire manque, et
+        le Watch Mode signale le rôle à ajouter au lieu de l'ajouter. Refusez, et la squad consigne une renonciation
+        au conseil et poursuit ; cette renonciation ne lève jamais une Risk Gate ni une action à fort impact.
+      </p>
+      <p>
         Quatre rôles sont répertoriés, mais <strong>non sélectionnables</strong>, et leur présence est délibérée :
         <code>devrel</code>, <code>networking</code>, <code>gcp</code> et <code>identity</code>. Aucun
         agent ni skill ne les prend en charge, ici ou en amont ; un tel rôle serait donc une promesse

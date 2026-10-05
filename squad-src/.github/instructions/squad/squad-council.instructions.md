@@ -5,7 +5,7 @@ applyTo: '**/.copilot-tracking/squad/**'
 
 # Squad Council Conventions
 
-These conventions define the pre-implementation council that the Squad Coordinator dispatches before any implementation-tier role acts on a non-trivial plan, design, or change. The council surfaces architecture, security, cost, product-fit, and (when AI/ML work is in scope) responsible-AI concerns in parallel so that the Squad Scribe can record a single, auditable verdict that downstream implementers consult.
+These conventions define the pre-implementation council that the Squad Coordinator dispatches before any implementation-tier role acts on a non-trivial plan, design, or change. The council surfaces the architecture, security, cost, product-fit, and responsible-AI concerns the work actually touches, in parallel, so that the Squad Scribe can record a single, auditable verdict that downstream implementers consult.
 
 A council run produces exactly one durable artifact: a `## Council Verdict` entry appended to `.copilot-tracking/squad/decisions.md` by the Squad Scribe. The coordinator never writes that entry itself; the single-writer rule from `.github/instructions/squad/squad-state.instructions.md` still holds.
 
@@ -16,26 +16,40 @@ The coordinator dispatches a council when any of the following hold:
 * The user explicitly asks for a council, a pre-implementation review, a cross-check, a design review, a go/no-go, or a validation pass before implementation.
 * The user's request contains both implementation language (build, ship, deploy, roll out, merge, apply) and risk language (cost, security, compliance, AI, regulated data, production, irreversible).
 * A routing row in `routing.md` resolves to the council pattern (see `squad-routing.instructions.md` for the canonical row).
-* A prior turn produced a plan whose scope crosses two or more council-member domains (for example, an Azure landing-zone change that touches budget and security).
+* A prior turn produced a plan whose scope crosses two or more council-member domains, or raises any responsible-AI concern (for example, an Azure landing-zone change that touches budget and security).
+
+The automatic triggers stay at two or more domains or any RAI concern; what is sized to the work is the membership, not the trigger. An explicit request may still ask for a council of any size, including a single role.
 
 When none of the triggers hold, the coordinator follows the normal routing table and does not pay the council-dispatch cost.
 
 ## Council Membership
 
-The default council is four roles dispatched in parallel:
+The council has no fixed quorum. It is **task-fit**: the coordinator maps each lens the work actually touches to its role and dispatches only those roles in parallel.
 
-* `architect`
-* `security`
-* `cost-manager`
-* `product-owner`
+| Lens         | Role            | Needed when the work…                                                                 |
+|--------------|-----------------|---------------------------------------------------------------------------------------|
+| Architecture | `architect`     | changes structure, components, integration, or infrastructure topology                |
+| Security     | `security`      | touches identity, secrets, network exposure, threat surface, or regulated data        |
+| Cost         | `cost-manager`  | adds or resizes billable resources, or carries a budget, pricing, or FinOps signal    |
+| Product-fit  | `product-owner` | changes scope, user-facing behavior, priorities, or acceptance criteria               |
+| RAI          | `rai`           | involves AI/ML behavior, model selection, training data, agent autonomy, or any RAI-relevant decision |
 
-The council adds a fifth role when the request involves AI/ML behavior, model selection, training data, agent autonomy, or any RAI-relevant decision:
-
-* `rai` (optional, conditional on RAI-relevance)
+A council may therefore be two of the four classic roles, all five, or `rai` alone. Every lens the coordinator considered and left out is recorded under *Council Members Not Proposed* with its reason, so a narrow council stays auditable.
 
 Each role resolves to its concrete agent through the roster's *Resolving a Role to an Agent* rules in `.github/instructions/squad/squad-roster.instructions.md`. A council membership change for a specific turn is acceptable (for example, swapping a Primary for an Alternate per a Selection Cue), but the council membership is recorded in the Council Verdict so the verdict is auditable.
 
-When a council role is absent from the active roster (`team.md`), or its mapped agent is not installed or not available at dispatch time, the coordinator escalates rather than dispatching a partial council. A council quorum is the full default membership (`architect`, `security`, `cost-manager`, `product-owner`); the optional `rai` slot is the only conditional role. The coordinator never synthesizes a Council Verdict from its own reasoning to cover a missing role, and never substitutes a non-mapped agent for an absent council member — a verdict assembled without the full quorum's dispatched findings is invalid and must not gate implementation.
+### Council Extension: When a Needed Role Is Not on the Roster
+
+Only `full` seeds every council role, and no other profile needs to: a missing council role is offered as a **council extension**, the same offer the coordinator makes for `intake-validator` and the opt-in roles. The offer names each missing role and the lens it covers. On acceptance the Squad Scribe appends the role to `team.md` and its routing rows to `routing.md`, and the role stays on the roster for later councils. When to offer depends on the mode:
+
+* **Init (every mode).** When the opening request already signals a council (any trigger above), the profile or custom-roster proposal lists the missing council roles as a suggested extension inside the same confirmation, the way packs are proposed. This adds no question. Autopilot runs Init first, so its council roles are usually settled here.
+* **Interactive.** The council row is `confirm` tier, so the coordinator proposes the task-fit council (roles on the roster, roles to add, and roles not proposed, each with a reason) and waits. The user accepts, adjusts, or declines.
+* **`mode=autopilot` and `mode=autonomous`.** No new question. The coordinator selects the task-fit roles from the roster and records the selection through the Scribe. It stops only when a needed role is absent from the roster, and that stop is the extension offer. In autonomous mode a waived council also ends the auto-validated loop for the turn, and the implementer runs at its normal tier.
+* **Watch Mode and other unattended runs.** The same selection as autopilot. A needed role absent from the roster escalates through the approval channel, naming the role to add as the remediation. An unattended run never adds a role and never waives a council.
+
+**A decline waives the council; it does not block the work.** When the user declines the council, or declines every missing role and does not want a council of the roles present, the Scribe records a `## Council Waiver <timestamp> <topic-id>` decision (Topic, Lenses Needed, Roles Offered, `Decision: waived by user`, Reason). A waiver satisfies the Implementation Gate for that topic. It never clears a Risk Gate or an Impactful-Action Gate, which still fire on their own triggers. A waived topic is not re-offered unless its scope changes.
+
+The coordinator never dispatches a role that is not on the roster, never synthesizes a Council Verdict from its own reasoning to cover a lens it did not dispatch, and never substitutes a non-mapped agent for an absent council member. When a selected role's mapped agent is not installed or not available at dispatch time, the coordinator escalates per the roster-resolution precheck rather than dropping the lens silently.
 
 ## Parallel Dispatch Contract
 
@@ -70,6 +84,7 @@ The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` un
 * Topic: <one-line summary of the proposal>
 * Proposal Ref: <path-to-plan-or-design>
 * Council Members Dispatched: <comma-separated roles>
+* Council Members Not Proposed: <role — reason; one per lens left out, or none>
 * Verdict: Go | Go-With-Conditions | Stop
 
 ### Findings by Role
@@ -96,6 +111,7 @@ The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` un
 
 Required fields:
 
+* The Findings by Role table carries one row per dispatched role only; a lens left out appears under `Council Members Not Proposed`, never as an invented row.
 * The `timestamp` is the turn's ISO-8601 date or datetime.
 * The `topic-id` is a short slug (kebab-case) the coordinator generates from the proposal title so that future turns can reference the verdict by id.
 * The `Verdict` value is one of exactly `Go`, `Go-With-Conditions`, or `Stop`.
@@ -128,5 +144,6 @@ Implementation-tier roles (`developer`, `tester` when it acts as an implementer,
 * `Go` permits dispatch on the next turn with no extra conditions.
 * `Go-With-Conditions` permits dispatch only when the implementer's payload acknowledges each consolidated condition (a condition may be satisfied in-flight or deferred with an explicit recorded acceptance).
 * `Stop` blocks dispatch entirely. The coordinator escalates to the user with the verdict, the blocking issues, the council membership, and the **Decision Ref** (per *Verdict Anchor and Decision Ref*) so the user can open the full verdict section directly.
+* A `## Council Waiver` for the topic, recorded on the user's decline (per *Council Extension*), permits dispatch in place of a verdict, unless a Risk Gate trigger applies.
 
 The coordinator does not bypass the gate. When a user explicitly overrides a `Stop` verdict, the coordinator records the override decision through the Scribe before any implementer dispatches, so the audit trail shows both the verdict and the override.

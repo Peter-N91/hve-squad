@@ -40,9 +40,11 @@ The intake gate is the operator's pre-work readiness check on the inputs a turn 
 
 ## Council Procedure
 
-The council is the operator's pre-implementation cross-check. The coordinator triggers it when the user explicitly asks for a council, a validation, a cross-check, or a pre-implementation review, or when a request mixes implementation language with risk language and crosses two or more council-member domains (architecture, security, cost, product-fit, RAI). The full protocol lives in `.github/instructions/squad/squad-council.instructions.md`; the operator's view is:
+The council is the operator's pre-implementation cross-check. The coordinator triggers it when the user explicitly asks for a council, a validation, a cross-check, or a pre-implementation review, or when a request mixes implementation language with risk language and crosses two or more council-member domains (architecture, security, cost, product-fit) or raises any RAI concern. The full protocol lives in `.github/instructions/squad/squad-council.instructions.md`; the operator's view is:
 
-1. The coordinator dispatches the default council in a single parallel batch: `architect`, `security`, `cost-manager`, `product-owner`, plus optional `rai` when AI/ML, training data, agent autonomy, or regulated data is in scope.
+1. The coordinator dispatches a **task-fit** council in a single parallel batch: only the roles for the lenses the work touches (`architect`, `security`, `cost-manager`, `product-owner`, `rai`), recording each lens left out under `Council Members Not Proposed` with its reason. There is no fixed quorum.
+   * A needed role missing from the roster is offered as a **council extension**: in the Init confirmation when the opening request already signals a council; at the council's `confirm` step in interactive mode, where the user accepts, adjusts, or declines; and in autopilot or autonomous mode only when a needed role is missing, never as a new question when the roster already covers the work. Watch Mode escalates with the role to add as the remediation and never adds it itself.
+   * A decline is recorded as a `## Council Waiver <timestamp> <topic-id>` decision. It satisfies the Implementation Gate for the topic but never clears a Risk Gate or an Impactful-Action Gate.
 2. Each council role returns a finding with a verdict label (`Approve`, `Conditional`, `Concern`, `Block`) and a risk label (`Risk: Low`, `Risk: Medium`, `Risk: High`).
 3. The Squad Scribe synthesizes the findings using a most-restrictive-wins rule: any `Block` or any `Risk: High` drives a `Stop` verdict; any `Conditional` (with no blockers) drives `Go-With-Conditions`; otherwise the verdict is `Go`.
 4. The Scribe appends a single `## Council Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
@@ -56,7 +58,7 @@ The Implementation Gate is what makes the squad a methodology instead of a route
 2. **Implementation may not begin cold.** Confirm all three on disk, by listing the directory and reading the file, before dispatching the producing role:
    * a research artifact under the `researcher` Deliverable Root for the topic — if missing, dispatch `researcher` first;
    * a plan artifact under the `lead` Deliverable Root for the topic — if missing, dispatch `lead` first;
-   * a non-`Stop` Council Verdict for the topic when the request crosses two or more council-member domains — if missing, run the council row first.
+   * a non-`Stop` Council Verdict, or a user's `## Council Waiver`, for the topic when the request crosses two or more council-member domains — if neither exists, run the council row first.
 3. When a precondition is unmet, dispatch the missing stage or escalate. **Never produce the missing research, plan, or verdict inline**, and never advance because the request "is only a document". Skipping research and plan to reach the deliverable faster is the single most common way a squad turn degrades into one model improvising, and it is invisible afterwards because the deliverable still looks finished.
 4. On the verdict: `Go` or `Go-With-Conditions` permits dispatch with the conditions attached as inputs; `Stop` escalates. A user may override `Stop`, and the override is recorded through the Scribe before any dispatch.
 
@@ -111,8 +113,8 @@ Autopilot removes the human turn between stages; it does not remove the stages. 
 2. **intake** — `intake-validator` (+`analyst` or `product-owner` on remediation) — a `## Intake Readiness Verdict` in `decisions.md` — requirement or input artifacts are in scope.
 3. **research** — `researcher` — a research artifact under the `researcher` Deliverable Root — the request is classified.
 4. **plan** — `lead` — a plan artifact under the `lead` Deliverable Root — a research artifact exists.
-5. **council** — `architect`, `security`, `cost-manager`, `product-owner` (+`rai` when relevant) — a `## Council Verdict` in `decisions.md` — a plan artifact exists.
-6. **implement** — `developer`, or the fan-out specialists — the artifact at each producing role's Deliverable Root — a plan artifact and a non-`Stop` Council Verdict exist.
+5. **council** — the task-fit subset of `architect`, `security`, `cost-manager`, `product-owner`, `rai` selected from the roster — a `## Council Verdict` (or the user's `## Council Waiver`) in `decisions.md` — a plan artifact exists.
+6. **implement** — `developer`, or the fan-out specialists — the artifact at each producing role's Deliverable Root — a plan artifact and a non-`Stop` Council Verdict or a Council Waiver exist.
 7. **review** — `tester` — a review record plus its `history/<agent>.md` entry — the implement stage's artifacts exist.
 
 **Deliverable fan-out replaces the implement row only.** When the plan's deliverable list names two or more artifact-owning roles on the team — a roster row whose `Deliverable Root` names a real path, counting every one except `researcher`, `lead`, and `tester` — dispatch each owning specialist in dependency order instead of a single `developer`, each a Scribe-recorded stage. The test is read off `team.md`, not off the profile name. Fan-out never replaces Research, Plan, council, or Review, and a plan the `lead` never wrote cannot have produced a deliverable list. A run that opens with a specialist deliverable has skipped four stages, not chosen a different shape.
