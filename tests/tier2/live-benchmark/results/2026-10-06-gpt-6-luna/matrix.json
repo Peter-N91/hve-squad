@@ -1,0 +1,239 @@
+{
+  "seed": 137,
+  "levels": [
+    "easy",
+    "medium",
+    "hard"
+  ],
+  "arms": [
+    "B",
+    "R",
+    "E"
+  ],
+  "repeats": 3,
+  "model": "gpt-6-luna",
+  "sources": {
+    "B": "baseline: upstream main @ 3f724d0 (squad-src tree 3B3751370965)",
+    "R": "candidate: PRs #138-#143 integrated (squad-src tree E70BD58D3BAE)",
+    "E": "candidate: PRs #138-#143 integrated (squad-src tree E70BD58D3BAE)"
+  },
+  "schedule": [
+    {
+      "Index": 1,
+      "Repeat": 1,
+      "Level": "easy",
+      "Arm": "R",
+      "Position": 1,
+      "RunId": "easy-R-r1"
+    },
+    {
+      "Index": 2,
+      "Repeat": 1,
+      "Level": "easy",
+      "Arm": "E",
+      "Position": 2,
+      "RunId": "easy-E-r1"
+    },
+    {
+      "Index": 3,
+      "Repeat": 1,
+      "Level": "easy",
+      "Arm": "B",
+      "Position": 3,
+      "RunId": "easy-B-r1"
+    },
+    {
+      "Index": 4,
+      "Repeat": 1,
+      "Level": "medium",
+      "Arm": "B",
+      "Position": 1,
+      "RunId": "medium-B-r1"
+    },
+    {
+      "Index": 5,
+      "Repeat": 1,
+      "Level": "medium",
+      "Arm": "E",
+      "Position": 2,
+      "RunId": "medium-E-r1"
+    },
+    {
+      "Index": 6,
+      "Repeat": 1,
+      "Level": "medium",
+      "Arm": "R",
+      "Position": 3,
+      "RunId": "medium-R-r1"
+    },
+    {
+      "Index": 7,
+      "Repeat": 1,
+      "Level": "hard",
+      "Arm": "R",
+      "Position": 1,
+      "RunId": "hard-R-r1"
+    },
+    {
+      "Index": 8,
+      "Repeat": 1,
+      "Level": "hard",
+      "Arm": "E",
+      "Position": 2,
+      "RunId": "hard-E-r1"
+    },
+    {
+      "Index": 9,
+      "Repeat": 1,
+      "Level": "hard",
+      "Arm": "B",
+      "Position": 3,
+      "RunId": "hard-B-r1"
+    },
+    {
+      "Index": 10,
+      "Repeat": 2,
+      "Level": "easy",
+      "Arm": "E",
+      "Position": 1,
+      "RunId": "easy-E-r2"
+    },
+    {
+      "Index": 11,
+      "Repeat": 2,
+      "Level": "easy",
+      "Arm": "B",
+      "Position": 2,
+      "RunId": "easy-B-r2"
+    },
+    {
+      "Index": 12,
+      "Repeat": 2,
+      "Level": "easy",
+      "Arm": "R",
+      "Position": 3,
+      "RunId": "easy-R-r2"
+    },
+    {
+      "Index": 13,
+      "Repeat": 2,
+      "Level": "medium",
+      "Arm": "E",
+      "Position": 1,
+      "RunId": "medium-E-r2"
+    },
+    {
+      "Index": 14,
+      "Repeat": 2,
+      "Level": "medium",
+      "Arm": "R",
+      "Position": 2,
+      "RunId": "medium-R-r2"
+    },
+    {
+      "Index": 15,
+      "Repeat": 2,
+      "Level": "medium",
+      "Arm": "B",
+      "Position": 3,
+      "RunId": "medium-B-r2"
+    },
+    {
+      "Index": 16,
+      "Repeat": 2,
+      "Level": "hard",
+      "Arm": "E",
+      "Position": 1,
+      "RunId": "hard-E-r2"
+    },
+    {
+      "Index": 17,
+      "Repeat": 2,
+      "Level": "hard",
+      "Arm": "B",
+      "Position": 2,
+      "RunId": "hard-B-r2"
+    },
+    {
+      "Index": 18,
+      "Repeat": 2,
+      "Level": "hard",
+      "Arm": "R",
+      "Position": 3,
+      "RunId": "hard-R-r2"
+    },
+    {
+      "Index": 19,
+      "Repeat": 3,
+      "Level": "easy",
+      "Arm": "B",
+      "Position": 1,
+      "RunId": "easy-B-r3"
+    },
+    {
+      "Index": 20,
+      "Repeat": 3,
+      "Level": "easy",
+      "Arm": "R",
+      "Position": 2,
+      "RunId": "easy-R-r3"
+    },
+    {
+      "Index": 21,
+      "Repeat": 3,
+      "Level": "easy",
+      "Arm": "E",
+      "Position": 3,
+      "RunId": "easy-E-r3"
+    },
+    {
+      "Index": 22,
+      "Repeat": 3,
+      "Level": "medium",
+      "Arm": "R",
+      "Position": 1,
+      "RunId": "medium-R-r3"
+    },
+    {
+      "Index": 23,
+      "Repeat": 3,
+      "Level": "medium",
+      "Arm": "B",
+      "Position": 2,
+      "RunId": "medium-B-r3"
+    },
+    {
+      "Index": 24,
+      "Repeat": 3,
+      "Level": "medium",
+      "Arm": "E",
+      "Position": 3,
+      "RunId": "medium-E-r3"
+    },
+    {
+      "Index": 25,
+      "Repeat": 3,
+      "Level": "hard",
+      "Arm": "B",
+      "Position": 1,
+      "RunId": "hard-B-r3"
+    },
+    {
+      "Index": 26,
+      "Repeat": 3,
+      "Level": "hard",
+      "Arm": "R",
+      "Position": 2,
+      "RunId": "hard-R-r3"
+    },
+    {
+      "Index": 27,
+      "Repeat": 3,
+      "Level": "hard",
+      "Arm": "E",
+      "Position": 3,
+      "RunId": "hard-E-r3"
+    }
+  ],
+  "disabledMcpServers": "all 13 non-builtin MCP servers configured on the host were disabled for every run"
+}
