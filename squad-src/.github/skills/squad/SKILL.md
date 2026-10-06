@@ -47,6 +47,7 @@ The procedure is split across the reference files below so that each agent loads
 | [consumption-rates-template.md](references/consumption-rates-template.md) | Cold seed template for consumption-rates.md: rate tables, tier fallback, calibration |
 | [model-catalog.md](references/model-catalog.md)               | Declared model capability, pricing, and host-availability precedence           |
 | [model-routing.md](references/model-routing.md)               | Opt-in model routing: off, ranked, economy, and manual modes, the team.md Model column, fit ranking, floors, and identity-bullet contract |
+| [economy-mode.md](references/economy-mode.md)                 | Only under `Model routing: economy`: consent, role allowlist, economy pick, one escalation |
 | [federation-templates.md](references/federation-templates.md) | Federation-root seed templates                                                 |
 
 Files at the skill root that are not part of this split — `learnings/shared-learnings.md`, `squad-watch.workflow.yml`, `github-approval-watcher.workflow.yml`, `mcp.template.json`, `mcp-server.template.json`, and `squad-task.issue-template.yml` — keep their existing paths.

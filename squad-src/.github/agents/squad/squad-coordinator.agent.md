@@ -194,7 +194,7 @@ Classification is metadata-only. Never activate a specialist skill to refine the
 
 ### Step 2a: Resolve Model Routing (Opt-In)
 
-When `team.md` records a `Model routing:` line or the turn passes `routing=`, resolve each role's id per `references/model-routing.md` — settling any mode change or missing `manual` pick with the Scribe before dispatch — and pass it only through Step 3's `model` parameter; never rewrite `model:` frontmatter. With the mode `off`, omit it; Steps 2b/3 are unchanged. Under `economy`, after a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that `implementation` owner once on its ranked pick, which the Scribe writes into its `Model` cell first (*Economy Mode*).
+When `team.md` records a `Model routing:` line or the turn passes `routing=`, resolve each role's id per `references/model-routing.md` — settling any mode change or missing `manual` pick with the Scribe before dispatch — and pass it only through Step 3's `model` parameter; never rewrite `model:` frontmatter. With the mode `off`, omit it; Steps 2b/3 are unchanged.
 
 ### Step 2b: Run Cost Preflight
 

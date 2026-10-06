@@ -22,7 +22,7 @@ metadata:
 |-----------|-----------------------------------------------------------------------|----------------------------------------------------------------|
 | `off`     | Nothing — the no-policy default above                                 | No mode line and no `Model` column                             |
 | `ranked`  | The id *Ranking Algorithm* below resolves for the role                 | `Model routing: ranked` and a `Model` column of ranked picks   |
-| `economy` | The id *Economy Mode* below resolves for the role                      | `Model routing: economy` and a `Model` column of economy picks |
+| `economy` | The id [economy-mode.md](economy-mode.md) resolves for the role         | `Model routing: economy` and a `Model` column of economy picks |
 | `manual`  | The id the user picked for the role, from the role's `Model` cell     | `Model routing: manual` and a `Model` column of user picks     |
 
 * **Where the mode lives.** A single line directly beneath `team.md`'s H1: `Model routing: ranked`, `Model routing: economy`, or `Model routing: manual`. No line means `off`, so every roster written before this contract reads as `off` unchanged.
@@ -108,13 +108,7 @@ For a role resolving under `routing=ranked`, or to suggest a pick under `routing
 
 ## Economy Mode
 
-`routing=economy` is `ranked` with one change: `implementation`-class roles are ordered cost first. It is opt-in; `off` stays the default.
-
-* **Pick.** For a role the *Assignment Classes* table maps to `implementation`, build *Ranking Algorithm* step 2's eligible set under the role's own floor, keep the rows at fit 2 or better, and take the lowest **Blended** rate (then higher fit, then newer generation within a family, then row order). With no such row, the role keeps its ranked pick. Every other role, the review class included, and a role whose class is only the fallback guess, keeps its ranked pick, so the review that checks the cheaper work is never weakened.
-* **Floors hold.** The pick never leaves *Consequence Floors*; running a `default`-floor role on a `fast-lightweight` model takes a `team.md` Model Tier edit, never a routing input.
-* **Model cell.** As under `ranked`: the coordinator computes each pick, the Scribe writes it into the `Model` cell, and every dispatch copies the cell.
-* **One escalation.** After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that owner once on its ranked pick, then re-run the review. The coordinator hands the Scribe that id for the role's `Model` cell before the re-dispatch, so dispatch still copies the cell; a costlier id with an active ceiling needs a new Cost Preflight round. When the economy pick already is the ranked pick there is nothing to escalate to. A second failure follows *Review Follow-Through*, and the next turn's re-rank resets the cell.
-* **Helper.** `scripts/Resolve-SquadModelRoute.ps1 -Mode economy` returns each role's pick as `suggested`, the escalation id as `escalation`, and the agent's own pin as `pin`.
+Under `Model routing: economy`, or on the turn `routing=economy` is passed, read [economy-mode.md](economy-mode.md); it holds the whole procedure, and nothing in it applies under any other mode.
 
 ## Consequence Floors
 

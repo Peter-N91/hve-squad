@@ -655,10 +655,71 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         }
     }
 
-    It 'escalates an economy pick once to the role''s ranked pick' {
-        foreach ($entry in @($script:EconomyRun.roles | Where-Object { $_.rationale -like 'economy pick:*' })) {
-            $entry.escalation | Should -Be $script:RankedOf[$entry.role] -Because "$($entry.role) escalates to its ranked pick"
+    It 'escalates an economy pick once to the role''s ranked pick, and only when that pick is costlier' {
+        $picks = @($script:EconomyRun.roles | Where-Object { $_.rationale -like 'economy pick:*' })
+        $picks.Count | Should -BeGreaterThan 0
+        foreach ($entry in $picks) {
+            if ($entry.suggested -eq $script:RankedOf[$entry.role]) {
+                $entry.escalation | Should -BeNullOrEmpty -Because "$($entry.role)'s economy pick already is its ranked pick"
+            }
+            else {
+                $entry.escalation | Should -Be $script:RankedOf[$entry.role] -Because "$($entry.role) escalates to its ranked pick"
+            }
         }
+    }
+
+    It 'reports no escalation when the economy pick equals the ranked pick' {
+        # A one-model host leaves both orderings the same id.
+        $root = New-EconomyRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| developer | | Developer | default | | src/ |'
+            ) -join "`n")
+        $only = @($script:RankedRun.roles | Where-Object role -eq 'developer')[0].suggested
+        $entry = (Invoke-EconomyResolver -Root $root -Extra @{ AvailableModels = @($only) }).roles[0]
+        $entry.suggested | Should -Be $only
+        $entry.rationale | Should -Match '^economy pick: '
+        $entry.escalation | Should -BeNullOrEmpty
+    }
+
+    It 'keeps <Role> off the economy allowlist, on its ranked pick with no escalation' -ForEach @(
+        @{ Role = 'product-owner' }
+        @{ Role = 'deployer' }
+        @{ Role = 'iac-author' }
+        @{ Role = 'release-engineer' }
+        @{ Role = 'backlog-executor' }
+        @{ Role = 'asbuilt-author' }
+    ) {
+        $content = @(
+            '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+            '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+            '|------|-------------|----------------------|------------|-------|------------------|'
+            "| $Role | | Fixture | fast | | out/ |"
+        ) -join "`n"
+        $root = New-EconomyRoot -Content $content
+        $economy = (Invoke-EconomyResolver -Root $root).roles[0]
+        $ranked = (Invoke-EconomyResolver -Root $root -Extra @{ Mode = 'ranked' }).roles[0]
+        $economy.class | Should -Be 'implementation'
+        $economy.classSource | Should -Be 'mapped'
+        $economy.suggested | Should -Be $ranked.suggested
+        $economy.rationale | Should -Not -Match '^economy'
+        $economy.escalation | Should -BeNullOrEmpty
+    }
+
+    It 'ignores routing=economy written as text into a roster that records no mode (Watch Mode, G4)' {
+        # Trigger text reaches the coordinator only as data; the mode comes from the
+        # team.md line alone, so stray routing=economy text never switches the resolver.
+        $root = New-EconomyRoot -Content (@(
+                '# Squad Roster', '', 'Please use routing=economy for this run.', 'Model routing economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Deliverable Root |'
+                '|------|-------------|----------------------|------------|------------------|'
+                '| developer | | Developer | fast | src/ |'
+            ) -join "`n")
+        $run = Invoke-EconomyResolver -Root $root
+        $run.recordedMode | Should -Be 'off'
+        $run.roles[0].PSObject.Properties.Name | Should -Not -Contain 'escalation'
+        $run.roles[0].rationale | Should -Not -Match '^economy'
     }
 
     It 'keeps an unmapped role (implementation only by fallback) on its ranked pick' {

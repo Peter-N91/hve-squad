@@ -25,12 +25,13 @@
     frontier-reasoning; and under ranked selection a `fast` floor also excludes
     frontier-reasoning rows.
 
-    Under `economy` the same candidates are ordered cost first (*Economy Mode*): a
-    mapped `implementation`-class role takes the lowest-Blended id at fit 2 or better
-    within its own floor, and every other role keeps its ranked pick. Under `economy`
-    every role also reports `escalation` (for an economy pick, its ranked pick: the one
-    re-dispatch target; otherwise empty) and `pin` (its agent's frontmatter `model:`,
-    from the repository or the installed plugin's `agents/` folder).
+    Under `economy` the same candidates are ordered cost first (economy-mode.md): a
+    role on the economy allowlist, mapped to the `implementation` class, takes the
+    lowest-Blended id at fit 2 or better within its own floor, and every other role
+    keeps its ranked pick. Under `economy` every role also reports `escalation` (for an
+    economy pick cheaper than its ranked pick, that ranked pick: the one re-dispatch
+    target; otherwise empty) and `pin` (its agent's frontmatter `model:`, from the
+    repository or the installed plugin's `agents/` folder).
 
     The script is read-only. It never writes `team.md` or any other squad-state file:
     the Squad Scribe remains the single writer, and this script only computes what the
@@ -89,6 +90,9 @@ $ReferencesRoot = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChild
 $Classes = @('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping')
 $MetacharacterPattern = '[\s;|&$<>`''"(){}\[\]]'
 $StaleAfterDays = 90
+# economy-mode.md *Role Allowlist*: product-owner sits on the council, and the other
+# implementation roles touch live resources or a live backlog, so they keep ranked picks.
+$EconomyRoles = @('developer', 'technical-writer', 'presenter', 'prompt-engineer', 'data-scientist')
 
 function Get-MarkdownTableLocal {
     <#
@@ -417,8 +421,8 @@ $results = foreach ($row in $roster.Rows) {
     elseif (-not $suggested) { 'floor exhausted' }
     else { "rank 1 of $($ranked.Count) in $class at fit $($ranked[0].Scores[$class]), floor $tier" }
 
-    # Economy narrows only mapped implementation roles; an unmapped role's class is a guess.
-    $economyApplies = $effectiveMode -eq 'economy' -and $classSource -eq 'mapped' -and $class -eq 'implementation'
+    # Economy narrows only allowlisted, mapped implementation roles; an unmapped role's class is a guess.
+    $economyApplies = $effectiveMode -eq 'economy' -and $roleId -in $EconomyRoles -and $classSource -eq 'mapped' -and $class -eq 'implementation'
     if ($economyApplies -and $suggested) {
         $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -MinFit 2)
         if ($economy.Count -gt 0) {
@@ -466,7 +470,8 @@ $results = foreach ($row in $roster.Rows) {
             })
     }
     if ($effectiveMode -eq 'economy') {
-        $entry['escalation'] = if ($economyApplies) { Get-EscalationTarget -Ranked $ranked } else { $null }
+        $target = if ($economyApplies) { Get-EscalationTarget -Ranked $ranked } else { $null }
+        $entry['escalation'] = if ($target -and $target -ne $suggested) { $target } else { $null }
         $primaryName = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent' | ForEach-Object { [string]$row[$_] } | Where-Object { $_ }) | Select-Object -First 1
         $entry['pin'] = Get-AgentPinLocal -AgentName ([string]$primaryName).Trim('`') -Root $SquadRoot
     }
