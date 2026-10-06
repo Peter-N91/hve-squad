@@ -12,17 +12,34 @@ Set-StrictMode -Version Latest
 $script:Root = $PSScriptRoot
 $script:Invariant = [cultureinfo]::InvariantCulture
 $script:Levels = @('easy', 'medium', 'hard')
-$script:ArmRouting = [ordered]@{ B = ''; R = 'ranked'; E = 'economy' }
+# A/B and C/D differ only in source, so each pair is a regression check; E is the economy effect against A.
+$script:ArmTable = [ordered]@{
+    A = @{ Source = 'baseline'; Routing = '' }
+    B = @{ Source = 'candidate'; Routing = '' }
+    C = @{ Source = 'baseline'; Routing = 'ranked' }
+    D = @{ Source = 'candidate'; Routing = 'ranked' }
+    E = @{ Source = 'candidate'; Routing = 'economy' }
+}
+$script:ArmNames = @($script:ArmTable.Keys)
+$script:PassingVerdicts = @('Pass', 'Pass-With-Findings')
 $script:OwnerExcluded = @('Squad Reviewer', 'Squad Scribe')
 # Paths a run writes for the squad itself; they reveal the arm and are not the deliverable.
 $script:TrackingPathspec = @(':(exclude).copilot-tracking', ':(exclude).github', ':(exclude).agents', ':(exclude)**/__pycache__', ':(exclude)*.pyc')
 
 function Get-LiveBenchmarkLevel { $script:Levels }
 
+function Get-BenchmarkArm { $script:ArmNames }
+
 function Get-ArmRouting {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][ValidateSet('B', 'R', 'E')][string]$Arm)
-    $script:ArmRouting[$Arm]
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E')][string]$Arm)
+    $script:ArmTable[$Arm].Routing
+}
+
+function Get-ArmSource {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E')][string]$Arm)
+    $script:ArmTable[$Arm].Source
 }
 
 function Get-NonBuiltinMcpServerNames {
@@ -76,7 +93,7 @@ function Get-ArmPrompt {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][ValidateSet('easy', 'medium', 'hard')][string]$Level,
-        [Parameter(Mandatory)][ValidateSet('B', 'R', 'E')][string]$Arm
+        [Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E')][string]$Arm
     )
     $prompt = (Get-BenchmarkTask -Level $Level).Prompt
     $routing = Get-ArmRouting -Arm $Arm
@@ -97,7 +114,7 @@ function Get-BenchmarkSchedule {
     [CmdletBinding()]
     param(
         [string[]]$Levels = $script:Levels,
-        [string[]]$Arms = @('B', 'R', 'E'),
+        [string[]]$Arms = $script:ArmNames,
         [int]$Repeats = 3,
         [int]$Seed = 137
     )
@@ -537,8 +554,9 @@ function Measure-LiveBenchmarkRun {
     $referenceHidden = Invoke-Pytest -Directory (New-GradeDirectory -Path (Join-Path $grade 'hidden-reference') -LedgerFrom $task.Reference -HiddenFrom $task.Hidden)
     $mutantDir = New-GradeDirectory -Path (Join-Path $grade 'owner-on-reference') -LedgerFrom $task.Reference -TestsFrom (Join-Path $workspace 'tests')
     $onReference = Invoke-Pytest -Directory $mutantDir
-    $killed = 0
-    if ($onReference.Clean) { foreach ($mutant in $task.Mutants) { if (-not (Invoke-Pytest -Directory $mutantDir -Mutant $mutant).Clean) { $killed++ } } }
+    # Mutants only mean something against tests that pass on the reference; otherwise they are not scored.
+    $killed = 'skipped'
+    if ($onReference.Clean) { $killed = 0; foreach ($mutant in $task.Mutants) { if (-not (Invoke-Pytest -Directory $mutantDir -Mutant $mutant).Clean) { $killed++ } } }
     $own = Invoke-Pytest -Directory $workspace
     $doc = Measure-DocCheck -Workspace $workspace -Task $task
 
@@ -553,6 +571,8 @@ function Measure-LiveBenchmarkRun {
 
     $diff = Get-DeliverableDiff -Workspace $workspace -BaselineCommit $meta.baselineCommit
     Set-Content -LiteralPath (Join-Path $out 'deliverable.diff') -Value $diff -Encoding utf8NoBOM
+    $verdict = Get-ReviewVerdict -Workspace $workspace
+    $hiddenAllPass = ($hidden.Clean -and $hidden.Passed -eq $referenceHidden.Passed)
 
     $row = [pscustomobject][ordered]@{
         runId             = $meta.runId
@@ -589,18 +609,21 @@ function Measure-LiveBenchmarkRun {
         modelMatch        = if ($withCells.Count) { "$(@($withCells | Where-Object match -EQ 'yes').Count)/$($withCells.Count)" } else { 'n/a' }
         hiddenPassed      = $hidden.Passed
         hiddenTotal       = $referenceHidden.Passed
-        hiddenAllPass     = ($hidden.Clean -and $hidden.Passed -eq $referenceHidden.Passed)
+        hiddenAllPass     = $hiddenAllPass
+        # A hidden-test pass the squad's own reviewer failed is not a completed run.
+        completed         = ($hiddenAllPass -and $verdict -in $script:PassingVerdicts)
         ownTestsPass      = $own.Clean
         testsOnReference  = $onReference.Clean
         mutantsKilled     = $killed
         mutantsTotal      = $task.Mutants.Count
         docCheck          = $doc.Check
         docConcepts       = $doc.Concepts
-        reviewVerdict     = Get-ReviewVerdict -Workspace $workspace
+        reviewVerdict     = $verdict
         ledgerCheck       = Get-LedgerCheck -Workspace $workspace
         model             = $meta.requestedModel
         cliVersion        = ([string]$meta.cliVersion -split '\r?\n')[0].Trim()
         srcTreeHash       = $meta.srcTreeHash
+        installed         = [bool]($meta.PSObject.Properties['installed'] -and $meta.installed)
         agentsJson        = ConvertTo-Json -InputObject $assignment -Compress -Depth 4
     }
     $row | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $out 'score.json') -Encoding utf8NoBOM
@@ -633,8 +656,8 @@ function Protect-DeliverableText {
     $Text = [regex]::Replace($Text, '(?im)^([+\- ]?)Model routing:.*$', '$1Model routing: <redacted>')
     $Text = [regex]::Replace($Text, '(?i)\b(claude|gpt|gemini|grok|o\d)-[\w.\-]+', '<model>')
     $Text = [regex]::Replace($Text, '(?i)[a-z]:\\[^\s''"`)]+', '<path>')
-    $Text = [regex]::Replace($Text, '(?i)\b(arm|variant)[ _-]?[BRE]\b', '<arm>')
-    $Text = [regex]::Replace($Text, '(?i)\b(easy|medium|hard)-[BRE]-r\d+\b', '<run>')
+    $Text = [regex]::Replace($Text, '(?i)\b(arm|variant)[ _-]?[A-E]\b', '<arm>')
+    $Text = [regex]::Replace($Text, '(?i)\b(easy|medium|hard)-[A-E]-r\d+\b', '<run>')
     $Text
 }
 
@@ -725,8 +748,34 @@ function Get-Median {
     if ($sorted.Count % 2) { $sorted[$mid] } else { ($sorted[$mid - 1] + $sorted[$mid]) / 2 }
 }
 
-Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-ArmRouting, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
+function Get-BootstrapMedianInterval {
+    <#
+    .SYNOPSIS
+        Percentile bootstrap interval for a median, seeded so a report is reproducible.
+    .OUTPUTS
+        An object with Low and High, or $null for fewer than two values.
+    #>
+    [CmdletBinding()]
+    param([double[]]$Values, [int]$Resamples = 2000, [double]$Level = 0.95, [int]$Seed = 137)
+    $data = @($Values | Where-Object { $null -ne $_ })
+    if ($data.Count -lt 2) { return $null }
+    $rng = [System.Random]::new($Seed)
+    $medians = [double[]]::new($Resamples)
+    $sample = [double[]]::new($data.Count)
+    for ($r = 0; $r -lt $Resamples; $r++) {
+        for ($i = 0; $i -lt $data.Count; $i++) { $sample[$i] = $data[$rng.Next($data.Count)] }
+        $medians[$r] = Get-Median $sample
+    }
+    [array]::Sort($medians)
+    $tail = (1 - $Level) / 2
+    [pscustomobject]@{
+        Low  = $medians[[int][math]::Floor($tail * ($Resamples - 1))]
+        High = $medians[[int][math]::Ceiling((1 - $tail) * ($Resamples - 1))]
+    }
+}
+
+Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-ArmRouting, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
 New-InventoryFixture, Invoke-Pytest, Test-BenchmarkTask, Measure-DocCheck, Get-ReviewVerdict, Get-LedgerCheck,
 Get-UsageSummary, Get-EventSummary, Get-TeamRouting, Get-ModelAssignment, Get-DeliverableDiff, Measure-LiveBenchmarkRun,
-Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Get-Median,
+Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Get-Median, Get-BootstrapMedianInterval,
 Format-Number, ConvertFrom-InvariantNumber, Get-NonBuiltinMcpServerNames, Get-ConfiguredMcpServerNames, ConvertFrom-McpServerArgument

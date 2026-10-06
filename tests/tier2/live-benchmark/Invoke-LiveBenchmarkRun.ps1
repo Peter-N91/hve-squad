@@ -34,14 +34,15 @@
 param(
     [Parameter(Mandatory)][string]$Src,
     [Parameter(Mandatory)][ValidateSet('easy', 'medium', 'hard')][string]$Level,
-    [Parameter(Mandatory)][ValidateSet('B', 'R', 'E')][string]$Arm,
+    [Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E')][string]$Arm,
     [Parameter(Mandatory)][string]$TrialRoot,
     [string]$RunId = "$Level-$Arm",
     [int]$Repeat = 1,
     [int]$Position = 1,
     [string]$Model = 'claude-sonnet-5',
     [string]$CliPath = (Join-Path $env:APPDATA 'npm/copilot.ps1'),
-    [AllowEmptyString()][string]$DisabledMcpServers = ''
+    [AllowEmptyString()][string]$DisabledMcpServers = '',
+    [AllowEmptyString()][string]$InstallRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -66,7 +67,10 @@ $workspace = Join-Path $TrialRoot 'workspace'
 $out = Join-Path $TrialRoot 'out'
 New-Item -ItemType Directory -Path $out -Force | Out-Null
 $fixture = New-InventoryFixture -Destination $workspace
-Copy-SquadSource -From $Src -To $workspace
+if ($InstallRoot) {
+    foreach ($dir in '.github', '.agents') { Copy-Item -LiteralPath (Join-Path $InstallRoot $dir) -Destination $workspace -Recurse -Force }
+}
+else { Copy-SquadSource -From $Src -To $workspace }
 
 $prompt = Get-ArmPrompt -Level $Level -Arm $Arm
 $deny = @('shell(git push)', 'shell(git remote)', 'shell(git clean)', 'shell(git reset)', 'shell(gh)',
@@ -103,6 +107,7 @@ $srcDirty = [bool](& git -C $Src status --porcelain -- . 2>$null)
     baselineCommit  = $fixture.Commit
     deniedTools     = $deny
     disabledMcpServers = $disabledServers
+    installed       = [bool]$InstallRoot
     caveats         = @('Source overlay, not a full APM install; no hve-core.', 'Runtime credits are not reconciled billing.')
 } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'metadata.json') -Encoding utf8NoBOM
 

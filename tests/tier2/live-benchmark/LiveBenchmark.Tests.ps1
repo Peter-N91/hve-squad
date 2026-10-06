@@ -10,7 +10,7 @@ BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'LiveBenchmark.psm1') -Force
 
     function New-SyntheticRun {
-        param([string]$Root, [switch]$Delivered)
+        param([string]$Root, [switch]$Delivered, [string]$Verdict = 'Pass-With-Findings', [string]$OwnTests)
         $workspace = Join-Path $Root 'workspace'
         $out = Join-Path $Root 'out'
         $fixture = New-InventoryFixture -Destination $workspace
@@ -36,10 +36,11 @@ def test_reserve_rejects_more_than_remaining():
     with pytest.raises(OutOfStock):
         ledger.reserve("o2", "a", 2)
 '@
+            if ($OwnTests) { Set-Content -LiteralPath (Join-Path $workspace 'tests/test_ledger.py') -Encoding utf8NoBOM -Value $OwnTests }
             New-Item -ItemType Directory -Path (Join-Path $workspace 'docs') -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $workspace 'docs/CONCURRENCY.md') -Value '# Concurrency`n`nTwo callers interleave and race; a lock fixes it at the cost of contention.' -Encoding utf8NoBOM
             New-Item -ItemType Directory -Path (Join-Path $workspace '.copilot-tracking/reviews') -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path $workspace '.copilot-tracking/reviews/r.md') -Value "# Review`n`n**Verdict:** Pass-With-Findings`n`nOne nit; no failures." -Encoding utf8NoBOM
+            Set-Content -LiteralPath (Join-Path $workspace '.copilot-tracking/reviews/r.md') -Value "# Review`n`n**Verdict:** $Verdict`n`nOne nit; no failures." -Encoding utf8NoBOM
             Set-Content -LiteralPath (Join-Path $workspace '.copilot-tracking/squad/team.md') -Encoding utf8NoBOM -Value @'
 # Squad Team
 
@@ -112,24 +113,49 @@ Describe 'Fixture and schedule' {
         $LASTEXITCODE | Should -Be 0
     }
 
-    It 'gives every arm the same prompt apart from the routing token' {
-        foreach ($level in Get-LiveBenchmarkLevel) {
-            $b = Get-ArmPrompt -Level $level -Arm B
-            $b | Should -Not -Match 'routing='
-            $b | Should -Not -Match 'README' -Because 'a referenced input file fires the intake gate, whose role the fixture roster lacks'
-            Get-ArmPrompt -Level $level -Arm R | Should -BeExactly "$b routing=ranked"
-            Get-ArmPrompt -Level $level -Arm E | Should -BeExactly "$b routing=economy"
+    It 'keeps every fixture and task file free of double-encoded UTF-8, so roster cells parse as written' {
+        $files = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'fixtures'), (Join-Path $PSScriptRoot 'tasks') -Recurse -File
+        foreach ($file in $files) {
+            [IO.File]::ReadAllText($file.FullName) | Should -Not -Match '[\u00C3\u00C2\u00D4][\u0080-\u00FF]' -Because "$($file.Name) must hold real characters, not a codepage round trip"
         }
     }
 
+    It 'gives every arm the same prompt apart from the routing token' {
+        foreach ($level in Get-LiveBenchmarkLevel) {
+            $a = Get-ArmPrompt -Level $level -Arm A
+            $a | Should -Not -Match 'routing='
+            $a | Should -Not -Match 'README' -Because 'a referenced input file fires the intake gate, whose role the fixture roster lacks'
+            Get-ArmPrompt -Level $level -Arm B | Should -BeExactly $a
+            Get-ArmPrompt -Level $level -Arm C | Should -BeExactly "$a routing=ranked"
+            Get-ArmPrompt -Level $level -Arm D | Should -BeExactly "$a routing=ranked"
+            Get-ArmPrompt -Level $level -Arm E | Should -BeExactly "$a routing=economy"
+        }
+    }
+
+    It 'pairs arms so each comparison changes exactly one factor' {
+        @('A', 'C') | ForEach-Object { Get-ArmSource -Arm $_ } | Should -Be @('baseline', 'baseline')
+        @('B', 'D', 'E') | ForEach-Object { Get-ArmSource -Arm $_ } | Should -Be @('candidate', 'candidate', 'candidate')
+        (Get-ArmRouting -Arm A) | Should -Be (Get-ArmRouting -Arm B)
+        (Get-ArmRouting -Arm C) | Should -Be (Get-ArmRouting -Arm D)
+    }
+
     It 'schedules every arm once per repeat and level, in every position once per level, deterministically for a seed' {
-        $a = @(Get-BenchmarkSchedule -Repeats 3 -Seed 137)
-        $a.Count | Should -Be 27
-        foreach ($group in $a | Group-Object Repeat, Level) { ($group.Group.Arm | Sort-Object) -join '' | Should -Be 'BER' }
-        foreach ($group in $a | Group-Object Level, Arm) { ($group.Group.Position | Sort-Object) -join '' | Should -Be '123' }
-        (@(Get-BenchmarkSchedule -Repeats 3 -Seed 137).RunId -join ',') | Should -Be ($a.RunId -join ',')
-        (@(Get-BenchmarkSchedule -Repeats 3 -Seed 138).RunId -join ',') | Should -Not -Be ($a.RunId -join ',')
-        @($a.RunId | Sort-Object -Unique).Count | Should -Be 27
+        $a = @(Get-BenchmarkSchedule -Repeats 5 -Seed 137)
+        $a.Count | Should -Be 75
+        foreach ($group in $a | Group-Object Repeat, Level) { ($group.Group.Arm | Sort-Object) -join '' | Should -Be 'ABCDE' }
+        foreach ($group in $a | Group-Object Level, Arm) { ($group.Group.Position | Sort-Object) -join '' | Should -Be '12345' }
+        (@(Get-BenchmarkSchedule -Repeats 5 -Seed 137).RunId -join ',') | Should -Be ($a.RunId -join ',')
+        (@(Get-BenchmarkSchedule -Repeats 5 -Seed 138).RunId -join ',') | Should -Not -Be ($a.RunId -join ',')
+        @($a.RunId | Sort-Object -Unique).Count | Should -Be 75
+    }
+
+    It 'gives a reproducible bootstrap interval that brackets the median' {
+        $values = [double[]](1..9)
+        $ci = Get-BootstrapMedianInterval -Values $values
+        $ci.Low | Should -BeLessOrEqual 5
+        $ci.High | Should -BeGreaterOrEqual 5
+        (Get-BootstrapMedianInterval -Values $values | ConvertTo-Json) | Should -Be ($ci | ConvertTo-Json)
+        Get-BootstrapMedianInterval -Values @(4.0) | Should -BeNullOrEmpty
     }
 }
 
@@ -159,6 +185,28 @@ Describe 'Scorer on synthetic workspaces' {
     BeforeAll {
         $good = Measure-LiveBenchmarkRun -TrialRoot (New-SyntheticRun -Root (Join-Path $TestDrive 'good') -Delivered)
         $bad = Measure-LiveBenchmarkRun -TrialRoot (New-SyntheticRun -Root (Join-Path $TestDrive 'bad'))
+        $failed = Measure-LiveBenchmarkRun -TrialRoot (New-SyntheticRun -Root (Join-Path $TestDrive 'failed') -Delivered -Verdict 'Fail')
+        $coupled = Measure-LiveBenchmarkRun -TrialRoot (New-SyntheticRun -Root (Join-Path $TestDrive 'coupled') -Delivered -OwnTests @'
+from src.ledger import Ledger
+
+
+def test_reads_private_state():
+    ledger = Ledger({"a": 2})
+    assert ledger._private_counter == 0
+'@)
+    }
+
+    It 'counts a run as completed only when hidden tests pass and the review passes' {
+        $good.completed | Should -BeTrue
+        $bad.completed | Should -BeFalse
+        $failed.hiddenAllPass | Should -BeTrue
+        $failed.reviewVerdict | Should -Be 'Fail'
+        $failed.completed | Should -BeFalse
+    }
+
+    It 'reports mutants as skipped, not zero, when the own tests fail on the reference' {
+        $coupled.testsOnReference | Should -BeFalse
+        $coupled.mutantsKilled | Should -Be 'skipped'
     }
 
     It 'reads credits and tokens with invariant formatting' {
@@ -208,7 +256,7 @@ Describe 'Scorer on synthetic workspaces' {
     It 'grades an untouched baseline as failing' {
         $bad.hiddenAllPass | Should -BeFalse
         $bad.hiddenPassed | Should -BeLessThan $bad.hiddenTotal
-        $bad.mutantsKilled | Should -Be 0
+        $bad.mutantsKilled | Should -BeIn @(0, 'skipped')
         $bad.docCheck | Should -Be 'missing'
         $bad.reviewVerdict | Should -Be 'none'
     }
@@ -246,7 +294,7 @@ Describe 'Review verdict parsing' {
 Describe 'Blind judge anonymisation' {
     BeforeAll {
         $runs = foreach ($i in 1..4) {
-            $arm = @('B', 'R', 'E', 'B')[$i - 1]
+            $arm = @('A', 'D', 'E', 'A')[$i - 1]
             $id = "medium-$arm-r$i"
             $trial = "C:\Users\someone\AppData\Local\Temp\hve-live-benchmark\runs\$id"
             $path = Join-Path $TestDrive "$id.diff"
@@ -263,7 +311,7 @@ Describe 'Blind judge anonymisation' {
         $files.Count | Should -Be 4
         foreach ($file in $files) {
             $text = Get-Content -LiteralPath $file.FullName -Raw
-            $text | Should -Not -Match 'claude-sonnet-5|routing=economy|Model routing: ranked|medium-[BRE]-r\d|hve-live-benchmark|AppData|arm [BRE]\b'
+            $text | Should -Not -Match 'claude-sonnet-5|routing=economy|Model routing: ranked|medium-[A-E]-r\d|hve-live-benchmark|AppData|arm [A-E]\b'
             $text | Should -Match 'marker-\d'
         }
     }
@@ -306,10 +354,12 @@ Describe 'Report generation' {
     BeforeAll {
         $rows = foreach ($level in 'easy', 'hard') {
             foreach ($repeat in 1..3) {
-                foreach ($arm in 'B', 'R', 'E') {
-                    $seconds = @{ B = 300; R = 250; E = 200 }[$arm] + $repeat
-                    $credits = @{ B = 80; R = 70; E = 60 }[$arm] + $repeat / 10
-                    $cell = if ($arm -eq 'B') { '' } else { 'gpt-5.4-mini' }
+                foreach ($arm in 'A', 'B', 'C', 'D', 'E') {
+                    $seconds = @{ A = 300; B = 300; C = 280; D = 250; E = 200 }[$arm] + $repeat
+                    $credits = @{ A = 80; B = 80; C = 75; D = 70; E = 60 }[$arm] + $repeat / 10
+                    $cell = if ($arm -in 'A', 'B') { '' } else { 'gpt-5.4-mini' }
+                    $verdict = if ($level -eq 'hard' -and $arm -eq 'E' -and $repeat -eq 3) { 'Fail' } else { 'Pass' }
+                    $skipped = $level -eq 'easy' -and $arm -eq 'D' -and $repeat -eq 1
                     $agents = @(
                         [ordered]@{ role = 'coordinator'; agent = 'coordinator'; modelsUsed = 'claude-sonnet-5'; modelCell = ''; passedModel = ''; match = 'n/a'; credits = 50 }
                         [ordered]@{ role = 'developer'; agent = 'Squad Implementor'; modelsUsed = 'gpt-5.4-mini'; modelCell = $cell; passedModel = 'gpt-5.4-mini'; match = $(if ($cell) { 'yes' } else { 'n/a' }); credits = 6 }
@@ -317,10 +367,10 @@ Describe 'Report generation' {
                     [pscustomobject][ordered]@{
                         runId = "$level-$arm-r$repeat"; level = $level; arm = $arm; repeat = $repeat; seconds = $seconds; outcome = 'dispatched'; credits = Format-Number $credits
                         coordCr = '50.5'; ownerCr = '6'; inputTokens = 1000000; outputTokens = 20000; cacheReadTokens = 900000
-                        hiddenPassed = 11; hiddenTotal = 11; hiddenAllPass = 'True'; ownTestsPass = 'True'; testsOnReference = 'True'
-                        mutantsKilled = 2; mutantsTotal = 2; docCheck = $(if ($level -eq 'easy') { 'n/a' } else { 'pass' }); reviewVerdict = 'Pass'; ledgerCheck = 'PASS'
+                        hiddenPassed = 11; hiddenTotal = 11; hiddenAllPass = 'True'; completed = $(if ($verdict -eq 'Pass') { 'True' } else { 'False' }); ownTestsPass = 'True'; testsOnReference = $(if ($skipped) { 'False' } else { 'True' })
+                        mutantsKilled = $(if ($skipped) { 'skipped' } else { 2 }); mutantsTotal = 2; docCheck = $(if ($level -eq 'easy') { 'n/a' } else { 'pass' }); reviewVerdict = $verdict; ledgerCheck = 'PASS'
                         dispatches = 3; scribeDispatches = 1; genericDispatches = 0; briefRan = 'True'; coordScriptRuns = 0; handoffSeconds = 40
-                        routingMode = $(@{ B = 'off'; R = 'ranked'; E = 'economy' }[$arm]); modelMatch = $(if ($cell) { '1/1' } else { 'n/a' })
+                        routingMode = $(@{ A = 'off'; B = 'off'; C = 'ranked'; D = 'ranked'; E = 'economy' }[$arm]); modelMatch = $(if ($cell) { '1/1' } else { 'n/a' })
                         model = 'claude-sonnet-5'; cliVersion = '1.0.92-3'; srcTreeHash = "HASH$arm"; agentsJson = (ConvertTo-Json -InputObject $agents -Compress)
                         judgeCorrectness = '8'; judgeTests = '7'; judgeDesign = '8'; judgeDocs = ''; judgeMean = '7.67'
                     }
@@ -335,19 +385,28 @@ Describe 'Report generation' {
     }
 
     It 'reports per level and arm medians with ranges' {
-        $report | Should -Match '\| easy \| B \| 3 \| 302 \[301, 303\] \| 80\.2 \[80\.1, 80\.3\] \|'
+        $report | Should -Match '\| easy \| A \| 3 \| 302 \[301, 303\] \| 80\.2 \[80\.1, 80\.3\] \|'
         $report | Should -Match '\| hard \| E \| 3 \| 202 \[201, 203\] \| 60\.2 \[60\.1, 60\.3\] \|'
     }
 
-    It 'reports paired differences against B per repeat and their medians' {
-        $report | Should -Match '\| easy \| 1 \| R \| -50 \| -10 \|'
-        $report | Should -Match '\| hard \| E \| 3 \| -100 \| 3/3 \| -20 \| 3/3 \|'
+    It 'reports all-run and completed medians side by side, counting a failed review as not completed' {
+        $report | Should -Match '## Summary by Arm'
+        $report | Should -Match '\| A \| 6 \| 6 \| 80\.2 \('
+        $report | Should -Match '\| E \| 6 \| 5 \| '
+    }
+
+    It 'reports paired differences against each arm''s control per repeat and their medians' {
+        $report | Should -Match '\| easy \| 1 \| E \| A \| -100 \| -20 \|'
+        $report | Should -Match '\| easy \| 1 \| D \| C \| -30 \| -5 \|'
+        $report | Should -Match '\| hard \| E \| A \| 3 \| -100 \| 3/3 \| -20 \| 3/3 \|'
+        $report | Should -Not -Match '\| C \| A \|'
     }
 
     It 'reports quality, judge scores, and model assignment per role' {
-        $report | Should -Match '\| easy \| R \| dispatched x3 \| 33/33 \| 3/3 \| 3/3 \| 3/3 \| 6/6 \| n/a \| Pass x3 \| PASS x3 \| 7\.7 \[7\.7, 7\.7\] \|'
+        $report | Should -Match '\| easy \| D \| dispatched x3 \| 3/3 \| 33/33 \| 3/3 \| 3/3 \| 2/3 \| 4/4 \(1 skipped\) \| n/a \| Pass x3 \| PASS x3 \| 7\.7 \[7\.7, 7\.7\] \|'
+        $report | Should -Match '\| hard \| E \| dispatched x3 \| 2/3 \| 33/33 \| 3/3 \|'
         $report | Should -Match '\| hard \| E \| developer \| Squad Implementor \| 3 \| gpt-5\.4-mini x3 \| gpt-5\.4-mini x3 \| gpt-5\.4-mini x3 \| yes x3 \|'
-        $report | Should -Match '\| easy \| B \| off x3 \| n/a x3 \| 3 \[3, 3\] \| 1 \[1, 1\] \| 0 \| 3/3 \| 0 \[0, 0\] \| 40 \[40, 40\] \|'
+        $report | Should -Match '\| easy \| A \| off x3 \| n/a x3 \| 3 \[3, 3\] \| 1 \[1, 1\] \| 0 \| 3/3 \| 0 \[0, 0\] \| 40 \[40, 40\] \|'
     }
 
     It 'states limitations and claims no significance test' {
