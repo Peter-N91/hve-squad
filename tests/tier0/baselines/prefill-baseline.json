@@ -1112,7 +1112,7 @@
       "4. Never choose an SDK, exporter, or vendor for the implementing team. Name the data and its shape; leave the wiring to them.": 1,
       "5. Never reproduce a real secret, token, connection string, or personal-data value read from the codebase, even as an illustrative example.": 1,
       "2. Never execute a load, stress, soak, or spike test, and never provision an environment to run one. Produce the matrix and hand it over.": 1,
-      "* Never silently broaden scope. An analyse request produces a report, not an edit.": 1,
+      "* Never silently broaden scope. A review-only request produces a report, not an edit.": 1,
       "* Never plan and never implement. Research is a separate dispatch from both.": 1,
       "Never dispatch `RPI Researcher` with a generic research prompt. A lane missing its contract does not degrade into a smaller research task; it returns blocked and the stage produces nothing.": 1,
       "When a lane returns `Blocked` or `Needs clarification`, either re-dispatch it with the corrected contract or record the gap. Never fill a blocked lane with the charter's own reasoning.": 1,
