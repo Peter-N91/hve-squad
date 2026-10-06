@@ -48,6 +48,8 @@ The `intake-validator` role reuses existing HVE Core agents by input type via th
 
 When the resolved validator agent is absent from the active roster or not installed, the coordinator escalates rather than dispatching a partial gate or substituting its own reasoning — an intake verdict assembled without a dispatched validator is invalid and must not clear the squad.
 
+When the user cannot be asked (outside Watch Mode), that escalation is recorded as an open escalation with a decision note and the turn continues without a verdict; it never halts the turn.
+
 ## Dispatch Contract
 
 1. The coordinator dispatches the `intake-validator` against the scoped inputs (the requirement/input artifacts under review), passing the artifacts and the intended downstream work as context.

@@ -33,7 +33,7 @@ BeforeAll {
 
 Describe 'Coordinator tool boundary and budget fail-closed (RTE-42, RTE-43)' {
     It 'the coordinator tools list is exactly the reviewed set, so any change is deliberate' {
-        $expected = @('read', 'search', 'view', 'glob', 'grep', 'agent', 'task', 'skill', 'execute', 'powershell', 'bash')
+        $expected = @('read', 'search', 'view', 'glob', 'grep', 'agent', 'task', 'skill', 'execute', 'powershell', 'bash', 'read_agent')
         $script:CoordinatorTools.Count | Should -Be $expected.Count
         @($script:CoordinatorTools | Sort-Object) | Should -Be @($expected | Sort-Object)
     }
@@ -49,8 +49,10 @@ Describe 'Coordinator tool boundary and budget fail-closed (RTE-42, RTE-43)' {
         }
     }
 
-    It 'the coordinator lists no question tool and its charter calls none' {
-        foreach ($tool in 'ask_user', 'vscode/askQuestions', 'read_agent') {
+    It 'the coordinator holds read_agent for the owner-finish barrier and lists no question tool' {
+        $script:CoordinatorTools | Should -Contain 'read_agent'
+        $script:Coordinator.Body | Should -Match 'read_agent.*wait: true'
+        foreach ($tool in 'ask_user', 'vscode/askQuestions') {
             $script:CoordinatorTools | Should -Not -Contain $tool
         }
         $script:Coordinator.Body | Should -Not -Match '(?i)ask_user|askQuestions'

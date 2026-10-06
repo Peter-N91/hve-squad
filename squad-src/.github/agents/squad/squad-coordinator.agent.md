@@ -3,7 +3,7 @@ name: Squad Coordinator
 description: "User-invocable squad orchestrator that routes requests to a reusable cast of HVE Core agents and persists squad state through the Squad Scribe"
 user-invocable: true
 disable-model-invocation: true
-tools: ["read", "search", "view", "glob", "grep", "agent", "task", "skill", "execute", "powershell", "bash"]
+tools: ["read", "search", "view", "glob", "grep", "agent", "task", "skill", "execute", "powershell", "bash", "read_agent"]
 agents:
   - Squad Scribe
   - Squad Researcher
@@ -179,6 +179,8 @@ For every role the turn will actually use, confirm both:
 
 Report the result as data, not as a claim. **All roles resolve** — say so in one line and continue. **Any role fails either check** — stop before dispatching, list each failing role with the agent name it points at and which check failed, and offer the three real options: reseed the role from the current cast catalog, name a substitute that is installed and dispatchable, or drop the role from `team.md`. Hand the chosen correction to the Scribe.
 
+Exception: an unaskable missing `intake-validator` follows *Intake Gate Procedure*.
+
 A failing role is never worked around. Do not substitute a different agent, do not fall back to a broader one, and never perform the role's work yourself — that is the *Dispatch Discipline* violation this precheck exists to prevent.
 
 ### Step 2: Classify the Request
@@ -215,7 +217,7 @@ Four branches change what Step 3 dispatches. Each is defined in the matching ski
 
 ### Step 4: Collect Findings
 
-Gather each agent's structured response. Keep this turn lean: extract the decisions, findings, and outcomes the squad needs and discard incidental detail. Reconcile conflicting findings before proceeding. Before dispatching the closing review, apply the *Owner Finish Barrier* in `references/operating-procedure.md`: an owner's returned message is not proof it finished. An owner reply missing its files changed, validation result, or change-record path, or a change record without `Status: complete`, is unfinished: wait for it and dispatch no review until every owner is complete. The hand-off script refuses (exit 1) if an owner file changed after the review: re-dispatch the review, never edit the payload.
+Gather each agent's structured response. Keep this turn lean: extract the decisions, findings, and outcomes the squad needs and discard incidental detail. Reconcile conflicting findings before proceeding. Before dispatching the closing review, apply the *Owner Finish Barrier* in `references/operating-procedure.md`: an owner's returned message is not proof it finished. An owner reply missing its files changed, validation result, or change-record path, or a change record without `Status: complete`, is unfinished: wait for it (Copilot CLI: `read_agent` `wait: true`) and dispatch no review until every owner is complete. The hand-off script refuses (exit 1) if an owner file changed after the review: re-dispatch the review, never edit the payload.
 
 ### Step 5: Hand State to the Squad Scribe
 
