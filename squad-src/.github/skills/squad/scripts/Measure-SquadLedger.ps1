@@ -1654,6 +1654,19 @@ function Get-BlendedRateLocal {
     return 0.20 * $r.input + 0.80 * $r.cached + 0.08 * $r.cache_write + 0.02 * $r.output
 }
 
+function Get-PropertySumLocal {
+    <#
+    .SYNOPSIS
+        Sums one numeric property over a collection, 0 when it is empty. Under
+        Set-StrictMode, `(@() | Measure-Object X -Sum).Sum` throws instead of
+        returning $null, so every observed-usage total goes through here.
+    #>
+    param([AllowNull()][AllowEmptyCollection()][object[]]$InputObject, [Parameter(Mandatory)][string]$Property)
+    $total = 0.0
+    foreach ($item in @($InputObject)) { if ($null -ne $item -and $null -ne $item.$Property) { $total += [double]$item.$Property } }
+    $total
+}
+
 function Get-ObservedUsageLocal {
     <#
     .SYNOPSIS
@@ -1709,23 +1722,22 @@ function Get-ObservedUsageLocal {
                 ObservedModels = $observedModels
                 LedgerModels   = $ledgerModels
                 Match          = $match
-                Tokens         = ($group.Group | Measure-Object Tokens -Sum).Sum
+                Tokens         = Get-PropertySumLocal -InputObject $group.Group -Property Tokens
                 Estimated      = if ($estimatedByAgent.ContainsKey($group.Name)) { $estimatedByAgent[$group.Name] } else { 0.0 }
-                Minutes        = ($group.Group | Measure-Object DurationMs -Sum).Sum / 60000.0
+                Minutes        = (Get-PropertySumLocal -InputObject $group.Group -Property DurationMs) / 60000.0
                 CostUsd        = $cost
             })
     }
     foreach ($m in $unpriced) { $Warnings.Add("WARN: observed model '$m' has no rate row in consumption-rates.md; its tokens are left out of the blended cost.") }
 
     $roleRows = @($rows | Where-Object { -not $_.IsScribe })
-    $roleTokens = ($roleRows | Measure-Object Tokens -Sum).Sum
-    if ($null -eq $roleTokens) { $roleTokens = 0.0 }
+    $roleTokens = Get-PropertySumLocal -InputObject $roleRows -Property Tokens
 
     $baseline = $BaselineModel
     if (-not $baseline) {
         $baseline = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique |
                 Sort-Object { $rate = Get-BlendedRateLocal -Model $_ -Rates $Rates; if ($null -eq $rate) { -1 } else { $rate } } -Descending |
-                Select-Object -First 1)[0]
+                Select-Object -First 1) | Select-Object -First 1
     }
     $baselineRate = if ($baseline) { Get-BlendedRateLocal -Model $baseline -Rates $Rates } else { $null }
     if ($baseline -and $null -eq $baselineRate) { $Warnings.Add("WARN: baseline model '$baseline' has no rate row; the without-HVE-Squad comparison is omitted.") }
@@ -1733,9 +1745,9 @@ function Get-ObservedUsageLocal {
     [pscustomobject]@{
         Session          = $Session
         Rows             = $rows
-        ObservedTokens   = ($rows | Measure-Object Tokens -Sum).Sum
-        EstimatedTokens  = ($rows | Measure-Object Estimated -Sum).Sum
-        SquadCostUsd     = ($rows | Measure-Object CostUsd -Sum).Sum
+        ObservedTokens   = Get-PropertySumLocal -InputObject $rows -Property Tokens
+        EstimatedTokens  = Get-PropertySumLocal -InputObject $rows -Property Estimated
+        SquadCostUsd     = Get-PropertySumLocal -InputObject $rows -Property CostUsd
         RoleTokens       = $roleTokens
         BaselineModel    = $baseline
         BaselineCostUsd  = if ($null -ne $baselineRate) { $roleTokens * $baselineRate / 1e6 } else { $null }
@@ -1764,7 +1776,7 @@ function Get-ObservedSectionLinesLocal {
         $ledger = if ($r.LedgerModels.Count -gt 0) { $r.LedgerModels -join ', ' } else { '—' }
         $lines.Add(('| {0} | {1} | {2} | {3} | {4} | {5:N0} | {6:N0} | {7:N1} | {8:N4} |' -f $r.Agent, $r.Dispatches, ($r.ObservedModels -join ', '), $ledger, $r.Match, $r.Tokens, $r.Estimated, $r.Minutes, $r.CostUsd))
     }
-    $lines.Add(('| **Subagents total** | **{0}** | | | | **{1:N0}** | **{2:N0}** | | **{3:N4}** |' -f ($Observed.Rows | Measure-Object Dispatches -Sum).Sum, $Observed.ObservedTokens, $Observed.EstimatedTokens, $Observed.SquadCostUsd))
+    $lines.Add(('| **Subagents total** | **{0}** | | | | **{1:N0}** | **{2:N0}** | | **{3:N4}** |' -f (Get-PropertySumLocal -InputObject $Observed.Rows -Property Dispatches), $Observed.ObservedTokens, $Observed.EstimatedTokens, $Observed.SquadCostUsd))
     $lines.Add('')
     if ($null -ne $Observed.SessionAiu) {
         $lines.Add(('Session total billed by the host, coordinator included: **{0:N2} AI units** (about {1:N2} USD at 0.01 USD per unit, the same convention as 1 AI credit). The coordinator''s own turns appear only in this figure, never in the table.' -f $Observed.SessionAiu, ($Observed.SessionAiu * 0.01)))
@@ -2400,8 +2412,15 @@ $observed = $null
 if ($SessionLog) {
     $sessionPath = Resolve-SessionLogPathLocal -SessionLog $SessionLog -SquadRoot $SquadRoot
     if ($sessionPath) {
-        $session = Read-SessionUsageLocal -Path $sessionPath -SquadRoot $SquadRoot
-        $observed = Get-ObservedUsageLocal -Session $session -Rates $rates -OrderedAggregates @($ordered) -OrchestrationAggregate $orchestrationAggregate -BaselineModel $BaselineModel -Warnings $warnings
+        # Observed usage is supplementary: a fault here must never fail the ledger write or roll back a hand-off.
+        try {
+            $session = Read-SessionUsageLocal -Path $sessionPath -SquadRoot $SquadRoot
+            $observed = Get-ObservedUsageLocal -Session $session -Rates $rates -OrderedAggregates @($ordered) -OrchestrationAggregate $orchestrationAggregate -BaselineModel $BaselineModel -Warnings $warnings
+        }
+        catch {
+            $observed = $null
+            $warnings.Add("WARN: observed usage from '$sessionPath' was left out: $($_.Exception.Message)")
+        }
     }
     else {
         $warnings.Add("WARN: -SessionLog auto found no Copilot session whose workspace is this squad root's repository; no observed usage was added.")
