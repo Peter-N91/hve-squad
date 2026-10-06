@@ -60,9 +60,10 @@ if ($CandidateSrc) { $sources.R = (Resolve-Path -LiteralPath $CandidateSrc).Path
 $schedule = @(Get-BenchmarkSchedule -Levels $Levels -Arms $Arms -Repeats $Repeats -Seed $Seed)
 if ($Plan) { return $schedule | Format-Table Index, Repeat, Level, Position, Arm, RunId -AutoSize }
 
+$disabledMcpServers = @(Get-ConfiguredMcpServerNames -CliPath $CliPath)
 New-Item -ItemType Directory -Path (Join-Path $ResultRoot 'runs') -Force | Out-Null
 $csv = Join-Path $ResultRoot 'results.csv'
-[ordered]@{ seed = $Seed; levels = $Levels; arms = $Arms; repeats = $Repeats; model = $Model; sources = $sources; schedule = $schedule } |
+[ordered]@{ seed = $Seed; levels = $Levels; arms = $Arms; repeats = $Repeats; model = $Model; sources = $sources; schedule = $schedule; disabledMcpServers = $disabledMcpServers } |
     ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ResultRoot "matrix-$(Get-Date -Format 'yyyyMMdd-HHmmss').json") -Encoding utf8NoBOM
 $done = if (Test-Path -LiteralPath $csv) { @(Import-Csv -LiteralPath $csv | ForEach-Object runId) } else { @() }
 
@@ -72,10 +73,11 @@ foreach ($run in $schedule) {
     if (Test-Path -LiteralPath $trial) { Move-Item -LiteralPath $trial -Destination "$trial.incomplete-$(Get-Date -Format 'yyyyMMddHHmmss')" }
     Write-Host ("[{0}/{1}] {2} start {3:HH:mm:ss}" -f $run.Index, $schedule.Count, $run.RunId, (Get-Date))
     & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Invoke-LiveBenchmarkRun.ps1') -Src $sources[$run.Arm] -Level $run.Level -Arm $run.Arm `
-        -TrialRoot $trial -RunId $run.RunId -Repeat $run.Repeat -Position $run.Position -Model $Model -CliPath $CliPath | Out-Host
+        -TrialRoot $trial -RunId $run.RunId -Repeat $run.Repeat -Position $run.Position -Model $Model -CliPath $CliPath `
+        -DisabledMcpServers ($disabledMcpServers -join ',') | Out-Host
     if (-not (Test-Path -LiteralPath (Join-Path $trial 'out/result.json'))) { Write-Warning "$($run.RunId) wrote no result.json; not scored."; continue }
     $row = Measure-LiveBenchmarkRun -TrialRoot $trial
-    $row | Export-Csv -LiteralPath $csv -Append -NoTypeInformation -Encoding utf8NoBOM
+    $row | Export-Csv -LiteralPath $csv -Append -NoTypeInformation -Encoding utf8NoBOM -Force
     $row | Select-Object runId, seconds, credits, coordCr, ownerCr, hiddenPassed, hiddenTotal, mutantsKilled, docCheck, reviewVerdict, ledgerCheck, modelMatch | Format-List | Out-Host
 }
 Write-Host "Results: $csv"

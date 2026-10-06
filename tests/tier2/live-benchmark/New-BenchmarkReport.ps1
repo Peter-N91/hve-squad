@@ -121,8 +121,9 @@ if ($paired.Count) {
 & $add
 & $add '## Quality'
 & $add
-& $add '| Level | Arm | Hidden tests passed | All hidden pass | Own tests pass | Own tests pass on reference | Mutants killed by own tests | Doc check | Review verdicts | Ledger -Check | Judge mean |'
-& $add '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+& $add '| Level | Arm | Outcomes | Hidden tests passed | All hidden pass | Own tests pass | Own tests pass on reference | Mutants killed by own tests | Doc check | Review verdicts | Ledger -Check | Judge mean |'
+& $add '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+$hasOutcome = [bool]$rows[0].PSObject.Properties['outcome']
 foreach ($level in $levels) {
     foreach ($arm in $arms) {
         $set = @($rows | Where-Object { $_.level -eq $level -and $_.arm -eq $arm })
@@ -131,7 +132,8 @@ foreach ($level in $levels) {
         $mutants = '{0}/{1}' -f (Get-Sum (Get-Values $set 'mutantsKilled')), (Get-Sum (Get-Values $set 'mutantsTotal'))
         $doc = if (@($set | Where-Object docCheck -NE 'n/a').Count) { Format-Count $set { $_.docCheck -eq 'pass' } } else { 'n/a' }
         $judge = if ($hasJudge) { Format-Stat (Get-Values $set 'judgeMean') } else { 'not judged' }
-        & $add ("| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} |" -f $level, $arm, $hidden,
+        $outcomes = if ($hasOutcome) { Format-Tally $set.outcome } else { 'n/a' }
+        & $add ("| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} |" -f $level, $arm, $outcomes, $hidden,
             (Format-Count $set { $_.hiddenAllPass -eq 'True' }), (Format-Count $set { $_.ownTestsPass -eq 'True' }), (Format-Count $set { $_.testsOnReference -eq 'True' }),
             $mutants, $doc, (Format-Tally $set.reviewVerdict), (Format-Tally $set.ledgerCheck), $judge)
     }

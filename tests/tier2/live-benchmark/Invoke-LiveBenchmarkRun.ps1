@@ -40,7 +40,8 @@ param(
     [int]$Repeat = 1,
     [int]$Position = 1,
     [string]$Model = 'claude-sonnet-5',
-    [string]$CliPath = (Join-Path $env:APPDATA 'npm/copilot.ps1')
+    [string]$CliPath = (Join-Path $env:APPDATA 'npm/copilot.ps1'),
+    [AllowEmptyString()][string]$DisabledMcpServers = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +54,12 @@ Import-Module (Join-Path $repoRoot 'tests/lib/SquadInstall.psm1') -Force
 if (Test-Path -LiteralPath $TrialRoot) { throw "Trial root already exists: $TrialRoot" }
 if (-not (Test-Path -LiteralPath (Join-Path $Src '.github/agents'))) { throw "Not a squad-src directory: $Src" }
 if (-not (Test-Path -LiteralPath $CliPath)) { throw "Copilot CLI not found: $CliPath" }
+if ([string]::IsNullOrWhiteSpace($DisabledMcpServers)) {
+    $disabledServers = @(Get-ConfiguredMcpServerNames -CliPath $CliPath)
+}
+else {
+    $disabledServers = @(ConvertFrom-McpServerArgument -Names $DisabledMcpServers)
+}
 $Src = (Resolve-Path -LiteralPath $Src).Path
 
 $workspace = Join-Path $TrialRoot 'workspace'
@@ -70,6 +77,7 @@ $cliArgs = @('-p', $prompt, '--model', $Model, '--agent', 'squad-coordinator',
     '--output-format', 'json', '--usage-output-file', (Join-Path $out 'usage.json'), '--log-dir', (Join-Path $out 'logs'),
     '--secret-env-vars', 'GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'COPILOT_GITHUB_TOKEN')
 foreach ($tool in $deny) { $cliArgs += @('--deny-tool', $tool) }
+foreach ($server in $disabledServers) { $cliArgs += @('--disable-mcp-server', $server) }
 
 # Variables an outer agent session sets would make the child think it is nested.
 Remove-Item Env:COPILOT_AGENT, Env:COPILOT_DEBUG_NONCE, Env:COPILOT_ENTRA_AUTH_AUD -ErrorAction SilentlyContinue
@@ -94,6 +102,7 @@ $srcDirty = [bool](& git -C $Src status --porcelain -- . 2>$null)
     srcTreeHash     = Get-SourceTreeHash -Path $Src
     baselineCommit  = $fixture.Commit
     deniedTools     = $deny
+    disabledMcpServers = $disabledServers
     caveats         = @('Source overlay, not a full APM install; no hve-core.', 'Runtime credits are not reconciled billing.')
 } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'metadata.json') -Encoding utf8NoBOM
 

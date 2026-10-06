@@ -25,6 +25,28 @@ function Get-ArmRouting {
     $script:ArmRouting[$Arm]
 }
 
+function Get-NonBuiltinMcpServerNames {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][object]$Configuration)
+    if (-not $Configuration.PSObject.Properties['mcpServers']) { throw 'Copilot MCP configuration has no mcpServers property.' }
+    @($Configuration.mcpServers.PSObject.Properties | Where-Object { $_.Value.source -ne 'builtin' } | ForEach-Object Name | Sort-Object -Unique)
+}
+
+function Get-ConfiguredMcpServerNames {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$CliPath)
+    $json = (& $CliPath mcp list --json 2>$null) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "Copilot CLI could not list configured MCP servers: $CliPath" }
+    Get-NonBuiltinMcpServerNames -Configuration ($json | ConvertFrom-Json -Depth 32)
+}
+
+function ConvertFrom-McpServerArgument {
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Names)
+    if ([string]::IsNullOrWhiteSpace($Names)) { return @() }
+    @($Names.Split(',', [StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object Trim | Sort-Object -Unique)
+}
+
 function Get-BenchmarkTask {
     <#
     .SYNOPSIS
@@ -379,6 +401,7 @@ function Get-EventSummary {
         Dispatches        = @($tasks | Where-Object Top).Count
         DispatchesAll     = $tasks.Count
         ScribeDispatches  = @($tasks | Where-Object Agent -EQ 'Squad Scribe').Count
+        OwnerDispatches   = @($tasks | Where-Object { $_.Agent -like 'Squad *' -and $_.Agent -notin $script:OwnerExcluded }).Count
         GenericDispatches = @($tasks | Where-Object Agent -NotLike 'Squad *').Count
         CoordScriptRuns   = @($topCommands | Where-Object { $_ -match 'Write-SquadHandoff' }).Count
         BriefRan          = [bool](@($topCommands | Where-Object { $_ -match 'Get-SquadDispatchBrief' }).Count)
@@ -540,6 +563,9 @@ function Measure-LiveBenchmarkRun {
         trial             = $TrialRoot
         exitCode          = $result.exitCode
         seconds           = $result.seconds
+        # halted: no owner ran and no deliverable path changed (scratch files left by the coordinator do not count).
+        outcome           = if ($events.OwnerDispatches -gt 0) { 'dispatched' } elseif ($diff -match '(?m)^diff --git a/(src|tests|docs)/') { 'inline' } else { 'halted' }
+        ownerDispatches   = $events.OwnerDispatches
         credits           = Format-Number $usage.Credits
         coordCr           = Format-Number $(if ($coord.Count) { $coord[0].Credits })
         ownerCr           = Format-Number (& $sumCredits { $_.Agent -ne 'coordinator' -and $_.Agent -notin $script:OwnerExcluded })
@@ -703,4 +729,4 @@ Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-ArmRouting, Get-Benchm
 New-InventoryFixture, Invoke-Pytest, Test-BenchmarkTask, Measure-DocCheck, Get-ReviewVerdict, Get-LedgerCheck,
 Get-UsageSummary, Get-EventSummary, Get-TeamRouting, Get-ModelAssignment, Get-DeliverableDiff, Measure-LiveBenchmarkRun,
 Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Get-Median,
-Format-Number, ConvertFrom-InvariantNumber
+Format-Number, ConvertFrom-InvariantNumber, Get-NonBuiltinMcpServerNames, Get-ConfiguredMcpServerNames, ConvertFrom-McpServerArgument

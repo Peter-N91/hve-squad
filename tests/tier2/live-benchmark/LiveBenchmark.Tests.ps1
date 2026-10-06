@@ -75,12 +75,22 @@ Model routing: economy
             @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:04:10Z'; data = @{ toolCallId = 'c4'; toolName = 'powershell'; arguments = @{ command = 'pwsh -File Write-SquadHandoff.ps1 -PayloadPath x' } } }
             @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:04:20Z'; data = @{ toolCallId = 'c5'; toolName = 'task'; parentToolCallId = 'c1'; arguments = @{ agent_type = 'Squad Scribe' } } }
         )
+        if (-not $Delivered) { $events = @($events | Where-Object { -not ($_.data.ContainsKey('arguments') -and $_.data.arguments['agent_type'] -in 'Squad Implementor', 'general-purpose') }) }
         Set-Content -LiteralPath (Join-Path $out 'events.jsonl') -Value ($events | ForEach-Object { $_ | ConvertTo-Json -Depth 6 -Compress })
         $Root
     }
 }
 
 Describe 'Fixture and schedule' {
+    It 'selects configured non-builtin MCP servers for isolated benchmark runs' {
+        $config = '{"mcpServers":{"builtin":{"source":"builtin"},"workspace":{"source":"workspace"},"plugin":{"source":"plugin"}}}' | ConvertFrom-Json
+        @(Get-NonBuiltinMcpServerNames -Configuration $config) | Should -Be @('plugin', 'workspace')
+    }
+
+    It 'parses the child-process MCP server argument without flattening names' {
+        @(ConvertFrom-McpServerArgument -Names 'calendar,canvas-authoring,mail') | Should -Be @('calendar', 'canvas-authoring', 'mail')
+    }
+
     It 'materialises a clean git repository with one baseline commit and no remote' {
         $fixture = New-InventoryFixture -Destination (Join-Path $TestDrive 'fx')
         git -C $fixture.Root status --porcelain | Should -BeNullOrEmpty
@@ -95,10 +105,18 @@ Describe 'Fixture and schedule' {
         { New-InventoryFixture -Destination $dir.FullName } | Should -Throw '*already exists*'
     }
 
+    It 'seeds a consumption ledger the squad ledger check accepts, so no run starts with a reconciliation' {
+        $fixture = New-InventoryFixture -Destination (Join-Path $TestDrive 'ledger')
+        $measure = Join-Path $PSScriptRoot '../../../squad-src/.github/skills/squad/scripts/Measure-SquadLedger.ps1'
+        pwsh -NoProfile -File $measure -SquadRoot (Join-Path $fixture.Root '.copilot-tracking/squad') -Check *> $null
+        $LASTEXITCODE | Should -Be 0
+    }
+
     It 'gives every arm the same prompt apart from the routing token' {
         foreach ($level in Get-LiveBenchmarkLevel) {
             $b = Get-ArmPrompt -Level $level -Arm B
             $b | Should -Not -Match 'routing='
+            $b | Should -Not -Match 'README' -Because 'a referenced input file fires the intake gate, whose role the fixture roster lacks'
             Get-ArmPrompt -Level $level -Arm R | Should -BeExactly "$b routing=ranked"
             Get-ArmPrompt -Level $level -Arm E | Should -BeExactly "$b routing=economy"
         }
@@ -193,6 +211,13 @@ Describe 'Scorer on synthetic workspaces' {
         $bad.mutantsKilled | Should -Be 0
         $bad.docCheck | Should -Be 'missing'
         $bad.reviewVerdict | Should -Be 'none'
+    }
+
+    It 'scores a run with no owner dispatch and no change as halted' {
+        $good.outcome | Should -Be 'dispatched'
+        $good.ownerDispatches | Should -Be 1
+        $bad.outcome | Should -Be 'halted'
+        $bad.ownerDispatches | Should -Be 0
     }
 
     It 'diffs only the deliverable, not squad tracking files' {
@@ -290,7 +315,7 @@ Describe 'Report generation' {
                         [ordered]@{ role = 'developer'; agent = 'Squad Implementor'; modelsUsed = 'gpt-5.4-mini'; modelCell = $cell; passedModel = 'gpt-5.4-mini'; match = $(if ($cell) { 'yes' } else { 'n/a' }); credits = 6 }
                     )
                     [pscustomobject][ordered]@{
-                        runId = "$level-$arm-r$repeat"; level = $level; arm = $arm; repeat = $repeat; seconds = $seconds; credits = Format-Number $credits
+                        runId = "$level-$arm-r$repeat"; level = $level; arm = $arm; repeat = $repeat; seconds = $seconds; outcome = 'dispatched'; credits = Format-Number $credits
                         coordCr = '50.5'; ownerCr = '6'; inputTokens = 1000000; outputTokens = 20000; cacheReadTokens = 900000
                         hiddenPassed = 11; hiddenTotal = 11; hiddenAllPass = 'True'; ownTestsPass = 'True'; testsOnReference = 'True'
                         mutantsKilled = 2; mutantsTotal = 2; docCheck = $(if ($level -eq 'easy') { 'n/a' } else { 'pass' }); reviewVerdict = 'Pass'; ledgerCheck = 'PASS'
@@ -320,7 +345,7 @@ Describe 'Report generation' {
     }
 
     It 'reports quality, judge scores, and model assignment per role' {
-        $report | Should -Match '\| easy \| R \| 33/33 \| 3/3 \| 3/3 \| 3/3 \| 6/6 \| n/a \| Pass x3 \| PASS x3 \| 7\.7 \[7\.7, 7\.7\] \|'
+        $report | Should -Match '\| easy \| R \| dispatched x3 \| 33/33 \| 3/3 \| 3/3 \| 3/3 \| 6/6 \| n/a \| Pass x3 \| PASS x3 \| 7\.7 \[7\.7, 7\.7\] \|'
         $report | Should -Match '\| hard \| E \| developer \| Squad Implementor \| 3 \| gpt-5\.4-mini x3 \| gpt-5\.4-mini x3 \| gpt-5\.4-mini x3 \| yes x3 \|'
         $report | Should -Match '\| easy \| B \| off x3 \| n/a x3 \| 3 \[3, 3\] \| 1 \[1, 1\] \| 0 \| 3/3 \| 0 \[0, 0\] \| 40 \[40, 40\] \|'
     }
