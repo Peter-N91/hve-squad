@@ -16,7 +16,7 @@ This is the one payload shape both coordinators fill at hand-off. Filling it in 
 
 ## 1. Invariant Instructions (Byte-Stable — Fill Nothing Here)
 
-Read, do not edit, this section on every dispatch. It is copied unmodified from turn to turn, the stable prefix a cache-aware host reuses.
+Read, do not edit, this section on every dispatch. It is copied unmodified each turn, the stable prefix a cache-aware host reuses.
 
 ### 1.1 Payload Type
 

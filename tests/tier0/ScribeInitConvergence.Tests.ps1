@@ -53,6 +53,38 @@ BeforeAll {
         $output = & pwsh @arguments 2>&1
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
     }
+
+    function Format-OrchestrationEntry {
+        param([Parameter(Mandatory)][string]$Title, [Parameter(Mandatory)][int]$Turn)
+        $fence = '```'
+        @(
+            ''
+            "### 2026-10-07T09:0${Turn}:00Z $Title"
+            ''
+            "* Turn: $Turn"
+            "* Request: $Title."
+            '* Deliverable: `state.json`'
+            "* Outcome: $Title recorded."
+            ''
+            '#### Consumption — Orchestration'
+            ''
+            "${fence}json"
+            '{'
+            '  "model": "Claude Haiku 4.5",'
+            '  "model_source": "agent-pinned",'
+            '  "priced_as": "Claude Haiku 4.5",'
+            '  "model_tier": "fast",'
+            '  "internal_turns": 4,'
+            '  "input_tokens": 3000,'
+            '  "cached_tokens": 12000,'
+            '  "cache_write_tokens": 1250,'
+            '  "output_tokens": 3200,'
+            '  "basis": "estimated"'
+            '}'
+            $fence
+            ''
+        ) -join "`n"
+    }
 }
 
 Describe 'GATE-38 Init copies roster rows from the payload and never derives an agent name' {
@@ -136,38 +168,6 @@ Describe 'GATE-41 The scripted ledger converges after Init and after one correct
         New-Item -ItemType Directory -Path (Split-Path $script:Root) -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'fixtures', 'scribe-benchmark', 'seed') -Destination $script:Root -Recurse
         $script:ScribeHistory = Join-Path $script:Root 'history/Squad Scribe.md'
-
-        function Format-OrchestrationEntry {
-            param([Parameter(Mandatory)][string]$Title, [Parameter(Mandatory)][int]$Turn)
-            $fence = '```'
-            @(
-                ''
-                "### 2026-10-07T09:0${Turn}:00Z $Title"
-                ''
-                "* Turn: $Turn"
-                "* Request: $Title."
-                '* Deliverable: `state.json`'
-                "* Outcome: $Title recorded."
-                ''
-                '#### Consumption — Orchestration'
-                ''
-                "${fence}json"
-                '{'
-                '  "model": "Claude Haiku 4.5",'
-                '  "model_source": "agent-pinned",'
-                '  "priced_as": "Claude Haiku 4.5",'
-                '  "model_tier": "fast",'
-                '  "internal_turns": 4,'
-                '  "input_tokens": 3000,'
-                '  "cached_tokens": 12000,'
-                '  "cache_write_tokens": 1250,'
-                '  "output_tokens": 3200,'
-                '  "basis": "estimated"'
-                '}'
-                $fence
-                ''
-            ) -join "`n"
-        }
 
         $header =  "---`ndescription: `"Append-only dispatch history for a single squad agent`"`n---`n`n# History: Squad Scribe`n"
         Set-Content -LiteralPath $script:ScribeHistory -Value ($header + (Format-OrchestrationEntry -Title 'Initialization state seed' -Turn 1)) -NoNewline -Encoding utf8
@@ -313,6 +313,76 @@ Describe 'GATE-43 A trailing marker comment never latches pipelining off' {
         $check = Invoke-BaselineCheck -BaselinePath $baseline
         $check.ExitCode | Should -Not -Be 0
         $check.Output | Should -Match 'inserted inside the file, not appended'
+        $check.Output | Should -Match 'failure class: history-integrity'
+    }
+}
+# Observed on the ace73d0 build (test-hve-squad-local, run run-20261007-1404): the
+# intake Scribe wrote its orchestration block through a PowerShell double-quoted
+# here-string, which collapsed the ```json fence to `json. The next pipelined
+# Scribe hand-off re-typed that earlier entry with a correct fence, the baseline
+# prefix hash changed, -Check reported history-integrity, and pipelining latched
+# off after the plan stage although no content was lost.
+Describe 'GATE-44 A collapsed fence is read, and repairing one never latches pipelining off' {
+    BeforeAll {
+        $script:Root = Join-Path $TestDrive 'fence/.copilot-tracking/squad'
+        New-Item -ItemType Directory -Path (Split-Path $script:Root) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'fixtures', 'scribe-benchmark', 'applied') -Destination $script:Root -Recurse
+        $script:ScribeHistory = Join-Path $script:Root 'history/Squad Scribe.md'
+        $script:Healthy = (Get-Content -LiteralPath $script:ScribeHistory -Raw) -replace '\r\n', "`n"
+        $script:Collapsed = $script:Healthy.Replace("``````json", '`json').Replace("}`n``````", "}`n``")
+
+        function Write-ScribeHistory {
+            param([Parameter(Mandatory)][string]$Text)
+            [System.IO.File]::WriteAllText($script:ScribeHistory, $Text)
+        }
+
+        function Invoke-LedgerCheck {
+            param([string]$BaselinePath)
+            $arguments = @('-NoProfile', '-File', $script:LedgerScript, '-SquadRoot', $script:Root, '-Check')
+            if ($BaselinePath) { $arguments += @('-BaselinePath', $BaselinePath) }
+            $output = & pwsh @arguments 2>&1
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
+        }
+    }
+
+    It 'the Scribe and coordinator are told never to repair or restate a collapsed fence' {
+        $script:ScribeProcedure | Should -Match 'never edit, re-type, reorder, or remove a prior entry, not even to fix its fence'
+        $script:OperatingProcedure | Should -Match 'never ask the Scribe to repair, re-type, or restate it'
+    }
+
+    It 'counts a collapsed-fence block and only warns' {
+        Write-ScribeHistory -Text $script:Collapsed
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -Write *> $null
+        $check = Invoke-LedgerCheck
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Match 'collapsed code fence'
+        (Get-Content -LiteralPath (Join-Path $script:Root 'consumption.md') -Raw) | Should -Match 'Squad Scribe\.md — 1 block\(s\)'
+    }
+
+    It 'warns, never fails, when a later hand-off restores the fence and appends' {
+        Write-ScribeHistory -Text $script:Collapsed
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -Write *> $null
+        $baseline = Join-Path $TestDrive 'fence-baseline.json'
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -EmitBaseline $baseline *> $null
+
+        $appended = $script:Healthy.TrimEnd() + "`n`n" + (Format-OrchestrationEntry -Title 'Later hand-off' -Turn 3).TrimStart()
+        Write-ScribeHistory -Text $appended
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -Write *> $null
+
+        $check = Invoke-LedgerCheck -BaselinePath $baseline
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Match 'collapsed code fence in an earlier entry restored'
+    }
+
+    It 'still fails as history-integrity when an earlier entry''s content is rewritten' {
+        Write-ScribeHistory -Text $script:Healthy
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -Write *> $null
+        $baseline = Join-Path $TestDrive 'rewrite-baseline.json'
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -EmitBaseline $baseline *> $null
+
+        Write-ScribeHistory -Text ($script:Healthy -replace '"output_tokens": 3200', '"output_tokens": 1')
+        $check = Invoke-LedgerCheck -BaselinePath $baseline
+        $check.ExitCode | Should -Not -Be 0
         $check.Output | Should -Match 'failure class: history-integrity'
     }
 }

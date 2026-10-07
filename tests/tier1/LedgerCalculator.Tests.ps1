@@ -1297,17 +1297,13 @@ Describe 'Measure-SquadLedger baseline-scoped malformed/illegal-model_source WAR
 ### 2026-09-25T09:10:00Z Post-baseline unparseable (bad fence) consumption block
 
 * Turn: 1
-* Request: Post-baseline synthetic entry with a bad fence.
+* Request: Post-baseline synthetic entry with no fence at all.
 * Deliverable: `fixtures/ledger-baseline/post-3.md`
 * Outcome: Synthetic.
 
 #### Consumption
 
-`json
-{
-  "model": "Claude Sonnet 4.6"
-}
-`
+model: Claude Sonnet 4.6
 '@
     }
 
@@ -1318,9 +1314,11 @@ Describe 'Measure-SquadLedger baseline-scoped malformed/illegal-model_source WAR
         $result.Output | Should -Match 'bad fence, or non-JSON content'
         $result.Output | Should -Match "illegal model_source 'session'"
         $result.Output | Should -Match "priced_as ' Claude Opus 5 ' only resolves.*after trimming"
-        # Still aggregates the two blocks that do resolve (the trimmed-whitespace
-        # block and the one fully well-formed block): turns 1 + 2 = 3.
-        ($result.Output | ConvertFrom-Json).total.turns | Should -Be 3.0
+        # Still aggregates the three blocks that do resolve (the collapsed-fence
+        # block, whose JSON is intact and which only warns since 0.18.1, the
+        # trimmed-whitespace block, and the one fully well-formed block): 1 + 1 + 2 = 4.
+        ($result.Output | ConvertFrom-Json).total.turns | Should -Be 4.0
+        $result.Output | Should -Match 'collapsed code fence'
     }
 
     It 'with -BaselinePath, the same four pre-baseline (legacy) shapes still only WARN, never FAIL/throw' {
@@ -1375,10 +1373,10 @@ Describe 'Measure-SquadLedger baseline-scoped malformed/illegal-model_source WAR
         $result = Invoke-Ledger -SquadRoot $root -BaselinePath $baselinePath -Format json
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Not -Match 'Post-baseline block'
-        # The new block aggregates alongside the two pre-existing resolvable ones:
-        # turns 1 (legacy well-formed... already 2) -- confirm the post-baseline
+        # The new block aggregates alongside the three pre-existing resolvable ones
+        # (4 turns, the collapsed-fence block included) -- confirm the post-baseline
         # block's own 1 turn is included without any WARN/FAIL naming it.
-        ($result.Output | ConvertFrom-Json).total.turns | Should -Be 4.0
+        ($result.Output | ConvertFrom-Json).total.turns | Should -Be 5.0
     }
 }
 

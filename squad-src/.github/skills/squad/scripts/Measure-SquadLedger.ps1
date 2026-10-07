@@ -753,7 +753,7 @@ function Get-ConsumptionBlockLocal {
     # newline(s) that follow the heading is both sufficient and CRLF-safe; the
     # blank line before the fence is `(?:\r?\n)+`, not `\r?\n+`, because the
     # latter's `\n+` cannot cross a second `\r` to reach a second `\n`.
-    $pattern = '(?ms)^####[ \t]+Consumption(?<orch>[ \t]+[-\u2013\u2014][ \t]+Orchestration)?[ \t]*(?:\r?\n)+```json\r?\n(?<json>.*?)\r?\n```'
+    $pattern = '(?ms)^####[ \t]+Consumption(?<orch>[ \t]+[-\u2013\u2014][ \t]+Orchestration)?[ \t]*(?:\r?\n)+(?<open>`{1,3})json\r?\n(?<json>.*?)\r?\n(?<close>`{1,3})[ \t]*(?=\r?\n|$)'
     # Heading-only: same anchor/prefix as $pattern (so a genuine well-formed
     # block's heading match shares the exact same start index as its full-block
     # match), but makes no assumption about what -- if anything -- follows on
@@ -770,9 +770,9 @@ function Get-ConsumptionBlockLocal {
         $match = $fullMatchesByIndex[$headingMatch.Index]
 
         if (-not $match) {
-            # A heading with no full-block match at the same offset: no valid
-            # fenced ```json block follows it (bad/single-backtick fence, or
-            # non-JSON content -- e.g. a markdown table -- pasted in its place).
+            # A heading with no full-block match at the same offset: no fenced
+            # json block follows it (no fence at all, or non-JSON content --
+            # e.g. a markdown table -- pasted in its place).
             [pscustomobject]@{
                 Source          = $SourceName
                 IsOrchestration = [bool]$headingMatch.Groups['orch'].Success
@@ -781,6 +781,7 @@ function Get-ConsumptionBlockLocal {
                 OrderOk         = $false
                 NonNumeric      = @()
                 ParseError      = 'heading found but no valid fenced ```json block follows it (bad fence, or non-JSON content immediately after the heading).'
+                CollapsedFence  = $false
                 Ordinal         = $ordinal
                 Offset          = $headingMatch.Index
                 RawText         = $headingMatch.Value
@@ -811,6 +812,14 @@ function Get-ConsumptionBlockLocal {
 
         $orderOk = @(Compare-Object -ReferenceObject $script:ConsumptionFieldOrder -DifferenceObject $order -SyncWindow 0).Count -eq 0
 
+        # A fence of one or two backticks is what a ```json fence becomes when it
+        # is written through a PowerShell double-quoted string (a backtick is that
+        # language's escape character). The JSON inside is intact, so the block is
+        # parsed and counted, and the caller warns instead of failing -- otherwise
+        # the only way to clear the failure is to edit the earlier entry in place,
+        # which is a history-integrity failure that latches pipelining off.
+        $collapsedFence = $match.Groups['open'].Value.Length -ne 3 -or $match.Groups['close'].Value.Length -ne 3
+
         [pscustomobject]@{
             Source          = $SourceName
             IsOrchestration = [bool]$match.Groups['orch'].Success
@@ -819,6 +828,7 @@ function Get-ConsumptionBlockLocal {
             OrderOk         = $orderOk
             NonNumeric      = $nonNumeric
             ParseError      = $parseError
+            CollapsedFence  = $collapsedFence
             # U1 baseline-scoping identity (Amendment 3 §2 item 1/3): Ordinal is
             # this block's 1-based position among every regex match in this
             # file -- including unparseable ones -- so a baseline's recorded
@@ -1225,6 +1235,30 @@ function Get-InsertionOffsetLocal {
     return $null
 }
 
+function Test-FenceOnlyRepairLocal {
+    <#
+    .SYNOPSIS
+        True when Current is Original plus appended text, except that one or more
+        collapsed code fences (a line of one or two backticks, optionally followed
+        by `json`) in Original were restored to three backticks. Line endings are
+        normalized; every other character must match.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Original,
+        [Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Current
+    )
+    $normalize = {
+        param([string]$Text)
+        ($Text -replace '\r\n', "`n") -replace '(?m)^`{1,3}(json)?[ \t]*$', '```$1'
+    }
+    $originalText = [System.Text.Encoding]::UTF8.GetString($Original)
+    $currentText = [System.Text.Encoding]::UTF8.GetString($Current)
+    if ($originalText -notmatch '(?m)^`{1,2}(json)?[ \t]*\r?$') { return $false }
+    $normalizedOriginal = (& $normalize $originalText).TrimEnd()
+    $normalizedCurrent = & $normalize $currentText
+    return $normalizedCurrent.StartsWith($normalizedOriginal, [System.StringComparison]::Ordinal)
+}
+
 function Test-SquadLedgerBaselineLocal {
     <#
     .SYNOPSIS
@@ -1293,6 +1327,10 @@ function Test-SquadLedgerBaselineLocal {
                     else {
                         $failures.Add("Append-only file's entries were inserted inside the file, not appended: '$relPath' keeps every original byte, but new text starts at byte $insertedAt of $baselineLength instead of at the end. Append new entries after the last existing entry, never directly under the file's marker comment.")
                     }
+                }
+                elseif ($originalCopy -and (Test-Path -LiteralPath $originalCopy -PathType Leaf) -and
+                    (Test-FenceOnlyRepairLocal -Original ([System.IO.File]::ReadAllBytes($originalCopy)) -Current $bytes)) {
+                    Write-Warning "WARN: '$relPath' had a collapsed code fence in an earlier entry restored to three backticks; every other byte of the earlier entries is unchanged, so this is not a failure. Earlier entries are append-only: leave a collapsed fence as it is, the ledger reads it."
                 }
                 else {
                     $failures.Add("Append-only file's original content changed: '$relPath' first $baselineLength byte(s) no longer hash to the baseline's recorded SHA-256 (a prefix edit, not only an append).")
@@ -1995,6 +2033,10 @@ foreach ($file in $historyFiles) {
                 $postBaselineBlockIssues.Add($issue)
             }
             continue
+        }
+
+        if ($block.CollapsedFence) {
+            $warnings.Add("WARN: $($block.Source): consumption block $($block.Ordinal) has a collapsed code fence (fewer than three backticks, the mark of a write through a PowerShell double-quoted string); its JSON is intact, so it is counted. Leave the entry as it is -- never edit it in place -- and write future entries with the file edit or create tool.")
         }
 
         if ($agentName -eq 'Squad Scribe') {
