@@ -38,7 +38,21 @@ BeforeAll {
     $script:PayloadTemplate = Get-SquadReferenceBody -Name 'scribe-payload-template.md'
     $script:ScribeProcedure = Get-SquadReferenceBody -Name 'scribe-procedure.md'
     $script:OperatingProcedure = Get-SquadReferenceBody -Name 'operating-procedure.md'
+    $script:GatesAndModes = Get-SquadReferenceBody -Name 'gates-and-modes.md'
     $script:LedgerScript = Join-Path $script:Model.SquadSkillRoot 'scripts/Measure-SquadLedger.ps1'
+
+    function Invoke-Ledger {
+        param(
+            [Parameter(Mandatory)][ValidateSet('Write', 'Check')][string]$Mode,
+            [string]$ExpectedScribeEntries
+        )
+        $arguments = @('-NoProfile', '-File', $script:LedgerScript, '-SquadRoot', $script:Root, "-$Mode")
+        if ($ExpectedScribeEntries) {
+            $arguments = @('-NoProfile', '-Command', "& '$($script:LedgerScript)' -SquadRoot '$($script:Root)' -Check -ExpectedHistoryCounts @{ 'Squad Scribe' = $ExpectedScribeEntries }")
+        }
+        $output = & pwsh @arguments 2>&1
+        [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
+    }
 }
 
 Describe 'GATE-38 Init copies roster rows from the payload and never derives an agent name' {
@@ -87,16 +101,32 @@ Describe 'GATE-39 Init records its orchestration block and runs ledgerCommand la
     }
 }
 
-Describe 'GATE-40 Init verification and ledger repair are bounded' {
-    It 'the coordinator repairs a failed Init once, then stops and asks the user' {
-        $script:Coordinator | Should -Match 'verify once, repair once, then stop\*\*'
-        $script:OperatingProcedure | Should -Match ([regex]::Escape('**Verify Init once, repair once, then stop.**'))
+Describe 'GATE-40 Init verification and ledger repair are bounded and never block' {
+    It 'the coordinator repairs a failed Init once, then warns and continues' {
+        $script:Coordinator | Should -Match 'verify once, repair once, warn and continue\*\*'
+        $script:OperatingProcedure | Should -Match ([regex]::Escape('**Verify Init once, repair once, then warn and continue.**'))
         $script:OperatingProcedure | Should -Match 'never dispatch a third Scribe pass'
+        $script:OperatingProcedure | Should -Match 'never block Init on it'
     }
 
-    It 'Ledger Reconciliation repairs once with ledgerCommand, then stops' {
-        $script:OperatingProcedure | Should -Match ([regex]::Escape('**Repair once, then stop.**'))
-        $script:OperatingProcedure | Should -Match 'never re-dispatch the Scribe for the same mismatch'
+    It 'Ledger Reconciliation repairs once with ledgerCommand, then warns and continues' {
+        $script:OperatingProcedure | Should -Match ([regex]::Escape('**Repair once, then warn and continue.**'))
+        $script:OperatingProcedure | Should -Match 'never re-dispatch the Scribe for the same mismatch, and never block on cost accounting'
+    }
+
+    It 'no text tells the coordinator to stop on a ledger or Init re-check' {
+        foreach ($body in @($script:Coordinator, $script:OperatingProcedure)) {
+            $body | Should -Not -Match 'Repair once, then stop'
+            $body | Should -Not -Match 'Verify Init once, repair once, then stop'
+            $body | Should -Not -Match 'stop and show the user the `-Check` output'
+        }
+    }
+
+    It 'a ledger-only failure never disables pipelining or holds a barrier' {
+        $script:OperatingProcedure | Should -Match 'A \*\*`ledger-only`\*\* failure never disables pipelining, never holds a barrier, and never stops the run'
+        $script:OperatingProcedure | Should -Match 'A \*\*`history-integrity`\*\* failure of a \*\*pipelined\*\* hand-off'
+        $script:GatesAndModes | Should -Match 'no pipelined hand-off has failed verification with `failure class: history-integrity` this run'
+        $script:GatesAndModes | Should -Match 'reports only `failure class: ledger-only` counts as verified for the barrier'
     }
 }
 
@@ -139,18 +169,14 @@ Describe 'GATE-41 The scripted ledger converges after Init and after one correct
             ) -join "`n"
         }
 
-        function Invoke-Ledger {
-            param([Parameter(Mandatory)][ValidateSet('Write', 'Check')][string]$Mode)
-            $output = & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root "-$Mode" 2>&1
-            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
-        }
-
-        $header = "---`ndescription: `"Append-only dispatch history for a single squad agent`"`n---`n`n# History: Squad Scribe`n"
+        $header =  "---`ndescription: `"Append-only dispatch history for a single squad agent`"`n---`n`n# History: Squad Scribe`n"
         Set-Content -LiteralPath $script:ScribeHistory -Value ($header + (Format-OrchestrationEntry -Title 'Initialization state seed' -Turn 1)) -NoNewline -Encoding utf8
     }
 
-    It 'fails -Check when the Init block is on disk but the ledger was left at its seed (the 0.18.0 trap)' {
-        (Invoke-Ledger -Mode Check).ExitCode | Should -Not -Be 0
+    It 'fails -Check as ledger-only when the Init block is on disk but the ledger was left at its seed (the 0.18.0 trap)' {
+        $check = Invoke-Ledger -Mode Check
+        $check.ExitCode | Should -Not -Be 0
+        $check.Output | Should -Match 'failure class: ledger-only' -Because 'an unpriced block is cost accounting, never a reason to block the run or disable pipelining'
     }
 
     It 'passes -Check once the Init hand-off runs ledgerCommand last' {
@@ -168,6 +194,125 @@ Describe 'GATE-41 The scripted ledger converges after Init and after one correct
 
     It 'is one block behind when a pass appends its block without -Write' {
         Add-Content -LiteralPath $script:ScribeHistory -Value (Format-OrchestrationEntry -Title 'Hand-written repair' -Turn 3) -NoNewline -Encoding utf8
-        (Invoke-Ledger -Mode Check).ExitCode | Should -Not -Be 0 -Because 'a hand-written ledger never folds the block its own hand-off appends'
+        $check = Invoke-Ledger -Mode Check
+        $check.ExitCode | Should -Not -Be 0 -Because 'a hand-written ledger never folds the block its own hand-off appends'
+        $check.Output | Should -Match 'failure class: ledger-only'
+    }
+}
+
+Describe 'GATE-42 -Check separates history-integrity failures from ledger-only ones' {
+    BeforeAll {
+        $script:Root = Join-Path $TestDrive 'integrity/.copilot-tracking/squad'
+        New-Item -ItemType Directory -Path (Split-Path $script:Root) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'fixtures', 'scribe-benchmark', 'applied') -Destination $script:Root -Recurse
+        $script:ScribeHistory = Join-Path $script:Root 'history/Squad Scribe.md'
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -Write *> $null
+    }
+
+    It 'passes on the applied fixture once -Write has run' {
+        $check = Invoke-Ledger -Mode Check -ExpectedScribeEntries 1
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+    }
+
+    It 'reports history-integrity when an expected history entry is missing' {
+        $check = Invoke-Ledger -Mode Check -ExpectedScribeEntries 2
+        $check.ExitCode | Should -Not -Be 0
+        $check.Output | Should -Match 'failure class: history-integrity'
+    }
+
+    It 'reports history-integrity when a recorded entry is overwritten in place' {
+        $content = Get-Content -LiteralPath $script:ScribeHistory -Raw
+        Set-Content -LiteralPath $script:ScribeHistory -Value ($content -replace 'Recording the research-stage history entry and decision', 'Rewritten heading') -NoNewline -Encoding utf8
+        $check = Invoke-Ledger -Mode Check
+        $check.ExitCode | Should -Not -Be 0
+        $check.Output | Should -Match 'failure class: history-integrity'
+    }
+}
+
+# Observed on the e621b5e build (test-hve-squad-local, run ap-20261007-001): the
+# history template ended with an `<!-- Append each new ... -->` marker, the Scribe
+# wrote each entry above it, and the pipelined -Check -BaselinePath reported the
+# turn-4 entry as "inserted inside the file". That latched pipelining off although
+# no byte was lost and the entry order was intact.
+Describe 'GATE-43 A trailing marker comment never latches pipelining off' {
+    BeforeAll {
+        $script:Root = Join-Path $TestDrive 'marker/.copilot-tracking/squad'
+        New-Item -ItemType Directory -Path (Split-Path $script:Root) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'fixtures', 'scribe-benchmark', 'applied') -Destination $script:Root -Recurse
+        $script:ScribeHistory = Join-Path $script:Root 'history/Squad Scribe.md'
+        $script:Marker = '<!-- Append each new orchestration entry at the end of this file, after the last entry. -->'
+        $original = (Get-Content -LiteralPath $script:ScribeHistory -Raw).TrimEnd()
+        Set-Content -LiteralPath $script:ScribeHistory -Value ($original + "`n`n" + $script:Marker + "`n") -NoNewline -Encoding utf8
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -Write *> $null
+
+        function Invoke-BaselineCheck {
+            param([Parameter(Mandatory)][string]$BaselinePath)
+            $output = & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -Check -BaselinePath $BaselinePath 2>&1
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
+        }
+
+        function Format-OrchestrationEntryText {
+            param([Parameter(Mandatory)][string]$Title)
+            $fence = '```'
+            @(
+                "### 2026-10-07T13:20:00+02:00 $Title"
+                ''
+                '* Turn: 4'
+                "* Request: $Title."
+                '* Deliverable: `state.json`'
+                "* Outcome: $Title recorded."
+                ''
+                '#### Consumption — Orchestration'
+                ''
+                "${fence}json"
+                '{'
+                '  "model": "Claude Haiku 4.5",'
+                '  "model_source": "agent-pinned",'
+                '  "priced_as": "Claude Haiku 4.5",'
+                '  "model_tier": "fast",'
+                '  "internal_turns": 4,'
+                '  "input_tokens": 3000,'
+                '  "cached_tokens": 12000,'
+                '  "cache_write_tokens": 1250,'
+                '  "output_tokens": 3200,'
+                '  "basis": "estimated"'
+                '}'
+                $fence
+                ''
+                ''
+            ) -join "`n"
+        }
+    }
+
+    It 'no append-only template ends with a marker comment' {
+        $schemas = Get-SquadReferenceBody -Name 'entry-schemas.md'
+        $schemas | Should -Not -Match '<!-- Append each new'
+        (Get-SquadReferenceBody -Name 'scribe-cold-gates-and-verdicts.md') | Should -Not -Match '<!-- Append each new'
+        (Get-SquadReferenceBody -Name 'federation-templates.md') | Should -Not -Match '<!-- Append each new'
+        $script:ScribeProcedure | Should -Match 'add each entry at the very end of the file, below any trailing marker comment'
+    }
+
+    It 'warns, never fails, when a new entry lands just above a trailing marker' {
+        $baseline = Join-Path $TestDrive 'marker-baseline.json'
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -EmitBaseline $baseline *> $null
+        $raw = Get-Content -LiteralPath $script:ScribeHistory -Raw
+        Set-Content -LiteralPath $script:ScribeHistory -Value $raw.Replace($script:Marker, (Format-OrchestrationEntryText -Title 'Entry above the marker') + $script:Marker) -NoNewline -Encoding utf8
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -Write *> $null
+
+        $check = Invoke-BaselineCheck -BaselinePath $baseline
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Match 'just above its trailing marker comment'
+    }
+
+    It 'still fails as history-integrity when a new entry lands above an older entry' {
+        $baseline = Join-Path $TestDrive 'reorder-baseline.json'
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:Root -EmitBaseline $baseline *> $null
+        $raw = Get-Content -LiteralPath $script:ScribeHistory -Raw
+        Set-Content -LiteralPath $script:ScribeHistory -Value $raw.Replace('# History: Squad Scribe', "# History: Squad Scribe`n`n" + (Format-OrchestrationEntryText -Title 'Entry above an older entry').TrimEnd()) -NoNewline -Encoding utf8
+
+        $check = Invoke-BaselineCheck -BaselinePath $baseline
+        $check.ExitCode | Should -Not -Be 0
+        $check.Output | Should -Match 'inserted inside the file, not appended'
+        $check.Output | Should -Match 'failure class: history-integrity'
     }
 }

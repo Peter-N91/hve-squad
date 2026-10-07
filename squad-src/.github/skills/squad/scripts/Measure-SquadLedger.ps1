@@ -106,7 +106,11 @@
     -Check, refusing to render a new fragment while it already fails. Writes
     nothing, ever — this switch only changes the exit code and adds a mismatch
     report. Exits 0 when every comparison passes, 1 otherwise, listing every
-    mismatch found.
+    mismatch found, then a `failure class:` line: `history-integrity` when a
+    history entry count is short, an entry was removed, overwritten, reordered,
+    or inserted, or a -BaselinePath file or protected artifact changed;
+    `ledger-only` for every other mismatch, which is cost accounting the next
+    -Write re-derives from history/ and which never blocks a run.
 .PARAMETER ExpectedHistoryCounts
     Optional hashtable keyed by history file name (with or without the `.md`
     extension, e.g. `'Squad Researcher'` or `'Squad Researcher.md'`) whose value is
@@ -1278,7 +1282,17 @@ function Test-SquadLedgerBaselineLocal {
                     $insertedAt = Get-InsertionOffsetLocal -Original ([System.IO.File]::ReadAllBytes($originalCopy)) -Current $bytes
                 }
                 if ($null -ne $insertedAt) {
-                    $failures.Add("Append-only file's entries were inserted inside the file, not appended: '$relPath' keeps every original byte, but new text starts at byte $insertedAt of $baselineLength instead of at the end. Append new entries after the last existing entry, never directly under the file's marker comment.")
+                    # Text inserted just before a trailing `<!-- ... -->` marker -- with no
+                    # original entry after it -- is an append in every sense the ledger reads
+                    # (same entry order, every byte kept). Warn, never fail, so a misplaced
+                    # marker cannot latch pipelining off or block a run.
+                    $originalTail = [System.Text.Encoding]::UTF8.GetString($bytes, [int]($bytes.Length - ($baselineLength - $insertedAt)), [int]($baselineLength - $insertedAt))
+                    if ($originalTail -match '^\s*(<!--(?:(?!-->)[\s\S])*-->\s*)+$') {
+                        Write-Warning "WARN: '$relPath' gained its new entries just above its trailing marker comment instead of after it; every original byte and the entry order are intact, so this is not a failure. Append future entries at the very end of the file."
+                    }
+                    else {
+                        $failures.Add("Append-only file's entries were inserted inside the file, not appended: '$relPath' keeps every original byte, but new text starts at byte $insertedAt of $baselineLength instead of at the end. Append new entries after the last existing entry, never directly under the file's marker comment.")
+                    }
                 }
                 else {
                     $failures.Add("Append-only file's original content changed: '$relPath' first $baselineLength byte(s) no longer hash to the baseline's recorded SHA-256 (a prefix edit, not only an append).")
@@ -2384,6 +2398,14 @@ if ($Check) {
     if ($mismatches.Count -gt 0) {
         Write-Host "Measure-SquadLedger -Check: FAIL ($($mismatches.Count) mismatch(es))" -ForegroundColor Red
         foreach ($m in $mismatches) { Write-Host "  - $m" -ForegroundColor Red }
+        # history-integrity: a dispatch record is missing, removed, overwritten, or
+        # inserted out of order, or a protected deliverable changed -- proof of
+        # dispatch is in doubt, so the pipelining fail-closed rule applies.
+        # ledger-only: everything else is cost accounting the next -Write
+        # re-derives from history/, so the coordinator warns and continues.
+        $integrityPattern = '^(History entry count for |Baseline)|History identity guard: .*(an entry was removed|overwritten or reordered)'
+        $failureClass = if (@($mismatches | Where-Object { $_ -match $integrityPattern }).Count -gt 0) { 'history-integrity' } else { 'ledger-only' }
+        Write-Host "Measure-SquadLedger -Check: failure class: $failureClass" -ForegroundColor Red
         exit 1
     }
 
