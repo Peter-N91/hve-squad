@@ -80,7 +80,8 @@ function Assert-TolerableInstallFailure {
     # APM wraps its output at the terminal width, so the log is flattened before matching.
     $log = ((Get-Content -LiteralPath $InstallLog -Raw) -replace '\s+', ' ')
 
-    $missing = @([regex]::Matches($log, 'File not found: (?<path>\S+) in ') |
+    # APM 0.29 reports a missing self-reference after its sparse-checkout fallback in a second form.
+    $missing = @(@([regex]::Matches($log, 'File not found: (?<path>\S+) in ')) + @([regex]::Matches($log, "File '(?<path>[^']+)' not found after git sparse checkout")) |
             ForEach-Object { $_.Groups['path'].Value } | Sort-Object -Unique)
     $failed = @([regex]::Matches($log, '\+- (?<package>\S+) -- ') |
             ForEach-Object { $_.Groups['package'].Value } | Sort-Object -Unique)
