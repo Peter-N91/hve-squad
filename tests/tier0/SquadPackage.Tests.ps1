@@ -222,7 +222,7 @@ Describe 'Consumption Accounting keeps its literal contract after the worked-exa
             -Because 'the orchestration-row rule (every table carries an orchestration row alongside dispatched roles) must survive the trim'
         $referenceBody | Should -Match ([regex]::Escape('are inseparable')) `
             -Because 'the append-only history/consumption pairing rule must survive the trim'
-        $referenceBody | Should -Match ([regex]::Escape('always write these rows with the tool, never by hand')) `
+        $referenceBody | Should -Match ([regex]::Escape('write these rows with the tool rather than by hand')) `
             -Because 'the instruction to have the helper write the ledger rather than hand-composing it must survive the trim'
         $referenceBody | Should -Match ([regex]::Escape('Measure-SquadLedger.ps1 -SquadRoot <squadRoot> -Write')) `
             -Because 'the helper''s -Write mode is how the Scribe writes the ledger and run totals'

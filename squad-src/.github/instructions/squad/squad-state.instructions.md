@@ -36,11 +36,11 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 
 * `decisions.md`, `notifications.md`, and the `history/<agent>.md` files are **append-only**. New entries are added to the end; prior entries are never edited or removed.
 * Init seeds `history/` as an empty directory. Each `history/<agent>.md` is created by the dispatch it records, in the same write as its first entry, because the file's presence is the proof that stage ran.
-* `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the Scribe overwrites as the squad advances. It carries the `notify` object (the captured notification contact) and the current `mode`.
+* `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the coordinator overwrites as the squad advances. It carries the `notify` object (the captured notification contact) and the current `mode`.
 
 ### state.json Shape
 
-The Scribe seeds `state.json` on first run and overwrites it as the squad advances. Before a child dispatch, the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching Cost Preflight decision entry, and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`, only by running `scripts/Set-SquadCostPreflight.ps1` from the squad skill; this is the sole pre-dispatch exception to Scribe-owned writes.
+The Scribe seeds `state.json` on first run and overwrites it as the squad advances. Before a child dispatch, the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching Cost Preflight decision entry, and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`; this is the sole exception to Scribe-owned writes.
 
 ```json
 {
@@ -165,7 +165,7 @@ The host reports what it ran; prefer that over inference. Measured against the C
 
 ### Recording the session model
 
-`state.json` `currentRun.sessionModel` is the single source of truth for rung 4, and it is captured **automatically, never by asking**. The coordinator runs *on* the session model, so it reports to the Scribe the model it is itself running on — an observation about itself, not a fact it needs from the user. It re-reports on every turn, so a mid-run model switch is picked up without anyone announcing it. `currentRun.modelOverrides` optionally maps a role or agent name to a model the user volunteered; it is never prompted for.
+`state.json` `currentRun.sessionModel` is the single source of truth for rung 4, and it is captured **automatically, never by asking**. The coordinator runs *on* the session model, so it records the model it is itself running on — an observation about itself, not a fact it needs from the user. It re-reports on every turn, so a mid-run model switch is picked up without anyone announcing it. `currentRun.modelOverrides` optionally maps a role or agent name to a model the user volunteered; it is never prompted for.
 
 Adding a build question here would buy nothing: the answer is already in the coordinator's possession, and a squad that interrogates its operator about facts it can observe is a squad that gets skipped.
 
@@ -196,7 +196,7 @@ Totals are computed by summing the rows, never estimated. The total row must equ
 
 ## State Ownership
 
-Only the Squad Coordinator initiates state changes, and the Squad Scribe performs every ordinary write, running `scripts/Write-SquadHandoff.ps1` as its deterministic write path. Initialization is outside admission. Before later work dispatch, the sole exception is the deterministic Cost Preflight transaction, performed only through `scripts/Set-SquadCostPreflight.ps1`: while no parallel writer exists, the coordinator compares `updated`, changes only `currentRun.costPreflight` plus an exact legacy schema bump when required, appends the matching decision, and reads both back. A collision or mismatch permits no dispatch. Other cast agents never write squad state directly.
+Only the Squad Coordinator initiates state changes, and the Squad Scribe performs every ordinary write. Initialization is outside admission. Before later work dispatch, the sole exception is the deterministic Cost Preflight transaction: while no parallel writer exists, the coordinator compares `updated`, changes only `currentRun.costPreflight` plus an exact legacy schema bump when required, appends the matching decision, and reads both back. A collision or mismatch permits no dispatch. Other cast agents never write squad state directly.
 
 This single-writer rule keeps shared state consistent across parallel dispatch: concurrent roles cannot race on the same files because every mutation funnels through the scribe. Under autopilot pipelining this still holds per squad root: at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order, and a federation applies this same per-root rule independently to each sub-squad root.
 

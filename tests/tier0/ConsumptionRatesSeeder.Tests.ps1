@@ -29,8 +29,10 @@ BeforeAll {
         <#
         .SYNOPSIS
             Runs the seeder in a child pwsh and returns its exit code and combined output.
+            Seeding is economy-only, so -Mode economy is passed unless -NoMode is given.
         #>
-        param([Parameter(Mandatory)][string[]]$Arguments)
+        param([Parameter(Mandatory)][string[]]$Arguments, [switch]$NoMode)
+        if (-not $NoMode -and '-Mode' -notin $Arguments) { $Arguments += @('-Mode', 'economy') }
         $output = & pwsh -NoProfile -File $script:Seeder @Arguments *>&1 | Out-String
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
     }
@@ -50,6 +52,52 @@ BeforeAll {
     function Set-RatesText {
         param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Text)
         [System.IO.File]::WriteAllText((Join-Path $Root 'consumption-rates.md'), $Text, [System.Text.UTF8Encoding]::new($false))
+    }
+}
+
+Describe 'Initialize-SquadConsumptionRates.ps1 runs only under Model routing: economy (G2)' {
+    BeforeAll {
+        function New-TeamRoot {
+            param([string]$ModeLine)
+            $root = Join-Path $TestDrive "team-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+            $null = New-Item -ItemType Directory -Path $root -Force
+            $lines = @('# Squad Roster', '')
+            if ($ModeLine) { $lines += @($ModeLine, '') }
+            [System.IO.File]::WriteAllText((Join-Path $root 'team.md'), (($lines + '## Members') -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
+            $root
+        }
+    }
+
+    It 'refuses with exit 7 and writes nothing when team.md records <Case>' -ForEach @(
+        @{ Case = 'Model routing: ranked'; Line = 'Model routing: ranked' }
+        @{ Case = 'no Model routing line'; Line = '' }
+        @{ Case = 'Model routing: manual'; Line = 'Model routing: manual' }
+    ) {
+        $root = New-TeamRoot -ModeLine $Line
+        foreach ($extra in @(@(), @('-Check'), @('-Reseed'))) {
+            $result = Invoke-Seeder -Arguments (@('-SquadRoot', $root) + $extra)
+            $result.ExitCode | Should -Be 7 -Because "team.md is authoritative over -Mode economy: $($result.Output)"
+            $result.Output | Should -Match 'economy-only'
+        }
+        Test-Path -LiteralPath (Join-Path $root 'consumption-rates.md') | Should -BeFalse
+    }
+
+    It 'refuses with exit 7 at Init when -Mode is <Mode>' -ForEach @(
+        @{ Mode = 'off' }
+        @{ Mode = 'ranked' }
+        @{ Mode = '' }
+    ) {
+        $root = Join-Path $TestDrive "init-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+        $result = if ($Mode) { Invoke-Seeder -Arguments @('-SquadRoot', $root, '-Mode', $Mode) } else { Invoke-Seeder -Arguments @('-SquadRoot', $root) -NoMode }
+        $result.ExitCode | Should -Be 7 -Because $result.Output
+        Test-Path -LiteralPath $root | Should -BeFalse
+    }
+
+    It 'seeds when team.md records Model routing: economy, with no -Mode' {
+        $root = New-TeamRoot -ModeLine 'Model routing: economy'
+        $result = Invoke-Seeder -Arguments @('-SquadRoot', $root) -NoMode
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Read-Lf (Join-Path $root 'consumption-rates.md') | Should -BeExactly $script:SeedBlock
     }
 }
 
@@ -98,7 +146,7 @@ Describe 'Initialize-SquadConsumptionRates.ps1 seeds from the template' {
         $relative = "rel-root-$([guid]::NewGuid().ToString('N').Substring(0, 8))/squad"
         $processDir = [Environment]::CurrentDirectory
         Push-Location -LiteralPath $work
-        try { & $script:Seeder -SquadRoot $relative *> $null; $code = $LASTEXITCODE }
+        try { & $script:Seeder -SquadRoot $relative -Mode economy *> $null; $code = $LASTEXITCODE }
         finally { Pop-Location }
 
         $code | Should -Be 0

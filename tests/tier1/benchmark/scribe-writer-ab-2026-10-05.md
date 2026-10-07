@@ -1,6 +1,8 @@
 # Hand-off writer A/B: Scribe runs the script vs coordinator runs it (2026-10-05)
 
-Question from review: should `Write-SquadHandoff.ps1` be run by the Squad Scribe (single writer) or by the coordinator? Goal: lower time and credits at equal quality.
+Question from review: should `Write-SquadHandoff.ps1` be run by the Squad Scribe (single writer) or by the coordinator? Goal: lower credits at equal quality.
+
+Scope: both arms run the script, which is economy-only (`references/economy-mode.md`). This note does not compare the script with the v0.18.0 hand-written hand-off and makes no speed claim for the script; the five-arm live benchmark (#147) measures economy against `off` and `ranked`.
 
 ## Setup
 
@@ -31,4 +33,4 @@ Before hardening, the same comparison favored C (median 339 s / 75.1 credits vs 
 
 ## Decision
 
-Adopt the Scribe-runs-script design: about 16% fewer credits for a median 6 s, with no quality difference across six runs. Three pairs is a small sample; the credit difference was consistent in all three pairs, the time difference was not.
+Under economy, the Scribe runs the script: about 16% fewer credits than the coordinator running it, with no quality difference across six runs. Time showed no consistent difference (median +6 s, pairs ranging -66 to +50 s), so this is not a speed result. Three pairs is a small sample; the credit difference was consistent in all three pairs.

@@ -37,12 +37,21 @@
     covering fast, default, and extended, a dispatch-size estimator, and a calibration
     yaml block with its five keys.
 
-    Exit code 0 means the file was seeded, or already valid, or passed -Check. Any
-    other outcome exits 1 after naming what failed.
+    Exit code 0 means the file was seeded, or already valid, or passed -Check. Exit 7 means
+    refused: the squad is not under `Model routing: economy`, so nothing was read or written
+    and the Scribe seeds the table by hand as in v0.18.0. Any other outcome exits 1 after
+    naming what failed.
+
+    Economy only (references/economy-mode.md): the mode is the `Model routing:` line in
+    `<SquadRoot>/team.md`; during Init, before `team.md` exists, it is -Mode, which the
+    Scribe copies from the initialization payload.
 .PARAMETER SquadRoot
     A squad root: `.copilot-tracking/squad/` or a member root such as
     `.copilot-tracking/squad/members/<name>/`. Seed mode creates it when missing;
     -Check requires `consumption-rates.md` to exist.
+.PARAMETER Mode
+    The routing mode, consulted only while `<SquadRoot>/team.md` does not exist (Init).
+    Anything but `economy` refuses with exit 7. Defaults to `off`.
 .PARAMETER TemplatePath
     Override for the template file. Defaults to the shipped
     `references/consumption-rates-template.md` beside this script's skill.
@@ -58,6 +67,8 @@
 .EXAMPLE
     ./Initialize-SquadConsumptionRates.ps1 -SquadRoot .copilot-tracking/squad
 .EXAMPLE
+    ./Initialize-SquadConsumptionRates.ps1 -SquadRoot .copilot-tracking/squad -Mode economy
+.EXAMPLE
     ./Initialize-SquadConsumptionRates.ps1 -SquadRoot .copilot-tracking/squad -Check
 .EXAMPLE
     ./Initialize-SquadConsumptionRates.ps1 -SquadRoot .copilot-tracking/squad/members/product -Reseed
@@ -66,6 +77,9 @@
 param(
     [Parameter(Mandatory)]
     [string]$SquadRoot,
+
+    [ValidateSet('off', 'ranked', 'economy', 'manual')]
+    [string]$Mode = 'off',
 
     [string]$TemplatePath = (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'references', 'consumption-rates-template.md'),
 
@@ -383,6 +397,17 @@ if ($Check -and $Reseed) { throw '-Check is read-only and cannot be combined wit
 # Resolve against the PowerShell location: .NET file APIs use the process directory, which Set-Location does not change.
 $SquadRoot = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($SquadRoot)
 $TemplatePath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($TemplatePath)
+
+$teamPath = Join-Path -Path $SquadRoot -ChildPath 'team.md'
+$effectiveMode = $Mode
+if (Test-Path -LiteralPath $teamPath -PathType Leaf) {
+    $modeMatch = [regex]::Match([System.IO.File]::ReadAllText($teamPath), '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
+    $effectiveMode = if ($modeMatch.Success) { $modeMatch.Groups['mode'].Value } else { 'off' }
+}
+if ($effectiveMode -ne 'economy') {
+    [Console]::Error.WriteLine("Initialize-SquadConsumptionRates: refused: the squad routes as '$effectiveMode', not economy. Scripted rate seeding is economy-only; the Squad Scribe seeds consumption-rates.md itself.")
+    exit 7
+}
 
 $seedBlock = Get-TemplateSeedBlock -Path $TemplatePath
 $target = Join-Path -Path $SquadRoot -ChildPath 'consumption-rates.md'

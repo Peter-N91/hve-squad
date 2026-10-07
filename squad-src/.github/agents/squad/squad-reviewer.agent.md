@@ -56,8 +56,6 @@ Assign each finding a severity. Write the review record per the skill's conventi
 
 Return to the coordinator:
 
-Send no text-only message until every edit, validation command, and the review record are finished; your single final message is the report. Write the review record last, ending with `Status: complete — <validation command> exit <n>`; the final message carries the files changed, the validation result, and the record path. Never announce what you will do next in a final message.
-
 * **Verdict** — one of `Pass`, `Pass-With-Findings`, or `Fail`.
 * **Scope Reviewed** — the files and the plan phase covered.
 * **Findings** — a table of severity, file and line, and the issue, ordered by severity.

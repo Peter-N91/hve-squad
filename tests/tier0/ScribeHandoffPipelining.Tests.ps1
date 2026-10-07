@@ -114,13 +114,8 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
             $payloadTemplate | Should -Match ([regex]::Escape('### 1.8 Ledger Command'))
             $payloadTemplate | Should -Match ([regex]::Escape('ledgerCommand: pwsh -NoProfile -File "<skill root>/scripts/Measure-SquadLedger.ps1" -SquadRoot "<squadRoot>" -Write -SessionLog auto'))
             $scribe = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0]
-            $scribe.Body | Should -Match ([regex]::Escape('**With `pwsh` 7+, run `ledgerCommand` verbatim (or `Measure-SquadLedger.ps1 -Write -SessionLog auto` when omitted) with the shell tool immediately after Step 13.**'))
-            (Get-SquadReferenceBody -Name 'scribe-procedure.md') | Should -Match ([regex]::Escape('this entire step is the script run after Step 13'))
-        }
-
-        It 'the payload template runs ledgerCommand whether supplied or not, and ledger verification covers every hand-off with pwsh 7+' {
-            (Get-SquadReferenceBody -Name 'scribe-payload-template.md') | Should -Match ([regex]::Escape('when `pwsh` 7+ exists, supplied or not.'))
-            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('Applies to every Scribe hand-off when `pwsh` 7+ is available, whether or not `ledgerCommand` is supplied'))
+            $scribe.Body | Should -Match ([regex]::Escape('**When the payload carries `ledgerCommand`, run it verbatim with the shell tool immediately after Step 13.**'))
+            (Get-SquadReferenceBody -Name 'scribe-procedure.md') | Should -Match ([regex]::Escape('this entire step is that one command, run after Step 13'))
         }
 
         It 'single-writer invariant: at most one Scribe hand-off in flight per squad root, queued in stage order' {

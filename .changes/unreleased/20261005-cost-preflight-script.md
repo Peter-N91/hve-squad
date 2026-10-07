@@ -1,6 +1,6 @@
 ---
-bump: patch
-type: Changed
+bump: minor
+type: Added
 ---
 
-- **The coordinator's one direct state write, the pre-dispatch Cost Preflight transaction, was model-composed.** It now runs only through the new `scripts/Set-SquadCostPreflight.ps1` (closed key set, compare-and-swap on `updated`, exact legacy schema bump, read-back). Without `pwsh` 7+ a configured ceiling is `cannot-confirm` and dispatches nothing. See `squad-src/.github/agents/squad/squad-coordinator.agent.md` and the floor and state instructions.
+- **Scripted Cost Preflight write under `routing=economy` (economy-only; other modes keep the v0.18.0 transaction).** New `scripts/Set-SquadCostPreflight.ps1` performs the coordinator's pre-dispatch Cost Preflight transaction deterministically: closed key set, compare-and-swap on `updated`, the exact legacy schema bump, and read-back. It reads `team.md` and refuses with exit 7, writing nothing, unless it records `Model routing: economy`. See `references/economy-mode.md`.

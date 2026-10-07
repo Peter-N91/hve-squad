@@ -46,9 +46,15 @@ BeforeAll {
         .SYNOPSIS
             Writes a squad root whose state.json mirrors the Scribe seed, optionally in legacy form.
         #>
-        param([ValidateSet('current', 'legacy', 'federation-legacy', 'current-missing')][string]$Kind = 'current')
+        param(
+            [ValidateSet('current', 'legacy', 'federation-legacy', 'current-missing')][string]$Kind = 'current',
+            [AllowEmptyString()][string]$RoutingLine = 'Model routing: economy'
+        )
         $root = Join-Path $TestDrive "squad-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
         New-Item -ItemType Directory -Path $root -Force | Out-Null
+        $team = @('# Squad Roster', '')
+        if ($RoutingLine) { $team += @($RoutingLine, '') }
+        [System.IO.File]::WriteAllText((Join-Path $root 'team.md'), (($team + '## Members') -join "`n") + "`n", $script:Utf8)
         $preflight = '"costPreflight": {"runId":"","roundId":"","ceilingUsd":null,"evaluatedSpendUsd":0,"remainingUsd":null,"plannedDispatches":0,"projectedCostUsd":0,"reserveMultiplier":3.0,"admissionCostUsd":0,"confidence":"not-applicable","basis":"not-requested","decision":"not-requested","reason":"No cost ceiling configured."}'
         $runBody = '"sessionModel": "claude-sonnet-5.5", "modelOverrides": {"developer": "gpt-5.6-sol"}, "estCostUsd": 1.5, "estCreditsTotal": 150'
         if ($Kind -notin 'current') { $currentRun = '{' + $runBody + '}' } else { $currentRun = '{' + $runBody + ', ' + $preflight + '}' }
@@ -79,6 +85,35 @@ BeforeAll {
     function Read-State {
         param([string]$Root)
         [System.IO.File]::ReadAllText((Join-Path $Root 'state.json')) | ConvertFrom-Json -Depth 20
+    }
+}
+
+Describe 'Set-SquadCostPreflight.ps1 runs only under Model routing: economy (G2)' {
+    It 'refuses with exit 7 and leaves both files untouched when team.md records <Case>' -ForEach @(
+        @{ Case = 'Model routing: ranked'; Line = 'Model routing: ranked' }
+        @{ Case = 'no Model routing line'; Line = '' }
+    ) {
+        $root = New-SquadFixture -RoutingLine $Line
+        $before = Get-Bytes -Root $root
+        $result = Invoke-Preflight -Arguments @('-SquadRoot', $root, '-ExpectedUpdated', '2026-10-03T18:00:00Z', '-PreflightJson', (New-PreflightJson), '-DecisionText', (New-DecisionText))
+        $result.ExitCode | Should -Be 7 -Because $result.Output
+        $result.Output | Should -Match 'economy-only'
+        Assert-Untouched -Root $root -Before $before
+    }
+
+    It 'refuses with exit 7 when the squad root has no team.md' {
+        $root = New-SquadFixture
+        Remove-Item -LiteralPath (Join-Path $root 'team.md')
+        $before = Get-Bytes -Root $root
+        $result = Invoke-Preflight -Arguments @('-SquadRoot', $root, '-ExpectedUpdated', '2026-10-03T18:00:00Z', '-PreflightJson', (New-PreflightJson), '-DecisionText', (New-DecisionText))
+        $result.ExitCode | Should -Be 7 -Because $result.Output
+        Assert-Untouched -Root $root -Before $before
+    }
+
+    It 'writes the transaction when team.md records Model routing: economy' {
+        $root = New-SquadFixture
+        $result = Invoke-Preflight -Arguments @('-SquadRoot', $root, '-ExpectedUpdated', '2026-10-03T18:00:00Z', '-PreflightJson', (New-PreflightJson), '-DecisionText', (New-DecisionText))
+        $result.ExitCode | Should -Be 0 -Because $result.Output
     }
 }
 

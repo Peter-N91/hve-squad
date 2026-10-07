@@ -61,8 +61,6 @@ Write the change record under `.copilot-tracking/changes/` per the `rpi-implemen
 
 Return to the coordinator:
 
-Send no text-only message until every edit, validation command, and the change record are finished; your single final message is the report. Write the change record last, ending with `Status: complete — <validation command> exit <n>`; the final message carries the files changed, the validation result, and the change-record path. Never announce what you will do next in a final message.
-
 * **Scope** — the plan phase or task this dispatch owned.
 * **Changes** — the files changed and a one-line summary per change.
 * **Change Record** — the path of the artifact written under `.copilot-tracking/changes/`.

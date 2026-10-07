@@ -47,7 +47,8 @@
     (each with agent, request, deliverable, outcome) and `stateAdvance.activeRoles` are
     required; everything marked "derived" is filled in when omitted and strictly validated
     when supplied:
-      runId, route (optional, requires decision),
+      runId, handoff (optional, only `script`: the economy marker the coordinator sends),
+      route (optional, requires decision),
       turn (derived: state turn + 1), timestamp (derived: the current UTC time),
       mode (derived: the state.json mode),
       since (optional ISO time: the dispatch start; a parallel wave passes it),
@@ -102,16 +103,31 @@
     an omitted block the estimator cannot derive), nothing
     written; 3 write or ledger failure, files restored (or unreadable input, nothing
     changed); 4 rate table refused (malformed operator row), operator decision needed,
-    nothing written; 5 snapshot differs; 6 write set not stable before the timeout.
+    nothing written; 5 snapshot differs; 6 write set not stable before the timeout;
+    7 refused: `team.md` does not record `Model routing: economy` (every mode, nothing
+    written; the Scribe composes the hand-off by hand as in v0.18.0); 8 another hand-off
+    holds this squad root's lock past -LockTimeoutSeconds, nothing written.
+
+    Economy only (references/economy-mode.md): every parameter set reads `team.md` under
+    -SquadRoot first and refuses with exit 7 unless it records `Model routing: economy`.
+
+    Concurrency: a hand-off holds an exclusive per-root lock (an OS file handle in the temp
+    directory, released when the process exits, so a crashed holder never leaves a stale
+    lock) from validation to the ledger check. A rollback restores a file only while its
+    bytes are still the ones this run wrote; a file another writer changed is left as it is
+    and named in the exit-3 message.
 
 .PARAMETER SquadRoot
     A single-squad root: `.copilot-tracking/squad/` or `.copilot-tracking/squad/members/<name>/`.
+    Required in every mode, because the economy check reads its `team.md`.
 .PARAMETER PayloadPath
     Path to a JSON payload file, instead of -PayloadJson.
 .PARAMETER PayloadJson
     The payload as a JSON string.
 .PARAMETER SessionLog
     Passed to `Measure-SquadLedger.ps1 -Write`; defaults to `auto`.
+.PARAMETER LockTimeoutSeconds
+    Longest wait for another hand-off on the same root to finish; exit 8 when exceeded (default 120).
 .PARAMETER SnapshotPath
     Snapshot mode: file to write the hash snapshot to.
 .PARAMETER Path
@@ -133,13 +149,15 @@
 .EXAMPLE
     ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -PayloadPath $env:TEMP/handoff.json
 .EXAMPLE
-    ./Write-SquadHandoff.ps1 -SnapshotPath $env:TEMP/deliverables.json -Path src/app.py, .copilot-tracking/changes/x.md
+    ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -SnapshotPath $env:TEMP/deliverables.json -Path src/app.py, .copilot-tracking/changes/x.md
 .EXAMPLE
-    ./Write-SquadHandoff.ps1 -VerifySnapshotPath $env:TEMP/deliverables.json
+    ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -VerifySnapshotPath $env:TEMP/deliverables.json
 #>
 [CmdletBinding(DefaultParameterSetName = 'Handoff')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Handoff')]
+    [Parameter(Mandatory, ParameterSetName = 'Snapshot')]
+    [Parameter(Mandatory, ParameterSetName = 'Verify')]
     [string]$SquadRoot,
 
     [Parameter(ParameterSetName = 'Handoff')]
@@ -150,6 +168,10 @@ param(
 
     [Parameter(ParameterSetName = 'Handoff')]
     [string]$SessionLog = 'auto',
+
+    [Parameter(ParameterSetName = 'Handoff')]
+    [ValidateRange(1, 3600)]
+    [int]$LockTimeoutSeconds = 120,
 
     [Parameter(Mandatory, ParameterSetName = 'Snapshot')]
     [string]$SnapshotPath,
@@ -186,6 +208,17 @@ function Get-FileSha256 {
     param([string]$FullPath)
     try { return (Get-FileHash -LiteralPath $FullPath -Algorithm SHA256).Hash.ToLowerInvariant() }
     catch { return '<unreadable>' }
+}
+
+$SquadRoot = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($SquadRoot)
+$routingTeam = Join-Path $SquadRoot 'team.md'
+$routingMode = 'off'
+if (Test-Path -LiteralPath $routingTeam -PathType Leaf) {
+    $routingMatch = [regex]::Match([System.IO.File]::ReadAllText($routingTeam), '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
+    if ($routingMatch.Success) { $routingMode = $routingMatch.Groups['mode'].Value }
+}
+if ($routingMode -ne 'economy') {
+    Stop-Handoff 7 "refused: $routingTeam records Model routing: $routingMode, not economy. The script hand-off is economy-only; the Squad Scribe composes this hand-off itself."
 }
 
 function ConvertTo-NormalPath {
@@ -433,9 +466,18 @@ function Write-FileAtomic {
     try {
         [System.IO.File]::WriteAllBytes($tmp, $Bytes)
         [System.IO.File]::Move($tmp, $FullPath, $true)
+        $script:OwnedHash[$FullPath] = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($Bytes))
     }
     finally {
         if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+function Update-OwnedHash {
+    # A child script this run started wrote the file; its bytes are this run's to restore.
+    param([string[]]$FullPath)
+    foreach ($p in $FullPath) {
+        if (Test-Path -LiteralPath $p -PathType Leaf) { $script:OwnedHash[$p] = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($p))) }
     }
 }
 
@@ -699,7 +741,6 @@ if ($PSBoundParameters.ContainsKey('PayloadPath')) {
 try { $payload = [System.Text.Json.Nodes.JsonNode]::Parse($PayloadJson) }
 catch { Stop-Handoff 1 "payload is not valid JSON (duplicate keys are rejected): $($_.Exception.Message)" }
 
-$SquadRoot = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($SquadRoot)
 $scriptsRoot = $PSScriptRoot
 $statePath = Join-Path $SquadRoot 'state.json'
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
@@ -710,6 +751,19 @@ $historyDir = Join-Path $SquadRoot 'history'
 
 foreach ($required in @($statePath, $decisionsPath, $consumptionPath, $teamPath)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { Stop-Handoff 2 "missing $required; an uninitialized or unseeded squad root needs the Squad Scribe." }
+}
+
+# One hand-off per root at a time; the handle is released by the OS if this process dies.
+$lockKey = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes((ConvertTo-NormalPath $SquadRoot).TrimEnd('\', '/').ToLowerInvariant()))).Substring(0, 16)
+$lockPath = Join-Path ([System.IO.Path]::GetTempPath()) "hve-squad-handoff-$lockKey.lock"
+$lockDeadline = [DateTime]::UtcNow.AddSeconds($LockTimeoutSeconds)
+$script:HandoffLock = $null
+while ($null -eq $script:HandoffLock) {
+    try { $script:HandoffLock = [System.IO.FileStream]::new($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None) }
+    catch [System.IO.IOException] {
+        if ([DateTime]::UtcNow -gt $lockDeadline) { Stop-Handoff 8 "another hand-off has held $SquadRoot for more than $LockTimeoutSeconds s; nothing was written. Rerun once it finishes." }
+        Start-Sleep -Milliseconds 200
+    }
 }
 if (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') -PathType Leaf) {
     Stop-Handoff 2 'federation roots need the Squad Scribe.'
@@ -769,8 +823,9 @@ catch { Write-Verbose "state.json pre-read failed; the state validation below re
 
 # --- Payload validation ------------------------------------------------------------------------
 Test-NodeStrings -Node $payload -Where 'payload'
-$null = Test-ObjectKeys -Node $payload -Required @('runId', 'historyRecords', 'stateAdvance') -Optional @('turn', 'mode', 'timestamp', 'route', 'decision', 'since', 'orchestration') -Where 'payload'
+$null = Test-ObjectKeys -Node $payload -Required @('runId', 'historyRecords', 'stateAdvance') -Optional @('handoff', 'turn', 'mode', 'timestamp', 'route', 'decision', 'since', 'orchestration') -Where 'payload'
 if ($problems.Count -gt 0) { Stop-Handoff 1 ("invalid payload: " + ($problems -join ' ')) }
+if ($null -ne $payload['handoff'] -and (Get-NodeString $payload['handoff']) -ne 'script') { $problems.Add("payload.handoff must be 'script' (economy-mode.md) when present.") }
 
 $runId = Get-NodeString $payload['runId']
 if ($null -eq $runId -or $runId -notmatch '^[A-Za-z0-9._:-]+$') { $problems.Add("payload.runId must match [A-Za-z0-9._:-]+.") }
@@ -1062,6 +1117,7 @@ if ($reviewRecords.Count -gt 0) {
 # --- Plan the writes ----------------------------------------------------------------------------
 $originals = [System.Collections.Generic.List[hashtable]]::new()
 $written = [System.Collections.Generic.List[string]]::new()
+$script:OwnedHash = @{}
 function Register-Original {
     param([string]$FullPath)
     if ($originals.Where({ $_.Path -eq $FullPath }).Count -gt 0) { return }
@@ -1069,14 +1125,20 @@ function Register-Original {
     $originals.Add(@{ Path = $FullPath; Bytes = $bytes })
 }
 function Restore-Originals {
-    # Restores only files whose bytes differ from the original; $script:RestoredCount counts them.
+    # Restores only files whose bytes differ from the original and still equal what this run last wrote;
+    # $script:RestoredCount counts restores, $script:ForeignChanges names files another writer changed.
     $failed = @()
     $script:RestoredCount = 0
+    $script:ForeignChanges = [System.Collections.Generic.List[string]]::new()
     $reversed = @($originals)
     [array]::Reverse($reversed)
     foreach ($entry in $reversed) {
         try {
             $exists = Test-Path -LiteralPath $entry.Path
+            if ($exists -and (Test-Path -LiteralPath $entry.Path -PathType Leaf) -and $script:OwnedHash.ContainsKey($entry.Path)) {
+                $current = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.IO.File]::ReadAllBytes($entry.Path)))
+                if ($current -ne $script:OwnedHash[$entry.Path]) { $script:ForeignChanges.Add($entry.Path); continue }
+            }
             if ($null -eq $entry.Bytes) {
                 if ($exists) { Remove-Item -LiteralPath $entry.Path -Force -Recurse; $script:RestoredCount++ }
                 continue
@@ -1095,6 +1157,7 @@ function Stop-WithRollback {
     $suffix = if ($failed.Count -gt 0) { " RESTORE FAILED for: $($failed -join '; ')" }
     elseif ($script:RestoredCount -gt 0) { " $($script:RestoredCount) changed file(s) restored to their original bytes." }
     else { ' No file had been changed.' }
+    if ($script:ForeignChanges.Count -gt 0) { $suffix += " Left as found, changed by another writer since this run wrote them: $($script:ForeignChanges -join '; ')." }
     Stop-Handoff $Code "$Message$suffix"
 }
 
@@ -1248,9 +1311,10 @@ $ledgerScript = Join-Path $scriptsRoot 'Measure-SquadLedger.ps1'
 foreach ($dependency in @($ratesScript, $ledgerScript)) { if (-not (Test-Path -LiteralPath $dependency -PathType Leaf)) { Stop-Handoff 1 "missing sibling script $dependency." } }
 
 Register-Original $ratesPath
-$ratesCheck = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Check')
+$ratesCheck = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Check', '-Mode', 'economy')
 if ($ratesCheck.ExitCode -ne 0) {
-    $seed = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot)
+    $seed = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Mode', 'economy')
+    Update-OwnedHash $ratesPath
     if ($seed.ExitCode -ne 0) {
         $failed = @(Restore-Originals)
         Stop-Handoff 4 "the rate table needs an operator decision (never -DropMalformedRows from here): $($seed.Text)$(if ($failed.Count -gt 0) { " RESTORE FAILED: $($failed -join '; ')" })"
@@ -1314,6 +1378,7 @@ try {
         $written.Add('RESEEDED consumption.md from the references/consumption.md template (it lacked the ledger sections)')
     }
     $ledger = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Write', '-SessionLog', $SessionLog)
+    Update-OwnedHash $consumptionPath, $statePath
     if ($ledger.ExitCode -ne 0) { throw "Measure-SquadLedger -Write failed: $($ledger.Text)" }
     $written.Add("WROTE consumption.md ($(($ledger.Text -split "`n" | Select-Object -Last 1).Trim()))")
 

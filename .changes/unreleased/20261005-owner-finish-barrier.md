@@ -1,6 +1,6 @@
 ---
-bump: patch
-type: Fixed
+bump: minor
+type: Added
 ---
 
-- **An owner's early `task` return let the closing review start before the owner had finished editing.** Owners now write the change record last, ending with a `Status: complete — <validation command> exit <n>` line, and send one final message carrying files changed, validation result, and change-record path; the coordinator treats anything less as unfinished and dispatches no review until every owner is finished. `scripts/Write-SquadHandoff.ps1` enforces review-on-final-files at the hand-off: an owner deliverable modified more than 2 s after the review's deliverable exits 1 and writes nothing until the review is re-dispatched. An optional `-SnapshotPath`/`-VerifySnapshotPath` pair (with `-WaitStable`) covers write sets the check cannot see. Changed in the implementor, lead, reviewer, and technical-writer charters and `references/operating-procedure.md`.
+- **Review-saw-the-final-files check for scripted hand-offs (economy-only).** Under `routing=economy`, `scripts/Write-SquadHandoff.ps1` refuses a hand-off (exit 1, nothing written) when an owner deliverable was modified more than 2 s after the closing review's own deliverable; only re-dispatching the review on the final files clears it. It compares file times and does not prove an owner reported it was finished. An optional `-SnapshotPath`/`-VerifySnapshotPath` pair (with `-WaitStable`) compares hashes for write sets the check cannot see. Both refuse with exit 7 outside economy. See `references/economy-mode.md`.

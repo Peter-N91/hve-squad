@@ -22,6 +22,20 @@ BeforeAll {
     # An empty COPILOT_HOME keeps `-SessionLog auto` from reading a real developer session.
     $env:COPILOT_HOME = Join-Path $TestDrive 'copilot-home'
 
+    function Set-RoutingLine {
+        # The script is economy-only; the line sits directly beneath team.md's H1, as model-routing.md defines.
+        param([string]$Root, [AllowEmptyString()][string]$Line = 'Model routing: economy')
+        $team = Join-Path $Root 'team.md'
+        $text = (Get-Content -LiteralPath $team -Raw) -replace "`r`n", "`n" -replace '(?m)^Model routing:[^\n]*\n\n?', ''
+        if ($Line) { $text = [regex]::Replace($text, '(?m)^(# [^\n]*\n)', "`$1`n$Line`n", 1) }
+        [System.IO.File]::WriteAllText($team, $text, [System.Text.UTF8Encoding]::new($false))
+    }
+
+    # Snapshot and verify modes check the same team.md before touching anything.
+    $script:SnapRoot = Join-Path $TestDrive 'snap-squad'
+    New-Item -ItemType Directory -Path $script:SnapRoot -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $script:SnapRoot 'team.md') -Value "# Squad Roster`n`nModel routing: economy`n" -Encoding utf8NoBOM
+
     function New-Root {
         # A repository whose .copilot-tracking/squad root is a copy of the seed fixture, with the two agent
         # files the attribution checks read. -Member roots the squad under a federation (members/alpha).
@@ -37,6 +51,7 @@ BeforeAll {
         Set-Content -LiteralPath (Join-Path $agents 'squad-researcher.agent.md') -Value "---`nname: Squad Researcher`nmodel: Claude Sonnet 4.6 (copilot)`n---`n# Researcher`n"
         Set-Content -LiteralPath (Join-Path $agents 'squad-scribe.agent.md') -Value "---`nname: Squad Scribe`nmodel: Claude Haiku 4.5 (copilot)`n---`n# Scribe`n"
         (Get-Item -LiteralPath (Join-Path $root 'research/2026-09-27-fixture-topic.md')).LastWriteTimeUtc = [DateTime]::Parse('2026-09-27T09:30:00Z').ToUniversalTime()
+        Set-RoutingLine -Root $root
         $root
     }
 
@@ -467,22 +482,91 @@ Describe 'Write-SquadHandoff.ps1 derives priced_as and checks the closing review
     }
 }
 
+Describe 'Write-SquadHandoff.ps1 runs only under Model routing: economy (G2)' {
+    It 'refuses a hand-off with exit 7 and changes nothing when team.md records <Case>' -ForEach @(
+        @{ Case = 'Model routing: ranked'; Line = 'Model routing: ranked' }
+        @{ Case = 'Model routing: manual'; Line = 'Model routing: manual' }
+        @{ Case = 'no Model routing line'; Line = '' }
+    ) {
+        $root = New-Root
+        Set-RoutingLine -Root $root -Line $Line
+        $before = Get-TreeHash $root
+        $result = Invoke-Writer -Root $root -Payload (New-Payload)
+        $result.ExitCode | Should -Be 7 -Because $result.Output
+        $result.Output | Should -Match 'economy-only'
+        Get-TreeHash $root | Should -BeExactly $before
+    }
+
+    It 'refuses snapshot and verify modes with exit 7 outside economy' {
+        $off = Join-Path $TestDrive 'snap-off'
+        New-Item -ItemType Directory -Path (Join-Path $off 'src') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $off 'team.md') -Value "# Squad Roster`n" -Encoding utf8NoBOM
+        Set-Content -LiteralPath (Join-Path $off 'src/a.txt') -Value 'a'
+        $snapshot = Join-Path $TestDrive 'snap-off.json'
+        $record = & pwsh -NoProfile -File $script:Writer -SquadRoot $off -SnapshotPath $snapshot -Path 'src' -RepoRoot $off *>&1 | Out-String
+        $LASTEXITCODE | Should -Be 7 -Because $record
+        Test-Path -LiteralPath $snapshot | Should -BeFalse
+        $verify = & pwsh -NoProfile -File $script:Writer -SquadRoot $off -VerifySnapshotPath $snapshot *>&1 | Out-String
+        $LASTEXITCODE | Should -Be 7 -Because $verify
+    }
+
+    It 'accepts the literal payload example in economy-mode.md' {
+        $doc = (Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/economy-mode.md') -Raw) -replace "`r`n", "`n"
+        $example = [regex]::Match($doc, '(?s)This is a complete, valid payload:\n\n```json\n(?<json>.*?)\n```').Groups['json'].Value
+        $example | Should -Not -BeNullOrEmpty
+        $root = New-Root
+        $file = Join-Path $TestDrive "example-$([guid]::NewGuid().ToString('N')).json"
+        [System.IO.File]::WriteAllText($file, $example, [System.Text.UTF8Encoding]::new($false))
+        $output = & pwsh -NoProfile -File $script:Writer -SquadRoot $root -PayloadPath $file *>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $output
+        $output | Should -Match 'Measure-SquadLedger -Check: PASS'
+    }
+
+    It 'refuses a handoff value other than script' {
+        $root = New-Root
+        $payload = New-Payload
+        $payload['handoff'] = 'manual'
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match "payload.handoff must be 'script'"
+    }
+
+    It 'waits for the per-root lock and exits 8, writing nothing, when it is never released' {
+        $root = New-Root
+        $full = (Get-Item -LiteralPath $root).FullName.TrimEnd('\', '/').ToLowerInvariant()
+        $key = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($full))).Substring(0, 16)
+        $lockPath = Join-Path ([System.IO.Path]::GetTempPath()) "hve-squad-handoff-$key.lock"
+        $before = Get-TreeHash $root
+        $held = [System.IO.FileStream]::new($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        try {
+            $file = Join-Path $TestDrive "lock-$([guid]::NewGuid().ToString('N')).json"
+            Set-Content -LiteralPath $file -Value (New-Payload | ConvertTo-Json -Depth 8) -Encoding utf8NoBOM
+            $blocked = & pwsh -NoProfile -File $script:Writer -SquadRoot $root -PayloadPath $file -LockTimeoutSeconds 1 *>&1 | Out-String
+            $LASTEXITCODE | Should -Be 8 -Because $blocked
+            Get-TreeHash $root | Should -BeExactly $before
+        }
+        finally { $held.Dispose() }
+        $after = & pwsh -NoProfile -File $script:Writer -SquadRoot $root -PayloadPath $file -LockTimeoutSeconds 1 *>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because "the lock is released with its handle: $after"
+    }
+}
+
 Describe 'Write-SquadHandoff.ps1 deliverable snapshot' {
     It 'reports UNCHANGED, then exit 5 after a deliverable changes, and refuses paths outside the repo root' {
         $repo = Join-Path $TestDrive 'repo'
         New-Item -ItemType Directory -Path (Join-Path $repo 'src') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $repo 'src/app.txt') -Value 'one'
         $snapshot = Join-Path $TestDrive 'snapshot.json'
-        $record = & pwsh -NoProfile -File $script:Writer -SnapshotPath $snapshot -Path 'src' -RepoRoot $repo *>&1 | Out-String
+        $record = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath $snapshot -Path 'src' -RepoRoot $repo *>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $record
-        $same = & pwsh -NoProfile -File $script:Writer -VerifySnapshotPath $snapshot *>&1 | Out-String
+        $same = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -VerifySnapshotPath $snapshot *>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $same
         $same | Should -Match 'SNAPSHOT: UNCHANGED'
         Set-Content -LiteralPath (Join-Path $repo 'src/app.txt') -Value 'two'
-        $changed = & pwsh -NoProfile -File $script:Writer -VerifySnapshotPath $snapshot *>&1 | Out-String
+        $changed = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -VerifySnapshotPath $snapshot *>&1 | Out-String
         $LASTEXITCODE | Should -Be 5 -Because $changed
         $changed | Should -Match 'src/app.txt'
-        $outside = & pwsh -NoProfile -File $script:Writer -SnapshotPath (Join-Path $TestDrive 'bad.json') -Path '../escape.txt' -RepoRoot $repo *>&1 | Out-String
+        $outside = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath (Join-Path $TestDrive 'bad.json') -Path '../escape.txt' -RepoRoot $repo *>&1 | Out-String
         $LASTEXITCODE | Should -Be 1 -Because $outside
     }
 
@@ -492,14 +576,14 @@ Describe 'Write-SquadHandoff.ps1 deliverable snapshot' {
         Set-Content -LiteralPath (Join-Path $repo 'src/a.txt') -Value 'a'
         Set-Content -LiteralPath (Join-Path $repo 'src/b.txt') -Value 'b'
         $snapshot = Join-Path $TestDrive 'snapshot-dir.json'
-        & pwsh -NoProfile -File $script:Writer -SnapshotPath $snapshot -Path 'src' -RepoRoot $repo *>&1 | Out-Null
+        & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath $snapshot -Path 'src' -RepoRoot $repo *>&1 | Out-Null
         Set-Content -LiteralPath (Join-Path $repo 'src/new.txt') -Value 'new'
-        $added = & pwsh -NoProfile -File $script:Writer -VerifySnapshotPath $snapshot *>&1 | Out-String
+        $added = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -VerifySnapshotPath $snapshot *>&1 | Out-String
         $LASTEXITCODE | Should -Be 5 -Because $added
         $added | Should -Match 'src/new.txt is new'
         Remove-Item -LiteralPath (Join-Path $repo 'src/new.txt')
         Remove-Item -LiteralPath (Join-Path $repo 'src/b.txt')
-        $removed = & pwsh -NoProfile -File $script:Writer -VerifySnapshotPath $snapshot *>&1 | Out-String
+        $removed = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -VerifySnapshotPath $snapshot *>&1 | Out-String
         $LASTEXITCODE | Should -Be 5 -Because $removed
         $removed | Should -Match 'src/b.txt was removed'
     }
@@ -518,14 +602,14 @@ Describe 'Write-SquadHandoff.ps1 deliverable snapshot' {
         while (-not (Test-Path -LiteralPath $marker) -and $waited -lt 100) { Start-Sleep -Milliseconds 100; $waited++ }
         $snapshot = Join-Path $TestDrive 'snapshot-wait.json'
         $started = [DateTime]::UtcNow
-        $result = & pwsh -NoProfile -File $script:Writer -SnapshotPath $snapshot -Path 'src' -RepoRoot $repo -WaitStable 2 -MaxWaitSeconds 60 *>&1 | Out-String
+        $result = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath $snapshot -Path 'src' -RepoRoot $repo -WaitStable 2 -MaxWaitSeconds 60 *>&1 | Out-String
         $elapsed = ([DateTime]::UtcNow - $started).TotalSeconds
         Wait-Job $job | Out-Null
         Remove-Job $job -Force
         $LASTEXITCODE | Should -Be 0 -Because $result
         (Get-Content -LiteralPath $target -Raw).Trim() | Should -Be '6'
         $elapsed | Should -BeGreaterThan 2
-        $verify = & pwsh -NoProfile -File $script:Writer -VerifySnapshotPath $snapshot *>&1 | Out-String
+        $verify = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -VerifySnapshotPath $snapshot *>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because "the snapshot was taken after the last write: $verify"
     }
 
@@ -539,7 +623,7 @@ Describe 'Write-SquadHandoff.ps1 deliverable snapshot' {
             foreach ($i in 1..40) { Set-Content -LiteralPath $file -Value $i; Start-Sleep -Milliseconds 150 }
         } -ArgumentList $target
         Start-Sleep -Milliseconds 800
-        $result = & pwsh -NoProfile -File $script:Writer -SnapshotPath (Join-Path $TestDrive 'snapshot-busy.json') -Path 'src' -RepoRoot $repo -WaitStable 3 -MaxWaitSeconds 2 *>&1 | Out-String
+        $result = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath (Join-Path $TestDrive 'snapshot-busy.json') -Path 'src' -RepoRoot $repo -WaitStable 3 -MaxWaitSeconds 2 *>&1 | Out-String
         $code = $LASTEXITCODE
         Wait-Job $job | Out-Null
         Remove-Job $job -Force
@@ -552,11 +636,11 @@ Describe 'Write-SquadHandoff.ps1 deliverable snapshot' {
         Set-Content -LiteralPath (Join-Path $repo 'src/a.txt') -Value 'a'
         Set-Content -LiteralPath (Join-Path $repo 'CHANGES.md') -Value 'c'
         $snapshot = Join-Path $TestDrive 'snapshot-comma.json'
-        $record = & pwsh -NoProfile -File $script:Writer -SnapshotPath $snapshot -Path 'src/a.txt,CHANGES.md' -RepoRoot $repo *>&1 | Out-String
+        $record = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath $snapshot -Path 'src/a.txt,CHANGES.md' -RepoRoot $repo *>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $record
         $record | Should -Match 'recorded 2 existing file'
         Set-Content -LiteralPath (Join-Path $repo 'src/a.txt') -Value 'edited'
-        $changed = & pwsh -NoProfile -File $script:Writer -VerifySnapshotPath $snapshot *>&1 | Out-String
+        $changed = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -VerifySnapshotPath $snapshot *>&1 | Out-String
         $LASTEXITCODE | Should -Be 5 -Because $changed
         $changed | Should -Match 'src/a.txt changed'
     }
@@ -566,18 +650,18 @@ Describe 'Write-SquadHandoff.ps1 deliverable snapshot' {
         New-Item -ItemType Directory -Path (Join-Path $repo 'src') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $repo 'src/a.txt') -Value 'a'
         $snapshot = Join-Path $TestDrive 'snapshot-missing.json'
-        $comma = & pwsh -NoProfile -File $script:Writer -SnapshotPath $snapshot -Path 'src/a.txt,typo/nope.md' -RepoRoot $repo *>&1 | Out-String
+        $comma = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath $snapshot -Path 'src/a.txt,typo/nope.md' -RepoRoot $repo *>&1 | Out-String
         $LASTEXITCODE | Should -Be 1 -Because $comma
         $comma | Should -Match 'does not exist'
-        $typo = & pwsh -NoProfile -File $script:Writer -SnapshotPath $snapshot -Path 'typo/nope.md' -RepoRoot $repo -WaitStable 1 *>&1 | Out-String
+        $typo = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath $snapshot -Path 'typo/nope.md' -RepoRoot $repo -WaitStable 1 *>&1 | Out-String
         $LASTEXITCODE | Should -Be 1 -Because $typo
 
         $wrapper = Join-Path $TestDrive "snap-wrapper-$([guid]::NewGuid().ToString('N')).ps1"
-        $body = "& '$($script:Writer)' -SnapshotPath '$snapshot' -Path 'src','CHANGES.md' -RepoRoot '$repo'`nexit `$LASTEXITCODE`n"
+        $body = "& '$($script:Writer)' -SquadRoot '$($script:SnapRoot)' -SnapshotPath '$snapshot' -Path 'src','CHANGES.md' -RepoRoot '$repo'`nexit `$LASTEXITCODE`n"
         [System.IO.File]::WriteAllText($wrapper, $body, [System.Text.UTF8Encoding]::new($false))
         $inProcess = & pwsh -NoProfile -File $wrapper *>&1 | Out-String
         $LASTEXITCODE | Should -Be 1 -Because $inProcess
-        $ok = "& '$($script:Writer)' -SnapshotPath '$snapshot' -Path 'src','src/a.txt' -RepoRoot '$repo'`nexit `$LASTEXITCODE`n"
+        $ok = "& '$($script:Writer)' -SquadRoot '$($script:SnapRoot)' -SnapshotPath '$snapshot' -Path 'src','src/a.txt' -RepoRoot '$repo'`nexit `$LASTEXITCODE`n"
         [System.IO.File]::WriteAllText($wrapper, $ok, [System.Text.UTF8Encoding]::new($false))
         $good = & pwsh -NoProfile -File $wrapper *>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $good
@@ -591,9 +675,9 @@ Describe 'Write-SquadHandoff.ps1 deliverable snapshot' {
         try { $short = (New-Object -ComObject Scripting.FileSystemObject).GetFolder($repo).ShortPath } catch { $short = $null }
         if (-not $short -or $short -eq $repo) { Set-ItResult -Skipped -Because 'this volume has no 8.3 short name for the test folder'; return }
         $snapshot = Join-Path $TestDrive 'snapshot-short.json'
-        $result = & pwsh -NoProfile -File $script:Writer -SnapshotPath $snapshot -Path 'src' -RepoRoot $short *>&1 | Out-String
+        $result = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath $snapshot -Path 'src' -RepoRoot $short *>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
-        $outside = & pwsh -NoProfile -File $script:Writer -SnapshotPath $snapshot -Path '../escape.txt' -RepoRoot $short *>&1 | Out-String
+        $outside = & pwsh -NoProfile -File $script:Writer -SquadRoot $script:SnapRoot -SnapshotPath $snapshot -Path '../escape.txt' -RepoRoot $short *>&1 | Out-String
         $LASTEXITCODE | Should -Be 1 -Because $outside
     }
 }

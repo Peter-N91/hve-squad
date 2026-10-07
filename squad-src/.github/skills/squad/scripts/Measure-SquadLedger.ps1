@@ -1610,17 +1610,6 @@ function Resolve-SessionLogPathLocal {
         return [string]::Equals($cwd, $repoRoot, [System.StringComparison]::OrdinalIgnoreCase)
     }
 
-    # The CLI exports the running session's id to its shell tool. Trust it only when it is a GUID naming a
-    # direct child of session-state whose cwd is this repo; an inherited or foreign id falls through to the scan.
-    $sessionId = $env:COPILOT_AGENT_SESSION_ID
-    if ($sessionId -and $sessionId -match '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
-        $ownDir = [System.IO.Path]::GetFullPath((Join-Path $stateDir $sessionId))
-        $stateFull = [System.IO.Path]::GetFullPath($stateDir).TrimEnd('\', '/')
-        $own = Join-Path $ownDir 'events.jsonl'
-        if ([string]::Equals([System.IO.Path]::GetDirectoryName($ownDir), $stateFull, [System.StringComparison]::OrdinalIgnoreCase) -and
-            (Test-Path -LiteralPath $own -PathType Leaf) -and (& $testCwd $ownDir)) { return $own }
-    }
-
     # Newest events.jsonl first, so the first cwd match is the most recently written one and
     # older sessions' workspace.yaml are never read (a machine can hold thousands).
     $candidates = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
