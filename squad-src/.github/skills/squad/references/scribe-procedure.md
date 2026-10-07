@@ -55,7 +55,7 @@ The Scribe decides which cold file(s) to read from its own payload type — neve
 | Payload type (Step above)                                     | Also read                                                                |
 |-----------------------------------------------------------------|---------------------------------------------------------------------------|
 | decision, history, (always: Step 7 consumption + state.json)    | none — this hot core is sufficient                                        |
-| initialization or roster refresh (3)                             | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption-rates-template.md](consumption-rates-template.md), `seed-templates.md` (existing init-only conditional) |
+| initialization or roster refresh (3)                             | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), [consumption-rates-template.md](consumption-rates-template.md), `seed-templates.md` (existing init-only conditional) |
 | Step 7.1 rate-table seed/reseed, any payload type (`consumption-rates.md` missing or shape-check-failed) | [consumption-rates-template.md](consumption-rates-template.md) |
 | memory (4)                                                       | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md)         |
 | Council Verdict / Intake Readiness Verdict / Discovery Verdict (5, 9, 12) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md)     |
@@ -79,7 +79,7 @@ A federation-level history payload is different from the ordinary case above —
 
 Verdict entries (Council, Intake Readiness, Discovery), their per-verdict-type instruction-file schemas, the failure-note rule for an incomplete schema, the Decision Ref format, and the autonomous-loop summary shape all move to [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) — read only for that payload type per the Cold-File Dispatch Table above.
 
-Initialization (`team.md`/`routing.md` seeding, the full state-tree seed including both consumption files, seeding `history/` empty, the `notify` object and Init decision, and Deliverable Root resolution and refresh) and Repository Memory and Learning Promotion both move to [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) — read only for an initialization or memory payload per the Cold-File Dispatch Table above.
+Initialization (`team.md`/`routing.md` seeding, the full state-tree seed including both consumption files, no agent file in `history/`, the `notify` object and Init decision, and Deliverable Root resolution and refresh) and Repository Memory and Learning Promotion move to [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) — read only for an initialization or memory payload per the Cold-File Dispatch Table above.
 
 ### Consumption Accounting
 

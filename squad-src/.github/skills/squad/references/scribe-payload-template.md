@@ -10,13 +10,13 @@ metadata:
 
 # Scribe Payload Template
 
-This is the one payload shape both coordinators fill at hand-off. It replaces composing an ad hoc payload per turn: filling this template, in this section order, is what keeps a host's prompt cache warm across dispatches — the fixed instructional text at the top never changes turn to turn, so only the tail differs and only the tail needs re-encoding.
+This is the one payload shape both coordinators fill at hand-off. Filling it in this section order keeps a host's prompt cache warm: the fixed text at the top never changes, so only the tail needs re-encoding.
 
-**Ordering is prose-only and cache-stable, never a JSON-field reorder.** Every JSON object below — most importantly the ten-field `#### Consumption` block — keeps the exact field order fixed in [entry-schemas.md](entry-schemas.md) and [scribe-procedure.md](scribe-procedure.md) Non-Negotiable Rules regardless of where the object sits in this template. Only the section-to-section prose order in this file is chosen for cache stability; a JSON object's own internal field order is a separate, unrelated contract and is never touched to achieve it.
+**Ordering is prose-only and cache-stable, never a JSON-field reorder.** Every JSON object below — most importantly the ten-field `#### Consumption` block — keeps the exact field order fixed in [entry-schemas.md](entry-schemas.md) and [scribe-procedure.md](scribe-procedure.md) Non-Negotiable Rules regardless of where the object sits in this template. Only the section-to-section prose order is chosen for cache stability.
 
 ## 1. Invariant Instructions (Byte-Stable — Fill Nothing Here)
 
-Read, do not edit, this section on every dispatch. It is copied unmodified from turn to turn, which is what makes it the stable prefix a cache-aware host can reuse.
+Read, do not edit, this section on every dispatch. It is copied unmodified from turn to turn, the stable prefix a cache-aware host reuses.
 
 ### 1.1 Payload Type
 
@@ -50,7 +50,7 @@ State what the Scribe should find after writing: the number of history entries t
 
 ### 1.8 Ledger Command (Every Payload That Appends to `history/`)
 
-When the coordinator has a shell with `pwsh` 7+, supply `ledgerCommand`: the exact `-Write` command with the installed squad skill's absolute script path, as in the YAML below. The Scribe runs it verbatim as its last write and never hand-writes `consumption.md` rows or the two `currentRun` totals while it is supplied.
+When the coordinator has a shell with `pwsh` 7+, supply `ledgerCommand`: the exact `-Write` command with the installed squad skill's absolute script path, as in the YAML below — on initialization and roster refresh too, which append the Scribe's orchestration block. The Scribe runs it verbatim as its last write and never hand-writes `consumption.md` rows or the two `currentRun` totals while it is supplied.
 
 ## 2. Per-Dispatch Data (Volatile — Fill Every Turn)
 
@@ -59,6 +59,7 @@ Everything below this line changes turn to turn and is appended after the stable
 ```yaml
 payloadType: <decision|history|initialization|memory|Council Verdict|autonomous-loop summary|autopilot-run summary|Intake Readiness Verdict|promotion|expansion|Discovery Verdict>
 squadRoot: <resolved path>
+roster: <initialization/roster refresh only: every confirmed team.md row, cells verbatim; the Scribe never derives an agent name>
 runId: <id>
 turn: <n>
 stage: <stage name, autopilot/autonomous runs only>
