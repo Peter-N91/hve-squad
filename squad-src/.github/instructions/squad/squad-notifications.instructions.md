@@ -183,12 +183,11 @@ description: "Append-only log of squad notifications (pings) and their delivery 
 # Squad Notifications
 
 Each entry records a notification the squad fired: when, to whom, the trigger, the channel it resolved to, and the decision awaited. Entries are appended in chronological order and never edited.
+```
 
-<!-- Append each new notification at the end of this file, after the last entry. -->
+Append each entry at the very end of the file, in this shape:
 
-<!--
-Notification entry pattern:
-
+```markdown
 ### <timestamp> <trigger>
 
 * Mode: <autopilot | interactive | autonomous>
@@ -197,7 +196,6 @@ Notification entry pattern:
 * Topic: <one-line>
 * Awaiting: <the decision the human must make>
 * Resolved: <pending | approved | approve-all | changes-requested | stopped> (<by whom, when>)
--->
 ```
 
 ## Privacy

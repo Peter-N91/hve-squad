@@ -62,8 +62,6 @@ description: "Append-only log of squad federation routing decisions and their ra
 # Squad Federation Decisions
 
 Entries are appended below in chronological order. Each entry records which sub-squad(s) a request was routed to, the matched meta-routing pattern or explicit `squad=` target, the turn it was made on, and a reference to the sub-squad's own decision entries. Prior entries are never edited or removed.
-
-<!-- Append each new federation decision at the end of this file, after the last entry. -->
 ```
 
 ### state.json (federation root)

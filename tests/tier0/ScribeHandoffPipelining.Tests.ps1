@@ -152,7 +152,7 @@ Describe 'Scribe Hand-off Pipelining wording pins (GATE-22..GATE-28)' {
 
         It 'only a failed pipelined hand-off latches pipelining off; a failed hand-off that ran alone does not' {
             $script:OperatingProcedureBody | Should -Match ([regex]::Escape('A failed verification of a hand-off that ran alone, such as the roster refresh or any other barrier write, says nothing about concurrency'))
-            $script:GatesAndModesBody | Should -Match ([regex]::Escape('no pipelined hand-off has failed verification this run (a failed hand-off that ran alone does not count)'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('no pipelined hand-off has failed verification with `failure class: history-integrity` this run (a failed hand-off that ran alone does not count, and neither does a `ledger-only` failure'))
             $script:GatesAndModesBody | Should -Not -Match ([regex]::Escape('no fail-closed event has occurred this run'))
         }
 
