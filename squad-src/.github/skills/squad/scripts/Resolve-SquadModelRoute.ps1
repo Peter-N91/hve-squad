@@ -32,6 +32,9 @@
     economy pick cheaper than its ranked pick, that ranked pick: the one re-dispatch
     target; otherwise empty) and `pin` (its agent's frontmatter `model:`, from the
     repository or the installed plugin's `agents/` folder).
+    Under `economy` the report also carries `consent`: `recorded` when `decisions.md`
+    beside `team.md` holds a `## Economy Mode Accepted` entry, else `missing` with a
+    warning. Missing consent never refuses. Other modes carry no `consent` field.
 
     The script is read-only. It never writes `team.md` or any other squad-state file:
     the Squad Scribe remains the single writer, and this script only computes what the
@@ -401,6 +404,16 @@ elseif ($SessionModel -and $SessionModel -ne 'auto' -and $catalog.InputRate.Cont
     $availability = "unverified (priced at or below session model $SessionModel)"
 }
 
+# economy-mode.md *Consent*: report a missing ## Economy Mode Accepted entry; never refuse on it.
+$consent = $null
+if ($effectiveMode -eq 'economy') {
+    $decisionsPath = Join-Path -Path $SquadRoot -ChildPath 'decisions.md'
+    $decisionsText = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) { [string](Get-Content -LiteralPath $decisionsPath -Raw) } else { '' }
+    $consent = if ($decisionsText -match '(?m)^## Economy Mode Accepted\b') { 'recorded' } else { 'missing' }
+    if ($consent -eq 'missing') {
+        $warnings.Add('economy consent not recorded: decisions.md has no ## Economy Mode Accepted entry; state the trade and hand the Scribe that decision before the next dispatch (economy-mode.md Consent).')
+    }
+}
 $results = foreach ($row in $roster.Rows) {
     $roleId = $row['Role']
     if (-not $roleId) { continue }
@@ -488,6 +501,7 @@ $report = [pscustomobject][ordered]@{
     warnings         = @($warnings)
     roles            = @($results)
 }
+if ($effectiveMode -eq 'economy') { $report | Add-Member -NotePropertyName consent -NotePropertyValue $consent }
 
 if ($Format -eq 'json') {
     $report | ConvertTo-Json -Depth 6
@@ -495,6 +509,7 @@ if ($Format -eq 'json') {
 }
 
 "Model routing: $effectiveMode (recorded: $($roster.Mode)); availability: $availability"
+if ($effectiveMode -eq 'economy') { "consent: $consent" }
 foreach ($warning in $warnings) { "WARN: $warning" }
 ''
 $economyHead = if ($effectiveMode -eq 'economy') { ' Escalation |' } else { '' }

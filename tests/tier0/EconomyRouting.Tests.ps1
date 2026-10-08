@@ -122,6 +122,15 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $script:EconomySection | Should -Match ([regex]::Escape('An unattended run never accepts economy for the user'))
     }
 
+    It 'pins the exact Economy Mode Accepted decision shape, written with the roster refresh (E1)' {
+        $block = [regex]::Match($script:EconomySection, '(?s)```markdown\n(?<b>## Economy Mode Accepted <timestamp>\n.*?)```').Groups['b'].Value
+        $block | Should -Not -BeNullOrEmpty
+        $lines = @($block.TrimEnd("`n") -split '\n' | Where-Object { $_ })
+        $lines[0] | Should -Be '## Economy Mode Accepted <timestamp>'
+        @($lines | Select-Object -Skip 1 | ForEach-Object { ($_ -split ':')[0] }) | Should -Be @('* User', '* Previous mode', '* Trade accepted', '* Never weakened')
+        $script:EconomySection | Should -Match ([regex]::Escape('the Scribe writes that entry with the roster-refresh payload, in exactly this shape'))
+        $script:EconomySection | Should -Match ([regex]::Escape('Missing consent is reported, never enforced'))
+    }
     It 'marks every economy history entry with Route: economy' {
         $script:EconomySection | Should -Match ([regex]::Escape('Every history entry produced under economy starts its **Route rationale** identity bullet (`model-routing.md` *Identity Bullets*) with `Route: economy`'))
     }

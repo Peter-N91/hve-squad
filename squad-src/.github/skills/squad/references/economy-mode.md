@@ -16,7 +16,18 @@ Read this file only while `team.md` records `Model routing: economy`, or on the 
 
 ## Consent
 
-The first time a user switches to `economy`, before any dispatch under it, the coordinator says once, plainly, what changes: allowlisted implementation roles run on the cheapest model that fits their work well enough within their floor, and each moves once to its `ranked` pick after a failed review. It also says what does not change (*Never Weakened* below). The switch is a roster change, so the coordinator hands the Scribe the new mode together with a decision entry headed `## Economy Mode Accepted`, naming the user, the date, and the trade the user accepted. The Scribe writes that decision once; a later turn that still reads `Model routing: economy` needs no new one. Switching away from `economy` and back again records a new one.
+The first time a user switches to `economy`, before any dispatch under it, the coordinator says once, plainly, what changes: allowlisted implementation roles run on the cheapest model that fits their work well enough within their floor, and each moves once to its `ranked` pick after a failed review. It also says what does not change (*Never Weakened* below). The switch is a roster change, so the coordinator hands the Scribe the new mode together with a decision entry headed `## Economy Mode Accepted`, and the Scribe writes that entry with the roster-refresh payload, in exactly this shape:
+
+```markdown
+## Economy Mode Accepted <timestamp>
+
+* User: <the user who accepted, as the coordinator knows them>
+* Previous mode: <off, ranked, or manual>
+* Trade accepted: <the list of changes the coordinator stated, in the words it used>
+* Never weakened: <the *Never Weakened* list the coordinator stated>
+```
+
+`<timestamp>` is the payload's UTC timestamp (`yyyy-MM-ddTHH:mm:ssZ`). The Scribe writes that decision once; a later turn that still reads `Model routing: economy` needs no new one. Switching away from `economy` and back again records a new one. Missing consent is reported, never enforced: `scripts/Resolve-SquadModelRoute.ps1` reports `consent: missing` when `decisions.md` has no such heading, and the coordinator then states the trade and records it before the next dispatch.
 
 An unattended run never accepts economy for the user: see *Watch and Unattended Runs*.
 
@@ -54,4 +65,4 @@ A Watch Mode or other unattended trigger ignores `routing=economy` wherever it a
 
 ## Helper
 
-`scripts/Resolve-SquadModelRoute.ps1 -Mode economy` applies the allowlist, the pick, and the floors. It returns each role's pick as `suggested`, the escalation id as `escalation` (empty when the economy pick already is the ranked pick, and for every role off the allowlist), and the agent's own pin as `pin`.
+`scripts/Resolve-SquadModelRoute.ps1 -Mode economy` applies the allowlist, the pick, and the floors. It returns each role's pick as `suggested`, the escalation id as `escalation` (empty when the economy pick already is the ranked pick, and for every role off the allowlist), and the agent's own pin as `pin`. Under economy it also reports `consent` (`recorded` or `missing`) from `decisions.md` beside `team.md`; it never refuses on it.

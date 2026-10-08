@@ -776,4 +776,59 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $result.roles[0].pin | Should -Be 'Claude Haiku 4.5'
         $result.roles[0].suggested | Should -Be (Get-ExpectedEconomyPick -Floor 'fast')
     }
+
+    Context 'economy consent is reported, never enforced (E2)' {
+        BeforeAll {
+            $script:ConsentTeam = @(
+                '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| developer | | Developer | default | | src/ |'
+            ) -join "`n"
+            $script:Accepted = @(
+                '# Squad Decisions', '', '## Economy Mode Accepted 2026-10-08T10:00:00Z', ''
+                '* User: Fixture User', '* Previous mode: ranked', '* Trade accepted: cheaper allowlisted picks', '* Never weakened: every gate'
+            ) -join "`n"
+        }
+
+        It 'reports consent: missing with a warning when decisions.md is absent' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            $run = Invoke-EconomyResolver -Root $root
+            $run.consent | Should -Be 'missing'
+            @($run.warnings | Where-Object { $_ -like 'economy consent not recorded*' }).Count | Should -Be 1
+            $run.roles[0].resolved | Should -Not -BeNullOrEmpty -Because 'missing consent is a warning, never a refusal'
+        }
+
+        It 'reports consent: missing when decisions.md has no Economy Mode Accepted entry' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value "# Squad Decisions`n`n## 2026-10-08T09:00:00Z Init`n`n* Roster seeded.`n" -Encoding utf8NoBOM
+            (Invoke-EconomyResolver -Root $root).consent | Should -Be 'missing'
+        }
+
+        It 'reports consent: recorded, without the warning, when the entry exists' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value $script:Accepted -Encoding utf8NoBOM
+            $run = Invoke-EconomyResolver -Root $root
+            $run.consent | Should -Be 'recorded'
+            @($run.warnings | Where-Object { $_ -like 'economy consent*' }).Count | Should -Be 0
+        }
+
+        It 'prints the consent line in the table output' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            $missing = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Format markdown)
+            $missing | Should -Contain 'consent: missing'
+            Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value $script:Accepted -Encoding utf8NoBOM
+            $recorded = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Format markdown)
+            $recorded | Should -Contain 'consent: recorded'
+        }
+
+        It 'adds no consent field or line under off, ranked, or manual' {
+            foreach ($mode in 'ranked', 'manual') {
+                $run = Invoke-EconomyResolver -Root $script:SeedRoot -Extra @{ Mode = $mode }
+                $run.PSObject.Properties.Name | Should -Not -Contain 'consent'
+                @(& $script:Resolver -SquadRoot $script:SeedRoot -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Mode $mode -Format markdown) -join "`n" | Should -Not -Match 'consent'
+            }
+            (Invoke-EconomyResolver -Root $script:SeedRoot).PSObject.Properties.Name | Should -Not -Contain 'consent'
+        }
+    }
 }
