@@ -39,7 +39,7 @@
 
     Exit code 0 means the file was seeded, or already valid, or passed -Check. Exit 7 means
     refused: the squad is not under `Model routing: economy`, so nothing was read or written
-    and the Scribe seeds the table by hand as in v0.18.0. Any other outcome exits 1 after
+    and the Scribe seeds the table by hand as in v0.18.1. Any other outcome exits 1 after
     naming what failed.
 
     Economy only (references/economy-mode.md): the mode is the `Model routing:` line in

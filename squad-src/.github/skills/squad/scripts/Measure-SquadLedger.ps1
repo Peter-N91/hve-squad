@@ -2610,7 +2610,32 @@ if ($Write) {
     if ($observed) {
         $updates[0].Text = Get-ConsumptionWithObservedLocal -Text $updates[0].Text -SectionLines (Get-ObservedSectionLinesLocal -Observed $observed)
     }
-    foreach ($u in $updates) { [System.IO.File]::WriteAllText($u.Path, $u.Text, $u.Encoding) }
+    # Each file is written to a temp file beside it and moved into place; when the second move fails,
+    # the first file gets its original bytes back, so a direct -Write never leaves one file updated alone.
+    $applied = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($u in $updates) {
+        $tmp = Join-Path (Split-Path -Path $u.Path -Parent) (".$([System.IO.Path]::GetFileName($u.Path)).$([guid]::NewGuid().ToString('N')).tmp")
+        try {
+            $original = if (Test-Path -LiteralPath $u.Path -PathType Leaf) { [System.IO.File]::ReadAllBytes($u.Path) } else { $null }
+            [System.IO.File]::WriteAllText($tmp, $u.Text, $u.Encoding)
+            [System.IO.File]::Move($tmp, $u.Path, $true)
+            $applied.Add(@{ Path = $u.Path; Bytes = $original })
+        }
+        catch {
+            $reason = $_.Exception.Message
+            if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+            $restoreFailures = @()
+            for ($i = $applied.Count - 1; $i -ge 0; $i--) {
+                try {
+                    if ($null -eq $applied[$i].Bytes) { Remove-Item -LiteralPath $applied[$i].Path -Force }
+                    else { [System.IO.File]::WriteAllBytes($applied[$i].Path, [byte[]]$applied[$i].Bytes) }
+                }
+                catch { $restoreFailures += "$($applied[$i].Path): $($_.Exception.Message)" }
+            }
+            $restored = if ($restoreFailures.Count -gt 0) { " RESTORE FAILED for: $($restoreFailures -join '; ')" } elseif ($applied.Count -gt 0) { " $(($applied | ForEach-Object { Split-Path -Leaf $_.Path }) -join ', ') restored to its original bytes." } else { ' Nothing was written.' }
+            throw "Measure-SquadLedger -Write: could not write $(Split-Path -Leaf $u.Path) ($reason).$restored"
+        }
+    }
     foreach ($w in $warnings) { Write-Warning $w }
     Write-Host ("Measure-SquadLedger -Write: rewrote the Attribution, Usage & Cost, and Derivation sections of consumption.md and set run totals in state.json (estCostUsd={0:F4}, estCreditsTotal={1:F2})." -f $totalCost, $totalCredits) -ForegroundColor Green
     exit 0

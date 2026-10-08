@@ -36,7 +36,7 @@
     2 `updated` collision (no write); 3 write or read-back failure (original content
     restored where possible); 7 refused: `team.md` under -SquadRoot does not record
     `Model routing: economy` (nothing read or written; the coordinator performs the
-    transaction itself as in v0.18.0). On any other non-zero exit the coordinator
+    transaction itself as in v0.18.1). On any other non-zero exit the coordinator
     dispatches nothing.
 
     Economy only (references/economy-mode.md).

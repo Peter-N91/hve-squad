@@ -105,15 +105,32 @@
     changed); 4 rate table refused (malformed operator row), operator decision needed,
     nothing written; 5 snapshot differs; 6 write set not stable before the timeout;
     7 refused: `team.md` does not record `Model routing: economy` (every mode, nothing
-    written; the Scribe composes the hand-off by hand as in v0.18.0); 8 another hand-off
+    written; the Scribe composes the hand-off by hand, as in v0.18.1); 8 another hand-off
     holds this squad root's lock past -LockTimeoutSeconds, nothing written.
+
+    Ledger check (v0.18.1 failure classes): after the writes, `Measure-SquadLedger -Check`
+    runs. PASS, or a `ledger-only` failure (cost accounting the next -Write re-derives),
+    keeps the writes and exits 0; a ledger-only failure prints `WARN ledger-only:` with the
+    first mismatch lines. A `history-integrity` failure, a missing `failure class:` line, or
+    a crash rolls the writes back and exits 3.
+
+    Warnings (never refusals): `WARN economy consent not recorded` when decisions.md has no
+    `## Economy Mode Accepted` entry; a history record whose routeRationale does not start
+    with `Route: ` is prefixed with `Route: bounded` (payload route `bounded`) or
+    `Route: economy`, with a WARN; a record without routingIdentity gets a WARN.
 
     Economy only (references/economy-mode.md): every parameter set reads `team.md` under
     -SquadRoot first and refuses with exit 7 unless it records `Model routing: economy`.
 
     Concurrency: a hand-off holds an exclusive per-root lock (an OS file handle in the temp
     directory, released when the process exits, so a crashed holder never leaves a stale
-    lock) from validation to the ledger check. A rollback restores a file only while its
+    lock) from validation to the ledger check. The lock is keyed by the canonical squad root
+    (8.3 short names expanded, junctions and symbolic links resolved), so one folder reached
+    by two spellings shares one lock. Everything that depends on state (turn, the freshness
+    bound, rate seeding) is read after the lock is held. When another hand-off landed while
+    this one waited, the freshness bound stays the state.json `updated` read before the wait,
+    so a valid second payload lands as the next turn; a deliverable that the other hand-off
+    already credited and that has not changed since exits 1 (a deliverable is credited once). A rollback restores a file only while its
     bytes are still the ones this run wrote; a file another writer changed is left as it is
     and named in the exit-3 message.
 
@@ -227,6 +244,25 @@ function ConvertTo-NormalPath {
     $full = [System.IO.Path]::GetFullPath($Text)
     if (Test-Path -LiteralPath $full) { try { $full = (Get-Item -LiteralPath $full -Force).FullName } catch { Write-Verbose "long-path lookup failed: $($_.Exception.Message)" } }
     return $full
+}
+
+function Get-CanonicalPath {
+    # One folder maps to one string: 8.3 short names are expanded and junctions or symbolic links
+    # on any component are resolved to their final target.
+    param([string]$Path)
+    $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    $root = [System.IO.Path]::GetPathRoot($full)
+    $current = $root
+    foreach ($part in @($full.Substring($root.Length) -split '[\\/]' | Where-Object { $_ })) {
+        $candidate = Join-Path $current $part
+        $item = Get-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
+        if ($null -eq $item) { $current = $candidate; continue }
+        $current = $item.FullName
+        $target = $null
+        try { $target = $item.ResolveLinkTarget($true) } catch { Write-Verbose "link resolution failed: $($_.Exception.Message)" }
+        if ($null -ne $target) { $current = Get-CanonicalPath $target.FullName }
+    }
+    return $current.TrimEnd('\', '/')
 }
 
 function Resolve-UnderRoot {
@@ -753,8 +789,26 @@ foreach ($required in @($statePath, $decisionsPath, $consumptionPath, $teamPath)
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { Stop-Handoff 2 "missing $required; an uninitialized or unseeded squad root needs the Squad Scribe." }
 }
 
-# One hand-off per root at a time; the handle is released by the OS if this process dies.
-$lockKey = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes((ConvertTo-NormalPath $SquadRoot).TrimEnd('\', '/').ToLowerInvariant()))).Substring(0, 16)
+# The state this hand-off was dispatched against, read before waiting on the lock: a hand-off that lands
+# while this one waits moves state.json updated past this turn's deliverables.
+$preWaitUpdated = $null
+try {
+    $preWaitNode = [System.Text.Json.Nodes.JsonNode]::Parse([System.IO.File]::ReadAllText($statePath))
+    if ((Get-Kind $preWaitNode) -eq 'Object') { $preWaitUpdated = Get-NodeString $preWaitNode['updated'] }
+}
+catch { Write-Verbose "state.json pre-wait read failed; the state validation below reports it: $($_.Exception.Message)" }
+
+# One hand-off per root at a time; the handle is released by the OS if this process dies. The key is the
+# canonical root, so a short (8.3) name, a junction, or a symbolic link to the same folder shares the lock. The root itself
+# is canonical from here on, so the repository above .copilot-tracking is found however the root was spelled.
+$SquadRoot = Get-CanonicalPath $SquadRoot
+$statePath = Join-Path $SquadRoot 'state.json'
+$decisionsPath = Join-Path $SquadRoot 'decisions.md'
+$consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
+$teamPath = Join-Path $SquadRoot 'team.md'
+$historyDir = Join-Path $SquadRoot 'history'
+$lockKey = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($SquadRoot.ToLowerInvariant()))).Substring(0, 16)
 $lockPath = Join-Path ([System.IO.Path]::GetTempPath()) "hve-squad-handoff-$lockKey.lock"
 $lockDeadline = [DateTime]::UtcNow.AddSeconds($LockTimeoutSeconds)
 $script:HandoffLock = $null
@@ -767,6 +821,12 @@ while ($null -eq $script:HandoffLock) {
 }
 if (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') -PathType Leaf) {
     Stop-Handoff 2 'federation roots need the Squad Scribe.'
+}
+
+# economy-mode.md Consent: a missing acceptance is reported, never refused (refusing would only push the Scribe to the manual path).
+$consentText = try { [System.IO.File]::ReadAllText($decisionsPath) } catch { '' }
+if ($consentText -notmatch '(?m)^## Economy Mode Accepted\b') {
+    $handoffWarnings.Add('WARN economy consent not recorded: decisions.md has no ## Economy Mode Accepted entry (economy-mode.md Consent); the hand-off continues. The coordinator states the trade and records it before the next dispatch.')
 }
 
 # The repository root sits above .copilot-tracking; without it, agent pins cannot be checked and deliverables stay inside the squad root.
@@ -969,6 +1029,20 @@ else {
     }
 }
 
+# economy-mode.md Route Markers: every economy history entry starts its Route rationale with Route: economy or Route: bounded.
+foreach ($record in $records) {
+    if ($null -eq $record.Routing) {
+        $handoffWarnings.Add("WARN $($record.Agent): no routingIdentity; under economy every history entry carries Route: economy (or Route: bounded) in its Route rationale bullet (economy-mode.md Route Markers).")
+        continue
+    }
+    $rationale = $record.Routing['routeRationale']
+    if ($null -ne $rationale -and $rationale -notmatch '^Route: ') {
+        $marker = if ($route -eq 'bounded') { 'Route: bounded' } else { 'Route: economy' }
+        $record.Routing['routeRationale'] = "$marker; $rationale"
+        $handoffWarnings.Add("WARN $($record.Agent): routeRationale did not start with a Route marker; recorded as '$marker; ...' (economy-mode.md Route Markers).")
+    }
+}
+
 $orchestration = $null
 $orchNode = $payload['orchestration']
 $orchValid = $true
@@ -1076,11 +1150,37 @@ if ($lastHandoff -gt [DateTimeOffset]::MinValue) {
 
 # A deliverable is a file inside the repository (or the squad root when it sits outside .copilot-tracking) that this turn modified:
 # newer than `since` (the dispatch start, which a parallel wave passes) or, by default, the previous hand-off.
-$freshAfter = if ($since) { [DateTimeOffset]::Parse($since, [System.Globalization.CultureInfo]::InvariantCulture) } else { $lastHandoff }
+# When another hand-off landed while this one waited on the lock, this turn still began at the state.json
+# updated read before the wait: its deliverables predate the other hand-off and are not stale.
+$turnFloor = $lastHandoff
+$landedWhileWaiting = $false
+$preWaitTime = [DateTimeOffset]::MinValue
+if ($preWaitUpdated -and [DateTimeOffset]::TryParse($preWaitUpdated, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$preWaitTime) -and $preWaitTime -lt $lastHandoff -and $preWaitTime -le $futureLimit) {
+    $turnFloor = $preWaitTime
+    $landedWhileWaiting = $true
+}
+$freshAfter = if ($since) { [DateTimeOffset]::Parse($since, [System.Globalization.CultureInfo]::InvariantCulture) } else { $turnFloor }
 if ($since) {
-    # since is bounded to this turn: not before the previous hand-off (state.json updated), not after this one.
-    if ($freshAfter -lt $lastHandoff) { $problems.Add("payload.since $since precedes state.json updated $stateUpdated; since must fall within this turn.") }
+    # since is bounded to this turn: not before the previous hand-off (state.json updated as this hand-off found it), not after this one.
+    if ($freshAfter -lt $turnFloor) { $problems.Add("payload.since $since precedes state.json updated $(if ($landedWhileWaiting) { $preWaitUpdated } else { $stateUpdated }); since must fall within this turn.") }
     if ($freshAfter -gt $payloadTime) { $problems.Add("payload.since $since is after payload.timestamp $timestamp.") }
+}
+# A deliverable is credited once: the hand-off that landed while this one waited may already have recorded it.
+$creditedWhileWaiting = @()
+if ($landedWhileWaiting) {
+    foreach ($historyFile in @(Get-ChildItem -LiteralPath $historyDir -Filter '*.md' -File -ErrorAction SilentlyContinue)) {
+        $historyText = [System.Text.UTF8Encoding]::new($false).GetString([System.IO.File]::ReadAllBytes($historyFile.FullName))
+        foreach ($chunk in ([regex]::Split($historyText, '(?m)^(?=###[ \t]+\d{4}-)') | Where-Object { $_ -match '^###[ \t]+\d{4}-' })) {
+            $entryTime = [DateTimeOffset]::MinValue
+            if (-not [DateTimeOffset]::TryParse([regex]::Match($chunk, '^###[ \t]+(\S+)').Groups[1].Value, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$entryTime)) { continue }
+            if ($entryTime -le $turnFloor) { continue }
+            foreach ($deliverableLineMatch in [regex]::Matches($chunk, '(?m)^\* Deliverable:(.*)$')) {
+                foreach ($pathMatch in [regex]::Matches($deliverableLineMatch.Groups[1].Value, '`([^`]+)`')) {
+                    $creditedWhileWaiting += , @{ Path = (($pathMatch.Groups[1].Value -replace '\\', '/').Trim() -replace '^\./', '').ToLowerInvariant(); Time = $entryTime; File = $historyFile.Name }
+                }
+            }
+        }
+    }
 }
 $deliverableBase = if ($RepoBase) { $RepoBase } else { ConvertTo-NormalPath $SquadRoot }
 foreach ($record in $records) {
@@ -1099,6 +1199,11 @@ foreach ($record in $records) {
     $modified = [DateTimeOffset]::new([System.IO.File]::GetLastWriteTimeUtc($resolved), [TimeSpan]::Zero)
     $record.Modified = $modified
     $record.ResolvedPath = $resolved
+    $waitKey = (($record.DeliverablePath -replace '\\', '/').Trim() -replace '^\./', '').ToLowerInvariant()
+    foreach ($earlier in @($creditedWhileWaiting | Where-Object { $_.Path -eq $waitKey -and $_.Time.AddSeconds(5) -ge $modified })) {
+        $problems.Add("deliverable '$($record.DeliverablePath)' for $($record.Agent) was already credited in history/$($earlier.File) at $($earlier.Time.ToString('o')) by the hand-off that landed while this one waited for the lock, and has not changed since; a deliverable is credited once. Drop the record, or re-dispatch the stage that rewrites it.")
+        break
+    }
     if ($payloadTime -lt $modified.AddSeconds(-5)) { $problems.Add("payload.timestamp $timestamp precedes the last write of deliverable '$($record.DeliverablePath)' for $($record.Agent) ($($modified.ToString('o'))); stamp the hand-off at or after its artifacts.") }
 }
 if ($problems.Count -gt 0) { Stop-Handoff 1 ("invalid payload: " + ($problems -join ' ')) }
@@ -1437,7 +1542,14 @@ try {
 
     $countsArgument = (@($expectedCounts.Keys | ForEach-Object { "$_=$($expectedCounts[$_])" })) -join ';'
     $check = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Check', '-ExpectedHistoryCounts', $countsArgument)
-    if ($check.ExitCode -ne 0) { throw "Measure-SquadLedger -Check failed: $($check.Text)" }
+    $ledgerOnly = $null
+    if ($check.ExitCode -ne 0) {
+        # v0.18.1: only a history-integrity failure stops; a ledger-only mismatch is cost accounting the next -Write re-derives.
+        $failureClass = [regex]::Match($check.Text, '(?m)Measure-SquadLedger -Check: failure class: (?<class>[a-z-]+)').Groups['class'].Value
+        if ($failureClass -ne 'ledger-only') { throw "Measure-SquadLedger -Check failed (failure class: $(if ($failureClass) { $failureClass } else { 'none reported' })): $($check.Text)" }
+        $firstMismatches = @($check.Text -split "`n" | Where-Object { $_ -match '^\s+- ' } | Select-Object -First 3 | ForEach-Object { ($_ -replace '^\s+- ', '').Trim() })
+        $ledgerOnly = "WARN ledger-only: $($firstMismatches -join ' | ') (writes kept; the next Measure-SquadLedger -Write re-derives consumption.md from history)"
+    }
 
     # A comparison that still quotes a squad total other than the ledger's own is self-refuting; the hand-off does not stand.
     $finalLedger = Get-FileText $consumptionPath
@@ -1453,6 +1565,10 @@ catch {
 
 $written | ForEach-Object { Write-Output $_ }
 $handoffWarnings | ForEach-Object { Write-Output $_ }
+if ($ledgerOnly) {
+    Write-Output $ledgerOnly
+    exit 0
+}
 $checkLine = @($check.Text -split "`n" | Where-Object { $_ -match 'Measure-SquadLedger -Check: PASS' } | Select-Object -Last 1)
 Write-Output $(if ($checkLine.Count -gt 0) { $checkLine[0].Trim() } else { 'Measure-SquadLedger -Check: PASS' })
 exit 0

@@ -474,7 +474,7 @@ Describe 'Write-SquadHandoff.ps1 derives priced_as and checks the closing review
         (Get-Item -LiteralPath $owner).LastWriteTimeUtc = [DateTime]::Parse('2026-09-27T09:40:02Z').ToUniversalTime()
         $result = Invoke-Writer -Root $root -Payload (New-ReviewPayload)
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        $result.Output | Should -Not -Match 'WARN'
+        @($result.Output -split "`n" | Where-Object { $_ -match 'WARN' -and $_ -notmatch 'economy consent not recorded|no routingIdentity' }) | Should -BeNullOrEmpty
 
         $older = New-ReviewRoot
         $ok = Invoke-Writer -Root $older -Payload (New-ReviewPayload)
@@ -1238,5 +1238,328 @@ Describe 'Write-SquadHandoff.ps1 derives omitted payload fields' {
         $result.ExitCode | Should -Be 2 -Because $result.Output
         $result.Output | Should -Match "no agent file named 'Squad Implementor'"
         Get-TreeHash $root | Should -Be $before
+    }
+}
+
+Describe 'Write-SquadHandoff.ps1 economy Scribe read set (H1)' {
+    BeforeAll {
+        $script:EconomyScribePath = Join-Path $PackageRoot '.agents/skills/squad/references/economy-scribe.md'
+        Import-Module (Join-Path $PSScriptRoot 'SquadPackage.psm1') -Force
+        $script:HandoffModel = Get-SquadPackageModel -PackageRoot $PackageRoot
+    }
+
+    It 'ships economy-scribe.md within 3,072 LF bytes with the command, every exit code, and the fallback' {
+        Test-Path -LiteralPath $script:EconomyScribePath -PathType Leaf | Should -BeTrue
+        $text = (Get-Content -LiteralPath $script:EconomyScribePath -Raw) -replace "`r`n", "`n"
+        [System.Text.Encoding]::UTF8.GetByteCount($text) | Should -BeLessOrEqual 3072
+        $text | Should -Match ([regex]::Escape('pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -PayloadPath <payload.json>'))
+        foreach ($code in 0, 1, 2, 3, 4, 7, 8) { $text | Should -Match "(?m)^\| $code \|" -Because "exit $code needs a row" }
+        $text | Should -Match 'RESTORE FAILED'
+        $text | Should -Match 'WARN ledger-only:'
+        $text | Should -Match ([regex]::Escape('read the normal hot core'))
+    }
+
+    It 'the Scribe agent reads only economy-scribe.md first for a handoff: script payload' {
+        $scribe = @($script:HandoffModel.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0].Body
+        $scribe | Should -Match ([regex]::Escape('Exception: a payload carrying `"handoff": "script"` (economy only) reads only `references/economy-scribe.md` first; read the hot core above only on its fallback.'))
+    }
+
+    It 'the Cold-File Dispatch Table and economy-mode.md point the Scribe at economy-scribe.md' {
+        $procedure = (Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/scribe-procedure.md') -Raw) -replace "`r`n", "`n"
+        $procedure | Should -Match ([regex]::Escape('| ordinary payload carrying `handoff: script` (economy only) | [economy-scribe.md](economy-scribe.md), read first instead of this hot core |'))
+        $procedure | Should -Not -Match 'economy-mode\.md'
+        $economy = (Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/economy-mode.md') -Raw) -replace "`r`n", "`n"
+        $economy | Should -Match ([regex]::Escape('lives in [economy-scribe.md](economy-scribe.md)'))
+        $economy | Should -Not -Match 'v0\.18\.0'
+    }
+}
+
+Describe 'Write-SquadHandoff.ps1 keeps v0.18.1 ledger-only semantics (H2)' {
+    BeforeAll {
+        function New-StubSkill {
+            # A copy of the installed squad skill whose Measure-SquadLedger.ps1 forwards -Write to the real script and answers -Check
+            # with the failure class in $env:HANDOFF_STUB_CLASS (ledger-only, history-integrity, none, or crash).
+            $skill = Join-Path $TestDrive "stub-$([guid]::NewGuid().ToString('N').Substring(0, 8))/squad"
+            New-Item -ItemType Directory -Path (Split-Path -Parent $skill) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad') -Destination $skill -Recurse
+            $real = Join-Path $skill 'scripts/Measure-SquadLedger.real.ps1'
+            Move-Item -LiteralPath (Join-Path $skill 'scripts/Measure-SquadLedger.ps1') -Destination $real
+            $stub = @'
+[CmdletBinding()]
+param([string]$SquadRoot, [switch]$Write, [switch]$Check, [string]$SessionLog, [string]$ExpectedHistoryCounts)
+if ($Check) {
+    switch ($env:HANDOFF_STUB_CLASS) {
+        'crash' { throw 'stub crash' }
+        'none' { Write-Host 'Measure-SquadLedger -Check: FAIL (1 mismatch(es))'; Write-Host '  - stub mismatch.'; exit 1 }
+        default {
+            Write-Host 'Measure-SquadLedger -Check: FAIL (2 mismatch(es))'
+            Write-Host '  - Usage & Cost run-total row: expected 0.3171, found 0.4171.'
+            Write-Host '  - state.json estCostUsd: expected 0.3171, found 0.4171.'
+            Write-Host "Measure-SquadLedger -Check: failure class: $env:HANDOFF_STUB_CLASS"
+            exit 1
+        }
+    }
+}
+$forward = @{ SquadRoot = $SquadRoot }
+if ($Write) { $forward.Write = $true }
+if ($SessionLog) { $forward.SessionLog = $SessionLog }
+& (Join-Path $PSScriptRoot 'Measure-SquadLedger.real.ps1') @forward
+exit $LASTEXITCODE
+'@
+            Set-Content -LiteralPath (Join-Path $skill 'scripts/Measure-SquadLedger.ps1') -Value $stub -Encoding utf8NoBOM
+            Join-Path $skill 'scripts/Write-SquadHandoff.ps1'
+        }
+
+        function Invoke-StubWriter {
+            param([string]$Root, [string]$Writer, [string]$Class)
+            $file = Join-Path $TestDrive "payload-$([guid]::NewGuid().ToString('N')).json"
+            Set-Content -LiteralPath $file -Value ((New-Payload) | ConvertTo-Json -Depth 8) -Encoding utf8NoBOM
+            $env:HANDOFF_STUB_CLASS = $Class
+            try { $output = & pwsh -NoProfile -File $Writer -SquadRoot $Root -PayloadPath $file *>&1 | Out-String }
+            finally { Remove-Item Env:HANDOFF_STUB_CLASS -ErrorAction SilentlyContinue }
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+        }
+        $script:StubWriter = New-StubSkill
+    }
+
+    It 'keeps the writes and exits 0 with WARN ledger-only on a ledger-only -Check failure' {
+        $root = New-Root
+        $result = Invoke-StubWriter -Root $root -Writer $script:StubWriter -Class 'ledger-only'
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'WARN ledger-only: Usage & Cost run-total row: expected 0\.3171, found 0\.4171\. \| state\.json estCostUsd'
+        $result.Output | Should -Not -Match 'Measure-SquadLedger -Check: PASS'
+        Test-Path -LiteralPath (Join-Path $root 'history/Squad Researcher.md') | Should -BeTrue
+        (Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json).turn | Should -Be 2
+    }
+
+    It 'rolls back and exits 3 on <Class>' -ForEach @(
+        @{ Class = 'history-integrity' }
+        @{ Class = 'none' }
+        @{ Class = 'crash' }
+    ) {
+        $root = New-Root
+        $before = Get-TreeHash $root
+        $result = Invoke-StubWriter -Root $root -Writer $script:StubWriter -Class $Class
+        $result.ExitCode | Should -Be 3 -Because $result.Output
+        $result.Output | Should -Match 'Measure-SquadLedger -Check failed'
+        Get-TreeHash $root | Should -Be $before
+    }
+}
+
+Describe 'Write-SquadHandoff.ps1 lands concurrent ordinary hand-offs (H3) and keys its lock by the canonical root (H4)' {
+    BeforeAll {
+        function New-TwoAgentRoot {
+            $root = New-Root
+            $repo = Split-Path -Parent (Split-Path -Parent $root)
+            Set-Content -LiteralPath (Join-Path $repo '.github/agents/squad/squad-developer.agent.md') -Value "---`nname: Squad Developer`nmodel: Claude Sonnet 4.6 (copilot)`n---`n# Developer`n"
+            $team = Join-Path $root 'team.md'
+            $text = (Get-Content -LiteralPath $team -Raw) -replace "`r`n", "`n"
+            $text = $text -replace '(?m)^(\| scribe .*)$', "| developer  | Beta        | Squad Developer       | —                  | —              | runSubagent / task | default    | src/               |`n`$1"
+            [System.IO.File]::WriteAllText($team, $text, [System.Text.UTF8Encoding]::new($false))
+            $state = Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json
+            $state.updated = [DateTime]::UtcNow.AddSeconds(-60).ToString('yyyy-MM-ddTHH:mm:ssZ')
+            [System.IO.File]::WriteAllText((Join-Path $root 'state.json'), ($state | ConvertTo-Json -Depth 8))
+            New-Item -ItemType Directory -Path (Join-Path $repo 'src') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $root 'research/parallel-research.md') -Value "# Research`n"
+            Set-Content -LiteralPath (Join-Path $repo 'src/parallel-change.md') -Value "# Change`n"
+            $root
+        }
+
+        function Get-HandoffLockPath {
+            # Mirrors Write-SquadHandoff.ps1: SHA-256 of the canonical, lower-cased root; first 16 hex digits.
+            param([string]$CanonicalRoot)
+            $key = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($CanonicalRoot.TrimEnd('\', '/').ToLowerInvariant()))).Substring(0, 16)
+            Join-Path ([System.IO.Path]::GetTempPath()) "hve-squad-handoff-$key.lock"
+        }
+
+        function Start-Writer {
+            param([string]$Root, [hashtable]$Payload, [int]$LockTimeoutSeconds = 120)
+            $file = Join-Path $TestDrive "payload-$([guid]::NewGuid().ToString('N')).json"
+            Set-Content -LiteralPath $file -Value ($Payload | ConvertTo-Json -Depth 8) -Encoding utf8NoBOM
+            $psi = [System.Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
+            foreach ($a in @('-NoProfile', '-File', $script:Writer, '-SquadRoot', $Root, '-PayloadPath', $file, '-LockTimeoutSeconds', "$LockTimeoutSeconds")) { $psi.ArgumentList.Add($a) }
+            $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.UseShellExecute = $false
+            $process = [System.Diagnostics.Process]::Start($psi)
+            [pscustomobject]@{ Process = $process; Stdout = $process.StandardOutput.ReadToEndAsync(); Stderr = $process.StandardError.ReadToEndAsync() }
+        }
+
+        function Wait-Writer {
+            param($Started)
+            $Started.Process.WaitForExit()
+            [pscustomobject]@{ ExitCode = $Started.Process.ExitCode; Output = ($Started.Stdout.Result + $Started.Stderr.Result) }
+        }
+
+        function Lock-Root {
+            param([string]$Root)
+            [System.IO.FileStream]::new((Get-HandoffLockPath -CanonicalRoot (Get-Item -LiteralPath $Root).FullName), [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        }
+
+        $script:ResearchPayload = @{ runId = 'parallel'; historyRecords = @(@{ agent = 'Squad Researcher'; request = 'Research.'; deliverable = 'research/parallel-research.md'; outcome = 'Done.' }); stateAdvance = @{ activeRoles = @('Squad Researcher') } }
+        $script:DeveloperPayload = @{ runId = 'parallel'; historyRecords = @(@{ agent = 'Squad Developer'; request = 'Change.'; deliverable = 'src/parallel-change.md'; outcome = 'Done.' }); stateAdvance = @{ activeRoles = @('Squad Developer') } }
+    }
+
+    It 'lands both of two ordinary hand-offs that wait on the lock together: turn +2 and -Check passes' {
+        $root = New-TwoAgentRoot
+        $lock = Lock-Root -Root $root
+        try {
+            $a = Start-Writer -Root $root -Payload $script:ResearchPayload
+            $b = Start-Writer -Root $root -Payload $script:DeveloperPayload
+            Start-Sleep -Seconds 4
+        }
+        finally { $lock.Dispose() }
+        $results = @((Wait-Writer $a), (Wait-Writer $b))
+        foreach ($result in $results) { $result.ExitCode | Should -Be 0 -Because $result.Output }
+        (Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json).turn | Should -Be 3
+        $check = Invoke-LedgerCheck -Root $root -Counts 'Squad Researcher=1;Squad Developer=1;Squad Scribe=2'
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+    }
+
+    It 'lands both when started at the same moment without a held lock' {
+        $root = New-TwoAgentRoot
+        $a = Start-Writer -Root $root -Payload $script:ResearchPayload
+        $b = Start-Writer -Root $root -Payload $script:DeveloperPayload
+        $results = @((Wait-Writer $a), (Wait-Writer $b))
+        foreach ($result in $results) { $result.ExitCode | Should -Be 0 -Because $result.Output }
+        (Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json).turn | Should -Be 3
+        (Invoke-LedgerCheck -Root $root -Counts 'Squad Researcher=1;Squad Developer=1;Squad Scribe=2').ExitCode | Should -Be 0
+    }
+
+    It 'refuses, with exit 1, a deliverable the hand-off that landed during the wait already credited' {
+        $root = New-TwoAgentRoot
+        $same = @{ runId = 'parallel'; historyRecords = @(@{ agent = 'Squad Developer'; request = 'Change again.'; deliverable = 'research/parallel-research.md'; outcome = 'Done.' }); stateAdvance = @{ activeRoles = @('Squad Developer') } }
+        $lock = Lock-Root -Root $root
+        try {
+            $a = Start-Writer -Root $root -Payload $script:ResearchPayload
+            Start-Sleep -Milliseconds 1500
+            $b = Start-Writer -Root $root -Payload $same
+            Start-Sleep -Seconds 3
+        }
+        finally { $lock.Dispose() }
+        $first = Wait-Writer $a
+        $second = Wait-Writer $b
+        @($first.ExitCode, $second.ExitCode) | Sort-Object | Should -Be @(0, 1) -Because "$($first.Output) / $($second.Output)"
+        (@($first, $second) | Where-Object ExitCode -eq 1).Output | Should -Match 'already credited in history/Squad (Researcher|Developer)\.md .* by the hand-off that landed while this one waited for the lock, and has not changed since; a deliverable is credited once'
+        (Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json).turn | Should -Be 2
+    }
+
+    It 'waits on the same lock when the root is reached by its 8.3 short path' {
+        $root = New-TwoAgentRoot
+        $long = (Get-Item -LiteralPath $root).FullName
+        $short = (& cmd /c "for %I in (`"$long`") do @echo %~sI" | Select-Object -Last 1).Trim()
+        if (-not $IsWindows -or -not $short -or $short -eq $long) { Set-ItResult -Skipped -Because '8.3 short names are not available on this volume'; return }
+        $lock = Lock-Root -Root $long
+        try { $held = Wait-Writer (Start-Writer -Root $short -Payload $script:ResearchPayload -LockTimeoutSeconds 2) }
+        finally { $lock.Dispose() }
+        $held.ExitCode | Should -Be 8 -Because "the short path $short must share the lock of $long. $($held.Output)"
+        (Wait-Writer (Start-Writer -Root $short -Payload $script:ResearchPayload)).ExitCode | Should -Be 0
+    }
+
+    It 'waits on the same lock when the root is reached through a directory junction' {
+        if (-not $IsWindows) { Set-ItResult -Skipped -Because 'directory junctions are Windows-only'; return }
+        $root = New-TwoAgentRoot
+        $repo = (Get-Item -LiteralPath (Split-Path -Parent (Split-Path -Parent $root))).FullName
+        $junction = Join-Path $TestDrive "junction-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+        New-Item -ItemType Junction -Path $junction -Target $repo | Out-Null
+        $viaJunction = Join-Path $junction '.copilot-tracking/squad'
+        $lock = Lock-Root -Root $root
+        try { $held = Wait-Writer (Start-Writer -Root $viaJunction -Payload $script:ResearchPayload -LockTimeoutSeconds 2) }
+        finally { $lock.Dispose() }
+        $held.ExitCode | Should -Be 8 -Because "the junction path must share the lock of the real root. $($held.Output)"
+    }
+}
+
+Describe 'Measure-SquadLedger.ps1 -Write never leaves one file updated alone (H5)' {
+    It 'restores consumption.md when the state.json write fails, and leaves no temp file' {
+        $root = New-Root
+        (Invoke-Writer -Root $root -Payload (New-Payload)).ExitCode | Should -Be 0
+        $consumption = Join-Path $root 'consumption.md'
+        $stale = ((Get-Content -LiteralPath $consumption -Raw) -replace '\*\*Total\*\* \| \*\*\d', '**Total** | **9')
+        [System.IO.File]::WriteAllText($consumption, $stale)
+        $before = (Get-FileHash -LiteralPath $consumption).Hash
+        $statePath = Join-Path $root 'state.json'
+        (Get-Item -LiteralPath $statePath).IsReadOnly = $true
+        try { $output = & pwsh -NoProfile -File $script:Ledger -SquadRoot $root -Write *>&1 | Out-String; $exit = $LASTEXITCODE }
+        finally { (Get-Item -LiteralPath $statePath).IsReadOnly = $false }
+        $exit | Should -Not -Be 0 -Because $output
+        $output | Should -Match 'could not write state\.json'
+        $output | Should -Match 'consumption\.md restored to its original bytes'
+        (Get-FileHash -LiteralPath $consumption).Hash | Should -Be $before
+        @(Get-ChildItem -LiteralPath $root -Force -Filter '*.tmp').Count | Should -Be 0
+    }
+}
+
+Describe 'Write-SquadHandoff.ps1 Route markers (H6) and consent warning (H7)' {
+    BeforeAll {
+        function New-RoutedPayload {
+            param([string]$Rationale, [string]$Route = 'standard')
+            $payload = New-Payload
+            $payload.route = $Route
+            $payload.historyRecords[0].routingIdentity = [ordered]@{ requestedModel = 'claude-sonnet-4.6'; effectiveModel = 'Claude Sonnet 4.6'; observedModel = 'unreported'; routeRationale = $Rationale }
+            $payload
+        }
+    }
+
+    It 'prefixes Route: economy to a routeRationale without a marker, with a WARN' {
+        $root = New-Root
+        $result = Invoke-Writer -Root $root -Payload (New-RoutedPayload -Rationale 'economy pick: rank 1 of 3')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match "WARN Squad Researcher: routeRationale did not start with a Route marker; recorded as 'Route: economy; \.\.\.'"
+        (Get-Content -LiteralPath (Join-Path $root 'history/Squad Researcher.md') -Raw) | Should -Match ([regex]::Escape('* **Route rationale** — Route: economy; economy pick: rank 1 of 3'))
+    }
+
+    It 'prefixes Route: bounded when the payload route is bounded' {
+        $root = New-Root
+        $result = Invoke-Writer -Root $root -Payload (New-RoutedPayload -Rationale 'rank 1 of 3' -Route 'bounded')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Get-Content -LiteralPath (Join-Path $root 'history/Squad Researcher.md') -Raw) | Should -Match ([regex]::Escape('* **Route rationale** — Route: bounded; rank 1 of 3'))
+    }
+
+    It 'keeps a rationale that already starts with its marker, without a marker WARN' {
+        $root = New-Root
+        $result = Invoke-Writer -Root $root -Payload (New-RoutedPayload -Rationale 'Route: economy; economy pick')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Not -Match 'routeRationale did not start'
+        (Get-Content -LiteralPath (Join-Path $root 'history/Squad Researcher.md') -Raw) | Should -Match ([regex]::Escape('* **Route rationale** — Route: economy; economy pick'))
+    }
+
+    It 'warns, and still writes, when a record has no routingIdentity' {
+        $root = New-Root
+        $result = Invoke-Writer -Root $root -Payload (New-Payload)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'WARN Squad Researcher: no routingIdentity; under economy every history entry carries Route: economy'
+    }
+
+    It 'warns economy consent not recorded and continues when decisions.md has no Economy Mode Accepted entry' {
+        $root = New-Root
+        $result = Invoke-Writer -Root $root -Payload (New-Payload)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'WARN economy consent not recorded'
+    }
+
+    It 'does not warn about consent once the entry is recorded' {
+        $root = New-Root
+        Add-Content -LiteralPath (Join-Path $root 'decisions.md') -Value "`n## Economy Mode Accepted 2026-09-27T08:00:00Z`n`n* User: Fixture User`n* Previous mode: ranked`n* Trade accepted: cheaper allowlisted picks`n* Never weakened: every gate`n"
+        $result = Invoke-Writer -Root $root -Payload (New-Payload)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Not -Match 'economy consent not recorded'
+    }
+}
+
+Describe 'Default role charters carry no economy text (H8)' {
+    BeforeAll {
+        Import-Module (Join-Path $PSScriptRoot 'SquadPackage.psm1') -Force
+        $script:CharterModel = Get-SquadPackageModel -PackageRoot $PackageRoot
+    }
+
+    It '<Name> has no Status: complete line and no economy procedure' -ForEach @(
+        @{ Name = 'squad-implementor.agent.md' }
+        @{ Name = 'squad-lead.agent.md' }
+        @{ Name = 'squad-reviewer.agent.md' }
+        @{ Name = 'squad-technical-writer.agent.md' }
+    ) {
+        $agent = @($script:CharterModel.SquadAgents | Where-Object Name -eq $Name)[0]
+        $agent | Should -Not -BeNullOrEmpty
+        $agent.Body | Should -Not -Match 'Status: complete'
+        $agent.Body | Should -Not -Match '(?i)economy|handoff: script|Write-SquadHandoff'
     }
 }
