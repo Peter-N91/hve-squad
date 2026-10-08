@@ -123,8 +123,29 @@ Describe 'Coordinator entry points for background workstreams (RTE-51)' {
         @($script:Coordinator.Meta['agents']) | Should -Contain 'Squad Workstream Lead'
         $hot = @($script:Coordinator.Body, $script:Gates, (Get-SquadReferenceBody -Name 'operating-procedure.md'), (Get-SquadReferenceBody -Name 'scribe-payload-template.md'))
         foreach ($text in $hot) { $text | Should -Not -Match '(?i)delivery=background|Background Workstreams|leadConsumption|launchedAt' }
-        @($script:Model.Prompts | Where-Object Name -eq 'squad.prompt.md')[0].Meta['argument-hint'] | Should -Not -Match 'delivery='
         $script:Coordinator.Body.Length | Should -BeLessOrEqual 30000
+    }
+
+    It 'tells a non-economy coordinator, in the /squad prompt, that delivery=background is economy-only and ignored otherwise (W2)' {
+        $prompt = @($script:Model.Prompts | Where-Object Name -eq 'squad.prompt.md')[0]
+        $prompt.Meta['argument-hint'] | Should -Match ([regex]::Escape('[delivery=background]'))
+        $prompt.Body | Should -Match ([regex]::Escape('* ${input:delivery}: (Optional) `background`: economy only (`references/economy-mode.md`); any other mode ignores it and says so once.'))
+        $prompt.Body | Should -Not -Match '(?i)Background Workstreams Launched|leadConsumption|launchedAt'
+    }
+
+    It 'mentions the Workstream Lead only in economy-mode.md, its own charter, and the coordinator agents list (W3)' {
+        $allowed = @('economy-mode.md', 'squad-workstream-lead.agent.md', 'squad-coordinator.agent.md')
+        $roots = @(
+            (Join-Path $PackageRoot '.github/agents'), (Join-Path $PackageRoot '.github/prompts'), (Join-Path $PackageRoot '.github/instructions'),
+            (Join-Path $script:Model.SquadSkillRoot 'references')
+        )
+        $files = @($roots | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -Filter '*.md' }) + @(Get-Item -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'SKILL.md'))
+        $files.Count | Should -BeGreaterThan 20
+        $mentions = @($files | Where-Object { (Get-Content -LiteralPath $_.FullName -Raw) -match '(?i)Workstream Lead' } | ForEach-Object Name | Sort-Object -Unique)
+        foreach ($name in $mentions) { $name | Should -BeIn $allowed -Because "$name is read outside economy and must not carry Workstream Lead text" }
+        $script:Coordinator.Body | Should -Not -Match '(?i)Workstream Lead' -Because 'the coordinator names it only in its agents: frontmatter'
+        $repo = Join-Path $PSScriptRoot '../..'
+        (Get-Content -LiteralPath (Join-Path $repo 'apm.yml') -Raw) | Should -Match ([regex]::Escape('squad-workstream-lead.agent.md'))
     }
 
     It 'holds read_agent whenever it declares a tools list' {
@@ -175,6 +196,16 @@ Describe 'Background Workstreams in economy-mode.md (RTE-51 to RTE-53)' {
         $script:BgText | Should -Match ([regex]::Escape('never re-launched silently'))
     }
 
+    It 'records the agent ids after launch and recovers from disk first, never relaunching silently (W1)' {
+        $script:BgText | Should -Match ([regex]::Escape('hand the Scribe a decision headed `## Background Workstreams Launched`'))
+        $script:BgText | Should -Match ([regex]::Escape('Right after the launch block, hand the Scribe a second short decision headed `## Background Workstreams Agents` that maps each workstream id to the agent id the `task` tool returned'))
+        $script:BgText | Should -Match ([regex]::Escape('9. **Recover, disk first.**'))
+        $script:BgText | Should -Match ([regex]::Escape('runs step 7''s on-disk verification for each: every deliverable newer than `launchedAt`, each owner''s change record ending with `Status: complete`, and a review artifact holding a verdict'))
+        $script:BgText | Should -Match ([regex]::Escape('`read_agent` is used only for agent ids recorded in `## Background Workstreams Agents` during the current session'))
+        $script:BgText | Should -Match ([regex]::Escape('reported to the user as not delivered, with its partial files listed, and is never re-launched silently'))
+        $script:BgText | Should -Not -Match ([regex]::Escape('checks the background agents still listed by `read_agent`'))
+    }
+
     It 'names no model id and no bounded pick' {
         $script:BgText | Should -Not -Match '(?i)bounded pick|boundedPick|(?<![a-z])-Bounded\b'
         $script:BgText | Should -Not -Match '(?i)\b(claude|gpt-|gemini|grok)'
@@ -184,7 +215,7 @@ Describe 'Background Workstreams in economy-mode.md (RTE-51 to RTE-53)' {
         $contract = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../squad-behavior-contract.md') -Raw
         $contract | Should -Match '(?m)^\| RTE-51 \| \*\*Background workstreams \(economy only\)\.\*\*'
         $contract | Should -Match '(?m)^\| RTE-52 \| \*\*Workstream hand-offs are serialized and proven\.\*\*'
-        $contract | Should -Match '(?m)^\| RTE-53 \| \*\*Recovery after an interrupted session\.\*\*'
+        $contract | Should -Match '(?m)^\| RTE-53 \| \*\*Recovery after an interrupted session\.\*\* A `## Background Workstreams Agents` decision maps each workstream to its agent id'
         (Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/Write-SquadHandoff.ps1') -Raw) | Should -Match ([regex]::Escape("'leadConsumption'"))
     }
 }

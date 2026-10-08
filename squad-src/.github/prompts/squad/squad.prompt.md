@@ -1,7 +1,7 @@
 ---
 description: "Hands a request to the Squad Coordinator, which routes it to a cast of HVE Core agents and persists squad state"
 agent: Squad Coordinator
-argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual]"
+argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual] [delivery=background]"
 ---
 
 # Squad
@@ -17,6 +17,7 @@ argument-hint: "request=... [profile=default|full|security|design|accessibility|
 * ${input:mode}: (Optional) The autonomy mode for this turn. `autonomous` engages the bounded `auto-validated` validator loop from `.github/instructions/squad/squad-autonomous.instructions.md`. `autopilot` runs the full research→plan→implement→review pipeline from `.github/instructions/squad/squad-autopilot.instructions.md`, stopping for the human only at impactful actions and final-outcome validation. When omitted, the coordinator uses the standard interactive `auto` and `confirm` tiers from the routing table, approving each step.
 * ${input:cost-ceiling}: (Optional) A finite positive USD model-spend ceiling or the literal `unset`. A positive value sets or replaces the ceiling for this run. Omission inherits an active ceiling only when this request continues the same run. `cost-ceiling=unset` explicitly removes it; a new run with no value starts without a ceiling.
 * ${input:routing}: (Optional) `off`, `ranked`, `economy` (cheaper picks after your consent, `references/economy-mode.md`), or `manual`. Persisted in `team.md` until changed, so pass it only to change the mode. `ranked` picks each role's model by how well it fits the role's work, from `references/model-catalog.md`, and shows the picks in `team.md`'s `Model` column. `manual` asks you to choose each role's model — accept the suggestions, choose per assignment class, or choose per role — offering only models this host can run, and records your picks in that column. `off` removes the column and keeps today's behavior byte-for-byte.
+* ${input:delivery}: (Optional) `background`: economy only (`references/economy-mode.md`); any other mode ignores it and says so once.
 
 ## Requirements
 
