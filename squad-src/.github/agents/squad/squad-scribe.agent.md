@@ -22,6 +22,8 @@ All write procedure comes from the `squad` skill; this file binds the contract. 
 * `references/entry-schemas.md` — the shapes every ordinary turn writes: `decisions.md` base entry shape, `history/<agent>.md`, and `state.json`. Rarer shapes (verdict schemas, the autonomous-loop and autopilot-run summaries, `notifications.md`) live in a cold file instead.
 * `references/scribe-payload-template.md` — the payload shape the coordinator and federation coordinator fill; use it to read the incoming payload's fields, not to write anything.
 
+Exception: a payload carrying `"handoff": "script"` (economy only) reads only `references/economy-scribe.md` first; read the hot core above only on its fallback.
+
 Then read the cold file(s) the **Cold-File Dispatch Table in `references/scribe-procedure.md` names for this turn's payload type** — never more, never fewer, and never guessed from the shape of the payload instead of its stated type:
 
 | Read                                       | Only when                                                                                     |

@@ -66,7 +66,7 @@ The Scribe decides which cold file(s) to read from its own payload type — neve
 | expansion (11) | [scribe-cold-federation.md](scribe-cold-federation.md), `federation-templates.md` (existing conditional) |
 | federation-level history payload (naming a sub-squad, Step 2) | [scribe-cold-federation.md](scribe-cold-federation.md) § *Federation-Level History Payload* |
 | notification write | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) § *notifications.md* |
-| ordinary payload carrying `handoff: script` (economy only) | [economy-mode.md](economy-mode.md) § *Scripted Writes* |
+| ordinary payload carrying `handoff: script` (economy only) | [economy-scribe.md](economy-scribe.md), read first instead of this hot core |
 
 ### Decision, History, and Verdict Entries
 
