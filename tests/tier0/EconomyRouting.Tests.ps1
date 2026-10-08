@@ -36,7 +36,6 @@ BeforeAll {
     $skill = $script:Model.SquadSkillRoot
     $script:Routing = Get-EconomyFileText (Join-Path $skill 'references/model-routing.md')
     $script:EconomySection = Get-EconomyFileText (Join-Path $skill 'references/economy-mode.md')
-    $script:EconomyPointer = Get-EconomySection -Text $script:Routing -Heading 'Economy Mode'
     $script:WatchWorkflow = Get-EconomyFileText (Join-Path $skill 'squad-watch.workflow.yml')
     $script:WatchInstructions = Get-EconomyFileText (@($script:Model.Instructions | Where-Object Name -eq 'squad-watch-mode.instructions.md')[0]).Path
     $script:OperatingProcedure = Get-EconomyFileText (Join-Path $skill 'references/operating-procedure.md')
@@ -82,10 +81,12 @@ Describe 'Every routing-mode enumeration names economy (SQ-35)' {
 }
 
 Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
-    It 'lives in the cold economy-mode.md, with only a pointer left in model-routing.md' {
+    It 'lives in the cold economy-mode.md, with only a table row and one sentence left in model-routing.md' {
         $script:EconomySection | Should -Not -BeNullOrEmpty
-        $script:EconomyPointer.Trim() | Should -Match '^Under `Model routing: economy`, or on the turn `routing=economy` is passed, read \[economy-mode\.md\]\(economy-mode\.md\)'
-        @($script:EconomyPointer.Trim() -split '\n').Count | Should -Be 1
+        $script:Routing | Should -Match '(?m)^\| `economy` \| The id \[economy-mode\.md\]\(economy-mode\.md\) picks for the role \|'
+        $script:Routing | Should -Match ([regex]::Escape('Everywhere below that says `ranked`, `economy` behaves the same except for its pick.'))
+        $script:Routing | Should -Not -Match '(?m)^## Economy Mode'
+        ([regex]::Matches($script:Routing, 'economy')).Count | Should -BeLessOrEqual 6 -Because 'model-routing.md is read on every ranked and manual turn, so economy keeps to the mode list, one row, and one sentence'
         $script:Routing | Should -Not -Match '(?i)fit 2 or better|lowest \*\*Blended\*\* rate'
     }
 

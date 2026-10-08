@@ -1,6 +1,6 @@
 ---
 name: squad-model-routing
-description: "Opt-in model-routing procedure: the off, ranked, economy, and manual modes persisted in team.md, the Model column, per-host availability, fit-based ranking, consequence floors, the manual model-selection prompt, re-rank and substitution, stale-catalog fallback, Watch-mode ignore rules, the identity-bullet contract, Cost Preflight pricing, and federation forwarding."
+description: "Opt-in model-routing procedure: the off, ranked, and manual modes persisted in team.md, the Model column, per-host availability, fit-based ranking, consequence floors, the manual model-selection prompt, re-rank and substitution, stale-catalog fallback, Watch-mode ignore rules, the identity-bullet contract, Cost Preflight pricing, and federation forwarding."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -18,22 +18,24 @@ metadata:
 
 `routing=off|ranked|economy|manual` selects how each role's model is chosen. The mode is **persisted in `team.md`**, so it holds on every later turn until the user changes it:
 
-| Mode      | What each dispatch passes as `model`                                  | `team.md` carries                                              |
-|-----------|-----------------------------------------------------------------------|----------------------------------------------------------------|
-| `off`     | Nothing — the no-policy default above                                 | No mode line and no `Model` column                             |
-| `ranked`  | The id *Ranking Algorithm* below resolves for the role                 | `Model routing: ranked` and a `Model` column of ranked picks   |
-| `economy` | The id [economy-mode.md](economy-mode.md) resolves for the role         | `Model routing: economy` and a `Model` column of economy picks |
-| `manual`  | The id the user picked for the role, from the role's `Model` cell     | `Model routing: manual` and a `Model` column of user picks     |
+| Mode     | What each dispatch passes as `model`                                  | `team.md` carries                                            |
+|----------|-----------------------------------------------------------------------|--------------------------------------------------------------|
+| `off`    | Nothing — the no-policy default above                                 | No mode line and no `Model` column                           |
+| `ranked` | The id *Ranking Algorithm* below resolves for the role                 | `Model routing: ranked` and a `Model` column of ranked picks |
+| `manual` | The id the user picked for the role, from the role's `Model` cell     | `Model routing: manual` and a `Model` column of user picks   |
+| `economy` | The id [economy-mode.md](economy-mode.md) picks for the role | As `ranked`, with `Model routing: economy` |
 
-* **Where the mode lives.** A single line directly beneath `team.md`'s H1: `Model routing: ranked`, `Model routing: economy`, or `Model routing: manual`. No line means `off`, so every roster written before this contract reads as `off` unchanged.
+Everywhere below that says `ranked`, `economy` behaves the same except for its pick.
+
+* **Where the mode lives.** A single line directly beneath `team.md`'s H1: `Model routing: ranked` or `Model routing: manual`. No line means `off`, so every roster written before this contract reads as `off` unchanged.
 * **Changing it.** A `routing=` input different from the recorded mode is a roster change: before any dispatch, the coordinator hands the new mode, and the `Model` column values it resolved, to the Scribe as a roster refresh, then continues the turn under the new mode. `routing=off` removes both the line and the column; the Scribe records the removed picks in that turn's decision entry so a later switch back to `manual` can offer them as the suggestion.
 * **Legacy `models=`.** The comma-separated `models=` input is retired. When a turn still passes it, apply none of its pairs, tell the user once that per-role models now live in `team.md`'s `Model` column under `routing=manual`, and offer to switch.
 
 ## The Model Column
 
-The `Model` column sits between `Model Tier` and `Deliverable Root` and exists only while the mode is `ranked`, `economy`, or `manual`. Each cell holds one **Model ID** — the exact lowercase id in `consumption-rates.md`'s `Model ID` column and `model-catalog.md`'s `Catalog ID` (for example `claude-sonnet-5.5`) — never a display name, a tier, or a list.
+The `Model` column sits between `Model Tier` and `Deliverable Root` and exists only while the mode is `ranked` or `manual`. Each cell holds one **Model ID** — the exact lowercase id in `consumption-rates.md`'s `Model ID` column and `model-catalog.md`'s `Catalog ID` (for example `claude-sonnet-5.5`) — never a display name, a tier, or a list.
 
-* **Under `ranked`** (and `economy`) the cell is a readout: the coordinator writes the role's ranked pick so the user can see what each role will run on. It re-ranks on every turn and hands the Scribe any cell whose pick changed (a different host, catalog, floor, or roster). A hand edit is overwritten on the next re-rank; to pin a model, switch to `manual`.
+* **Under `ranked`** the cell is a readout: the coordinator writes the role's ranked pick so the user can see what each role will run on. It re-ranks on every turn and hands the Scribe any cell whose pick changed (a different host, catalog, floor, or roster). A hand edit is overwritten on the next re-rank; to pin a model, switch to `manual`.
 * **Under `manual`** the cell is the user's choice and the coordinator never rewrites it. An empty cell, or one refused under *Allowlist* below, triggers *Manual Model Selection* before that role's first dispatch.
 
 ## Manual Model Selection
@@ -59,11 +61,11 @@ A `Model` cell, or an id the user types during *Manual Model Selection*, must ma
 Highest wins, per role, evaluated independently for every dispatch:
 
 1. `routing=manual`: the role's valid `Model` cell.
-2. `routing=ranked`: the ranked id for that role — the value its `Model` cell mirrors; `routing=economy`: the *Economy Mode* id, mirrored the same way.
+2. `routing=ranked`: the ranked id for that role — the value its `Model` cell mirrors.
 3. `tier=` (the existing static-tier input) or the seeded `team.md` Model Tier — today's fallback, unchanged.
 4. Omit the parameter — the no-policy default.
 
-**Dispatch copies the cell; it never retypes it.** Under `ranked`, `economy`, or `manual`, every dispatch to a roster agent (Primary or Alternate) passes that row's `Model` cell, copied character for character from `team.md` as read this turn — never recalled, never omitted, never adjusted to a "similar" id. The Scribe is the one exception: its own model pin governs. A live run resolved `claude-opus-5.5` for `researcher`, then typed `claude-sonnet-5.5` into the call, and omitted `model` entirely for `intake-validator`, which ran on the session model. In the plugin distribution, the `dispatch-guards` `preToolUse` hook denies such a dispatch and names the cell to copy; it only compares and never fills or changes a cell, so how cells are chosen is unchanged. **Requested model** in the identity bullets is the value actually passed, never the cell it should have been.
+**Dispatch copies the cell; it never retypes it.** Under `ranked` or `manual`, every dispatch to a roster agent (Primary or Alternate) passes that row's `Model` cell, copied character for character from `team.md` as read this turn — never recalled, never omitted, never adjusted to a "similar" id. The Scribe is the one exception: its own model pin governs. A live run resolved `claude-opus-5.5` for `researcher`, then typed `claude-sonnet-5.5` into the call, and omitted `model` entirely for `intake-validator`, which ran on the session model. In the plugin distribution, the `dispatch-guards` `preToolUse` hook denies such a dispatch and names the cell to copy; it only compares and never fills or changes a cell, so how cells are chosen is unchanged. **Requested model** in the identity bullets is the value actually passed, never the cell it should have been.
 
 ## Assignment Classes
 
@@ -106,10 +108,6 @@ For a role resolving under `routing=ranked`, or to suggest a pick under `routing
 
 **Deterministic helper.** When a shell tool and `pwsh` 7+ are available, run `scripts/Resolve-SquadModelRoute.ps1 -SquadRoot <squadRoot>` from the installed squad skill, passing `-AvailableModels` with the `task` tool's enum on the CLI or app, or `-SessionModel` on VS Code. It applies this algorithm, the floors, and the *Allowlist* checks to every roster row, writes nothing, and returns each role's pick, candidates, and cell status. Use its output rather than ranking by hand; without a shell, apply the steps above.
 
-## Economy Mode
-
-Under `Model routing: economy`, or on the turn `routing=economy` is passed, read [economy-mode.md](economy-mode.md); it holds the whole procedure, and nothing in it applies under any other mode.
-
 ## Consequence Floors
 
 Every role's floor is its current `team.md` Model Tier (`fast`, `default`, or `extended`) — a property of the roster, independent of anything `model-catalog.md` contains. A floor admits these capability classes:
@@ -149,7 +147,7 @@ The ten-field `#### Consumption` block defined in `entry-schemas.md` stays close
 * **Requested model** — the id routing resolved and passed through the dispatch `model` parameter, or "none (parameter omitted)".
 * **Effective model** — the `model` value the closed consumption block actually recorded for this dispatch (identical to Requested model unless a substitution occurred).
 * **Observed model** — what the host reported the dispatch ran on, per the *Model Attribution* ladder's rung 1; `unreported` when the host gave no dispatch-line or self-reported model, `unverified` when only a lower rung (pin, session, or declaration) was available.
-* **Route rationale** — the mode and assignment class used, the candidate's rank position with its fit (or "manual" / "floor fallback" / "stale-catalog fallback" / "economy pick" / "economy escalation"), the floor applied, and any re-rank or refusal.
+* **Route rationale** — the mode and assignment class used, the candidate's rank position with its fit (or "manual" / "floor fallback" / "stale-catalog fallback"), the floor applied, and any re-rank or refusal.
 
 These four names are the D9 contract: Tier1 fixtures and any Scribe-procedure wiring that populate them must use this exact wording and placement, never a new schema field.
 
@@ -165,7 +163,7 @@ The Federation Coordinator forwards `routing` to every selected sub-squad exactl
 
 ## Cost-First Model Selection
 
-Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn. This static-tier behavior is `references/operating-procedure.md` Route step 5 and is exactly what runs whenever the mode is `off` or no `ranked`, `economy`, or `manual` id resolves a role — it is not replaced by anything above, only ever outranked per *Precedence*.
+Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn. This static-tier behavior is `references/operating-procedure.md` Route step 5 and is exactly what runs whenever the mode is `off` or no `ranked` or `manual` id resolves a role — it is not replaced by anything above, only ever outranked per *Precedence*.
 
 ## Worked Examples
 
