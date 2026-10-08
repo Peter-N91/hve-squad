@@ -126,6 +126,15 @@ $containers = @(
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'EconomyRouting.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ConsumptionRatesSeeder.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'SetSquadCostPreflight.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'WriteSquadHandoff.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
 )
 
 # Manifest coverage is a property of the working copy, not of an installed tree.

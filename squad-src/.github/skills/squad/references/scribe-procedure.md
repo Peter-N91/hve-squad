@@ -52,20 +52,21 @@ These hold on every turn regardless of payload type. Each names its full definit
 
 The Scribe decides which cold file(s) to read from its own payload type — never from whether the coordinator's payload happened to mention a section. `entry-schemas.md` and this hot core are always read; the table below is the complete set of additional reads.
 
-| Payload type (Step above)                                     | Also read                                                                |
-|-----------------------------------------------------------------|---------------------------------------------------------------------------|
-| decision, history, (always: Step 7 consumption + state.json)    | none — this hot core is sufficient                                        |
-| initialization or roster refresh (3)                             | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), [consumption-rates-template.md](consumption-rates-template.md), `seed-templates.md` (existing init-only conditional) |
+| Payload type (Step above) | Also read |
+|---|---|
+| decision, history, (always: Step 7 consumption + state.json) | none — this hot core is sufficient |
+| initialization or roster refresh (3) | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), [consumption-rates-template.md](consumption-rates-template.md), `seed-templates.md` (existing init-only conditional) |
 | Step 7.1 rate-table seed/reseed, any payload type (`consumption-rates.md` missing or shape-check-failed) | [consumption-rates-template.md](consumption-rates-template.md) |
-| memory (4)                                                       | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md)         |
-| Council Verdict / Intake Readiness Verdict / Discovery Verdict (5, 9, 12) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md)     |
-| autonomous-loop summary (6)                                      | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md)     |
-| autopilot-run summary, single-squad root (8)                     | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md)     |
-| autopilot-run summary, federation root (8)                       | [scribe-cold-federation.md](scribe-cold-federation.md)                     |
-| promotion (10)                                                   | [scribe-cold-federation.md](scribe-cold-federation.md), [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) (deliverable-root rebasing) |
-| expansion (11)                                                   | [scribe-cold-federation.md](scribe-cold-federation.md), `federation-templates.md` (existing conditional) |
-| federation-level history payload (naming a sub-squad, Step 2)    | [scribe-cold-federation.md](scribe-cold-federation.md) § *Federation-Level History Payload* |
-| notification write                                               | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) § *notifications.md* |
+| memory (4) | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) |
+| Council Verdict / Intake Readiness Verdict / Discovery Verdict (5, 9, 12) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
+| autonomous-loop summary (6) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
+| autopilot-run summary, single-squad root (8) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
+| autopilot-run summary, federation root (8) | [scribe-cold-federation.md](scribe-cold-federation.md) |
+| promotion (10) | [scribe-cold-federation.md](scribe-cold-federation.md), [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) (deliverable-root rebasing) |
+| expansion (11) | [scribe-cold-federation.md](scribe-cold-federation.md), `federation-templates.md` (existing conditional) |
+| federation-level history payload (naming a sub-squad, Step 2) | [scribe-cold-federation.md](scribe-cold-federation.md) § *Federation-Level History Payload* |
+| notification write | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) § *notifications.md* |
+| ordinary payload carrying `handoff: script` (economy only) | [economy-scribe.md](economy-scribe.md), read first instead of this hot core |
 
 ### Decision, History, and Verdict Entries
 
