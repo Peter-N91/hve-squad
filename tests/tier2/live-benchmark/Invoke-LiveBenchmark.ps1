@@ -13,6 +13,7 @@
       C  -BaselineSrc,  prompt ends with routing=ranked
       D  -CandidateSrc, prompt ends with routing=ranked; must match C
       E  -CandidateSrc, prompt ends with routing=economy; compared with A
+      F  -CandidateSrc, prompt ends with routing=economy delivery=background; optional, compared with E
     Arm order is counterbalanced: each level gets a seeded random arm order that rotates
     one place per repeat, so over as many repeats as there are arms every arm runs once
     in every position, cancelling time-of-day and cache-warmth drift by position.
@@ -47,7 +48,7 @@ param(
     [Parameter(Mandatory)][string]$BaselineSrc,
     [string]$CandidateSrc,
     [ValidateSet('easy', 'medium', 'hard')][string[]]$Levels = @('easy', 'medium', 'hard'),
-    [ValidateSet('A', 'B', 'C', 'D', 'E')][string[]]$Arms = @('A', 'B', 'C', 'D', 'E'),
+    [ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string[]]$Arms = @('A', 'B', 'C', 'D', 'E'),
     [ValidateRange(1, 50)][int]$Repeats = 8,
     [int]$Seed = 137,
     [string]$ResultRoot = (Join-Path ([IO.Path]::GetTempPath()) 'hve-live-benchmark'),
@@ -68,7 +69,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $ResultRoot = [IO.Path]::GetFullPath($ResultRoot)
 if ($ResultRoot.StartsWith($repoRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "ResultRoot must be outside the repository: $ResultRoot" }
 $needsCandidate = @($Arms | Where-Object { (Get-ArmSource -Arm $_) -eq 'candidate' }).Count -gt 0
-if ($needsCandidate -and -not $CandidateSrc) { throw 'Arms B, D and E need -CandidateSrc.' }
+if ($needsCandidate -and -not $CandidateSrc) { throw 'Arms B, D, E and F need -CandidateSrc.' }
 $roots = @{ baseline = (Resolve-Path -LiteralPath $BaselineSrc).Path }
 if ($CandidateSrc) { $roots.candidate = (Resolve-Path -LiteralPath $CandidateSrc).Path }
 foreach ($root in $roots.Values) { if (-not (Test-Path -LiteralPath (Join-Path $root 'squad-src/.github/agents'))) { throw "Not a repository root with squad-src: $root" } }

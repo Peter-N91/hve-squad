@@ -105,8 +105,8 @@ Describe 'Fixture and schedule' {
         $model = $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.ParameterAst] -and $node.Name.VariablePath.UserPath -eq 'Model' }, $true) | Select-Object -First 1
         $model.DefaultValue.Extent.Text | Should -Be "'claude-sonnet-5.5'"
         $text = Get-Content -LiteralPath $path -Raw
-        $text | Should -Match "\[ValidateSet\('A', 'B', 'C', 'D', 'E'\)\]\[string\]\`$Arm"
-        $text | Should -Match 'A through E'
+        $text | Should -Match "\[ValidateSet\('A', 'B', 'C', 'D', 'E', 'F'\)\]\[string\]\`$Arm"
+        $text | Should -Match 'A through F'
         $text | Should -Not -Match 'claude-sonnet-5[^.]'
     }
 
@@ -156,14 +156,17 @@ Describe 'Fixture and schedule' {
             Get-ArmPrompt -Level $level -Arm C | Should -BeExactly "$a routing=ranked"
             Get-ArmPrompt -Level $level -Arm D | Should -BeExactly "$a routing=ranked"
             Get-ArmPrompt -Level $level -Arm E | Should -BeExactly "$a routing=economy"
+            Get-ArmPrompt -Level $level -Arm F | Should -BeExactly "$a routing=economy delivery=background"
         }
     }
 
     It 'pairs arms so each comparison changes exactly one factor' {
         @('A', 'C') | ForEach-Object { Get-ArmSource -Arm $_ } | Should -Be @('baseline', 'baseline')
-        @('B', 'D', 'E') | ForEach-Object { Get-ArmSource -Arm $_ } | Should -Be @('candidate', 'candidate', 'candidate')
+        @('B', 'D', 'E', 'F') | ForEach-Object { Get-ArmSource -Arm $_ } | Should -Be @('candidate', 'candidate', 'candidate', 'candidate')
         (Get-ArmRouting -Arm A) | Should -Be (Get-ArmRouting -Arm B)
         (Get-ArmRouting -Arm C) | Should -Be (Get-ArmRouting -Arm D)
+        Get-ArmRouting -Arm F | Should -Be 'economy'
+        Get-ArmDelivery -Arm F | Should -Be 'background'
     }
 
     It 'schedules every arm once per repeat and level, in every position once per level, deterministically for a seed' {
@@ -174,6 +177,14 @@ Describe 'Fixture and schedule' {
         (@(Get-BenchmarkSchedule -Repeats 5 -Seed 137).RunId -join ',') | Should -Be ($a.RunId -join ',')
         (@(Get-BenchmarkSchedule -Repeats 5 -Seed 138).RunId -join ',') | Should -Not -Be ($a.RunId -join ',')
         @($a.RunId | Sort-Object -Unique).Count | Should -Be 75
+    }
+
+    It 'keeps background arm F out of defaults but accepts it when requested' {
+        Get-DefaultBenchmarkArm | Should -Be @('A', 'B', 'C', 'D', 'E')
+        @(Get-BenchmarkSchedule -Levels easy -Repeats 1).Arm | Sort-Object | Should -Be @('A', 'B', 'C', 'D', 'E')
+        $withF = @(Get-BenchmarkSchedule -Levels easy -Arms @('A', 'B', 'C', 'D', 'E', 'F') -Repeats 1)
+        ($withF.Arm | Sort-Object) | Should -Be @('A', 'B', 'C', 'D', 'E', 'F')
+        ($withF | Where-Object Arm -EQ F).RunId | Should -Be 'easy-F-r1'
     }
 
     It 'gives a reproducible bootstrap interval that brackets the median' {
@@ -476,9 +487,9 @@ Describe 'Report generation' {
     BeforeAll {
         $rows = foreach ($level in 'easy', 'hard') {
             foreach ($repeat in 1..3) {
-                foreach ($arm in 'A', 'B', 'C', 'D', 'E') {
-                    $seconds = @{ A = 300; B = 300; C = 280; D = 250; E = 200 }[$arm] + $repeat
-                    $credits = @{ A = 80; B = 80; C = 75; D = 70; E = 60 }[$arm] + $repeat / 10
+                foreach ($arm in 'A', 'B', 'C', 'D', 'E', 'F') {
+                    $seconds = @{ A = 300; B = 300; C = 280; D = 250; E = 200; F = 180 }[$arm] + $repeat
+                    $credits = @{ A = 80; B = 80; C = 75; D = 70; E = 60; F = 58 }[$arm] + $repeat / 10
                     $cell = if ($arm -in 'A', 'B') { '' } else { 'gpt-5.4-mini' }
                     $verdict = if ($level -eq 'hard' -and $arm -eq 'E' -and $repeat -eq 3) { 'Fail' } else { 'Pass' }
                     $skipped = $level -eq 'easy' -and $arm -eq 'D' -and $repeat -eq 1
@@ -492,7 +503,7 @@ Describe 'Report generation' {
                         hiddenPassed = 11; hiddenTotal = 11; hiddenAllPass = 'True'; completed = $(if ($verdict -eq 'Pass') { 'True' } else { 'False' }); ownTestsPass = 'True'; testsOnReference = $(if ($skipped) { 'False' } else { 'True' })
                         mutantsKilled = $(if ($skipped) { 'skipped' } else { 2 }); mutantsTotal = 2; docCheck = $(if ($level -eq 'easy') { 'n/a' } else { 'pass' }); reviewVerdict = $verdict; ledgerCheck = 'PASS'
                         dispatches = 3; scribeDispatches = 1; genericDispatches = 0; briefRan = 'True'; coordScriptRuns = 0; handoffSeconds = 40
-                        routingMode = $(@{ A = 'off'; B = 'off'; C = 'ranked'; D = 'ranked'; E = 'economy' }[$arm]); modelMatch = $(if ($cell) { '1/1' } else { 'n/a' })
+                        routingMode = $(@{ A = 'off'; B = 'off'; C = 'ranked'; D = 'ranked'; E = 'economy'; F = 'economy' }[$arm]); modelMatch = $(if ($cell) { '1/1' } else { 'n/a' })
                         model = 'claude-sonnet-5'; cliVersion = '1.0.92-3'; srcTreeHash = "HASH$arm"; agentsJson = (ConvertTo-Json -InputObject $agents -Compress)
                         judgeCorrectness = '8'; judgeTests = '7'; judgeDesign = '8'; judgeDocs = ''; judgeMean = '7.67'
                     }
@@ -519,7 +530,9 @@ Describe 'Report generation' {
 
     It 'reports paired differences against each arm''s control per repeat and their medians' {
         $report | Should -Match '\| easy \| 1 \| E \| A \| -100 \| -20 \|'
+        $report | Should -Match '\| easy \| 1 \| F \| E \| -20 \| -2 \|'
         $report | Should -Match '\| easy \| 1 \| D \| C \| -30 \| -5 \|'
+        $report | Should -Match '\| hard \| F \| E \| 3 \| -20 \| 3/3 \| -2 \| 3/3 \|'
         $report | Should -Match '\| hard \| E \| A \| 3 \| -100 \| 3/3 \| -20 \| 3/3 \|'
         $report | Should -Not -Match '\| C \| A \|'
     }

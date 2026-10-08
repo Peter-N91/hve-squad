@@ -9,7 +9,7 @@
 .DESCRIPTION
     Reports sample statistics: median with [min, max], a seeded bootstrap interval for
     per-arm medians, and per-repeat paired differences against each arm's control
-    (B and E against A, D against C). No significance test is computed or claimed.
+    (B and E against A, D against C, optional F against E). No significance test is computed or claimed.
 .PARAMETER ResultsCsv
     results.csv, or results-judged.csv from Invoke-BlindJudge.ps1.
 .PARAMETER OutFile
@@ -34,7 +34,7 @@ $arms = @(Get-BenchmarkArm) | Where-Object { $rows.arm -contains $_ }
 $hasJudge = [bool]$rows[0].PSObject.Properties['judgeMean']
 $hasCompleted = [bool]$rows[0].PSObject.Properties['completed']
 # Each arm is compared with the arm that differs from it in exactly one factor.
-$controls = [ordered]@{ B = 'A'; D = 'C'; E = 'A' }
+$controls = [ordered]@{ B = 'A'; D = 'C'; E = 'A'; F = 'E' }
 $isCompleted = if ($hasCompleted) { { $_.completed -eq 'True' } } else { { $_.hiddenAllPass -eq 'True' } }
 
 function Get-Value { param($Row, [string]$Name) if ($Row.PSObject.Properties[$Name]) { ConvertFrom-InvariantNumber ([string]$Row.$Name) } }
@@ -77,7 +77,7 @@ if (-not $hasJudge) {
     & $add '> **Not blind judged:** this report was generated from unjudged results. Quality rows show **not judged** instead of blind judge scores.'
     & $add
 }
-& $add 'Arms: **A** baseline, routing off; **B** candidate, routing off; **C** baseline, `routing=ranked`; **D** candidate, `routing=ranked`; **E** candidate, `routing=economy`. A/B and C/D differ only in source and must match (regression checks); E against A is the economy effect. A run is **completed** when every hidden test passes and the closing review is Pass or Pass-With-Findings. Credits are `totalNanoAiu / 1e9` from the CLI usage file (runtime credits, not reconciled billing). Cells show median [min, max]; summary medians show a 95% percentile-bootstrap interval in parentheses.'
+& $add 'Arms: **A** baseline, routing off; **B** candidate, routing off; **C** baseline, `routing=ranked`; **D** candidate, `routing=ranked`; **E** candidate, `routing=economy`; optional **F** candidate, `routing=economy delivery=background`. A/B and C/D differ only in source and must match (regression checks); E against A is the economy effect; F against E is the background-delivery wall-clock effect on the same task. A run is **completed** when every hidden test passes and the closing review is Pass or Pass-With-Findings. Credits are `totalNanoAiu / 1e9` from the CLI usage file (runtime credits, not reconciled billing). Cells show median [min, max]; summary medians show a 95% percentile-bootstrap interval in parentheses.'
 & $add
 & $add '| Arm | Session models | CLI versions | Source tree hashes |'
 & $add '| --- | --- | --- | --- |'
@@ -122,7 +122,7 @@ foreach ($level in $levels) {
 & $add
 & $add '## Paired Differences vs Control'
 & $add
-& $add 'Each row pairs an arm with its control run of the same level and repeat (B and E against A, D against C). Negative is faster or cheaper than the control.'
+& $add 'Each row pairs an arm with its control run of the same level and repeat (B and E against A, D against C, F against E). Negative is faster or cheaper than the control.'
 & $add
 & $add '| Level | Repeat | Arm | Control | Δ seconds | Δ credits | Δ coordinator cr | Δ owner cr | Δ hidden passed |'
 & $add '| --- | --- | --- | --- | --- | --- | --- | --- | --- |'

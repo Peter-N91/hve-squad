@@ -13,14 +13,17 @@ $script:Root = $PSScriptRoot
 $script:Invariant = [cultureinfo]::InvariantCulture
 $script:Levels = @('easy', 'medium', 'hard')
 # A/B and C/D differ only in source, so each pair is a regression check; E is the economy effect against A.
+# F is optional because background delivery needs a task with independent items; the easy task has three.
 $script:ArmTable = [ordered]@{
-    A = @{ Source = 'baseline'; Routing = '' }
-    B = @{ Source = 'candidate'; Routing = '' }
-    C = @{ Source = 'baseline'; Routing = 'ranked' }
-    D = @{ Source = 'candidate'; Routing = 'ranked' }
-    E = @{ Source = 'candidate'; Routing = 'economy' }
+    A = @{ Source = 'baseline'; Routing = ''; Delivery = '' }
+    B = @{ Source = 'candidate'; Routing = ''; Delivery = '' }
+    C = @{ Source = 'baseline'; Routing = 'ranked'; Delivery = '' }
+    D = @{ Source = 'candidate'; Routing = 'ranked'; Delivery = '' }
+    E = @{ Source = 'candidate'; Routing = 'economy'; Delivery = '' }
+    F = @{ Source = 'candidate'; Routing = 'economy'; Delivery = 'background' }
 }
 $script:ArmNames = @($script:ArmTable.Keys)
+$script:DefaultArmNames = @('A', 'B', 'C', 'D', 'E')
 $script:MinimumRepeats = 8
 $script:PassingVerdicts = @('Pass', 'Pass-With-Findings')
 $script:OwnerExcluded = @('Squad Reviewer', 'Squad Scribe')
@@ -30,6 +33,8 @@ $script:TrackingPathspec = @(':(exclude).copilot-tracking', ':(exclude).github',
 function Get-LiveBenchmarkLevel { $script:Levels }
 
 function Get-BenchmarkArm { $script:ArmNames }
+
+function Get-DefaultBenchmarkArm { $script:DefaultArmNames }
 
 function Get-MinimumBenchmarkRepeats { $script:MinimumRepeats }
 
@@ -43,13 +48,19 @@ function Write-BenchmarkRepeatWarning {
 
 function Get-ArmRouting {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E')][string]$Arm)
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm)
     $script:ArmTable[$Arm].Routing
+}
+
+function Get-ArmDelivery {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm)
+    $script:ArmTable[$Arm].Delivery
 }
 
 function Get-ArmSource {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E')][string]$Arm)
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm)
     $script:ArmTable[$Arm].Source
 }
 
@@ -104,11 +115,15 @@ function Get-ArmPrompt {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][ValidateSet('easy', 'medium', 'hard')][string]$Level,
-        [Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E')][string]$Arm
+        [Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm
     )
     $prompt = (Get-BenchmarkTask -Level $Level).Prompt
     $routing = Get-ArmRouting -Arm $Arm
-    if ($routing) { "$prompt routing=$routing" } else { $prompt }
+    $delivery = Get-ArmDelivery -Arm $Arm
+    $tokens = @()
+    if ($routing) { $tokens += "routing=$routing" }
+    if ($delivery) { $tokens += "delivery=$delivery" }
+    if ($tokens.Count) { "$prompt $($tokens -join ' ')" } else { $prompt }
 }
 
 function Get-BenchmarkSchedule {
@@ -125,7 +140,7 @@ function Get-BenchmarkSchedule {
     [CmdletBinding()]
     param(
         [string[]]$Levels = $script:Levels,
-        [string[]]$Arms = $script:ArmNames,
+        [string[]]$Arms = $script:DefaultArmNames,
         [int]$Repeats = $script:MinimumRepeats,
         [int]$Seed = 137
     )
@@ -736,8 +751,8 @@ function Protect-DeliverableText {
     $Text = [regex]::Replace($Text, '(?im)^([+\- ]?)Model routing:.*$', '$1Model routing: <redacted>')
     $Text = [regex]::Replace($Text, '(?i)\b(claude|gpt|gemini|grok|o\d)-[\w.\-]+', '<model>')
     $Text = [regex]::Replace($Text, '(?i)[a-z]:\\[^\s''"`)]+', '<path>')
-    $Text = [regex]::Replace($Text, '(?i)\b(arm|variant)[ _-]?[A-E]\b', '<arm>')
-    $Text = [regex]::Replace($Text, '(?i)\b(easy|medium|hard)-[A-E]-r\d+\b', '<run>')
+    $Text = [regex]::Replace($Text, '(?i)\b(arm|variant)[ _-]?[A-F]\b', '<arm>')
+    $Text = [regex]::Replace($Text, '(?i)\b(easy|medium|hard)-[A-F]-r\d+\b', '<run>')
     $Text
 }
 
@@ -900,7 +915,7 @@ function Get-BootstrapMedianInterval {
     }
 }
 
-Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-MinimumBenchmarkRepeats, Write-BenchmarkRepeatWarning, Get-ArmRouting, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
+Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-DefaultBenchmarkArm, Get-MinimumBenchmarkRepeats, Write-BenchmarkRepeatWarning, Get-ArmRouting, Get-ArmDelivery, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
 New-InventoryFixture, Invoke-Pytest, Test-BenchmarkTask, Measure-DocCheck, Get-ReviewVerdict, Get-LedgerCheck, Get-StopCause,
 Get-UsageSummary, Get-EventSummary, Get-TeamRouting, Get-ModelAssignment, Get-DeliverableDiff, Measure-LiveBenchmarkRun,
 Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Invoke-BenchmarkJudgeAndReport, Get-Median, Get-BootstrapMedianInterval,

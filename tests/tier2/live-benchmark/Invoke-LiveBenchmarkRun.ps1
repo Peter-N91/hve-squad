@@ -21,9 +21,10 @@
 .PARAMETER Level
     easy, medium, or hard.
 .PARAMETER Arm
-    A through E, matching Invoke-LiveBenchmark.ps1: A baseline source/routing off;
+    A through F, matching Invoke-LiveBenchmark.ps1: A baseline source/routing off;
     B candidate source/routing off; C baseline source/routing ranked; D candidate
-    source/routing ranked; E candidate source/routing economy. The source comes from -Src.
+    source/routing ranked; E candidate source/routing economy; F candidate source/routing
+    economy with background delivery. The source comes from -Src.
 .PARAMETER TrialRoot
     New directory for this run's evidence. Must not exist.
 .PARAMETER Model
@@ -35,7 +36,7 @@
 param(
     [Parameter(Mandatory)][string]$Src,
     [Parameter(Mandatory)][ValidateSet('easy', 'medium', 'hard')][string]$Level,
-    [Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E')][string]$Arm,
+    [Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm,
     [Parameter(Mandatory)][string]$TrialRoot,
     [string]$RunId = "$Level-$Arm",
     [int]$Repeat = 1,
@@ -98,6 +99,7 @@ $srcDirty = [bool](& git -C $Src status --porcelain -- . 2>$null)
     repeat          = $Repeat
     position        = $Position
     routing         = (Get-ArmRouting -Arm $Arm)
+    delivery        = (Get-ArmDelivery -Arm $Arm)
     prompt          = $prompt
     requestedModel  = $Model
     cliVersion      = (@(& $CliPath --version) | Where-Object { $_ } | Select-Object -First 1).Trim()
