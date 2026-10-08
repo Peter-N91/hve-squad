@@ -35,6 +35,8 @@
     roles that load hve-core skills cannot run.
 .PARAMETER Plan
     Print the schedule and exit without running anything.
+.PARAMETER SkipJudge
+    Skip blind judging and generate a report that clearly marks quality rows as not judged.
 .EXAMPLE
     ./Invoke-LiveBenchmark.ps1 -BaselineSrc C:/wt/main -CandidateSrc C:/wt/int -Install -Repeats 10 -ResultRoot $env:TEMP/hve-live-benchmark
 .EXAMPLE
@@ -51,7 +53,9 @@ param(
     [string]$ResultRoot = (Join-Path ([IO.Path]::GetTempPath()) 'hve-live-benchmark'),
     [string]$Model = 'claude-sonnet-5.5',
     [string]$CliPath = (Join-Path $env:APPDATA 'npm/copilot.ps1'),
+    [string]$JudgeScript = (Join-Path $PSScriptRoot 'Invoke-BlindJudge.ps1'),
     [switch]$Install,
+    [switch]$SkipJudge,
     [switch]$Plan
 )
 
@@ -108,3 +112,5 @@ foreach ($run in $schedule) {
     $row | Select-Object runId, seconds, credits, coordCr, ownerCr, hiddenPassed, hiddenTotal, mutantsKilled, docCheck, reviewVerdict, ledgerCheck, modelMatch | Format-List | Out-Host
 }
 Write-Host "Results: $csv"
+$report = Invoke-BenchmarkJudgeAndReport -ResultRoot $ResultRoot -Levels $Levels -Seed $Seed -SkipJudge:$SkipJudge -JudgeScript $JudgeScript
+Write-Host "Report: $($report.ReportPath)"

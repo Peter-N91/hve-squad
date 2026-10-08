@@ -363,6 +363,52 @@ Describe 'Blind judge anonymisation' {
     }
 }
 
+Describe 'Judge and report workflow' {
+    BeforeEach {
+        $root = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        $agents = @([ordered]@{ role = 'coordinator'; agent = 'coordinator'; modelsUsed = 'claude-sonnet-5.5'; modelCell = ''; passedModel = ''; match = 'n/a'; credits = 5 })
+        [pscustomobject][ordered]@{
+            runId = 'easy-A-r1'; level = 'easy'; arm = 'A'; repeat = 1; seconds = 100; outcome = 'dispatched'; credits = '10'
+            coordCr = '5'; ownerCr = '3'; inputTokens = 1000; outputTokens = 100; cacheReadTokens = 50
+            hiddenPassed = 5; hiddenTotal = 5; hiddenAllPass = 'True'; completed = 'True'; ownTestsPass = 'True'; testsOnReference = 'True'
+            mutantsKilled = 2; mutantsTotal = 2; docCheck = 'n/a'; reviewVerdict = 'Pass'; ledgerCheck = 'PASS'
+            dispatches = 1; scribeDispatches = 0; genericDispatches = 0; briefRan = 'True'; coordScriptRuns = 0; handoffSeconds = 10
+            routingMode = 'off'; modelMatch = 'n/a'; model = 'claude-sonnet-5.5'; cliVersion = '1.0.0'; srcTreeHash = 'HASH'; agentsJson = (ConvertTo-Json -InputObject $agents -Compress)
+        } | Export-Csv -LiteralPath (Join-Path $root 'results.csv') -NoTypeInformation
+
+        $stub = Join-Path $TestDrive 'stub-judge.ps1'
+        Set-Content -LiteralPath $stub -Encoding utf8NoBOM -Value @'
+param([string]$ResultRoot, [string[]]$Levels, [int]$Seed)
+Set-Content -LiteralPath (Join-Path $ResultRoot 'judge-called.txt') -Value "$($Levels -join ',')|$Seed" -Encoding utf8NoBOM
+$rows = @(Import-Csv -LiteralPath (Join-Path $ResultRoot 'results.csv'))
+foreach ($row in $rows) {
+    foreach ($name in 'judgeCorrectness', 'judgeTests', 'judgeDesign', 'judgeDocs', 'judgeMean') {
+        $row | Add-Member -NotePropertyName $name -NotePropertyValue '9' -Force
+    }
+}
+$rows | Export-Csv -LiteralPath (Join-Path $ResultRoot 'results-judged.csv') -NoTypeInformation -Encoding utf8NoBOM
+'@
+    }
+
+    It 'runs the judge by default and reports merged scores' {
+        $result = Invoke-BenchmarkJudgeAndReport -ResultRoot $root -Levels @('easy') -Seed 17 -JudgeScript $stub
+        Get-Content -LiteralPath (Join-Path $root 'judge-called.txt') -Raw | Should -Match 'easy\|17'
+        Split-Path -Leaf $result.ReportCsv | Should -Be 'results-judged.csv'
+        $report = Get-Content -LiteralPath $result.ReportPath -Raw
+        $report | Should -Match '\| easy \| A \| dispatched x1 .* \| 9 \|'
+    }
+
+    It 'skips the judge on request and marks the report as not judged' {
+        $result = Invoke-BenchmarkJudgeAndReport -ResultRoot $root -Levels @('easy') -Seed 17 -JudgeScript $stub -SkipJudge
+        Test-Path -LiteralPath (Join-Path $root 'judge-called.txt') | Should -BeFalse
+        Split-Path -Leaf $result.ReportCsv | Should -Be 'results.csv'
+        $report = Get-Content -LiteralPath $result.ReportPath -Raw
+        $report | Should -Match 'Not blind judged'
+        $report | Should -Match '\*\*not judged\*\*'
+    }
+}
+
 Describe 'Report generation' {
     BeforeAll {
         $rows = foreach ($level in 'easy', 'hard') {

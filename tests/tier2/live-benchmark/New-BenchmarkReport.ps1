@@ -73,6 +73,10 @@ $add = { param([string]$Line = '') $lines.Add($Line) }
 & $add
 & $add ("Generated {0:yyyy-MM-dd HH:mm} from ``{1}``: {2} scored runs, levels {3}, arms {4}." -f (Get-Date), (Split-Path -Leaf $ResultsCsv), $rows.Count, ($levels -join ', '), ($arms -join ', '))
 & $add
+if (-not $hasJudge) {
+    & $add '> **Not blind judged:** this report was generated from unjudged results. Quality rows show **not judged** instead of blind judge scores.'
+    & $add
+}
 & $add 'Arms: **A** baseline, routing off; **B** candidate, routing off; **C** baseline, `routing=ranked`; **D** candidate, `routing=ranked`; **E** candidate, `routing=economy`. A/B and C/D differ only in source and must match (regression checks); E against A is the economy effect. A run is **completed** when every hidden test passes and the closing review is Pass or Pass-With-Findings. Credits are `totalNanoAiu / 1e9` from the CLI usage file (runtime credits, not reconciled billing). Cells show median [min, max]; summary medians show a 95% percentile-bootstrap interval in parentheses.'
 & $add
 & $add '| Arm | Session models | CLI versions | Source tree hashes |'
@@ -166,7 +170,7 @@ foreach ($level in $levels) {
         $hidden = '{0}/{1}' -f (Get-Sum (Get-Values $set 'hiddenPassed')), (Get-Sum (Get-Values $set 'hiddenTotal'))
         $mutants = Format-Mutants $set
         $doc = if (@($set | Where-Object docCheck -NE 'n/a').Count) { Format-Count $set { $_.docCheck -eq 'pass' } } else { 'n/a' }
-        $judge = if ($hasJudge) { Format-Stat (Get-Values $set 'judgeMean') } else { 'not judged' }
+        $judge = if ($hasJudge) { Format-Stat (Get-Values $set 'judgeMean') } else { '**not judged**' }
         $outcomes = if ($hasOutcome) { Format-Tally $set.outcome } else { 'n/a' }
         & $add ("| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} | {11} | {12} |" -f $level, $arm, $outcomes, (Format-Count $set $isCompleted), $hidden,
             (Format-Count $set { $_.hiddenAllPass -eq 'True' }), (Format-Count $set { $_.ownTestsPass -eq 'True' }), (Format-Count $set { $_.testsOnReference -eq 'True' }),

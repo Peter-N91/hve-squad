@@ -751,6 +751,52 @@ function Merge-JudgeScore {
     }
 }
 
+function Invoke-BenchmarkJudgeAndReport {
+    <#
+    .SYNOPSIS
+        Runs the blind judge unless skipped, then writes the Markdown report.
+    .DESCRIPTION
+        Kept in the offline module so tests can inject a stub judge script. The live
+        harness calls this only after the matrix has finished writing results.csv.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$ResultRoot,
+        [string[]]$Levels = $script:Levels,
+        [int]$Seed = 137,
+        [switch]$SkipJudge,
+        [string]$JudgeScript = (Join-Path $script:Root 'Invoke-BlindJudge.ps1'),
+        [string]$ReportScript = (Join-Path $script:Root 'New-BenchmarkReport.ps1'),
+        [string]$ReportPath = (Join-Path $ResultRoot 'report.md')
+    )
+    $ResultRoot = (Resolve-Path -LiteralPath $ResultRoot).Path
+    $resultsCsv = Join-Path $ResultRoot 'results.csv'
+    if (-not (Test-Path -LiteralPath $resultsCsv)) { throw "No results.csv in $ResultRoot" }
+
+    $reportCsv = $resultsCsv
+    $judgeInvoked = $false
+    if (-not $SkipJudge) {
+        $judgeInvoked = $true
+        & $JudgeScript -ResultRoot $ResultRoot -Levels $Levels -Seed $Seed
+        $judgedCsv = Join-Path $ResultRoot 'results-judged.csv'
+        if (Test-Path -LiteralPath $judgedCsv) {
+            $reportCsv = $judgedCsv
+        }
+        else {
+            Write-Warning "Judge did not write $judgedCsv; reporting unjudged results."
+        }
+    }
+
+    & $ReportScript -ResultsCsv $reportCsv -OutFile $ReportPath
+    [pscustomobject]@{
+        ResultRoot   = $ResultRoot
+        ResultsCsv   = $resultsCsv
+        ReportCsv    = $reportCsv
+        ReportPath   = $ReportPath
+        JudgeInvoked = $judgeInvoked
+    }
+}
+
 function Get-Median {
     param([double[]]$Values)
     $sorted = @($Values | Where-Object { $null -ne $_ } | Sort-Object)
@@ -788,5 +834,5 @@ function Get-BootstrapMedianInterval {
 Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-MinimumBenchmarkRepeats, Write-BenchmarkRepeatWarning, Get-ArmRouting, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
 New-InventoryFixture, Invoke-Pytest, Test-BenchmarkTask, Measure-DocCheck, Get-ReviewVerdict, Get-LedgerCheck,
 Get-UsageSummary, Get-EventSummary, Get-TeamRouting, Get-ModelAssignment, Get-DeliverableDiff, Measure-LiveBenchmarkRun,
-Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Get-Median, Get-BootstrapMedianInterval,
+Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Invoke-BenchmarkJudgeAndReport, Get-Median, Get-BootstrapMedianInterval,
 Format-Number, ConvertFrom-InvariantNumber, Get-NonBuiltinMcpServerNames, Get-ConfiguredMcpServerNames, ConvertFrom-McpServerArgument
