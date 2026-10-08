@@ -78,10 +78,12 @@
           coordinator's cost-first defaults.
         </li>
         <li>
-          <code>routing=off|ranked|manual</code> — how each role's model is chosen, saved in
+          <code>routing=off|ranked|economy|manual</code> — how each role's model is chosen, saved in
           <code>team.md</code> until you change it. <code>off</code> (default) applies no policy;
           <code>ranked</code> picks the model that best fits each role's work among the models your
-          host offers; <code>manual</code> asks you to pick, with suggestions pre-filled. See
+          host offers; <code>economy</code> is <code>ranked</code> with cheaper picks for five
+          implementation roles, after your consent; <code>manual</code> asks you to pick, with
+          suggestions pre-filled. See
           <a href="#model-selection-per-role">Model selection per role</a> below.
         </li>
         <li>
@@ -1489,7 +1491,7 @@ layouts:
         model, exactly as before this feature existed.
       </p>
       <p>
-        <code>routing=</code> has three modes. The mode is <strong>saved in <code>team.md</code></strong>
+        <code>routing=</code> has four modes. The mode is <strong>saved in <code>team.md</code></strong>
         and stays in effect on later requests until you change it, so you pass it once:
       </p>
       <ul>
@@ -1501,6 +1503,12 @@ layouts:
           <strong><code>ranked</code></strong> — the squad picks the model that best fits each role's
           work, among the models your host offers, and shows each pick in a <code>Model</code> column
           under a <code>Model routing: ranked</code> line.
+        </li>
+        <li>
+          <strong><code>economy</code></strong> — as <code>ranked</code>, except that five low-impact
+          implementation roles get the cheapest model that fits their work well enough; shown under a
+          <code>Model routing: economy</code> line. Opt-in, and only after you accept the trade. See
+          <a href="#routing-economy">Economy mode</a> below.
         </li>
         <li>
           <strong><code>manual</code></strong> — you pick once, with suggestions pre-filled; your picks
@@ -1530,6 +1538,34 @@ layouts:
         squad offers catalog models priced at or below your session model; if VS Code rejects a
         pick, you are asked again with the list VS Code reports.
       </p>
+      <p id="routing-economy">
+        <strong>Economy mode (<code>routing=economy</code>).</strong> Only these five roles change
+        model: <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
+        <code>prompt-engineer</code>, and <code>data-scientist</code>. Each gets the cheapest catalog
+        model with a fit of 2 or better for implementation work, within the role's own
+        <code>Model Tier</code> floor; every other role, including <code>product-owner</code>,
+        <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
+        <code>backlog-executor</code>, and every review, council, intake, research, planning, and
+        bookkeeping role, keeps its <code>ranked</code> pick. After a <code>Fail</code> verdict, a
+        Critical or High finding, or a blocked owner, that owner is re-dispatched once on its
+        <code>ranked</code> pick, then reviewed again.
+      </p>
+      <p>
+        <strong>Consent.</strong> The first time you switch to <code>economy</code>, before any
+        dispatch, the coordinator tells you once what changes and what does not, and the Scribe
+        records a <code>## Economy Mode Accepted</code> decision with your name, the previous mode,
+        the trade you accepted, and the list of things that are never weakened. If that decision is
+        missing, the helper script reports <code>consent: missing</code> as a warning, and the
+        coordinator states the trade and records it before the next dispatch. A Watch Mode or other unattended run
+        never switches into <code>economy</code> from issue, PR, or comment text.
+      </p>
+      <p>
+        <strong>Never weakened.</strong> Economy never skips, shortens, or relaxes the Risk Gate,
+        the Impactful-Action Gate, the security review, the final tester review, the task-fit council
+        with its extension and waiver, or any other gate, and it never lowers a floor. Under
+        <code>off</code>, <code>ranked</code>, and <code>manual</code> the squad behaves exactly as
+        v0.18.1 does.
+      </p>
       <p>
         <strong>What a <code>Model</code> cell holds.</strong> One exact model id from the
         <code>Model ID</code> column of <code>consumption-rates.md</code> (for example
@@ -1539,7 +1575,7 @@ layouts:
       <p><strong>Precedence</strong> (highest wins, per role):</p>
       <ol>
         <li><code>routing=manual</code>: the role's valid <code>Model</code> cell.</li>
-        <li><code>routing=ranked</code>: the ranked pick for that role.</li>
+        <li><code>routing=ranked</code>: the ranked pick for that role (<code>routing=economy</code>: the economy pick).</li>
         <li>
           <code>tier=</code> (the existing static-tier input) or the seeded <code>team.md</code> Model
           Tier — today's fallback, unchanged.
@@ -1547,7 +1583,7 @@ layouts:
         <li>Omit the parameter — the no-policy default.</li>
       </ol>
       <p>
-        <strong>Dispatch copies the cell:</strong> under <code>ranked</code> or <code>manual</code>, every
+        <strong>Dispatch copies the cell:</strong> under <code>ranked</code>, <code>economy</code>, or <code>manual</code>, every
         dispatch to a roster agent passes that row's <code>Model</code> cell exactly, except the Scribe,
         whose own model pin governs. In the plugin distribution, the <code>dispatch-guards</code> hook
         refuses a dispatch whose <code>model</code> is missing or differs from the cell, and names the
@@ -1581,6 +1617,9 @@ layouts:
       <p><strong>Examples:</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
 /squad request="implement the design" routing=ranked
+
+# Switch to economy; the squad states the trade and records your consent first.
+/squad request="update the getting-started guide" routing=economy
 
 # Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual

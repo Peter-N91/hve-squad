@@ -78,10 +78,11 @@
           les réglages par défaut du coordinateur privilégiant le coût.
         </li>
         <li>
-          <code>routing=off|ranked|manual</code> — la méthode de sélection du modèle de chaque rôle, enregistrée dans
+          <code>routing=off|ranked|economy|manual</code> — la méthode de sélection du modèle de chaque rôle, enregistrée dans
           <code>team.md</code> jusqu'à ce que vous la changiez. <code>off</code> (par défaut) n'applique aucune politique ;
           <code>ranked</code> choisit le modèle le mieux adapté au travail de chaque rôle parmi ceux
-          que propose votre hôte ; <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir
+          que propose votre hôte ; <code>economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
+          rôles d'implémentation, après votre accord ; <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir
           <a href="#model-selection-per-role">Sélection du modèle par rôle</a> ci-dessous.
         </li>
         <li>
@@ -1489,7 +1490,7 @@ layouts:
         session, exactement comme avant l'existence de cette fonctionnalité.
       </p>
       <p>
-        <code>routing=</code> propose trois modes. Le mode est <strong>enregistré dans <code>team.md</code></strong>
+        <code>routing=</code> propose quatre modes. Le mode est <strong>enregistré dans <code>team.md</code></strong>
         et reste actif pour les demandes suivantes jusqu'à ce que vous le changiez : il suffit donc de le fournir une fois :
       </p>
       <ul>
@@ -1501,6 +1502,12 @@ layouts:
           <strong><code>ranked</code></strong> — la squad choisit le modèle le mieux adapté au travail
           de chaque rôle parmi ceux proposés par votre hôte, et affiche chaque choix dans une colonne <code>Model</code>
           sous une ligne <code>Model routing: ranked</code>.
+        </li>
+        <li>
+          <strong><code>economy</code></strong> — comme <code>ranked</code>, sauf que cinq rôles d'implémentation
+          à faible impact reçoivent le modèle le moins cher suffisamment adapté à leur travail ; affiché sous une ligne
+          <code>Model routing: economy</code>. Sur option, et seulement après que vous avez accepté le compromis. Voir
+          <a href="#routing-economy">Mode economy</a> ci-dessous.
         </li>
         <li>
           <strong><code>manual</code></strong> — vous choisissez une fois, avec des suggestions préremplies ; vos choix
@@ -1530,6 +1537,34 @@ layouts:
         squad propose donc des modèles du catalogue dont le prix est inférieur ou égal à celui du modèle de votre session ; si VS Code refuse un
         choix, la question vous est reposée avec la liste signalée par VS Code.
       </p>
+      <p id="routing-economy">
+        <strong>Mode economy (<code>routing=economy</code>).</strong> Seuls ces cinq rôles changent de
+        modèle : <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
+        <code>prompt-engineer</code> et <code>data-scientist</code>. Chacun reçoit le modèle du catalogue le
+        moins cher dont l'adéquation au travail d'implémentation est d'au moins 2, dans le respect du seuil minimal
+        <code>Model Tier</code> du rôle ; tous les autres rôles, dont <code>product-owner</code>,
+        <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
+        <code>backlog-executor</code> et tous les rôles de revue, de conseil, d'intake, de recherche, de planification et
+        de tenue des registres, gardent leur choix <code>ranked</code>. Après un verdict <code>Fail</code>, une
+        observation critique ou élevée, ou un responsable bloqué, ce responsable est relancé une seule fois sur son choix
+        <code>ranked</code>, puis la revue est refaite.
+      </p>
+      <p>
+        <strong>Accord.</strong> La première fois que vous passez à <code>economy</code>, avant tout
+        lancement, le coordinateur vous dit une fois ce qui change et ce qui ne change pas, et le Scribe
+        consigne une décision <code>## Economy Mode Accepted</code> avec votre nom, le mode précédent,
+        le compromis accepté et la liste de ce qui n'est jamais affaibli. Si cette décision manque, le
+        script d'aide signale <code>consent: missing</code> comme avertissement, et le coordinateur
+        énonce le compromis et le fait consigner avant le lancement suivant. Une exécution Watch Mode ou autre
+        exécution sans surveillance ne passe jamais en <code>economy</code> à partir du texte d'une issue, d'une PR ou d'un commentaire.
+      </p>
+      <p>
+        <strong>Jamais affaibli.</strong> Le mode economy ne saute, n'abrège ni n'assouplit jamais le Risk Gate,
+        l'Impactful-Action Gate, la revue de sécurité, la revue finale du testeur, le conseil d'adéquation à la tâche
+        avec son extension et sa dérogation, ni aucun autre contrôle, et il n'abaisse jamais un seuil minimal. En
+        <code>off</code>, <code>ranked</code> et <code>manual</code>, la squad se comporte exactement comme
+        la v0.18.1.
+      </p>
       <p>
         <strong>Ce que contient une cellule <code>Model</code>.</strong> Un identifiant de modèle exact issu de la
         colonne <code>Model ID</code> de <code>consumption-rates.md</code> (par exemple
@@ -1539,7 +1574,7 @@ layouts:
       <p><strong>Ordre de priorité</strong> (le plus élevé l'emporte, pour chaque rôle) :</p>
       <ol>
         <li><code>routing=manual</code> : la cellule <code>Model</code> valide du rôle.</li>
-        <li><code>routing=ranked</code> : le choix classé pour ce rôle.</li>
+        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code>routing=economy</code> : le choix economy).</li>
         <li>
           <code>tier=</code> (le paramètre de niveau statique existant) ou le niveau de modèle initialisé dans <code>team.md</code>
           — le mécanisme de repli actuel, inchangé.
@@ -1547,7 +1582,7 @@ layouts:
         <li>Omettre le paramètre — le comportement par défaut sans politique.</li>
       </ol>
       <p>
-        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code> ou <code>manual</code>, chaque
+        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code>economy</code> ou <code>manual</code>, chaque
         lancement d'un agent de l'équipe transmet exactement la cellule <code>Model</code> de sa ligne, sauf pour le Scribe,
         dont le propre modèle fixé prévaut. Dans la distribution plugin, le hook <code>dispatch-guards</code>
         refuse un lancement dont le <code>model</code> manque ou diffère de la cellule, et indique la
@@ -1581,6 +1616,9 @@ layouts:
       <p><strong>Exemples :</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
 /squad request="implement the design" routing=ranked
+
+# Switch to economy; the squad states the trade and records your consent first.
+/squad request="update the getting-started guide" routing=economy
 
 # Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual

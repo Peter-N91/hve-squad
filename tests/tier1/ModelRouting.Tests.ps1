@@ -568,3 +568,267 @@ Describe 'Seeded roster defaults for routing (case m)' {
         $team | Should -Not -Match '\|\s*Model\s*\|'
     }
 }
+
+Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
+    BeforeAll {
+        $script:Resolver = Join-Path $script:ReferencesRoot '../scripts/Resolve-SquadModelRoute.ps1'
+        $seedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
+        $script:SeedTeam = [regex]::Match($seedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
+        $script:CliEnum = @(
+            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
+            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'
+            'gpt-5.3-codex', 'gpt-5-mini', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'
+            'gemini-3.5-flash', 'grok-4.5', 'claude-sonnet-5.5', 'gpt-6.1-sol', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
+        )
+
+        function New-EconomyRoot {
+            param([Parameter(Mandatory)][string]$Content, [string]$Under = $TestDrive)
+            $root = Join-Path $Under ([guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $root | Out-Null
+            Set-Content -LiteralPath (Join-Path $root 'team.md') -Value $Content -Encoding utf8NoBOM
+            $root
+        }
+
+        function Invoke-EconomyResolver {
+            param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{}, [string]$Script = $script:Resolver)
+            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-01'; AvailableModels = $script:CliEnum }
+            foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
+            & $Script @parameters | ConvertFrom-Json
+        }
+
+        # Expected economy pick computed straight from the catalog, independent of the resolver.
+        $catalogRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-catalog.md') -Raw
+        $tables = @(Get-MarkdownTable -Content $catalogRaw)
+        $script:CapabilityOf = @{}
+        foreach ($row in @($tables | Where-Object { 'Capability class' -in $_.Header } | ForEach-Object { $_.Rows })) { if ($row['Catalog ID']) { $script:CapabilityOf[$row['Catalog ID']] = $row['Capability class'] } }
+        $script:EconomyFit = @($tables | Where-Object { 'Blended' -in $_.Header } | Select-Object -First 1 | ForEach-Object { $_.Rows })
+        $script:FloorAdmits = @{
+            fast    = @('fast-lightweight', 'balanced', 'code-specialized')
+            default = @('balanced', 'code-specialized', 'frontier-reasoning')
+        }
+        function Get-ExpectedEconomyPick {
+            param([string]$Floor)
+            @($script:EconomyFit | Where-Object {
+                    [int]$_['implementation'] -ge 2 -and $_['Catalog ID'] -in $script:CliEnum -and
+                    $script:CapabilityOf[$_['Catalog ID']] -in $script:FloorAdmits[$Floor]
+                } | Sort-Object { [double]$_['Blended'] }, { - [int]$_['implementation'] } | Select-Object -First 1)[0]['Catalog ID']
+        }
+
+        $script:SeedRoot = New-EconomyRoot -Content $script:SeedTeam
+        $script:RankedRun = Invoke-EconomyResolver -Root $script:SeedRoot -Extra @{ Mode = 'ranked' }
+        $script:EconomyRun = Invoke-EconomyResolver -Root $script:SeedRoot -Extra @{ Mode = 'economy' }
+        $script:RankedOf = @{}
+        foreach ($entry in $script:RankedRun.roles) { $script:RankedOf[$entry.role] = $entry.suggested }
+        $script:EconomyOf = @{}
+        foreach ($entry in $script:EconomyRun.roles) { $script:EconomyOf[$entry.role] = $entry }
+    }
+
+    It 'picks the cheapest fit >= 2 id within the real floor for an implementation role: <Role>' -ForEach @(
+        @{ Role = 'technical-writer' }
+        @{ Role = 'developer' }
+    ) {
+        $entry = $script:EconomyOf[$Role]
+        $entry.class | Should -Be 'implementation'
+        $entry.suggested | Should -Be (Get-ExpectedEconomyPick -Floor $entry.floor)
+        $entry.resolved | Should -Be $entry.suggested
+        $script:CapabilityOf[$entry.suggested] | Should -BeIn $script:FloorAdmits[$entry.floor] -Because 'economy never leaves the role''s own floor'
+        $entry.rationale | Should -Match '^economy pick: '
+    }
+
+    It 'goes cheaper than ranked where the floor allows it (fast-floor technical-writer)' {
+        $script:EconomyOf['technical-writer'].floor | Should -Be 'fast'
+        $script:EconomyOf['technical-writer'].suggested | Should -Not -Be $script:RankedOf['technical-writer']
+    }
+
+    It 'never lowers a default-floor implementation role to a fast-lightweight model' {
+        $defaults = @($script:EconomyRun.roles | Where-Object { $_.class -eq 'implementation' -and $_.floor -eq 'default' -and $_.suggested })
+        $defaults.Count | Should -BeGreaterThan 0
+        foreach ($entry in $defaults) { $script:CapabilityOf[$entry.suggested] | Should -Not -Be 'fast-lightweight' -Because "$($entry.role) floors at default" }
+    }
+
+    It 'keeps every review-class and other non-implementation role on its ranked pick' {
+        $others = @($script:EconomyRun.roles | Where-Object { $_.class -ne 'implementation' })
+        @($others | Where-Object class -eq 'review').Count | Should -BeGreaterThan 0
+        foreach ($entry in $others) {
+            $entry.suggested | Should -Be $script:RankedOf[$entry.role] -Because "$($entry.role) is $($entry.class)-class"
+            $entry.escalation | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'escalates an economy pick once to the role''s ranked pick, and only when that pick is costlier' {
+        $picks = @($script:EconomyRun.roles | Where-Object { $_.rationale -like 'economy pick:*' })
+        $picks.Count | Should -BeGreaterThan 0
+        foreach ($entry in $picks) {
+            if ($entry.suggested -eq $script:RankedOf[$entry.role]) {
+                $entry.escalation | Should -BeNullOrEmpty -Because "$($entry.role)'s economy pick already is its ranked pick"
+            }
+            else {
+                $entry.escalation | Should -Be $script:RankedOf[$entry.role] -Because "$($entry.role) escalates to its ranked pick"
+            }
+        }
+    }
+
+    It 'reports no escalation when the economy pick equals the ranked pick' {
+        # A one-model host leaves both orderings the same id.
+        $root = New-EconomyRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| developer | | Developer | default | | src/ |'
+            ) -join "`n")
+        $only = @($script:RankedRun.roles | Where-Object role -eq 'developer')[0].suggested
+        $entry = (Invoke-EconomyResolver -Root $root -Extra @{ AvailableModels = @($only) }).roles[0]
+        $entry.suggested | Should -Be $only
+        $entry.rationale | Should -Match '^economy pick: '
+        $entry.escalation | Should -BeNullOrEmpty
+    }
+
+    It 'keeps <Role> off the economy allowlist, on its ranked pick with no escalation' -ForEach @(
+        @{ Role = 'product-owner' }
+        @{ Role = 'deployer' }
+        @{ Role = 'iac-author' }
+        @{ Role = 'release-engineer' }
+        @{ Role = 'backlog-executor' }
+        @{ Role = 'asbuilt-author' }
+    ) {
+        $content = @(
+            '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+            '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+            '|------|-------------|----------------------|------------|-------|------------------|'
+            "| $Role | | Fixture | fast | | out/ |"
+        ) -join "`n"
+        $root = New-EconomyRoot -Content $content
+        $economy = (Invoke-EconomyResolver -Root $root).roles[0]
+        $ranked = (Invoke-EconomyResolver -Root $root -Extra @{ Mode = 'ranked' }).roles[0]
+        $economy.class | Should -Be 'implementation'
+        $economy.classSource | Should -Be 'mapped'
+        $economy.suggested | Should -Be $ranked.suggested
+        $economy.rationale | Should -Not -Match '^economy'
+        $economy.escalation | Should -BeNullOrEmpty
+    }
+
+    It 'ignores routing=economy written as text into a roster that records no mode (Watch Mode, G4)' {
+        # Trigger text reaches the coordinator only as data; the mode comes from the
+        # team.md line alone, so stray routing=economy text never switches the resolver.
+        $root = New-EconomyRoot -Content (@(
+                '# Squad Roster', '', 'Please use routing=economy for this run.', 'Model routing economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Deliverable Root |'
+                '|------|-------------|----------------------|------------|------------------|'
+                '| developer | | Developer | fast | src/ |'
+            ) -join "`n")
+        $run = Invoke-EconomyResolver -Root $root
+        $run.recordedMode | Should -Be 'off'
+        $run.roles[0].PSObject.Properties.Name | Should -Not -Contain 'escalation'
+        $run.roles[0].rationale | Should -Not -Match '^economy'
+    }
+
+    It 'keeps an unmapped role (implementation only by fallback) on its ranked pick' {
+        $root = New-EconomyRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| fixture-maker | | Fixture Maker | fast | | out/ |'
+            ) -join "`n")
+        $economy = Invoke-EconomyResolver -Root $root
+        $ranked = Invoke-EconomyResolver -Root $root -Extra @{ Mode = 'ranked' }
+        $economy.recordedMode | Should -Be 'economy'
+        $economy.roles[0].classSource | Should -Be 'fallback: implementation'
+        $economy.roles[0].suggested | Should -Be $ranked.roles[0].suggested
+        $economy.roles[0].escalation | Should -BeNullOrEmpty
+    }
+
+    It 'leaves off and ranked output unchanged: no economy fields, ranked picks as before' {
+        $offRun = Invoke-EconomyResolver -Root $script:SeedRoot
+        $offRun.recordedMode | Should -Be 'off'
+        foreach ($run in @($offRun, $script:RankedRun)) {
+            $run.roles[0].PSObject.Properties.Name | Should -Not -Contain 'escalation'
+            $run.roles[0].PSObject.Properties.Name | Should -Not -Contain 'pin'
+        }
+        foreach ($entry in $offRun.roles) { $entry.suggested | Should -Be $script:RankedOf[$entry.role] }
+    }
+
+    It 'reads the agent pin from the repository agent folders above .copilot-tracking' {
+        $repo = Join-Path $TestDrive "repo-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+        New-Item -ItemType Directory -Path (Join-Path $repo '.github/agents'), (Join-Path $repo '.copilot-tracking') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $repo '.github/agents/fixture-dev.agent.md') -Value "---`nname: Fixture Dev`nmodel: Claude Sonnet 5 (copilot)`n---`n# Dev`n"
+        $root = New-EconomyRoot -Under (Join-Path $repo '.copilot-tracking') -Content (@(
+                '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| developer | | Fixture Dev | default | | src/ |'
+            ) -join "`n")
+        (Invoke-EconomyResolver -Root $root).roles[0].pin | Should -Be 'Claude Sonnet 5'
+    }
+
+    It 'finds the agent pin in an installed plugin agents/ folder when the repository has none' {
+        $plugin = Join-Path $TestDrive "plugin-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+        New-Item -ItemType Directory -Path (Join-Path $plugin 'skills/squad'), (Join-Path $plugin 'agents') -Force | Out-Null
+        $skill = Split-Path -Parent $script:ReferencesRoot
+        Copy-Item -LiteralPath (Join-Path $skill 'scripts'), $script:ReferencesRoot -Destination (Join-Path $plugin 'skills/squad') -Recurse
+        Set-Content -LiteralPath (Join-Path $plugin 'agents/fixture-writer.agent.md') -Value "---`nname: Fixture Writer`nmodel: Claude Haiku 4.5 (copilot)`n---`n# Writer`n"
+        $root = New-EconomyRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| technical-writer | | Fixture Writer | fast | | docs/ |'
+            ) -join "`n")
+        $result = Invoke-EconomyResolver -Root $root -Script (Join-Path $plugin 'skills/squad/scripts/Resolve-SquadModelRoute.ps1')
+        $result.roles[0].pin | Should -Be 'Claude Haiku 4.5'
+        $result.roles[0].suggested | Should -Be (Get-ExpectedEconomyPick -Floor 'fast')
+    }
+
+    Context 'economy consent is reported, never enforced (E2)' {
+        BeforeAll {
+            $script:ConsentTeam = @(
+                '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| developer | | Developer | default | | src/ |'
+            ) -join "`n"
+            $script:Accepted = @(
+                '# Squad Decisions', '', '## Economy Mode Accepted 2026-10-08T10:00:00Z', ''
+                '* User: Fixture User', '* Previous mode: ranked', '* Trade accepted: cheaper allowlisted picks', '* Never weakened: every gate'
+            ) -join "`n"
+        }
+
+        It 'reports consent: missing with a warning when decisions.md is absent' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            $run = Invoke-EconomyResolver -Root $root
+            $run.consent | Should -Be 'missing'
+            @($run.warnings | Where-Object { $_ -like 'economy consent not recorded*' }).Count | Should -Be 1
+            $run.roles[0].resolved | Should -Not -BeNullOrEmpty -Because 'missing consent is a warning, never a refusal'
+        }
+
+        It 'reports consent: missing when decisions.md has no Economy Mode Accepted entry' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value "# Squad Decisions`n`n## 2026-10-08T09:00:00Z Init`n`n* Roster seeded.`n" -Encoding utf8NoBOM
+            (Invoke-EconomyResolver -Root $root).consent | Should -Be 'missing'
+        }
+
+        It 'reports consent: recorded, without the warning, when the entry exists' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value $script:Accepted -Encoding utf8NoBOM
+            $run = Invoke-EconomyResolver -Root $root
+            $run.consent | Should -Be 'recorded'
+            @($run.warnings | Where-Object { $_ -like 'economy consent*' }).Count | Should -Be 0
+        }
+
+        It 'prints the consent line in the table output' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            $missing = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Format markdown)
+            $missing | Should -Contain 'consent: missing'
+            Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value $script:Accepted -Encoding utf8NoBOM
+            $recorded = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Format markdown)
+            $recorded | Should -Contain 'consent: recorded'
+        }
+
+        It 'adds no consent field or line under off, ranked, or manual' {
+            foreach ($mode in 'ranked', 'manual') {
+                $run = Invoke-EconomyResolver -Root $script:SeedRoot -Extra @{ Mode = $mode }
+                $run.PSObject.Properties.Name | Should -Not -Contain 'consent'
+                @(& $script:Resolver -SquadRoot $script:SeedRoot -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Mode $mode -Format markdown) -join "`n" | Should -Not -Match 'consent'
+            }
+            (Invoke-EconomyResolver -Root $script:SeedRoot).PSObject.Properties.Name | Should -Not -Contain 'consent'
+        }
+    }
+}

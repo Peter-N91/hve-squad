@@ -143,7 +143,7 @@ These are the ones that catch a coordinator quietly doing the work itself, which
 
 ### Model routing
 
-Precondition: an initialized squad. These cases check the opt-in `routing=` layer defined in `model-routing.md` — the `off`, `ranked`, and `manual` modes persisted in `team.md`; none of them apply while the mode is `off`.
+Precondition: an initialized squad. These cases check the opt-in `routing=` layer defined in `model-routing.md` — the `off`, `ranked`, `economy`, and `manual` modes persisted in `team.md`; none of them apply while the mode is `off`.
 
 | ID | Assertion | Source |
 |---|---|---|
@@ -153,10 +153,11 @@ Precondition: an initialized squad. These cases check the opt-in `routing=` laye
 | SQ-28 | **Watch ignores untrusted routing inputs.** A Watch Mode trigger's issue, PR, or comment text carrying `routing=`, `models=`, `tier=`, `mode=`, or `cost-ceiling=` is recorded as seen-and-ignored, never applied as a control input, and an unattended run never prompts for a model | `model-routing.md`, Watch and Unattended Runs |
 | SQ-29 | **Stale catalog falls back.** When `model-catalog.md`'s `Retrieved:` date is more than 90 days old, or the file fails to parse, ranking falls back to `consumption.md`'s static `fast`/`default`/`extended` tiers for every class, and one warning line is logged; the run is never blocked | `model-routing.md`, Stale-Catalog Fallback |
 | SQ-30 | **Unknown price never `0`.** An unpriced routed id is priced at the maximum rate of its eligible set within the floor, or returns `cannot-confirm` — never `0` and never a blended rate | `model-routing.md`, Cost Preflight Pricing |
-| SQ-31 | **Mode persists.** A turn passing `routing=ranked` or `routing=manual` leaves `team.md` with the matching `Model routing:` line and a `Model` column of Model IDs; the next turn, passing no `routing=`, dispatches under the same mode. `routing=off` removes both and the decision entry lists the removed picks | `model-routing.md`, Routing Modes |
+| SQ-31 | **Mode persists.** A turn passing `routing=ranked`, `routing=economy`, or `routing=manual` leaves `team.md` with the matching `Model routing:` line and a `Model` column of Model IDs; the next turn, passing no `routing=`, dispatches under the same mode. `routing=off` removes both and the decision entry lists the removed picks | `model-routing.md`, Routing Modes |
 | SQ-32 | **Manual selection asks before dispatch.** Switching to `manual` opens with one question offering to accept every role's suggestion, customize by class, or customize per role, before any role dispatches; every offered id is in the host's available set and admitted by the role's floor | `model-routing.md`, Manual Model Selection |
 | SQ-33 | **Ranked picks follow fit, not spelling.** Under `routing=ranked`, each role's `Model` cell equals the top row of *Ranking Algorithm* (fit, then Blended, then generation within a family); for the seeded roster on the Copilot CLI the picks match the ranked worked example | `model-routing.md`, Ranking Algorithm |
 | SQ-34 | **Legacy `models=` is not applied.** A turn passing `models=` applies none of its pairs and tells the user once that per-role models now live in the `Model` column under `routing=manual` | `model-routing.md`, Routing Modes |
+| SQ-35 | **Economy narrows allowlisted roles only, within the floor, after consent.** Switching to `routing=economy` first tells the user once what changes and records a `## Economy Mode Accepted` decision. Under it, each allowlisted role's (`developer`, `technical-writer`, `presenter`, `prompt-engineer`, `data-scientist`) `Model` cell is the lowest-Blended id at fit 2 or better admitted by its own floor (its ranked pick when none qualifies), and every other role's cell, `product-owner`, `deployer`, `iac-author`, `release-engineer`, and `backlog-executor` included, equals its `ranked` pick. Every history entry under economy carries `Route: economy`. After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, that owner is re-dispatched once on its ranked pick, written into its `Model` cell before the re-dispatch; no escalation exists when the two picks are equal. A Watch Mode trigger's `routing=economy` text is ignored | `economy-mode.md` |
 
 ## Tier 1 — Consumption integrity
 
