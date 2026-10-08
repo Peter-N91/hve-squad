@@ -19,7 +19,7 @@ Offline self-tests do not call models. Live benchmark and judge scripts spend cr
 - E: candidate source, `routing=economy`
 - F: optional candidate source, `routing=economy delivery=background`
 
-Default live matrix: arms A to E, 8 repeats per cell, model `claude-sonnet-5.5`, blind judge on. Use `-SkipJudge` to report unjudged results. Use `-Arms A,B,C,D,E,F` to include F.
+Default live matrix: arms A to E (F runs every selected level; the easy task has three independent items, so pair F with `-Levels easy` when only background delivery is under test), 8 repeats per cell, model `claude-sonnet-5.5`, blind judge on. Use `-SkipJudge` to report unjudged results. Use `-Arms A,B,C,D,E,F` to include F.
 
 ## stopCause values
 
@@ -28,8 +28,8 @@ Default live matrix: arms A to E, 8 repeats per cell, model `claude-sonnet-5.5`,
 ## Run offline self-tests
 
 ```powershell
-python -m venv .bench-venv
-.\.bench-venv\Scripts\python.exe -m pip install pytest
-$env:PATH = (Resolve-Path .\.bench-venv\Scripts).Path + [IO.Path]::PathSeparator + $env:PATH
+python -m venv $env:TEMP\bench-venv
+& "$env:TEMP\bench-venv\Scripts\python.exe" -m pip install pytest
+$env:PATH = "$env:TEMP\bench-venv\Scripts" + [IO.Path]::PathSeparator + $env:PATH
 pwsh -NoProfile -File tests\tier2\live-benchmark\Invoke-LiveBenchmarkTests.ps1 -Output Normal
 ```
