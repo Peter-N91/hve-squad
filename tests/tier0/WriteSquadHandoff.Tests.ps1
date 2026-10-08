@@ -1442,11 +1442,11 @@ Describe 'Write-SquadHandoff.ps1 lands concurrent ordinary hand-offs (H3) and ke
         (Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json).turn | Should -Be 2
     }
 
-    It 'waits on the same lock when the root is reached by its 8.3 short path' {
+    It 'waits on the same lock when the root is reached by its 8.3 short path' -Skip:(-not $IsWindows) {
         $root = New-TwoAgentRoot
         $long = (Get-Item -LiteralPath $root).FullName
         $short = (& cmd /c "for %I in (`"$long`") do @echo %~sI" | Select-Object -Last 1).Trim()
-        if (-not $IsWindows -or -not $short -or $short -eq $long) { Set-ItResult -Skipped -Because '8.3 short names are not available on this volume'; return }
+        if (-not $short -or $short -eq $long) { Set-ItResult -Skipped -Because '8.3 short names are not available on this volume'; return }
         $lock = Lock-Root -Root $long
         try { $held = Wait-Writer (Start-Writer -Root $short -Payload $script:ResearchPayload -LockTimeoutSeconds 2) }
         finally { $lock.Dispose() }
@@ -1454,8 +1454,7 @@ Describe 'Write-SquadHandoff.ps1 lands concurrent ordinary hand-offs (H3) and ke
         (Wait-Writer (Start-Writer -Root $short -Payload $script:ResearchPayload)).ExitCode | Should -Be 0
     }
 
-    It 'waits on the same lock when the root is reached through a directory junction' {
-        if (-not $IsWindows) { Set-ItResult -Skipped -Because 'directory junctions are Windows-only'; return }
+    It 'waits on the same lock when the root is reached through a directory junction' -Skip:(-not $IsWindows) {
         $root = New-TwoAgentRoot
         $repo = (Get-Item -LiteralPath (Split-Path -Parent (Split-Path -Parent $root))).FullName
         $junction = Join-Path $TestDrive "junction-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
@@ -1469,7 +1468,8 @@ Describe 'Write-SquadHandoff.ps1 lands concurrent ordinary hand-offs (H3) and ke
 }
 
 Describe 'Measure-SquadLedger.ps1 -Write never leaves one file updated alone (H5)' {
-    It 'restores consumption.md when the state.json write fails, and leaves no temp file' {
+    # A read-only target makes the replace fail only on Windows; Linux and macOS replace it through the directory entry.
+    It 'restores consumption.md when the state.json write fails, and leaves no temp file' -Skip:(-not $IsWindows) {
         $root = New-Root
         (Invoke-Writer -Root $root -Payload (New-Payload)).ExitCode | Should -Be 0
         $consumption = Join-Path $root 'consumption.md'
