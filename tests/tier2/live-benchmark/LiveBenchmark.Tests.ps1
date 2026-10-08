@@ -290,8 +290,10 @@ def test_reads_private_state():
 
     It 'scores a run with no owner dispatch and no change as halted' {
         $good.outcome | Should -Be 'dispatched'
+        $good.stopCause | Should -Be 'none'
         $good.ownerDispatches | Should -Be 1
         $bad.outcome | Should -Be 'halted'
+        $bad.stopCause | Should -Be 'unknown'
         $bad.ownerDispatches | Should -Be 0
     }
 
@@ -315,6 +317,53 @@ Describe 'Review verdict parsing' {
         New-Item -ItemType Directory -Path (Join-Path $ws '.copilot-tracking/reviews') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $ws '.copilot-tracking/reviews/r.md') -Value $Text
         Get-ReviewVerdict -Workspace $ws | Should -Be $Expected
+    }
+}
+
+Describe 'Stop-cause classification' {
+    BeforeEach {
+        $runRoot = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory -Path (Join-Path $runRoot 'out'), (Join-Path $runRoot 'workspace/.copilot-tracking/squad') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $runRoot 'out/stderr.txt') -Value '' -Encoding utf8NoBOM
+        Set-Content -LiteralPath (Join-Path $runRoot 'out/events.jsonl') -Value '' -Encoding utf8NoBOM
+        @{ openEscalations = @() } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runRoot 'workspace/.copilot-tracking/squad/state.json') -Encoding utf8NoBOM
+    }
+
+    It 'returns intake-escalation from squad state' {
+        @{ openEscalations = @(@{ type = 'intake'; reason = 'needs user input' }) } | ConvertTo-Json -Depth 4 |
+            Set-Content -LiteralPath (Join-Path $runRoot 'workspace/.copilot-tracking/squad/state.json') -Encoding utf8NoBOM
+        Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome halted | Should -Be 'intake-escalation'
+    }
+
+    It 'returns handoff-failure with the handoff exit code' {
+        $events = @(
+            @{ type = 'tool.execution_start'; data = @{ toolCallId = 'h1'; arguments = @{ command = 'pwsh -File Write-SquadHandoff.ps1' } } }
+            @{ type = 'tool.execution_complete'; data = @{ toolCallId = 'h1'; exitCode = 3 } }
+        )
+        Set-Content -LiteralPath (Join-Path $runRoot 'out/events.jsonl') -Value ($events | ForEach-Object { $_ | ConvertTo-Json -Depth 6 -Compress }) -Encoding utf8NoBOM
+        Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome halted | Should -Be 'handoff-failure (exit 3)'
+    }
+
+    It 'returns ledger-crash for Measure-SquadLedger exceptions' {
+        Set-Content -LiteralPath (Join-Path $runRoot 'out/stderr.txt') -Value 'Measure-SquadLedger.ps1 RuntimeException: null ledger entry' -Encoding utf8NoBOM
+        Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome halted | Should -Be 'ledger-crash'
+    }
+
+    It 'returns rate-limit for throttle messages' {
+        Set-Content -LiteralPath (Join-Path $runRoot 'out/stderr.txt') -Value 'GitHub API throttle exceeded (HTTP 403). Retry later.' -Encoding utf8NoBOM
+        Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome halted | Should -Be 'rate-limit'
+    }
+
+    It 'returns cli-error for an otherwise unclassified non-zero exit' {
+        Get-StopCause -TrialRoot $runRoot -ExitCode 2 -Outcome dispatched | Should -Be 'cli-error'
+    }
+
+    It 'returns none for a normal dispatched run' {
+        Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome dispatched | Should -Be 'none'
+    }
+
+    It 'returns unknown for a halted run with no signal' {
+        Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome halted | Should -Be 'unknown'
     }
 }
 
@@ -383,7 +432,7 @@ Describe 'Judge and report workflow' {
         New-Item -ItemType Directory -Path $root -Force | Out-Null
         $agents = @([ordered]@{ role = 'coordinator'; agent = 'coordinator'; modelsUsed = 'claude-sonnet-5.5'; modelCell = ''; passedModel = ''; match = 'n/a'; credits = 5 })
         [pscustomobject][ordered]@{
-            runId = 'easy-A-r1'; level = 'easy'; arm = 'A'; repeat = 1; seconds = 100; outcome = 'dispatched'; credits = '10'
+            runId = 'easy-A-r1'; level = 'easy'; arm = 'A'; repeat = 1; seconds = 100; outcome = 'dispatched'; stopCause = 'none'; credits = '10'
             coordCr = '5'; ownerCr = '3'; inputTokens = 1000; outputTokens = 100; cacheReadTokens = 50
             hiddenPassed = 5; hiddenTotal = 5; hiddenAllPass = 'True'; completed = 'True'; ownTestsPass = 'True'; testsOnReference = 'True'
             mutantsKilled = 2; mutantsTotal = 2; docCheck = 'n/a'; reviewVerdict = 'Pass'; ledgerCheck = 'PASS'
@@ -438,7 +487,7 @@ Describe 'Report generation' {
                         [ordered]@{ role = 'developer'; agent = 'Squad Implementor'; modelsUsed = 'gpt-5.4-mini'; modelCell = $cell; passedModel = 'gpt-5.4-mini'; match = $(if ($cell) { 'yes' } else { 'n/a' }); credits = 6 }
                     )
                     [pscustomobject][ordered]@{
-                        runId = "$level-$arm-r$repeat"; level = $level; arm = $arm; repeat = $repeat; seconds = $seconds; outcome = 'dispatched'; credits = Format-Number $credits
+                        runId = "$level-$arm-r$repeat"; level = $level; arm = $arm; repeat = $repeat; seconds = $seconds; outcome = 'dispatched'; stopCause = 'none'; credits = Format-Number $credits
                         coordCr = '50.5'; ownerCr = '6'; inputTokens = 1000000; outputTokens = 20000; cacheReadTokens = 900000
                         hiddenPassed = 11; hiddenTotal = 11; hiddenAllPass = 'True'; completed = $(if ($verdict -eq 'Pass') { 'True' } else { 'False' }); ownTestsPass = 'True'; testsOnReference = $(if ($skipped) { 'False' } else { 'True' })
                         mutantsKilled = $(if ($skipped) { 'skipped' } else { 2 }); mutantsTotal = 2; docCheck = $(if ($level -eq 'easy') { 'n/a' } else { 'pass' }); reviewVerdict = $verdict; ledgerCheck = 'PASS'
@@ -476,8 +525,8 @@ Describe 'Report generation' {
     }
 
     It 'reports quality, judge scores, and model assignment per role' {
-        $report | Should -Match '\| easy \| D \| dispatched x3 \| 3/3 \| 33/33 \| 3/3 \| 3/3 \| 2/3 \| 4/4 \(1 skipped\) \| n/a \| Pass x3 \| PASS x3 \| 7\.7 \[7\.7, 7\.7\] \|'
-        $report | Should -Match '\| hard \| E \| dispatched x3 \| 2/3 \| 33/33 \| 3/3 \|'
+        $report | Should -Match '\| easy \| D \| dispatched x3 \| none x3 \| 3/3 \| 33/33 \| 3/3 \| 3/3 \| 2/3 \| 4/4 \(1 skipped\) \| n/a \| Pass x3 \| PASS x3 \| 7\.7 \[7\.7, 7\.7\] \|'
+        $report | Should -Match '\| hard \| E \| dispatched x3 \| none x3 \| 2/3 \| 33/33 \| 3/3 \|'
         $report | Should -Match '\| hard \| E \| developer \| Squad Implementor \| 3 \| gpt-5\.4-mini x3 \| gpt-5\.4-mini x3 \| gpt-5\.4-mini x3 \| yes x3 \|'
         $report | Should -Match '\| easy \| A \| off x3 \| n/a x3 \| 3 \[3, 3\] \| 1 \[1, 1\] \| 0 \| 3/3 \| 0 \[0, 0\] \| 40 \[40, 40\] \|'
     }

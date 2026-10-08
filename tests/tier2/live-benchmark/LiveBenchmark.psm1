@@ -438,6 +438,72 @@ function Get-EventSummary {
     }
 }
 
+function Get-StopCause {
+    <#
+    .SYNOPSIS
+        Best-effort reason a run stopped before normal squad completion.
+    .DESCRIPTION
+        Detection precedence is intentional and first-match wins:
+        1. intake-escalation: the squad state records an open escalation mentioning intake.
+        2. handoff-failure: a Write-SquadHandoff tool call failed; include its exit code when present.
+        3. ledger-crash: Measure-SquadLedger appears with exception/crash wording.
+        4. rate-limit: stderr or events mention HTTP 403/429 throttling or rate limits.
+        5. cli-error: the top-level Copilot CLI process returned a non-zero exit code.
+        6. none: no stop signal and the run dispatched an owner with a zero exit code.
+        7. unknown: halted or inline/early stop with no recognized signal.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TrialRoot,
+        [int]$ExitCode = 0,
+        [string]$Outcome = 'dispatched'
+    )
+
+    $out = Join-Path $TrialRoot 'out'
+    $workspace = Join-Path $TrialRoot 'workspace'
+    $eventsPath = Join-Path $out 'events.jsonl'
+    $stderrPath = Join-Path $out 'stderr.txt'
+    $events = Read-EventLog $eventsPath
+    $stderr = if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath -Raw } else { '' }
+    $eventText = if (Test-Path -LiteralPath $eventsPath) { Get-Content -LiteralPath $eventsPath -Raw } else { '' }
+    $text = "$stderr`n$eventText"
+
+    $statePath = Join-Path $workspace '.copilot-tracking/squad/state.json'
+    if (Test-Path -LiteralPath $statePath) {
+        try {
+            $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -Depth 32
+            if ($state.PSObject.Properties['openEscalations']) {
+                $escalations = ($state.openEscalations | ConvertTo-Json -Depth 16 -Compress)
+                if ($escalations -match '(?i)intake') { return 'intake-escalation' }
+            }
+        }
+        catch { Write-Debug "Could not parse squad state for stop cause: $_" }
+    }
+
+    $handoffIds = @($events | Where-Object {
+            $_.type -eq 'tool.execution_start' -and
+            ([string](Get-EventProperty $_ @('data', 'arguments', 'command'))) -match 'Write-SquadHandoff'
+        } | ForEach-Object { [string](Get-EventProperty $_ @('data', 'toolCallId')) })
+    foreach ($event in @($events | Where-Object { $_.type -eq 'tool.execution_complete' -and $handoffIds -contains [string](Get-EventProperty $_ @('data', 'toolCallId')) })) {
+        $exit = Get-EventProperty $event @('data', 'exitCode')
+        if ($null -eq $exit) { $exit = Get-EventProperty $event @('data', 'result', 'exitCode') }
+        $success = Get-EventProperty $event @('data', 'success')
+        if (($null -ne $exit -and [int]$exit -ne 0) -or ($null -ne $success -and -not [bool]$success)) {
+            if ($null -ne $exit) { return "handoff-failure (exit $([int]$exit))" }
+            return 'handoff-failure'
+        }
+    }
+    $m = [regex]::Match($text, '(?is)Write-SquadHandoff.*?exit(?:ed)?(?: code)?\s*(\d+)')
+    if ($m.Success) { return "handoff-failure (exit $($m.Groups[1].Value))" }
+    if ($text -match '(?is)Write-SquadHandoff.*?(failed|error)') { return 'handoff-failure' }
+
+    if ($text -match '(?is)Measure-SquadLedger.*?(exception|runtimeexception|parsererror|traceback|crash)') { return 'ledger-crash' }
+    if ($text -match '(?is)(HTTP\s*(403|429).*?(throttl|rate limit)|(throttl|rate limit).*?HTTP\s*(403|429)|\b(403|429)\b.*?(throttl|rate limit)|rate limit(ed)?|too many requests)') { return 'rate-limit' }
+    if ($ExitCode -ne 0) { return 'cli-error' }
+    if ($Outcome -eq 'dispatched') { return 'none' }
+    'unknown'
+}
+
 function Get-TeamRouting {
     <#
     .SYNOPSIS
@@ -585,6 +651,8 @@ function Measure-LiveBenchmarkRun {
     $verdict = Get-ReviewVerdict -Workspace $workspace
     $hiddenAllPass = ($hidden.Clean -and $hidden.Passed -eq $referenceHidden.Passed)
 
+    $outcome = if ($events.OwnerDispatches -gt 0) { 'dispatched' } elseif ($diff -match '(?m)^diff --git a/(src|tests|docs)/') { 'inline' } else { 'halted' }
+
     $row = [pscustomobject][ordered]@{
         runId             = $meta.runId
         level             = $meta.level
@@ -595,7 +663,8 @@ function Measure-LiveBenchmarkRun {
         exitCode          = $result.exitCode
         seconds           = $result.seconds
         # halted: no owner ran and no deliverable path changed (scratch files left by the coordinator do not count).
-        outcome           = if ($events.OwnerDispatches -gt 0) { 'dispatched' } elseif ($diff -match '(?m)^diff --git a/(src|tests|docs)/') { 'inline' } else { 'halted' }
+        outcome           = $outcome
+        stopCause         = Get-StopCause -TrialRoot $TrialRoot -ExitCode ([int]$result.exitCode) -Outcome $outcome
         ownerDispatches   = $events.OwnerDispatches
         credits           = Format-Number $usage.Credits
         coordCr           = Format-Number $(if ($coord.Count) { $coord[0].Credits })
@@ -832,7 +901,7 @@ function Get-BootstrapMedianInterval {
 }
 
 Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-MinimumBenchmarkRepeats, Write-BenchmarkRepeatWarning, Get-ArmRouting, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
-New-InventoryFixture, Invoke-Pytest, Test-BenchmarkTask, Measure-DocCheck, Get-ReviewVerdict, Get-LedgerCheck,
+New-InventoryFixture, Invoke-Pytest, Test-BenchmarkTask, Measure-DocCheck, Get-ReviewVerdict, Get-LedgerCheck, Get-StopCause,
 Get-UsageSummary, Get-EventSummary, Get-TeamRouting, Get-ModelAssignment, Get-DeliverableDiff, Measure-LiveBenchmarkRun,
 Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Invoke-BenchmarkJudgeAndReport, Get-Median, Get-BootstrapMedianInterval,
 Format-Number, ConvertFrom-InvariantNumber, Get-NonBuiltinMcpServerNames, Get-ConfiguredMcpServerNames, ConvertFrom-McpServerArgument
