@@ -23,6 +23,8 @@
     Each run is a separate pwsh process (Invoke-LiveBenchmarkRun.ps1) so environment
     changes never leak between runs; scoring (Measure-LiveBenchmarkRun) is offline.
     After the matrix: Invoke-BlindJudge.ps1, then New-BenchmarkReport.ps1.
+.PARAMETER Repeats
+    Repeats per level and arm. Defaults to 8; lower values are indicative only.
 .PARAMETER BaselineSrc
     Repository root of the baseline (apm.yml and squad-src/) for arms A and C.
 .PARAMETER CandidateSrc
@@ -44,7 +46,7 @@ param(
     [string]$CandidateSrc,
     [ValidateSet('easy', 'medium', 'hard')][string[]]$Levels = @('easy', 'medium', 'hard'),
     [ValidateSet('A', 'B', 'C', 'D', 'E')][string[]]$Arms = @('A', 'B', 'C', 'D', 'E'),
-    [ValidateRange(1, 50)][int]$Repeats = 3,
+    [ValidateRange(1, 50)][int]$Repeats = 8,
     [int]$Seed = 137,
     [string]$ResultRoot = (Join-Path ([IO.Path]::GetTempPath()) 'hve-live-benchmark'),
     [string]$Model = 'claude-sonnet-5.5',
@@ -56,6 +58,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'LiveBenchmark.psm1') -Force
+Write-BenchmarkRepeatWarning -Repeats $Repeats
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $ResultRoot = [IO.Path]::GetFullPath($ResultRoot)

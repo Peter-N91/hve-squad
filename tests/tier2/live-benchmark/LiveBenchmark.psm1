@@ -21,6 +21,7 @@ $script:ArmTable = [ordered]@{
     E = @{ Source = 'candidate'; Routing = 'economy' }
 }
 $script:ArmNames = @($script:ArmTable.Keys)
+$script:MinimumRepeats = 8
 $script:PassingVerdicts = @('Pass', 'Pass-With-Findings')
 $script:OwnerExcluded = @('Squad Reviewer', 'Squad Scribe')
 # Paths a run writes for the squad itself; they reveal the arm and are not the deliverable.
@@ -29,6 +30,16 @@ $script:TrackingPathspec = @(':(exclude).copilot-tracking', ':(exclude).github',
 function Get-LiveBenchmarkLevel { $script:Levels }
 
 function Get-BenchmarkArm { $script:ArmNames }
+
+function Get-MinimumBenchmarkRepeats { $script:MinimumRepeats }
+
+function Write-BenchmarkRepeatWarning {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][int]$Repeats)
+    if ($Repeats -lt $script:MinimumRepeats) {
+        Write-Warning "Results below $script:MinimumRepeats repeats per cell are indicative only."
+    }
+}
 
 function Get-ArmRouting {
     [CmdletBinding()]
@@ -115,7 +126,7 @@ function Get-BenchmarkSchedule {
     param(
         [string[]]$Levels = $script:Levels,
         [string[]]$Arms = $script:ArmNames,
-        [int]$Repeats = 3,
+        [int]$Repeats = $script:MinimumRepeats,
         [int]$Seed = 137
     )
     $rng = [System.Random]::new($Seed)
@@ -774,7 +785,7 @@ function Get-BootstrapMedianInterval {
     }
 }
 
-Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-ArmRouting, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
+Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-MinimumBenchmarkRepeats, Write-BenchmarkRepeatWarning, Get-ArmRouting, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
 New-InventoryFixture, Invoke-Pytest, Test-BenchmarkTask, Measure-DocCheck, Get-ReviewVerdict, Get-LedgerCheck,
 Get-UsageSummary, Get-EventSummary, Get-TeamRouting, Get-ModelAssignment, Get-DeliverableDiff, Measure-LiveBenchmarkRun,
 Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Get-Median, Get-BootstrapMedianInterval,

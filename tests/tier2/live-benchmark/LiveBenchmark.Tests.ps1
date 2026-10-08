@@ -83,6 +83,19 @@ Model routing: economy
 }
 
 Describe 'Fixture and schedule' {
+    It 'defaults the matrix to the supported repeat floor and warns below it' {
+        Get-MinimumBenchmarkRepeats | Should -Be 8
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Invoke-LiveBenchmark.ps1'), [ref]$tokens, [ref]$errors)
+        $errors.Count | Should -Be 0
+        $paramAst = $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.ParameterAst] -and $node.Name.VariablePath.UserPath -eq 'Repeats' }, $true) | Select-Object -First 1
+        $paramAst.DefaultValue.Extent.Text | Should -Be '8'
+        @(& { Write-BenchmarkRepeatWarning -Repeats 8 } 3>&1) | Should -BeNullOrEmpty
+        $warning = @(& { Write-BenchmarkRepeatWarning -Repeats 7 } 3>&1)
+        $warning[0].Message | Should -Match 'below 8 repeats.*indicative only'
+    }
+
     It 'selects configured non-builtin MCP servers for isolated benchmark runs' {
         $config = '{"mcpServers":{"builtin":{"source":"builtin"},"workspace":{"source":"workspace"},"plugin":{"source":"plugin"}}}' | ConvertFrom-Json
         @(Get-NonBuiltinMcpServerNames -Configuration $config) | Should -Be @('plugin', 'workspace')
