@@ -36,5 +36,11 @@
     "squad-src/.github/instructions/squad/squad-federation-autopilot.instructions.md": 16539,
     "squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md": 8603,
     "squad-src/.github/instructions/squad/squad-notifications.instructions.md": 18464
+  },
+  "everyMode": {
+    "squad-src/.github/skills/squad/references/consumption.md": {
+      "bytes": 1506,
+      "reason": "FinOps unit economics (#143) applies in every routing mode by design: the Unit economics paragraph tells the Scribe and the Cost Manager how Measure-SquadLedger counts accepted deliverables, first-pass yield, and rework. It is not an economy-mode change."
+    }
   }
 }
