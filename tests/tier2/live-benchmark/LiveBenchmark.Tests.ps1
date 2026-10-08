@@ -96,6 +96,20 @@ Describe 'Fixture and schedule' {
         $warning[0].Message | Should -Match 'below 8 repeats.*indicative only'
     }
 
+    It 'keeps the single-run helper defaults and arm validation aligned with the matrix' {
+        $path = Join-Path $PSScriptRoot 'Invoke-LiveBenchmarkRun.ps1'
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors)
+        $errors.Count | Should -Be 0
+        $model = $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.ParameterAst] -and $node.Name.VariablePath.UserPath -eq 'Model' }, $true) | Select-Object -First 1
+        $model.DefaultValue.Extent.Text | Should -Be "'claude-sonnet-5.5'"
+        $text = Get-Content -LiteralPath $path -Raw
+        $text | Should -Match "\[ValidateSet\('A', 'B', 'C', 'D', 'E'\)\]\[string\]\`$Arm"
+        $text | Should -Match 'A through E'
+        $text | Should -Not -Match 'claude-sonnet-5[^.]'
+    }
+
     It 'selects configured non-builtin MCP servers for isolated benchmark runs' {
         $config = '{"mcpServers":{"builtin":{"source":"builtin"},"workspace":{"source":"workspace"},"plugin":{"source":"plugin"}}}' | ConvertFrom-Json
         @(Get-NonBuiltinMcpServerNames -Configuration $config) | Should -Be @('plugin', 'workspace')

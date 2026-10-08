@@ -21,14 +21,15 @@
 .PARAMETER Level
     easy, medium, or hard.
 .PARAMETER Arm
-    B (baseline routing), R (routing=ranked), or E (routing=economy). Only the routing
-    token in the prompt depends on it; the source comes from -Src.
+    A through E, matching Invoke-LiveBenchmark.ps1: A baseline source/routing off;
+    B candidate source/routing off; C baseline source/routing ranked; D candidate
+    source/routing ranked; E candidate source/routing economy. The source comes from -Src.
 .PARAMETER TrialRoot
     New directory for this run's evidence. Must not exist.
 .PARAMETER Model
-    Coordinator session model. Defaults to claude-sonnet-5.
+    Coordinator session model. Defaults to claude-sonnet-5.5.
 .EXAMPLE
-    ./Invoke-LiveBenchmarkRun.ps1 -Src ../../../squad-src -Level easy -Arm B -TrialRoot $env:TEMP/lb/easy-B-r1
+    ./Invoke-LiveBenchmarkRun.ps1 -Src ../../../squad-src -Level easy -Arm A -TrialRoot $env:TEMP/lb/easy-A-r1
 #>
 [CmdletBinding()]
 param(
@@ -39,7 +40,7 @@ param(
     [string]$RunId = "$Level-$Arm",
     [int]$Repeat = 1,
     [int]$Position = 1,
-    [string]$Model = 'claude-sonnet-5',
+    [string]$Model = 'claude-sonnet-5.5',
     [string]$CliPath = (Join-Path $env:APPDATA 'npm/copilot.ps1'),
     [AllowEmptyString()][string]$DisabledMcpServers = '',
     [AllowEmptyString()][string]$InstallRoot = ''
