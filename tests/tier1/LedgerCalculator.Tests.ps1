@@ -1581,6 +1581,41 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
         $check.ExitCode | Should -Be 0 -Because $check.Output
     }
 
+    It 'writes the ledger when only the Scribe has completed, as at the first hand-off of a run (a live run rolled back on ''Sum'' cannot be found)' {
+        $f = New-SessionFixtureLocal -EventLines @($script:BaseEvents | Where-Object { $_ -notmatch '"t1"' })
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match '\| Squad Scribe \| 1 \| claude-haiku-4\.5 \|'
+        $ledger | Should -Not -Match 'Without HVE Squad' -Because 'no role work was observed to compare'
+    }
+
+    It 'writes the ledger when the session has billed units but no completed dispatch' {
+        $f = New-SessionFixtureLocal -EventLines @($script:BaseEvents | Where-Object { $_ -notmatch 'subagent\.completed' })
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw | Should -Match '\*\*123\.45 AI units\*\*'
+    }
+
+    It 'writes the ledger at every point a live session can be cut, so a hand-off at any moment of a run never fails on observed usage' {
+        # Live order: the Scribe's roster refresh completes and is billed before any owner finishes.
+        $live = @($script:BaseEvents[0], $script:BaseEvents[3], $script:BaseEvents[4], $script:BaseEvents[1], $script:BaseEvents[2], $script:BaseEvents[5])
+        for ($n = 1; $n -le $live.Count; $n++) {
+            $f = New-SessionFixtureLocal -EventLines @($live | Select-Object -First $n)
+            $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $result.ExitCode | Should -Be 0 -Because "the session cut after event $n must still write: $($result.Output)"
+        }
+    }
+
+    It 'leaves observed usage out with a warning, and still writes and checks the ledger, when the session log cannot be read' {
+        $f = New-SessionFixtureLocal -EventLines @('{"type":"subagent.completed","data":{"toolCallId":"t9","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":"not-a-number","durationMs":1},"timestamp":"2026-10-01T10:00:00.000Z"}')
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'observed usage from .* was left out'
+        Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw | Should -Not -Match '## Observed Usage'
+        (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }).ExitCode | Should -Be 0
+    }
+
     It 'replaces the section on a later rewrite instead of appending a second one' {
         $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
         (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
