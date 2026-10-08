@@ -211,3 +211,36 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match ([regex]::Escape('ledger: stub (do not dispatch the Scribe to repair it'))
     }
 }
+
+Describe 'Get-SquadDispatchBrief.ps1 consent and Route markers (B1)' {
+    It 'prints consent: missing and a WARN to record consent before any dispatch when decisions.md is absent' {
+        $result = Invoke-Brief -Repo (New-BriefRepo)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match '(?m)^consent: missing\r?$'
+        $result.Output | Should -Match ([regex]::Escape('WARN economy consent not recorded: before any dispatch, state the trade once (economy-mode.md Consent) and hand the Scribe the ## Economy Mode Accepted decision'))
+    }
+
+    It 'prints consent: missing when decisions.md has no Economy Mode Accepted entry' {
+        $repo = New-BriefRepo
+        Write-Text (Join-Path $repo '.copilot-tracking/squad/decisions.md') "# Squad Decisions`n`n## 2026-10-03T17:00:00Z Init`n`n* Seeded.`n"
+        (Invoke-Brief -Repo $repo).Output | Should -Match '(?m)^consent: missing\r?$'
+    }
+
+    It 'prints consent: recorded, without the WARN, once the decision exists' {
+        $repo = New-BriefRepo
+        Write-Text (Join-Path $repo '.copilot-tracking/squad/decisions.md') "# Squad Decisions`n`n## Economy Mode Accepted 2026-10-03T17:30:00Z`n`n* User: Fixture`n* Previous mode: ranked`n* Trade accepted: cheaper picks`n* Never weakened: every gate`n"
+        $result = Invoke-Brief -Repo $repo
+        $result.Output | Should -Match '(?m)^consent: recorded\r?$'
+        $result.Output | Should -Not -Match '(?m)^WARN economy consent not recorded'
+    }
+
+    It 'reminds the coordinator that every history record needs Route: economy or Route: bounded' {
+        (Invoke-Brief -Repo (New-BriefRepo)).Output | Should -Match ([regex]::Escape('route markers: every history record needs routingIdentity whose routeRationale starts with Route: economy, or Route: bounded on the Bounded Lane'))
+    }
+
+    It 'still refuses outside economy with exit 7 before any consent check' {
+        $result = Invoke-Brief -Repo (New-BriefRepo -Routing 'ranked')
+        $result.ExitCode | Should -Be 7
+        $result.Output | Should -Not -Match 'consent:'
+    }
+}

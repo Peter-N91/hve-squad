@@ -32,7 +32,7 @@
 
     It never picks a model: the roster's `Model` cell, the agent pin, or the session model
     is what each dispatch runs on. The script writes nothing. Exit codes: 0 brief printed;
-    1 usage error; 7 refused, not economy (the coordinator reads its references as in v0.18.0).
+    1 usage error; 7 refused, not economy (the coordinator reads its references as in v0.18.1).
 .PARAMETER SquadRoot
     The squad root (`.copilot-tracking/squad/`).
 .PARAMETER RepoRoot
@@ -178,6 +178,15 @@ $cap = if ($capText -match '^\d+$' -and [int]$capText -gt 0) { [int]$capText } e
 $covered = -not $federated -and -not $ceiling
 $out.Add("state: schema $($state['schemaVersion']), turn $turn (next hand-off turn: $($turn + 1)), mode $($state['mode']), updated $updated")
 $out.Add("federation: $(if ($federated) { 'yes' } else { 'no' }) | cost ceiling: $(if ($ceiling) { 'active' } else { 'none' }) | ledger: $ledger | model routing: $routing | concurrency cap: $cap")
+# economy-mode.md Consent (the same check Resolve-SquadModelRoute.ps1 and Write-SquadHandoff.ps1 make) and Route Markers.
+$decisionsPath = Join-Path $SquadRoot 'decisions.md'
+$decisionsText = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) { [string](Get-Content -LiteralPath $decisionsPath -Raw -Encoding utf8) } else { '' }
+$consent = if ($decisionsText -match '(?m)^## Economy Mode Accepted\b') { 'recorded' } else { 'missing' }
+$out.Add("consent: $consent")
+if ($consent -eq 'missing') {
+    $out.Add('WARN economy consent not recorded: before any dispatch, state the trade once (economy-mode.md Consent) and hand the Scribe the ## Economy Mode Accepted decision with the roster refresh.')
+}
+$out.Add('route markers: every history record needs routingIdentity whose routeRationale starts with Route: economy, or Route: bounded on the Bounded Lane (economy-mode.md Route Markers).')
 if ($covered) {
     $out.Add('coverage: for a request that meets every Bounded Lane criterion below, this brief replaces reading 00-index.md, operating-procedure.md, gates-and-modes.md, economy-mode.md, agent files, and the rate table. Any other request: read the reference files whole.')
 }
