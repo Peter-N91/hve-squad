@@ -1997,25 +1997,40 @@ function Get-UnitEconomicsLocal {
         if ($m.Value -match '^(?i)(pass|approv)') { 'accepted' } else { 'rejected' }
     }
 
-    # A review that names deliverables (full path or file name, in its Request or Outcome) covers only those;
-    # a review that names none covers every deliverable of its turn and workstream.
-    $namesDeliverable = {
-        param($review, $path)
-        $text = "$($review.Request) $($review.Outcome)".Replace('`', '').Replace('\', '/').ToLowerInvariant()
-        if ($text.Contains($path)) { return $true }
-        $leaf = ($path -split '/')[-1]
+    # A review that names deliverables (full path, or a file name unique among its turn and workstream's deliverables, in its
+    # Request or Outcome) covers only those; a review that mentions none covers every deliverable of its turn and workstream.
+    # A file name shared by two deliverables of the same turn and workstream names neither: only the full path does, and the
+    # mention still keeps the review from covering everything (consumption.md *Unit economics*).
+    $reviewText = { param($review) "$($review.Request) $($review.Outcome)".Replace('`', '').Replace('\', '/').ToLowerInvariant() }
+    $leafOf = { param($path) ($path -split '/')[-1] }
+    $mentionsLeaf = {
+        param($text, $path)
+        $leaf = & $leafOf $path
         $leaf -and [regex]::IsMatch($text, '(?<![\w./-])' + [regex]::Escape($leaf) + '(?![\w-])')
+    }
+    $mentionsDeliverable = {
+        param($review, $path)
+        $text = & $reviewText $review
+        $text.Contains($path) -or (& $mentionsLeaf $text $path)
+    }
+    $namesDeliverable = {
+        param($review, $path, $groupPaths)
+        $text = & $reviewText $review
+        if ($text.Contains($path)) { return $true }
+        $leaf = & $leafOf $path
+        $sameLeaf = @($groupPaths | Where-Object { (& $leafOf $_) -eq $leaf }).Count
+        $sameLeaf -le 1 -and (& $mentionsLeaf $text $path)
     }
     $latestStatus = @{}
     $work = @($sorted | Where-Object { -not $_.IsReview -and $_.Deliverable })
     foreach ($w in $work) {
         $group = @($reviews | Where-Object { $_.Turn -and $_.Turn -eq $w.Turn -and $_.Workstream -eq $w.Workstream })
         $groupPaths = @($work | Where-Object { $_.Turn -eq $w.Turn -and $_.Workstream -eq $w.Workstream } | ForEach-Object { $_.Deliverable } | Select-Object -Unique)
-        $naming = @($group | Where-Object { & $namesDeliverable $_ $w.Deliverable })
+        $naming = @($group | Where-Object { & $namesDeliverable $_ $w.Deliverable $groupPaths })
         $covering = if ($naming.Count -gt 0) { $naming | Select-Object -Last 1 }
         else {
             $r = $null
-            foreach ($g in $group) { if (-not @($groupPaths | Where-Object { & $namesDeliverable $g $_ }).Count) { $r = $g } }
+            foreach ($g in $group) { if (-not @($groupPaths | Where-Object { & $mentionsDeliverable $g $_ }).Count) { $r = $g } }
             $r
         }
         $status = if ($covering) { & $verdictOf $covering.Outcome } else { 'unknown' }

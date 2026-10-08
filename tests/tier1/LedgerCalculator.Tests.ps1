@@ -1844,6 +1844,58 @@ Describe 'Unit economics (value) section' {
         $out | Should -Match ([regex]::Escape('so the rework figures are a floor'))
     }
 
+    It 'accepts a file-name mention only when no other deliverable of the turn and workstream shares that name (F1)' {
+        $byPath = @(
+            New-EntryLocal 'Squad Implementor' '10:00' 2 'src/readme.md'
+            New-EntryLocal 'Squad Writer' '10:05' 2 'docs/readme.md'
+            New-EntryLocal 'Squad Tester' '10:10' 2 'reviews/r2.md' 'Verdict Pass for `src/readme.md`.'
+            New-EntryLocal 'Squad Scribe' '12:00' 2 'decisions.md'
+        )
+        $out = (Invoke-Ledger -SquadRoot (New-UnitEconomicsRootLocal -Entries $byPath)).Output
+        $out | Should -Match '\| Accepted by an independent review \| 1 \| derived \|'
+        $out | Should -Match '\| Unreviewed \| 1 \| derived \|'
+
+        $byLeaf = @(
+            New-EntryLocal 'Squad Implementor' '10:00' 2 'src/readme.md'
+            New-EntryLocal 'Squad Writer' '10:05' 2 'docs/readme.md'
+            New-EntryLocal 'Squad Tester' '10:10' 2 'reviews/r2.md' 'Verdict Pass on readme.md.'
+            New-EntryLocal 'Squad Scribe' '12:00' 2 'decisions.md'
+        )
+        $out = (Invoke-Ledger -SquadRoot (New-UnitEconomicsRootLocal -Entries $byLeaf)).Output
+        $out | Should -Match '\| Accepted by an independent review \| 0 \| derived \|' -Because 'an ambiguous file name names neither deliverable'
+        $out | Should -Match '\| Unreviewed \| 2 \| derived \|' -Because 'the mention also keeps the review from covering every deliverable'
+
+        $otherWorkstream = @(
+            New-EntryLocal 'Squad Implementor' '10:00' 2 'src/readme.md' -Workstream 'ws1'
+            New-EntryLocal 'Squad Writer' '10:05' 2 'docs/readme.md' -Workstream 'ws2'
+            New-EntryLocal 'Squad Tester' '10:10' 2 'reviews/r2.md' 'Verdict Pass on readme.md.' 'ws1'
+            New-EntryLocal 'Squad Scribe' '12:00' 2 'decisions.md'
+        )
+        $out = (Invoke-Ledger -SquadRoot (New-UnitEconomicsRootLocal -Entries $otherWorkstream)).Output
+        $out | Should -Match '\| Accepted by an independent review \| 1 \| derived \|' -Because 'the name is unique within its own turn and workstream'
+    }
+
+    It 'never changes the -Check result or its failure class (F2): <Case>' -ForEach @(
+        @{ Case = 'ledger-only'; Class = 'ledger-only' }
+        @{ Case = 'history-integrity'; Class = 'history-integrity' }
+    ) {
+        $root = New-UnitEconomicsRootLocal -Entries $script:AcceptedEntries
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $checkArgs = @{}
+        if ($Case -eq 'ledger-only') {
+            $state = Join-Path $root 'state.json'
+            Set-Content -LiteralPath $state -Value ((Get-Content -LiteralPath $state -Raw) -replace '"estCostUsd":\s*[0-9.]+', '"estCostUsd": 9.9999') -NoNewline
+        }
+        else { $checkArgs.ExpectedHistoryCounts = @{ 'Squad Implementor' = 9 } }
+        $with = Invoke-Ledger -SquadRoot $root -Check @checkArgs
+        $with.ExitCode | Should -Be 1 -Because $with.Output
+        $with.Output | Should -Match "failure class: $Class"
+        $text = Get-Content -LiteralPath $ledgerPath -Raw
+        Set-Content -LiteralPath $ledgerPath -Value ($text -replace '(?s)## Unit Economics \(value\).*?(?=## Cost Comparison)', '') -NoNewline
+        $without = Invoke-Ledger -SquadRoot $root -Check @checkArgs
+        $without.ExitCode | Should -Be $with.ExitCode
+        $without.Output | Should -Be $with.Output
+    }
     It '-Write reports that it rewrote the Unit Economics section' {
         $root = New-UnitEconomicsRootLocal -Entries $script:AcceptedEntries
         (Invoke-Ledger -SquadRoot $root -Write).Output | Should -Match ([regex]::Escape('Derivation, and Unit Economics (value) sections of consumption.md'))
