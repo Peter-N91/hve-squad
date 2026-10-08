@@ -110,6 +110,17 @@ Describe 'Fixture and schedule' {
         $text | Should -Not -Match 'claude-sonnet-5[^.]'
     }
 
+    It 'documents the pytest prerequisite before running the self-tests' {
+        $runner = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Invoke-LiveBenchmarkTests.ps1') -Raw
+        $runner | Should -Match 'python -m pytest --version'
+        $runner | Should -Match 'python -m pip install pytest'
+        $readme = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Raw
+        $readme | Should -Match 'PowerShell 7\.4'
+        $readme | Should -Match 'A: baseline source'
+        $readme | Should -Match 'F: optional candidate source'
+        $readme | Should -Match 'stopCause'
+    }
+
     It 'selects configured non-builtin MCP servers for isolated benchmark runs' {
         $config = '{"mcpServers":{"builtin":{"source":"builtin"},"workspace":{"source":"workspace"},"plugin":{"source":"plugin"}}}' | ConvertFrom-Json
         @(Get-NonBuiltinMcpServerNames -Configuration $config) | Should -Be @('plugin', 'workspace')

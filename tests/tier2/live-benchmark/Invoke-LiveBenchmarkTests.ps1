@@ -26,9 +26,11 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$pytestCheck = & python -m pytest --version 2>&1
+if ($LASTEXITCODE -ne 0) {
+    throw "python -m pytest is required for the live benchmark offline self-tests. Install it with 'python -m pip install pytest' or create and activate a virtual environment, then rerun this script."
+}
 if ($PesterPath) { Import-Module $PesterPath -Force } else { Import-Module Pester -MinimumVersion 5.0 -Force }
-& python -m pytest --version *> $null
-if ($LASTEXITCODE -ne 0) { throw 'python -m pytest is not available; the scorer runs real test suites.' }
 
 $config = New-PesterConfiguration
 $config.Run.Container = New-PesterContainer -Path (Join-Path $PSScriptRoot 'LiveBenchmark.Tests.ps1')
