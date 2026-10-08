@@ -268,6 +268,17 @@ This is the group that proves the squad is a methodology rather than an agent th
 | RTE-36 | A user override of a `Stop` is recorded through the Scribe **before** any implementer dispatches | Same |
 | RTE-37 | `backlog-executor` is never dispatched without a finalized handoff; when none exists, `product-owner` is dispatched first | Routing, backlog notes |
 
+The cases below hold only while `team.md` records `Model routing: economy` and the turn is interactive (no `mode=`). Under `off`, `ranked`, or `manual`, RTE-21 and RTE-30 to RTE-37 apply unchanged and none of these cases may fire.
+
+| ID | Case | Source |
+|----|------|--------|
+| RTE-38 | **Bounded lane accepted (economy only).** A request that names the exact files and change, has no open questions, one owning role (or independent items each with one owner and disjoint write sets), engages no council lens, and trips no Impactful-Action, Risk, intake, or discovery trigger skips Research and Plan only: assert the owning role **and** `tester` are dispatched (history entries exist), the coordinator authored no artifact itself, and the Scribe decision entry records `Route: bounded` with each criterion's evidence | `economy-mode.md`, Bounded Lane |
+| RTE-39 | **Any doubt means the full pipeline.** An ambiguous request, an open question, an engaged council lens, or an unproven criterion runs Research → Plan → Implement → Review as in RTE-30 and RTE-31; no `Route: bounded` is recorded | Same |
+| RTE-40 | **`pipeline=full` forces the full pipeline** even when every bounded-lane criterion holds | Same |
+| RTE-41 | **Never outside economy, never unattended.** Under `off`, `ranked`, or `manual`, or with `mode=autonomous` or `mode=autopilot`, a fully specified request still runs every stage | Same |
+| RTE-42 | **Plan-driven parallelism (economy only).** Owners named by a `deliverable-fan-out` plan whose write sets are disjoint are dispatched concurrently under one confirmation that lists every owner, its tier, and its write set; an `escalate`-tier owner is never batched, and unproven disjointness (or budget as the only reason) dispatches sequentially | `economy-mode.md`, Plan-Driven Parallelism |
+| RTE-43 | **Dispatch brief (economy only).** `Get-SquadDispatchBrief.ps1` refuses with exit 7 outside economy; under it, when its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table | `economy-mode.md`, Dispatch Brief; `GetSquadDispatchBrief.Tests.ps1` |
+
 ## Tier 1 — Profile seeding
 
 Init with each profile and assert the seeded roster holds exactly the documented member set. Cheap, fully deterministic once Init has run, and it catches a roster template that drifts from the catalog.

@@ -1,6 +1,6 @@
 ---
 name: squad-economy-mode
-description: "Opt-in routing=economy procedure, read only while team.md records Model routing: economy: consent, the role allowlist, the cheaper pick, the one escalation, Route markers, the scripted hand-off, rate seeding and Cost Preflight writes, the intake waiver, and what never changes."
+description: "Opt-in routing=economy procedure, read only while team.md records Model routing: economy: consent, the role allowlist, the cheaper pick, the one escalation, Route markers, the bounded lane, plan-driven parallelism, the dispatch brief, the scripted hand-off, rate seeding and Cost Preflight writes, the intake waiver, and what never changes."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -16,7 +16,7 @@ Read this file only while `team.md` records `Model routing: economy`, or on the 
 
 ## Consent
 
-The first time a user switches to `economy`, before any dispatch under it, the coordinator says once, plainly, what changes: allowlisted implementation roles run on the cheapest model that fits their work well enough within their floor, and each moves once to its `ranked` pick after a failed review; ordinary hand-offs, the rate table, and the Cost Preflight write run through scripts (*Scripted Writes*); and a missing intake verdict may be waived with a recorded decision (*Intake Waiver*). It also says what does not change (*Never Weakened* below). The switch is a roster change, so the coordinator hands the Scribe the new mode together with a decision entry headed `## Economy Mode Accepted`, and the Scribe writes that entry with the roster-refresh payload, in exactly this shape:
+The first time a user switches to `economy`, before any dispatch under it, the coordinator says once, plainly, what changes: allowlisted implementation roles run on the cheapest model that fits their work well enough within their floor, and each moves once to its `ranked` pick after a failed review; ordinary hand-offs, the rate table, and the Cost Preflight write run through scripts (*Scripted Writes*); in interactive mode a fully specified, low-risk request may skip Research and Plan (*Bounded Lane*) and owners with disjoint write sets may run concurrently (*Plan-Driven Parallelism*); and a missing intake verdict may be waived with a recorded decision (*Intake Waiver*). It also says what does not change (*Never Weakened* below). The switch is a roster change, so the coordinator hands the Scribe the new mode together with a decision entry headed `## Economy Mode Accepted`, and the Scribe writes that entry with the roster-refresh payload, in exactly this shape:
 
 ```markdown
 ## Economy Mode Accepted <timestamp>
@@ -53,11 +53,33 @@ After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dis
 
 ## Route Markers
 
-Every history entry produced under economy starts its **Route rationale** identity bullet (`model-routing.md` *Identity Bullets*) with `Route: economy`, followed by the existing rationale (`economy pick`, `economy escalation`, or the ranked rationale of a role off the allowlist). The coordinator writes the marker into the payload; the Scribe copies it as it copies every other identity bullet.
+Every history entry produced under economy starts its **Route rationale** identity bullet (`model-routing.md` *Identity Bullets*) with `Route: economy`, or `Route: bounded` for a dispatch on the *Bounded Lane*, followed by the existing rationale (`economy pick`, `economy escalation`, or the ranked rationale of a role off the allowlist). The coordinator writes the marker into the payload; the Scribe copies it as it copies every other identity bullet.
+
+## Bounded Lane
+
+Interactive mode only (no `mode=`). A fully specified, low-risk request does not need Research and Plan to be safe. Under economy the lane waives **only** those two stages, and only when **all** of these hold:
+
+* The request names the exact target files or artifacts and the exact change.
+* There are no open questions or unknowns.
+* A single owning role does the work, or independent items each have one owner and disjoint write sets.
+* It engages no council lens: it touches none of architecture, security, cost, product-fit, or RAI (the task-fit lenses in `gates-and-modes.md` *Council Procedure*), and the user asked for no council, validation, cross-check, or pre-implementation review. A request that would need a council, an extension, or a waiver is never bounded.
+* No Impactful-Action Gate or Risk Gate trigger applies, and no intake or discovery gate trigger applies.
+
+**Any doubt means the full pipeline.** `pipeline=full` forces it, and `mode=autonomous`, `mode=autopilot`, and Watch Mode never use the lane. The lane changes how many stages run, never who runs them: the coordinator still dispatches the owning role through `runSubagent` or `task`, never inline, still dispatches `tester` as the closing stage under `gates-and-modes.md` *Review Follow-Through*, and still hands every stage to the Scribe. The decision entry records `Route: bounded` and each criterion with the request evidence that met it. The lane never changes which model a dispatch runs on.
+
+**Bounded owner brief.** The dispatch to each bounded owner carries its full write set (every file and directory it may touch), the exact change, the validation command, the change-record path, and the line `bounded: read only the named files and the change-record convention; do not explore the repository, but you may search for references to any symbol, heading, or link you change; if a dependent outside the named files needs a change, return "blocked: not bounded" without editing it`. A `blocked: not bounded` return leaves the lane for the full pipeline. The owner still follows the repository coding-standards instructions, runs the validation, and writes the change record last, ending with `Status: complete`. The closing review runs only after every owner's final message and is checked by *Review saw the final files* below.
+
+## Plan-Driven Parallelism
+
+Interactive mode only (no `mode=`). Besides the `Parallel-Eligible` flag, owners may run concurrently when the Lead plan's `Implement Shape` is `deliverable-fan-out`, or a bounded request lists independent items, and their write sets are disjoint (no shared file, and no deliverable that consumes another's output). The plan or the request must show the disjointness; budget is never a reason. Obtain the routing tier's confirmation once for the batch, listing every owner, its tier, and its write set; an `escalate`-tier owner is never batched. Scribe single-writer, one hand-off per stage, and per-stage `history/<agent>.md` entries are unchanged. When disjointness is unproven, dispatch sequentially in dependency order. Autopilot's own fan-out is unchanged.
+
+## Dispatch Brief
+
+With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, the roster (agent and Alternates with dispatchability, pin, `Model` cell, rate row, deliverable root), ready consumption objects, the Scribe's hand-off command line, and the *Bounded Lane*, *Plan-Driven Parallelism*, and *Scripted Writes* sections verbatim. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
 
 ## Never Weakened
 
-Economy only changes which model an allowlisted role runs on and who types the bookkeeping. It never skips, shortens, or relaxes the Risk Gate, the Impactful-Action Gate, the security review, the final tester review, the task-fit council with its extension and waiver, or any other gate, and it never lowers a floor. A gate that cannot run is waived only by a recorded decision (*Intake Waiver*), never silently.
+Economy only changes which model an allowlisted role runs on, who types the bookkeeping, and, on the *Bounded Lane*, whether Research and Plan run. It never skips, shortens, or relaxes the Risk Gate, the Impactful-Action Gate, the security review, the final tester review, the task-fit council with its extension and waiver, or any other gate, and it never lowers a floor. A gate that cannot run is waived only by a recorded decision (*Intake Waiver*), never silently.
 
 ## Scripted Writes
 
