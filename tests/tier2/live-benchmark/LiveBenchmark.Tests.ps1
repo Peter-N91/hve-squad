@@ -483,6 +483,57 @@ $rows | Export-Csv -LiteralPath (Join-Path $ResultRoot 'results-judged.csv') -No
     }
 }
 
+Describe 'Squad install retry policy' {
+    BeforeAll {
+        Import-Module (Join-Path $PSScriptRoot '../../lib/SquadInstall.psm1') -Force
+    }
+
+    It 'retries GitHub throttling twice then succeeds on the third call' {
+        $state = [pscustomobject]@{ Calls = 0; Sleeps = [System.Collections.Generic.List[int]]::new() }
+        $install = {
+            param($InstallArgs, $Target, $Attempt)
+            $state.Calls++
+            if ($state.Calls -lt 3) { [pscustomobject]@{ ExitCode = 1; Output = @('GitHub API throttle exceeded (HTTP 403)') } }
+            else { [pscustomobject]@{ ExitCode = 0; Output = @('installed') } }
+        }
+        $sleep = { param([int]$Seconds) $state.Sleeps.Add($Seconds) }
+
+        $result = Install-SquadPackage -Destination (Join-Path $TestDrive 'retry-success') -Ref main -InstallCommand $install -SleepCommand $sleep
+
+        $result.Mode | Should -Be 'Ref'
+        $state.Calls | Should -Be 3
+        $state.Sleeps | Should -Be @(30, 60)
+    }
+
+    It 'does not retry non-throttle failures' {
+        $state = [pscustomobject]@{ Calls = 0; Sleeps = [System.Collections.Generic.List[int]]::new() }
+        $install = {
+            param($InstallArgs, $Target, $Attempt)
+            $state.Calls++
+            [pscustomobject]@{ ExitCode = 1; Output = @('fatal: package manifest is invalid') }
+        }
+        $sleep = { param([int]$Seconds) $state.Sleeps.Add($Seconds) }
+
+        { Install-SquadPackage -Destination (Join-Path $TestDrive 'no-retry') -Ref main -InstallCommand $install -SleepCommand $sleep } | Should -Throw '*apm install failed*'
+        $state.Calls | Should -Be 1
+        $state.Sleeps.Count | Should -Be 0
+    }
+
+    It 'fails after three throttle back-offs' {
+        $state = [pscustomobject]@{ Calls = 0; Sleeps = [System.Collections.Generic.List[int]]::new() }
+        $install = {
+            param($InstallArgs, $Target, $Attempt)
+            $state.Calls++
+            [pscustomobject]@{ ExitCode = 1; Output = @('Too many requests (HTTP 429)') }
+        }
+        $sleep = { param([int]$Seconds) $state.Sleeps.Add($Seconds) }
+
+        { Install-SquadPackage -Destination (Join-Path $TestDrive 'retry-fail') -Ref main -InstallCommand $install -SleepCommand $sleep } | Should -Throw '*GitHub throttling persisted*'
+        $state.Calls | Should -Be 4
+        $state.Sleeps | Should -Be @(30, 60, 120)
+    }
+}
+
 Describe 'Report generation' {
     BeforeAll {
         $rows = foreach ($level in 'easy', 'hard') {
