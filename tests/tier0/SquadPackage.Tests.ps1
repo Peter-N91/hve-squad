@@ -280,3 +280,58 @@ Describe 'PKG-15 Roster roles resolve in the catalog (C4)' {
         $missingAfterMutation | Should -Contain 'lead' -Because 'renaming the lead catalog row must surface lead as a missing role; a test that cannot fail this way would pass even if the real catalog lost a role'
     }
 }
+
+Describe 'GATE-45 Coordinator progress presentation contract' {
+    BeforeAll {
+        $script:ProgressCoordinator = @(
+            $script:Model.SquadAgents |
+                Where-Object Name -eq 'squad-coordinator.agent.md'
+        )[0]
+        $script:ProgressPrompt = @(
+            $script:Model.Prompts |
+                Where-Object Name -eq 'squad.prompt.md'
+        )[0]
+        $progressProcedurePath = Join-Path $script:Model.SquadSkillRoot 'references/operating-procedure.md'
+        $script:ProgressProcedure = Get-Content -LiteralPath $progressProcedurePath -Raw
+    }
+
+    It 'resolves a native tracker by capability and retains the in-chat fallback' {
+        $script:ProgressProcedure | Should -Match 'capabilities the host advertises'
+        $script:ProgressProcedure | Should -Match 'native todo or task-list capability'
+        $script:ProgressProcedure | Should -Match 'named `todo` or something else'
+        $script:ProgressProcedure | Should -Match 'same concise list under `## Plan`'
+        $script:ProgressProcedure | Should -Match 'Markdown checklist or status ledger'
+    }
+
+    It 'pins stable three-to-seven item progress and verification before completion' {
+        $script:ProgressProcedure | Should -Match '3 to 7 high-level, outcome-oriented items'
+        $script:ProgressProcedure | Should -Match 'verification and final reporting items'
+        $script:ProgressProcedure | Should -Match 'Do not create items for reads, searches, Scribe mechanics, or individual file'
+        $script:ProgressProcedure | Should -Match 'Keep item identity and order stable unless material scope changes'
+        $script:ProgressProcedure | Should -Match 'Exactly one\s+item is in progress while active work exists'
+        $script:ProgressProcedure | Should -Match 'only after its outcome and every applicable artifact,\s+history, and consumption gate have been verified'
+        $script:ProgressProcedure | Should -Match 'Completed: <item>\. Next: <next item>\.'
+    }
+
+    It 'binds pre-dispatch presentation and ephemeral ownership to the coordinator' {
+        $script:ProgressCoordinator.Body | Should -Match 'progress presentation'
+        $script:ProgressProcedure | Should -Match 'Do not begin the first substantive work dispatch until the native list, when\s+available, and the concise in-chat plan have both been presented'
+        $script:ProgressProcedure | Should -Match 'Do not delay or degrade the squad\s+methodology because a native tracker is unavailable'
+        $script:ProgressProcedure | Should -Match 'coordinator-owned ephemeral presentation metadata'
+        $script:ProgressProcedure | Should -Match 'not durable squad-state writes'
+        $script:ProgressProcedure | Should -Match 'Squad Scribe remains the\s+sole ordinary state writer'
+    }
+
+    It 'pins blocked work and final progress accounting' {
+        $script:ProgressProcedure | Should -Match 'When blocked, leave the current item in progress, name the blocker'
+        $script:ProgressProcedure | Should -Match 'mark every item complete or report it explicitly\s+blocked'
+        $script:ProgressProcedure | Should -Match 'final response names changed or delivered files, actual\s+validation, and remaining risks or decisions'
+    }
+
+    It 'forwards plan ownership from the prompt without creating duplicate state' {
+        $script:ProgressPrompt.Body | Should -Match 'Forward progress presentation ownership to the Squad Coordinator'
+        $script:ProgressPrompt.Body | Should -Match 'capability-resolved native\s+task list'
+        $script:ProgressPrompt.Body | Should -Match 'always present the matching concise `## Plan`'
+        $script:ProgressPrompt.Body | Should -Match 'does not create a second plan\s+or write progress into squad state'
+    }
+}

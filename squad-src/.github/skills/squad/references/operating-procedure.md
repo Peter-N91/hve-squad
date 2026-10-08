@@ -26,8 +26,10 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 1. Read `team.md` and `routing.md`.
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
 3. Resolve each matched role to a deployed agent through the roster. A role marked **thin charter needed** has no deployed agent — escalate instead of substituting.
-4. Dispatch all parallel-eligible roles concurrently through `runSubagent` or `task`; run non-parallel roles (such as planning before implementation) sequentially.
-5. Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn. When `team.md` records `Model routing: ranked|manual` or the turn passes `routing=`, `references/model-routing.md` resolves the dispatched id instead; with the mode `off`, this step is unchanged.
+4. Determine which gates apply and establish the actual stage shape. Before the
+   first work dispatch, apply *Progress Presentation* below.
+5. Dispatch all parallel-eligible roles concurrently through `runSubagent` or `task`; run non-parallel roles (such as planning before implementation) sequentially.
+6. Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn. When `team.md` records `Model routing: ranked|manual` or the turn passes `routing=`, `references/model-routing.md` resolves the dispatched id instead; with the mode `off`, this step is unchanged.
 
 ### Ledger Reconciliation (before new work)
 
@@ -44,6 +46,44 @@ Count the rows against the history before assuming the ledger is healthy. A popu
 State which path — `scripted` or `manual` — this reconciliation used in the hand-off given to the Scribe, so the history shows which path a run took.
 
 **Repair once, then warn and continue.** Hand a mismatch to the Scribe in one corrective hand-off carrying `ledgerCommand`. That hand-off appends its own orchestration block before the command runs, so the scripted rewrite folds every block on disk, its own included, and converges in one pass. When `-Check` still reports `failure class: ledger-only` after it, record a warning in the turn's synthesis and the next hand-off's decision entry and proceed with the turn's work — never re-dispatch the Scribe for the same mismatch, and never block on cost accounting: the next hand-off's `ledgerCommand` re-derives the ledger anyway. A `history-integrity` failure follows *Fail-closed and correction* in *Scribe Hand-off Pipelining* below.
+
+## Progress Presentation
+
+For every non-trivial squad request, the coordinator creates one stable list
+after state, route, and gate classification establish the actual stage shape and
+before the first substantive work dispatch.
+
+* Create 3 to 7 high-level, outcome-oriented items. Include explicit
+  verification and final reporting items.
+* Do not create items for reads, searches, Scribe mechanics, or individual file
+  edits.
+* Resolve a tracker from the capabilities the host advertises, not from a
+  literal tool name. When a compatible native todo or task-list capability is
+  available, use it, whether the mechanism is named `todo` or something else.
+* Always present the same concise list under `## Plan` in chat before
+  implementation begins. When no compatible native tracker is available, use
+  the Markdown checklist or status ledger under `## Plan` as the tracker and
+  maintain it in later progress updates. Do not delay or degrade the squad
+  methodology because a native tracker is unavailable.
+* Do not begin the first substantive work dispatch until the native list, when
+  available, and the concise in-chat plan have both been presented.
+* Keep item identity and order stable unless material scope changes. Exactly one
+  item is in progress while active work exists.
+* Mark an item complete only after its outcome and every applicable artifact,
+  history, and consumption gate have been verified.
+* After each meaningful phase, update the native list or fallback ledger and
+  emit one concise sentence in this exact shape:
+  `Completed: <item>. Next: <next item>.`
+* When blocked, leave the current item in progress, name the blocker, and do not
+  silently skip the item.
+* Before the final response, mark every item complete or report it explicitly
+  blocked. The final response names changed or delivered files, actual
+  validation, and remaining risks or decisions.
+
+Progress UI updates are coordinator-owned ephemeral presentation metadata. They
+are not role work and are not durable squad-state writes. Do not dispatch a role
+or the Squad Scribe to create or maintain them. The Squad Scribe remains the
+sole ordinary state writer.
 
 ## Decide
 
