@@ -466,6 +466,9 @@ function Get-StopCause {
         5. cli-error: the top-level Copilot CLI process returned a non-zero exit code.
         6. none: no stop signal and the run dispatched an owner with a zero exit code.
         7. unknown: halted or inline/early stop with no recognized signal.
+        Text rules (2 to 4) read only stderr and the output of tool calls that failed (non-zero exit code or
+        success false), one line at a time: a successful read of a reference or prompt that merely mentions
+        Write-SquadHandoff, Measure-SquadLedger, or a rate limit is never a stop signal.
     #>
     [CmdletBinding()]
     param(
@@ -480,8 +483,12 @@ function Get-StopCause {
     $stderrPath = Join-Path $out 'stderr.txt'
     $events = Read-EventLog $eventsPath
     $stderr = if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath -Raw } else { '' }
-    $eventText = if (Test-Path -LiteralPath $eventsPath) { Get-Content -LiteralPath $eventsPath -Raw } else { '' }
-    $text = "$stderr`n$eventText"
+    $failedToolText = @($events | Where-Object {
+            $_.type -eq 'tool.execution_complete' -and (
+                ($null -ne (Get-EventProperty $_ @('data', 'exitCode')) -and [int](Get-EventProperty $_ @('data', 'exitCode')) -ne 0) -or
+                ($null -ne (Get-EventProperty $_ @('data', 'success')) -and -not [bool](Get-EventProperty $_ @('data', 'success'))))
+        } | ForEach-Object { $_ | ConvertTo-Json -Depth 16 -Compress }) -join "`n"
+    $text = "$stderr`n$failedToolText"
 
     $statePath = Join-Path $workspace '.copilot-tracking/squad/state.json'
     if (Test-Path -LiteralPath $statePath) {
@@ -508,12 +515,12 @@ function Get-StopCause {
             return 'handoff-failure'
         }
     }
-    $m = [regex]::Match($text, '(?is)Write-SquadHandoff.*?exit(?:ed)?(?: code)?\s*(\d+)')
+    $m = [regex]::Match($text, '(?im)Write-SquadHandoff.*?exit(?:ed)?(?: code)?\s*(\d+)')
     if ($m.Success) { return "handoff-failure (exit $($m.Groups[1].Value))" }
-    if ($text -match '(?is)Write-SquadHandoff.*?(failed|error)') { return 'handoff-failure' }
+    if ($text -match '(?im)Write-SquadHandoff.*?(failed|error)') { return 'handoff-failure' }
 
-    if ($text -match '(?is)Measure-SquadLedger.*?(exception|runtimeexception|parsererror|traceback|crash)') { return 'ledger-crash' }
-    if ($text -match '(?is)(HTTP\s*(403|429).*?(throttl|rate limit)|(throttl|rate limit).*?HTTP\s*(403|429)|\b(403|429)\b.*?(throttl|rate limit)|rate limit(ed)?|too many requests)') { return 'rate-limit' }
+    if ($text -match '(?im)Measure-SquadLedger.*?(exception|runtimeexception|parsererror|traceback|crash)') { return 'ledger-crash' }
+    if ($text -match '(?im)(HTTP\s*(403|429).*?(throttl|rate limit)|(throttl|rate limit).*?HTTP\s*(403|429)|\b(403|429)\b.*?(throttl|rate limit)|rate limit(ed)?|too many requests)') { return 'rate-limit' }
     if ($ExitCode -ne 0) { return 'cli-error' }
     if ($Outcome -eq 'dispatched') { return 'none' }
     'unknown'

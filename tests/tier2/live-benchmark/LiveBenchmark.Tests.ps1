@@ -384,6 +384,22 @@ Describe 'Stop-cause classification' {
         Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome dispatched | Should -Be 'none'
     }
 
+    It 'ignores successful tool output that only mentions the scripts or a rate limit' {
+        $events = @(
+            @{ type = 'tool.execution_start'; data = @{ toolCallId = 'v1'; arguments = @{ path = 'economy-mode.md' } } }
+            @{ type = 'tool.execution_complete'; data = @{ toolCallId = 'v1'; success = $true; result = @{ content = "Write-SquadHandoff.ps1 refuses with exit 7 outside economy.`nMeasure-SquadLedger may throw an exception.`nGitHub rate limit (HTTP 429)." } } }
+        )
+        Set-Content -LiteralPath (Join-Path $runRoot 'out/events.jsonl') -Value ($events | ForEach-Object { $_ | ConvertTo-Json -Depth 6 -Compress }) -Encoding utf8NoBOM
+        Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome dispatched | Should -Be 'none'
+    }
+
+    It 'reads a failed tool call''s output for a ledger crash' {
+        $events = @(
+            @{ type = 'tool.execution_complete'; data = @{ toolCallId = 'l1'; exitCode = 1; result = @{ content = 'Measure-SquadLedger.ps1: RuntimeException: Sum cannot be found' } } }
+        )
+        Set-Content -LiteralPath (Join-Path $runRoot 'out/events.jsonl') -Value ($events | ForEach-Object { $_ | ConvertTo-Json -Depth 6 -Compress }) -Encoding utf8NoBOM
+        Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome halted | Should -Be 'ledger-crash'
+    }
     It 'returns unknown for a halted run with no signal' {
         Get-StopCause -TrialRoot $runRoot -ExitCode 0 -Outcome halted | Should -Be 'unknown'
     }
