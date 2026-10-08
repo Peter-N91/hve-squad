@@ -80,7 +80,8 @@ function Assert-TolerableInstallFailure {
     # APM wraps its output at the terminal width, so the log is flattened before matching.
     $log = ((Get-Content -LiteralPath $InstallLog -Raw) -replace '\s+', ' ')
 
-    $missing = @([regex]::Matches($log, 'File not found: (?<path>\S+) in ') |
+    # APM 0.29 reports a missing self-reference after its sparse-checkout fallback in a second form.
+    $missing = @(@([regex]::Matches($log, 'File not found: (?<path>\S+) in ')) + @([regex]::Matches($log, "File '(?<path>[^']+)' not found after git sparse checkout")) |
             ForEach-Object { $_.Groups['path'].Value } | Sort-Object -Unique)
     $failed = @([regex]::Matches($log, '\+- (?<package>\S+) -- ') |
             ForEach-Object { $_.Groups['package'].Value } | Sort-Object -Unique)
@@ -118,6 +119,10 @@ function Install-SquadPackage {
     .PARAMETER Target
         Harness to deploy to. APM refuses to guess in an empty directory, so it is
         always passed explicitly.
+    .PARAMETER InstallCommand
+        Test hook that replaces `apm install`. Returns an object with ExitCode and Output.
+    .PARAMETER SleepCommand
+        Test hook that replaces Start-Sleep for GitHub throttle back-off.
     .OUTPUTS
         A hashtable with Root, InstallLog, Mode, and Ref.
     #>
@@ -135,10 +140,14 @@ function Install-SquadPackage {
         [Parameter(Mandatory, ParameterSetName = 'Source')]
         [string]$SourceRoot,
 
-        [string]$Target = 'copilot'
+        [string]$Target = 'copilot',
+
+        [scriptblock]$InstallCommand,
+
+        [scriptblock]$SleepCommand = { param([int]$Seconds) Start-Sleep -Seconds $Seconds }
     )
 
-    if (-not (Get-Command apm -ErrorAction SilentlyContinue)) {
+    if (-not $InstallCommand -and -not (Get-Command apm -ErrorAction SilentlyContinue)) {
         throw "The 'apm' CLI was not found on PATH."
     }
 
@@ -155,18 +164,48 @@ function Install-SquadPackage {
         $installArgs = @("$Package#$Ref")
     }
 
+    $backoffs = @(30, 60, 120)
+    $attempt = 0
+    $installSucceeded = $false
+    Set-Content -LiteralPath $installLog -Value '' -Encoding utf8NoBOM
     Push-Location $Destination
     try {
-        # Both streams are captured: the unpinned-reference warning PKG-01 asserts on is
-        # emitted to stderr. Write-Host rather than Out-Host, so a caller redirecting the
-        # run still sees the log, and so the pass-through never joins the return value.
-        & apm install @installArgs --target $Target *>&1 |
-            Tee-Object -FilePath $installLog |
-            ForEach-Object { Write-Host $_ }
+        while (-not $installSucceeded) {
+            $attempt++
+            # Both streams are captured: the unpinned-reference warning PKG-01 asserts on is
+            # emitted to stderr. Write-Host rather than Out-Host, so a caller redirecting the
+            # run still sees the log, and so the pass-through never joins the return value.
+            if ($InstallCommand) {
+                $result = & $InstallCommand -InstallArgs $installArgs -Target $Target -Attempt $attempt
+                $output = @($result.Output)
+                $exitCode = [int]$result.ExitCode
+            }
+            else {
+                $output = @(& apm install @installArgs --target $Target *>&1)
+                $exitCode = $LASTEXITCODE
+            }
+            $output | Tee-Object -FilePath $installLog -Append | ForEach-Object { Write-Host $_ }
 
-        if ($LASTEXITCODE -ne 0) {
+            if ($exitCode -eq 0) {
+                $installSucceeded = $true
+                break
+            }
+
+            $logText = Get-Content -LiteralPath $installLog -Raw
+            if ((Test-ApmThrottleFailure -Text $logText) -and $attempt -le $backoffs.Count) {
+                $delay = $backoffs[$attempt - 1]
+                Write-Warning "apm install hit GitHub throttling; retrying after $delay seconds (attempt $($attempt + 1) of $($backoffs.Count + 1))."
+                & $SleepCommand -Seconds $delay
+                continue
+            }
+            if (Test-ApmThrottleFailure -Text $logText) {
+                throw "apm install failed after $($backoffs.Count + 1) attempts because GitHub throttling persisted. See $installLog."
+            }
+
+            $global:LASTEXITCODE = $exitCode
             $overlay = if ($PSCmdlet.ParameterSetName -eq 'Source') { $SourceRoot } else { '' }
             Assert-TolerableInstallFailure -InstallLog $installLog -SourceRoot $overlay
+            $installSucceeded = $true
         }
     }
     finally {
@@ -183,6 +222,12 @@ function Install-SquadPackage {
         Mode       = $PSCmdlet.ParameterSetName
         Ref        = if ($PSCmdlet.ParameterSetName -eq 'Source') { $SourceRoot } else { $Ref }
     }
+}
+
+function Test-ApmThrottleFailure {
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Text)
+    $Text -match '(?is)(GitHub API throttle|HTTP\s*429|HTTP\s*403.*?(throttl|rate limit)|(throttl|rate limit).*?HTTP\s*403|\brate limit(ed)?\b|too many requests)'
 }
 
 Export-ModuleMember -Function Install-SquadPackage, Copy-SquadSource

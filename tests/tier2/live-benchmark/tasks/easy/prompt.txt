@@ -1,0 +1,1 @@
+One small, bounded change: in src/ledger.py add a method available(sku) that returns on-hand minus reserved for that sku (0 for an unknown sku), and add a test for it in tests/test_ledger.py. Keep every existing behaviour and test unchanged. Then review it. Route it through the squad as you normally would. Proceed without asking questions.
