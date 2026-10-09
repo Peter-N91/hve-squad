@@ -110,8 +110,12 @@ permissions:
 env:
   # Model pin for headless runs, scoped to THIS repository.
   #
-  # A headless Copilot CLI run does NOT read the `model:` frontmatter the VS Code
-  # host honors, so this flag is the only model lever on the CI path.
+  # Observed on Copilot CLI 1.0.92 (measured, not a documented guarantee; re-verify
+  # on other versions): an agent's `model:` frontmatter pin, as a display name or a
+  # slug, IS honored for subagents, while `--model` (set from SQUAD_MODEL) sets the
+  # session model. That session model applies to the coordinator, which declares no
+  # `model:`, and to every agent that pins nothing, so this flag is the model lever
+  # for those; a pinned role keeps its own pin.
   #
   # The coordinator is the most instruction-heavy agent in the system: it holds the
   # dispatch contract, the roster, the routing table, and the two-level verification

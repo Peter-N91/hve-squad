@@ -110,12 +110,13 @@ only untargeted federation autopilot uses one aggregate federation ceiling.
 
 **Default behavior (`routing=off`):** No `model` parameter is passed to any dispatch, so each agent runs on its own frontmatter model or the session model, exactly as before this feature existed.
 
-`routing=` has three modes. The mode is **saved in `team.md`** and stays in effect on later requests until you change it, so you pass it once:
+`routing=` has four modes. The mode is **saved in `team.md`** and stays in effect on later requests until you change it, so you pass it once:
 
 | Mode | How each role's model is chosen | What `team.md` shows |
 |------|---------------------------------|----------------------|
 | `off` (default) | Not chosen; the agent's own pin or the session model runs | No `Model` column |
 | `ranked` | The squad picks the model that best fits the role's work, among the models your host offers | `Model routing: ranked` and a `Model` column listing each pick |
+| `economy` | As `ranked`, except five low-impact implementation roles (developer, technical-writer, presenter, prompt-engineer, data-scientist) get the cheapest model with a fit of 2 or better within their floor, and move once to their `ranked` pick after a failed review. The squad asks for and records your consent first; gates never change | `Model routing: economy` and a `Model` column listing each pick |
 | `manual` | You pick, once, with suggestions pre-filled | `Model routing: manual` and a `Model` column holding your picks |
 
 **How ranked picks are made.** Each role maps to an assignment class (`research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`). The model catalog scores every model 0–3 for each class, and the squad picks the highest fit, then the lowest blended cost, then the newest generation of the same model family. It never breaks a tie by a model's name. On the Copilot CLI the seeded roster resolves to, for example, `researcher` → `claude-opus-5.5`, `lead` → `gpt-5.6-sol`, `developer` → `gpt-5.3-codex`, `tester` → `gpt-6-sol`, `architect` → `gpt-5.5`, `intake-validator` → `claude-sonnet-5.5`, and `scribe` → `claude-haiku-4.5`.
@@ -132,7 +133,7 @@ Every question lists only models **your host can run** and that meet the role's 
 
 **Precedence** (highest wins, per role):
 1. `routing=manual`: the role's valid `Model` cell.
-2. `routing=ranked`: the ranked pick for that role.
+2. `routing=ranked`: the ranked pick for that role (`routing=economy`: the economy pick).
 3. `tier=` or the role's `team.md` Model Tier — today's fallback, unchanged.
 4. Omit the parameter — the no-policy default.
 
@@ -170,7 +171,7 @@ The former `models=<key>:<id>,...` input is retired. If you pass it, it is not a
 
 **History and identity bullets:**
 
-The squad records which model routing requested, which model actually ran (if the host substituted one), and which model the host reported. These details appear in `.copilot-tracking/squad/history/` (single squad) or `.copilot-tracking/squad/members/<name>/history/` (federation) only while routing is `ranked` or `manual`. See the identity bullets in those history files for: Requested model, Effective model, Observed model, and Route rationale.
+The squad records which model routing requested, which model actually ran (if the host substituted one), and which model the host reported. These details appear in `.copilot-tracking/squad/history/` (single squad) or `.copilot-tracking/squad/members/<name>/history/` (federation) only while routing is `ranked`, `economy`, or `manual`. See the identity bullets in those history files for: Requested model, Effective model, Observed model, and Route rationale.
 
 **Important notes:**
 

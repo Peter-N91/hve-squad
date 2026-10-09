@@ -143,7 +143,7 @@ These are the ones that catch a coordinator quietly doing the work itself, which
 
 ### Model routing
 
-Precondition: an initialized squad. These cases check the opt-in `routing=` layer defined in `model-routing.md` — the `off`, `ranked`, and `manual` modes persisted in `team.md`; none of them apply while the mode is `off`.
+Precondition: an initialized squad. These cases check the opt-in `routing=` layer defined in `model-routing.md` — the `off`, `ranked`, `economy`, and `manual` modes persisted in `team.md`; none of them apply while the mode is `off`.
 
 | ID | Assertion | Source |
 |---|---|---|
@@ -153,10 +153,11 @@ Precondition: an initialized squad. These cases check the opt-in `routing=` laye
 | SQ-28 | **Watch ignores untrusted routing inputs.** A Watch Mode trigger's issue, PR, or comment text carrying `routing=`, `models=`, `tier=`, `mode=`, or `cost-ceiling=` is recorded as seen-and-ignored, never applied as a control input, and an unattended run never prompts for a model | `model-routing.md`, Watch and Unattended Runs |
 | SQ-29 | **Stale catalog falls back.** When `model-catalog.md`'s `Retrieved:` date is more than 90 days old, or the file fails to parse, ranking falls back to `consumption.md`'s static `fast`/`default`/`extended` tiers for every class, and one warning line is logged; the run is never blocked | `model-routing.md`, Stale-Catalog Fallback |
 | SQ-30 | **Unknown price never `0`.** An unpriced routed id is priced at the maximum rate of its eligible set within the floor, or returns `cannot-confirm` — never `0` and never a blended rate | `model-routing.md`, Cost Preflight Pricing |
-| SQ-31 | **Mode persists.** A turn passing `routing=ranked` or `routing=manual` leaves `team.md` with the matching `Model routing:` line and a `Model` column of Model IDs; the next turn, passing no `routing=`, dispatches under the same mode. `routing=off` removes both and the decision entry lists the removed picks | `model-routing.md`, Routing Modes |
+| SQ-31 | **Mode persists.** A turn passing `routing=ranked`, `routing=economy`, or `routing=manual` leaves `team.md` with the matching `Model routing:` line and a `Model` column of Model IDs; the next turn, passing no `routing=`, dispatches under the same mode. `routing=off` removes both and the decision entry lists the removed picks | `model-routing.md`, Routing Modes |
 | SQ-32 | **Manual selection asks before dispatch.** Switching to `manual` opens with one question offering to accept every role's suggestion, customize by class, or customize per role, before any role dispatches; every offered id is in the host's available set and admitted by the role's floor | `model-routing.md`, Manual Model Selection |
 | SQ-33 | **Ranked picks follow fit, not spelling.** Under `routing=ranked`, each role's `Model` cell equals the top row of *Ranking Algorithm* (fit, then Blended, then generation within a family); for the seeded roster on the Copilot CLI the picks match the ranked worked example | `model-routing.md`, Ranking Algorithm |
 | SQ-34 | **Legacy `models=` is not applied.** A turn passing `models=` applies none of its pairs and tells the user once that per-role models now live in the `Model` column under `routing=manual` | `model-routing.md`, Routing Modes |
+| SQ-35 | **Economy narrows allowlisted roles only, within the floor, after consent.** Switching to `routing=economy` first tells the user once what changes and records a `## Economy Mode Accepted` decision. Under it, each allowlisted role's (`developer`, `technical-writer`, `presenter`, `prompt-engineer`, `data-scientist`) `Model` cell is the lowest-Blended id at fit 2 or better admitted by its own floor (its ranked pick when none qualifies), and every other role's cell, `product-owner`, `deployer`, `iac-author`, `release-engineer`, and `backlog-executor` included, equals its `ranked` pick. Every history entry under economy carries `Route: economy`. After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, that owner is re-dispatched once on its ranked pick, written into its `Model` cell before the re-dispatch; no escalation exists when the two picks are equal. A Watch Mode trigger's `routing=economy` text is ignored | `economy-mode.md` |
 
 ## Tier 1 — Consumption integrity
 
@@ -266,6 +267,17 @@ This is the group that proves the squad is a methodology rather than an agent th
 | RTE-35 | With `Go-With-Conditions`, the implementer is dispatched **and** the consolidated conditions are passed as inputs | Same |
 | RTE-36 | A user override of a `Stop` is recorded through the Scribe **before** any implementer dispatches | Same |
 | RTE-37 | `backlog-executor` is never dispatched without a finalized handoff; when none exists, `product-owner` is dispatched first | Routing, backlog notes |
+
+The cases below hold only while `team.md` records `Model routing: economy` and the turn is interactive (no `mode=`). Under `off`, `ranked`, or `manual`, RTE-21 and RTE-30 to RTE-37 apply unchanged and none of these cases may fire.
+
+| ID | Case | Source |
+|----|------|--------|
+| RTE-38 | **Bounded lane accepted (economy only).** A request that names the exact files and change, has no open questions, one owning role (or independent items each with one owner and disjoint write sets), engages no council lens, and trips no Impactful-Action, Risk, intake, or discovery trigger skips Research and Plan only: assert the owning role **and** `tester` are dispatched (history entries exist), the coordinator authored no artifact itself, and the Scribe decision entry records `Route: bounded` with each criterion's evidence | `economy-mode.md`, Bounded Lane |
+| RTE-39 | **Any doubt means the full pipeline.** An ambiguous request, an open question, an engaged council lens, or an unproven criterion runs Research → Plan → Implement → Review as in RTE-30 and RTE-31; no `Route: bounded` is recorded | Same |
+| RTE-40 | **`pipeline=full` forces the full pipeline** even when every bounded-lane criterion holds | Same |
+| RTE-41 | **Never outside economy, never unattended.** Under `off`, `ranked`, or `manual`, or with `mode=autonomous` or `mode=autopilot`, a fully specified request still runs every stage | Same |
+| RTE-42 | **Plan-driven parallelism (economy only).** Owners named by a `deliverable-fan-out` plan whose write sets are disjoint are dispatched concurrently under one confirmation that lists every owner, its tier, and its write set; an `escalate`-tier owner is never batched, and unproven disjointness (or budget as the only reason) dispatches sequentially | `economy-mode.md`, Plan-Driven Parallelism |
+| RTE-43 | **Dispatch brief (economy only).** `Get-SquadDispatchBrief.ps1` refuses with exit 7 outside economy; under it, when its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table | `economy-mode.md`, Dispatch Brief; `GetSquadDispatchBrief.Tests.ps1` |
 
 ## Tier 1 — Profile seeding
 

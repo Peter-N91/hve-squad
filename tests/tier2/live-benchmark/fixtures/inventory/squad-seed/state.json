@@ -1,0 +1,1 @@
+{ "schemaVersion": "1.4", "updated": "2026-10-03T14:00:00Z", "turn": 1, "mode": "interactive", "activeRoles": [], "openEscalations": [], "currentRun": { "sessionModel": "claude-sonnet-5", "modelOverrides": {}, "estCostUsd": 0, "estCreditsTotal": 0 }, "notify": { "approvalChannel": "in-chat", "enabled": false, "email": "", "github": { "handle": "", "repo": "" } } }

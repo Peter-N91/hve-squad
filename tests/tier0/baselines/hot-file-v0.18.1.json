@@ -1,0 +1,46 @@
+{
+  "description": "LF-normalized UTF-8 byte sizes of the files a default (off, ranked, or manual) run reads on every turn: the coordinators and their prompts, the Scribe hot core, the skill index, model-routing.md, the cost references, and every squad instruction file that auto-loads under .copilot-tracking/squad/. Sizes are the v0.18.1 release content as shipped on main at d46fbea, which matches tag v0.18.1 except squad-roster.instructions.md, changed by the hve-core sync bb7894a that the hotfix branch did not carry. HotFileBudget.Tests.ps1 keeps each file within perFileThreshold bytes and the set within totalThreshold, so economy procedure stays in the cold references/economy-mode.md and a default run reads what v0.18.1 reads plus one-line pointers. An everyMode entry is an approved allowance for a change that applies in every routing mode (not economy); it is added to that file's perFileThreshold and left out of the totalThreshold sum, and it must name its reason.",
+  "ref": "v0.18.1",
+  "commit": "4c1f140f12f17abd3f200baa3afcb6d4c84bb6da",
+  "sizesFrom": "d46fbea935e106c527e4088c7ce9ff55ba31beb2",
+  "perFileThreshold": 256,
+  "totalThreshold": 1024,
+  "files": {
+    "squad-src/.github/agents/squad/squad-coordinator.agent.md": 31882,
+    "squad-src/.github/agents/squad/squad-scribe.agent.md": 16182,
+    "squad-src/.github/instructions/squad/squad-floor.instructions.md": 23810,
+    "squad-src/.github/instructions/squad/squad-routing.instructions.md": 29893,
+    "squad-src/.github/skills/squad/references/gates-and-modes.md": 27643,
+    "squad-src/.github/skills/squad/references/operating-procedure.md": 20294,
+    "squad-src/.github/skills/squad/references/scribe-procedure.md": 38390,
+    "squad-src/.github/skills/squad/references/00-index.md": 7197,
+    "squad-src/.github/skills/squad/references/entry-schemas.md": 12168,
+    "squad-src/.github/skills/squad/references/scribe-payload-template.md": 7697,
+    "squad-src/.github/skills/squad/references/model-routing.md": 25326,
+    "squad-src/.github/instructions/squad/squad-roster.instructions.md": 62039,
+    "squad-src/.github/skills/squad/SKILL.md": 5862,
+    "squad-src/.github/prompts/squad/squad.prompt.md": 6776,
+    "squad-src/.github/agents/squad/squad-federation-coordinator.agent.md": 31906,
+    "squad-src/.github/prompts/squad/squad-federation.prompt.md": 8222,
+    "squad-src/.github/instructions/squad/squad-intake-gate.instructions.md": 13649,
+    "squad-src/.github/instructions/squad/squad-autopilot.instructions.md": 28201,
+    "squad-src/.github/instructions/squad/squad-watch-mode.instructions.md": 30529,
+    "squad-src/.github/skills/squad/references/consumption.md": 24129,
+    "squad-src/.github/skills/squad/references/seed-templates.md": 22921,
+    "squad-src/.github/skills/squad/references/consumption-rates-template.md": 16940,
+    "squad-src/.github/instructions/squad/squad-state.instructions.md": 30703,
+    "squad-src/.github/instructions/squad/squad-federation.instructions.md": 41418,
+    "squad-src/.github/instructions/squad/squad-autonomous.instructions.md": 10071,
+    "squad-src/.github/instructions/squad/squad-council.instructions.md": 14736,
+    "squad-src/.github/instructions/squad/squad-discovery-gate.instructions.md": 24575,
+    "squad-src/.github/instructions/squad/squad-federation-autopilot.instructions.md": 16539,
+    "squad-src/.github/instructions/squad/squad-mcp-capability.instructions.md": 8603,
+    "squad-src/.github/instructions/squad/squad-notifications.instructions.md": 18464
+  },
+  "everyMode": {
+    "squad-src/.github/skills/squad/references/consumption.md": {
+      "bytes": 1506,
+      "reason": "FinOps unit economics (#143) applies in every routing mode by design: the Unit economics paragraph tells the Scribe and the Cost Manager how Measure-SquadLedger counts accepted deliverables, first-pass yield, and rework. It is not an economy-mode change."
+    }
+  }
+}

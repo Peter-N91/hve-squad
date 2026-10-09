@@ -123,6 +123,24 @@ $containers = @(
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'ScribeInitConvergence.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'EconomyRouting.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ConsumptionRatesSeeder.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'SetSquadCostPreflight.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'WriteSquadHandoff.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'BoundedLane.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'GetSquadDispatchBrief.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
 )
 
 # Manifest coverage is a property of the working copy, not of an installed tree.
@@ -137,6 +155,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Source') {
         SourceRoot = $SourceRoot
     }
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Packaging.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'HotFileBudget.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
 }

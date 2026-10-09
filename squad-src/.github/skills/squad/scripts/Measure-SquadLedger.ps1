@@ -115,7 +115,9 @@
     Optional hashtable keyed by history file name (with or without the `.md`
     extension, e.g. `'Squad Researcher'` or `'Squad Researcher.md'`) whose value is
     the expected `###` dispatch-entry count for that file. Compared only when -Check
-    is also supplied.
+    is also supplied. Under `pwsh -File` pass a string instead (a hashtable literal
+    cannot cross it): `'Squad Implementor=2;Squad Scribe=1'` (`,` also separates), or a
+    JSON object string. An unparseable string is an error.
 .PARAMETER Write
     Scribe-invoked write mode. Derives the same fragment the default markdown mode
     prints, then replaces the existing `## Attribution` heading through the closing
@@ -130,6 +132,11 @@
     render mode already refuses (a failing history-identity guard or an unreadable
     post-baseline block). Run it after every other write the hand-off makes to
     `state.json`, then run -Check -ExpectedHistoryCounts as the self-check.
+    Markdown and -Write also add a `## Unit Economics (value)` section (cost per
+    deliverable an independent review accepted, first-pass yield, rework and
+    orchestration shares; -Format json adds `unitEconomics`). -Write replaces it
+    when present, else inserts it before `## Observed Usage (host-reported)` or
+    `## Cost Comparison`; -Check ignores it.
 .PARAMETER Format
     Output shape: `markdown` (default) prints the pasteable table and Derivation
     block; `json` prints the same figures as a structured object instead, for a
@@ -235,7 +242,7 @@
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/routing-performance
 .EXAMPLE
-    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
+    ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check -ExpectedHistoryCounts 'Squad Researcher=1;Squad Scribe=1'
 .EXAMPLE
     ./Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/product -Write
 .EXAMPLE
@@ -261,7 +268,7 @@ param(
 
     [switch]$Write,
 
-    [hashtable]$ExpectedHistoryCounts = @{},
+    [object]$ExpectedHistoryCounts = @{},
 
     [ValidateSet('markdown', 'json')]
     [string]$Format = 'markdown',
@@ -495,11 +502,13 @@ function Get-RosterLocal {
     $roster = [System.Collections.Generic.List[pscustomobject]]::new()
     foreach ($table in (Get-MarkdownTableLocal -Content $Content)) {
         if ('Role' -notin $table.Header) { continue }
+        # Model-written rosters drift from the template header; accept the same primary spellings Write-SquadHandoff.ps1 does.
+        $primaryHeader = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent') | Where-Object { $_ -in $table.Header } | Select-Object -First 1
 
         foreach ($row in $table.Rows) {
             $names = [System.Collections.Generic.List[string]]::new()
-            foreach ($column in @('Agent Name (Primary)', 'Alternate Agents')) {
-                if ($column -notin $table.Header) { continue }
+            foreach ($column in @($primaryHeader, 'Alternate Agents')) {
+                if (-not $column -or $column -notin $table.Header) { continue }
                 foreach ($name in ($row[$column] -split ',')) {
                     $trimmed = $name.Trim()
                     if ($trimmed -and $trimmed -ne '—' -and $trimmed -ne '-') { $names.Add($trimmed) }
@@ -507,7 +516,7 @@ function Get-RosterLocal {
             }
             if (-not $row['Role']) { continue }
             $memberName = if ('Member Name' -in $table.Header) { $row['Member Name'] } else { '' }
-            $primaryAgent = if ('Agent Name (Primary)' -in $table.Header) { $row['Agent Name (Primary)'] } else { '' }
+            $primaryAgent = if ($primaryHeader) { $row[$primaryHeader] } else { '' }
             $tier = if ('Model Tier' -in $table.Header) { $row['Model Tier'] } else { '' }
             $roster.Add([pscustomobject]@{
                     Role         = $row['Role']
@@ -973,7 +982,7 @@ function Add-BlockToAggregateLocal {
     $Aggregate.Output += $outTok
     $Aggregate.Cost += $cost
     if ([string]$Block.Fields['basis'] -eq 'tier-default') { $Aggregate.Basis = 'tier-default' }
-    $Aggregate.Blocks.Add(@{ Block = $Block; Rate = $rate })
+    $Aggregate.Blocks.Add(@{ Block = $Block; Rate = $rate; Cost = $cost })
 
     # Attribution accumulation: a block's `model` is recorded exactly as written --
     # including the literal `unknown` -- and never replaced by the rate row that
@@ -1595,20 +1604,28 @@ function Resolve-SessionLogPathLocal {
     $stateDir = Join-Path $copilotHome 'session-state'
     if (-not (Test-Path -LiteralPath $stateDir -PathType Container)) { return $null }
 
-    $best = $null
-    foreach ($dir in Get-ChildItem -LiteralPath $stateDir -Directory) {
-        $events = Join-Path $dir.FullName 'events.jsonl'
-        $workspace = Join-Path $dir.FullName 'workspace.yaml'
-        if (-not (Test-Path -LiteralPath $events -PathType Leaf) -or -not (Test-Path -LiteralPath $workspace -PathType Leaf)) { continue }
-        $cwdMatch = [regex]::Match((Get-Content -LiteralPath $workspace -Raw), '(?m)^cwd:\s*(?<cwd>.+?)\s*$')
-        if (-not $cwdMatch.Success) { continue }
-        $cwd = $cwdMatch.Groups['cwd'].Value.Trim('"', "'")
-        try { $cwd = [System.IO.Path]::GetFullPath($cwd).TrimEnd('\', '/') } catch { continue }
-        if (-not [string]::Equals($cwd, $repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
-        $item = Get-Item -LiteralPath $events
-        if (-not $best -or $item.LastWriteTimeUtc -gt $best.LastWriteTimeUtc) { $best = $item }
+    # Local helper: does this session dir's workspace.yaml name the repo root as its cwd?
+    $testCwd = {
+        param([string]$dir)
+        $workspace = Join-Path $dir 'workspace.yaml'
+        if (-not (Test-Path -LiteralPath $workspace -PathType Leaf)) { return $false }
+        $cwdMatch = [regex]::Match([System.IO.File]::ReadAllText($workspace), '(?m)^cwd:\s*(?<cwd>.+?)\s*$')
+        if (-not $cwdMatch.Success) { return $false }
+        try { $cwd = [System.IO.Path]::GetFullPath($cwdMatch.Groups['cwd'].Value.Trim('"', "'")).TrimEnd('\', '/') } catch { return $false }
+        return [string]::Equals($cwd, $repoRoot, [System.StringComparison]::OrdinalIgnoreCase)
     }
-    if ($best) { return $best.FullName }
+
+    # Newest events.jsonl first, so the first cwd match is the most recently written one and
+    # older sessions' workspace.yaml are never read (a machine can hold thousands).
+    $candidates = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+    foreach ($dirPath in [System.IO.Directory]::EnumerateDirectories($stateDir)) {
+        $info = [System.IO.FileInfo]::new([System.IO.Path]::Combine($dirPath, 'events.jsonl'))
+        if ($info.Exists) { $candidates.Add($info) }
+    }
+    $candidates.Sort([System.Comparison[System.IO.FileInfo]] { param($a, $b) $b.LastWriteTimeUtc.CompareTo($a.LastWriteTimeUtc) })
+    foreach ($item in $candidates) {
+        if (& $testCwd $item.DirectoryName) { return $item.FullName }
+    }
     return $null
 }
 
@@ -1706,6 +1723,19 @@ function Get-BlendedRateLocal {
     return 0.20 * $r.input + 0.80 * $r.cached + 0.08 * $r.cache_write + 0.02 * $r.output
 }
 
+function Get-PropertySumLocal {
+    <#
+    .SYNOPSIS
+        Sums one numeric property over a collection, 0 when it is empty. Under
+        Set-StrictMode, `(@() | Measure-Object X -Sum).Sum` throws instead of
+        returning $null, so every observed-usage total goes through here.
+    #>
+    param([AllowNull()][AllowEmptyCollection()][object[]]$InputObject, [Parameter(Mandatory)][string]$Property)
+    $total = 0.0
+    foreach ($item in @($InputObject)) { if ($null -ne $item -and $null -ne $item.$Property) { $total += [double]$item.$Property } }
+    $total
+}
+
 function Get-ObservedUsageLocal {
     <#
     .SYNOPSIS
@@ -1761,23 +1791,22 @@ function Get-ObservedUsageLocal {
                 ObservedModels = $observedModels
                 LedgerModels   = $ledgerModels
                 Match          = $match
-                Tokens         = ($group.Group | Measure-Object Tokens -Sum).Sum
+                Tokens         = Get-PropertySumLocal -InputObject $group.Group -Property Tokens
                 Estimated      = if ($estimatedByAgent.ContainsKey($group.Name)) { $estimatedByAgent[$group.Name] } else { 0.0 }
-                Minutes        = ($group.Group | Measure-Object DurationMs -Sum).Sum / 60000.0
+                Minutes        = (Get-PropertySumLocal -InputObject $group.Group -Property DurationMs) / 60000.0
                 CostUsd        = $cost
             })
     }
     foreach ($m in $unpriced) { $Warnings.Add("WARN: observed model '$m' has no rate row in consumption-rates.md; its tokens are left out of the blended cost.") }
 
     $roleRows = @($rows | Where-Object { -not $_.IsScribe })
-    $roleTokens = ($roleRows | Measure-Object Tokens -Sum).Sum
-    if ($null -eq $roleTokens) { $roleTokens = 0.0 }
+    $roleTokens = Get-PropertySumLocal -InputObject $roleRows -Property Tokens
 
     $baseline = $BaselineModel
     if (-not $baseline) {
         $baseline = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique |
                 Sort-Object { $rate = Get-BlendedRateLocal -Model $_ -Rates $Rates; if ($null -eq $rate) { -1 } else { $rate } } -Descending |
-                Select-Object -First 1)[0]
+                Select-Object -First 1) | Select-Object -First 1
     }
     $baselineRate = if ($baseline) { Get-BlendedRateLocal -Model $baseline -Rates $Rates } else { $null }
     if ($baseline -and $null -eq $baselineRate) { $Warnings.Add("WARN: baseline model '$baseline' has no rate row; the without-HVE-Squad comparison is omitted.") }
@@ -1785,9 +1814,9 @@ function Get-ObservedUsageLocal {
     [pscustomobject]@{
         Session          = $Session
         Rows             = $rows
-        ObservedTokens   = ($rows | Measure-Object Tokens -Sum).Sum
-        EstimatedTokens  = ($rows | Measure-Object Estimated -Sum).Sum
-        SquadCostUsd     = ($rows | Measure-Object CostUsd -Sum).Sum
+        ObservedTokens   = Get-PropertySumLocal -InputObject $rows -Property Tokens
+        EstimatedTokens  = Get-PropertySumLocal -InputObject $rows -Property Estimated
+        SquadCostUsd     = Get-PropertySumLocal -InputObject $rows -Property CostUsd
         RoleTokens       = $roleTokens
         BaselineModel    = $baseline
         BaselineCostUsd  = if ($null -ne $baselineRate) { $roleTokens * $baselineRate / 1e6 } else { $null }
@@ -1816,7 +1845,7 @@ function Get-ObservedSectionLinesLocal {
         $ledger = if ($r.LedgerModels.Count -gt 0) { $r.LedgerModels -join ', ' } else { '—' }
         $lines.Add(('| {0} | {1} | {2} | {3} | {4} | {5:N0} | {6:N0} | {7:N1} | {8:N4} |' -f $r.Agent, $r.Dispatches, ($r.ObservedModels -join ', '), $ledger, $r.Match, $r.Tokens, $r.Estimated, $r.Minutes, $r.CostUsd))
     }
-    $lines.Add(('| **Subagents total** | **{0}** | | | | **{1:N0}** | **{2:N0}** | | **{3:N4}** |' -f ($Observed.Rows | Measure-Object Dispatches -Sum).Sum, $Observed.ObservedTokens, $Observed.EstimatedTokens, $Observed.SquadCostUsd))
+    $lines.Add(('| **Subagents total** | **{0}** | | | | **{1:N0}** | **{2:N0}** | | **{3:N4}** |' -f (Get-PropertySumLocal -InputObject $Observed.Rows -Property Dispatches), $Observed.ObservedTokens, $Observed.EstimatedTokens, $Observed.SquadCostUsd))
     $lines.Add('')
     if ($null -ne $Observed.SessionAiu) {
         $lines.Add(('Session total billed by the host, coordinator included: **{0:N2} AI units** (about {1:N2} USD at 0.01 USD per unit, the same convention as 1 AI credit). The coordinator''s own turns appear only in this figure, never in the table.' -f $Observed.SessionAiu, ($Observed.SessionAiu * 0.01)))
@@ -1846,12 +1875,28 @@ function Get-ConsumptionWithObservedLocal {
         `## Cost Comparison` (or at the end), in consumption.md text.
     #>
     param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][AllowEmptyString()][string[]]$SectionLines)
+    Get-ConsumptionWithSectionLocal -Text $Text -SectionLines $SectionLines -HeadingPattern '^##\s+Observed Usage \(host-reported\)\s*$' -InsertBeforePatterns @('^##\s+Cost Comparison')
+}
+
+function Get-ConsumptionWithSectionLocal {
+    <#
+    .SYNOPSIS
+        Replaces the `##` section matching HeadingPattern in consumption.md text, or
+        inserts it before the first heading matching the earliest InsertBeforePatterns
+        entry that exists (else at the end).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Text,
+        [Parameter(Mandatory)][AllowEmptyString()][string[]]$SectionLines,
+        [Parameter(Mandatory)][string]$HeadingPattern,
+        [Parameter(Mandatory)][string[]]$InsertBeforePatterns
+    )
     $newline = if ($Text.Contains("`r`n")) { "`r`n" } else { "`n" }
     $lines = [System.Collections.Generic.List[string]]::new()
     foreach ($l in ($Text -split '\r?\n')) { $lines.Add($l) }
 
     $start = -1
-    for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^##\s+Observed Usage \(host-reported\)\s*$') { $start = $i; break } }
+    for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match $HeadingPattern) { $start = $i; break } }
     if ($start -ge 0) {
         $end = $lines.Count
         for ($j = $start + 1; $j -lt $lines.Count; $j++) { if ($lines[$j] -match '^##\s') { $end = $j; break } }
@@ -1860,10 +1905,196 @@ function Get-ConsumptionWithObservedLocal {
     }
     else {
         $insertAt = $lines.Count
-        for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^##\s+Cost Comparison') { $insertAt = $i; break } }
+        :search foreach ($pattern in $InsertBeforePatterns) {
+            for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match $pattern) { $insertAt = $i; break search } }
+        }
     }
     $lines.InsertRange($insertAt, [string[]]$SectionLines)
     return ($lines -join $newline)
+}
+
+# ---------------------------------------------------------------------------
+# Unit economics (value): cost per deliverable an independent review accepted.
+# ---------------------------------------------------------------------------
+
+# Keep identical to $ReviewRoles in Write-SquadHandoff.ps1.
+$script:UnitEconomicsReviewRoles = @('tester', 'qa-engineer', 'challenger', 'fact-checker', 'supply-chain', 'vuln-manager', 'privacy', 'accessibility', 'risk-manager')
+
+function Get-HistoryEntryRecordsLocal {
+    <#
+    .SYNOPSIS
+        One record per `###` dispatch entry in a history file: heading timestamp and
+        the Turn / Workstream / Deliverable / Outcome bullets. Cost is filled in later.
+    #>
+    param([Parameter(Mandatory)][string]$Content, [Parameter(Mandatory)][string]$AgentName)
+    $headings = @([regex]::Matches($Content, '(?m)^###[ \t]+(?<title>\S.*)'))
+    for ($i = 0; $i -lt $headings.Count; $i++) {
+        $start = $headings[$i].Index
+        $end = if ($i + 1 -lt $headings.Count) { $headings[$i + 1].Index } else { $Content.Length }
+        $text = $Content.Substring($start, $end - $start)
+        $field = {
+            param($name)
+            $m = [regex]::Match($text, "(?mi)^[ \t]*[*-][ \t]+$name`:[ \t]*(?<v>[^\r\n]*)")
+            if ($m.Success) { $m.Groups['v'].Value.Trim() } else { '' }
+        }
+        $stamp = ($headings[$i].Groups['title'].Value.Trim() -split '\s+')[0]
+        $deliverable = (& $field 'Deliverable').Replace('`', '').Trim().Replace('\', '/').ToLowerInvariant()
+        if ($deliverable -in @('none', 'n/a', '-', [string][char]0x2014)) { $deliverable = '' }
+        [pscustomobject]@{
+            Agent       = $AgentName
+            Start       = $start
+            End         = $end
+            Timestamp   = if ($stamp -match '^\d{4}-\d\d-\d\dT') { $stamp } else { '' }
+            Turn        = (& $field 'Turn')
+            Workstream  = (& $field 'Workstream').ToLowerInvariant()
+            Deliverable = $deliverable
+            Request     = (& $field 'Request')
+            Outcome     = (& $field 'Outcome')
+            Cost        = 0.0
+            Seq         = 0
+        }
+    }
+}
+
+function Add-BlockCostToEntryLocal {
+    param([AllowEmptyCollection()][object[]]$Entries = @(), [Parameter(Mandatory)][int]$Offset, [Parameter(Mandatory)][double]$Cost)
+    $entry = $Entries | Where-Object { $Offset -ge $_.Start -and $Offset -lt $_.End } | Select-Object -First 1
+    if ($entry) { $entry.Cost += $Cost }
+}
+
+function Get-UnitEconomicsLocal {
+    <#
+    .SYNOPSIS
+        Derives value counts and credit ratios from the non-Scribe history entries.
+        Ratios that cannot be computed are $null (rendered `n/a`).
+    #>
+    param(
+        [AllowEmptyCollection()][object[]]$Entries = @(),
+        [Parameter(Mandatory)]$Roster,
+        [Parameter(Mandatory)][double]$TotalCredits,
+        [Parameter(Mandatory)][double]$OrchestrationCredits,
+        $HostAiu
+    )
+    $sorted = @($Entries | Sort-Object -Property Timestamp, Seq)
+
+    $seen = @{}
+    foreach ($e in $sorted) {
+        $role = (Resolve-RoleForAgentLocal -AgentName $e.Agent -Roster $Roster).Role
+        $e | Add-Member -NotePropertyName IsReview -NotePropertyValue ($role.ToLowerInvariant() -in $script:UnitEconomicsReviewRoles) -Force
+        $isRework = $false
+        if ($e.Deliverable) {
+            $key = "$($e.Agent.ToLowerInvariant())|$($e.Deliverable)"
+            if ($seen.ContainsKey($key)) { $isRework = $true } else { $seen[$key] = $true }
+        }
+        $e | Add-Member -NotePropertyName IsRework -NotePropertyValue $isRework -Force
+    }
+
+    $reviews = @($sorted | Where-Object { $_.IsReview })
+    $verdictOf = {
+        param($outcome)
+        $m = [regex]::Match($outcome, '(?i)\b(pass-with-findings|pass|approved?|fail(ed)?|reject(ed)?|blocked)\b')
+        if (-not $m.Success) { return 'unknown' }
+        if ($m.Value -match '^(?i)(pass|approv)') { 'accepted' } else { 'rejected' }
+    }
+
+    # A review that names deliverables (full path, or a file name unique among its turn and workstream's deliverables, in its
+    # Request or Outcome) covers only those; a review that mentions none covers every deliverable of its turn and workstream.
+    # A file name shared by two deliverables of the same turn and workstream names neither: only the full path does, and the
+    # mention still keeps the review from covering everything (consumption.md *Unit economics*).
+    $reviewText = { param($review) "$($review.Request) $($review.Outcome)".Replace('`', '').Replace('\', '/').ToLowerInvariant() }
+    $leafOf = { param($path) ($path -split '/')[-1] }
+    $mentionsLeaf = {
+        param($text, $path)
+        $leaf = & $leafOf $path
+        $leaf -and [regex]::IsMatch($text, '(?<![\w./-])' + [regex]::Escape($leaf) + '(?![\w-])')
+    }
+    $mentionsDeliverable = {
+        param($review, $path)
+        $text = & $reviewText $review
+        $text.Contains($path) -or (& $mentionsLeaf $text $path)
+    }
+    $namesDeliverable = {
+        param($review, $path, $groupPaths)
+        $text = & $reviewText $review
+        if ($text.Contains($path)) { return $true }
+        $leaf = & $leafOf $path
+        $sameLeaf = @($groupPaths | Where-Object { (& $leafOf $_) -eq $leaf }).Count
+        $sameLeaf -le 1 -and (& $mentionsLeaf $text $path)
+    }
+    $latestStatus = @{}
+    $work = @($sorted | Where-Object { -not $_.IsReview -and $_.Deliverable })
+    foreach ($w in $work) {
+        $group = @($reviews | Where-Object { $_.Turn -and $_.Turn -eq $w.Turn -and $_.Workstream -eq $w.Workstream })
+        $groupPaths = @($work | Where-Object { $_.Turn -eq $w.Turn -and $_.Workstream -eq $w.Workstream } | ForEach-Object { $_.Deliverable } | Select-Object -Unique)
+        $naming = @($group | Where-Object { & $namesDeliverable $_ $w.Deliverable $groupPaths })
+        $covering = if ($naming.Count -gt 0) { $naming | Select-Object -Last 1 }
+        else {
+            $r = $null
+            foreach ($g in $group) { if (-not @($groupPaths | Where-Object { & $mentionsDeliverable $g $_ }).Count) { $r = $g } }
+            $r
+        }
+        $status = if ($covering) { & $verdictOf $covering.Outcome } else { 'unknown' }
+        $latestStatus[$w.Deliverable] = if ($status -eq 'unknown') { 'unreviewed' } else { $status }
+    }
+
+    $reworkEntries = @($sorted | Where-Object { $_.IsRework })
+    $reworkDeliverables = @{}
+    foreach ($r in $reworkEntries) { $reworkDeliverables[$r.Deliverable] = $true }
+    $acceptedKeys = @($latestStatus.Keys | Where-Object { $latestStatus[$_] -eq 'accepted' })
+    $accepted = $acceptedKeys.Count
+    $reworkCredits = 0.0
+    foreach ($r in $reworkEntries) { $reworkCredits += $r.Cost / 0.01 }
+
+    [ordered]@{
+        deliverablesProduced         = $latestStatus.Count
+        accepted                     = $accepted
+        rejected                     = @($latestStatus.Keys | Where-Object { $latestStatus[$_] -eq 'rejected' }).Count
+        unreviewed                   = @($latestStatus.Keys | Where-Object { $latestStatus[$_] -eq 'unreviewed' }).Count
+        dispatches                   = $sorted.Count
+        reworkDispatches             = $reworkEntries.Count
+        firstPassYieldPct            = if ($accepted -gt 0) { @($acceptedKeys | Where-Object { -not $reworkDeliverables.ContainsKey($_) }).Count / $accepted * 100 } else { $null }
+        estCreditsPerAccepted        = if ($accepted -gt 0) { $TotalCredits / $accepted } else { $null }
+        reworkCredits                = $reworkCredits
+        reworkSharePct               = if ($TotalCredits -gt 0) { $reworkCredits / $TotalCredits * 100 } else { $null }
+        orchestrationSharePct        = if ($TotalCredits -gt 0) { $OrchestrationCredits / $TotalCredits * 100 } else { $null }
+        hostBilledCreditsPerAccepted = if ($null -ne $HostAiu) { if ($accepted -gt 0) { $HostAiu / $accepted } else { $null } } else { $null }
+        hostBilledPresent            = ($null -ne $HostAiu)
+    }
+}
+
+function Get-UnitEconomicsSectionLinesLocal {
+    <#
+    .SYNOPSIS
+        Renders `## Unit Economics (value)`. Headers avoid `Turns`/`Basis`/
+        `Model Source`/`Priced As`, which -Check uses to find the estimated tables.
+    #>
+    param([Parameter(Mandatory)]$Ue)
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    $count = { param($v) ([int]$v).ToString($inv) }
+    $credits = { param($v) if ($null -eq $v) { 'n/a' } else { ([double]$v).ToString('N2', $inv) } }
+    $pct = { param($v) if ($null -eq $v) { 'n/a' } else { ([double]$v).ToString('N1', $inv) + '%' } }
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add('## Unit Economics (value)')
+    $lines.Add('')
+    $lines.Add('| Measure | Value | Label |')
+    $lines.Add('| ------- | ----- | ----- |')
+    $lines.Add("| Deliverables produced | $(& $count $Ue.deliverablesProduced) | derived |")
+    $lines.Add("| Accepted by an independent review | $(& $count $Ue.accepted) | derived |")
+    $lines.Add("| Rejected | $(& $count $Ue.rejected) | derived |")
+    $lines.Add("| Unreviewed | $(& $count $Ue.unreviewed) | derived |")
+    $lines.Add("| Dispatches (excluding Scribe) | $(& $count $Ue.dispatches) | derived |")
+    $lines.Add("| Rework dispatches | $(& $count $Ue.reworkDispatches) | derived |")
+    $lines.Add("| First-pass yield | $(& $pct $Ue.firstPassYieldPct) | derived |")
+    $lines.Add("| Est. credits per accepted deliverable | $(& $credits $Ue.estCreditsPerAccepted) | estimated |")
+    $lines.Add("| Rework share of est. credits | $(& $pct $Ue.reworkSharePct) | estimated |")
+    $lines.Add("| Orchestration share of est. credits | $(& $pct $Ue.orchestrationSharePct) | estimated |")
+    if ($Ue.hostBilledPresent) {
+        $lines.Add("| Host-billed credits per accepted deliverable | $(& $credits $Ue.hostBilledCreditsPerAccepted) | measured |")
+    }
+    $lines.Add('')
+    $lines.Add('Value is counted only for deliverables an independent review-class verdict accepted; a produced but unaccepted deliverable adds cost and no value. A review that names deliverables covers only those it names. Rework counts a repeat of the same agent and deliverable path only: a fix by a different agent, to a different file, or with no deliverable path is not counted, so the rework figures are a floor. Compare runs only for like work, using medians of several runs. Source: FinOps Foundation unit-economics KPIs (cost per unit of value, error and retry waste).')
+    $lines.Add('')
+    return $lines.ToArray()
 }
 
 # ---------------------------------------------------------------------------
@@ -1874,6 +2105,55 @@ if (-not (Test-Path -LiteralPath $SquadRoot -PathType Container)) {
     throw "Measure-SquadLedger: squad root not found at '$SquadRoot'."
 }
 $SquadRoot = (Resolve-Path -LiteralPath $SquadRoot).Path
+
+# A hashtable literal cannot cross `pwsh -File`, so a string form is accepted too.
+function ConvertTo-ExpectedHistoryCountsLocal {
+    param($Value)
+    $result = @{}
+    if ($null -eq $Value) { return $result }
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($k in $Value.Keys) { $result[[string]$k] = $Value[$k] }
+        return $result
+    }
+    $text = ([string]$Value).Trim()
+    if ($text -eq '') { throw "Measure-SquadLedger: -ExpectedHistoryCounts is blank. Pass a hashtable, 'Squad Implementor=2;Squad Scribe=1', or a JSON object string." }
+    $pairs = [System.Collections.Generic.List[object]]::new()
+    if ($text.StartsWith('{')) {
+        # JsonDocument keeps duplicate keys, which ConvertFrom-Json would silently collapse.
+        try {
+            $doc = [System.Text.Json.JsonDocument]::Parse($text)
+            if ($doc.RootElement.ValueKind -ne 'Object') { throw 'not a JSON object' }
+            foreach ($prop in $doc.RootElement.EnumerateObject()) { $pairs.Add(@($prop.Name, $prop.Value.ToString())) }
+        }
+        catch { throw "Measure-SquadLedger: -ExpectedHistoryCounts JSON is not valid: $($_.Exception.Message)" }
+    }
+    else {
+        $body = $text -replace '^@\{\s*', '' -replace '\s*\}$', ''
+        foreach ($part in ($body -split '[;,]')) {
+            if ($part.Trim() -eq '') { continue }
+            $m = [regex]::Match($part, '^\s*[''"]?(?<k>[^=''"]+?)[''"]?\s*=\s*(?<v>\d+)\s*$')
+            if (-not $m.Success) {
+                throw "Measure-SquadLedger: -ExpectedHistoryCounts entry '$($part.Trim())' is not 'Agent Name=<count>'. Use a hashtable, 'Squad Implementor=2;Squad Scribe=1', or a JSON object string."
+            }
+            $pairs.Add(@($m.Groups['k'].Value.Trim(), [int]$m.Groups['v'].Value))
+        }
+    }
+    $seen = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($p in $pairs) {
+        $n = 0
+        if (-not [int]::TryParse([string]$p[1], [ref]$n) -or $n -lt 0) {
+            throw "Measure-SquadLedger: -ExpectedHistoryCounts count for '$($p[0])' must be a non-negative integer, got '$($p[1])'."
+        }
+        $key = [string]$p[0]
+        $norm = ($key -replace '\.md$', '').ToLowerInvariant()
+        if ($seen.Contains($norm)) { throw "Measure-SquadLedger: -ExpectedHistoryCounts names '$($key -replace '\.md$', '')' more than once." }
+        [void]$seen.Add($norm)
+        $result[$key] = $n
+    }
+    if ($result.Count -eq 0) { throw "Measure-SquadLedger: -ExpectedHistoryCounts '$text' contains no 'Agent Name=<count>' entries." }
+    return $result
+}
+$ExpectedHistoryCounts = ConvertTo-ExpectedHistoryCountsLocal -Value $ExpectedHistoryCounts
 
 if ($Write) {
     if ($Check) {
@@ -1985,6 +2265,7 @@ $enumerationLines = [System.Collections.Generic.List[string]]::new()
 # orchestration last) rather than directory/hash order.
 $ordered = [System.Collections.Generic.List[pscustomobject]]::new()
 $orchestrationAggregate = $null
+$unitEntries = [System.Collections.Generic.List[pscustomobject]]::new()
 
 foreach ($file in $historyFiles) {
     $agentName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
@@ -1998,6 +2279,7 @@ foreach ($file in $historyFiles) {
     $identityLabel = if ($identities.Count -gt 0) { $identities -join ',' } else { '(none)' }
 
     $blocks = @(Get-ConsumptionBlockLocal -Content $content -SourceName $file.Name)
+    $fileEntries = if ($agentName -eq 'Squad Scribe') { @() } else { @(Get-HistoryEntryRecordsLocal -Content $content -AgentName $agentName) }
     $enumerationLines.Add("$($file.Name) — $($blocks.Count) block(s) — identities: $identityLabel")
 
     foreach ($block in $blocks) {
@@ -2081,7 +2363,9 @@ foreach ($file in $historyFiles) {
             $ordered.Add($existing)
         }
         Add-BlockToAggregateLocal -Aggregate $existing.Aggregate -Block $block -Rates $rates -CalibrationFactor $calibrationFactor -Warnings $warnings -TreatUnresolvedRateAsWarning $isLegacyBlock
+        Add-BlockCostToEntryLocal -Entries $fileEntries -Offset $block.Offset -Cost $existing.Aggregate.Blocks[-1].Cost
     }
+    foreach ($entryRecord in $fileEntries) { $entryRecord.Seq = $unitEntries.Count; $unitEntries.Add($entryRecord) }
 }
 
 # Post-baseline malformed/illegal-model_source blocks (item 3): outside -Check
@@ -2464,13 +2748,22 @@ $observed = $null
 if ($SessionLog) {
     $sessionPath = Resolve-SessionLogPathLocal -SessionLog $SessionLog -SquadRoot $SquadRoot
     if ($sessionPath) {
-        $session = Read-SessionUsageLocal -Path $sessionPath -SquadRoot $SquadRoot
-        $observed = Get-ObservedUsageLocal -Session $session -Rates $rates -OrderedAggregates @($ordered) -OrchestrationAggregate $orchestrationAggregate -BaselineModel $BaselineModel -Warnings $warnings
+        # Observed usage is supplementary: a fault here must never fail the ledger write or roll back a hand-off.
+        try {
+            $session = Read-SessionUsageLocal -Path $sessionPath -SquadRoot $SquadRoot
+            $observed = Get-ObservedUsageLocal -Session $session -Rates $rates -OrderedAggregates @($ordered) -OrchestrationAggregate $orchestrationAggregate -BaselineModel $BaselineModel -Warnings $warnings
+        }
+        catch {
+            $observed = $null
+            $warnings.Add("WARN: observed usage from '$sessionPath' was left out: $($_.Exception.Message)")
+        }
     }
     else {
         $warnings.Add("WARN: -SessionLog auto found no Copilot session whose workspace is this squad root's repository; no observed usage was added.")
     }
 }
+
+$unitEconomics = Get-UnitEconomicsLocal -Entries @($unitEntries) -Roster $roster -TotalCredits $totalCredits -OrchestrationCredits $(if ($orchestrationAggregate) { $orchestrationAggregate.Cost / 0.01 } else { 0.0 }) -HostAiu $(if ($observed) { $observed.SessionAiu } else { $null })
 
 $fragmentLines = [System.Collections.Generic.List[string]]::new()
 $fragmentLines.Add('## Attribution')
@@ -2530,13 +2823,42 @@ if ($Write) {
     if ($observed) {
         $updates[0].Text = Get-ConsumptionWithObservedLocal -Text $updates[0].Text -SectionLines (Get-ObservedSectionLinesLocal -Observed $observed)
     }
-    foreach ($u in $updates) { [System.IO.File]::WriteAllText($u.Path, $u.Text, $u.Encoding) }
+    # After the Observed section so a first write lands the value section before it.
+    $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines (Get-UnitEconomicsSectionLinesLocal -Ue $unitEconomics) -HeadingPattern '^##\s+Unit Economics \(value\)\s*$' -InsertBeforePatterns @('^##\s+Observed Usage \(host-reported\)', '^##\s+Cost Comparison')
+    # Each file is written to a temp file beside it and moved into place; when the second move fails,
+    # the first file gets its original bytes back, so a direct -Write never leaves one file updated alone.
+    $applied = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($u in $updates) {
+        $tmp = Join-Path (Split-Path -Path $u.Path -Parent) (".$([System.IO.Path]::GetFileName($u.Path)).$([guid]::NewGuid().ToString('N')).tmp")
+        try {
+            $original = if (Test-Path -LiteralPath $u.Path -PathType Leaf) { [System.IO.File]::ReadAllBytes($u.Path) } else { $null }
+            [System.IO.File]::WriteAllText($tmp, $u.Text, $u.Encoding)
+            [System.IO.File]::Move($tmp, $u.Path, $true)
+            $applied.Add(@{ Path = $u.Path; Bytes = $original })
+        }
+        catch {
+            $reason = $_.Exception.Message
+            if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+            $restoreFailures = @()
+            for ($i = $applied.Count - 1; $i -ge 0; $i--) {
+                try {
+                    if ($null -eq $applied[$i].Bytes) { Remove-Item -LiteralPath $applied[$i].Path -Force }
+                    else { [System.IO.File]::WriteAllBytes($applied[$i].Path, [byte[]]$applied[$i].Bytes) }
+                }
+                catch { $restoreFailures += "$($applied[$i].Path): $($_.Exception.Message)" }
+            }
+            $restored = if ($restoreFailures.Count -gt 0) { " RESTORE FAILED for: $($restoreFailures -join '; ')" } elseif ($applied.Count -gt 0) { " $(($applied | ForEach-Object { Split-Path -Leaf $_.Path }) -join ', ') restored to its original bytes." } else { ' Nothing was written.' }
+            throw "Measure-SquadLedger -Write: could not write $(Split-Path -Leaf $u.Path) ($reason).$restored"
+        }
+    }
     foreach ($w in $warnings) { Write-Warning $w }
-    Write-Host ("Measure-SquadLedger -Write: rewrote the Attribution, Usage & Cost, and Derivation sections of consumption.md and set run totals in state.json (estCostUsd={0:F4}, estCreditsTotal={1:F2})." -f $totalCost, $totalCredits) -ForegroundColor Green
+    Write-Host ("Measure-SquadLedger -Write: rewrote the Attribution, Usage & Cost, Derivation, and Unit Economics (value) sections of consumption.md and set run totals in state.json (estCostUsd={0:F4}, estCreditsTotal={1:F2})." -f $totalCost, $totalCredits) -ForegroundColor Green
     exit 0
 }
 
 if ($Format -eq 'json') {
+    $unitEconomicsJson = [ordered]@{}
+    foreach ($k in $unitEconomics.Keys) { if ($k -ne 'hostBilledPresent') { $unitEconomicsJson[$k] = $unitEconomics[$k] } }
     $result = [ordered]@{
         squadRoot         = $SquadRoot
         calibrationFactor = $calibrationFactor
@@ -2598,6 +2920,7 @@ if ($Format -eq 'json') {
             }
         }
         else { $null }
+        unitEconomics     = $unitEconomicsJson
         warnings          = @($warnings)
     }
     $result | ConvertTo-Json -Depth 6
@@ -2605,8 +2928,9 @@ if ($Format -eq 'json') {
 }
 
 foreach ($line in $fragmentLines) { Write-Host $line }
+Write-Host ''
+foreach ($line in (Get-UnitEconomicsSectionLinesLocal -Ue $unitEconomics)) { Write-Host $line }
 if ($observed) {
-    Write-Host ''
     foreach ($line in (Get-ObservedSectionLinesLocal -Observed $observed)) { Write-Host $line }
 }
 

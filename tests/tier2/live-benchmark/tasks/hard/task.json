@@ -1,0 +1,14 @@
+{
+  "level": "hard",
+  "mutants": ["no-lock", "ignore-expiry", "expiry-off-by-one", "release-noop"],
+  "doc": {
+    "path": "docs/CONCURRENCY.md",
+    "concepts": [
+      { "name": "race", "pattern": "(?i)\\brace\\b|interleav" },
+      { "name": "locking", "pattern": "(?i)\\block|mutex" },
+      { "name": "trade-off", "pattern": "(?i)trade-?off|contention|throughput|latency|downside|cost of" },
+      { "name": "expiry", "pattern": "(?i)expir|\\bttl\\b" },
+      { "name": "clock", "pattern": "(?i)\\bclock\\b" }
+    ]
+  }
+}

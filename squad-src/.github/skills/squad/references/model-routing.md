@@ -16,13 +16,16 @@ metadata:
 
 ## Routing Modes
 
-`routing=off|ranked|manual` selects how each role's model is chosen. The mode is **persisted in `team.md`**, so it holds on every later turn until the user changes it:
+`routing=off|ranked|economy|manual` selects how each role's model is chosen. The mode is **persisted in `team.md`**, so it holds on every later turn until the user changes it:
 
 | Mode     | What each dispatch passes as `model`                                  | `team.md` carries                                            |
 |----------|-----------------------------------------------------------------------|--------------------------------------------------------------|
 | `off`    | Nothing — the no-policy default above                                 | No mode line and no `Model` column                           |
 | `ranked` | The id *Ranking Algorithm* below resolves for the role                 | `Model routing: ranked` and a `Model` column of ranked picks |
 | `manual` | The id the user picked for the role, from the role's `Model` cell     | `Model routing: manual` and a `Model` column of user picks   |
+| `economy` | The id [economy-mode.md](economy-mode.md) picks for the role | As `ranked`, with `Model routing: economy` |
+
+Everywhere below that says `ranked`, `economy` behaves the same except for its pick.
 
 * **Where the mode lives.** A single line directly beneath `team.md`'s H1: `Model routing: ranked` or `Model routing: manual`. No line means `off`, so every roster written before this contract reads as `off` unchanged.
 * **Changing it.** A `routing=` input different from the recorded mode is a roster change: before any dispatch, the coordinator hands the new mode, and the `Model` column values it resolved, to the Scribe as a roster refresh, then continues the turn under the new mode. `routing=off` removes both the line and the column; the Scribe records the removed picks in that turn's decision entry so a later switch back to `manual` can offer them as the suggestion.

@@ -1,0 +1,5 @@
+{
+  "level": "easy",
+  "mutants": ["ignore-reserved", "double-subtract", "unknown-sku-error"],
+  "doc": null
+}

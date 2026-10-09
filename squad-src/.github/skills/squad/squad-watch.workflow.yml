@@ -125,9 +125,11 @@ permissions:
 env:
   # Model pin for headless runs, scoped to THIS repository.
   #
-  # A headless Copilot CLI run does NOT read the `model:` frontmatter that the
-  # VS Code host honors, so without this flag model selection falls to `auto` and
-  # routes the coordinator — the most instruction-heavy agent in the system, holding
+  # Observed on Copilot CLI 1.0.92 (measured, not a documented guarantee; re-verify
+  # on other versions): an agent's `model:` frontmatter pin IS honored for subagents,
+  # while `--model` sets the session model. Without this flag the session model falls
+  # to `auto`, which routes the coordinator — declaring no `model:` and the most
+  # instruction-heavy agent in the system, holding
   # the dispatch contract, the roster, the routing table, and the two-level
   # verification checklist — to whatever is cheapest. A coordinator that cannot hold
   # the contract fills the gap by authoring deliverables inline instead of
