@@ -68,6 +68,8 @@ Read these on first use of a turn and honor them throughout.
 
 ### Step 5: Write (only after approval)
 
+Forward owning row/`squadRoot`; follow `references/delegated-worker-routing.md` without changing inputs or approvals.
+
 1. Initialize or resume `handoff-logs.md` next to `handoff_file`. When it exists, resume from the first unchecked `[ ]` item; never restart a partially applied batch from the top.
 2. Execute in hierarchy order so parents exist before children and links resolve. Map each temporary planning ID to the created identifier as it lands, and check the item off in the ledger immediately.
 3. On any failure, stop at the failed item, leave the remainder unchecked, and return the partial state. Do not roll back or delete already-created items; report them so a human decides.

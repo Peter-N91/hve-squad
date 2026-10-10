@@ -347,6 +347,8 @@ $out.Add("``pwsh -File '$(Join-Path $PSScriptRoot 'Write-SquadHandoff.ps1')' -Sq
 $out.Add('')
 $out.Add('## Procedure (verbatim, economy-mode.md)')
 $out.Add('')
+$out.Add('Delegating parents additionally read delegated-worker-routing.md. Carry the owning roster row and squadRoot; admit only a selected delegate, preserve worker inputs and pins, never inherit a discounted owner pick, and return worker routing and host-model reports separately.')
+$out.Add('')
 $out.Add((Get-Section 'economy-mode.md' '## Bounded Lane'))
 $out.Add('')
 $out.Add((Get-Section 'economy-mode.md' '## Plan-Driven Parallelism'))

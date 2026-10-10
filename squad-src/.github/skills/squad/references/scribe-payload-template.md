@@ -32,9 +32,11 @@ State `run id`, `turn`, `stage` (when the run is autopilot or autonomous), and a
 
 ### 1.4 History Records (When Payload Type Is `history`)
 
-For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. Each history record's consumption JSON follows immediately, in the fixed field order from [entry-schemas.md](entry-schemas.md): `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Supply one consumption object per history record — never one without the other, per the `per-dispatch-history-and-consumption` rule.
+For every dispatch, supply its verbatim `name:` (never slugified/lowercased), scoped request, deliverable path and one-line outcome, plus Cost Preflight Decision Ref and permitted slot when a ceiling applies. Follow each record with one consumption JSON, never either alone (`per-dispatch-history-and-consumption`), in [entry-schemas.md](entry-schemas.md) order.
 
-When a routing policy resolved this dispatch's model, also supply its `routingIdentity` values (`requestedModel`, `effectiveModel`, `observedModel`, `routeRationale`) so the Scribe can render the four identity bullets `entry-schemas.md` defines. Omit `routingIdentity` entirely when no policy applied — never emit it for a no-policy dispatch.
+For routed dispatches, supply `routingIdentity` (`requestedModel`, `effectiveModel`, `observedModel`, `routeRationale`) for the four identity bullets in [entry-schemas.md](entry-schemas.md); omit it entirely for no-policy dispatches.
+
+Worker records follow [delegated-worker-routing.md](delegated-worker-routing.md): ownership in routing rationale, reported model distinct from request, unchanged consumption keys, unrostered history via the Scribe.
 
 ### 1.5 Decision Entries (When Payload Type Is `decision` or a Verdict)
 
