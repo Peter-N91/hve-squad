@@ -1,10 +1,16 @@
 {
-  "description": "LF-normalized UTF-8 byte sizes of the files a default (off, ranked, or manual) run reads on every turn: the coordinators and their prompts, the Scribe hot core, the skill index, model-routing.md, the cost references, and every squad instruction file that auto-loads under .copilot-tracking/squad/. Sizes are the v0.18.1 release content as shipped on main at d46fbea, which matches tag v0.18.1 except squad-roster.instructions.md, changed by the hve-core sync bb7894a that the hotfix branch did not carry. HotFileBudget.Tests.ps1 keeps each file within perFileThreshold bytes and the set within totalThreshold, so economy procedure stays in the cold references/economy-mode.md and a default run reads what v0.18.1 reads plus one-line pointers. An everyMode entry is an approved allowance for a change that applies in every routing mode (not economy); it is added to that file's perFileThreshold and left out of the totalThreshold sum, and it must name its reason.",
+  "description": "LF-normalized UTF-8 byte sizes of the files a default (off, ranked, or manual) run reads on every turn: the coordinators and their prompts, the Scribe hot core, the skill index, model-routing.md, the cost references, and every squad instruction file that auto-loads under .copilot-tracking/squad/. Sizes are the v0.18.1 release content as shipped on main at d46fbea, which matches tag v0.18.1 except squad-roster.instructions.md, changed by the hve-core sync bb7894a that the hotfix branch did not carry. HotFileBudget.Tests.ps1 keeps the set within totalThreshold and each file within perFileThreshold or a documented perFileThresholdOverrides entry. An override redistributes the unchanged aggregate budget; it does not add aggregate headroom. Pull requests ratchet from an over-budget base without permitting further growth. An everyMode entry is an approved allowance for a change that applies in every routing mode (not economy); it is added to that file's per-file threshold and left out of the totalThreshold sum, and it must name its reason.",
   "ref": "v0.18.1",
   "commit": "4c1f140f12f17abd3f200baa3afcb6d4c84bb6da",
   "sizesFrom": "d46fbea935e106c527e4088c7ce9ff55ba31beb2",
   "perFileThreshold": 256,
   "totalThreshold": 1024,
+  "perFileThresholdOverrides": {
+    "squad-src/.github/instructions/squad/squad-roster.instructions.md": {
+      "bytes": 1024,
+      "reason": "Upstream cast inventory changes concentrate growth in the roster instruction. This override may consume, but does not enlarge, the 1024-byte aggregate budget."
+    }
+  },
   "files": {
     "squad-src/.github/agents/squad/squad-coordinator.agent.md": 31882,
     "squad-src/.github/agents/squad/squad-scribe.agent.md": 16182,

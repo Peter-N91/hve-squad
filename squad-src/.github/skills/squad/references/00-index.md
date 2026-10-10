@@ -1,6 +1,6 @@
 ---
 name: squad-reference-index
-description: "Which squad reference file to read for which job, plus the companion instruction files that auto-apply when squad state is touched."
+description: "Maps squad jobs to reference files and companion instructions."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
