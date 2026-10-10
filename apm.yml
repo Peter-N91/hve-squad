@@ -251,6 +251,7 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-sql-migration-advisor.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-technical-writer.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-vulnerability-manager.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-workstream-lead.agent.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/pptx-brand-template.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autonomous.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-autopilot.instructions.md

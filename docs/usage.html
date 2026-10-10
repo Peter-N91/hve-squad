@@ -87,6 +87,11 @@
           <a href="#model-selection-per-role">Model selection per role</a> below.
         </li>
         <li>
+          <code>delivery=background</code> — economy only: independent workstreams run in the background
+          on the Copilot CLI while you keep working. Under any other routing mode it is ignored, and the
+          squad says so once. See <a href="#routing-economy-workflow">Economy-only workflow</a> below.
+        </li>
+        <li>
           <code>discovery=quick|standard|deep|skip</code> &mdash; runs the discovery gate at that
           depth without being asked, or skips it. See <em>Discovery gate</em> below.
         </li>
@@ -1566,6 +1571,33 @@ layouts:
         <code>off</code>, <code>ranked</code>, and <code>manual</code> the squad behaves exactly as
         v0.18.1 does.
       </p>
+      <p id="routing-economy-workflow">
+        <strong>Economy-only workflow.</strong> Three more changes exist only under
+        <code>economy</code>, and the coordinator names them when it asks for your consent:
+      </p>
+      <ul>
+        <li>
+          <strong>Scripted writes.</strong> Ordinary hand-offs, the rate table, and the Cost Preflight
+          write run through PowerShell scripts that refuse outside economy. The Scribe stays the only
+          writer: it runs the hand-off script and reads its full procedure only when the script sends
+          the hand-off back to it. A cost-ledger mismatch is a warning, as in v0.18.1.
+        </li>
+        <li>
+          <strong>Bounded lane.</strong> In interactive mode, a fully specified, low-risk request (exact
+          files and change, no open questions, no council lens, no gate trigger) may skip Research and
+          Plan. The owning role is still dispatched and the tester still closes; any doubt, or
+          <code>pipeline=full</code>, keeps the full pipeline. Owners with proven disjoint write sets may
+          run at the same time.
+        </li>
+        <li>
+          <strong><code>delivery=background</code>.</strong> On the Copilot CLI, independent workstreams
+          run as background tasks after every gate has cleared in the foreground, each with its own
+          named reviewer, and land one after the other through the Scribe. The launch and the agent ids
+          are recorded first, so an interrupted session recovers from what is on disk and never
+          relaunches a workstream silently. VS Code runs the same workstreams one at a time in the
+          foreground.
+        </li>
+      </ul>
       <p>
         <strong>What a <code>Model</code> cell holds.</strong> One exact model id from the
         <code>Model ID</code> column of <code>consumption-rates.md</code> (for example
