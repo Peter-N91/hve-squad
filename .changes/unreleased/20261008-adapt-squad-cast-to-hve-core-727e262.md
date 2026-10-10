@@ -1,0 +1,6 @@
+---
+bump: minor
+type: Changed
+---
+
+- **hve-core retired its `.github/prompts/` surface outright and moved three squad-owned capabilities to identically named, user-invocable skills.** `Squad Risk Manager` now follows the `risk-register` skill (was `risk-register.prompt.md`) and `Squad Azure Diagnose` now follows the `incident-response` skill (was `incident-response.prompt.md`) for the phases beyond diagnosis, both under `.github/skills/security/`; `Squad Data Scientist` now escalates a synthetic-dataset request to the `synth-data-generate` skill instead of the retired prompt of the same name. `Squad Vulnerability Manager` and the `vuln-manager` and `SSSC Reviewer` roster rows no longer cite the removed `/vex-scan` and `/vex-triage` prompts (no hve-core replacement exists); the deep-analysis escalation now names `SSSC Reviewer` directly as the user-invoked entry point. No roster Primary or Alternate agent changed — the delta affected only prompts a charter followed by path, none of the dispatchable agent cast (`squad-coordinator.agent.md`, `squad-federation-coordinator.agent.md`, and every other roster row were verified unaffected). `apm.yml` is repinned to `727e262d7fa7f59c6568fe85a441958301a41589` via `scripts/Update-ApmDependencies.ps1`, which also adds the three new skill dependency lines and drops the five retired prompt lines automatically.
