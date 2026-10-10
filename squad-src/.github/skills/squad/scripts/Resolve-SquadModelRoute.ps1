@@ -58,6 +58,17 @@
     switching.
 .PARAMETER Role
     Optional role ids to report; defaults to every roster row.
+.PARAMETER DispatchAgent
+    Exact name of one selected delegate. Adds a dispatch report, or explicitly refuses
+    that dispatch. Never expands or admits an agent's advertised delegates.
+.PARAMETER OwningRole
+    Explicit roster role owning the delegated work. A roster-backed delegate keeps its
+    own route; an unrostered worker keeps its pin or the owner's undiscounted ranked pick.
+.PARAMETER OwningMemberName
+    Disambiguates the owning roster row when the role has multiple named members.
+.PARAMETER ObservedModel
+    Model actually reported by the host for this dispatch, if any. Overrides attribution
+    predictions, never the requested model. Without a report, auto attribution is unknown.
 .PARAMETER AsOf
     The date the catalog's staleness is measured against. Defaults to today.
 .PARAMETER Format
@@ -78,6 +89,14 @@ param(
     [string]$Mode,
 
     [string[]]$Role = @(),
+
+    [string]$DispatchAgent,
+
+    [string]$OwningRole,
+
+    [string]$OwningMemberName,
+
+    [string]$ObservedModel,
 
     [datetime]$AsOf = (Get-Date),
 
@@ -326,10 +345,10 @@ function Get-RankedCandidatesLocal {
     $list.ToArray()
 }
 
-function Get-AgentPinLocal {
+function Get-AgentMetadataLocal {
     <#
     .SYNOPSIS
-        An agent's frontmatter `model:` (first entry, vendor suffix dropped), or $null, from the
+        An agent's frontmatter pin and dispatchability, or $null, from the
         repository agent folders above .copilot-tracking, then the installed plugin's agents/.
     #>
     param([string]$AgentName, [string]$Root)
@@ -343,17 +362,35 @@ function Get-AgentPinLocal {
     foreach ($base in $bases) {
         if (-not (Test-Path -LiteralPath $base -PathType Container)) { continue }
         foreach ($file in (Get-ChildItem -LiteralPath $base -Recurse -File -Filter '*.md')) {
-            $lines = @([System.IO.File]::ReadLines($file.FullName) | Select-Object -First 40)
+            $lines = [System.Collections.Generic.List[string]]::new()
+            $reader = [System.IO.File]::OpenText($file.FullName)
+            try {
+                while ($null -ne ($line = $reader.ReadLine())) {
+                    $lines.Add($line)
+                    if ($lines.Count -eq 1 -and $line.Trim() -ne '---') { break }
+                    if ($lines.Count -gt 1 -and $line.Trim() -eq '---') { break }
+                }
+            }
+            finally { $reader.Dispose() }
             if ($lines.Count -lt 2 -or $lines[0].Trim() -ne '---') { continue }
             $name = $null
             $model = $null
+            $disabled = $false
             for ($i = 1; $i -lt $lines.Count -and $lines[$i].Trim() -ne '---'; $i++) {
                 if ($lines[$i] -match '^name:\s*(.+?)\s*$') { $name = $Matches[1].Trim('"', "'") }
                 elseif ($lines[$i] -match '^model:\s*(.+?)\s*$') { $model = (($Matches[1].Trim('[', ']').Split(',')[0]).Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() }
+                elseif ($lines[$i] -match '^disable-model-invocation:\s*true\s*$') { $disabled = $true }
             }
-            if ($name -ceq $AgentName) { return $model }
+            if ($name -ceq $AgentName) { return [pscustomobject]@{ Model = $model; Disabled = $disabled } }
         }
     }
+    return $null
+}
+
+function Get-AgentPinLocal {
+    param([string]$AgentName, [string]$Root)
+    $metadata = Get-AgentMetadataLocal -AgentName $AgentName -Root $Root
+    if ($metadata) { return $metadata.Model }
     return $null
 }
 
@@ -417,7 +454,7 @@ if ($effectiveMode -eq 'economy') {
 $results = foreach ($row in $roster.Rows) {
     $roleId = $row['Role']
     if (-not $roleId) { continue }
-    if ($Role.Count -gt 0 -and $roleId -notin $Role) { continue }
+    if (-not $DispatchAgent -and $Role.Count -gt 0 -and $roleId -notin $Role) { continue }
 
     $tier = $row['Model Tier']
     $class = if ($classMap.ContainsKey($roleId)) { $classMap[$roleId] } else { 'implementation' }
@@ -491,6 +528,137 @@ $results = foreach ($row in $roster.Rows) {
     [pscustomobject]$entry
 }
 
+$dispatch = $null
+if ($DispatchAgent) {
+    $refusal = "Delegate dispatch refused for '$DispatchAgent'"
+    if (-not $OwningRole) { throw "${refusal}: an explicit OwningRole is required." }
+    $owners = @($results | Where-Object {
+        $_.role -ceq $OwningRole -and (-not $OwningMemberName -or $_.memberName -ceq $OwningMemberName)
+    })
+    if ($owners.Count -ne 1) { throw "${refusal}: owning role '$OwningRole' must resolve to exactly one roster member." }
+    $owner = $owners[0]
+    $refusal += " (owning role $($owner.role), floor $($owner.floor))"
+    $metadata = Get-AgentMetadataLocal -AgentName $DispatchAgent -Root $SquadRoot
+    if (-not $metadata -or $metadata.Disabled) { throw "${refusal}: the selected agent is absent or disables model invocation." }
+
+    $delegateRows = @(foreach ($candidateRow in $roster.Rows) {
+        $names = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent' | ForEach-Object {
+            ([string]$candidateRow[$_]).Trim('`')
+        })
+        $names += @(([string]$candidateRow['Alternate Agents'] -split ',') | ForEach-Object { $_.Trim().Trim('`') })
+        if ($DispatchAgent -cin $names) { $candidateRow }
+    })
+    if ($delegateRows.Count -gt 0 -and $Role.Count -gt 0) {
+        $delegateRows = @($delegateRows | Where-Object { $_['Role'] -in $Role })
+        if ($delegateRows.Count -eq 0) { throw "${refusal}: the selected Role does not match the delegate's roster identity." }
+    }
+    if ($delegateRows.Count -gt 1) { throw "${refusal}: multiple roster members match; select a unique delegate Role." }
+    $worker = $delegateRows.Count -eq 0
+    $route = $owner
+    if (-not $worker) {
+        $delegateRow = $delegateRows[0]
+        $route = @($results | Where-Object {
+            $_.role -ceq $delegateRow['Role'] -and $_.memberName -ceq $delegateRow['Member Name']
+        })[0]
+    }
+
+    $selected = $null
+    $requested = 'none (parameter omitted)'
+    $source = 'agent-pinned'
+    $reason = 'agent pin'
+    $rankRationale = $route.rationale
+    if ($metadata.Model -and ($worker -or $effectiveMode -eq 'off' -or $DispatchAgent -ceq 'Squad Scribe')) {
+        $selected = @($catalog.DisplayName.Keys | Where-Object {
+            $_ -ceq $metadata.Model -or $catalog.DisplayName[$_] -eq $metadata.Model
+        }) | Select-Object -First 1
+        if (-not $selected) { throw "${refusal}: agent pin '$($metadata.Model)' has no catalogued capability; its floor cannot be verified." }
+    }
+    elseif ($worker) {
+        $admitted = @(Get-AdmittedClassesLocal -Tier $owner.floor -Purpose 'ranked')
+        $ownerRanked = @(if (-not $stale -and $admitted.Count -gt 0) {
+            Get-RankedCandidatesLocal -Catalog $catalog -Class $owner.class -Admitted $admitted -Available $available
+        })
+        if ($ownerRanked.Count -gt 0) {
+            $selected = $ownerRanked[0].Id
+            $rankRationale = "rank 1 of $($ownerRanked.Count) at fit $($ownerRanked[0].Scores[$owner.class])"
+        }
+        else { $rankRationale = if ($stale) { 'stale-catalog fallback cannot verify a worker floor' } else { 'floor exhausted' } }
+        $source = 'cli-pinned'
+        $reason = 'owning-role ranked model (not discounted pick)'
+    }
+    elseif ($effectiveMode -in @('ranked', 'economy', 'manual')) {
+        $selected = $route.resolved
+        $source = 'cli-pinned'
+        $reason = "$effectiveMode role routing"
+        if ($selected -and $effectiveMode -in @('ranked', 'economy')) {
+            if ($route.modelCell -cne $selected) {
+                throw "${refusal}: Model cell for '$($route.role)' must be refreshed through the Scribe to '$selected' before dispatch."
+            }
+            $selected = $route.modelCell
+        }
+    }
+    elseif ($SessionModel -and $SessionModel -ne 'auto') {
+        $selected = $SessionModel
+        $source = 'session-inherited'
+        $reason = 'session fallback'
+    }
+    if (-not $selected) { throw "${refusal}: no valid model meets the $($route.floor) floor ($rankRationale); no downgrade or unverified host fallback is permitted." }
+    if ($null -ne $available -and -not $available.Contains($selected)) { throw "${refusal}: model '$selected' is not available on this host." }
+    $admitted = @(Get-AdmittedClassesLocal -Tier $route.floor -Purpose 'manual')
+    $explicitUnevaluated = -not $worker -and $effectiveMode -eq 'manual' -and $route.cellStatus -eq 'valid: unevaluated'
+    if (-not $explicitUnevaluated -and (-not $catalog.Capability.ContainsKey($selected) -or $catalog.Capability[$selected] -notin $admitted)) {
+        throw "${refusal}: model '$selected' cannot be verified at the $($route.floor) floor."
+    }
+    if ($source -eq 'cli-pinned') { $requested = $selected }
+    $effective = $selected
+    $observed = 'unverified'
+    if ($ObservedModel) {
+        if ($ObservedModel -in @('auto', 'unknown', 'unreported', 'unverified')) { throw 'ObservedModel must be a concrete host-reported model, not a placeholder.' }
+        $effective = $ObservedModel
+        $source = 'dispatch-reported'
+        $observed = $ObservedModel
+    }
+    elseif ($SessionModel -eq 'auto') {
+        $effective = 'unknown'
+        $source = 'unresolved'
+        $observed = 'unreported'
+    }
+    $marker = if ($effectiveMode -eq 'economy') { 'Route: economy; ' } else { '' }
+    $rationale = "${marker}owning role $($owner.role); routing role $($route.role); $reason; class $($route.class); floor $($route.floor); $rankRationale"
+    $observedId = @($catalog.DisplayName.Keys | Where-Object {
+        $_ -ceq $ObservedModel -or $catalog.DisplayName[$_] -eq $ObservedModel
+    }) | Select-Object -First 1
+    if ($ObservedModel -and $requested -ne 'none (parameter omitted)' -and $selected -cne $(if ($observedId) { $observedId } else { $ObservedModel })) {
+        $rationale += "; identity-mismatch: requested $requested, observed $ObservedModel"
+    }
+    $observedFloor = 'unreported'
+    if ($ObservedModel) {
+        $observedFloor = if (-not $observedId) { 'unverified' }
+        elseif ($catalog.Capability[$observedId] -in $admitted) { 'admitted' }
+        else { 'below-floor' }
+        if ($observedFloor -ne 'admitted') { $rationale += "; host model floor ${observedFloor}: escalate, not successful admission" }
+    }
+    $dispatch = [pscustomobject][ordered]@{
+        agent = $DispatchAgent
+        owningRole = $owner.role
+        owningMemberName = $owner.memberName
+        routingRole = $route.role
+        worker = $worker
+        class = $route.class
+        floor = $route.floor
+        selectedModel = $selected
+        attributionSource = $source
+        observedFloor = $observedFloor
+        routingIdentity = [pscustomobject][ordered]@{
+            requestedModel = $requested
+            effectiveModel = $effective
+            observedModel = $observed
+            routeRationale = $rationale
+        }
+    }
+}
+elseif ($OwningRole -or $OwningMemberName -or $ObservedModel) { throw 'OwningRole/OwningMemberName/ObservedModel requires a selected DispatchAgent.' }
+
 $report = [pscustomobject][ordered]@{
     squadRoot        = $SquadRoot
     recordedMode     = $roster.Mode
@@ -501,6 +669,7 @@ $report = [pscustomobject][ordered]@{
     warnings         = @($warnings)
     roles            = @($results)
 }
+if ($dispatch) { $report | Add-Member -NotePropertyName dispatch -NotePropertyValue $dispatch }
 if ($effectiveMode -eq 'economy') { $report | Add-Member -NotePropertyName consent -NotePropertyValue $consent }
 
 if ($Format -eq 'json') {
@@ -509,6 +678,9 @@ if ($Format -eq 'json') {
 }
 
 "Model routing: $effectiveMode (recorded: $($roster.Mode)); availability: $availability"
+if ($dispatch) {
+    "Delegate $($dispatch.agent): selected $($dispatch.selectedModel); requested $($dispatch.routingIdentity.requestedModel); attribution $($dispatch.attributionSource); $($dispatch.routingIdentity.routeRationale)"
+}
 if ($effectiveMode -eq 'economy') { "consent: $consent" }
 foreach ($warning in $warnings) { "WARN: $warning" }
 ''

@@ -23,6 +23,8 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 ## Route
 
+Delegating briefs carry the owning roster row and squad root; only selected nested dispatches load [delegated-worker-routing.md](delegated-worker-routing.md).
+
 1. Read `team.md` and `routing.md`.
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
 3. Resolve each matched role to a deployed agent through the roster. A role marked **thin charter needed** has no deployed agent — escalate instead of substituting.

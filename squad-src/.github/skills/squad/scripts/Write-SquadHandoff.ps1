@@ -652,8 +652,11 @@ function Test-Attribution {
             if ($fallback -and $Map['priced_as'] -ne $fallback) { $problems.Add("$Where.model '$($Map['model'])' has no rate row, so priced_as must be the $($Map['model_tier']) tier fallback '$fallback', not '$($Map['priced_as'])'.") }
         }
     }
-    # A passedModel that repeats the recorded model is redundant, not evidence of a passed override.
-    if ($Map['model_source'] -ne 'cli-pinned' -and $PassedModel -and (ConvertFrom-ModelPin $PassedModel) -ne (ConvertFrom-ModelPin $Map['model'])) { $problems.Add("$Where passedModel '$PassedModel' differs from model '$($Map['model'])'; a passed override is model_source cli-pinned.") }
+    # Host reports (or auto's unresolved attribution) can differ from a passed request.
+    if ($Map['model_source'] -notin @('cli-pinned', 'dispatch-reported', 'unresolved') -and $PassedModel -and (ConvertFrom-ModelPin $PassedModel) -ne (ConvertFrom-ModelPin $Map['model'])) { $problems.Add("$Where passedModel '$PassedModel' differs from model '$($Map['model'])'; a passed override is model_source cli-pinned unless the host reported a substitution or attribution is unresolved.") }
+    if ($derivationSession -eq 'auto' -and $Map['model_source'] -in @('agent-pinned', 'cli-pinned', 'session-inherited')) {
+        $problems.Add("$Where cannot attribute a pin, request, or session default under auto without a host report; use dispatch-reported or unresolved.")
+    }
     switch ($Map['model_source']) {
         'cli-pinned' {
             if (-not $PassedModel) { $problems.Add("$Where.model_source cli-pinned needs the dispatch's passedModel recorded in the payload.") }
@@ -705,7 +708,8 @@ function Get-DerivedConsumption {
     }
     $floors = Get-EstimatorFloors $class
     if ($null -eq $floors) { $needsScribe.Add("$Where was omitted and the $class dispatch-size estimator row cannot be read from consumption-rates.md or its template; the Scribe composes the block."); return $null }
-    if ($Orchestration) {
+    if ($SessionModel -eq 'auto') { $model = 'unknown'; $source = 'unresolved' }
+    elseif ($Orchestration) {
         if ($SessionModel) { $model = $SessionModel; $source = 'session-inherited' } else { $model = 'unknown'; $source = 'unresolved' }
     }
     elseif ($PassedModel) { $model = $PassedModel; $source = 'cli-pinned' }
@@ -1022,6 +1026,17 @@ else {
             if ($null -eq $consumption) { continue }
         }
         Test-Attribution -Map $consumption -Where "$where.consumption" -PinAgent $agent -PassedModel $passedModel
+        if ($routing -and (ConvertFrom-ModelPin $routing['effectiveModel']) -ne (ConvertFrom-ModelPin $consumption['model'])) {
+            $problems.Add("$where.routingIdentity.effectiveModel must equal consumption.model, not the requested model.")
+        }
+        if ($passedModel -and (ConvertFrom-ModelPin $passedModel) -ne (ConvertFrom-ModelPin $consumption['model']) -and $consumption['model_source'] -in @('dispatch-reported', 'unresolved')) {
+            if (-not $routing -or (ConvertFrom-ModelPin $routing['requestedModel']) -ne (ConvertFrom-ModelPin $passedModel)) {
+                $problems.Add("$where must retain the differing passedModel in routingIdentity.requestedModel.")
+            }
+        }
+        if ($routing -and $consumption['model_source'] -eq 'dispatch-reported' -and (ConvertFrom-ModelPin $routing['observedModel']) -ne (ConvertFrom-ModelPin $consumption['model'])) {
+            $problems.Add("$where.routingIdentity.observedModel must equal the host-reported consumption.model.")
+        }
         $deliverablePath = ($deliverable -replace '\s+\([^)]*\)\s*$', '').Trim().Trim('`')
         $deliverableSize = if ($deliverable -match '\s+\(([^)]*)\)\s*$') { $Matches[1] } else { $null }
         if ($deliverablePath -match '^(?i)(n/?a|none|inline.*|no artifact.*)$') { $problems.Add("$where.deliverable names no artifact; a stage that wrote no file did not run."); continue }

@@ -35,7 +35,7 @@ Everywhere below that says `ranked`, `economy` behaves the same except for its p
 
 The `Model` column sits between `Model Tier` and `Deliverable Root` and exists only while the mode is `ranked` or `manual`. Each cell holds one **Model ID** — the exact lowercase id in `consumption-rates.md`'s `Model ID` column and `model-catalog.md`'s `Catalog ID` (for example `claude-sonnet-5.5`) — never a display name, a tier, or a list.
 
-* **Under `ranked`** the cell is a readout: the coordinator writes the role's ranked pick so the user can see what each role will run on. It re-ranks on every turn and hands the Scribe any cell whose pick changed (a different host, catalog, floor, or roster). A hand edit is overwritten on the next re-rank; to pin a model, switch to `manual`.
+* **Under `ranked`** the cell is a readout. Re-rank each turn and hand changed picks to the Scribe. Hand edits are overwritten; to pin a model, use `manual`.
 * **Under `manual`** the cell is the user's choice and the coordinator never rewrites it. An empty cell, or one refused under *Allowlist* below, triggers *Manual Model Selection* before that role's first dispatch.
 
 ## Manual Model Selection
@@ -68,6 +68,8 @@ Highest wins, per role, evaluated independently for every dispatch:
 **Dispatch copies the cell; it never retypes it.** Under `ranked` or `manual`, every dispatch to a roster agent (Primary or Alternate) passes that row's `Model` cell, copied character for character from `team.md` as read this turn — never recalled, never omitted, never adjusted to a "similar" id. The Scribe is the one exception: its own model pin governs. A live run resolved `claude-opus-5.5` for `researcher`, then typed `claude-sonnet-5.5` into the call, and omitted `model` entirely for `intake-validator`, which ran on the session model. In the plugin distribution, the `dispatch-guards` `preToolUse` hook denies such a dispatch and names the cell to copy; it only compares and never fills or changes a cell, so how cells are chosen is unchanged. **Requested model** in the identity bullets is the value actually passed, never the cell it should have been.
 
 ## Assignment Classes
+
+Selected delegates follow [delegated-worker-routing.md](delegated-worker-routing.md), never eager admission.
 
 Every role maps to one of the seven fixed assignment classes: `research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`. The class selects which fit column ranks the role:
 
