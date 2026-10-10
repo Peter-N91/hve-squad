@@ -24,6 +24,15 @@ on:
       - 'apm.yml'
       - 'tests/tier0/**'
       - '.github/workflows/tier0-conformance.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'squad-src/**'
+      - 'scripts/Build-SquadPlugin.ps1'
+      - 'apm.yml'
+      - 'tests/tier0/**'
+      - '.github/workflows/tier0-conformance.yml'
   workflow_call:
     inputs:
       ref:
@@ -56,6 +65,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
 
       # setup-only: the suite drives apm itself, so it needs the CLI and nothing else.
@@ -79,6 +89,7 @@ jobs:
           # on the reset rather than failing, which reads as a hung job.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_REF: ${{ inputs.ref }}
+          TIER0_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if ($env:INPUT_REF) {
             ./tests/tier0/Invoke-Tier0Tests.ps1 -Ref $env:INPUT_REF -Output Detailed
