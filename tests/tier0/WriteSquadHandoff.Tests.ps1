@@ -98,6 +98,79 @@ BeforeAll {
 }
 
 Describe 'Write-SquadHandoff.ps1 writes an ordinary hand-off and verifies the ledger' {
+    It 'records a host substitution truthfully while preserving the different requested model' {
+        $root = New-Root
+        $payload = New-Payload
+        $record = $payload.historyRecords[0]
+        $record.passedModel = 'gpt-5.3-codex'
+        $record.consumption.model_source = 'dispatch-reported'
+        $record.routingIdentity = @{
+            requestedModel = 'gpt-5.3-codex'; effectiveModel = 'Claude Sonnet 4.6'; observedModel = 'Claude Sonnet 4.6'
+            routeRationale = 'Route: economy; owning role researcher; floor default; identity-mismatch: requested gpt-5.3-codex, observed Claude Sonnet 4.6'
+        }
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $history = Get-Content -LiteralPath (Join-Path $root 'history\Squad Researcher.md') -Raw
+        $history | Should -Match '"model_source": "dispatch-reported"'
+        $history | Should -Match '\*\*Requested model\*\*.*gpt-5.3-codex'
+        $history | Should -Match '\*\*Observed model\*\*.*Claude Sonnet 4.6'
+        (Invoke-LedgerCheck -Root $root -Counts 'Squad Researcher=1;Squad Scribe=1').ExitCode | Should -Be 0
+    }
+
+    It 'refuses success-shaped identity bullets that price a substituted model as the request' {
+        $root = New-Root
+        $payload = New-Payload
+        $record = $payload.historyRecords[0]
+        $record.passedModel = 'gpt-5.3-codex'
+        $record.consumption.model_source = 'dispatch-reported'
+        $record.routingIdentity = @{
+            requestedModel = 'gpt-5.3-codex'; effectiveModel = 'gpt-5.3-codex'; observedModel = 'gpt-5.3-codex'
+            routeRationale = 'Route: economy; owning role researcher'
+        }
+        $before = Get-TreeHash $root
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match 'effectiveModel must equal consumption.model'
+        $result.Output | Should -Match 'observedModel must equal the host-reported'
+        Get-TreeHash $root | Should -Be $before
+    }
+
+    It 'keeps explicit auto requests distinct from unresolved attribution and refuses a claimed pin under auto' {
+        $root = New-Root
+        $payload = New-Payload
+        $payload.stateAdvance.sessionModel = 'auto'
+        $payload.orchestration.consumption.model = 'unknown'
+        $payload.orchestration.consumption.model_source = 'unresolved'
+        $payload.orchestration.consumption.basis = 'tier-default'
+        $payload.orchestration.consumption.Remove('priced_as')
+        $record = $payload.historyRecords[0]
+        $record.passedModel = 'gpt-5.3-codex'
+        $record.consumption.model = 'unknown'
+        $record.consumption.model_source = 'unresolved'
+        $record.consumption.basis = 'tier-default'
+        $record.consumption.Remove('priced_as')
+        $record.routingIdentity = @{
+            requestedModel = 'gpt-5.3-codex'; effectiveModel = 'unknown'; observedModel = 'unreported'
+            routeRationale = 'Route: economy; owning role researcher; auto-unreported'
+        }
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $history = Get-Content -LiteralPath (Join-Path $root 'history\Squad Researcher.md') -Raw
+        $history | Should -Match '"model": "unknown"'
+        $history | Should -Match '"model_source": "unresolved"'
+        $history | Should -Match '\*\*Requested model\*\*.*gpt-5.3-codex'
+
+        $root = New-Root
+        $payload = New-Payload
+        $payload.stateAdvance.sessionModel = 'auto'
+        $payload.historyRecords[0].consumption.model_source = 'agent-pinned'
+        $before = Get-TreeHash $root
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match 'under auto without a host report'
+        Get-TreeHash $root | Should -Be $before
+    }
+
     It 'ships in the squad skill' {
         Test-Path -LiteralPath $script:Writer -PathType Leaf | Should -BeTrue
     }
