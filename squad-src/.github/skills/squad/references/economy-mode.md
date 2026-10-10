@@ -79,6 +79,10 @@ With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionMo
 
 ## Background Workstreams
 
+**Delegation context.** Every owner brief carries its owning roster row and squad root, forwarded verbatim by the lead. Resolve eligibility for the selected stage, not every advertised delegate. Real roster delegates keep their own cells and floors; contract workers keep their pins or the full-floor owner-ranked request supplied by the coordinator, never a discounted owner cell. Preserve required worker inputs. Return each worker's request, ownership, requested model, host report and consumption separately; refused workers have no consumption record. Unrostered worker history goes to the Scribe's general path, not a new roster entry.
+
+**Lead attribution.** A concrete host report wins over `orchestration.leadConsumption` (`agent-pinned`), which is only a prediction under fixed selection. Supply `dispatch-reported` for a host substitution, or `unknown`/`unresolved`/`tier-default` under auto without a report. The requested pin remains in the dispatch report, not a new consumption field. Surface identity mismatches and below-floor reports through the existing routing escalation.
+
 `delivery=background` is honored only under economy and only in interactive mode (no `mode=`; never autonomous, autopilot, or Watch Mode). Under any other routing mode the input is ignored and the coordinator says so once. It lets independent workstreams with disjoint write sets land while the user keeps talking to the squad. It changes who waits, never who works: every stage is still produced by a dispatched role, every workstream is reviewed independently, and the Squad Scribe stays the only writer.
 
 1. **Host.** Background dispatch needs a `task` tool with `mode: "background"` and `read_agent` (the Copilot CLI and the GitHub Copilot app). VS Code has neither: there, run the same workstreams one at a time in the foreground, each as an ordinary bounded or planned dispatch, and say so once.

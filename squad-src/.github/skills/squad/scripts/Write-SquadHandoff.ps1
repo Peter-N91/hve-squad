@@ -65,7 +65,7 @@
         requestedModel, effectiveModel, observedModel, routeRationale}} ] (may be empty),
       orchestration? {request?, outcome?, passedModel?, consumption? {ten fields},
         leadConsumption? (workstream only: a Squad Workstream Lead's own turns, ten fields,
-        agent-pinned to the lead's pin; written as a second orchestration block)},
+        attributed to the lead's pin, host report, or unresolved; a second orchestration block)},
       stateAdvance {activeRoles[], openEscalationsRaised[]?, openEscalationsResolved[]?,
         sessionModel?, modelOverrides?}.
 
@@ -1085,13 +1085,13 @@ if ($orchValid) {
         if ($orchConsumption['model_source'] -eq 'agent-pinned') { $problems.Add('orchestration.consumption.model_source must not be agent-pinned; the coordinator declares no model: pin. Price its turns at the session model with session-inherited.') }
         else { Test-Attribution -Map $orchConsumption -Where 'orchestration.consumption' -PinAgent $ScribeAgent -PassedModel $orchPassed }
         $orchestration = @{ Consumption = $orchConsumption; Request = $orchRequest; Outcome = $orchOutcome; LeadConsumption = $null }
-        # A Squad Workstream Lead's own turns: a second orchestration block, agent-pinned to the lead's frontmatter pin; workstream hand-offs only.
+        # A lead's host report outranks its pin; auto without a report remains unresolved.
         if ($null -ne $orchNode -and $null -ne $orchNode['leadConsumption']) {
             if (-not $workstream) { $problems.Add('orchestration.leadConsumption is only valid with payload.workstream.') }
             else {
                 $leadConsumption = Test-Consumption -Node $orchNode['leadConsumption'] -Where 'orchestration.leadConsumption'
                 if ($null -ne $leadConsumption) {
-                    if ($leadConsumption['model_source'] -ne 'agent-pinned') { $problems.Add('orchestration.leadConsumption.model_source must be agent-pinned; the Squad Workstream Lead declares a model: pin.') }
+                    if ($leadConsumption['model_source'] -notin @('agent-pinned', 'dispatch-reported', 'unresolved')) { $problems.Add('orchestration.leadConsumption.model_source must be agent-pinned, dispatch-reported, or unresolved; a session guess cannot replace the lead pin.') }
                     else { Test-Attribution -Map $leadConsumption -Where 'orchestration.leadConsumption' -PinAgent 'Squad Workstream Lead' -PassedModel $null }
                     $orchestration['LeadConsumption'] = $leadConsumption
                 }

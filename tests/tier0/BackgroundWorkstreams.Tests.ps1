@@ -116,6 +116,21 @@ Describe 'Squad Workstream Lead charter (RTE-51)' {
         $script:Lead.Body | Should -Not -Match '(?i)bounded pick|boundedPick|(?<![a-z])-Bounded\b'
         $script:Lead.Body | Should -Not -Match '(?i)\b(claude|gpt-|gemini|grok)'
     }
+
+    It 'propagates explicit worker ownership and validates only selected delegates without changing role cell-copy precedence' {
+        $script:Lead.Body | Should -Match 'Preserve the owning roster row and squad root'
+        $script:Lead.Body | Should -Match 'never model-check the whole list'
+        $script:Lead.Body | Should -Match 'selected roster-backed delegate keeps its own cell and floor'
+        $script:Lead.Body | Should -Match 'contract worker keeps its pin or the full-floor owner-ranked request supplied in the brief'
+        $script:Lead.Body | Should -Match 'never cast a worker, weaken its inputs, or silently lower its floor'
+    }
+
+    It 'distinguishes passed requests from host attribution and does not claim the lead pin as observed under auto' {
+        $script:Lead.Body | Should -Match '`passedModel`.*`routingIdentity`'
+        $script:Lead.Body | Should -Match 'preferring the host report over the request or pin'
+        $script:Lead.Body | Should -Match 'Never count a worker''s loop again in its parent'
+        $script:Lead.Body | Should -Match 'Under auto without a report, use `unknown`, `unresolved`, and `tier-default`'
+    }
 }
 
 Describe 'Coordinator entry points for background workstreams (RTE-51)' {

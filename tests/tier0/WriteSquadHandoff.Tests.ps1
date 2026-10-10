@@ -1234,7 +1234,30 @@ Describe 'Write-SquadHandoff.ps1 records concurrent background workstreams (RTE-
         (Invoke-LedgerCheck -Root $root -Counts 'Squad Researcher=1;Squad Reviewer=1;Squad Scribe=1').ExitCode | Should -Be 0
     }
 
-    It 'refuses leadConsumption without a workstream, with a non-pinned source, or with a model that is not the lead pin' {
+    It 'accepts a lead host report or unresolved auto attribution without replacing either with its pin' -ForEach @('dispatch-reported', 'unresolved') {
+        $root = New-WsRoot
+        Set-LeadAgent -Root $root
+        $payload = New-WsPayload -Id 'ws-a' -Turn 2 -Timestamp '2026-09-27T10:00:00Z' -Research 'research/a.md' -Review 'reviews/review-a.md'
+        $lead = New-LeadConsumption
+        $lead.model_source = $_
+        if ($_ -eq 'dispatch-reported') {
+            $lead.model = 'Claude Haiku 4.5'
+            $lead.model_tier = 'fast'
+        }
+        else {
+            $lead.model = 'unknown'
+            $lead.basis = 'tier-default'
+        }
+        $payload.orchestration.leadConsumption = $lead
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $history = Get-Content -LiteralPath (Join-Path $root 'history\Squad Scribe.md') -Raw
+        $history | Should -Match ([regex]::Escape('"model_source": "' + $_ + '"'))
+        $history | Should -Match ([regex]::Escape('"model": "' + $lead.model + '"'))
+        (Invoke-LedgerCheck -Root $root -Counts 'Squad Researcher=1;Squad Reviewer=1;Squad Scribe=1').ExitCode | Should -Be 0
+    }
+
+    It 'refuses leadConsumption without a workstream, with a session guess, or with a model that is not the claimed lead pin' {
         $root = New-WsRoot
         Set-LeadAgent -Root $root
         $before = Get-TreeHash $root
