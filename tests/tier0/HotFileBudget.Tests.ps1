@@ -119,6 +119,14 @@ Describe 'Hot files stay within the v0.18.1 aggregate performance envelope' {
         $delta | Should -BeLessOrEqual $limit -Because "the hot set grew $delta bytes against $($script:Budget.ref); the absolute ceiling is $($script:Budget.totalThreshold) and the pull request base uses $baseDelta bytes"
     }
 
+    It 'measures the common-path progress contract instead of hiding it in an unmeasured reference' {
+        $path = 'squad-src/.github/skills/squad/references/operating-procedure.md'
+        $script:Budget.files.PSObject.Properties.Name | Should -Contain $path
+        $procedure = Get-Content -LiteralPath (Join-Path $script:Root $path) -Raw
+        $procedure | Should -Match '(?m)^### Progress Presentation\r?$'
+        $procedure | Should -Not -Match 'references/progress\.md|\[progress\.md\]'
+    }
+
     It 'measures every listed file, including every file a ranked or manual run reads' {
         @($script:Budget.files.PSObject.Properties).Count | Should -BeGreaterOrEqual 22
         foreach ($required in @(

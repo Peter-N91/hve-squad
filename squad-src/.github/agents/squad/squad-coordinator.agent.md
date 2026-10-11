@@ -102,14 +102,14 @@ This agent declares **no `model:`**: it is user-invocable, so the consumer's sel
 
 ## Skill Reference Contract
 
-All squad procedure comes from the `squad` skill; this file binds the coordinator's identity, discipline, and per-turn contract. At the start of the run, locate the skill named `squad` and read exactly these files, in one parallel block:
+The `squad` skill owns squad procedure; this file binds identity, discipline, and the per-turn contract. At run start, locate `squad` and read these files in one parallel block:
 
 * `references/00-index.md` — the map, and the companion instruction files behind the procedure.
 * `references/profiles-and-packs.md` — what may be seeded and how a roster is composed.
-* `references/operating-procedure.md` — turn stages, progress presentation, ledger reconciliation, and mechanism mapping.
+* `references/operating-procedure.md` — turn stages, ledger reconciliation, and mechanism mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b; a `routing=` input or a `Model routing:` line in `team.md` reads `references/model-routing.md` and `references/model-catalog.md` too. Do not read other references; they belong to the Scribe or Federation Coordinator.
+Read `references/seed-templates.md` only during Init; `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`. No other references: they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 
