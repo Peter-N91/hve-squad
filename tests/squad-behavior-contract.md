@@ -45,11 +45,32 @@ Scribe hand-off pipelining (GATE-22 through GATE-28 below) is one more case this
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck` | no | Mutation controls proving the state contract can fail |
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SquadRoot <path>` | no | State contract against an existing squad tree |
 | `./tests/tier1/Invoke-Tier1LiveRun.ps1 -SourceRoot . -ProvisionOnly` | no | Builds every scenario workspace and stops before the first turn |
+| `./tests/tier1/Invoke-Tier1LiveRun.ps1 -SourceRoot . -Scenario pack-lifecycle -Pack foundry -ProvisionOnly` | no | Provisions the one parameterized pack lifecycle scenario without spending a request |
 | `./tests/tier1/Invoke-Tier1LiveRun.ps1 -Ref v0.16.0` | **yes** | Provisions fixtures, drives real turns, then applies the state contract |
 | `./tests/tier2/Invoke-Tier2Tests.ps1` | no | Drift controls proving the comparator can fail |
 | `./tests/tier2/Compare-SquadRun.ps1 -ObservationRoot ./tests/tier1/results` | no | Scores a completed Tier 1 run against the golden baselines |
 
 The live harness needs `COPILOT_GITHUB_TOKEN`, the `apm` CLI, and a pinned `@github/copilot`. Everything else needs only Pester 5.7.1.
+
+### Registered pack acceptance
+
+Tier 0 has one registry-driven test that loops over every Registered Packs row. It checks the
+canonical roster, the mirrored profiles reference, role routing, the prompt choices, generated
+plugin invocation, federation conventions, guidance-file existence, and both usage documents.
+Adding a pack extends the table and the test data rather than adding another pack-specific test.
+
+Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
+requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
+without model calls first:
+
+```powershell
+pwsh -Command '& .\tests\tier1\Invoke-Tier1LiveRun.ps1 -SourceRoot . -Scenario pack-lifecycle -Pack foundry -ProvisionOnly'
+```
+
+Live execution requires separate operator approval and an explicitly selected pinned model.
+Remove `-ProvisionOnly` and add `-Model <operator-selected-model>` only after that approval.
+The generic state contract remains the gate for roster, decisions, history, deliverables, and
+consumption. Semantic review of a pack's guidance remains separate evidence.
 
 ## Verified parity evidence
 

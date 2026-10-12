@@ -35,6 +35,8 @@
     Repository root to install from and overlay, for testing a branch.
 .PARAMETER Scenario
     Scenario ids to run. Defaults to every scenario in scenarios/.
+.PARAMETER Pack
+    Registered pack name substituted into the parameterized pack-lifecycle scenario.
 .PARAMETER Model
     Model to pin. Results across runs are not comparable without this.
 .PARAMETER ResultRoot
@@ -54,6 +56,8 @@
 .EXAMPLE
     ./Invoke-Tier1LiveRun.ps1 -SourceRoot . -Scenario single-init
 .EXAMPLE
+    ./Invoke-Tier1LiveRun.ps1 -SourceRoot . -Scenario pack-lifecycle -Pack foundry
+.EXAMPLE
     ./Invoke-Tier1LiveRun.ps1 -Ref v0.16.0
 #>
 [CmdletBinding(DefaultParameterSetName = 'Ref')]
@@ -65,6 +69,8 @@ param(
     [string]$SourceRoot,
 
     [string[]]$Scenario,
+
+    [string]$Pack,
 
     [string]$Model = 'claude-sonnet-5',
 
@@ -111,8 +117,17 @@ $scenarioFiles = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'scenario
 if ($Scenario) {
     $scenarioFiles = @($scenarioFiles | Where-Object { $_.BaseName -in $Scenario })
 }
+else {
+    $scenarioFiles = @($scenarioFiles | Where-Object { $_.BaseName -ne 'pack-lifecycle' })
+}
 if ($scenarioFiles.Count -eq 0) {
     throw "No scenarios matched. Available: $((Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'scenarios') -Filter '*.json').BaseName -join ', ')"
+}
+if (@($scenarioFiles | Where-Object BaseName -eq 'pack-lifecycle').Count -gt 0 -and -not $Pack) {
+    throw "The 'pack-lifecycle' scenario requires -Pack <registered-pack>."
+}
+if ($Pack -and $Pack -notmatch '^[a-z0-9-]+$') {
+    throw 'Pack must be a lowercase kebab-case identifier.'
 }
 
 $fixtureRoot = Join-Path $PSScriptRoot '..' 'fixtures'
@@ -120,7 +135,11 @@ $contractRunner = Join-Path $PSScriptRoot 'Invoke-Tier1Tests.ps1'
 $summary = @()
 
 foreach ($file in $scenarioFiles) {
-    $definition = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
+    $definitionText = Get-Content -LiteralPath $file.FullName -Raw
+    if ($file.BaseName -eq 'pack-lifecycle') {
+        $definitionText = $definitionText.Replace('${pack}', $Pack)
+    }
+    $definition = $definitionText | ConvertFrom-Json
     $scenarioResult = $null
 
     foreach ($attempt in 1..($Retries + 1)) {

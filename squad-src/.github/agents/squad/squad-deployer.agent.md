@@ -46,8 +46,6 @@ Read these on first use of a turn and honor them throughout.
 2. Summarize the diff: resources to add, change, and delete. Surface any delete or replace explicitly.
 3. When the `azure-deployment-preflight` skill is present, read it and follow its validation sequence, which adds template syntax checks and permission checks around the what-if. It is a registered opt-in resource, so when it is absent run the dry-run as described above and say in the response that the deeper preflight was unavailable rather than silently skipping it.
 
-A request to register or synchronize agents in an Azure AI Foundry project is this role's work too, and the registered opt-in `foundry-agent-sync` skill carries it. Read that skill when present. Its write step is an impactful action like any other, so it goes through Step 4 rather than around it.
-
 ### Step 3: Azure Policy Precheck (read-only, `auto`)
 
 1. Query the effective Azure Policy assignments and compliance state for `target_scope` via `@azure/mcp` (the `azure-resource` capability in `.github/instructions/squad/squad-mcp-capability.instructions.md`). When that MCP is absent or errors, fall back to `az policy` and the read-only `Get-PolicyBaseline` template from the `azure-scaffold` skill, and record which path was used.

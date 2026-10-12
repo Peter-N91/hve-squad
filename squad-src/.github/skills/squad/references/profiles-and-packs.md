@@ -30,15 +30,18 @@ One catalog role — `backlog-executor`, which writes work items into a live Azu
 | `operations`    | researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe | Running a deployed system: incidents, reliability targets, instrumentation design, and as-built docs |
 | `product`       | researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
 
-## Squad Packs
+## Registered Packs
 
 A **pack** is a named set of roles added *on top of* a profile, never instead of one. A profile answers "what kind of work is this" and carries the methodology spine; a pack answers "what is it built on" and carries specialists only, so technology verticals arrive as packs and compose with any profile. Exactly one profile, zero or more packs. Packs are defined canonically in `.github/instructions/squad/squad-roster.instructions.md`; the catalog below mirrors them.
 
-| Pack             | Adds                       | Use When                                                                                       | Arrival                                                                       |
-|------------------|----------------------------|-------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
-| `power-platform` | pp-architect, pp-connector | The project is built on Power Platform — Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio | Opt-in; both roles rest on registered external agents the consumer installs |
-| `m365-copilot` | m365-agent-architect, m365-agent-integrator | The project is built on Microsoft 365 Copilot — declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration | Opt-in; both roles rest on registered external agents the consumer installs |
-| `aws`          | aws-architect, aws-diagnose | The project is built on AWS — Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage | Opt-in; both roles rest on registered external agents the consumer installs |
+| Pack             | Adds                       | Guidance | Use When                                                                                       | Arrival                                                                       |
+|------------------|----------------------------|----------|-------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| `power-platform` | pp-architect, pp-connector |          | The project is built on Power Platform — Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio | Opt-in; both roles rest on registered external agents the consumer installs |
+| `m365-copilot` | m365-agent-architect, m365-agent-integrator |          | The project is built on Microsoft 365 Copilot — declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration | Opt-in; both roles rest on registered external agents the consumer installs |
+| `aws`          | aws-architect, aws-diagnose |          | The project is built on AWS — Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage | Opt-in; both roles rest on registered external agents the consumer installs |
+| `foundry` | researcher, lead, developer, azure-architect, prompt-engineer, security, rai, observability, cost-manager | [foundry-blueprint.md](foundry-blueprint.md); [foundry-platform-options.md](foundry-platform-options.md) | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in; reuses existing roles and registered external skills |
+
+The optional `Guidance` column is the only pack-to-context mechanism. For an active pack, the coordinator passes those files to the roles named in `Adds`; a blank value means role composition only. Resolve active packs from accepted Init and apply/remove decisions, never from role presence. Removing a pack stops its guidance handoff and removes only roles no other roster source owns.
 
 The Scribe records a roster's provenance — the profile plus any applied packs — in the Init decision in `decisions.md`, and in a federation in the registry's `Profile` column. A pack's roles obey every rule a profile's roles obey: a role whose external resource is not installed is offered with its install command rather than seeded.
 

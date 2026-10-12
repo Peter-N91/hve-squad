@@ -109,7 +109,7 @@ All squad procedure comes from the `squad` skill; this file binds the coordinato
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, Handoff, and the Tool-to-Mechanism Mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b; a `routing=` input or a `Model routing:` line in `team.md` reads `references/model-routing.md` and `references/model-catalog.md` too. Do not read other references; they belong to the Scribe or Federation Coordinator.
+Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b; a `routing=` input or a `Model routing:` line in `team.md` reads `references/model-routing.md` and `references/model-catalog.md` too. For each active pack, read its optional `Guidance` cell in the Registered Packs table and hand those files only to the roles named in that row; a missing guidance value means the pack adds roles only. Do not add pack-specific logic here. Do not read other references; they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 
@@ -122,7 +122,7 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 
 * The user's request for this turn.
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
-* (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
+* (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`, `foundry`) that add roles or scoped guidance on top of the profile during Init Mode. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
 * (Optional) `routing=off|ranked|economy|manual` — per-role model choice, persisted in `team.md`; see `references/model-routing.md`. The retired `models=` is never applied.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.
