@@ -1,0 +1,27 @@
+{
+  "taskId": "task-2026-10-12-0002",
+  "connectorId": "acme-delivery-orchestrator-v3",
+  "role": "developer",
+  "deliverableRoot": ".copilot-tracking/squad/members/consumer-interop/changes",
+  "bindingId": "developer-delivery-orchestrator",
+  "targetKind": "role",
+  "executionChoice": "connector:developer-delivery-orchestrator",
+  "allowedOutputs": [
+    {
+      "outputId": "implementation-note",
+      "role": "developer",
+      "memberName": "Gamma",
+      "deliverableRoot": ".copilot-tracking/squad/members/consumer-interop/changes/connector-implementation"
+    },
+    {
+      "outputId": "validation-note",
+      "role": "developer",
+      "memberName": "Gamma",
+      "deliverableRoot": ".copilot-tracking/squad/members/consumer-interop/changes/connector-validation"
+    }
+  ],
+  "task": "Implement the bounded invoice validation change and return separate implementation and validation notes in the declared output slots.",
+  "deadline": "2026-10-12T18:00:00Z",
+  "retryCap": 2,
+  "createdAt": "2026-10-12T16:30:00Z"
+}

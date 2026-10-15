@@ -5,11 +5,11 @@ import { load } from "cheerio";
 import { localizeDiagram } from "./diagram-locales.mjs";
 
 export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const pageOrder = ["index", "getting-started", "usage", "demo", "demo-1", "demo-2", "demo-3", "demo-4", "ecosystem", "maintaining", "troubleshooting", "contributing"];
+export const pageOrder = ["index", "getting-started", "usage", "demo", "demo-1", "demo-2", "demo-3", "demo-4", "ecosystem", "connector", "maintaining", "troubleshooting", "contributing"];
 export const navigationGroups = [
   { key: "start", pages: ["index", "getting-started", "usage"] },
   { key: "guides", pages: ["demo", "demo-1", "demo-2", "demo-3", "demo-4"], links: [{ key: "workshop", url: "https://peter-n91.github.io/hve-squad-hands-on-workshop/" }] },
-  { key: "reference", pages: ["ecosystem", "troubleshooting"] },
+  { key: "reference", pages: ["ecosystem", "connector", "troubleshooting"] },
   { key: "project", pages: ["maintaining", "contributing"] },
 ];
 export const publicUrl = "https://peter-n91.github.io/hve-squad/";
@@ -53,7 +53,21 @@ export function readSource(slug, prefix = "") {
   const $ = load(raw);
   if ($("main").length !== 1) throw new Error(`${sourcePath}: expected exactly one main element.`);
   if ($("body > header.hero").length !== 1) throw new Error(`${sourcePath}: expected the original hero header.`);
+  embedConnectorTemplates($);
   return { $, raw, sourcePath };
+}
+
+export function embedConnectorTemplates($) {
+  $("[data-connector-template]").each((index, element) => {
+    const block = $(element);
+    const filename = block.attr("data-connector-template");
+    if (!/^(?:agents\/)?[a-z0-9][a-z0-9.-]*\.(?:json|agent\.md)$/.test(filename || "")) {
+      throw new Error(`Invalid connector template path: ${filename}`);
+    }
+    const code = block.find("pre code");
+    if (code.length !== 1) throw new Error(`Connector template ${filename} needs exactly one code block.`);
+    code.text(readFileSync(resolve(repositoryRoot, "docs/templates/connector-example", filename), "utf8").replace(/\r\n?/g, "\n"));
+  });
 }
 
 export function assembleContent($) {

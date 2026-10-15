@@ -49,7 +49,7 @@
     ./Invoke-Tier0Tests.ps1 -SourceRoot .
 .NOTES
     See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-15,
-    GATE-22..GATE-28).
+    GATE-22..GATE-28, CONN-01..CONN-12).
 #>
 [CmdletBinding(DefaultParameterSetName = 'Install')]
 param(
@@ -141,6 +141,9 @@ $containers = @(
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'GetSquadDispatchBrief.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ConnectorRoleModes.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
 )
 
 # Manifest coverage is a property of the working copy, not of an installed tree.
@@ -158,6 +161,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Source') {
         SourceRoot = $SourceRoot
     }
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'HotFileBudget.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'ConnectorContract.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
 }

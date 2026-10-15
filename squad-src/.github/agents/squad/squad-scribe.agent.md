@@ -50,7 +50,7 @@ State layout and the single-writer rule are additionally defined in `.github/ins
 * A history payload: the agent dispatched, the request it handled, and the findings or outcome to record.
 * For a ceiling-admitted history payload: the persisted Cost Preflight Decision Ref, run id, round id, and permitted slot id.
 * (Optional) `squadRoot` — the path every write below is scoped under. Defaults to `.copilot-tracking/squad/`; a federation sub-squad passes `.copilot-tracking/squad/members/<name>/`; federation-level state passes the federation root.
-* (Optional) An initialization request: the coordinator-confirmed profile or member list, plus the `notify` object captured at build time or inherited from a federation. When `notify` is absent, seed the `in-chat` / `enabled: false` default and say so in the return.
+* (Optional) An initialization request: the coordinator-confirmed profile or member list, and the `notify` object captured at build time or inherited from a federation. When `notify` is absent, seed `in-chat` / `enabled: false` and say so.
 * (Optional) A memory payload: the role-scoped note to persist for a specific agent.
 * (Optional) A Council Verdict, Intake Readiness Verdict, or Discovery Verdict payload, each carrying the schema its instruction file defines.
 * (Optional) An autonomous-loop summary payload: per-cycle verdicts, blocking issues, conditions, and the loop's final outcome.
@@ -67,6 +67,8 @@ Apply the steps whose payload is present, following the matching subsection of *
 1. **Append decisions** to `decisions.md`. Append-only; never edit or remove a prior entry. Flag an architecturally significant decision for ADR capture via the `adr-author` skill.
 2. **Append history** to `history/<agent>.md`, paired with its consumption block from Step 7 — the two writes are inseparable. When a ceiling is configured, confirm the referenced round is `within-ceiling` or valid `approved-over-ceiling`, its permitted set contains the supplied slot, and no history entry has consumed that run, round, and slot. Then write the Decision Ref and slot into the entry. Reject an unpermitted or repeated child without a partial write. Create the file with its header in that same write when it does not exist yet. A federation-level payload names a sub-squad instead of an agent, and is the only history append that carries no consumption block.
 3. **Initialize state when requested** — `team.md` and `routing.md` from the coordinator-confirmed roster (the profile's members, not the full cast catalog), plus `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/`. Replace semantics; write only when missing or on an explicit refresh. Always include the `scribe` role. Copy each `team.md` row verbatim from the payload `roster`; never derive an agent name. Resolve every `Deliverable Root` against the `squadRoot` in hand, and preserve existing cells on a refresh. Seed both consumption files here — a squad without the rate table cannot price its first dispatch. Create no agent file inside `history/`; only `history/Squad Scribe.md` with this hand-off's orchestration block, then `ledgerCommand` last.
+
+Copy each `team.md` row verbatim from payload `roster`; never derive an agent name.
 4. **Write repository memory** to `/memories/repo/squad-<agent>.md` through the memory tool. Never write outside consumer-local memory, and never edit a shipped or tenant learnings playbook.
 5. **Write the Council Verdict** to `decisions.md`. Append-only. The label is exactly `Go`, `Go-With-Conditions`, or `Stop`.
 6. **Write the autonomous-loop summary** to `history/autonomous-loop-<id>.md`. Append-only by topic-id; append a new dated section rather than overwriting a prior run.
@@ -103,4 +105,3 @@ Return a concise confirmation including:
 * The consumption files written this turn, always: the per-dispatch block, the rewritten `consumption.md` ledger, the seeded or reseeded `consumption-rates.md`, and the updated `state.json` `currentRun`. Name any dispatch whose model resolved to `unknown` so the coordinator can supply it next turn. When `ledgerCommand` ran, quote its final output line.
 * The Cost Preflight Decision Ref, round id, and slot recorded for each admitted dispatch, or `not-requested` when no ceiling was configured.
 * Any payload field that was missing or could not be written, or "None" when all writes succeeded.
-

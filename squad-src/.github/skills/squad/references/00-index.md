@@ -17,7 +17,8 @@ Read this file first, then read only the reference files your role names in its 
 | File                                               | Read it when                                                              |
 |----------------------------------------------------|---------------------------------------------------------------------------|
 | [profiles-and-packs.md](profiles-and-packs.md)     | Seeding or amending a roster: profile choice, packs, which roles exist    |
-| [roster-catalog.md](roster-catalog.md)             | Casting a role for the first time, recasting after an HVE Core upgrade, applying or registering a pack's external agents, resolving an external role, or assembling a custom roster |
+| [roster-catalog.md](roster-catalog.md)             | First casting, HVE upgrades, custom rosters, external roles, and pack registration/resolution |
+| [connector-role-modes.md](connector-role-modes.md) | Connector setup/refresh, manual bindings, execution selection; [transport contract](connector-contract.md) for the shim |
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
 | [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |

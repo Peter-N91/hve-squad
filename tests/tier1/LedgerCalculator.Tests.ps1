@@ -154,6 +154,24 @@ Describe 'Measure-SquadLedger reproduces the correct ledger on a fully-applied f
     }
 }
 
+Describe 'Measure-SquadLedger preserves legacy orchestration attribution identity' -Tag 'NF002' {
+    It '-Check passes when consumption.md uses historical Agent `Coordinator+Scribe` for `orchestration`' {
+        $root = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $ledger = $ledger.Replace('| orchestration |        | Squad Scribe      |', '| orchestration |        | Coordinator+Scribe |')
+        Set-Content -LiteralPath $ledgerPath -Value $ledger -NoNewline
+
+        $check = Invoke-Ledger -SquadRoot $root -Check
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Match 'PASS'
+
+        $derived = Invoke-Ledger -SquadRoot $root -Format markdown
+        $derived.Output | Should -Match '\|\s*orchestration\s*\|\s*\|\s*Coordinator\+Scribe\s*\|'
+    }
+}
+
 Describe 'Measure-SquadLedger catches a mutated (wrong-arithmetic) ledger' {
     BeforeAll {
         $script:MutatedRoot = Join-Path $script:FixtureRoot 'mutated'
@@ -817,6 +835,290 @@ description: "Append-only dispatch history for a single squad agent"
         $result.ExitCode | Should -Be 1
         $result.Output | Should -Match "role 'architect' agent 'System Architecture Reviewer' column 'Priced As'"
         $result.Output | Should -Match "role 'architect' agent 'ADR Creator' column 'Priced As'"
+    }
+}
+
+Describe 'Connector member-aware attribution and legacy missing-member behavior' {
+    It 'keeps two Squad Connector members distinct in Attribution by (agent, Member Name)' {
+        $root = Join-Path $TestDrive 'connector-distinct-members'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+| gcp | GCP Assessor | Squad Connector | — | — | runSubagent / task | default | gcp/assessments/ |
+| gcp | GCP Reviewer | Squad Connector | — | — | runSubagent / task | default | gcp/reviews/ |
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | azure-architect | connector |
+| gcp-reviewer | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Reviewer | GCP Reviewer | gcp | azure-architect | connector |
+'@
+        Set-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Value @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Connector
+
+### 2026-10-12T10:00:00Z Assess gcp architecture
+
+* Turn: 3
+* Request: Assess bounded gcp architecture.
+* Deliverable: `research/2026-09-27-fixture-topic.md`
+* Outcome: Assessed architecture.
+* Member Name: GCP Assessor
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "dispatch-reported",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 2,
+  "input_tokens": 800,
+  "cached_tokens": 3200,
+  "cache_write_tokens": 400,
+  "output_tokens": 900,
+  "basis": "estimated"
+}
+```
+
+### 2026-10-12T10:05:00Z Review gcp architecture
+
+* Turn: 3
+* Request: Review bounded gcp architecture.
+* Deliverable: `research/2026-09-27-fixture-topic.md`
+* Outcome: Reviewed architecture.
+* Member Name: GCP Reviewer
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "dispatch-reported",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 2,
+  "input_tokens": 900,
+  "cached_tokens": 3600,
+  "cache_write_tokens": 450,
+  "output_tokens": 950,
+  "basis": "estimated"
+}
+```
+'@ -NoNewline
+
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+        $check = Invoke-Ledger -SquadRoot $root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1; 'Squad Connector' = 2 }
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+
+        $markdown = (Invoke-Ledger -SquadRoot $root -Format markdown).Output
+        $markdown | Should -Match '\| gcp \| GCP Assessor \| Squad Connector \|'
+        $markdown | Should -Match '\| gcp \| GCP Reviewer \| Squad Connector \|'
+    }
+
+    It 'keeps legacy unique-agent history without Member Name valid' {
+        $result = Invoke-Ledger -SquadRoot (Join-Path $script:FixtureRoot 'applied') -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+    }
+
+    It 'fails closed for ambiguous shared-agent connector history missing Member Name' {
+        $root = Join-Path $TestDrive 'connector-ambiguous-memberless'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+| gcp | GCP Assessor | Squad Connector | — | — | runSubagent / task | default | gcp/assessments/ |
+| gcp | GCP Reviewer | Squad Connector | — | — | runSubagent / task | default | gcp/reviews/ |
+'@
+        Set-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Value @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Connector
+
+### 2026-10-12T10:00:00Z Ambiguous connector history
+
+* Turn: 3
+* Request: Produce a connector note.
+* Deliverable: `research/2026-09-27-fixture-topic.md`
+* Outcome: Produced a connector note.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "dispatch-reported",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 2,
+  "input_tokens": 700,
+  "cached_tokens": 2800,
+  "cache_write_tokens": 350,
+  "output_tokens": 800,
+  "basis": "estimated"
+}
+```
+'@ -NoNewline
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'Attribution identity:'
+        $result.Output | Should -Match 'ambiguous-missing-member'
+    }
+
+    It 'fails closed when connector Member Name is reused across add/replace/coordinator bindings' {
+        $root = Join-Path $TestDrive 'connector-duplicate-member-collision'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | azure-architect | connector |
+| developer-replace | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | GCP Assessor | — | developer | connector |
+'@
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'globally unique across connector bindings'
+    }
+
+    It 'fails closed when two replacement bindings reuse one connector Member Name' {
+        $root = Join-Path $TestDrive 'connector-duplicate-replace-coordinator-member'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| developer-replace | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | Partner Developer | — | developer | connector |
+| second-developer | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | Partner Developer | — | developer | ask |
+'@
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'globally unique across connector bindings'
+    }
+
+    It 'rejects a retired coordinator binding regardless of its member identity' {
+        $root = Join-Path $TestDrive 'connector-coordinator-target-collision'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        $teamPath = Join-Path $root 'team.md'
+        $team = Get-Content -LiteralPath $teamPath -Raw
+        $team = $team.Replace('| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |', "| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |`n| coordinator | Lead      | Squad Coordinator     | —                  | —              | runSubagent / task | default    | plans/             |")
+        [System.IO.File]::WriteAllText($teamPath, $team, [System.Text.UTF8Encoding]::new($false))
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| coordinator-replace | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | coordinator | coordinator:Squad Coordinator | Lead | — | coordinator | connector |
+'@
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'governance are protected'
+    }
+
+    It 'uses the explicit trusted target member tier for replace bindings regardless roster row order' {
+        foreach ($variant in @('gamma-first', 'delta-first')) {
+            $root = Join-Path $TestDrive "connector-deterministic-tier-$variant"
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+            $teamPath = Join-Path $root 'team.md'
+            $team = Get-Content -LiteralPath $teamPath -Raw
+            $developerRows = if ($variant -eq 'gamma-first') {
+                @(
+                    '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/gamma/ |',
+                    '| developer | Delta | Squad Implementor | — | — | runSubagent / task | extended | changes/delta/ |'
+                )
+            }
+            else {
+                @(
+                    '| developer | Delta | Squad Implementor | — | — | runSubagent / task | extended | changes/delta/ |',
+                    '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/gamma/ |'
+                )
+            }
+            $team = $team.Replace('| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |', "| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |`n$($developerRows[0])`n$($developerRows[1])")
+            [System.IO.File]::WriteAllText($teamPath, $team, [System.Text.UTF8Encoding]::new($false))
+            Add-Content -LiteralPath $teamPath -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| developer-replace-delta | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Delta | Partner Developer | — | developer | connector |
+'@
+            Set-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Value @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Connector
+
+### 2026-10-12T10:00:00Z Replace developer execution
+
+* Turn: 3
+* Request: Produce a bounded developer note.
+* Deliverable: `changes/delta-note.md`
+* Outcome: Delivered a bounded developer note.
+* Member Name: Partner Developer
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "dispatch-reported",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 1,
+  "input_tokens": 120,
+  "cached_tokens": 240,
+  "cache_write_tokens": 0,
+  "output_tokens": 220,
+  "basis": "estimated"
+}
+```
+'@ -NoNewline
+
+            $markdown = (Invoke-Ledger -SquadRoot $root -Format markdown).Output
+            $markdown | Should -Match '\|\s*developer\s*\|\s*Partner Developer\s*\|\s*Squad Connector\s*\|'
+            $markdown | Should -Match '\|\s*developer\s*\|\s*Partner Developer\s*\|\s*Squad Connector\s*\|.*\|\s*extended\s*\|'
+        }
+    }
+
+    It 'fails closed for generic replace targets with mixed internal tiers so roster order cannot change connector tier attribution' {
+        foreach ($variant in @('gamma-first', 'delta-first')) {
+            $root = Join-Path $TestDrive "connector-ambiguous-generic-tier-$variant"
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+            $teamPath = Join-Path $root 'team.md'
+            $team = Get-Content -LiteralPath $teamPath -Raw
+            $developerRows = if ($variant -eq 'gamma-first') {
+                @(
+                    '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/gamma/ |',
+                    '| developer | Delta | Squad Implementor | — | — | runSubagent / task | extended | changes/delta/ |'
+                )
+            }
+            else {
+                @(
+                    '| developer | Delta | Squad Implementor | — | — | runSubagent / task | extended | changes/delta/ |',
+                    '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/gamma/ |'
+                )
+            }
+            $team = $team.Replace('| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |', "| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |`n$($developerRows[0])`n$($developerRows[1])")
+            [System.IO.File]::WriteAllText($teamPath, $team, [System.Text.UTF8Encoding]::new($false))
+            Add-Content -LiteralPath $teamPath -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| developer-replace-generic | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer | Partner Developer | — | developer | connector |
+'@
+
+            $result = Invoke-Ledger -SquadRoot $root -Check
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match "developer-replace-generic"
+            $result.Output | Should -Match 'ambiguous'
+        }
     }
 }
 

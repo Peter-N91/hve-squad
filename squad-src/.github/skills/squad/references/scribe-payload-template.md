@@ -32,7 +32,7 @@ State `run id`, `turn`, `stage` (when the run is autopilot or autonomous), and a
 
 ### 1.4 History Records (When Payload Type Is `history`)
 
-For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. Each history record's consumption JSON follows immediately, in the fixed field order from [entry-schemas.md](entry-schemas.md): `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Supply one consumption object per history record — never one without the other, per the `per-dispatch-history-and-consumption` rule.
+For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. Connector-backed records must include `memberName` and closed `externalProvenance` per [entry-schemas.md](entry-schemas.md). Supply one consumption object per history record in that file's fixed field order — never one without the other.
 
 When a routing policy resolved this dispatch's model, also supply its `routingIdentity` values (`requestedModel`, `effectiveModel`, `observedModel`, `routeRationale`) so the Scribe can render the four identity bullets `entry-schemas.md` defines. Omit `routingIdentity` entirely when no policy applied — never emit it for a no-policy dispatch.
 
@@ -60,12 +60,16 @@ Everything below this line changes turn to turn and is appended after the stable
 payloadType: <decision|history|initialization|memory|Council Verdict|autonomous-loop summary|autopilot-run summary|Intake Readiness Verdict|promotion|expansion|Discovery Verdict>
 squadRoot: <resolved path>
 roster: <initialization/roster refresh only: every confirmed team.md row, cells verbatim; the Scribe never derives an agent name>
+connectorBindings: <confirmed binding rows; omit on refresh to preserve existing rows>
+customRoutingRows: <confirmed routing rows/overrides; omit on refresh to preserve existing rows>
 runId: <id>
 turn: <n>
 stage: <stage name, autopilot/autonomous runs only>
 timestamp: <ISO or the entry-heading format in use>
 historyRecords:
   - agent: <name: frontmatter value, verbatim>
+    memberName: <binding member identity for Squad Connector; omit when not needed>
+    externalProvenance: <closed object per entry-schemas.md; Squad Connector only>
     request: <scoped request>
     deliverable: <path> (<size or word count>)
     outcome: <one-line summary>
