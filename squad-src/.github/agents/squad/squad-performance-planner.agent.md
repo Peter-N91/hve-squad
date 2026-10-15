@@ -2,7 +2,7 @@
 name: Squad Performance Planner
 description: "Non-user-invocable squad performance and reliability planner that runs the performance-slo-planner skill to produce SLIs, SLOs, error budgets, a load model, a test matrix, and a reliability backlog"
 user-invocable: false
-model: Claude Sonnet 5 (copilot)
+model: Claude Sonnet 5.5 (copilot)
 ---
 
 # Squad Performance Planner
