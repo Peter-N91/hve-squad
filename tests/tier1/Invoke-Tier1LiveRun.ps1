@@ -34,7 +34,8 @@
 .PARAMETER SourceRoot
     Repository root to install from and overlay, for testing a branch.
 .PARAMETER Scenario
-    Scenario ids to run. Defaults to every scenario in scenarios/.
+    Scenario ids to run. Defaults to every scenario in scenarios/ except the parameterized
+    pack-lifecycle scenario, which is opt-in and runs only when named together with -Pack.
 .PARAMETER Pack
     Registered pack name substituted into the parameterized pack-lifecycle scenario.
 .PARAMETER Model
