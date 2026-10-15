@@ -35,7 +35,7 @@ Ask:
 * Which control-plane, model-download, update, management, and telemetry paths require connectivity?
 * Has the customer accepted every preview dependency and named a supported fallback?
 
-Use the registered `microsoft-foundry` and `azure-local` skills for current product guidance. The former is available through the official Microsoft Foundry plugin, while the latter is distributed by the official Azure Local Skills plugin. The Azure Local skill covers the platform, not Foundry Local on Azure Local; verify that preview workload against current Microsoft Learn documentation. Record unknown or conflicting claims as unverified with the smallest next check.
+Use the registered `microsoft-foundry` skill for current product guidance, and verify Foundry Local on Azure Local against current Microsoft Learn documentation. Record unknown or conflicting claims as unverified with the smallest next check.
 
 ## SDK and API Questions
 
