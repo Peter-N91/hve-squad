@@ -1980,6 +1980,8 @@ Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
 
     It 'reviews a supplied financial report only for evidence gaps' {
         $script:CostManagerBody | Should -Match ([regex]::Escape('A supplied financial-report evidence review runs Step 6 only'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('references/business-value-measurement.md'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('claim ID, value category, hypothesis'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('Do not fetch, create, estimate, or recalculate financial actuals'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('Do not calculate ROI, approve a business decision'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('status` (`supported`, `gap`, or `pending`)'))
@@ -1996,12 +1998,32 @@ Describe 'Benefit hypotheses remain traceable through planning and review' {
         $script:PayloadTemplate = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/scribe-payload-template.md') -Raw
         $script:CoordinatorBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
         $script:AutopilotBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-autopilot.instructions.md') -Raw
+        $script:BusinessValueReference = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/business-value-measurement.md') -Raw
     }
 
     It 'requires a measurable benefit claim at intake and plans its validation' {
-        $script:IntakeBody | Should -Match 'Benefits need ID, hypothesis'
+        $script:IntakeBody | Should -Match 'ID/hypothesis/beneficiary/category'
         $script:IntakeBody | Should -Match 'measurement owner'
+        $script:IntakeBody | Should -Match 'business-value-measurement\.md'
         $script:LeadBody | Should -Match 'plan instrumentation and outcome validation'
+    }
+
+    It 'defines the requested value categories and measurement guidance' {
+        foreach ($category in @(
+                'revenue enablement'
+                'cost avoidance'
+                'capacity gained'
+                'labour augmentation'
+                'quality'
+                'speed'
+                'risk reduction'
+                'new capacity'
+                'engagement'
+            )) {
+            $script:BusinessValueReference | Should -Match ([regex]::Escape($category))
+        }
+        $script:BusinessValueReference | Should -Match 'Baseline and target'
+        $script:BusinessValueReference | Should -Match 'booked value'
     }
 
     It 'distinguishes deliverable acceptance from business outcomes and approvals' {

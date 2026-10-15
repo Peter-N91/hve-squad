@@ -129,7 +129,7 @@ Required fields:
 * The `Verdict` value is one of exactly `Ready`, `Ready-With-Gaps`, or `Not-Ready`.
 * Blocking and non-blocking gaps carry artifact attribution inline when more than one input is in scope (for example, `(prd.md) no acceptance criteria`).
 
-Benefits need ID, hypothesis, beneficiary, baseline/target, measurement owner, evidence/instrumentation, decision owner/status/ref; omissions block.
+ID/hypothesis/beneficiary/category; baseline/target; measurement owner; evidence; decision owner/status/ref; see business-value-measurement.md.
 
 ## Verdict Anchor and Decision Ref
 
