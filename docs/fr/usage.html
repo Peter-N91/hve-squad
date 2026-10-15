@@ -1130,7 +1130,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
-          <tr><td><code>foundry</code></td><td>researcher, lead, developer, azure-architect, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
+          <tr><td><code>foundry</code></td><td>researcher, lead, developer, tester, architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
         </tbody>
       </table>
       <p>
@@ -1172,19 +1172,23 @@ flowchart TD
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
-        <code>foundry</code> ajoute des consignes et neuf rôles existants dédupliqués, dont les trois rôles
+        <code>foundry</code> ajoute des consignes et douze rôles existants dédupliqués, dont les quatre rôles
         de la colonne méthodologique déjà présents dans chaque profil, sans créer de nouvel
         agent spécialiste, outil ou dépendance. Le <code>researcher</code> rassemble les preuves de capacité
         et de compatibilité SDK/API ; le <code>lead</code> assemble le
         <a href="https://github.com/Peter-N91/hve-squad/blob/main/squad-src/.github/skills/squad/references/foundry-blueprint.md">blueprint Foundry canonique en sept blocs</a>.
-        Les règles existantes d'approbation, de coût et de racine de livrable continuent de s'appliquer.
+        L'<code>architect</code> effectue une revue indépendante de la conception intégrée, le
+        <code>tester</code> réalise la revue finale de l'implémentation par rapport au blueprint, et le
+        <code>deployer</code> utilise la compétence Foundry officielle uniquement pour le déploiement
+        approuvé, après la simulation et le point de contrôle des actions à impact. Les règles existantes
+        d'approbation, de coût et de racine de livrable continuent de s'appliquer.
         Dans une squad, l'écriture et l'exécution de tests nécessitent le rôle facultatif
         <code>qa-engineer</code> installé ; <code>tester</code> effectue uniquement les revues. Une capacité
         QA absente est proposée et signalée, jamais installée automatiquement.
       </p>
       <p>
         L'activation exige une décision Init ou apply acceptée pour cette squad. Le profil <code>full</code>
-        contient déjà les neuf rôles, mais n'active pas les consignes Foundry. Les demandes génériques sur
+        contient déjà les douze rôles, mais n'active pas les consignes Foundry. Les demandes génériques sur
         l'IA, les agents ou MCP ne l'activent pas non plus ; Microsoft 365 Copilot et Copilot Studio
         conservent leurs packs. Vous pouvez appliquer Foundry plus tard ou le réappliquer sans dupliquer les
         membres. Son retrait désactive la transmission de ses consignes tout en préservant les rôles du

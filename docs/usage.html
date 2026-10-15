@@ -1131,7 +1131,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>The project is built on Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>The project is built on Microsoft 365 Copilot &mdash; declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>The project is built on AWS &mdash; Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage</td></tr>
-          <tr><td><code>foundry</code></td><td>researcher, lead, developer, azure-architect, prompt-engineer, security, rai, observability, cost-manager</td><td>Microsoft Foundry project planning with a seven-block blueprint, source evidence, and SDK/API revalidation; reuses existing roles</td></tr>
+          <tr><td><code>foundry</code></td><td>researcher, lead, developer, tester, architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Microsoft Foundry project planning, independent review, and gated deployment with a seven-block blueprint, source evidence, and SDK/API revalidation; reuses existing roles</td></tr>
         </tbody>
       </table>
       <p>
@@ -1173,18 +1173,22 @@ flowchart TD
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
-        <code>foundry</code> adds guidance and a deduplicated set of nine existing roles, including the
-        three methodology-spine roles already present in every profile, not a new
+        <code>foundry</code> adds guidance and a deduplicated set of twelve existing roles, including the
+        four methodology-spine roles already present in every profile, not a new
         specialist agent, tool, or dependency. The <code>researcher</code> owns capability and
         SDK/API evidence; the <code>lead</code> integrates the
         <a href="https://github.com/Peter-N91/hve-squad/blob/main/squad-src/.github/skills/squad/references/foundry-blueprint.md">canonical seven-block Foundry blueprint</a>.
-        Existing approval, cost, and deliverable-root rules still apply. Within a squad,
+        The <code>architect</code> independently reviews the integrated design, the
+        <code>tester</code> performs the final implementation-versus-blueprint review, and the
+        <code>deployer</code> uses the official Foundry skill only for the approved deployment behind
+        the existing dry-run and Impactful-Action Gate. Existing approval, cost, and deliverable-root
+        rules still apply. Within a squad,
         test authoring and execution require the optional installed <code>qa-engineer</code>;
         <code>tester</code> reviews only. Missing QA capability is offered and reported, never installed automatically.
       </p>
       <p>
         Activation requires your accepted Init or apply decision for that squad. The <code>full</code>
-        profile already has all nine roles but does not activate Foundry guidance. Generic AI, agent,
+        profile already has all twelve roles but does not activate Foundry guidance. Generic AI, agent,
         or MCP requests do not activate it either; Microsoft 365 Copilot and Copilot Studio keep
         their existing packs. You can apply Foundry later or reapply it without duplicate members.
         Removal disables its guidance handoff while preserving profile,

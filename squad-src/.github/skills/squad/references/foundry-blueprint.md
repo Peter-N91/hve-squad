@@ -19,14 +19,16 @@ The coordinator reads this section to select owners and pass scoped reference po
 | Block | Existing owners | Artifact and receiving owner |
 |---|---|---|
 | Experience | `designer`, `accessibility`, `developer` | Journey, channel and accessibility requirements to development and accessibility assessment |
-| Orchestration | `lead`, `architect`, `developer` | Agent/workflow and state decisions to development |
+| Orchestration | `lead`, `architect`, `developer` | Agent/workflow and state decisions to development; integrated design to independent architecture review |
 | Tools and Actions | `developer`, `security`, `azure-architect` | Tool contracts, identity and approval boundaries to development and security review |
 | Grounding and Data | `data-scientist`, `privacy`, `developer` | Source, retrieval and access/lifecycle plan to development, privacy and evaluation |
 | Models | `azure-architect`, `cost-manager`, `experimenter` when needed | Evidence-backed candidate comparison to architecture and evaluation |
-| Evaluation and Safety | `prompt-engineer`, `security`, `rai`, installed `qa-engineer`, `tester` | Evaluation design to approved QA execution; results to reviewers |
-| Operations | `observability`, `performance`, `azure-diagnose`, `cost-manager`; `deployer` and `asbuilt-author` when needed | Instrumentation, operating limits and runbook to development and operations |
+| Evaluation and Safety | `prompt-engineer`, `security`, `rai`, installed `qa-engineer`, `tester` | Evaluation design to approved QA execution; implementation and results to final review |
+| Operations | `observability`, `performance`, `azure-diagnose`, `cost-manager`; `deployer` and `asbuilt-author` when needed | Instrumentation, operating limits and runbook to development; approved deployment to operations |
 
-Pack membership names the always-present `researcher`, `lead`, and `developer` so they receive this guidance, then adds `azure-architect`, `prompt-engineer`, `security`, `rai`, `observability`, and `cost-manager` when the profile does not already own them. Deduplication keeps one row per role. Applying the pack does not dispatch all nine. Request other owners only when needed and pass them scoped decision inputs rather than this whole reference unless another active pack names them. `prompt-engineer` uses the existing `evaluation-design` skill; in a squad run, `qa-engineer` writes/runs tests and `tester` reviews only. Offer absent QA through the registered installation path, never install it automatically.
+Pack membership names the always-present `researcher`, `lead`, `developer`, and `tester` so they receive this guidance, then adds `architect`, `azure-architect`, `deployer`, `prompt-engineer`, `security`, `rai`, `observability`, and `cost-manager` when the profile does not already own them. Deduplication keeps one row per role. Applying the pack does not dispatch all twelve. Request other owners only when needed and pass them scoped decision inputs rather than this whole reference unless another active pack names them. `architect` independently reviews the integrated design and participates in council review without replacing `azure-architect` as the Azure design author. `prompt-engineer` uses the existing `evaluation-design` skill; in a squad run, `qa-engineer` writes/runs tests and `tester` performs the final implementation-versus-blueprint review. Offer absent QA through the registered installation path, never install it automatically.
+
+`developer` authors and configures the application or agent, while `deployer` owns only the approved environment deployment. When a deployment includes a Microsoft Foundry hosted agent or related Foundry workload, `deployer` follows the registered `microsoft-foundry` skill behind its existing dry-run and Impactful-Action Gate. It does not select the feature, model, SDK, API, region, or gateway during deployment. Those approved decisions and their evidence arrive from the blueprint.
 
 Each dispatch carries: resolved squad root, accepted pack provenance, requested block, input artifact paths, relevant reference section, evidence pointer, expected output, receiving owner and action boundary. Preserve the specialist's governing skills, permissions, autonomy tiers, council gates and cost rules. The complete seven-block output is required for an integrated blueprint, not every focused specialist answer.
 
@@ -99,10 +101,10 @@ For existing projects, inspect manifests and lockfiles before advising an upgrad
 
 Prefer verified vendor-official resources, then official GitHub marketplace resources, then a justified community fallback. Apply the roster's existing verification gate, collision check, tier and blocklist rules before registration. Installed upstream skills never replace the owners above.
 
-| Candidate source | Potential use | Boundary |
+| Candidate skill | Potential use | Boundary |
 |---|---|---|
-| [Microsoft Foundry skill](https://learn.microsoft.com/azure/foundry/how-to/develop/use-microsoft-foundry-skill) | Approved agent, model, evaluation and troubleshooting workflows | Optional; inspect prerequisites and setup behavior before activation; installation or resource mutation needs authorization |
-| [Azure AI Gateway skill](https://github.com/microsoft/azure-skills/tree/main/skills/azure-aigateway) | Implement a selected APIM option | Not a prerequisite to planning or a reason to select APIM |
-| [CAIRA](https://github.com/microsoft/CAIRA) | Inspect relevant reference components for the selected stack | Select and adapt only needed components after scenario confirmation; no automatic deployment or full-stack copying |
+| `microsoft-foundry` | Approved agent, model, evaluation, troubleshooting and hosted-agent deployment workflows | Optional; inspect prerequisites and setup behavior before activation; installation or resource mutation needs authorization and deployer actions remain gated |
+| `azure-aigateway` | Implement a selected APIM option | Not a prerequisite to planning or a reason to select APIM |
+| `caira` | Inspect relevant reference components for the selected stack | Select and adapt only needed components after scenario confirmation; no automatic deployment or full-stack copying |
 
-First check for capabilities already installed, including the existing Agent Framework, Semantic Kernel and evaluation guidance. These links are candidates, not new dependency declarations or proof that a resource passed the gate. Planning must remain useful without them. Do not activate a skill that runs dependency setup merely to answer a design question.
+First check for capabilities already installed, including the existing Agent Framework, Semantic Kernel and evaluation guidance. When the pack is applied and a candidate skill is absent, offer its installation through the registered path in the roster catalog, as for the other opt-in external roles, and install nothing without the user's agreement. These skills are candidates, not new dependency declarations or proof that a resource passed the gate. Planning must remain useful without them. Do not activate a skill that runs dependency setup merely to answer a design question.
