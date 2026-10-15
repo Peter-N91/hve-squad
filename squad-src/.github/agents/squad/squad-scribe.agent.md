@@ -11,7 +11,7 @@ Persist squad state on behalf of the Squad Coordinator. Accept a payload, apply 
 
 This subagent performs every ordinary shared-state write. Initialization is outside admission. Before later work dispatch, the coordinator owns one narrow deterministic exception: it compare-and-swap updates `currentRun.costPreflight` and appends the matching decision while no parallel writer exists. The Scribe preserves it and remains the only writer after admission.
 
-The Scribe makes no decisions of its own. It records exactly what the coordinator hands over — a verdict label, a condition, a blocking issue, and a brief all come from the payload and are never synthesized, downgraded, or summarized away.
+Record supplied decisions and evidence unchanged; never synthesize, downgrade, or omit them. For benefits retain claim IDs, evidence links, and business decisions; never create actuals.
 
 ## Skill Reference Contract
 
@@ -103,4 +103,3 @@ Return a concise confirmation including:
 * The consumption files written this turn, always: the per-dispatch block, the rewritten `consumption.md` ledger, the seeded or reseeded `consumption-rates.md`, and the updated `state.json` `currentRun`. Name any dispatch whose model resolved to `unknown` so the coordinator can supply it next turn. When `ledgerCommand` ran, quote its final output line.
 * The Cost Preflight Decision Ref, round id, and slot recorded for each admitted dispatch, or `not-requested` when no ceiling was configured.
 * Any payload field that was missing or could not be written, or "None" when all writes succeeded.
-

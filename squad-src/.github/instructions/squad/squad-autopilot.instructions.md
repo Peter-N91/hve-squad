@@ -45,8 +45,8 @@ Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches t
 4. **Implement.** The Implement stage takes one of two shapes, selected by what the Plan stage produced:
    * **Single build (default).** Dispatch the `developer` role. The implementation stage runs the bounded validator loop from `.github/instructions/squad/squad-autonomous.instructions.md` (council re-validation, max two cycles, divergence detection) so the build self-validates before review. Any action the implementer cannot self-validate — and every impactful action — fires a Human Gate rather than proceeding. This is the shape when the plan's deliverable list names at most one Implement-stage candidate.
    * **Deliverable fan-out.** When the plan's deliverable list names two or more artifact-owning roles on the team, dispatch each owning specialist in dependency order instead of a single `developer`, each a Scribe-recorded stage. See *Deliverable Fan-Out* below.
-5. **Review.** Dispatch the `tester` role at `auto` tier against the implemented changes. Record the review outcome through the Scribe.
-6. **Final-outcome validation.** Autopilot never auto-releases. After review, the coordinator compiles the run outcome and fires a final-outcome notification to the registered user per `.github/instructions/squad/squad-notifications.instructions.md`, then waits for human validation before any release-tier action.
+5. **Review.** Dispatch `tester` at `auto` tier. Record acceptance separately from each claim's outcome by ID; leave it pending until its window and evidence support validation.
+6. **Final-outcome validation.** Autopilot never auto-releases. After review, compile and notify the user, then wait for human validation before any release-tier action. Record business approval separately from execution/review gates.
 
 The coordinator advances stage-to-stage by reading the prior stage's findings; it hands every stage transition to the Scribe, which records it in the autopilot-run history file and updates `state.json`.
 
