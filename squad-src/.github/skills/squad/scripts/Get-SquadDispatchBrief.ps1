@@ -25,7 +25,8 @@
       - hand-off: the `Write-SquadHandoff.ps1` command line the Squad Scribe runs;
       - procedure: the verbatim Bounded Lane, Plan-Driven Parallelism, and Scripted Writes
         sections of `references/economy-mode.md` (the hand-off payload shape and a complete
-        example), so a bounded request needs no whole reference file.
+        example), plus its Background Workstreams section with -Background, so a bounded
+        request needs no whole reference file.
 
     Economy only (references/economy-mode.md): it reads `team.md` first and refuses with
     exit 7 unless it records `Model routing: economy`.
@@ -39,6 +40,8 @@
     The repository root that holds `.github/agents/`. Defaults to the current directory.
 .PARAMETER SessionModel
     The coordinator's session model id, used for the orchestration consumption object.
+.PARAMETER Background
+    Also embed the Background Workstreams Procedure, for a `delivery=background` request.
 .EXAMPLE
     & .agents/skills/squad/scripts/Get-SquadDispatchBrief.ps1 -SquadRoot .copilot-tracking/squad -SessionModel claude-sonnet-5
 #>
@@ -49,7 +52,9 @@ param(
 
     [string]$RepoRoot = (Get-Location).Path,
 
-    [string]$SessionModel
+    [string]$SessionModel,
+
+    [switch]$Background
 )
 
 Set-StrictMode -Version Latest
@@ -352,6 +357,10 @@ $out.Add('')
 $out.Add((Get-Section 'economy-mode.md' '## Plan-Driven Parallelism'))
 $out.Add('')
 $out.Add((Get-Section 'economy-mode.md' '## Scripted Writes'))
+if ($Background) {
+    $out.Add('')
+    $out.Add((Get-Section 'economy-mode.md' '## Background Workstreams'))
+}
 
 $text = $out -join "`n"
 # The CLI spills shell output over 20,480 bytes to a temp file, costing extra read turns.

@@ -86,6 +86,11 @@
           <a href="#model-selection-per-role">Sélection du modèle par rôle</a> ci-dessous.
         </li>
         <li>
+          <code>delivery=background</code> — economy uniquement : des flux de travail indépendants s'exécutent en arrière-plan
+          sur Copilot CLI pendant que vous continuez à travailler. Dans tout autre mode de routage, il est ignoré et la
+          squad le signale une fois. Voir <a href="#routing-economy-workflow">Déroulement propre au mode economy</a> ci-dessous.
+        </li>
+        <li>
           <code>discovery=quick|standard|deep|skip</code> &mdash; lance l'étape de découverte à la profondeur indiquée
           sans poser la question, ou l'ignore. Voir <em>Étape de découverte</em> ci-dessous.
         </li>
@@ -1565,6 +1570,32 @@ layouts:
         <code>off</code>, <code>ranked</code> et <code>manual</code>, la squad se comporte exactement comme
         la v0.18.1.
       </p>
+      <p id="routing-economy-workflow">
+        <strong>Déroulement propre au mode economy.</strong> Trois autres changements n'existent qu'en
+        <code>economy</code>, et le coordinateur les cite lorsqu'il vous demande votre accord :
+      </p>
+      <ul>
+        <li>
+          <strong>Écritures scriptées.</strong> Les transmissions ordinaires, la table des tarifs et l'écriture du
+          Cost Preflight passent par des scripts PowerShell qui refusent de s'exécuter hors du mode economy. Le Scribe reste le seul
+          rédacteur : il exécute le script de transmission et ne lit sa procédure complète que lorsque le script lui
+          renvoie la transmission. Un écart du registre des coûts est un avertissement, comme dans la v0.18.1.
+        </li>
+        <li>
+          <strong>Voie courte.</strong> En mode interactif, une demande entièrement spécifiée et à faible risque (fichiers
+          et modification exacts, aucune question ouverte, aucun angle du conseil, aucun déclencheur de contrôle) peut sauter
+          la recherche et le plan. Le rôle responsable est toujours lancé et le testeur clôt toujours ; au moindre doute, ou avec
+          <code>pipeline=full</code>, le pipeline complet s'applique. Des responsables dont les ensembles de fichiers sont
+          prouvés disjoints peuvent travailler en même temps.
+        </li>
+        <li>
+          <strong><code>delivery=background</code>.</strong> Sur Copilot CLI, des flux de travail indépendants
+          s'exécutent en tâches d'arrière-plan une fois tous les contrôles passés au premier plan, chacun avec son propre
+          relecteur nommé, et sont consignés l'un après l'autre par le Scribe. Le lancement et les identifiants des agents
+          sont consignés d'abord : une session interrompue reprend à partir de ce qui est sur le disque et ne relance jamais
+          un flux de travail en silence. VS Code exécute les mêmes flux de travail un par un, au premier plan.
+        </li>
+      </ul>
       <p>
         <strong>Ce que contient une cellule <code>Model</code>.</strong> Un identifiant de modèle exact issu de la
         colonne <code>Model ID</code> de <code>consumption-rates.md</code> (par exemple

@@ -141,6 +141,9 @@ $containers = @(
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'GetSquadDispatchBrief.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'BackgroundWorkstreams.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
 )
 
 # Manifest coverage is a property of the working copy, not of an installed tree.
