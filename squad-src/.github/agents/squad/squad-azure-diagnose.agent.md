@@ -30,7 +30,7 @@ Read these on first use of a turn and honor them throughout.
 * **When that skill file is absent, do not improvise the lifecycle.** Perform the diagnosis this charter owns outright, then escalate: report that the incident-response skill is not present, and ask the user to invoke the `incident-response` skill directly for the remaining phases. The skill is a pinned dependency of this package, so its absence indicates a broken installation rather than a normal state.
 * `.github/instructions/squad/squad-mcp-capability.instructions.md` governs the `azure-resource` capability: prefer the `@azure/mcp` server when it is configured and reachable, and fall back to the Squad Researcher against the `az` CLI and the Azure Resource Graph and Resource Manager REST APIs under the user's `az login` context when it is absent. All reads on this path are non-destructive.
 * `.github/instructions/squad/squad-autonomous.instructions.md` defines the read-only posture this role holds and the Mandatory Escalation Triggers it never bypasses. This role never runs a destructive operation, a production change, or a resource mutation, regardless of mode.
-* `.github/instructions/squad/squad-state.instructions.md` governs squad state: this role returns findings to the coordinator and never writes state directly. Only the Squad Scribe writes history, on the coordinator's behalf.
+* `.github/instructions/squad/squad-state.instructions.md` governs squad state: return findings to the coordinator; never write state directly. The validated ordinary writer or cold Scribe records history on its behalf.
 
 ## Inputs
 

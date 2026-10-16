@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-procedure
-description: "The Squad Scribe hot core, read every dispatch: non-negotiable rules, payload-to-step map, the cold-file dispatch table, append-only entry rules, consumption accounting, state advancement, and the write-completeness self-check. Cold detail lives in scribe-cold-init-and-seeding.md, scribe-cold-federation.md, and scribe-cold-gates-and-verdicts.md."
+description: "Full legacy Scribe procedure for cold operations: non-negotiable rules, payload-to-step map, conditional reads, append-only rules, consumption, state advancement, and completeness checks. Ordinary writes use economy-scribe.md."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -12,7 +12,7 @@ metadata:
 
 ## Scribe Write Procedure
 
-The Squad Scribe performs every ordinary shared-state write. Initialization is outside admission. Before later work dispatch, the coordinator's deterministic Cost Preflight exception is limited to appending the matching decision and compare-and-swap updating `currentRun.costPreflight` while no parallel writer exists.
+This full procedure applies to cold Scribe operations, not the ordinary hot path. In every routing mode, supported ordinary writes use the synchronous `Write-SquadHandoff.ps1 -Quiet` contract in [economy-scribe.md](economy-scribe.md), directly by the coordinator or by Scribe. Cold operations first load [scribe-cold-charter.md](scribe-cold-charter.md), this procedure, entry schemas and the full payload template. Initialization is outside admission. Serialize all writers with the coordinator's Cost Preflight transaction per root; failures never authorize hand-written ordinary fallback.
 
 Every path below is relative to the resolved `squadRoot`. The default `.copilot-tracking/squad/` preserves single-squad behavior; a federation sub-squad resolves to `.copilot-tracking/squad/members/<name>/`; a federation-level payload resolves to the federation root.
 
@@ -20,7 +20,7 @@ Every path below is relative to the resolved `squadRoot`. The default `.copilot-
 
 These hold on every turn regardless of payload type. Each names its full definition; read this file's own remaining sections for the ones defined here, or the cited file for the ones defined elsewhere — the contract below holds whether or not that file loads on this host.
 
-* **`single-writer-ownership`** — The Squad Scribe is the sole writer of squad state. Confirmed initialization is outside admission; the one narrow exception is the coordinator's own deterministic Cost Preflight transaction (compare-and-swap `currentRun.costPreflight` plus the exact legacy schema bump, while no parallel writer exists). Every other mutation goes through the Scribe. Full definition: `squad-floor.instructions.md` § *The Squad Scribe Is the Single Writer* and `squad-state.instructions.md`.
+* **`single-writer-ownership`** — One writer per resolved root: the validated ordinary script or cold Scribe, serialized with Cost Preflight. Confirmed initialization is outside admission. Cost Preflight may compare-and-swap `currentRun.costPreflight` plus the exact legacy schema bump with no parallel writer. No other coordinator hand edits. Full definition: `squad-floor.instructions.md` § *The Squad Scribe Is the Single Writer* and `squad-state.instructions.md`.
 * **`append-only-rules`** — Treat `decisions.md`, `history/<agent>.md` (and its consumption blocks), and `history/autonomous-loop-<id>.md`/`history/autopilot-run-<id>.md`/`notifications.md` as strictly append-only: add each entry at the very end of the file, below any trailing marker comment; never edit, re-type, reorder, or remove a prior entry, not even to fix its fence. Treat `team.md`, `routing.md`, `state.json`, `consumption.md`, and `consumption-rates.md` as replace-on-request. See *Decision, History, and Verdict Entries* below.
 * **`per-dispatch-history-and-consumption`** — A history append and its consumption block are inseparable: never write one without the other. See *Decision, History, and Verdict Entries* below and *Consumption Accounting* Step 5 for the exact 10-field order (`model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`).
 * **`ledger-rewrite-from-full-history`** — `consumption.md` is rewritten from every `#### Consumption` block recorded in `history/*.md` for the run — never from the current turn's payload alone. See *Consumption Accounting* Step 7's rewrite rule and its sum check: the run-total row must equal the sum of every role row, column by column, and the count of blocks folded in must equal the count found on disk.
@@ -50,11 +50,11 @@ These hold on every turn regardless of payload type. Each names its full definit
 
 ### Cold-File Dispatch Table
 
-The Scribe decides which cold file(s) to read from its own payload type — never from whether the coordinator's payload happened to mention a section. `entry-schemas.md` and this hot core are always read; the table below is the complete set of additional reads.
+For a cold operation the Scribe reads the full legacy charter, this procedure, `entry-schemas.md`, and `scribe-payload-template.md`, then the additional files below by payload type, never by whether the coordinator mentioned a section. A supported ordinary handoff reads only `economy-scribe.md`.
 
 | Payload type (Step above) | Also read |
 |---|---|
-| decision, history, (always: Step 7 consumption + state.json) | none — this hot core is sufficient |
+| decision, history, (always: Step 7 consumption + state.json) | ordinary: `economy-scribe.md`; explicitly unsupported cold operation: full charter/procedure/schema/payload plus `consumption.md` |
 | initialization or roster refresh (3) | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), [consumption-rates-template.md](consumption-rates-template.md), `seed-templates.md` (existing init-only conditional) |
 | Step 7.1 rate-table seed/reseed, any payload type (`consumption-rates.md` missing or shape-check-failed) | [consumption-rates-template.md](consumption-rates-template.md) |
 | memory (4) | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) |
@@ -66,7 +66,7 @@ The Scribe decides which cold file(s) to read from its own payload type — neve
 | expansion (11) | [scribe-cold-federation.md](scribe-cold-federation.md), `federation-templates.md` (existing conditional) |
 | federation-level history payload (naming a sub-squad, Step 2) | [scribe-cold-federation.md](scribe-cold-federation.md) § *Federation-Level History Payload* |
 | notification write | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) § *notifications.md* |
-| ordinary payload carrying `handoff: script` (economy only) | [economy-scribe.md](economy-scribe.md), read first instead of this hot core |
+| supported ordinary payload, every routing mode (`handoff: script` optional) | [economy-scribe.md](economy-scribe.md) only; direct synchronous `-Quiet` writer or the same path through Scribe |
 
 ### Decision, History, and Verdict Entries
 

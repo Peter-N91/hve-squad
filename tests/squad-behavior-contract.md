@@ -1,3 +1,7 @@
+---
+description: "Squad behavior contracts and regression coverage across installed package tiers"
+---
+
 # Squad Behavior Contract and Regression Test Plan
 
 Defines the end result a squad run must produce, so a release can be blocked when it stops producing it.
@@ -63,6 +67,22 @@ That parity is evidence, not proof. The cases below are what turn it into proof.
 ## Tier 0 — Static conformance
 
 No Copilot invocation. Install the ref into a scratch directory, then inspect the delivered tree.
+
+### Universal deterministic handoffs
+
+Ordinary persistence uses `Write-SquadHandoff.ps1` in every routing mode. Existing
+Markdown histories, decisions, ledger, and state remain the compatibility contract.
+
+| ID | Assertion | Source |
+|---|---|---|
+| WRT-01 | Ordinary writes pass the ledger check under `off`, `ranked`, `economy`, `manual`, and an absent routing line, for single-squad and federation member roots | `Write-SquadHandoff.ps1`; `economy-scribe.md` |
+| WRT-02 | `-Quiet` emits exactly one JSON stdout line with `status`, `turn`, `dispatchEntries`, `historyCounts`, and `ledgerCheck`; warnings remain on stderr | `Write-SquadHandoff.ps1`, Quiet parameter |
+| WRT-03 | Quiet mode preserves validation, unsupported-operation, rate-refusal, rollback, and history-integrity failures, with no success status on failure | `Write-SquadHandoff.ps1`, exit codes |
+| WRT-04 | A tolerated accounting mismatch reports `ledgerCheck: ledger-only`, never `PASS`, and retains its warning | `Write-SquadHandoff.ps1`, ledger check |
+| WRT-05 | Non-economy handoffs neither demand economy consent nor add economy routing markers | `Write-SquadHandoff.ps1`, routing-specific warnings |
+| WRT-06 | Rate seeding, checking, and reseeding work in all routing modes and retain operator rows and calibration rules | `Initialize-SquadConsumptionRates.ps1` |
+| WRT-07 | Coordinators execute ordinary handoffs directly and serialize them with cold Scribe operations; unsupported operations retain the legacy contract and completion barriers | Coordinator agents; `economy-scribe.md` |
+| WRT-08 | The Scribe definition is less than 3,000 UTF-8 bytes and does not eagerly load the legacy procedure, schemas, or payload template | `squad-scribe.agent.md` |
 
 | ID | Assertion | Rationale |
 |---|---|---|
@@ -183,7 +203,7 @@ Presence of a consumption block is not the same as a correct ledger. These cases
 | ID | Assertion | Source |
 |---|---|---|
 | CON-20 | An `#### Consumption — Orchestration` block exists for the turn — the coordinator's own turns and the Scribe's writes are never uncounted | `scribe-procedure.md` Step 7 |
-| CON-21 | The orchestration block covers one coordinator turn **per dispatch round** plus one `Scribe state write` per hand-off; a turn with three dispatch rounds does not record one coordinator turn | Same |
+| CON-21 | The orchestration block covers coordinator work **per dispatch round** and Scribe work only when a Scribe actually ran; direct deterministic writes do not fabricate Scribe model usage | `economy-scribe.md`; `scribe-procedure.md` Step 7 |
 | CON-22 | `consumption.md` carries an `orchestration` row in **both** the Attribution and the Usage & Cost tables | `consumption.md` template |
 | CON-23 | The `orchestration` row `Tier` is `mixed` | `consumption.md` template |
 

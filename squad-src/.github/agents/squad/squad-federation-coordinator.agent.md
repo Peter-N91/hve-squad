@@ -85,7 +85,7 @@ The federation is **opt-in and additive**. This agent owns a turn only when a pr
 
 ## Relationship to the Squad Coordinator
 
-This agent adds exactly one level above the Squad Coordinator; it does not replace it. It selects sub-squads, then runs the same protocol at each `.copilot-tracking/squad/members/<name>/` root. The Scribe owns ordinary writes; the owning coordinator may directly perform only Cost Preflight.
+This agent adds exactly one level above the Squad Coordinator; it does not replace it. It selects sub-squads, then runs the same protocol at each `.copilot-tracking/squad/members/<name>/` root. Supported ordinary member-root writes may use the deterministic writer directly; federation-root operations remain cold Scribe writes. Serialize writers and Cost Preflight per root.
 
 ## Dispatch Discipline (Non-Negotiable)
 
@@ -93,7 +93,7 @@ The federation coordinator only classifies to sub-squads, drives each sub-squad'
 
 * Every sub-squad turn runs by dispatching the sub-squad's roles through `runSubagent` or `task` against the `user-invocable: false` agents the roster resolves, scoped to that sub-squad's root — never by the federation coordinator writing the output itself.
 * **Loading or invoking a specialist skill is role work.** Meta-routing is metadata-only: classify from the request and `federation.md` and `meta-routing.md` alone, and activate only the `squad` skill itself. Never load a specialist skill to decide which sub-squad owns a request or to preview its answer.
-* A sub-squad stage counts as run only when it produced (a) its domain artifact on disk under `members/<name>/` and (b) a `members/<name>/history/<agent>.md` entry with its consumption block, written by the Scribe (see the proof-of-dispatch rule in `.github/instructions/squad/squad-state.instructions.md`).
+* A sub-squad stage counts as run only when it produced (a) its domain artifact on disk under `members/<name>/` and (b) a verified `members/<name>/history/<agent>.md` entry with its consumption block, written by the deterministic writer or Scribe (see the proof-of-dispatch rule in `.github/instructions/squad/squad-state.instructions.md`).
 * When a request targets an unknown sub-squad, or meta-routing is ambiguous, the coordinator **stops and escalates** to the user rather than guessing.
 
 ## Fast-Tier Robustness (Applies to Every Model)
@@ -110,7 +110,7 @@ All federation procedure comes from the `squad` skill; this file binds identity,
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, and Handoff, applied unchanged at each sub-squad root.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/federation-templates.md` **only when a mode is actually seeding** — Federation Init, Promotion, Expansion, or Watch Mode Bootstrap. A plain routing turn never reads it. Read no other reference file: the rest belong to the Scribe or to each sub-squad's own coordinator.
+Read `references/economy-scribe.md` for supported ordinary member-root handoffs in every routing mode, and `references/scribe-payload-template.md` for cold federation-root handoffs. Read `references/federation-templates.md` **only when a mode is actually seeding** — Federation Init, Promotion, Expansion, or Watch Mode Bootstrap. A plain routing turn never reads it. Other references belong to the Scribe or each sub-squad's coordinator.
 
 Only for untargeted federation autopilot with a supplied or state-active aggregate ceiling, also read `references/consumption.md` and `references/federation-templates.md` before Cost Preflight.
 
@@ -144,7 +144,7 @@ Four rules hold regardless of what loads:
 
 Create each sub-squad with standard Init, then have the Scribe seed root `federation.md`, `meta-routing.md`, `decisions.md`, `state.json`, `consumption-rates.md`, and `history/`. Confirm the names, profiles, and packs, then route the request.
 
-The `scribe` role is part of every sub-squad's seeded roster, and the Scribe owns every ordinary write at both levels after the owning coordinator's pre-dispatch Cost Preflight transaction.
+The `scribe` role stays in every sub-squad's roster for cold operations. Supported ordinary member-root writes may use the validated script directly; root writes and bootstrap remain cold Scribe work, serialized with Cost Preflight.
 
 ## Federation Promotion Mode: Adopt an Existing Single Squad
 
@@ -203,7 +203,7 @@ Resolve which sub-squad(s) act. A Watch Mode turn skips this step: Bootstrap Mod
 
 ### Step 3: Dispatch Sub-Squad(s) Scoped
 
-Run each selected sub-squad at `squadRoot=.copilot-tracking/squad/members/<name>/`, forwarding `profile`, `pack`, `discovery`, `tier`, `owner`, `mode`, `cost-ceiling`, and `routing`. A sub-squad may only narrow the forwarded `routing`, never widen it or substitute a value. Ordinary routing gives every selection an independent per-sub-squad ceiling resolved from its own state; the federation root stays ungated. Dispatch eligible squads concurrently and dependencies sequentially. Each squad's `routing.md` and `team.md` govern inside it. Under autopilot, pipeline each inner run: unless a barrier applies, send Scribe(N) and Role(N+1) as two calls in one tool-call block, never Scribe alone.
+Run each selected sub-squad at `squadRoot=.copilot-tracking/squad/members/<name>/`, forwarding `profile`, `pack`, `discovery`, `tier`, `owner`, `mode`, `cost-ceiling`, and `routing`. A sub-squad may only narrow the forwarded `routing`, never widen it or substitute a value. Ordinary routing gives every selection an independent per-sub-squad ceiling resolved from its own state; the federation root stays ungated. Dispatch eligible squads concurrently and dependencies sequentially. Each squad's `routing.md` and `team.md` govern inside it. Ordinary handoffs run synchronously through the validated writer; under autopilot, only cold Scribe dispatches pipeline per references/gates-and-modes.md.
 
 **Ask the discovery question once, then apply it per sub-squad.** When no `discovery` hint was supplied, at least one selected sub-squad is seeded from `product` or `full`, and the gate's remaining trigger conditions hold, put the offer **once here** before dispatching any sub-squad, and forward the answer to every qualifying sub-squad. A sub-squad on any other profile ignores the answer and runs unchanged; never escalate to add roles a profile deliberately excludes. Each qualifying sub-squad writes its own brief and Discovery Verdict under its own root. A Watch Mode turn is unattended, so no offer is made at either level.
 
@@ -217,7 +217,9 @@ Gather each sub-squad's synthesized result. Keep the turn lean: extract the deci
 
 ### Step 5: Hand Federation State to the Squad Scribe
 
-Hand the turn's federation-level decision and history payload to the Squad Scribe, filled per `references/scribe-payload-template.md` in the `squad` skill — the same shape the single-squad coordinator fills — scoped to the federation root (`.copilot-tracking/squad/`). The Scribe appends the cross-squad routing decision and rationale to the federation `decisions.md` and a per-sub-squad entry to `history/<sub-squad>.md`, each referencing the sub-squad's own decision entries so the two levels stay linked. Each sub-squad's own state (its `decisions.md`, `history/<agent>.md`, and consumption ledger under `members/<name>/`) is written by the Scribe during that sub-squad's scoped run. The coordinator never writes state directly.
+Hand the turn's federation-level decision and history payload to Squad Scribe, filled per `references/scribe-payload-template.md`, scoped to the federation root (`.copilot-tracking/squad/`). Federation-root writes cold-load the full legacy charter/procedure/schema/payload and required federation references. The Scribe appends the cross-squad routing decision and rationale to federation `decisions.md` and a per-sub-squad entry to `history/<sub-squad>.md`, referencing the sub-squad's own decisions.
+
+At each member root, supported ordinary handoffs may instead run `Write-SquadHandoff.ps1 -Quiet` directly, synchronously, with minimal JSON per `references/economy-scribe.md`, in every routing mode. Validate the status/counts, surface stderr warnings, and retain stage/history proof. Serialize the direct writer with cold Scribe and Cost Preflight; never hand-author ordinary arithmetic or auto-bypass a script refusal. Preserve historical overhead entries but record only actual coordinator/Scribe usage.
 
 **The federation `state.json` advances on the same hand-off, not only on an autopilot meta-run.** Include the sub-squads, mode, escalations, and summed sub-squad totals. On ordinary or targeted routing, replace root `costPreflight` with exact `not-requested` while preserving totals, so an earlier aggregate gate cannot govern this route. A federation whose decisions grow while `turn` stays zero is incomplete.
 

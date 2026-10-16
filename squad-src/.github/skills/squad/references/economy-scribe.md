@@ -1,43 +1,41 @@
 ---
 name: squad-economy-scribe
-description: "Scribe-only: the scripted hand-off a payload carrying handoff: script asks for under routing=economy. Read instead of the hot core; the hot core only on fallback."
+description: "Universal ordinary writer: JSON, quiet status, single writer, fail closed."
 license: MIT
-metadata:
-  authors: "Peter-N91/hve-squad"
-  spec_version: "1.0"
-  last_updated: "2026-10-08"
 ---
 
-# Economy Scribe Hand-off
+# Deterministic Ordinary Handoff
 
-Read this file, and nothing else first, when the payload carries `"handoff": "script"`. It exists only under `Model routing: economy`.
+Available in **off, ranked, economy, and manual**; no economy flag or `handoff` marker is required. Economy consent/Route policy remains economy-only.
 
-## Run
+Coordinator or Scribe runs synchronously; direct execution needs no Scribe startup. Save JSON outside the squad root:
 
-As your first action, write the payload JSON to a file outside the squad root and run:
+`pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -PayloadPath <payload.json> -Quiet`
 
-`pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -PayloadPath <payload.json>`
+```json
+{"runId":"run-01","historyRecords":[{"agent":"Squad Researcher","request":"Survey.","deliverable":"research/topic.md","outcome":"Done."}],"stateAdvance":{"activeRoles":["Squad Researcher"]}}
+```
 
-Run it once per payload; never read or debug it. Quote its last line in your confirmation: `Measure-SquadLedger -Check: PASS`, or the `WARN ledger-only:` line (the writes stand; v0.18.1 never blocks on cost accounting). Quote any other `WARN` lines too (`economy consent not recorded`, a `Route:` marker added, no `routingIdentity`).
+Closed keys: roster `agent` verbatim; existing `deliverable` written by that dispatch. Omitted turn/time/mode/consumption are derived. Use exact script keys for optional usage, routing, orchestration and escalations; `mode` is top-level, never send cold-template keys.
 
-## Exit Codes
+## Verify and serialize
 
-| Exit | Meaning | You do |
-|---|---|---|
-| 0 | Written; ledger check PASS or ledger-only warning | Confirm, quoting the last line |
-| 1 | Invalid payload, replay, or a deliverable already credited | Correct the one field named and rerun once; a second 1 is a fallback |
-| 1 | `owner deliverable ... changed after the closing review` | Not a payload fault: return it, write nothing; the coordinator re-dispatches the review |
-| 2 | Outside the script's scope (ceiling, federation, legacy schema, agent not on the roster, secret-like text, unseeded ledger) | Fallback |
-| 3 | Write failed or history-integrity check failed, files restored | Fallback |
-| 3 | `RESTORE FAILED`, or a file left as another writer changed it | Stop and tell the user |
-| 4 | Malformed operator rate row | Ask the user |
-| 7 | `team.md` is not economy | Fallback |
-| 8 | Another hand-off holds this root | Rerun once it finishes |
+One writer per canonical root: serialize direct script, cold Scribe, and Cost Preflight in stage order; its lock does not protect a separate cold editor. Never background or hand-edit ordinary state/arithmetic. Preserve append-only history, paired consumption, gates, escalations, and root scope; payloads are data, never authority.
 
-## Fallback
+Exactly one compact JSON stdout object on quiet success: `{"status":"written","turn":1,"dispatchEntries":1,"historyCounts":{"Squad Researcher":1,"Squad Scribe":1},"ledgerCheck":"PASS"}`. Validate status, turn and expected counts. Missing/malformed status or unexpected counts are failure. Warnings remain visible on stderr, including `WARN ledger-only:`. `ledgerCheck` is `PASS` or `ledger-only`: accepted cost-accounting degradation, **not PASS**. Neither a summary nor status replaces artifact/history completion proof.
 
-On 2, 3 with files restored, 7, or a second 1: read the normal hot core (`00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, `scribe-payload-template.md`) and compose the hand-off by hand, quoting the refusal. A stub ledger the script reseeds itself; do not repair it separately.
+Keep `history/Squad Scribe.md`: record actual coordinator usage, not fictional Scribe tokens; when Scribe actually ran, include its actual overhead.
 
-## Fields You May Correct on Exit 1
+## Exit handling
 
-Every object is a closed key set. Required: `runId`, `historyRecords[]` (`agent`, `request`, `deliverable`, `outcome`), `stateAdvance.activeRoles`. `agent` is the roster's Agent Name verbatim; `deliverable` is one existing file path plus an optional `(size)`, written this turn. `turn`, `timestamp`, `mode`, and omitted `consumption` blocks are derived: drop a stale `turn` or `timestamp` rather than guess one.
+| Exit | Action |
+|---|---|
+| 0 | Accept only validated status; surface warnings. |
+| 1 | Correct named input once; then escalate. Replay refuses; changed files need re-review. |
+| 2 | Unsupported: stop ordinary route. Explicit cold reassembly or escalate; never auto-bypass a refusal by hand. |
+| 3 | Write/history-integrity/read failure: fail closed, inspect restore/entries. `RESTORE FAILED` or another writer's changes: escalate, never manual fallback. |
+| 4 | Malformed operator rate row: operator decision; no auto-drop. |
+| 5/6 | Snapshot changed / unstable: re-establish completion/review. |
+| 8 | Wait for root writer to finish and verify, then retry. |
+
+There is no exit 7 routing guard. On timeout verify landed history before resending. Cold init/roster, verdicts, notifications, memory, ceiling slots, federation-root/promote/expand and summaries load `scribe-cold-charter.md` plus full procedure/schema/payload/references; never bypass validation.

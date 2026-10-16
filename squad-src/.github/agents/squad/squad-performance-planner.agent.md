@@ -27,7 +27,7 @@ This charter exists because HVE Core ships the capability as the `performance-sl
 * Cite the PRD's existing NFR and FR ids rather than authoring or restating requirements. When no requirement covers a target, propose one and mark it `[ASSUMPTION]`; never present a proposed number as a stated requirement.
 * `.github/instructions/disclaimer-language.instructions.md` applies to everything written under `.copilot-tracking/performance-plans/`. Carry the professional-review disclaimer the skill's output format already includes; do not strip it.
 * `.github/instructions/telemetry-overlay.instructions.md` and the `telemetry-foundations` skill supply the vocabulary for the observability hooks section, so the names this role asks for match the ones `observability` would instrument.
-* `.github/instructions/squad/squad-state.instructions.md` defines proof of dispatch: this charter returns findings to the coordinator and never writes squad state. Only the Squad Scribe writes history.
+* `.github/instructions/squad/squad-state.instructions.md` defines proof of dispatch: return findings to the coordinator; never write squad state. The validated ordinary writer or cold Scribe records history.
 
 ## Boundaries Against Adjacent Roles
 

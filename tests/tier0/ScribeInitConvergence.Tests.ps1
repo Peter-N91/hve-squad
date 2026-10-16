@@ -33,7 +33,8 @@ BeforeAll {
     }
 
     $script:Coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
-    $script:Scribe = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0].Body
+    $script:ScribeHot = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0].Body
+    $script:Scribe = Get-SquadReferenceBody -Name 'scribe-cold-charter.md'
     $script:InitCold = Get-SquadReferenceBody -Name 'scribe-cold-init-and-seeding.md'
     $script:PayloadTemplate = Get-SquadReferenceBody -Name 'scribe-payload-template.md'
     $script:ScribeProcedure = Get-SquadReferenceBody -Name 'scribe-procedure.md'
@@ -88,6 +89,14 @@ BeforeAll {
 }
 
 Describe 'GATE-38 Init copies roster rows from the payload and never derives an agent name' {
+    It 'loads the full legacy charter/procedure/schema/payload for cold Init, not ordinary dispatches' {
+        $script:ScribeHot | Should -Match 'Before initialization/roster refresh'
+        $script:ScribeHot | Should -Match 'read `references/scribe-cold-charter\.md` in full'
+        foreach ($reference in @('00-index.md', 'scribe-procedure.md', 'entry-schemas.md', 'scribe-payload-template.md')) {
+            $script:Scribe | Should -Match ([regex]::Escape("references/$reference"))
+        }
+        $script:ScribeHot | Should -Match 'Cold loading is not a validation bypass'
+    }
     It 'the payload template carries a roster field for initialization and roster refresh' {
         $script:PayloadTemplate | Should -Match '(?m)^roster: <initialization/roster refresh only'
     }
