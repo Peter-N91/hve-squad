@@ -321,6 +321,25 @@ function ConvertTo-LedgerNumberLocal {
     return $null
 }
 
+function ConvertTo-LongContextThresholdLocal {
+    <#
+    .SYNOPSIS
+        Converts a documented threshold such as "\<=100K / >100K" to tokens.
+    #>
+    param([string]$Value)
+
+    $clean = ($Value -replace '\\', '').Trim()
+    if ($clean -notmatch '(?:≤|<=)\s*(?<amount>\d+(?:\.\d+)?)\s*(?<unit>[KMG]?)') { return $null }
+
+    $multiplier = switch ($Matches.unit.ToUpperInvariant()) {
+        'K' { 1000.0 }
+        'M' { 1000000.0 }
+        'G' { 1000000000.0 }
+        default { 1.0 }
+    }
+    return [double]$Matches.amount * $multiplier
+}
+
 function Get-MarkdownTableLocal {
     <#
     .SYNOPSIS
@@ -377,8 +396,8 @@ function Get-RateTableLocal {
     .SYNOPSIS
         Reads the per-model and tier-fallback rate tables out of consumption-rates.md
         content. Tolerates both the 7-column shape (no LC columns) and the current
-        shape (LC Threshold/Input/Cached/Cache write/Output columns present but
-        unused here) because rows are selected by header name, never by position.
+        shape (LC Threshold/Input/Cached/Cache write/Output columns present)
+        because rows are selected by header name, never by position.
     #>
     [CmdletBinding()]
     param(
@@ -419,6 +438,16 @@ function Get-RateTableLocal {
                 cache_write  = $numbers[2]
                 output       = $numbers[3]
                 pricedAsName = $key
+            }
+            $lcColumns = @('LC Input', 'LC Cached', 'LC Cache write', 'LC Output')
+            $lcThreshold = if ('LC Threshold' -in $table.Header) { ConvertTo-LongContextThresholdLocal $row['LC Threshold'] } else { $null }
+            $lcNumbers = @($lcColumns | ForEach-Object { if ($_ -in $table.Header) { ConvertTo-LedgerNumberLocal $row[$_] } })
+            if ($null -ne $lcThreshold -and $lcNumbers.Count -eq $lcColumns.Count) {
+                $rate['long_context_threshold'] = $lcThreshold
+                $rate['lc_input'] = $lcNumbers[0]
+                $rate['lc_cached'] = $lcNumbers[1]
+                $rate['lc_cache_write'] = $lcNumbers[2]
+                $rate['lc_output'] = $lcNumbers[3]
             }
 
             if ($isTierTable) {
@@ -1204,7 +1233,16 @@ function Add-BlockToAggregateLocal {
     $cacheWr = [double]$Block.Fields['cache_write_tokens']
     $outTok = [double]$Block.Fields['output_tokens']
 
-    $rawCost = ($inTok * $rate.input + $cached * $rate.cached + $cacheWr * $rate.cache_write + $outTok * $rate.output) / 1000000.0
+    $effectiveRate = $rate
+    if ($rate.ContainsKey('long_context_threshold') -and ($inTok + $cached) -gt [double]$rate.long_context_threshold) {
+        $effectiveRate = @{} + $rate
+        $effectiveRate.input = $rate.lc_input
+        $effectiveRate.cached = $rate.lc_cached
+        $effectiveRate.cache_write = $rate.lc_cache_write
+        $effectiveRate.output = $rate.lc_output
+    }
+
+    $rawCost = ($inTok * $effectiveRate.input + $cached * $effectiveRate.cached + $cacheWr * $effectiveRate.cache_write + $outTok * $effectiveRate.output) / 1000000.0
     $cost = $rawCost * $CalibrationFactor
 
     $Aggregate.Turns += $turns
@@ -1214,7 +1252,7 @@ function Add-BlockToAggregateLocal {
     $Aggregate.Output += $outTok
     $Aggregate.Cost += $cost
     if ([string]$Block.Fields['basis'] -eq 'tier-default') { $Aggregate.Basis = 'tier-default' }
-    $Aggregate.Blocks.Add(@{ Block = $Block; Rate = $rate; Cost = $cost })
+    $Aggregate.Blocks.Add(@{ Block = $Block; Rate = $effectiveRate; Cost = $cost })
 
     # Attribution accumulation: a block's `model` is recorded exactly as written --
     # including the literal `unknown` -- and never replaced by the rate row that
@@ -1224,7 +1262,7 @@ function Add-BlockToAggregateLocal {
     # from Model without either column ever being fabricated.
     $model = [string]$Block.Fields['model']
     $modelSource = [string]$Block.Fields['model_source']
-    $pricedAsLabel = [string]$rate.pricedAsName
+    $pricedAsLabel = [string]$effectiveRate.pricedAsName
     if ($model -and $model -notin $Aggregate.Models) { $Aggregate.Models.Add($model) }
     if ($modelSource -and $modelSource -notin $Aggregate.ModelSources) { $Aggregate.ModelSources.Add($modelSource) }
     if ($pricedAsLabel -and $pricedAsLabel -notin $Aggregate.PricedAsUsed) { $Aggregate.PricedAsUsed.Add($pricedAsLabel) }

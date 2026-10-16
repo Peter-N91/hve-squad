@@ -51,16 +51,16 @@ BeforeAll {
         $squad = Join-Path $repo '.copilot-tracking/squad'
         New-Item -ItemType Directory -Path $squad -Force | Out-Null
         $agents = Join-Path $repo '.github/agents'
-        Write-Text (Join-Path $agents 'squad-implementor.agent.md') "---`nname: Squad Implementor`nmodel: Claude Sonnet 5 (copilot)`n---`n`nBody.`n"
+        Write-Text (Join-Path $agents 'squad-implementor.agent.md') "---`nname: Squad Implementor`nmodel: Claude Sonnet 5.5 (copilot)`n---`n`nBody.`n"
         $flag = if ($BlockedReviewer) { "disable-model-invocation: true`n" } else { '' }
-        Write-Text (Join-Path $agents 'squad-reviewer.agent.md') "---`nname: Squad Reviewer`n$($flag)model: Claude Haiku 4.5 (copilot)`n---`n`nBody.`n"
+        Write-Text (Join-Path $agents 'squad-reviewer.agent.md') "---`nname: Squad Reviewer`n$($flag)model: Claude Haiku 5.5 (copilot)`n---`n`nBody.`n"
         if ($Uninitialized) { return $repo }
         $team = if ($ModelColumn) {
             @(
                 '# Squad Team', '') + $modeLines + @('## Members', '',
                 '| Role | Member Name | Agent Name (Primary) | Alternate Agents | Selection Cue | Invocation | Model Tier | Model | Deliverable Root |',
                 '| ---- | ----------- | -------------------- | ---------------- | ------------- | ---------- | ---------- | ----- | ---------------- |',
-                '| developer | Dev | Squad Implementor | — | — | task | default | `claude-haiku-4.5` | `.copilot-tracking/changes/` |',
+                '| developer | Dev | Squad Implementor | — | — | task | default | `claude-haiku-5.5` | `.copilot-tracking/changes/` |',
                 '| tester | Rev | Squad Reviewer | — | — | task | fast | — | `.copilot-tracking/reviews/` |'
             )
         }
@@ -160,18 +160,18 @@ Describe 'Get-SquadDispatchBrief.ps1' {
     It 'prints the roster by column header with pins, rate rows, dispatchability, the next turn, and the procedure, and writes nothing' {
         $repo = New-BriefRepo
         $before = Get-TreeHash -Root $repo
-        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'claude-sonnet-5')
+        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'claude-sonnet-5.5')
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Match ([regex]::Escape('next hand-off turn: 5'))
         $result.Output | Should -Match ([regex]::Escape('updated 2026-10-03T18:00:00Z'))
         $result.Output | Should -Match ([regex]::Escape('model routing: economy'))
         $result.Output | Should -Match ([regex]::Escape('| Role | Agent | Dispatchable | Pin | Priced as (tier) | Deliverable root |'))
-        $result.Output | Should -Match ([regex]::Escape('| developer | Squad Implementor | yes | Claude Sonnet 5 | Claude Sonnet 5 (default) | .copilot-tracking/changes/ |'))
-        $result.Output | Should -Match ([regex]::Escape('| tester | Squad Reviewer | yes | Claude Haiku 4.5 | Claude Haiku 4.5 (fast) | .copilot-tracking/reviews/ |'))
+        $result.Output | Should -Match ([regex]::Escape('| developer | Squad Implementor | yes | Claude Sonnet 5.5 | Claude Sonnet 5.5 (default) | .copilot-tracking/changes/ |'))
+        $result.Output | Should -Match ([regex]::Escape('| tester | Squad Reviewer | yes | Claude Haiku 5.5 | Claude Haiku 5.5 (fast) | .copilot-tracking/reviews/ |'))
         $result.Output | Should -Match ([regex]::Escape('roster precheck (Step 1b): PASS'))
         $result.Output | Should -Match ([regex]::Escape('never `general-purpose`'))
         $result.Output | Should -Match 'coverage: for a request that meets every Bounded Lane criterion'
-        $result.Output | Should -Match '"model":"Claude Sonnet 5","model_source":"agent-pinned","priced_as":"Claude Sonnet 5"'
+        $result.Output | Should -Match '"model":"Claude Sonnet 5.5","model_source":"agent-pinned","priced_as":"Claude Sonnet 5.5"'
         $result.Output | Should -Match '"model_source":"session-inherited"'
         $result.Output | Should -Match '(?m)^## Bounded Lane'
         $result.Output | Should -Match '(?m)^## Plan-Driven Parallelism'
@@ -190,20 +190,20 @@ Describe 'Get-SquadDispatchBrief.ps1' {
     }
 
     It 'prints each role''s Model cell under routing and prices the dispatch on it' {
-        $result = Invoke-Brief -Repo (New-BriefRepo -ModelColumn) -Extra @('-SessionModel', 'claude-sonnet-5')
+        $result = Invoke-Brief -Repo (New-BriefRepo -ModelColumn) -Extra @('-SessionModel', 'claude-sonnet-5.5')
         $result.Output | Should -Match ([regex]::Escape('model routing: economy'))
         $result.Output | Should -Match ([regex]::Escape('| Role | Agent | Dispatchable | Pin | Model | Priced as (tier) | Deliverable root |'))
-        $result.Output | Should -Match ([regex]::Escape('| developer | Squad Implementor | yes | Claude Sonnet 5 | claude-haiku-4.5 | Claude Haiku 4.5 (fast) | .copilot-tracking/changes/ |'))
-        $result.Output | Should -Match ([regex]::Escape('| tester | Squad Reviewer | yes | Claude Haiku 4.5 | none | Claude Haiku 4.5 (fast) | .copilot-tracking/reviews/ |'))
-        $result.Output | Should -Match ([regex]::Escape('developer on its Model cell (add `"passedModel": "claude-haiku-4.5"`)'))
-        $result.Output | Should -Match '"model":"claude-haiku-4.5","model_source":"cli-pinned","priced_as":"Claude Haiku 4.5"'
+        $result.Output | Should -Match ([regex]::Escape('| developer | Squad Implementor | yes | Claude Sonnet 5.5 | claude-haiku-5.5 | Claude Haiku 5.5 (fast) | .copilot-tracking/changes/ |'))
+        $result.Output | Should -Match ([regex]::Escape('| tester | Squad Reviewer | yes | Claude Haiku 5.5 | none | Claude Haiku 5.5 (fast) | .copilot-tracking/reviews/ |'))
+        $result.Output | Should -Match ([regex]::Escape('developer on its Model cell (add `"passedModel": "claude-haiku-5.5"`)'))
+        $result.Output | Should -Match '"model":"claude-haiku-5.5","model_source":"cli-pinned","priced_as":"Claude Haiku 5.5"'
         $result.Output | Should -Match ([regex]::Escape('Pass each role''s Model cell as the dispatch `model` exactly as written'))
     }
 
     It 'reads team.md by header name, so a reordered or drifted header still maps each column' {
         $result = Invoke-Brief -Repo (New-BriefRepo -DriftedHeader)
-        $result.Output | Should -Match ([regex]::Escape('| developer | Squad Implementor | yes | Claude Sonnet 5 | Claude Sonnet 5 (default) | .copilot-tracking/changes/ |'))
-        $result.Output | Should -Match ([regex]::Escape('| tester | Squad Reviewer | yes | Claude Haiku 4.5 | Claude Haiku 4.5 (fast) | .copilot-tracking/reviews/ |'))
+        $result.Output | Should -Match ([regex]::Escape('| developer | Squad Implementor | yes | Claude Sonnet 5.5 | Claude Sonnet 5.5 (default) | .copilot-tracking/changes/ |'))
+        $result.Output | Should -Match ([regex]::Escape('| tester | Squad Reviewer | yes | Claude Haiku 5.5 | Claude Haiku 5.5 (fast) | .copilot-tracking/reviews/ |'))
         $result.Output | Should -Match ([regex]::Escape('roster precheck (Step 1b): PASS'))
     }
 
@@ -216,7 +216,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
     }
 
     It 'stays under the host inline output limit' {
-        $result = Invoke-Brief -Repo (New-BriefRepo) -Extra @('-SessionModel', 'claude-sonnet-5')
+        $result = Invoke-Brief -Repo (New-BriefRepo) -Extra @('-SessionModel', 'claude-sonnet-5.5')
         [System.Text.Encoding]::UTF8.GetByteCount($result.Output) | Should -BeLessThan 20480
         $result.Output | Should -Not -Match 'WARN brief exceeds'
     }

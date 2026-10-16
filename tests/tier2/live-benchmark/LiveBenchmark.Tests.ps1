@@ -49,7 +49,7 @@ Model routing: economy
 | Role | Primary | Alternate Agents | Selection Cue | Model Tier | Model | Deliverable Root | Member Name |
 | ---- | ------- | ---------------- | ------------- | ---------- | ----- | ---------------- | ----------- |
 | developer | Squad Implementor | — | — | default | `gpt-5.4-mini` | `.copilot-tracking/changes/` | — |
-| tester | Squad Reviewer | — | — | fast | claude-haiku-4.5 | `.copilot-tracking/reviews/` | — |
+| tester | Squad Reviewer | — | — | fast | claude-haiku-5.5 | `.copilot-tracking/reviews/` | — |
 | scribe | Squad Scribe | — | — | fast | — | `.copilot-tracking/squad/` | — |
 '@
         }
@@ -71,7 +71,7 @@ Model routing: economy
             @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:00:05Z'; data = @{ toolCallId = 'c0'; toolName = 'powershell'; arguments = @{ command = 'pwsh -File .agents/skills/squad/scripts/Get-SquadDispatchBrief.ps1' } } }
             @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:01:00Z'; data = @{ toolCallId = 'c1'; toolName = 'task'; arguments = @{ agent_type = 'Squad Implementor'; model = 'gpt-5.4-mini' } } }
             @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:02:00Z'; data = @{ toolCallId = 'c2'; toolName = 'task'; arguments = @{ agent_type = 'general-purpose' } } }
-            @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:03:00Z'; data = @{ toolCallId = 'c3'; toolName = 'task'; arguments = @{ agent_type = 'Squad Reviewer'; model = 'claude-haiku-4.5' } } }
+            @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:03:00Z'; data = @{ toolCallId = 'c3'; toolName = 'task'; arguments = @{ agent_type = 'Squad Reviewer'; model = 'claude-haiku-5.5' } } }
             @{ type = 'tool.execution_complete'; timestamp = '2026-10-05T10:04:00Z'; data = @{ toolCallId = 'c3' } }
             @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:04:10Z'; data = @{ toolCallId = 'c4'; toolName = 'powershell'; arguments = @{ command = 'pwsh -File Write-SquadHandoff.ps1 -PayloadPath x' } } }
             @{ type = 'tool.execution_start'; timestamp = '2026-10-05T10:04:20Z'; data = @{ toolCallId = 'c5'; toolName = 'task'; parentToolCallId = 'c1'; arguments = @{ agent_type = 'Squad Scribe' } } }
@@ -280,7 +280,7 @@ def test_reads_private_state():
 
     It 'records routing mode and compares Model cells with the models used' {
         $good.routingMode | Should -Be 'economy'
-        $good.modelCells | Should -Be 'developer=gpt-5.4-mini;tester=claude-haiku-4.5'
+        $good.modelCells | Should -Be 'developer=gpt-5.4-mini;tester=claude-haiku-5.5'
         $good.modelMatch | Should -Be '1/2'
         $agents = $good.agentsJson | ConvertFrom-Json
         ($agents | Where-Object agent -EQ 'Squad Implementor').match | Should -Be 'yes'

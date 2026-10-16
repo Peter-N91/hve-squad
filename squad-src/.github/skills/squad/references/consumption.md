@@ -163,27 +163,27 @@ Immediately before each dispatch unit, read `currentRun.estCostUsd` again and ad
 
 ### Worked single-squad example
 
-This example uses the class inputs above, Claude Sonnet 4.6 for coordinator and research, Claude Haiku 4.5 for Scribe, and an eligible calibration factor of `1.20`:
+This example uses the class inputs above, Claude Sonnet 4.6 for coordinator and research, Claude Haiku 5.5 for Scribe, and an eligible calibration factor of `1.20`:
 
 ```text
 coordinator  13800 x 3.00 +  55200 x 0.30 + 26000 x 3.75 +  2400 x 15.00 =  191460 / 1e6 x 1.20 = 0.229752
 researcher  148800 x 3.00 + 595200 x 0.30 + 84000 x 3.75 + 15000 x 15.00 = 1164960 / 1e6 x 1.20 = 1.397952
-scribe       15600 x 1.00 +  62400 x 0.10 + 24000 x 1.25 +  3200 x  5.00 =   67840 / 1e6 x 1.20 = 0.081408
-                                           projected = 1.709112
-                                         admission x3.0 = 5.127336
+scribe       15600 x 0.10 +  62400 x 0.01 + 24000 x 0.125 + 3200 x  0.50 =    6784 / 1e6 x 1.20 = 0.0081408
+                                            projected = 1.6358448
+                                          admission x3.0 = 4.9075344
 ```
 
-With `ceilingUsd=10.0000` and `currentRun.estCostUsd=0.5000`, `remainingUsd=9.5000`. The persisted point estimate is `1.7091`, admission cost is `5.1273`, and the decision is `within-ceiling` at medium confidence.
+With `ceilingUsd=10.0000` and `currentRun.estCostUsd=0.5000`, `remainingUsd=9.5000`. The persisted point estimate is `1.6358`, admission cost is `4.9075`, and the decision is `within-ceiling` at medium confidence.
 
 ### Worked federation example
 
 Federation admission sums already reserved inner-run costs and a separately priced federation meta-orchestration reservation:
 
 ```text
-product inner admission       = 5.127336
+product inner admission       = 4.907534
 azure inner admission         = 3.200000
 federation meta admission     = 0.900000
-federation admission total    = 9.227336
+federation admission total    = 9.007534
 remaining (12.0000 - 1.0000)  = 11.000000
 decision                      = within-ceiling
 ```

@@ -5,14 +5,14 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "2.0"
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-15"
 ---
 
 # Squad Model Routing
 
 **No policy is the default and is byte-for-byte today's behavior.** When `team.md` records no routing mode and the turn passes no `routing=`, the coordinator omits the dispatch `model` parameter entirely, exactly as before this file existed. Everything below only ever narrows or substitutes a model id passed through that same parameter — it never rewrites an agent's `model:` frontmatter (that pin, and the five-rung *Model Attribution* ladder that resolves what actually ran, stay exactly as `.github/instructions/squad/squad-state.instructions.md` defines them).
 
-**Omitting the parameter defers to the target agent's own model pin, when it has one.** A dispatch with no `model` parameter runs on that pin; when the agent declares none, the host decides — typically the session model — so the squad pins every role it wants off the session model. The two coordinators (`squad-coordinator`, `federation-coordinator`) declare no pin by design and run on the session model the user selected. The Scribe must not inherit the frontier session model: its `model:` frontmatter pins Claude Haiku 4.5, its `bookkeeping` assignment class floors at the seeded `fast` Model Tier, and neither routing input nor the no-policy default ever substitutes the orchestrating session's own model in its place.
+**Omitting the parameter defers to the target agent's own model pin, when it has one.** A dispatch with no `model` parameter runs on that pin; when the agent declares none, the host decides — typically the session model — so the squad pins every role it wants off the session model. The two coordinators (`squad-coordinator`, `federation-coordinator`) declare no pin by design and run on the session model the user selected. The Scribe must not inherit the frontier session model: its `model:` frontmatter pins Claude Haiku 5.5, its `bookkeeping` assignment class floors at the seeded `fast` Model Tier, and neither routing input nor the no-policy default ever substitutes the orchestrating session's own model in its place.
 
 ## Routing Modes
 
@@ -168,9 +168,9 @@ Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` r
 ## Worked Examples
 
 * **No policy (default)**: `team.md` has no mode line and the turn passes no `routing=`. Every dispatch omits `model`; behavior is identical to before this file existed.
-* **Ranked on the Copilot CLI**: `routing=ranked` with this CLI host's full `task` enum. The Scribe writes `Model routing: ranked` and fills the `Model` column. With the seeded Model Tiers the picks differ by need rather than by name: `researcher` → `claude-opus-5.5` (research fit 3, lowest Blended of the fit-3 rows); `lead` → `gpt-5.6-sol`; `developer` → `gpt-5.3-codex`; `tester` (a `fast` floor, so no frontier rows) → `gpt-6-sol`; `architect` → `gpt-5.5`, as for the rest of the council; `intake-validator` → `claude-sonnet-5.5` (a newer generation than the equally fit and equally priced `claude-sonnet-5`); `scribe` → `claude-haiku-4.5`.
+* **Ranked on the Copilot CLI**: `routing=ranked` with this CLI host's full `task` enum. The Scribe writes `Model routing: ranked` and fills the `Model` column. With the seeded Model Tiers the picks differ by need rather than by name: `researcher` → `claude-opus-5.5` (research fit 3, lowest Blended of the fit-3 rows); `lead` → `gpt-5.6-sol`; `developer` → `gpt-5.3-codex`; `tester` (a `fast` floor, so no frontier rows) → `gpt-6-sol`; `architect` → `gpt-5.5`, as for the rest of the council; `intake-validator` → `claude-sonnet-5.5` (implementation fit 3 and lower Blended than `claude-sonnet-5`); `scribe` → `claude-haiku-5.5`.
 * **Manual at Init**: `/squad routing=manual` on a new project. After the roster is confirmed, the opening question lists each role's suggestion; the user accepts all but changes the `review` class to `claude-opus-4.8`. The Scribe seeds `team.md` with `Model routing: manual` and the chosen cells.
-* **Switching an existing squad to manual in VS Code**: the session model is Claude Sonnet 5, so only catalog ids priced at or below it are offered, labeled unverified. A pick VS Code then rejects re-opens the question for that role with the list VS Code reported.
-* **Below-floor cell, refused**: a hand-edited `architect` cell of `claude-haiku-4.5` under a `default` floor. `claude-haiku-4.5` is `fast-lightweight`, which `default` does not admit, so the cell is refused and logged; `architect` dispatches at the next precedence level and the next interactive turn re-asks.
+* **Switching an existing squad to manual in VS Code**: the session model is Claude Sonnet 5.5, so only catalog ids priced at or below it are offered, labeled unverified. A pick VS Code then rejects re-opens the question for that role with the list VS Code reported.
+* **Below-floor cell, refused**: a hand-edited `architect` cell of `claude-haiku-5.5` under a `default` floor. `claude-haiku-5.5` is `fast-lightweight`, which `default` does not admit, so the cell is refused and logged; `architect` dispatches at the next precedence level and the next interactive turn re-asks.
 * **Unevaluated pick**: a `developer` cell of `gpt-5.6-sol-fast` — advertised, not in the catalog. Applied because it is an explicit manual pick, marked `unevaluated` in the identity bullets and priced `unpriced`-safe per Cost Preflight's max-of-eligible-set rule.
 * **Stale catalog**: `model-catalog.md`'s `Retrieved:` date is over 90 days old. `routing=ranked` falls back silently in rank terms but loudly in log terms — one warning line — to `consumption.md`'s static tiers for every class.

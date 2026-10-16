@@ -2,7 +2,7 @@
 name: Squad Scribe
 description: "Non-user-invocable squad state writer that appends decisions and history and persists per-agent repository memory on the coordinator's behalf"
 user-invocable: false
-model: Claude Haiku 4.5 (copilot)
+model: Claude Haiku 5.5 (copilot)
 ---
 
 # Squad Scribe

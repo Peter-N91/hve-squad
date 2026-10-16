@@ -2,7 +2,7 @@
 name: Squad Implementor
 description: "Non-user-invocable squad implementer that executes an approved plan phase through the rpi-implement skill and records the change under .copilot-tracking/changes/"
 user-invocable: false
-model: Claude Sonnet 5 (copilot)
+model: Claude Sonnet 5.5 (copilot)
 ---
 
 # Squad Implementor

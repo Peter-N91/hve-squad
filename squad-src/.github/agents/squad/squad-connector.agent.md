@@ -2,7 +2,7 @@
 name: Squad Connector
 description: "Delegate a bounded work-role task to a consumer-owned agent or orchestrator through file envelopes and replace/add bindings; never replace HVE coordinators, Scribe, or council authority"
 user-invocable: false
-model: Claude Sonnet 5 (copilot)
+model: Claude Sonnet 5.5 (copilot)
 ---
 
 # Squad Connector
