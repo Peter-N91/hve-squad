@@ -900,7 +900,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
     ) {
         $root = New-EconomyRoot -Content $TeamMd
         $result = Invoke-EconomyResolverRaw -Root $root -Extra @{ Mode = 'ranked' }
-        $NormalizedOutput = $result.Output -replace '\s+', ' '
+        $NormalizedOutput = ($result.Output -replace '\s*\|\s*', ' ') -replace '\s+', ' '
         $result.ExitCode | Should -Not -Be 0 -Because $result.Output
         $result.Output | Should -Match 'Connector alignment error'
         $NormalizedOutput | Should -Match $Match

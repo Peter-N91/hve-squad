@@ -258,7 +258,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         @{ Mode = 'cyclic-aligned'; Message = 'cyclic Aligned Role chain' }
     ) {
         $result = Invoke-Brief -Repo (New-BriefRepo -ConnectorMode $Mode)
-        $NormalizedOutput = $result.Output -replace '\s+', ' '
+        $NormalizedOutput = ($result.Output -replace '\s*\|\s*', ' ') -replace '\s+', ' '
         $result.ExitCode | Should -Not -Be 0 -Because $result.Output
         $result.Output | Should -Match 'connector alignment error'
         $NormalizedOutput | Should -Match ([regex]::Escape($Message))
