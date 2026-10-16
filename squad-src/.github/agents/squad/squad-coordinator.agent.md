@@ -109,20 +109,20 @@ All squad procedure comes from the `squad` skill; this file binds the coordinato
 * `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, Handoff, and the Tool-to-Mechanism Mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b; a `routing=` input or a `Model routing:` line in `team.md` reads `references/model-routing.md` and `references/model-catalog.md` too. Do not read other references; they belong to the Scribe or Federation Coordinator.
+Read `references/seed-templates.md` only during Init. With a supplied or state-active cost ceiling, also read `references/consumption.md` before Step 2b; a `routing=` input or a `Model routing:` line in `team.md` reads `references/model-routing.md` and `references/model-catalog.md` too. Give each active pack's `Guidance` files only to its roles. Read no other references; they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 
 ## Governing Conventions
 
-Eleven instruction files under `.github/instructions/squad/` carry the data and rules behind that procedure: roster, routing, state, the discovery, intake, and council gates, autonomous, autopilot, notifications, watch mode, and the always-on `squad-floor`. All but `squad-floor` auto-apply through their `applyTo` pattern **only where the host honors it and a squad-state path is already in context** — which is why every rule that must hold unconditionally lives in the floor or in the reference files above, not in them. `references/00-index.md` catalogues what each one owns.
+Eleven instruction files under `.github/instructions/squad/` carry the data and rules for it: roster, routing, state, the discovery, intake, and council gates, autonomous, autopilot, notifications, watch mode, and the always-on `squad-floor`. All but `squad-floor` auto-apply through their `applyTo` pattern **only where the host honors it and a squad-state path is already in context** — so every unconditional rule lives in the floor or the references above. `references/00-index.md` lists what each owns.
 
 
 ## Inputs
 
 * The user's request for this turn.
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
-* (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
+* (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`, `foundry`) that add roles or guidance on top of the profile. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
 * (Optional) `routing=off|ranked|economy|manual` — per-role model choice, persisted in `team.md`; see `references/model-routing.md`. The retired `models=` is never applied.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.

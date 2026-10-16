@@ -70,6 +70,8 @@ The Scribe decides which cold file(s) to read from its own payload type — neve
 
 ### Decision, History, and Verdict Entries
 
+For confirmed pack application or removal, update the roster and append a decision recording pack and action. Derive active packs from decisions, not roles. Guidance is read-time context, not a routing row. Never duplicate rows.
+
 Append decisions and their rationale to the end of `decisions.md`; never edit or remove prior entries. When a decision is marked architecturally significant, note that the coordinator should additionally capture it as an ADR via the `adr-author` skill and reference that ADR from the entry.
 
 Append each dispatch record to `history/<agent>.md`, creating the file with its agent heading when absent. A history append and its consumption block are inseparable — never append a dispatch record without also writing its block. When a ceiling is configured, the history payload also carries the Cost Preflight Decision Ref, run id, round id, and slot. Read the persisted preflight and every history entry first. Reject the child without a partial write unless its decision is `within-ceiling` or `approved-over-ceiling`, its readable permitted set contains that slot, and no history entry already records the same run, round, and slot. For `approved-over-ceiling`, also require medium confidence, `evaluatedSpendUsd < ceilingUsd`, a readable `Approved From` over-ceiling round with matching inputs, and an `Approval Ref`. A permitted slot is consumable exactly once.

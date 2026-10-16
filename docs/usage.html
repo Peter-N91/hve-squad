@@ -68,9 +68,9 @@
           proposes a recommended profile before creating anything.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, or <code>pack=aws</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, or <code>pack=foundry</code>
           &mdash; adds a technology
-          vertical's specialist roles on top of the profile. A pack never replaces the profile, and you
+          vertical's specialist roles, scoped guidance, or both on top of the profile. A pack never replaces the profile, and you
           can apply more than one (comma-separated). See <em>Packs</em> below.
         </li>
         <li>
@@ -1080,7 +1080,7 @@ flowchart TD
         a live Azure DevOps or Jira project, and a tracker write reaches a whole team &mdash;
         notifications, subscriptions, and webhooks fire the moment an item lands &mdash; so the squad
         never seeds that reach by default. <code>qa-engineer</code>, <code>release-engineer</code>, and
-        every pack role are opt-in for a different reason: the agent that fills them is published
+        the Power Platform, M365 Copilot, and AWS pack roles are opt-in for a different reason: the agent that fills them is published
         elsewhere and simply is not there until you install it, and a roster should never advertise
         capability your project does not have. Either way the coordinator <em>offers</em> the role the
         first time you ask for work that needs it, naming what it would do and, where something must be
@@ -1131,6 +1131,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>The project is built on Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>The project is built on Microsoft 365 Copilot &mdash; declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>The project is built on AWS &mdash; Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage</td></tr>
+          <tr><td><code>foundry</code></td><td>researcher, lead, developer, tester, architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Microsoft Foundry project planning, independent review, and gated deployment with a seven-block blueprint, source evidence, and SDK/API revalidation; reuses existing roles</td></tr>
         </tbody>
       </table>
       <p>
@@ -1160,12 +1161,73 @@ flowchart TD
         implying general multi-cloud reach.
       </p>
       <p>
-        A pack is <strong>opt-in</strong>. Its roles are filled by agents published in
+        Every pack is <strong>opt-in</strong>. Power Platform, M365 Copilot, and AWS roles are filled by agents published in
         <a href="https://github.com/github/awesome-copilot">github/awesome-copilot</a> rather than by
         this package, so hve-squad references them instead of shipping them &mdash; you install a pack's
         resources deliberately, and no consumer carries a vertical they never asked for. The coordinator
         gives you the exact install command when you apply the pack, or the first time a request needs a
-        role the pack would provide.
+        role the pack would provide. Foundry reuses existing roles and points them to registered upstream
+        Microsoft and Azure skills instead of copying changing product documentation into the squad.
+      </p>
+      <h3>Microsoft Foundry project guidance</h3>
+      <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
+/squad request="Remove the Foundry pack"</code></pre>
+      <p>
+        <code>foundry</code> adds guidance and a deduplicated set of twelve existing roles, including the
+        four methodology-spine roles already present in every profile, not a new
+        specialist agent, tool, or dependency. The <code>researcher</code> owns capability and
+        SDK/API evidence; the <code>lead</code> integrates the
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/squad-src/.github/skills/squad/references/foundry-blueprint.md">canonical seven-block Foundry blueprint</a>.
+        The <code>architect</code> independently reviews the integrated design, the
+        <code>tester</code> performs the final implementation-versus-blueprint review, and the
+        <code>deployer</code> uses the official Foundry skill only for the approved deployment behind
+        the existing dry-run and Impactful-Action Gate. Existing approval, cost, and deliverable-root
+        rules still apply. Within a squad,
+        test authoring and execution require the optional installed <code>qa-engineer</code>;
+        <code>tester</code> reviews only. Missing QA capability is offered and reported, never installed automatically.
+      </p>
+      <p>
+        Activation requires your accepted Init or apply decision for that squad. The <code>full</code>
+        profile already has all twelve roles but does not activate Foundry guidance. Generic AI, agent,
+        or MCP requests do not activate it either; Microsoft 365 Copilot and Copilot Studio keep
+        their existing packs. You can apply Foundry later or reapply it without duplicate members.
+        Removal disables its guidance handoff while preserving profile,
+        other-pack, and custom roles, decisions, histories, deliverables, and recorded spend.
+      </p>
+      <p>
+        At each checkpoint, the squad reads the project manifests and lockfiles and uses the registered
+        <code>microsoft-foundry</code>, <code>azure-aigateway</code>, <code>use-ai-gateway</code>,
+        and official Microsoft Foundry plugin resources to verify service, feature,
+        SDK/API, tier, and regional status separately. Missing or conflicting evidence stays
+        unverified. Applying the pack never approves a preview, upgrades a dependency, installs a
+        resource, or provisions Azure.
+      </p>
+      <h4>Worked example: employee support assistant</h4>
+      <p>
+        A fictional equipment supplier wants employees to ask questions over an access-controlled
+        knowledge base. Answers cite authorized sources and abstain when evidence is insufficient.
+        Creating a support ticket requires human approval. The customer prefers GA capabilities but
+        has not yet chosen a region, language, SDK baseline, or cloud-versus-local deployment.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Block</th><th>Decision question</th><th>Owner and handoff</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Experience</td><td>How are citations, abstention, accessibility, and ticket confirmation presented?</td><td>designer and accessibility hand requirements to developer</td></tr>
+          <tr><td>Orchestration</td><td>Which state transition persists human approval before ticket creation?</td><td>lead and architect hand the workflow boundary to developer</td></tr>
+          <tr><td>Tools and Actions</td><td>How are caller authorization, retries, and reversible ticket submission enforced?</td><td>developer drafts the contract for security review</td></tr>
+          <tr><td>Grounding and Data</td><td>Which documents may each employee retrieve, retain, and cite?</td><td>data-scientist and privacy hand source and lifecycle rules to development and evaluation</td></tr>
+          <tr><td>Models</td><td>Which current model and deployment meet quality, region, latency, locality, and cost constraints?</td><td>azure-architect and cost-manager hand verified candidates to prompt-engineer</td></tr>
+          <tr><td>Evaluation and Safety</td><td>Which tests prove grounded answers, appropriate abstention, and authorized tool execution?</td><td>prompt-engineer designs evaluation; installed QA executes; tester, security, and RAI review</td></tr>
+          <tr><td>Operations</td><td>Which redacted traces, alerts, budgets, rollback, and incident ownership are required?</td><td>observability, performance, and cost-manager hand criteria to development and operations</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The architect compares a direct service path with optional API Management governance and,
+        when locality warrants it, a separate Azure Local option. The comparison asks the upstream
+        skills for current capability, preview or GA, tier, region, and SDK/API evidence. It never
+        assumes cloud and local parity or treats a dated example as current verification.
       </p>
       <p>
         You rarely have to remember packs exist. The squad <em>offers</em> one the same way it offers a
@@ -1179,18 +1241,18 @@ flowchart TD
         off the roster. Removal only takes out the roles that pack still owns &mdash; a role your profile
         or another pack also contributes stays &mdash; and it does not damage the record: the decision log
         and each agent's history are append-only, so removal <em>adds</em> an entry rather than erasing
-        any. Anything those roles already produced stays on disk, and the resources stay installed, so
-        re-applying the pack later costs nothing.
+        any. Anything those roles already produced stays on disk, and installed resources stay installed.
+        Re-applying the pack later does not require reinstalling them; normal dispatch cost rules still apply.
       </p>
 
       <h3>Some verticals are not packs</h3>
       <p>
-        Two domains arrive as extra reach on a role you already have, rather than as a pack, because no
-        upstream agent behind them passed the squad's verification gate &mdash; and a pack needs roles,
-        which need an agent. <strong>Power BI and Fabric</strong> (semantic-model review, DAX
+        Some capabilities arrive as extra reach on a role you already have rather than as a
+        separate pack. <strong>Power BI and Fabric</strong> (semantic-model review, DAX
         optimization, report design, Lakehouse fundamentals) sit with <code>data-scientist</code>.
         <strong>AI application engineering</strong> (Microsoft Agent Framework, Semantic Kernel) sits
-        with <code>developer</code>.
+        with <code>developer</code>. The Foundry pack adds project-level coordination and evidence,
+        not a replacement for that implementation role.
       </p>
       <p>
         There is nothing to apply for either. <code>developer</code> is in every profile, so the AI
@@ -1216,6 +1278,7 @@ flowchart TD
           <tr><td>Power Platform app that has to produce audit evidence</td><td><code>profile=compliance pack=power-platform</code></td></tr>
           <tr><td>Designing an AWS workload before anything is built</td><td><code>profile=architecture pack=aws</code></td></tr>
           <tr><td>One estate spanning Azure and AWS</td><td><code>profile=azure pack=aws</code></td></tr>
+          <tr><td>Planning a Microsoft Foundry support assistant</td><td><code>profile=azure pack=foundry</code></td></tr>
           <tr><td>On call for a live AWS workload</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>An M365 Copilot agent that handles personal data</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>A Power Platform solution fronted by an M365 Copilot agent</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>

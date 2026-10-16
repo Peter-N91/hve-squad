@@ -33,6 +33,8 @@ The procedure is split across the reference files below so that each agent loads
 |---------------------------------------------------------------|--------------------------------------------------------------------------------|
 | [00-index.md](references/00-index.md)                         | Which file to read for which job, and the companion instruction files          |
 | [profiles-and-packs.md](references/profiles-and-packs.md)     | Squad profiles and add-on packs                                                |
+| [foundry-blueprint.md](references/foundry-blueprint.md)       | `foundry` guidance: seven-block ownership, artifacts, and handoffs              |
+| [foundry-platform-options.md](references/foundry-platform-options.md) | `foundry` guidance: gateway and Azure Local decision questions with upstream skill pointers |
 | [operating-procedure.md](references/operating-procedure.md)   | Init, Route, ledger reconciliation, Decide, Handoff, tool-to-mechanism mapping |
 | [gates-and-modes.md](references/gates-and-modes.md)           | Discovery, intake, council, implementation gates; autopilot and autonomy modes |
 | [federation.md](references/federation.md)                     | Federation layout, detection precedence, and federation modes                  |

@@ -143,6 +143,13 @@ $containers = @(
     }
 )
 
+if ($PSCmdlet.ParameterSetName -eq 'Source') {
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'PackRegistry.Tests.ps1') -Data @{
+        SourceRoot  = $SourceRoot
+        PackageRoot = $PackageRoot
+    }
+}
+
 # Manifest coverage is a property of the working copy, not of an installed tree.
 if ($PSCmdlet.ParameterSetName -eq 'Source') {
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Manifest.Tests.ps1') -Data @{

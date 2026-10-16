@@ -557,7 +557,7 @@ metadata:
 
 * **request** (required): The work for the squad this turn, from the user's own words.
 * **profile** (optional): The squad profile to seed when the project has no squad yet (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, or `product`). Selects which cast the coordinator stamps out during Init Mode.
-* **pack** (optional): One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`). A pack carries a technology vertical's specialist roles and never replaces the profile.
+* **pack** (optional): One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`, `foundry`). A pack carries specialist roles, scoped guidance, or both and never replaces the profile.
 * **discovery** (optional): The depth of the opt-in discovery gate for this turn (`quick`, `standard`, `deep`, or `skip`). When omitted, the coordinator offers it once per topic in a `product` or `full` squad and stays silent in every other profile. Ignored on an unattended run.
 * **tier** (optional): A model-tier hint (`fast` or `default`) overriding cost-first defaults for this turn.
 * **owner** (optional): A `Member Name` from `team.md` that picks a specific named member when two rows share the same role.

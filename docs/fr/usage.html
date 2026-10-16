@@ -68,9 +68,9 @@
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code> ou <code>pack=aws</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code> ou <code>pack=foundry</code>
           &mdash; ajoute au profil
-          les rôles spécialisés d'un domaine technologique. Un pack ne remplace jamais le profil, et vous
+          les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
         </li>
         <li>
@@ -1079,7 +1079,7 @@ flowchart TD
         un projet Azure DevOps ou Jira actif, et une écriture dans un outil de suivi touche toute une équipe &mdash;
         notifications, abonnements et webhooks se déclenchent dès qu'un élément est créé &mdash; la squad
         ne met donc jamais cette capacité en place par défaut. <code>qa-engineer</code>, <code>release-engineer</code> et
-        tous les rôles des packs sont à activer explicitement pour une autre raison : l'agent qui les assure est publié
+        les rôles des packs Power Platform, M365 Copilot et AWS sont à activer explicitement pour une autre raison : l'agent qui les assure est publié
         ailleurs et n'est simplement pas présent tant que vous ne l'avez pas installé ; une équipe ne doit jamais annoncer
         une capacité dont votre projet ne dispose pas. Dans les deux cas, le coordinateur <em>propose</em> le rôle
         la première fois que vous demandez un travail qui le nécessite, en précisant ce qu'il ferait et, si une installation est
@@ -1130,6 +1130,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
+          <tr><td><code>foundry</code></td><td>researcher, lead, developer, tester, architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
         </tbody>
       </table>
       <p>
@@ -1159,12 +1160,76 @@ flowchart TD
         laisser entendre qu'elle couvre tous les clouds.
       </p>
       <p>
-        Un pack est <strong>à activer explicitement</strong>. Ses rôles sont assurés par des agents publiés dans
+        Un pack est <strong>à activer explicitement</strong>. Les rôles Power Platform, M365 Copilot et AWS sont assurés par des agents publiés dans
         <a href="https://github.com/github/awesome-copilot">github/awesome-copilot</a> plutôt que par
         ce package : hve-squad les référence donc au lieu de les distribuer &mdash; vous installez délibérément les
         ressources d'un pack, et aucun utilisateur n'hérite d'un domaine technologique qu'il n'a jamais demandé. Le coordinateur
         fournit la commande d'installation exacte lorsque vous appliquez le pack, ou la première fois qu'une demande nécessite un
-        rôle que ce pack apporterait.
+        rôle que ce pack apporterait. Foundry réutilise les rôles existants et les oriente vers des compétences Microsoft et Azure
+        enregistrées, au lieu de copier dans la squad une documentation produit qui évolue rapidement.
+      </p>
+      <h3>Consignes de projet Microsoft Foundry</h3>
+      <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
+/squad request="Remove the Foundry pack"</code></pre>
+      <p>
+        <code>foundry</code> ajoute des consignes et douze rôles existants dédupliqués, dont les quatre rôles
+        de la colonne méthodologique déjà présents dans chaque profil, sans créer de nouvel
+        agent spécialiste, outil ou dépendance. Le <code>researcher</code> rassemble les preuves de capacité
+        et de compatibilité SDK/API ; le <code>lead</code> assemble le
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/squad-src/.github/skills/squad/references/foundry-blueprint.md">blueprint Foundry canonique en sept blocs</a>.
+        L'<code>architect</code> effectue une revue indépendante de la conception intégrée, le
+        <code>tester</code> réalise la revue finale de l'implémentation par rapport au blueprint, et le
+        <code>deployer</code> utilise la compétence Foundry officielle uniquement pour le déploiement
+        approuvé, après la simulation et le point de contrôle des actions à impact. Les règles existantes
+        d'approbation, de coût et de racine de livrable continuent de s'appliquer.
+        Dans une squad, l'écriture et l'exécution de tests nécessitent le rôle facultatif
+        <code>qa-engineer</code> installé ; <code>tester</code> effectue uniquement les revues. Une capacité
+        QA absente est proposée et signalée, jamais installée automatiquement.
+      </p>
+      <p>
+        L'activation exige une décision Init ou apply acceptée pour cette squad. Le profil <code>full</code>
+        contient déjà les douze rôles, mais n'active pas les consignes Foundry. Les demandes génériques sur
+        l'IA, les agents ou MCP ne l'activent pas non plus ; Microsoft 365 Copilot et Copilot Studio
+        conservent leurs packs. Vous pouvez appliquer Foundry plus tard ou le réappliquer sans dupliquer les
+        membres. Son retrait désactive la transmission de ses consignes tout en préservant les rôles du
+        profil, des autres packs et personnalisés, ainsi que les décisions, historiques, livrables et coûts
+        enregistrés.
+      </p>
+      <p>
+        À chaque jalon, la squad lit les manifestes et fichiers de verrouillage du projet et utilise
+        <code>microsoft-foundry</code>, <code>azure-aigateway</code>, <code>use-ai-gateway</code>,
+        et le plugin Microsoft Foundry officiel pour vérifier séparément le service, la
+        fonctionnalité, le SDK ou l'API, le niveau et la région. Une preuve absente ou contradictoire
+        reste non vérifiée. Le pack n'approuve aucune préversion, ne met à niveau aucune dépendance,
+        n'installe aucune ressource et ne provisionne pas Azure.
+      </p>
+      <h4>Exemple : assistant de support pour les employés</h4>
+      <p>
+        Un fournisseur fictif d'équipements veut interroger une base documentaire contrôlée par les
+        droits d'accès. Les réponses citent les sources autorisées et s'abstiennent lorsque les preuves
+        sont insuffisantes. La création d'un ticket exige une approbation humaine.         Le client préfère des capacités en disponibilité générale, mais la région, le langage,
+        le SDK et le choix cloud ou local restent à décider.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Bloc</th><th>Question de décision</th><th>Responsable et transmission</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Expérience</td><td>Comment présenter citations, abstention, accessibilité et confirmation du ticket ?</td><td>designer et accessibility transmettent les exigences à developer</td></tr>
+          <tr><td>Orchestration</td><td>Quelle transition d'état conserve l'approbation humaine avant la création du ticket ?</td><td>lead et architect transmettent la frontière du workflow à developer</td></tr>
+          <tr><td>Outils et actions</td><td>Comment appliquer autorisation, nouvelles tentatives et réversibilité ?</td><td>developer rédige le contrat soumis à security</td></tr>
+          <tr><td>Données et ancrage</td><td>Quels documents chaque employé peut-il récupérer, conserver et citer ?</td><td>data-scientist et privacy transmettent les règles au développement et à l'évaluation</td></tr>
+          <tr><td>Modèles</td><td>Quel modèle et quel déploiement actuels satisfont qualité, région, latence, localisation et coût ?</td><td>azure-architect et cost-manager transmettent les candidats vérifiés à prompt-engineer</td></tr>
+          <tr><td>Évaluation et sécurité</td><td>Quels tests prouvent ancrage, abstention et exécution autorisée des outils ?</td><td>prompt-engineer conçoit ; QA installée exécute ; tester, security et RAI examinent</td></tr>
+          <tr><td>Opérations</td><td>Quelles traces expurgées, alertes, limites budgétaires et procédures de retour sont requises ?</td><td>observability, performance et cost-manager transmettent les critères aux opérations</td></tr>
+        </tbody>
+      </table>
+      <p>
+        L'architecte compare un accès direct au service, une gouvernance API Management facultative
+        et, si la localisation l'exige, une option Azure Local distincte. Les compétences amont
+        fournissent les preuves actuelles de capacité, préversion ou disponibilité générale, niveau,
+        région et SDK/API. L'exemple ne suppose jamais la parité entre cloud et local et ne traite
+        pas un exemple daté comme une vérification actuelle.
       </p>
       <p>
         Vous avez rarement à vous rappeler l'existence des packs. La squad en <em>propose</em> un comme elle propose un
@@ -1178,18 +1243,18 @@ flowchart TD
         de l'équipe. Le retrait n'enlève que les rôles dont ce pack est encore responsable &mdash; un rôle également apporté
         par votre profil ou un autre pack reste &mdash; sans altérer la trace : le journal de décisions
         et l'historique de chaque agent sont en ajout uniquement, donc le retrait <em>ajoute</em> une entrée plutôt que d'en effacer
-        une. Tout ce que ces rôles ont déjà produit reste sur disque, et les ressources restent installées ;
-        réappliquer le pack plus tard ne coûte donc rien.
+        une. Tout ce que ces rôles ont déjà produit reste sur disque, et les ressources restent installées.
+        Une réapplication ne réinstalle rien ; les règles normales de coût de dispatch continuent de s'appliquer.
       </p>
 
       <h3>Certains domaines technologiques ne sont pas des packs</h3>
       <p>
-        Deux domaines arrivent comme des extensions d'un rôle que vous avez déjà, plutôt que comme des packs, car aucun
-        agent amont les prenant en charge n'a passé le contrôle de vérification de la squad &mdash; or un pack nécessite des rôles,
-        qui nécessitent un agent. <strong>Power BI et Fabric</strong> (revue du modèle sémantique, optimisation DAX,
+        Certaines capacités arrivent comme des extensions d'un rôle que vous avez déjà, plutôt que comme des packs.
+        <strong>Power BI et Fabric</strong> (revue du modèle sémantique, optimisation DAX,
         conception de rapports, fondamentaux du Lakehouse) relèvent de <code>data-scientist</code>.
         <strong>L'ingénierie des applications d'IA</strong> (Microsoft Agent Framework, Semantic Kernel) relève
-        de <code>developer</code>.
+        de <code>developer</code>. Le pack Foundry ajoute une coordination de projet et des transmissions
+        fondées sur des preuves ; il ne remplace pas ce rôle d'implémentation.
       </p>
       <p>
         Il n'y a rien à appliquer pour l'un ou l'autre. <code>developer</code> figure dans tous les profils : l'ingénierie
@@ -1215,6 +1280,7 @@ flowchart TD
           <tr><td>Application Power Platform devant produire des preuves d'audit</td><td><code>profile=compliance pack=power-platform</code></td></tr>
           <tr><td>Conception d'une charge de travail AWS avant toute réalisation</td><td><code>profile=architecture pack=aws</code></td></tr>
           <tr><td>Un environnement couvrant Azure et AWS</td><td><code>profile=azure pack=aws</code></td></tr>
+          <tr><td>Planification d'un assistant de support Microsoft Foundry</td><td><code>profile=azure pack=foundry</code></td></tr>
           <tr><td>Astreinte pour une charge de travail AWS en service</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>Agent M365 Copilot traitant des données personnelles</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>Solution Power Platform dont l'interface est un agent M365 Copilot</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>

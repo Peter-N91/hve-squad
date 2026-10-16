@@ -1,7 +1,7 @@
 ---
 description: "Hands a request to the Squad Coordinator, which routes it to a cast of HVE Core agents and persists squad state"
 agent: Squad Coordinator
-argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual]"
+argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws|foundry] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual]"
 ---
 
 # Squad
@@ -10,7 +10,7 @@ argument-hint: "request=... [profile=default|full|security|design|accessibility|
 
 * ${input:request}: (Required) The work for the squad this turn, from the user prompt or conversation.
 * ${input:profile}: (Optional) The squad profile to seed when the project has no squad yet (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, or `product`). Selects which cast the coordinator stamps out during Init Mode.
-* ${input:pack}: (Optional) One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`). A pack carries a technology vertical's specialist roles and never replaces the profile.
+* ${input:pack}: (Optional) One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`, `foundry`). A pack carries specialist roles, scoped guidance, or both and never replaces the profile.
 * ${input:discovery}: (Optional) The depth of the opt-in discovery gate for this turn (`quick`, `standard`, `deep`, or `skip`). Runs a brainstorming session that interviews you and produces a brief when the work has no requirement or input artifact to build on, per `.github/instructions/squad/squad-discovery-gate.instructions.md`. When omitted, the coordinator offers it once per topic in a `product` or `full` squad and stays silent in every other profile. Ignored on an unattended run.
 * ${input:tier}: (Optional) A model-tier hint (`fast` or `default`) that overrides the coordinator's cost-first defaults for this turn.
 * ${input:owner}: (Optional) A `Member Name` from `team.md` that picks a specific named member when two rows share the same `Role` (for example, `owner=Beta` when both `developer` rows exist as `Beta` and `Gamma`).
