@@ -23,6 +23,7 @@ BeforeDiscovery {
 BeforeAll {
     $script:Root = (Resolve-Path -LiteralPath $SourceRoot).Path
     $script:Budget = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'baselines/hot-file-v0.18.1.json') -Raw | ConvertFrom-Json
+    $script:Tier0Workflow = Get-Content -LiteralPath (Join-Path $script:Root '.github/workflows/tier0-conformance.yml') -Raw
 
     function Get-NormalizedByteCount {
         param([Parameter(Mandatory)][string]$Path)
@@ -159,5 +160,17 @@ Describe 'Hot files stay within the v0.18.1 aggregate performance envelope' {
                 $entry.Value.reason | Should -Not -Match '(?i)economy-only'
             }
         }
+    }
+
+    It 'keeps the pull request merge parent available to the budget ratchet' {
+        $fetchDepth = [regex]::Match($script:Tier0Workflow, '(?m)^\s+fetch-depth:\s*(\d+)\s*$')
+        $fetchDepth.Success | Should -BeTrue
+        ([int]$fetchDepth.Groups[1].Value -eq 0 -or [int]$fetchDepth.Groups[1].Value -ge 2) | Should -BeTrue -Because 'HEAD^1 must exist in the checkout'
+    }
+
+    It 'ratchets against the checked-out merge parent instead of a stale event base' {
+        $expectedBase = "TIER0_BASE_SHA: `${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}"
+        $script:Tier0Workflow | Should -Match ([regex]::Escape($expectedBase))
+        $script:Tier0Workflow | Should -Not -Match 'github\.event\.pull_request\.base\.sha'
     }
 }
