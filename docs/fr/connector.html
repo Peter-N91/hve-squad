@@ -119,8 +119,15 @@
       </p>
       <p>
         Cette association dépend de l'hôte ; HVE ne lit aucun fichier d'adaptateur inventé et ne déduit
-        pas un agent de son nom de fichier. N'ajoutez pas de champ d'exécution de commande ou de fichier
-        d'agent au manifeste. Adaptez l'adresse de contact, les identifiants et les chemins de façon cohérente.
+        pas un agent de son nom de fichier. Le tableau <code>roles</code> du manifeste est une liste
+        d'autorisation des rôles pouvant être liés à ce connecteur, et non un remplacement automatique
+        de tous les rôles listés. Vos fichiers <code>.agent.md</code> et compétences peuvent résider
+        dans le dépôt ou dans un dossier externe partagé : votre script adaptateur surveille
+        <code>.connector-drops/</code>, associe <code>connectorId</code> à votre agent ou workflow,
+        l'exécute sur les sources citées dans <code>request.task</code> (les textes génériques sans
+        citations étant rejetés) et écrit l'enveloppe de résultat. N'ajoutez pas de champ d'exécution
+        de commande ou de fichier d'agent au manifeste. Adaptez l'adresse de contact, les identifiants
+        et les chemins de façon cohérente.
       </p>
 
       <h3>Étape 3 : Inscrire les connecteurs et choisir les rôles remplacés</h3>
@@ -231,7 +238,9 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         La recherche utilise le <code>Deliverable Root</code> actif du chercheur ; le workflow,
         ses sorties déclarées ; les spécialistes, leurs racines confirmées. Le code et les tests
         restent dans le worktree autorisé. Le Scribe conserve les références et les identités
-        de membre/liaison dans le <code>squadRoot</code> propriétaire, dont <code>history/Squad Connector.md</code>.
+        de membre/liaison dans le <code>squadRoot</code> propriétaire, dont <code>history/Squad Connector.md</code>
+        (où chaque rôle connecté est distingué par son <code>Member Name</code> unique et dispose de sa
+        propre ligne dans <code>consumption.md</code>).
       </p>
       <p>
         Le travail externe reste <code>external, unverified</code> ; ses coûts ne sont pas mesurés

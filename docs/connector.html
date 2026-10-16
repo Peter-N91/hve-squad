@@ -119,8 +119,15 @@
       </p>
       <p>
         This mapping is host-specific; HVE does not read an invented adapter file or infer an agent
-        from its filename. Do not add command or agent-file execution fields to a manifest.
-        Adapt the sample contact address, ids, and paths consistently across the adapter and registration.
+        from its filename. The <code>roles</code> array in each manifest is an allowlist of roles
+        that connector may be bound to, not an automatic replacement of every listed role. Your
+        actual <code>.agent.md</code> files and skills can live inside the repository or in an
+        external shared folder—your adapter script or watcher polls <code>.connector-drops/</code>,
+        maps <code>connectorId</code> to your agent or workflow, runs it against the sources named
+        in <code>request.task</code> (returning source-grounded content, not generic placeholder text),
+        and writes back the result envelope. Do not add command or agent-file execution fields to a
+        manifest. Adapt the sample contact address, ids, and paths consistently across the adapter
+        and registration.
       </p>
 
       <h3>Step 3: Register the connectors and choose what they replace</h3>
@@ -229,7 +236,9 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         researcher's <code>Deliverable Root</code>; the workflow uses its declared output slots;
         extra specialists use their confirmed roots. Source code and tests stay in the authorized worktree.
         The internal Scribe records artifact references and member/binding identities under the owning
-        <code>squadRoot</code>, including <code>history/Squad Connector.md</code>.
+        <code>squadRoot</code>, including <code>history/Squad Connector.md</code> (where each connected
+        role is disambiguated by its unique <code>Member Name</code> and receives its own row in
+        <code>consumption.md</code>).
       </p>
       <p>
         External work remains <code>external, unverified</code>; its spend is unmetered by the shim.

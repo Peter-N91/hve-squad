@@ -79,12 +79,49 @@ loop forever:
 * Never emits action fields (`command`, `exec`, `script`, `url`, `fetch`) and
   never claims authority over squad gates, council verdicts, approvals, Scribe
   writes, or state writes.
+* Produces artifacts that are genuinely grounded in the repository sources and
+  page/file citations named in `request.task` (generic placeholder or template
+  output is rejected by the shim before placement).
 * If it is an orchestrator, discloses fan-out in narrative/provenance while
   still returning one bounded envelope for this `taskId`.
 * Understands that `External-unmetered: connector=<id>` and
   `Verification: external, unverified` are trusted Scribe-rendered history
   bullets derived from validated registration data, not authority-bearing text
   from this envelope's narrative.
+
+## PowerShell watcher sketch for local testing
+
+If you are testing file-drop connectors locally on Windows, macOS, or Linux with
+PowerShell 7+, your external watcher can poll each manifest's `dropPath`, map
+`connectorId` to an `.agent.md` file (stored either inside your repo or in an
+external shared folder), invoke your CLI/agent runner, and write back the
+validated `.result.json` envelope:
+
+```powershell
+# Illustrative consumer-side polling loop (run outside HVE Squad in your own terminal)
+$EndpointMap = @{
+    'acme-research-agent'           = 'C:\OrgAgents\consumer-research.agent.md'
+    'acme-delivery-orchestrator-v3' = 'C:\OrgAgents\consumer-implementation-orchestrator.agent.md'
+}
+
+while ($true) {
+    Get-ChildItem -Path '.\connectors\*.json' -File | ForEach-Object {
+        $manifest = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
+        $dropDir  = Join-Path (Get-Location) $manifest.dropPath
+        Get-ChildItem -Path $dropDir -Filter '*.request.json' -File -ErrorAction SilentlyContinue | ForEach-Object {
+            $req        = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
+            $resultPath = Join-Path $dropDir "$($req.taskId).result.json"
+            if (-not (Test-Path -LiteralPath $resultPath)) {
+                $agentCharter = $EndpointMap[$req.connectorId]
+                # 1. Run your agent host with $agentCharter and $req.task (reading the sources named in $req.task).
+                # 2. Write the resulting .md/.json/.txt artifact into $dropDir.
+                # 3. Write $resultPath echoing taskId, connectorId, bindingId, role, status='completed', and artifacts/outputs.
+            }
+        }
+    }
+    Start-Sleep -Seconds 2
+}
+```
 
 See [`connector-contract.md`](../../../squad-src/.github/skills/squad/references/connector-contract.md)
 for the full, normative contract this sketch is illustrating.

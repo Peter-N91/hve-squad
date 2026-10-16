@@ -93,6 +93,42 @@ Configure your adapter's trusted endpoint mapping:
 | `acme-research-agent` | Your researcher, or Consumer Research Agent | Your research skills |
 | `acme-delivery-orchestrator-v3` | Your implementation coordinator, or Consumer Implementation Orchestrator | Your implementation and validation agents, with their skills |
 
+### How `.agent.md` files, manifests, and your adapter link together
+
+1. **Manifests (`connectors/*.json`) declare capability and mailbox paths only.**
+   The `roles` array in a manifest is an **allowlist** of squad roles that connector is permitted to serve—it does **not** automatically replace every listed role. For security, manifests never contain shell commands, scripts, or `.agent.md` file paths.
+2. **`team.md` (`## Connector Bindings`) chooses the actual role binding.**
+   During `init` or roster refresh, each binding row links one squad role (for example `researcher`) to one `connectorId` and `Manifest`, and sets `Default Execution=connector`.
+3. **Your consumer `.agent.md` files and skills can live anywhere.**
+   They can stay in `.github/agents/` inside the repository or in a separate central folder or repository on your machine—HVE Squad never dispatches consumer `.agent.md` files directly because `Squad Coordinator` only dispatches its built-in `Squad Connector` shim.
+4. **Your adapter script bridges `.connector-drops/<connectorId>/` to your `.agent.md` or workflow.**
+   When a bound role runs, `Squad Connector` writes `<taskId>.request.json` into the manifest's `dropPath` and pauses (`awaiting`). A lightweight PowerShell watcher (or your own agent host) polls `.connector-drops/`, maps `connectorId` to your `.agent.md` or orchestrator, runs it against the real source files named in `request.task`, writes the source-grounded `.md` deliverable(s), and writes `<taskId>.result.json`.
+
+Below is a reference PowerShell watcher loop you can adapt for your own host (save it outside the package or in your own tooling folder and replace the inner agent call with your CLI or SDK runner):
+
+```powershell
+#Consumer-owned watcher sketch: maps connectorId -> your external .agent.md or CLI runner
+$EndpointMap = @{
+    'acme-research-agent'           = 'C:\OrgAgents\consumer-research.agent.md'
+    'acme-delivery-orchestrator-v3' = 'C:\OrgAgents\consumer-implementation-orchestrator.agent.md'
+}
+
+Get-ChildItem -Path '.\connectors\*.json' | ForEach-Object {
+    $manifest = Get-Content $_.FullName -Raw | ConvertFrom-Json
+    $dropDir  = Join-Path (Get-Location) $manifest.dropPath
+    Get-ChildItem -Path $dropDir -Filter '*.request.json' -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $req        = Get-Content $_.FullName -Raw | ConvertFrom-Json
+        $resultPath = Join-Path $dropDir "$($req.taskId).result.json"
+        if (-not (Test-Path $resultPath)) {
+            $agentFile = $EndpointMap[$req.connectorId]
+            # 1. Invoke your agent/CLI ($agentFile) with $req.task and the read-only sources it names.
+            #    The generated Markdown must cite the actual project sources (generic placeholders are rejected).
+            # 2. Save the Markdown report(s) in $dropDir and write $resultPath matching the 1.1 Result Envelope schema.
+        }
+    }
+}
+```
+
 The adapter's mapping format depends on your host. HVE does not read an
 invented adapter configuration file, execute a manifest command, or discover an
 endpoint from its filename. Do not add unsupported fields to the manifest.
@@ -156,7 +192,11 @@ Planning stays with the existing lead. Implementation uses your coordinator's
 workflow. HVE's closing review and applicable council/risk gates remain in place.
 Other ordinary work roles support the same binding mechanism.
 
-Your running adapter handles the request and returns the reports. A result that
+Your running adapter handles the request and returns the reports. Make sure the
+artifact your agent produces is genuinely grounded in the repository sources
+and citations requested by `request.task`—the `Squad Connector` shim inspects
+returned artifacts before placing them under `deliverableRoot` and rejects
+generic placeholder text or uncited claims. A result that
 is not ready leaves the current stage `awaiting`; it does not trigger a fallback
 to the internal worker. Consumer automation can resume the run when the result
 arrives. If your workflow uses manual file handoff, resume the same task:
@@ -233,9 +273,11 @@ every request.
 | History, provenance, decisions, state, ledger | Internal Scribe under the owning `squadRoot` |
 
 Only Markdown, JSON, and text reports travel in the envelope. Your agents must
-honor the passed roots instead of their own defaults. The Scribe records
-artifact references and distinct member/binding identities in
-`history/Squad Connector.md`, marking external work `external, unverified`.
+honor the passed roots instead of their own defaults. All connector dispatches
+append to `history/Squad Connector.md`; when multiple roles are connected, each
+binding's unique `Member Name` disambiguates the entries and gives each
+connected role its own row in `consumption.md`, marking external work
+`external, unverified`.
 The ledger measures the shim, not your external workflow's spend.
 
 Bindings belong to this squad. Federation promotion carries them with its roster,
