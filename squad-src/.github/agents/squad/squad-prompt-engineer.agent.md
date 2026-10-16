@@ -2,7 +2,7 @@
 name: Squad Prompt Engineer
 description: "Non-user-invocable squad prompt engineer that authors, refactors, and reviews prompt artifacts through the hve-builder skill, and designs AI evaluation datasets through the evaluation-design skill"
 user-invocable: false
-model: Claude Sonnet 5 (copilot)
+model: Claude Sonnet 5.5 (copilot)
 ---
 
 # Squad Prompt Engineer

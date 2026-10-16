@@ -2,7 +2,7 @@
 name: Squad Cost Manager
 description: "Indicative Azure cost estimator, WAF Cost Optimization guide, and FinOps reviewer of the squad's own AI spend and value; delegates pricing lookups to Squad Researcher"
 user-invocable: false
-model: Claude Haiku 4.5 (copilot)
+model: Claude Haiku 5.5 (copilot)
 agents:
   - Squad Researcher
 ---

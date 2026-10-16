@@ -2,7 +2,7 @@
 name: Squad Reviewer
 description: "Non-user-invocable squad reviewer that validates implemented changes against the plan through the rpi-review and code-review skills and returns severity-graded findings"
 user-invocable: false
-model: Claude Haiku 4.5 (copilot)
+model: Claude Haiku 5.5 (copilot)
 ---
 
 # Squad Reviewer

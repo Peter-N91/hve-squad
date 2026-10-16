@@ -347,7 +347,7 @@ Describe 'model-routing.md phrase-survival for security- and precedence-critical
         $script:RoutingRaw | Should -Match $([regex]::Escape('The Scribe must not inherit the frontier session model'))
 
         $scribeAgentRaw = Get-Content -LiteralPath (Join-Path $script:AgentsRoot 'squad-scribe.agent.md') -Raw
-        $scribeAgentRaw | Should -Match '(?m)^model:\s*Claude Haiku 4\.5'
+        $scribeAgentRaw | Should -Match '(?m)^model:\s*Claude Haiku 5\.5'
 
         $seedTemplatesRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
         $seedTemplatesRaw | Should -Match '\|\s*scribe\s*\|.*\|\s*fast\s*\|'
@@ -363,7 +363,11 @@ Describe 'model-catalog.md Assignment Fit table (case j)' {
         foreach ($table in @($tables | Where-Object { 'Rate-row alias' -in $_.Header })) {
             foreach ($row in $table.Rows) { $script:PriceRows[$row['Catalog ID']] = $row }
         }
-        $script:CapabilityIds = @($tables | Where-Object { 'Capability class' -in $_.Header } | ForEach-Object { $_.Rows } | ForEach-Object { $_['Catalog ID'] })
+        $script:CapabilityRows = @{}
+        foreach ($row in @($tables | Where-Object { 'Capability class' -in $_.Header } | ForEach-Object { $_.Rows })) {
+            if ($row.Contains('Catalog ID') -and $row['Catalog ID']) { $script:CapabilityRows[$row['Catalog ID']] = $row }
+        }
+        $script:CapabilityIds = @($script:CapabilityRows.Keys)
         $script:SevenClasses = @('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping')
     }
 
@@ -399,6 +403,16 @@ Describe 'model-catalog.md Assignment Fit table (case j)' {
             }
         )
         $wrong -join ', ' | Should -BeNullOrEmpty
+    }
+
+    It 'catalogs Haiku 5.5 with its documented standard and long-context rates and sourced lightweight fit' {
+        $price = $script:PriceRows['claude-haiku-5.5']
+        $price['LC threshold'] | Should -Be '≤100K / >100K'
+        @($price['Input'], $price['Cached'], $price['Cache write'], $price['Output']) | Should -Be @('0.10', '0.01', '0.125', '0.50')
+        @($price['LC input'], $price['LC cached'], $price['LC cache write'], $price['LC output']) | Should -Be @('0.50', '0.05', '0.625', '2.50')
+        $script:CapabilityRows['claude-haiku-5.5']['Capability class'] | Should -Be 'fast-lightweight'
+        $fit = @($script:FitRows | Where-Object { $_['Catalog ID'] -eq 'claude-haiku-5.5' })[0]
+        @($fit['intake'], $fit['bookkeeping'], $fit['Blended']) | Should -Be @('2', '3', '0.048')
     }
 
     It 'keeps at least one model scoring 3 in every class, so no class ranks on cost alone' {
@@ -449,7 +463,7 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
         $seedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
         $script:SeedTeam = [regex]::Match($seedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
         $script:CliEnum = @(
-            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
+            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
             'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'
             'gpt-5.3-codex', 'gpt-5-mini', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'
             'gemini-3.5-flash', 'grok-4.5', 'claude-sonnet-5.5', 'gpt-6.1-sol', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
@@ -465,7 +479,7 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
 
         function Invoke-Resolver {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{})
-            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-01' }
+            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-15' }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             & $script:Resolver @parameters | ConvertFrom-Json
         }
@@ -499,7 +513,14 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
 
     It 'keeps a fast-floor role off frontier-reasoning rows under ranked selection' {
         $script:PickOf['tester'] | Should -Be 'gpt-6-sol'
-        $script:PickOf['scribe'] | Should -Be 'claude-haiku-4.5'
+        $script:PickOf['scribe'] | Should -Be 'claude-haiku-5.5'
+    }
+
+    It 'does not rank Haiku 5.5 when the host does not advertise it' {
+        $available = @($script:CliEnum | Where-Object { $_ -ne 'claude-haiku-5.5' })
+        $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ AvailableModels = $available; Mode = 'ranked'; Role = @('scribe') }
+        $result.roles[0].suggested | Should -Be 'claude-haiku-4.5'
+        @($result.roles[0].candidates | ForEach-Object id) | Should -Not -Contain 'claude-haiku-5.5'
     }
 
     It 'breaks an equal fit and price tie by generation, never by spelling' {
@@ -519,7 +540,7 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
     }
 
     It 'narrows a VS Code session to models priced at or below the session model' {
-        $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ SessionModel = 'claude-sonnet-5'; Mode = 'ranked'; Role = @('researcher', 'architect') }
+        $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ SessionModel = 'claude-sonnet-5.5'; Mode = 'ranked'; Role = @('researcher', 'architect') }
         $result.availability | Should -Match 'unverified'
         foreach ($entry in $result.roles) { $entry.suggested | Should -Not -BeIn @('claude-opus-5.5', 'gpt-5.5', 'gpt-5.6-sol') }
     }
@@ -533,7 +554,7 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
 
     It 'validates manual Model cells: <Cell> is <Status>' -ForEach @(
         @{ Tier = 'default'; Cell = 'claude-opus-4.8'; Status = 'valid' }
-        @{ Tier = 'default'; Cell = 'claude-haiku-4.5'; Status = 'refused: below the default floor' }
+        @{ Tier = 'default'; Cell = 'claude-haiku-5.5'; Status = 'refused: below the default floor' }
         @{ Tier = 'default'; Cell = 'gpt-5.6-sol-fast'; Status = 'valid: unevaluated' }
         @{ Tier = 'default'; Cell = 'not-a-model'; Status = 'refused: unknown id' }
         @{ Tier = 'default'; Cell = 'gpt-5.5;rm'; Status = 'refused: metacharacter' }
@@ -575,7 +596,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $seedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
         $script:SeedTeam = [regex]::Match($seedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
         $script:CliEnum = @(
-            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
+            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
             'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'
             'gpt-5.3-codex', 'gpt-5-mini', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'
             'gemini-3.5-flash', 'grok-4.5', 'claude-sonnet-5.5', 'gpt-6.1-sol', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
@@ -591,7 +612,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
 
         function Invoke-EconomyResolver {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{}, [string]$Script = $script:Resolver)
-            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-01'; AvailableModels = $script:CliEnum }
+            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-15'; AvailableModels = $script:CliEnum }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             & $Script @parameters | ConvertFrom-Json
         }
@@ -750,14 +771,14 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
     It 'reads the agent pin from the repository agent folders above .copilot-tracking' {
         $repo = Join-Path $TestDrive "repo-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
         New-Item -ItemType Directory -Path (Join-Path $repo '.github/agents'), (Join-Path $repo '.copilot-tracking') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $repo '.github/agents/fixture-dev.agent.md') -Value "---`nname: Fixture Dev`nmodel: Claude Sonnet 5 (copilot)`n---`n# Dev`n"
+        Set-Content -LiteralPath (Join-Path $repo '.github/agents/fixture-dev.agent.md') -Value "---`nname: Fixture Dev`nmodel: Claude Sonnet 5.5 (copilot)`n---`n# Dev`n"
         $root = New-EconomyRoot -Under (Join-Path $repo '.copilot-tracking') -Content (@(
                 '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
                 '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
                 '|------|-------------|----------------------|------------|-------|------------------|'
                 '| developer | | Fixture Dev | default | | src/ |'
             ) -join "`n")
-        (Invoke-EconomyResolver -Root $root).roles[0].pin | Should -Be 'Claude Sonnet 5'
+        (Invoke-EconomyResolver -Root $root).roles[0].pin | Should -Be 'Claude Sonnet 5.5'
     }
 
     It 'finds the agent pin in an installed plugin agents/ folder when the repository has none' {
@@ -765,7 +786,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         New-Item -ItemType Directory -Path (Join-Path $plugin 'skills/squad'), (Join-Path $plugin 'agents') -Force | Out-Null
         $skill = Split-Path -Parent $script:ReferencesRoot
         Copy-Item -LiteralPath (Join-Path $skill 'scripts'), $script:ReferencesRoot -Destination (Join-Path $plugin 'skills/squad') -Recurse
-        Set-Content -LiteralPath (Join-Path $plugin 'agents/fixture-writer.agent.md') -Value "---`nname: Fixture Writer`nmodel: Claude Haiku 4.5 (copilot)`n---`n# Writer`n"
+        Set-Content -LiteralPath (Join-Path $plugin 'agents/fixture-writer.agent.md') -Value "---`nname: Fixture Writer`nmodel: Claude Haiku 5.5 (copilot)`n---`n# Writer`n"
         $root = New-EconomyRoot -Content (@(
                 '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
                 '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
@@ -773,7 +794,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
                 '| technical-writer | | Fixture Writer | fast | | docs/ |'
             ) -join "`n")
         $result = Invoke-EconomyResolver -Root $root -Script (Join-Path $plugin 'skills/squad/scripts/Resolve-SquadModelRoute.ps1')
-        $result.roles[0].pin | Should -Be 'Claude Haiku 4.5'
+        $result.roles[0].pin | Should -Be 'Claude Haiku 5.5'
         $result.roles[0].suggested | Should -Be (Get-ExpectedEconomyPick -Floor 'fast')
     }
 
@@ -815,10 +836,10 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
 
         It 'prints the consent line in the table output' {
             $root = New-EconomyRoot -Content $script:ConsentTeam
-            $missing = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Format markdown)
+            $missing = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-15') -AvailableModels $script:CliEnum -Format markdown)
             $missing | Should -Contain 'consent: missing'
             Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value $script:Accepted -Encoding utf8NoBOM
-            $recorded = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Format markdown)
+            $recorded = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-15') -AvailableModels $script:CliEnum -Format markdown)
             $recorded | Should -Contain 'consent: recorded'
         }
 
@@ -826,7 +847,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
             foreach ($mode in 'ranked', 'manual') {
                 $run = Invoke-EconomyResolver -Root $script:SeedRoot -Extra @{ Mode = $mode }
                 $run.PSObject.Properties.Name | Should -Not -Contain 'consent'
-                @(& $script:Resolver -SquadRoot $script:SeedRoot -AsOf ([datetime]'2026-10-01') -AvailableModels $script:CliEnum -Mode $mode -Format markdown) -join "`n" | Should -Not -Match 'consent'
+                @(& $script:Resolver -SquadRoot $script:SeedRoot -AsOf ([datetime]'2026-10-15') -AvailableModels $script:CliEnum -Mode $mode -Format markdown) -join "`n" | Should -Not -Match 'consent'
             }
             (Invoke-EconomyResolver -Root $script:SeedRoot).PSObject.Properties.Name | Should -Not -Contain 'consent'
         }

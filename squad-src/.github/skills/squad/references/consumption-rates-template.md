@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-15"
 ---
 
 # Squad Consumption Rates Template
@@ -22,23 +22,24 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 # Consumption Rates (verify against the current GitHub Copilot "Models and pricing" docs)
 
 * Billing model: usage-based billing (UBB), token-metered, effective 2026-06-01.
-* Observed-on: 2026-09-30. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
+* Observed-on: 2026-10-15. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
 * Credit conversion: 1 AI credit = $0.01 USD (fixed).
 * All rates are USD per 1M tokens. Anthropic models bill a separate cache-write rate on top of cached input; models without one leave the column at 0.
-* `Observed-on:` above must equal `model-catalog.md`'s `Retrieved:` date exactly, not merely "close" — both are `2026-09-30` as of this snapshot; a future re-verification that updates one must update the other in the same change.
+* `Observed-on:` above must equal `model-catalog.md`'s `Retrieved:` date exactly, not merely "close" — both are `2026-10-15` as of this snapshot; a future re-verification that updates one must update the other in the same change.
 
 ## Per-model token rates in USD per 1M tokens (volatile, verify before commit)
 
-`Model ID` is the exact dispatch id the Copilot CLI and the GitHub Copilot app accept, and the only value a `team.md` `Model` cell may hold under `routing=ranked`, `routing=economy`, or `routing=manual` (see `model-routing.md`); `Model (as routed)` stays the row key and the display name VS Code's picker shows. `—` marks a retired row no host can dispatch. `LC Threshold` and the `LC *` columns record GitHub's own long-context tier: an explicit higher input-token threshold and a second, higher rate above it. Only OpenAI and xAI publish one. Anthropic and Google publish no threshold column at all for any model in this table — `none (flat rate)` is a positive confirmation of that absence, never a blank cell standing in for "unknown." `Tier` here is this table's own cost-based routing bucket (`fast`/`default`/`extended`), independent of the vendor's own capability category on the official page; a model's `Tier` need not match its `model-catalog.md` capability class.
+`Model ID` is the exact Copilot dispatch id and the only value a `team.md` `Model` cell may hold under `routing=ranked`, `routing=economy`, or `routing=manual`; `Model (as routed)` is the rate key and VS Code display name. `—` marks a retired row. `LC Threshold` and `LC *` record documented long-context thresholds and higher rates. OpenAI, xAI, and Claude Haiku 5.5 publish them; every other row uses `none (flat rate)`, never a blank for "unknown." `Tier` is this table's cost bucket, independent of `model-catalog.md`'s capability class.
 
 | Model (as routed) | Model ID             | Tier     | Input | Cached | Cache write | Output | LC Threshold      | LC Input | LC Cached | LC Cache write | LC Output | Notes                      |
 | ------------------ | -------------------- | -------- | ----- | ------ | ----------- | ------ | ----------------- | -------- | --------- | --------------- | --------- | -------------------------- |
 | GPT-5.4 nano        | `gpt-5.4-nano`       | fast     | 0.20  | 0.02   | 0           | 1.25   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | lightweight, read-heavy    |
 | GPT-5.4 mini        | `gpt-5.4-mini`       | fast     | 0.75  | 0.075  | 0           | 4.50   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | lightweight                |
 | Claude Haiku 4.5    | `claude-haiku-4.5`   | fast     | 1.00  | 0.10   | 1.25        | 5.00   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | lightweight reasoning      |
+| Claude Haiku 5.5    | `claude-haiku-5.5`   | fast     | 0.10  | 0.01   | 0.125       | 0.50   | \<=100K / >100K   | 0.50     | 0.05      | 0.625           | 2.50      | lightweight reasoning      |
 | Claude Sonnet 4.6   | `claude-sonnet-4.6`  | default  | 3.00  | 0.30   | 3.75        | 15.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile                  |
 | Claude Sonnet 5     | `claude-sonnet-5`    | default  | 2.00  | 0.20   | 2.50        | 10.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile (promo pricing)  |
-| Claude Sonnet 5.5   | `claude-sonnet-5.5`  | default  | 2.00  | 0.20   | 2.50        | 10.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile                  |
+| Claude Sonnet 5.5   | `claude-sonnet-5.5`  | default  | 2.00  | 0.10   | 2.50        | 10.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile                  |
 | GPT-5.4             | `gpt-5.4`            | default  | 2.50  | 0.25   | 0           | 15.00  | \<=272K / >272K   | 5.00     | 0.50      | n/a             | 22.50     | versatile                  |
 | Gemini 3.1 Pro (retired) | —                    | default  | 2.00  | 0.20   | 0           | 12.00  | not currently listed | n/a  | n/a       | n/a             | n/a       | Deprecated 2026-09-27; no longer in official GitHub Copilot offering. Preserved for backward compatibility with existing consumption ledgers referencing this rate row. |
 | Claude Opus 4.8     | `claude-opus-4.8`    | extended | 5.00  | 0.50   | 6.25        | 25.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning  |
