@@ -900,9 +900,10 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
     ) {
         $root = New-EconomyRoot -Content $TeamMd
         $result = Invoke-EconomyResolverRaw -Root $root -Extra @{ Mode = 'ranked' }
+        $NormalizedOutput = $result.Output -replace '\s+', ' '
         $result.ExitCode | Should -Not -Be 0 -Because $result.Output
         $result.Output | Should -Match 'Connector alignment error'
-        $result.Output | Should -Match $Match
+        $NormalizedOutput | Should -Match $Match
     }
 
     Context 'economy consent is reported, never enforced (E2)' {

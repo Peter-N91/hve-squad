@@ -379,21 +379,22 @@ Describe 'CONN-06 symlinks, disallowed extensions, and numeric caps are rejected
         }
     }
 
-    It 'a junction at an intermediate path component is detected as a reparse point' {
+    It 'a reparse-point link at an intermediate path component is detected' {
         $workDir = Join-Path ([System.IO.Path]::GetTempPath()) "conn06-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
         $real = Join-Path $workDir 'real'
         $link = Join-Path $workDir 'linked'
+        $LinkType = if ([System.OperatingSystem]::IsWindows()) { 'Junction' } else { 'SymbolicLink' }
         New-Item -ItemType Directory -Path $real -Force | Out-Null
 
         try {
-            New-Item -ItemType Junction -Path $link -Target $real -ErrorAction Stop | Out-Null
-        }
-        catch {
-            Set-ItResult -Skipped -Because "this environment cannot create a junction: $($_.Exception.Message)"
-            return
-        }
+            try {
+                New-Item -ItemType $LinkType -Path $link -Target $real -ErrorAction Stop | Out-Null
+            }
+            catch {
+                Set-ItResult -Skipped -Because "this environment cannot create a $LinkType link: $($_.Exception.Message)"
+                return
+            }
 
-        try {
             $item = Get-Item -LiteralPath $link -Force
             ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) | Should -Not -Be 0 -Because 'connector-contract.md: reject any symlink, junction, or reparse point at any path component'
         }
