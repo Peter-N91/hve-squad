@@ -95,6 +95,13 @@ BeforeAll {
 }
 
 Describe 'Get-SquadDispatchBrief.ps1' {
+    It 'forwards selected-delegate ownership and cold worker routing when the brief replaces normal reference reads' {
+        $result = Invoke-Brief -Repo (New-BriefRepo)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'Delegating parents additionally read delegated-worker-routing.md'
+        $result.Output | Should -Match 'admit only a selected delegate.*never inherit a discounted owner pick'
+    }
+
     It 'ships with the squad skill' {
         Test-Path -LiteralPath $script:Script | Should -BeTrue
     }

@@ -85,6 +85,7 @@ else {
     $config.Run.Container = @(
         New-PesterContainer -Path (Join-Path $PSScriptRoot 'Assertions.Tests.ps1')
         New-PesterContainer -Path (Join-Path $PSScriptRoot 'ModelRouting.Tests.ps1')
+        New-PesterContainer -Path (Join-Path $PSScriptRoot 'DelegatedWorkerRouting.Tests.ps1')
         New-PesterContainer -Path (Join-Path $PSScriptRoot 'LedgerCalculator.Tests.ps1')
         # U5 (routing-performance plan, Amendment 3 §5, P04-T04/T06): the live
         # pipelining benchmark's classification and void-rule logic is pure and
