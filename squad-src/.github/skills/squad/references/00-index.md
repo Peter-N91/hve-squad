@@ -18,8 +18,8 @@ Read this file first, then read only the reference files your role names in its 
 |----------------------------------------------------|---------------------------------------------------------------------------|
 | [profiles-and-packs.md](profiles-and-packs.md)     | Seeding or amending a roster: profile choice, packs, which roles exist    |
 | [roster-catalog.md](roster-catalog.md)             | Casting a role for the first time, recasting after an HVE Core upgrade, applying or registering a pack's external agents, resolving an external role, or assembling a custom roster |
-| [foundry-blueprint.md](foundry-blueprint.md)       | An active `foundry` pack hands the ownership, artifact, and handoff map to its registered roles |
-| [foundry-platform-options.md](foundry-platform-options.md) | An active `foundry` pack hands gateway and Azure Local decision questions plus upstream skill pointers to its registered roles |
+| [foundry-blueprint.md](foundry-blueprint.md) | `foundry` blueprint |
+| [foundry-platform-options.md](foundry-platform-options.md) | `foundry` platform questions |
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
 | [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |

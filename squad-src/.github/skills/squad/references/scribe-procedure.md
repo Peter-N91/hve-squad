@@ -70,7 +70,7 @@ The Scribe decides which cold file(s) to read from its own payload type — neve
 
 ### Decision, History, and Verdict Entries
 
-For confirmed pack application/removal, update the roster at the resolved squad root and append a decision recording pack, action, and rationale. Reconstruct active packs from Init plus subsequent accepted decisions; clarify ambiguous provenance rather than inferring it from roles. Use the deduplicated union of profile, active packs, and custom roles supplied by the coordinator. Guidance is read-time context from the Registered Packs table, not a routing row to seed. Preserve ordinary routes, append-only decisions/history, deliverables, and consumption totals; retain removed members' spend. Reapplication must not duplicate rows. Do not edit sibling squad roots. Read [seed-templates.md](seed-templates.md) when routing templates are needed; no additional coordinator references are required.
+For confirmed pack application or removal, update the roster and append a decision recording pack and action. Derive active packs from decisions, not roles. Guidance is read-time context, not a routing row. Never duplicate rows.
 
 Append decisions and their rationale to the end of `decisions.md`; never edit or remove prior entries. When a decision is marked architecturally significant, note that the coordinator should additionally capture it as an ADR via the `adr-author` skill and reference that ADR from the entry.
 
