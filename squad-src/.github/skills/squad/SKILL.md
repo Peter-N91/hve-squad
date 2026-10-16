@@ -27,7 +27,7 @@ This skill packages the coordinator's operating procedure and the seed templates
 
 The coordinator runs four stages each turn: **init**, **route**, **decide**, and **handoff**. The Squad Scribe performs ordinary writes. Init is outside admission; before later work dispatch, the owning coordinator may perform only the deterministic Cost Preflight transaction defined by the squad floor.
 
-The procedure is split across the reference files below so that each agent loads only what its role needs. Read [references/00-index.md](references/00-index.md) first, then read the files your Skill Reference Contract names — not all of them.
+Read [references/00-index.md](references/00-index.md) first, then only files your Skill Reference Contract names or conditionally requires.
 
 | Reference                                                     | Covers                                                                         |
 |---------------------------------------------------------------|--------------------------------------------------------------------------------|

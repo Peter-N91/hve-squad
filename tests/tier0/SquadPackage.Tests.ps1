@@ -280,3 +280,146 @@ Describe 'PKG-15 Roster roles resolve in the catalog (C4)' {
         $missingAfterMutation | Should -Contain 'lead' -Because 'renaming the lead catalog row must surface lead as a missing role; a test that cannot fail this way would pass even if the real catalog lost a role'
     }
 }
+
+Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
+    BeforeAll {
+        $script:ProgressCoordinator = @(
+            $script:Model.SquadAgents |
+                Where-Object Name -eq 'squad-coordinator.agent.md'
+        )[0]
+        $script:ProgressPrompt = @(
+            $script:Model.Prompts |
+                Where-Object Name -eq 'squad.prompt.md'
+        )[0]
+        $progressProcedurePath = Join-Path $script:Model.SquadSkillRoot 'references/operating-procedure.md'
+        $script:ProgressProcedure = Get-Content -LiteralPath $progressProcedurePath -Raw
+        $script:ProgressReferencePath = Join-Path $script:Model.SquadSkillRoot 'references/progress.md'
+        $script:ProgressBody = [regex]::Match($script:ProgressProcedure, '(?ms)^### Progress Presentation\r?\n(?<Body>.*?)(?=^#{1,3} |\z)').Groups['Body'].Value
+        $script:ProgressIndex = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/00-index.md') -Raw
+        $script:ProgressSkill = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'SKILL.md') -Raw
+        $script:ProgressRoutePointer = '5. Determine which gates apply and establish the actual stage shape. Apply Progress Presentation before the first work dispatch.'
+        $script:ProgressAuthorization = '* `references/operating-procedure.md`'
+
+        function Test-ProgressWiring {
+            param([string]$Procedure, [string]$Coordinator)
+
+            $route = [regex]::Match($Procedure, '(?ms)^## Route\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
+            $contract = [regex]::Match($Coordinator, '(?ms)^## Skill Reference Contract\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
+            $routePattern = (
+                '(?ms)^1\. Read `team\.md` and `routing\.md`\..*?^2\. Match the request against the routing table;.*?^4\. Select cost-first:.*?^' +
+                [regex]::Escape($script:ProgressRoutePointer) + '\r?\n6\. Dispatch all parallel-eligible roles'
+            )
+            return (
+                ($route -match $routePattern) -and
+                ($route -match '(?m)^### Progress Presentation\r?$') -and
+                ($contract -match 'At run start, locate `squad` and read these files in one parallel block') -and
+                ($contract -match ('(?m)^' + [regex]::Escape($script:ProgressAuthorization))) -and
+                ($contract -match 'No other references: they belong to the Scribe or Federation Coordinator')
+            )
+        }
+
+        function Test-ProgressOwnership {
+            param([string]$Body)
+
+            return (
+                $Body -match 'Progress is coordinator-owned ephemeral UI, not role work or durable squad-state writes\.' -and
+                $Body -match 'Dispatch no role or Squad Scribe for it; the Scribe is the sole ordinary state writer\.'
+            )
+        }
+    }
+
+    It 'keeps the complete common-path progress contract inline in a measured file' {
+        $budget = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'baselines/hot-file-v0.18.1.json') -Raw | ConvertFrom-Json
+        $budget.files.PSObject.Properties.Name | Should -Contain 'squad-src/.github/skills/squad/references/operating-procedure.md'
+        $script:ProgressBody | Should -Not -BeNullOrEmpty
+        [regex]::Matches($script:ProgressProcedure, '(?m)^### Progress Presentation\r?$').Count | Should -Be 1
+        Test-Path -LiteralPath $script:ProgressReferencePath -PathType Leaf | Should -BeFalse
+        foreach ($surface in @($script:ProgressProcedure, $script:ProgressCoordinator.Body, $script:ProgressIndex, $script:ProgressSkill)) {
+            $surface | Should -Not -Match 'references/progress\.md|\[progress\.md\]' -Because 'common-path progress must not evade the budget through an unmeasured reference'
+        }
+    }
+
+    It 'requires inline progress after classification and before dispatch through the loaded procedure' {
+        Test-ProgressWiring -Procedure $script:ProgressProcedure -Coordinator $script:ProgressCoordinator.Body | Should -BeTrue
+        $script:ProgressBody | Should -Match 'For every non-trivial request, after state, route, and gate classification'
+    }
+
+    It 'preserves cost-first tiers, per-turn override, routed modes, and off behavior' {
+        $script:ProgressProcedure | Should -Match '`fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`'
+        $script:ProgressProcedure | Should -Match 'user tier hints override per-role defaults for this turn'
+        $script:ProgressProcedure | Should -Match 'For `team.md` `Model routing: ranked\|economy\|manual` or `routing=`, resolve ids per `references/model-routing.md`'
+        $script:ProgressProcedure | Should -Match '`off` keeps cost-first selection'
+    }
+
+    It 'resolves a native tracker by capability and retains the in-chat fallback' {
+        $script:ProgressBody | Should -Match 'Before first substantive dispatch, show the same concise `## Plan` in chat and a compatible native todo or task-list tracker'
+        $script:ProgressBody | Should -Match 'when available by advertised host capability, not literal tool name'
+        $script:ProgressBody | Should -Match 'Otherwise maintain the Markdown checklist or status ledger in later updates'
+    }
+
+    It 'pins stable three-to-seven item progress and verification before completion' {
+        $script:ProgressBody | Should -Match '3 to 7 high-level outcome items, including verification and final reporting'
+        $script:ProgressBody | Should -Match 'no reads, searches, Scribe mechanics, or individual edits'
+        $script:ProgressBody | Should -Match 'Keep item identity and order stable unless material scope changes'
+        $script:ProgressBody | Should -Match 'exactly one item in progress during active work'
+        $script:ProgressBody | Should -Match 'Complete an item only after its outcome and applicable artifact, history, and consumption gates are verified'
+        $script:ProgressBody | Should -Match 'After each meaningful phase, update tracker or ledger and emit exactly: `Completed: <item>\. Next: <next item>\.`'
+    }
+
+    It 'binds pre-dispatch presentation and ephemeral ownership to the coordinator' {
+        $script:ProgressBody | Should -Match 'Before first substantive dispatch, show the same concise `## Plan` in chat and a compatible native'
+        $script:ProgressBody | Should -Match 'without delay or degraded squad methodology'
+        Test-ProgressOwnership -Body $script:ProgressBody | Should -BeTrue
+    }
+
+    It 'pins blocked work and final progress accounting' {
+        $script:ProgressBody | Should -Match 'Blocked: keep the current item in progress, name the blocker, never silently skip it'
+        $script:ProgressBody | Should -Match 'Before final response, complete each item or report it explicitly blocked'
+        $script:ProgressBody | Should -Match 'Name changed or delivered files, actual validation, and remaining risks or decisions'
+    }
+
+    It 'forwards plan ownership from the prompt without creating duplicate state' {
+        $script:ProgressPrompt.Body | Should -Match '1\. Hand `\$\{input:request\}`.*?to the Squad Coordinator and let its per-turn protocol classify, dispatch, and synthesize the response'
+        $script:ProgressPrompt.Body | Should -Not -Match 'Forward progress presentation ownership|## Plan' -Because 'the existing delegation must not acquire a second progress contract'
+        $script:ProgressBody | Should -Match 'The prompt delegates: no second plan or progress state writes'
+    }
+
+    It 'rejects deleted, optional, retargeted, or late inline progress wiring' {
+        foreach ($mutated in @(
+                $script:ProgressProcedure.Replace($script:ProgressRoutePointer, ''),
+                $script:ProgressProcedure.Replace('Apply Progress Presentation', 'Optionally apply Progress Presentation'),
+                $script:ProgressProcedure.Replace('Apply Progress Presentation', 'Read references/progress.md'),
+                ($script:ProgressProcedure.Replace($script:ProgressRoutePointer, '') + "`n" + $script:ProgressRoutePointer),
+                $script:ProgressProcedure.Replace('### Progress Presentation', '### Deferred Progress'),
+                ($script:ProgressProcedure.Replace("### Progress Presentation`r`n", '').Replace("### Progress Presentation`n", '') + "`n### Progress Presentation`n")
+            )) {
+            Test-ProgressWiring -Procedure $mutated -Coordinator $script:ProgressCoordinator.Body | Should -BeFalse
+        }
+    }
+
+    It 'rejects a missing procedure read even when the reference remains elsewhere in the coordinator' {
+        $mutated = $script:ProgressCoordinator.Body.Replace($script:ProgressAuthorization, '')
+        Test-ProgressWiring -Procedure $script:ProgressProcedure -Coordinator $mutated | Should -BeFalse
+        Test-ProgressWiring -Procedure $script:ProgressProcedure -Coordinator ($mutated + "`n" + $script:ProgressAuthorization) | Should -BeFalse
+    }
+
+    It 'rejects role-work, durable-state, Scribe-dispatch, and shared-writer ownership mutations' {
+        foreach ($mutation in @(
+                @{ From = 'not role work'; To = 'role work' },
+                @{ From = 'or durable squad-state writes'; To = 'and durable squad-state writes' },
+                @{ From = 'Dispatch no role or Squad Scribe'; To = 'Dispatch the Squad Scribe' },
+                @{ From = 'sole ordinary state writer'; To = 'shared state writer' }
+            )) {
+            Test-ProgressOwnership -Body $script:ProgressBody.Replace($mutation.From, $mutation.To) | Should -BeFalse
+        }
+    }
+
+    It 'preserves shared-learning read order, conditional tenant loading, and single-writer promotion boundaries' {
+        $decide = [regex]::Match($script:ProgressProcedure, '(?ms)^## Decide\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
+        $decide | Should -Match 'Persist durable, role-scoped learnings to `/memories/repo/squad-<agent>\.md` through the Squad Scribe and the memory tool'
+        $decide | Should -Match 'Read learnings in order: local memory, shipped `learnings/shared-learnings\.md` \(skill-root-relative within the deployed `squad` skill\), then `\.agents/skills/squad-learnings-tenant/tenant-learnings\.md` only when the organization configured the tenant-internal APM dependency'
+        $decide | Should -Match 'Both playbooks are read-only, authoritative context; apply entries matching the current scenario and never write either from a run'
+        $decide | Should -Match 'promotion to shared playbooks uses only the human-reviewed fork-and-PR paths in `CONTRIBUTING\.md`'
+        $script:ProgressProcedure | Should -Match '\| `squad_memory`.*Write durable per-agent notes with the memory tool to `/memories/repo/squad-<agent>\.md`'
+    }
+}
