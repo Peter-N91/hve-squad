@@ -189,6 +189,48 @@ Describe 'Measure-SquadLedger parses an old-shape (no LC-column) consumption-rat
     }
 }
 
+Describe 'Measure-SquadLedger applies documented long-context rates' {
+    BeforeAll {
+        $script:LongContextRoot = Join-Path $TestDrive 'long-context'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $script:LongContextRoot -Recurse
+
+        $templatePath = Join-Path (Split-Path -Parent $script:LedgerScript) '../references/consumption-rates-template.md'
+        $template = (Get-Content -LiteralPath $templatePath -Raw) -replace "`r`n", "`n"
+        $seed = [regex]::Match($template, '(?ms)^````markdown\n(?<body>.*?)\n````[ \t]*$').Groups['body'].Value
+        Set-Content -LiteralPath (Join-Path $script:LongContextRoot 'consumption-rates.md') -Value $seed -NoNewline
+
+        Remove-Item -Path (Join-Path $script:LongContextRoot 'history/*') -Force
+        @'
+# History: Squad Researcher
+
+### Long-context fixture
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Haiku 5.5",
+  "model_source": "agent-pinned",
+  "priced_as": "Claude Haiku 5.5",
+  "model_tier": "fast",
+  "internal_turns": 1,
+  "input_tokens": 30000,
+  "cached_tokens": 80000,
+  "cache_write_tokens": 0,
+  "output_tokens": 0,
+  "basis": "estimated"
+}
+```
+'@ | Set-Content -LiteralPath (Join-Path $script:LongContextRoot 'history/Squad Researcher.md') -NoNewline
+    }
+
+    It 'uses the >100K Haiku 5.5 tier when input plus cached tokens exceed the threshold' {
+        $result = Invoke-Ledger -SquadRoot $script:LongContextRoot -Format json
+        $result.ExitCode | Should -Be 0
+        ($result.Output | ConvertFrom-Json).total.estCostUsd | Should -Be 0.019
+    }
+}
+
 Describe 'Measure-SquadLedger is locale-independent' {
     It 'prints a "." decimal mark even when the calling session culture is fr-FR' {
         $root = Join-Path $script:FixtureRoot 'applied'

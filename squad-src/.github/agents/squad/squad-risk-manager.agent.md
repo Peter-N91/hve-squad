@@ -2,7 +2,7 @@
 name: Squad Risk Manager
 description: "Non-user-invocable squad risk manager that follows the deployed risk-register skill to produce a qualitative project risk register and mitigation plan under docs/risks/"
 user-invocable: false
-model: Claude Sonnet 5 (copilot)
+model: Claude Sonnet 5.5 (copilot)
 ---
 
 # Squad Risk Manager

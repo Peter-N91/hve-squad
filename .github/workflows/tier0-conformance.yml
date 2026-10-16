@@ -89,7 +89,9 @@ jobs:
           # on the reset rather than failing, which reads as a hung job.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_REF: ${{ inputs.ref }}
-          TIER0_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # A rerun keeps its old event payload while checkout refreshes the PR merge
+          # ref. HEAD^1 is the base of the tree under test; other events stay absolute.
+          TIER0_BASE_SHA: ${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}
         run: |
           if ($env:INPUT_REF) {
             ./tests/tier0/Invoke-Tier0Tests.ps1 -Ref $env:INPUT_REF -Output Detailed

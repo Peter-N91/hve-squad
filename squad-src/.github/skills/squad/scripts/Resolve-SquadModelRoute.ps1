@@ -63,7 +63,7 @@
 .PARAMETER Format
     `json` (default) or `markdown` (a compact table a manual-selection question can show).
 .EXAMPLE
-    ./Resolve-SquadModelRoute.ps1 -SquadRoot .copilot-tracking/squad -AvailableModels claude-sonnet-5.5,gpt-5.6-sol,claude-haiku-4.5
+    ./Resolve-SquadModelRoute.ps1 -SquadRoot .copilot-tracking/squad -AvailableModels claude-sonnet-5.5,gpt-5.6-sol,claude-haiku-5.5
 #>
 [CmdletBinding()]
 param(
