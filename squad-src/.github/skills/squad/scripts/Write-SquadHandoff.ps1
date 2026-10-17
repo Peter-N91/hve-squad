@@ -1534,9 +1534,11 @@ try {
     $ledgerText = Get-FileText $consumptionPath
     $ledgerText = [regex]::Replace($ledgerText, '(?m)^# Squad Consumption Ledger \(Run: [^)\r\n]*\)', "# Squad Consumption Ledger (Run: $runId)")
     $comparison = 'This run consumed an estimated **${0} (~{1} AI credits)** across {2} specialized agent(s) (squad figure only; the host-reported comparison is in Observed Usage when a session log exists).' -f $cost.ToString('F4', [System.Globalization.CultureInfo]::InvariantCulture), $credits.ToString('F2', [System.Globalization.CultureInfo]::InvariantCulture), $agentCount
-    $comparisonPattern = '(?m)^(?:This run has not yet dispatched|This run consumed an estimated \*\*\$<squad-cost>|This run consumed an estimated [^\r\n]*\(squad figure only;)[^\r\n]*'
+    $comparisonPattern = '(?m)^(?:n/a \(initialization\)\.|This run has not yet dispatched|This run consumed an estimated \*\*\$<squad-cost>|This run consumed an estimated [^\r\n]*\(squad figure only;)[^\r\n]*'
     $comparisonRefreshed = [regex]::IsMatch($ledgerText, $comparisonPattern)
-    if ($comparisonRefreshed) { $ledgerText = [regex]::Replace($ledgerText, $comparisonPattern, { param($m) $comparison }) }
+    if ($comparisonRefreshed) {
+        if ($agentCount -gt 0) { $ledgerText = [regex]::Replace($ledgerText, $comparisonPattern, { $comparison }) }
+    }
     else {
         # A full comparison keeps its manual baseline; its squad figures and the saving percentage are recomputed from the new total.
         $invariantCulture = [System.Globalization.CultureInfo]::InvariantCulture

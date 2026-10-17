@@ -10,6 +10,14 @@ metadata:
 
 # Scribe Cold Section: Init, Seeding, and Repository Memory
 
+Fresh single-squad or member-root Init with the required runtime uses only
+[scribe-init.md](scribe-init.md) and `scripts/Initialize-Squad.ps1`. This file
+remains the fallback/explicit-refresh, memory, and promotion-rebasing contract;
+do not load it on a successful helper Init. The helper refuses existing roots,
+so it never resets history or performs an unrequested refresh. Whenever `pwsh`
+is available, seed rates with `Initialize-SquadConsumptionRates.ps1`, not a
+model-authored template copy.
+
 Read this file only when the turn's payload is one of: an **initialization** payload (Payload-to-Step Map Step 3), a **memory** payload (Step 4), or the deliverable-root rebasing sub-step of a **promotion** or **expansion** payload (Steps 10–11, which cross-reference *Initialization and Deliverable Roots* below for the rebasing rule). Every other turn skips this file entirely — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
 
 ### Initialization and Deliverable Roots

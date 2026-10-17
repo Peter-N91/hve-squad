@@ -10,6 +10,11 @@ metadata:
 
 # Scribe Payload Template
 
+Fresh single-squad/member-root Init uses only [scribe-init.md](scribe-init.md).
+Adapt confirmed fields from this legacy payload once into its JSON contract;
+do not load this full template on that path or execute `ledgerCommand` text.
+Explicit refresh and the other cold operations retain this template.
+
 This is the full legacy payload shape both coordinators fill for cold Scribe handoffs. Supported ordinary handoffs in every routing mode use only the minimal JSON in [economy-scribe.md](economy-scribe.md), run synchronously with `-Quiet`; do not send this template's additional keys to the script. An unsupported script operation requires explicit cold reassembly, never automatic hand-written bypass of validation. Filling this cold template in section order keeps its prefix cache-stable.
 
 **Ordering is prose-only and cache-stable, never a JSON-field reorder.** Every JSON object below — most importantly the ten-field `#### Consumption` block — keeps the exact field order fixed in [entry-schemas.md](entry-schemas.md) and [scribe-procedure.md](scribe-procedure.md) Non-Negotiable Rules regardless of where the object sits in this template. Only the section-to-section prose order is chosen for cache stability.

@@ -15,9 +15,13 @@ Read only `references/economy-scribe.md` in the installed `squad` skill for supp
 
 Never hand-author ordinary history, state, ledger rows, or arithmetic. A nonzero exit, malformed/missing status, history-integrity failure, or failed restore is not success and never permits a hand-written fallback. Follow the reference's bounded correction/escalation rules. Preserve warnings and distinguish `ledger-only` from `PASS`.
 
+## Fresh initialization
+
+For fresh single-squad or member-root initialization, read only `references/scribe-init.md` in the installed `squad` skill. Adapt the coordinator-confirmed fields once into JSON and run `scripts/Initialize-Squad.ps1` synchronously. Return its validated JSON status and warnings, then stop; no full reference reads, manual accounting audit, or extra file rereads. An existing root is refused, never reset. Missing input fails cheaply without invented roster, models, names, or tokens. Explicit refresh and hosts without the required runtime use the cold branch below.
+
 ## Cold operations
 
-Before initialization/roster refresh, verdicts, notifications, memory, ceiling-admitted slots, federation-root writes, promotion/expansion, summaries, or an explicitly supported cold operation, read `references/scribe-cold-charter.md` in full. Then load its full legacy procedure, schema, payload template, and every conditional reference required by `scribe-procedure.md`'s Cold-File Dispatch Table. Apply them verbatim; missing required fields fail without partial writes. Cold loading is not a validation bypass.
+Before explicit roster refresh, fallback initialization, verdicts, notifications, memory, ceiling-admitted slots, federation-root writes, promotion/expansion, summaries, or an explicitly supported cold operation, read `references/scribe-cold-charter.md` in full. Then load its full legacy procedure, schema, payload template, and every conditional reference required by `scribe-procedure.md`'s Cold-File Dispatch Table. Apply them verbatim; missing required fields fail without partial writes. Cold loading is not a validation bypass.
 
 ## Portable safety floor
 

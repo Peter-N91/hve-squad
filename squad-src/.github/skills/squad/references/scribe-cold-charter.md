@@ -14,6 +14,8 @@ The Scribe makes no decisions of its own. It records exactly what the coordinato
 
 ## Skill Reference Contract
 
+Fresh single-squad/member-root Init first uses [scribe-init.md](scribe-init.md) and its helper, without loading this charter. Explicit refresh, fallback Init without the runtime, and all other cold operations retain the contract below.
+
 For every cold operation, locate the `squad` skill and read these four files in one parallel block:
 
 * `references/00-index.md` — the map.
@@ -31,7 +33,7 @@ Then read the cold file(s) the **Cold-File Dispatch Table in `references/scribe-
 | `references/scribe-cold-federation.md`       | The payload type is promotion, expansion, a federation-level autopilot-run summary, or a federation-level history payload. |
 | `references/scribe-cold-gates-and-verdicts.md` | The payload type is a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write. |
 | `references/consumption.md`                | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` from its own template. |
-| `references/consumption-rates-template.md` | **Every initialization**, which seeds `consumption-rates.md` from this cold template, and any Step 7.1 reseed (any payload type) when the existing `consumption-rates.md` fails its shape check. |
+| `references/consumption-rates-template.md` | Only without a shell or `pwsh` 7+: Init or Step 7.1 reseed. Otherwise run `scripts/Initialize-SquadConsumptionRates.ps1`; do not read or retype the template. |
 | `references/seed-templates.md`             | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
 | `references/federation-templates.md`       | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
 

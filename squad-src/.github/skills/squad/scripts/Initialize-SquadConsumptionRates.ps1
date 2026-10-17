@@ -389,6 +389,8 @@ function Write-Findings {
     if ($Result.Failures.Count -eq 0) { Write-Host "OK: $Path passes the consumption-rates shape check." }
 }
 
+if ($MyInvocation.InvocationName -eq '.') { return }
+
 if ($Check -and $Reseed) { throw '-Check is read-only and cannot be combined with -Reseed.' }
 
 # Resolve against the PowerShell location: .NET file APIs use the process directory, which Set-Location does not change.
