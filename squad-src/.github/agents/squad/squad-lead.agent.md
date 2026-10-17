@@ -51,6 +51,8 @@ List every deliverable the request asks for. For each, name the owning role from
 
 When two or more artifact-owning roles appear in this list — roster rows whose `Deliverable Root` names a real path, other than `researcher`, `lead`, and `tester` — state that explicitly so the coordinator selects the fan-out shape rather than a single build.
 
+For each intake claim, plan instrumentation and outcome validation tied to its ID, owner, target, and window; never invent actuals.
+
 ### Step 4: Surface What the Plan Depends On
 
 State the assumptions the plan rests on, the decisions still open, and anything that would invalidate the plan if it turns out to be false. These belong in the returned outcome, not buried in the artifact.

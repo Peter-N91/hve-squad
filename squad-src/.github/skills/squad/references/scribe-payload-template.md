@@ -88,7 +88,7 @@ historyRecords:
       observedModel: <value | unreported | unverified>
       routeRationale: <assignment class, rank/override source, floor applied>
 decisionEntry:
-  rationale: <text | omit when payload type is not decision/verdict>
+  rationale: <text; for benefits retain supplied claim IDs, evidence links, and decisions only; no actuals>
   adrNoted: <true|false>
   verdictSchema: <the exact fields the matching instruction file requires | omit when not a verdict>
 stateAdvance:

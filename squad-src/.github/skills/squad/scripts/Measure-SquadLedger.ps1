@@ -2130,7 +2130,7 @@ function Get-UnitEconomicsSectionLinesLocal {
         $lines.Add("| Host-billed credits per accepted deliverable | $(& $credits $Ue.hostBilledCreditsPerAccepted) | measured |")
     }
     $lines.Add('')
-    $lines.Add('Value is counted only for deliverables an independent review-class verdict accepted; a produced but unaccepted deliverable adds cost and no value. A review that names deliverables covers only those it names. Rework counts a repeat of the same agent and deliverable path only: a fix by a different agent, to a different file, or with no deliverable path is not counted, so the rework figures are a floor. Compare runs only for like work, using medians of several runs. Source: FinOps Foundation unit-economics KPIs (cost per unit of value, error and retry waste).')
+    $lines.Add('For accepted-deliverable unit economics only, value counts deliverables accepted by an independent review-class verdict; an unaccepted deliverable adds cost and zero unit-economics value. This does not establish financial business value. A review that names deliverables covers only those it names. Rework counts a repeat of the same agent and deliverable path only: a fix by a different agent, to a different file, or with no deliverable path is not counted, so the rework figures are a floor. Compare runs only for like work, using medians of several runs. Source: FinOps Foundation unit-economics KPIs (cost per unit of value, error and retry waste).')
     $lines.Add('')
     return $lines.ToArray()
 }

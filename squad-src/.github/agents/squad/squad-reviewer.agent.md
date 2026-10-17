@@ -59,6 +59,7 @@ Return to the coordinator:
 * **Verdict** — one of `Pass`, `Pass-With-Findings`, or `Fail`.
 * **Scope Reviewed** — the files and the plan phase covered.
 * **Findings** — a table of severity, file and line, and the issue, ordered by severity.
+* **Benefit Status** — when claims exist, report deliverable acceptance separately from evidence-based business-outcome validation for each claim ID; use `pending` until its measurement window and evidence support a conclusion.
 * **Plan Deviations** — planned-not-done, done-not-planned, and done-differently items, or `none`.
 * **Conditions Honored** — each council condition and the evidence it was met, or `not applicable`.
 * **Review Record** — the path of the artifact written.

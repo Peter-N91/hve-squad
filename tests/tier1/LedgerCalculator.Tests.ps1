@@ -2006,9 +2006,10 @@ Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
         $script:CostManagerBody = $text.Substring($text.IndexOf("`n---", 4) + 5)
     }
 
-    It 'has an AI spend review mode that measures cost per accepted deliverable, not per dispatch' {
-        $script:CostManagerBody | Should -Match ([regex]::Escape('An AI spend review (the squad''s own model spend, not an Azure workload) skips Steps 2 to 4 and runs Step 5.'))
-        $script:CostManagerBody | Should -Match ([regex]::Escape('A deliverable no review accepted carries zero value: never divide by dispatches or by deliverables merely produced.'))
+    It 'scopes zero value to accepted-deliverable unit economics' {
+        $script:CostManagerBody | Should -Match ([regex]::Escape('AI spend review runs Steps 1 and 5 only'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('An unaccepted deliverable has zero value only in this unit-economics measure'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('This does not determine financial business value.'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('`## Unit Economics (value)`'))
     }
 
@@ -2017,5 +2018,66 @@ Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
         $script:CostManagerBody | Should -Match ([regex]::Escape('with at least three runs per side, reporting medians and the spread'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('Each recommendation that changes a pin, a ceiling, or the roster is `confirm`-tier.'))
         $script:CostManagerBody.Length | Should -BeLessOrEqual 30000
+    }
+
+    It 'reviews a supplied financial report only for evidence gaps' {
+        $script:CostManagerBody | Should -Match ([regex]::Escape('A supplied financial-report evidence review runs Step 6 only'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('references/business-value-measurement.md'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('claim ID, value category, hypothesis'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('Do not fetch, create, estimate, or recalculate financial actuals'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('Do not calculate ROI, approve a business decision'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('status` (`supported`, `gap`, or `pending`)'))
+    }
+}
+
+Describe 'Benefit hypotheses remain traceable through planning and review' {
+    BeforeAll {
+        $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+        $script:IntakeBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-intake-gate.instructions.md') -Raw
+        $script:LeadBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-lead.agent.md') -Raw
+        $script:ReviewerBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-reviewer.agent.md') -Raw
+        $script:ScribeBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw
+        $script:PayloadTemplate = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/scribe-payload-template.md') -Raw
+        $script:CoordinatorBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
+        $script:AutopilotBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-autopilot.instructions.md') -Raw
+        $script:BusinessValueReference = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/business-value-measurement.md') -Raw
+    }
+
+    It 'requires a measurable benefit claim at intake and plans its validation' {
+        $script:IntakeBody | Should -Match 'ID/hypothesis/beneficiary/category'
+        $script:IntakeBody | Should -Match 'measurement owner'
+        $script:IntakeBody | Should -Match 'business-value-measurement\.md'
+        $script:LeadBody | Should -Match 'plan instrumentation and outcome validation'
+    }
+
+    It 'defines the requested value categories and measurement guidance' {
+        foreach ($category in @(
+                'revenue enablement'
+                'cost avoidance'
+                'capacity gained'
+                'labour augmentation'
+                'quality'
+                'speed'
+                'risk reduction'
+                'new capacity'
+                'engagement'
+            )) {
+            $script:BusinessValueReference | Should -Match ([regex]::Escape($category))
+        }
+        $script:BusinessValueReference | Should -Match 'Baseline and target'
+        $script:BusinessValueReference | Should -Match 'booked value'
+    }
+
+    It 'distinguishes deliverable acceptance from business outcomes and approvals' {
+        $script:ReviewerBody | Should -Match 'deliverable acceptance separately from evidence-based business-outcome validation'
+        $script:AutopilotBody | Should -Match 'Record acceptance separately from each claim''s outcome by ID'
+        $script:CoordinatorBody | Should -Match 'Synthesize findings; keep business approval separate from execution/review'
+    }
+
+    It 'persists supplied claim and evidence metadata without creating actuals' {
+        $script:ScribeBody | Should -Match 'retain claim IDs, evidence links, and business decisions'
+        $script:ScribeBody | Should -Match 'never create actuals'
+        $script:PayloadTemplate | Should -Match 'for benefits retain supplied claim IDs, evidence links, and decisions only'
+        $script:PayloadTemplate | Should -Match 'no actuals'
     }
 }
