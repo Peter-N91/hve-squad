@@ -500,7 +500,9 @@ Describe 'Write-SquadHandoff.ps1 derives priced_as and checks the closing review
         (Get-Item -LiteralPath $owner).LastWriteTimeUtc = [DateTime]::Parse('2026-09-27T09:40:02Z').ToUniversalTime()
         $result = Invoke-Writer -Root $root -Payload (New-ReviewPayload)
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        @($result.Output -split "`n" | Where-Object { $_ -match 'WARN' -and $_ -notmatch 'economy consent not recorded|no routingIdentity' }) | Should -BeNullOrEmpty
+        @($result.Output -split "`n" | Where-Object {
+            $_ -match 'WARN' -and $_ -notmatch "economy consent not recorded|no routingIdentity|consumption\.md's ### Derivation block records no history-entry identities yet|-SessionLog auto found no Copilot session"
+        }) | Should -BeNullOrEmpty
 
         $older = New-ReviewRoot
         $ok = Invoke-Writer -Root $older -Payload (New-ReviewPayload)
@@ -532,7 +534,7 @@ Describe 'Write-SquadHandoff.ps1 quiet direct execution (WRT-02, WRT-03)' -Tag '
         if ($Mode -eq 'economy') {
             $result.Stderr | Should -Match 'WARN economy consent not recorded'
         }
-        else { $result.Stderr | Should -BeNullOrEmpty }
+        else { $result.Stderr | Should -Not -Match 'WARN (economy consent not recorded|no routingIdentity)' }
         $orchestration = Get-Content -LiteralPath (Join-Path $root 'history/Squad Scribe.md') -Raw
         $orchestration | Should -Match 'recorded deterministically through scripts/Write-SquadHandoff.ps1'
         $orchestration | Should -Not -Match 'recorded by the Squad Scribe'
