@@ -181,26 +181,21 @@ Describe 'PKG-13 Cost ceiling ownership is mode-specific' {
     }
 }
 
-Describe 'The Scribe hot core and charter bind writes to the file tool and fix the ledger decimal mark (CH5-07)' {
-    # A static text assertion is the only offline-testable guard for this contract:
-    # nothing short of an actual model turn exercises whether an agent chooses the
-    # file edit/create tool over a shell string, so this proves the instruction the
-    # Scribe is bound to still says so in both places it must -- the hot core it
-    # follows and the charter that dispatches it -- rather than proving the
-    # instruction is obeyed at runtime.
-    It 'states file-edit/create-tool-only writes in the hot core and the charter, and the "." decimal mark in the hot core the charter defers to' {
+Describe 'Ordinary hand-offs use the validated writer; cold Scribe writes use the file tool (CH5-07)' {
+    It 'keeps ordinary routing, cold write safety, and locale-independent ledger arithmetic explicit' {
         $scribeReference = Join-Path $script:Model.SquadSkillRoot 'references/scribe-procedure.md'
         $referenceBody = Get-Content -LiteralPath $scribeReference -Raw
-        $referenceBody | Should -Match ([regex]::Escape("write every file with the host's file edit or create tool, never through a shell string")) `
-            -Because 'the hot core is where the Scribe''s own write-mechanism rule lives'
+        $referenceBody | Should -Match 'supported ordinary writes use the synchronous `Write-SquadHandoff\.ps1 -Quiet` contract.*directly by the coordinator or by Scribe'
         $referenceBody | Should -Match ([regex]::Escape('as the decimal mark whatever the host locale')) `
             -Because 'the hot core is where the ledger''s locale-independence rule lives'
 
+        $coldCharter = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-cold-charter.md') -Raw
+        $coldCharter | Should -Match ([regex]::Escape('write the files themselves with the file edit or create tool, never through a shell string')) `
+            -Because 'cold writes must use host file tools except for the documented ledger helper'
+
         $scribeAgent = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0]
-        $scribeAgent.Body | Should -Match ([regex]::Escape('write the files themselves with the file edit or create tool, never through a shell string')) `
-            -Because 'the charter must bind the coordinator''s own dispatched agent to the same write-mechanism rule as the hot core'
-        $scribeAgent.Body | Should -Match 'scribe-procedure\.md' `
-            -Because 'the charter defers the ledger''s decimal-mark rule to the hot core it cites rather than restating it, so this checks the cross-reference holds'
+        $scribeAgent.Body | Should -Match 'scribe-cold-charter\.md' `
+            -Because 'cold Scribe dispatches load the charter that contains the file-tool rule'
     }
 }
 
@@ -322,8 +317,8 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
             param([string]$Body)
 
             return (
-                $Body -match 'Progress is coordinator-owned ephemeral UI, not role work or durable squad-state writes\.' -and
-                $Body -match 'Dispatch no role or Squad Scribe for it; the Scribe is the sole ordinary state writer\.'
+                $Body -match 'Progress is coordinator-owned ephemeral UI, never role work or durable state\.' -and
+                $Body -match 'Dispatch no role or Scribe for it; the validated writer owns ordinary writes, the Scribe cold writes\.'
             )
         }
     }
@@ -381,7 +376,7 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
     It 'forwards plan ownership from the prompt without creating duplicate state' {
         $script:ProgressPrompt.Body | Should -Match '1\. Hand `\$\{input:request\}`.*?to the Squad Coordinator and let its per-turn protocol classify, dispatch, and synthesize the response'
         $script:ProgressPrompt.Body | Should -Not -Match 'Forward progress presentation ownership|## Plan' -Because 'the existing delegation must not acquire a second progress contract'
-        $script:ProgressBody | Should -Match 'The prompt delegates: no second plan or progress state writes'
+        $script:ProgressBody | Should -Match 'The prompt delegates, so no second plan or progress-state writes'
     }
 
     It 'rejects deleted, optional, retargeted, or late inline progress wiring' {
@@ -405,10 +400,11 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
 
     It 'rejects role-work, durable-state, Scribe-dispatch, and shared-writer ownership mutations' {
         foreach ($mutation in @(
-                @{ From = 'not role work'; To = 'role work' },
-                @{ From = 'or durable squad-state writes'; To = 'and durable squad-state writes' },
-                @{ From = 'Dispatch no role or Squad Scribe'; To = 'Dispatch the Squad Scribe' },
-                @{ From = 'sole ordinary state writer'; To = 'shared state writer' }
+                @{ From = 'never role work'; To = 'is role work' },
+                @{ From = 'or durable state'; To = 'and durable state' },
+                @{ From = 'Dispatch no role or Scribe'; To = 'Dispatch the Scribe' },
+                @{ From = 'validated writer owns ordinary writes'; To = 'Scribe owns ordinary writes' },
+                @{ From = 'the Scribe cold writes'; To = 'the validated writer cold writes' }
             )) {
             Test-ProgressOwnership -Body $script:ProgressBody.Replace($mutation.From, $mutation.To) | Should -BeFalse
         }

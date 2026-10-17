@@ -149,8 +149,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match '(?m)^## Bounded Lane'
         $result.Output | Should -Match '(?m)^## Plan-Driven Parallelism'
         $result.Output | Should -Match '(?m)^## Scripted Writes'
-        $result.Output | Should -Match ([regex]::Escape('This is a complete, valid payload:'))
-        $result.Output | Should -Match '(?m)^```json'
+        $result.Output | Should -Match 'minimal structured JSON per `references/economy-scribe\.md`'
         $result.Output | Should -Not -Match 'not found in'
         Get-TreeHash -Root $repo | Should -Be $before
     }
@@ -180,10 +179,16 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match ([regex]::Escape('roster precheck (Step 1b): PASS'))
     }
 
-    It 'gives the Scribe the hand-off command line and tells the coordinator never to run it' {
+    It 'gives the coordinator the direct ordinary-writer command and keeps cold writes with the Scribe' {
         $result = Invoke-Brief -Repo (New-BriefRepo)
-        $result.Output | Should -Match ([regex]::Escape('Dispatch the Squad Scribe with the payload JSON and this exact command line, which the Scribe runs as its first action; never run it yourself:'))
-        $result.Output | Should -Match '`pwsh -File ''[^'']+Write-SquadHandoff\.ps1'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json>`'
+        $result.Output | Should -Match 'run the validated writer directly and synchronously\. Do not dispatch the Scribe for this write:'
+        $result.Output | Should -Match '`pwsh -NoProfile -File ''[^'']+Write-SquadHandoff\.ps1'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json> -Quiet`'
+        $result.Output | Should -Match '(?m)^## Payload Contract$'
+        $result.Output | Should -Match 'Optional `decision`:.*adrNoted: boolean'
+        $result.Output | Should -Match 'historyRecords\[\].*passedModel.*routingIdentity'
+        $result.Output | Should -Match 'routingIdentity.*requestedModel, effectiveModel, observedModel, routeRationale'
+        $result.Output | Should -Match 'stateAdvance.*required.*activeRoles: string\[\]'
+        $result.Output | Should -Match 'Use the Squad Scribe for cold operations\.'
         $result.Output | Should -Not -Match ([regex]::Escape('-PayloadJson $p'))
         $result.Output | Should -Not -Match '(?m)^### Script Hand-off'
     }

@@ -21,8 +21,10 @@ Read this index first, then only references your Skill Reference Contract names 
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
 | [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |
+| [economy-scribe.md](economy-scribe.md)             | Supported ordinary handoffs in every routing mode; minimal JSON, synchronous `-Quiet` writer, verified status and failure handling |
+| [scribe-cold-charter.md](scribe-cold-charter.md)    | Full legacy charter for cold initialization, verdicts, memory, notifications, ceiling slots, federation changes, summaries, and unsupported operations |
 | [scribe-procedure.md](scribe-procedure.md)         | Writing squad state, Scribe only: the Non-Negotiable Rules, every payload-to-step rule, the Cold-File Dispatch Table, and the Write-Completeness Self-Check |
-| [entry-schemas.md](entry-schemas.md)               | Any ordinary write turn: `decisions.md` base shape, `history/<agent>.md`, state.json |
+| [entry-schemas.md](entry-schemas.md)               | Cold writes and schema reference: `decisions.md` base shape, `history/<agent>.md`, state.json |
 | [scribe-payload-template.md](scribe-payload-template.md) | Filling or reading the Scribe hand-off payload: field order, and the byte-stable-prefix / volatile-tail section order both coordinators follow |
 | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) | Scribe only, initialization or memory payload: the full state-tree seed and Repository Memory and Learning Promotion |
 | [scribe-cold-federation.md](scribe-cold-federation.md) | Scribe only, promotion, expansion, or a federation-level autopilot-run-summary or history payload |
@@ -34,7 +36,7 @@ Read this index first, then only references your Skill Reference Contract names 
 | [model-routing.md](model-routing.md)               | Applying `routing=` (all modes): modes, the Model column, fit ranking, floors, and identity bullets |
 | [federation-templates.md](federation-templates.md) | Creating or expanding a federation: registry, meta-routing, root files    |
 
-The Scribe reads `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` on every turn — this hot core replaced a heavier unconditional set so the common case reads less — and reads every other file above, including the three `scribe-cold-*.md` files, only when the turn's payload calls for it per the Cold-File Dispatch Table in `scribe-procedure.md`. The coordinators read `seed-templates.md` and `federation-templates.md` only to verify deliverable roots during Init or a federation change, and fill `scribe-payload-template.md` on every hand-off.
+The ordinary hot path reads only `economy-scribe.md`; coordinators may execute its validated writer directly with `-Quiet` in every routing mode. A dispatched Scribe uses the same path. Cold operations first read `scribe-cold-charter.md`, then `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` plus every conditional file required by the Cold-File Dispatch Table. Coordinators fill the small script JSON for ordinary writes and the full payload template only for cold handoffs. Seed templates remain Init/federation-change-only reads.
 
 ## Companion instruction files
 

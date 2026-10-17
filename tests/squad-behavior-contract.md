@@ -1,3 +1,7 @@
+---
+description: "Squad behavior contracts and regression coverage across installed package tiers"
+---
+
 # Squad Behavior Contract and Regression Test Plan
 
 Defines the end result a squad run must produce, so a release can be blocked when it stops producing it.
@@ -63,6 +67,22 @@ That parity is evidence, not proof. The cases below are what turn it into proof.
 ## Tier 0 — Static conformance
 
 No Copilot invocation. Install the ref into a scratch directory, then inspect the delivered tree.
+
+### Universal deterministic handoffs
+
+Ordinary persistence uses `Write-SquadHandoff.ps1` in every routing mode. Existing
+Markdown histories, decisions, ledger, and state remain the compatibility contract.
+
+| ID | Assertion | Source |
+|---|---|---|
+| WRT-01 | Ordinary writes pass the ledger check under `off`, `ranked`, `economy`, `manual`, and an absent routing line, for single-squad and federation member roots | `Write-SquadHandoff.ps1`; `economy-scribe.md` |
+| WRT-02 | `-Quiet` emits exactly one JSON stdout line with `status`, `turn`, `dispatchEntries`, `historyCounts`, and `ledgerCheck`; warnings from the writer and successful ledger-helper calls remain on stderr | `Write-SquadHandoff.ps1`, Quiet parameter |
+| WRT-03 | Quiet mode preserves validation, unsupported-operation, rate-refusal, rollback, and history-integrity failures, with no success status on failure | `Write-SquadHandoff.ps1`, exit codes |
+| WRT-04 | A tolerated accounting mismatch reports `ledgerCheck: ledger-only`, never `PASS`, and retains its warning | `Write-SquadHandoff.ps1`, ledger check |
+| WRT-05 | Non-economy handoffs neither demand economy consent nor add economy routing markers | `Write-SquadHandoff.ps1`, routing-specific warnings |
+| WRT-06 | Rate seeding, checking, and reseeding work in all routing modes and retain operator rows and calibration rules | `Initialize-SquadConsumptionRates.ps1` |
+| WRT-07 | Coordinators execute ordinary handoffs directly and serialize them with cold Scribe operations; unsupported operations retain the legacy contract and completion barriers | Coordinator agents; `economy-scribe.md` |
+| WRT-08 | The Scribe definition is less than 3,000 UTF-8 bytes and does not eagerly load the legacy procedure, schemas, or payload template | `squad-scribe.agent.md` |
 
 | ID | Assertion | Rationale |
 |---|---|---|
@@ -183,7 +203,7 @@ Presence of a consumption block is not the same as a correct ledger. These cases
 | ID | Assertion | Source |
 |---|---|---|
 | CON-20 | An `#### Consumption — Orchestration` block exists for the turn — the coordinator's own turns and the Scribe's writes are never uncounted | `scribe-procedure.md` Step 7 |
-| CON-21 | The orchestration block covers one coordinator turn **per dispatch round** plus one `Scribe state write` per hand-off; a turn with three dispatch rounds does not record one coordinator turn | Same |
+| CON-21 | The orchestration block covers coordinator work **per dispatch round** and Scribe work only when a Scribe actually ran; direct deterministic writes do not fabricate Scribe model usage | `economy-scribe.md`; `scribe-procedure.md` Step 7 |
 | CON-22 | `consumption.md` carries an `orchestration` row in **both** the Attribution and the Usage & Cost tables | `consumption.md` template |
 | CON-23 | The `orchestration` row `Tier` is `mixed` | `consumption.md` template |
 
@@ -277,7 +297,7 @@ The cases below hold only while `team.md` records `Model routing: economy` and t
 | RTE-40 | **`pipeline=full` forces the full pipeline** even when every bounded-lane criterion holds | Same |
 | RTE-41 | **Never outside economy, never unattended.** Under `off`, `ranked`, or `manual`, or with `mode=autonomous` or `mode=autopilot`, a fully specified request still runs every stage | Same |
 | RTE-42 | **Plan-driven parallelism (economy only).** Owners named by a `deliverable-fan-out` plan whose write sets are disjoint are dispatched concurrently under one confirmation that lists every owner, its tier, and its write set; an `escalate`-tier owner is never batched, and unproven disjointness (or budget as the only reason) dispatches sequentially | `economy-mode.md`, Plan-Driven Parallelism |
-| RTE-43 | **Dispatch brief (economy only).** `Get-SquadDispatchBrief.ps1` refuses with exit 7 outside economy; under it, when its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table | `economy-mode.md`, Dispatch Brief; `GetSquadDispatchBrief.Tests.ps1` |
+| RTE-43 | **Dispatch brief (economy only).** `Get-SquadDispatchBrief.ps1` refuses with exit 7 outside economy; under it, when its `coverage:` line covers the request, it provides the direct synchronous ordinary-writer command and closed payload schemas for decisions, routed attribution, orchestration, and state advancement, so the coordinator reads no further reference, agent file, or rate table | `economy-mode.md`, Dispatch Brief; `GetSquadDispatchBrief.Tests.ps1` |
 
 ## Tier 1 — Profile seeding
 
@@ -535,7 +555,7 @@ FD-15a and DLR-24 are written to fail on the literal reading. Tightening Step 5'
 | GATE-43 | **A trailing marker comment never latches pipelining off.** No append-only template ends with a `<!-- ... -->` marker; the Scribe appends below any marker an older file still carries; and `-Check -BaselinePath` only warns when new entries land just above a trailing marker (every byte and the entry order intact), while an entry inserted above an older entry still fails as `history-integrity` | `entry-schemas.md`, `scribe-procedure.md`, `scribe-cold-gates-and-verdicts.md`, `federation-templates.md`, `squad-notifications.instructions.md`, `Measure-SquadLedger.ps1` |
 
 | GATE-44 | **A collapsed fence is read, and repairing one never latches pipelining off.** A consumption block whose fence collapsed to one or two backticks (a write through a PowerShell double-quoted string) is parsed, counted, and only warned about; `-Check -BaselinePath` only warns when a later write restores such a fence in an earlier entry and changes nothing else; any other rewrite of an earlier entry still fails as `history-integrity`. The Scribe never re-types an earlier entry, and the coordinator never asks for a fence repair or a restated block | `Measure-SquadLedger.ps1`, `scribe-procedure.md`, `operating-procedure.md` |
-| GATE-45 | **Progress is portable and coordinator-owned.** Route requires the inline Progress Presentation contract in the measured `operating-procedure.md` after state, route, and gate classification and before the first work dispatch; no additional reference read is needed. Every non-trivial request exposes one stable 3-to-7-item outcome plan with verification and final-reporting items, never low-level reads, searches, Scribe mechanics, or individual edits. Identity and order change only with material scope. The coordinator uses an advertised native todo or task-list capability by capability rather than literal tool name, while always presenting the matching `## Plan`; the first substantive dispatch waits for both surfaces when native tracking is available. Without one, the same Markdown ledger continues without delay or methodology degradation. Exactly one item is in progress during active work; completion requires the outcome and applicable artifact, history, and consumption verification. Each meaningful phase updates the tracker or fallback ledger and reports `Completed: <item>. Next: <next item>.`; blocked work remains in progress with its blocker named, never silently skipped. Before the final response, every item is complete or explicitly blocked, and the response accounts for deliverables, actual validation, and remaining risks or decisions. Progress UI is ephemeral coordinator metadata, not role work or durable state; no role or Scribe dispatch maintains it, and the Scribe remains the sole ordinary state writer. The prompt delegates through its existing per-turn requirement without a second plan or progress state write | `squad-coordinator.agent.md`, `squad.prompt.md`, `operating-procedure.md`, `00-index.md`, `SKILL.md` |
+| GATE-45 | **Progress is portable and coordinator-owned.** Route requires the inline Progress Presentation contract in the measured `operating-procedure.md` after state, route, and gate classification and before the first work dispatch; no additional reference read is needed. Every non-trivial request exposes one stable 3-to-7-item outcome plan with verification and final-reporting items, never low-level reads, searches, Scribe mechanics, or individual edits. Identity and order change only with material scope. The coordinator uses an advertised native todo or task-list capability by capability rather than literal tool name, while always presenting the matching `## Plan`; the first substantive dispatch waits for both surfaces when native tracking is available. Without one, the same Markdown ledger continues without delay or methodology degradation. Exactly one item is in progress during active work; completion requires the outcome and applicable artifact, history, and consumption verification. Each meaningful phase updates the tracker or fallback ledger and reports `Completed: <item>. Next: <next item>.`; blocked work remains in progress with its blocker named, never silently skipped. Before the final response, every item is complete or explicitly blocked, and the response accounts for deliverables, actual validation, and remaining risks or decisions. Progress UI is ephemeral coordinator metadata, not role work or durable state; ordinary writes use the validated writer and cold operations use the Scribe. The prompt delegates through its existing per-turn requirement without a second plan or progress state write | `squad-coordinator.agent.md`, `squad.prompt.md`, `operating-procedure.md`, `00-index.md`, `SKILL.md` |
 
 Tier 0 pins GATE-38 through GATE-44 in `tests/tier0/ScribeInitConvergence.Tests.ps1` (0.18.1 hotfix). GATE-38..40 are static text pins; GATE-41..44 run the shipped ledger helper against the `scribe-benchmark` fixtures.
 

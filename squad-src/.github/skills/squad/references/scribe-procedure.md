@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-procedure
-description: "The Squad Scribe hot core, read every dispatch: non-negotiable rules, payload-to-step map, the cold-file dispatch table, append-only entry rules, consumption accounting, state advancement, and the write-completeness self-check. Cold detail lives in scribe-cold-init-and-seeding.md, scribe-cold-federation.md, and scribe-cold-gates-and-verdicts.md."
+description: "Full legacy Scribe procedure for cold operations: non-negotiable rules, payload-to-step map, conditional reads, append-only rules, consumption, state advancement, and completeness checks. Ordinary writes use economy-scribe.md."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -12,7 +12,7 @@ metadata:
 
 ## Scribe Write Procedure
 
-The Squad Scribe performs every ordinary shared-state write. Initialization is outside admission. Before later work dispatch, the coordinator's deterministic Cost Preflight exception is limited to appending the matching decision and compare-and-swap updating `currentRun.costPreflight` while no parallel writer exists.
+This full procedure applies to cold Scribe operations, not the ordinary hot path or fresh scripted Init. Fresh single-squad/member-root Init reads only [scribe-init.md](scribe-init.md), runs its helper, reports validated status, and stops. In every routing mode, supported ordinary writes use the synchronous `Write-SquadHandoff.ps1 -Quiet` contract in [economy-scribe.md](economy-scribe.md), directly by the coordinator or by Scribe. Other cold operations first load [scribe-cold-charter.md](scribe-cold-charter.md), this procedure, entry schemas and the full payload template. Initialization is outside admission. Serialize all writers with the coordinator's Cost Preflight transaction per root; failures never authorize hand-written ordinary fallback.
 
 Every path below is relative to the resolved `squadRoot`. The default `.copilot-tracking/squad/` preserves single-squad behavior; a federation sub-squad resolves to `.copilot-tracking/squad/members/<name>/`; a federation-level payload resolves to the federation root.
 
@@ -20,7 +20,7 @@ Every path below is relative to the resolved `squadRoot`. The default `.copilot-
 
 These hold on every turn regardless of payload type. Each names its full definition; read this file's own remaining sections for the ones defined here, or the cited file for the ones defined elsewhere — the contract below holds whether or not that file loads on this host.
 
-* **`single-writer-ownership`** — The Squad Scribe is the sole writer of squad state. Confirmed initialization is outside admission; the one narrow exception is the coordinator's own deterministic Cost Preflight transaction (compare-and-swap `currentRun.costPreflight` plus the exact legacy schema bump, while no parallel writer exists). Every other mutation goes through the Scribe. Full definition: `squad-floor.instructions.md` § *The Squad Scribe Is the Single Writer* and `squad-state.instructions.md`.
+* **`single-writer-ownership`** — One writer per resolved root: the validated ordinary script or cold Scribe, serialized with Cost Preflight. Confirmed initialization is outside admission. Cost Preflight may compare-and-swap `currentRun.costPreflight` plus the exact legacy schema bump with no parallel writer. No other coordinator hand edits. Full definition: `squad-floor.instructions.md` § *The Squad Scribe Is the Single Writer* and `squad-state.instructions.md`.
 * **`append-only-rules`** — Treat `decisions.md`, `history/<agent>.md` (and its consumption blocks), and `history/autonomous-loop-<id>.md`/`history/autopilot-run-<id>.md`/`notifications.md` as strictly append-only: add each entry at the very end of the file, below any trailing marker comment; never edit, re-type, reorder, or remove a prior entry, not even to fix its fence. Treat `team.md`, `routing.md`, `state.json`, `consumption.md`, and `consumption-rates.md` as replace-on-request. See *Decision, History, and Verdict Entries* below.
 * **`per-dispatch-history-and-consumption`** — A history append and its consumption block are inseparable: never write one without the other. See *Decision, History, and Verdict Entries* below and *Consumption Accounting* Step 5 for the exact 10-field order (`model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`).
 * **`ledger-rewrite-from-full-history`** — `consumption.md` is rewritten from every `#### Consumption` block recorded in `history/*.md` for the run — never from the current turn's payload alone. See *Consumption Accounting* Step 7's rewrite rule and its sum check: the run-total row must equal the sum of every role row, column by column, and the count of blocks folded in must equal the count found on disk.
@@ -50,13 +50,13 @@ These hold on every turn regardless of payload type. Each names its full definit
 
 ### Cold-File Dispatch Table
 
-The Scribe decides which cold file(s) to read from its own payload type — never from whether the coordinator's payload happened to mention a section. `entry-schemas.md` and this hot core are always read; the table below is the complete set of additional reads.
+For a cold operation the Scribe reads the full legacy charter, this procedure, `entry-schemas.md`, and `scribe-payload-template.md`, then the additional files below by payload type, never by whether the coordinator mentioned a section. A supported ordinary handoff reads only `economy-scribe.md`.
 
 | Payload type (Step above) | Also read |
 |---|---|
-| decision, history, (always: Step 7 consumption + state.json) | none — this hot core is sufficient |
-| initialization or roster refresh (3) | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), [consumption-rates-template.md](consumption-rates-template.md), `seed-templates.md` (existing init-only conditional) |
-| Step 7.1 rate-table seed/reseed, any payload type (`consumption-rates.md` missing or shape-check-failed) | [consumption-rates-template.md](consumption-rates-template.md) |
+| decision, history, (always: Step 7 consumption + state.json) | ordinary: `economy-scribe.md`; explicitly unsupported cold operation: full charter/procedure/schema/payload plus `consumption.md` |
+| initialization or roster refresh (3) | fresh scripted Init: only [scribe-init.md](scribe-init.md), then `scripts/Initialize-Squad.ps1`; explicit refresh/fallback: [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), `seed-templates.md`; run `scripts/Initialize-SquadConsumptionRates.ps1` without reading its template |
+| Step 7.1 rate-table seed/reseed, any payload type (`consumption-rates.md` missing or shape-check-failed) | Run `scripts/Initialize-SquadConsumptionRates.ps1 -SquadRoot <squadRoot>`; read the template only when no shell tool or `pwsh` 7+ is available |
 | memory (4) | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) |
 | Council Verdict / Intake Readiness Verdict / Discovery Verdict (5, 9, 12) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
 | autonomous-loop summary (6) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
@@ -66,7 +66,7 @@ The Scribe decides which cold file(s) to read from its own payload type — neve
 | expansion (11) | [scribe-cold-federation.md](scribe-cold-federation.md), `federation-templates.md` (existing conditional) |
 | federation-level history payload (naming a sub-squad, Step 2) | [scribe-cold-federation.md](scribe-cold-federation.md) § *Federation-Level History Payload* |
 | notification write | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) § *notifications.md* |
-| ordinary payload carrying `handoff: script` (economy only) | [economy-scribe.md](economy-scribe.md), read first instead of this hot core |
+| supported ordinary payload, every routing mode (`handoff: script` optional) | [economy-scribe.md](economy-scribe.md) only; direct synchronous `-Quiet` writer or the same path through Scribe |
 
 ### Decision, History, and Verdict Entries
 
@@ -84,9 +84,14 @@ Initialization (`team.md`/`routing.md` seeding, the full state-tree seed includi
 
 ### Consumption Accounting
 
+For helper Init, `Measure-SquadLedger.ps1` owns the initialization-only Cost
+Comparison and its validation. After its `-Write` / `-Check` succeed, report the
+helper status and stop: skip every manual derivation, reread, and completeness
+audit below. Actual-work comparisons and Observed Usage remain unchanged.
+
 Write a consumption block for **every** dispatch recorded in the history append — never conditionally. All figures are estimates, not billed amounts: no per-dispatch token telemetry exists, so every numeric output carries an "estimated, not billed" disclaimer.
 
-1. **Validate the rate table before using it.** Seed `consumption-rates.md` from the template in [consumption-rates-template.md](consumption-rates-template.md) when the file is missing **or when the existing file fails the shape check**: it must carry a per-model rate table with `Input`, `Cached`, `Cache write`, and `Output` columns, a tier-fallback table, a dispatch-size estimator, and a calibration block. A file that prices whole tiers at one blended rate, or omits the cache-write or output columns, fails the check and is reseeded — an existence-only check is what lets a drifted table silently flatten every model to one price. Preserve the calibration block across a reseed. This table is the only source of token rates; never hardcode rates. `consumption-rates-template.md` is cold — read it only for this seed/reseed step, never for an ordinary decision or history dispatch; see the Cold-File Dispatch Table above.
+1. **Validate the rate table before using it.** Run `scripts/Initialize-SquadConsumptionRates.ps1 -SquadRoot <squadRoot>` from the installed skill. It copies the canonical seed deterministically when missing or shape-failed and preserves eligible calibration and operator-added rows; propagate failures rather than hand-authoring a replacement. Do not read or retype its template on the scripted path. Only when no shell tool or `pwsh` 7+ is available, seed from [consumption-rates-template.md](consumption-rates-template.md): require a per-model rate table with `Input`, `Cached`, `Cache write`, and `Output` columns, a tier-fallback table, a dispatch-size estimator, and a calibration block. Preserve eligible calibration across a reseed. This table is the only source of token rates; never hardcode rates.
 2. **Resolve the model — never invent one, and never skip a rung.** Walk the ladder in *Model Attribution* (`squad-state.instructions.md`) and stop at the first hit: the model the host reported for the dispatch (the Copilot CLI prints it as `AgentName(model-id)`) or the dispatch's own statement; the dispatched agent's frontmatter `model:` when it declares one; a user-volunteered override in `currentRun.modelOverrides`; the session model in `currentRun.sessionModel`, which on a headless run is the `--model` value; then the literal `unknown`. Record the rung in `model_source` as `dispatch-reported`, `agent-pinned`, `operator-declared`, `session-inherited`, `cli-pinned`, or `unresolved`. Normalize a reported display name to a rate-table row before recording it. **A frontmatter pin is a prediction, not an observation**: when the host cannot use the pinned model it substitutes the session model — silently, on the dispatch path — so prefer the host's own report whenever the payload carries one.
    **`unresolved` is earned, not assumed.** It requires that the dispatch reported no model, the agent's file was opened and carried no model pin, *and* `state.json` held no usable `sessionModel`. Every rung is an observation or a file read, so a ledger where every row says `unresolved` means the ladder was never walked — a defect, not a gap.
    **Open the agent's file before writing either `agent-pinned` or `unresolved`.** Both values are claims about that file's frontmatter and neither can be made without reading it. The shipped squad agents do pin a model, so a `Squad Researcher` dispatch recorded as `unresolved` is a rung that was skipped, and a row recorded as `agent-pinned` carrying any name other than the one in that file's `model:` is fabricated. When the rung answers, copy the frontmatter value verbatim rather than recalling a model that sounds right.

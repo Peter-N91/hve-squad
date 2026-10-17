@@ -111,6 +111,8 @@
     or inserted, or a -BaselinePath file or protected artifact changed;
     `ledger-only` for every other mismatch, which is cost accounting the next
     -Write re-derives from history/ and which never blocks a run.
+    When history contains only Squad Scribe setup usage, also requires the
+    canonical initialization Cost Comparison: n/a until the first work dispatch.
 .PARAMETER ExpectedHistoryCounts
     Optional hashtable keyed by history file name (with or without the `.md`
     extension, e.g. `'Squad Researcher'` or `'Squad Researcher.md'`) whose value is
@@ -122,7 +124,7 @@
     Scribe-invoked write mode. Derives the same fragment the default markdown mode
     prints, then replaces the existing `## Attribution` heading through the closing
     fence of the `### Derivation` block inside the squad root's `consumption.md`,
-    leaving the H1, frontmatter, Basis note, and Cost Comparison section untouched,
+    leaving the H1, frontmatter, Basis note, and actual-work Cost Comparison untouched,
     and sets only `currentRun.estCostUsd` and `currentRun.estCreditsTotal` in
     `state.json` to the derived run totals (a value-only replacement, so every other
     byte of `state.json`, including date strings, is preserved). Refuses, writing
@@ -137,6 +139,8 @@
     orchestration shares; -Format json adds `unitEconomics`). -Write replaces it
     when present, else inserts it before `## Observed Usage (host-reported)` or
     `## Cost Comparison`; -Check ignores it.
+    Initialization-only history instead stamps a canonical n/a Cost Comparison;
+    it never invents a manual baseline. Observed Usage remains untouched.
 .PARAMETER Format
     Output shape: `markdown` (default) prints the pasteable table and Derivation
     block; `json` prints the same figures as a structured object instead, for a
@@ -2497,9 +2501,15 @@ if (-not $Check -and $identityGuardResult) {
 # -Check: compare against the squad root's own consumption.md, write nothing.
 # ---------------------------------------------------------------------------
 
+$initializationOnly = @($historyFiles | Where-Object { $_.Name -ne 'Squad Scribe.md' }).Count -eq 0
+$initializationComparison = 'n/a (initialization). Setup spend is recorded above; the first comparison follows the first work dispatch. Estimates only, not billed.'
+
 if ($Check) {
     $mismatches = [System.Collections.Generic.List[string]]::new()
     $infoLines = [System.Collections.Generic.List[string]]::new()
+    if ($initializationOnly -and $existingConsumptionContent -notmatch ('(?m)^## Cost Comparison \(illustrative\)\r?\n\r?\n' + [regex]::Escape($initializationComparison) + '\r?$')) {
+        $mismatches.Add('Initialization Cost Comparison is missing or changed; run -Write to derive it without a fictional baseline.')
+    }
 
     # Post-baseline malformed/illegal-model_source blocks (item 3): under -Check
     # these are reported as FAILs rather than thrown (see the non--Check throw
@@ -2863,6 +2873,9 @@ if ($Write) {
     }
     # After the Observed section so a first write lands the value section before it.
     $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines (Get-UnitEconomicsSectionLinesLocal -Ue $unitEconomics) -HeadingPattern '^##\s+Unit Economics \(value\)\s*$' -InsertBeforePatterns @('^##\s+Observed Usage \(host-reported\)', '^##\s+Cost Comparison')
+    if ($initializationOnly) {
+        $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines @('## Cost Comparison (illustrative)', '', $initializationComparison, '') -HeadingPattern '^##\s+Cost Comparison.*$' -InsertBeforePatterns @('(?!)')
+    }
     # Each file is written to a temp file beside it and moved into place; when the second move fails,
     # the first file gets its original bytes back, so a direct -Write never leaves one file updated alone.
     $applied = [System.Collections.Generic.List[hashtable]]::new()

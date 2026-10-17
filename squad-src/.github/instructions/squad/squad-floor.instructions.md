@@ -24,23 +24,23 @@ All squad state lives under a **squad root**: `.copilot-tracking/squad/` for a s
 | `decisions.md`         | Squad decisions and their rationale         | Append-only; Cost Preflight via coordinator |
 | `notifications.md`     | Notifications fired and their channel       | Append-only        |
 | `history/<agent>.md`   | Per-agent dispatch history                  | Append-only        |
-| `state.json`           | Machine-readable squad status               | Replace via Scribe; Cost Preflight compare-and-swap via coordinator |
-| `consumption.md`       | Member, model, and credit ledger            | Replace via Scribe |
-| `consumption-rates.md` | Per-model token-rate table                  | Replace via Scribe |
+| `state.json`           | Machine-readable squad status               | Replace via validated writer or Scribe; Cost Preflight compare-and-swap via coordinator |
+| `consumption.md`       | Member, model, and credit ledger            | Replace via validated writer or Scribe |
+| `consumption-rates.md` | Per-model token-rate table                  | Replace via seeder or Scribe |
 
 `<agent>` is the agent's `name:` frontmatter value **verbatim** — spaces and capitalization intact, as in `history/BRD Builder.md`. Never slugify, lowercase, or substitute the role id; a renamed file reads as a missing entry and drops that agent from every later ledger rewrite.
 
-Init seeds `history/` **empty**. Each file inside it is created by the dispatch it records, so its presence is what proves that stage ran; a header-only file seeded per roster member at Init destroys that signal.
+Init seeds only `history/Squad Scribe.md` with actual initialization overhead. Each role file is created by the dispatch it records; a header-only file per roster member would destroy proof of dispatch.
 
 Detection precedence: `federation.md` present means federation; otherwise `team.md` present means a single squad; otherwise the squad is not initialized and Init Mode runs. Squad state is runtime-created and is never packaged with the squad source.
 
 ## The Squad Scribe Is the Single Writer
 
-The **Squad Scribe** performs every ordinary squad-state write. Confirmed initialization is setup outside Cost Preflight. After it completes, one deterministic exception gates work before its child and Scribe handoff: while no parallel writer exists, the owning coordinator may append one Cost Preflight entry to `decisions.md` and compare-and-swap only `state.json` `currentRun.costPreflight`. When that transaction upgrades a legacy single-squad `1.3` or federation `1.2` state, it may also change only `schemaVersion` to `1.4` or `1.3`, respectively. The coordinator compares the prior `updated` value, preserves every other field, reads both files back, and dispatches nothing on a collision, partial write, or mismatch.
+The **Squad Scribe** owns cold state writes; supported ordinary writes use `Write-SquadHandoff.ps1 -Quiet` synchronously, directly by the coordinator or by Scribe, in every routing mode. Read the small `references/economy-scribe.md` contract; no hand-authored ordinary arithmetic or validation bypass. Confirmed initialization remains outside Cost Preflight. Before later work, with no parallel writer, the coordinator may append a Cost Preflight decision and compare-and-swap only `currentRun.costPreflight`, plus the exact legacy `schemaVersion` bump (`1.3` → `1.4`, federation `1.2` → `1.3`). Compare prior `updated`, preserve other fields, read back, and dispatch nothing on collision, partial write, or mismatch.
 
-Every other mutation goes through the Scribe via `runSubagent` or `task`. After admission, the Scribe preserves the preflight object and links each child history entry to the exact admitted run and round. This keeps the exception narrow enough that parallel dispatch still has one writer. Under autopilot pipelining, hand-offs for different stages of the same squad root still funnel through this one writer — never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order and dispatch the next only once the current one has returned and verified clean.
+Every unsupported operation cold-loads the full Scribe charter/procedure/schema/payload. After admission Scribe preserves the preflight object and links each child to its admitted run/round/slot. Never overlap direct writer, cold Scribe, or Cost Preflight at one root. For cold autopilot handoffs, never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order and verify before the next. A direct ordinary handoff is synchronous, not pipelined.
 
-Append-only files are appended to and never edited or removed. A coordinator that edits `history/`, any prior decision, or any `state.json` field outside `currentRun.costPreflight` and the exact legacy schema bump has broken the contract, even when the edit is correct.
+Append-only files are never edited or removed. Coordinators must not edit state themselves outside Cost Preflight; invoking the validated writer grants no permission to hand-edit history or state. Nonzero exits, invalid status, history-integrity, and restore failures fail closed, never trigger a hand-written fallback. Quiet success is one JSON status/count/check object; warnings stay visible on stderr and tolerated `ledger-only` is not `PASS`.
 
 **Line numbers are never file content.** A read tool renders a `1.`, `2.`, `12:` gutter down the left margin so you can cite a line; it belongs to the viewer, not to the file. Copying a template out of a numbered view and writing it back with the gutter intact produces a file nothing downstream can parse — including this contract's own checks. Strip the numbering before writing, every time.
 
@@ -64,7 +64,7 @@ A roster row names one **Primary** agent and optionally some **Alternates**. The
 
 ## Proof of Dispatch
 
-The stage's domain artifact on disk at the role's `Deliverable Root` gates dispatching the next stage. A `history/<agent>.md` entry written by the Scribe carrying the dispatch's consumption block additionally gates counting the stage as run. No history entry means the stage has not been proven complete — re-send its Scribe hand-off rather than re-running the stage that produced the artifact — and no barrier that reads Scribe-written state may proceed past it.
+The stage's domain artifact on disk at the role's `Deliverable Root` gates dispatching the next stage. A verified `history/<agent>.md` entry from the deterministic writer or Scribe, carrying its consumption block, additionally gates counting the stage as run. Without history, verify whether the handoff landed before resending it; do not rerun an already completed stage. No state-dependent barrier proceeds without that proof.
 
 A history file is created by the dispatch it records, with this preamble and nothing else above the first entry:
 
@@ -135,7 +135,7 @@ Three rules keep the block parseable, and each one has been broken by a real run
 
 `consumption-rates.md` is **copied verbatim** from the template in the `squad` skill's `references/consumption-rates-template.md`, at Init and at every sub-squad seeding or federation promotion. It carries the per-model rate table, the tier-fallback table, the dispatch-size estimator, and the calibration block, and all four are load-bearing. A shortened, summarized, or hand-rewritten rate file leaves the Scribe pricing from a table that no longer contains what it needs.
 
-In `consumption.md`, the row covering the coordinator's and Scribe's own turns is labelled **`orchestration`** in both tables — never `scribe`, `coordinator`, or a split pair. It is derived from the `#### Consumption — Orchestration` blocks the same way every other row is derived from its dispatch blocks, so the Scribe writes one such block into `history/Squad Scribe.md` on every turn it writes state, including Init. No block means no row — an `orchestration` row carrying a figure no block accounts for is invented, and a zero row hides the cost of running the squad.
+In `consumption.md`, the coordinator/Scribe overhead row remains **`orchestration`** in both tables, derived from `#### Consumption — Orchestration` blocks in `history/Squad Scribe.md`, including Init. Preserve that historical artifact on direct writer routes, but record only actual coordinator usage plus Scribe usage when dispatched, never fictional Scribe tokens. No block means no row; never invent an overhead figure.
 
 An orchestration entry takes the same prose shape a dispatch entry takes. The turn number and the work it covers go in these fields, because the block's field set is closed at ten and neither is in it — with no prose slot to hold them they leak into the JSON and break the block:
 

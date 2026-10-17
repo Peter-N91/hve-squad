@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-payload-template
-description: "The single payload template both the Squad Coordinator and Squad Federation Coordinator fill when handing state to the Squad Scribe. Byte-stable instructions first, volatile per-dispatch data last, for cache-stable prefixing. Read always."
+description: "Full cold Scribe payload template for both coordinators: initialization, verdicts, memory, notifications, ceiling slots, federation operations and summaries. Ordinary script JSON uses economy-scribe.md instead."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -10,7 +10,12 @@ metadata:
 
 # Scribe Payload Template
 
-This is the one payload shape both coordinators fill at hand-off. Filling it in this section order keeps a host's prompt cache warm: the fixed text at the top never changes, so only the tail needs re-encoding.
+Fresh single-squad/member-root Init uses only [scribe-init.md](scribe-init.md).
+Adapt confirmed fields from this legacy payload once into its JSON contract;
+do not load this full template on that path or execute `ledgerCommand` text.
+Explicit refresh and the other cold operations retain this template.
+
+This is the full legacy payload shape both coordinators fill for cold Scribe handoffs. Supported ordinary handoffs in every routing mode use only the minimal JSON in [economy-scribe.md](economy-scribe.md), run synchronously with `-Quiet`; do not send this template's additional keys to the script. An unsupported script operation requires explicit cold reassembly, never automatic hand-written bypass of validation. Filling this cold template in section order keeps its prefix cache-stable.
 
 **Ordering is prose-only and cache-stable, never a JSON-field reorder.** Every JSON object below — most importantly the ten-field `#### Consumption` block — keeps the exact field order fixed in [entry-schemas.md](entry-schemas.md) and [scribe-procedure.md](scribe-procedure.md) Non-Negotiable Rules regardless of where the object sits in this template. Only the section-to-section prose order is chosen for cache stability.
 

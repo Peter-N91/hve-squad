@@ -10,12 +10,11 @@
 .DESCRIPTION
     A hand-off that only transcribes a payload into append-only entries, a state advance,
     and a derived ledger needs no model. This script performs exactly that write, with the
-    same formats `references/entry-schemas.md` defines. The Squad Scribe runs it as its
-    deterministic write path for an ordinary payload, so the Scribe remains the only writer
-    of squad state; a payload this script refuses (initialization, memory, verdicts, summaries,
-    promotion, expansion, notifications, a ceiling-admitted history write) is composed by the
-    Scribe itself. The coordinator never runs it. It is synchronous; run it once at a time
-    per squad root.
+    same formats `references/entry-schemas.md` defines. The coordinator runs it directly
+    for ordinary payloads in every routing mode; the Squad Scribe handles unsupported
+    operations (initialization, memory, verdicts, summaries, promotion, expansion,
+    notifications, a ceiling-admitted history write). It is synchronous; serialize it
+    with every other state writer, including the Scribe, once at a time per squad root.
 
     Order of operations:
       1. Validate the payload (closed field sets, legal values, roster agent names, model
@@ -47,7 +46,7 @@
     (each with agent, request, deliverable, outcome) and `stateAdvance.activeRoles` are
     required; everything marked "derived" is filled in when omitted and strictly validated
     when supplied:
-      runId, handoff (optional, only `script`: the economy marker the coordinator sends),
+      runId, handoff (optional, only `script`: the deterministic hand-off marker),
       route (optional, requires decision),
       turn (derived: state turn + 1), timestamp (derived: the current UTC time),
       mode (derived: the state.json mode),
@@ -104,8 +103,7 @@
     written; 3 write or ledger failure, files restored (or unreadable input, nothing
     changed); 4 rate table refused (malformed operator row), operator decision needed,
     nothing written; 5 snapshot differs; 6 write set not stable before the timeout;
-    7 refused: `team.md` does not record `Model routing: economy` (every mode, nothing
-    written; the Scribe composes the hand-off by hand, as in v0.18.1); 8 another hand-off
+    8 another hand-off
     holds this squad root's lock past -LockTimeoutSeconds, nothing written.
 
     Ledger check (v0.18.1 failure classes): after the writes, `Measure-SquadLedger -Check`
@@ -114,13 +112,13 @@
     first mismatch lines. A `history-integrity` failure, a missing `failure class:` line, or
     a crash rolls the writes back and exits 3.
 
-    Warnings (never refusals): `WARN economy consent not recorded` when decisions.md has no
+    Economy-only warnings (never refusals): `WARN economy consent not recorded` when decisions.md has no
     `## Economy Mode Accepted` entry; a history record whose routeRationale does not start
     with `Route: ` is prefixed with `Route: bounded` (payload route `bounded`) or
     `Route: economy`, with a WARN; a record without routingIdentity gets a WARN.
 
-    Economy only (references/economy-mode.md): every parameter set reads `team.md` under
-    -SquadRoot first and refuses with exit 7 unless it records `Model routing: economy`.
+    Routing selects models and admission policy, not the persistence mechanism.
+    off, ranked, economy, and manual all use this writer.
 
     Concurrency: a hand-off holds an exclusive per-root lock (an OS file handle in the temp
     directory, released when the process exits, so a crashed holder never leaves a stale
@@ -136,13 +134,17 @@
 
 .PARAMETER SquadRoot
     A single-squad root: `.copilot-tracking/squad/` or `.copilot-tracking/squad/members/<name>/`.
-    Required in every mode, because the economy check reads its `team.md`.
+    Required in every parameter set.
 .PARAMETER PayloadPath
     Path to a JSON payload file, instead of -PayloadJson.
 .PARAMETER PayloadJson
     The payload as a JSON string.
 .PARAMETER SessionLog
     Passed to `Measure-SquadLedger.ps1 -Write`; defaults to `auto`.
+.PARAMETER Quiet
+    Hand-off mode: emit one compact JSON status line on stdout after successful writes.
+    Warnings remain visible on stderr. ledgerCheck is PASS or ledger-only, never a
+    fabricated PASS for a tolerated accounting mismatch. Failures retain nonzero exits.
 .PARAMETER LockTimeoutSeconds
     Longest wait for another hand-off on the same root to finish; exit 8 when exceeded (default 120).
 .PARAMETER SnapshotPath
@@ -187,6 +189,9 @@ param(
     [string]$SessionLog = 'auto',
 
     [Parameter(ParameterSetName = 'Handoff')]
+    [switch]$Quiet,
+
+    [Parameter(ParameterSetName = 'Handoff')]
     [ValidateRange(1, 3600)]
     [int]$LockTimeoutSeconds = 120,
 
@@ -228,15 +233,6 @@ function Get-FileSha256 {
 }
 
 $SquadRoot = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($SquadRoot)
-$routingTeam = Join-Path $SquadRoot 'team.md'
-$routingMode = 'off'
-if (Test-Path -LiteralPath $routingTeam -PathType Leaf) {
-    $routingMatch = [regex]::Match([System.IO.File]::ReadAllText($routingTeam), '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
-    if ($routingMatch.Success) { $routingMode = $routingMatch.Groups['mode'].Value }
-}
-if ($routingMode -ne 'economy') {
-    Stop-Handoff 7 "refused: $routingTeam records Model routing: $routingMode, not economy. The script hand-off is economy-only; the Squad Scribe composes this hand-off itself."
-}
 
 function ConvertTo-NormalPath {
     # GetFullPath expands 8.3 short names; an existing path is then read back in its long form.
@@ -519,8 +515,27 @@ function Update-OwnedHash {
 
 function Invoke-ChildScript {
     param([string]$ScriptPath, [string[]]$Arguments)
-    $output = & $PwshPath -NoProfile -File $ScriptPath @Arguments 2>&1
-    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Text = (($output | ForEach-Object { "$_" }) -join "`n").Trim() }
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new($PwshPath)
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in @('-NoProfile', '-File', $ScriptPath) + $Arguments) {
+        $startInfo.ArgumentList.Add($argument)
+    }
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw "Could not start child PowerShell process for '$ScriptPath'." }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        $text = (@($stdout.Result, $stderr.Result) | Where-Object { $_ }) -join "`n"
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Text = $text.Trim() }
+    }
+    finally {
+        $process.Dispose()
+    }
 }
 
 function Test-NodeStrings {
@@ -740,6 +755,23 @@ function Get-DerivedConsumption {
 
 # A stamp later than now + 120 s cannot be real (typically local time labelled Z); it is never an ordering floor.
 $handoffWarnings = [System.Collections.Generic.List[string]]::new()
+function Get-ChildWarnings {
+    param([string]$Text)
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $plainText = [regex]::Replace($Text, '\x1B\[[0-?]*[ -/]*[@-~]', '')
+    foreach ($line in ($plainText -split '\r?\n')) {
+        $warning = $null
+        if ($line -match '^\s*(?:WARNING:|Write-Warning:)\s*(?<message>.+)$') {
+            $warning = $Matches['message'].Trim()
+        }
+        elseif ($line -match '^\s*WARN(?:ING)?(?::|\s+)(?<message>.+)$') {
+            $warning = "WARN: $($Matches['message'].Trim())"
+        }
+        if ($warning -and -not $warnings.Contains($warning)) { $warnings.Add($warning) }
+    }
+    return $warnings.ToArray()
+}
+
 $futureLimit = [DateTimeOffset]::UtcNow.AddSeconds(120)
 function Test-FutureStamp {
     param([string]$Value, [DateTimeOffset]$Time, [string]$Where)
@@ -823,9 +855,9 @@ if (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') -PathType Leaf
     Stop-Handoff 2 'federation roots need the Squad Scribe.'
 }
 
-# economy-mode.md Consent: a missing acceptance is reported, never refused (refusing would only push the Scribe to the manual path).
-$consentText = try { [System.IO.File]::ReadAllText($decisionsPath) } catch { '' }
-if ($consentText -notmatch '(?m)^## Economy Mode Accepted\b') {
+$routingMatch = [regex]::Match([System.IO.File]::ReadAllText($teamPath), '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
+$routingMode = if ($routingMatch.Success) { $routingMatch.Groups['mode'].Value } else { 'off' }
+if ($routingMode -eq 'economy' -and [System.IO.File]::ReadAllText($decisionsPath) -notmatch '(?m)^## Economy Mode Accepted\b') {
     $handoffWarnings.Add('WARN economy consent not recorded: decisions.md has no ## Economy Mode Accepted entry (economy-mode.md Consent); the hand-off continues. The coordinator states the trade and records it before the next dispatch.')
 }
 
@@ -1030,7 +1062,7 @@ else {
 }
 
 # economy-mode.md Route Markers: every economy history entry starts its Route rationale with Route: economy or Route: bounded.
-foreach ($record in $records) {
+foreach ($record in $records | Where-Object { $routingMode -eq 'economy' }) {
     if ($null -eq $record.Routing) {
         $handoffWarnings.Add("WARN $($record.Agent): no routingIdentity; under economy every history entry carries Route: economy (or Route: bounded) in its Route rationale bullet (economy-mode.md Route Markers).")
         continue
@@ -1379,7 +1411,7 @@ $orchHeading = "$timestamp Coordinator hand-off, turn $turn"
 $orchLines = [System.Collections.Generic.List[string]]::new()
 $orchLines.Add("### $orchHeading"); $orchLines.Add('')
 $orchLines.Add("* Turn: $turn")
-$orchLines.Add("* Request: $(if ($orchestration.Request) { $orchestration.Request } else { 'Coordinator hand-off recorded by the Squad Scribe through scripts/Write-SquadHandoff.ps1.' })")
+$orchLines.Add("* Request: $(if ($orchestration.Request) { $orchestration.Request } else { 'Coordinator hand-off recorded deterministically through scripts/Write-SquadHandoff.ps1.' })")
 $orchLines.Add("* Deliverable: $($deliverableList -join ', ')")
 $orchLines.Add("* Outcome: $(if ($orchestration.Outcome) { $orchestration.Outcome } else { "Recorded $($entryPlans.Count) dispatch entr$(if ($entryPlans.Count -eq 1) { 'y' } else { 'ies' }) and advanced state." })")
 $orchLines.Add('')
@@ -1416,9 +1448,9 @@ $ledgerScript = Join-Path $scriptsRoot 'Measure-SquadLedger.ps1'
 foreach ($dependency in @($ratesScript, $ledgerScript)) { if (-not (Test-Path -LiteralPath $dependency -PathType Leaf)) { Stop-Handoff 1 "missing sibling script $dependency." } }
 
 Register-Original $ratesPath
-$ratesCheck = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Check', '-Mode', 'economy')
+$ratesCheck = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Check')
 if ($ratesCheck.ExitCode -ne 0) {
-    $seed = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Mode', 'economy')
+    $seed = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot)
     Update-OwnedHash $ratesPath
     if ($seed.ExitCode -ne 0) {
         $failed = @(Restore-Originals)
@@ -1485,6 +1517,10 @@ try {
     $ledger = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Write', '-SessionLog', $SessionLog)
     Update-OwnedHash $consumptionPath, $statePath
     if ($ledger.ExitCode -ne 0) { throw "Measure-SquadLedger -Write failed: $($ledger.Text)" }
+    $childWarnings = @(Get-ChildWarnings -Text $ledger.Text)
+    foreach ($warning in $childWarnings) {
+        if (-not $handoffWarnings.Contains($warning)) { $handoffWarnings.Add($warning) }
+    }
     $written.Add("WROTE consumption.md ($(($ledger.Text -split "`n" | Select-Object -Last 1).Trim()))")
 
     # The ledger helper leaves the heading run id and the Cost Comparison section as written. The seed placeholder and this script's own
@@ -1498,9 +1534,11 @@ try {
     $ledgerText = Get-FileText $consumptionPath
     $ledgerText = [regex]::Replace($ledgerText, '(?m)^# Squad Consumption Ledger \(Run: [^)\r\n]*\)', "# Squad Consumption Ledger (Run: $runId)")
     $comparison = 'This run consumed an estimated **${0} (~{1} AI credits)** across {2} specialized agent(s) (squad figure only; the host-reported comparison is in Observed Usage when a session log exists).' -f $cost.ToString('F4', [System.Globalization.CultureInfo]::InvariantCulture), $credits.ToString('F2', [System.Globalization.CultureInfo]::InvariantCulture), $agentCount
-    $comparisonPattern = '(?m)^(?:This run has not yet dispatched|This run consumed an estimated \*\*\$<squad-cost>|This run consumed an estimated [^\r\n]*\(squad figure only;)[^\r\n]*'
+    $comparisonPattern = '(?m)^(?:n/a \(initialization\)\.|This run has not yet dispatched|This run consumed an estimated \*\*\$<squad-cost>|This run consumed an estimated [^\r\n]*\(squad figure only;)[^\r\n]*'
     $comparisonRefreshed = [regex]::IsMatch($ledgerText, $comparisonPattern)
-    if ($comparisonRefreshed) { $ledgerText = [regex]::Replace($ledgerText, $comparisonPattern, { param($m) $comparison }) }
+    if ($comparisonRefreshed) {
+        if ($agentCount -gt 0) { $ledgerText = [regex]::Replace($ledgerText, $comparisonPattern, { $comparison }) }
+    }
     else {
         # A full comparison keeps its manual baseline; its squad figures and the saving percentage are recomputed from the new total.
         $invariantCulture = [System.Globalization.CultureInfo]::InvariantCulture
@@ -1542,13 +1580,21 @@ try {
 
     $countsArgument = (@($expectedCounts.Keys | ForEach-Object { "$_=$($expectedCounts[$_])" })) -join ';'
     $check = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Check', '-ExpectedHistoryCounts', $countsArgument)
+    $checkLine = @($check.Text -split "`n" | Where-Object { $_.Trim() -eq 'Measure-SquadLedger -Check: PASS' })
     $ledgerOnly = $null
+    if ($check.ExitCode -eq 0 -and $checkLine.Count -ne 1) {
+        throw "Measure-SquadLedger -Check returned exit 0 without exactly one PASS status: $($check.Text)"
+    }
     if ($check.ExitCode -ne 0) {
         # v0.18.1: only a history-integrity failure stops; a ledger-only mismatch is cost accounting the next -Write re-derives.
         $failureClass = [regex]::Match($check.Text, '(?m)Measure-SquadLedger -Check: failure class: (?<class>[a-z-]+)').Groups['class'].Value
         if ($failureClass -ne 'ledger-only') { throw "Measure-SquadLedger -Check failed (failure class: $(if ($failureClass) { $failureClass } else { 'none reported' })): $($check.Text)" }
         $firstMismatches = @($check.Text -split "`n" | Where-Object { $_ -match '^\s+- ' } | Select-Object -First 3 | ForEach-Object { ($_ -replace '^\s+- ', '').Trim() })
         $ledgerOnly = "WARN ledger-only: $($firstMismatches -join ' | ') (writes kept; the next Measure-SquadLedger -Write re-derives consumption.md from history)"
+    }
+    $childWarnings = @(Get-ChildWarnings -Text $check.Text)
+    foreach ($warning in $childWarnings) {
+        if (-not $handoffWarnings.Contains($warning)) { $handoffWarnings.Add($warning) }
     }
 
     # A comparison that still quotes a squad total other than the ledger's own is self-refuting; the hand-off does not stand.
@@ -1563,12 +1609,24 @@ catch {
     Stop-WithRollback 3 "write failed: $($_.Exception.Message)"
 }
 
+if ($Quiet) {
+    foreach ($warning in $handoffWarnings) { [Console]::Error.WriteLine($warning) }
+    if ($ledgerOnly) { [Console]::Error.WriteLine($ledgerOnly) }
+    [ordered]@{
+        status          = 'written'
+        turn            = $turn
+        dispatchEntries = $entryPlans.Count
+        historyCounts   = $expectedCounts
+        ledgerCheck     = $(if ($ledgerOnly) { 'ledger-only' } else { 'PASS' })
+    } | ConvertTo-Json -Depth 4 -Compress
+    exit 0
+}
+
 $written | ForEach-Object { Write-Output $_ }
 $handoffWarnings | ForEach-Object { Write-Output $_ }
 if ($ledgerOnly) {
     Write-Output $ledgerOnly
     exit 0
 }
-$checkLine = @($check.Text -split "`n" | Where-Object { $_ -match 'Measure-SquadLedger -Check: PASS' } | Select-Object -Last 1)
-Write-Output $(if ($checkLine.Count -gt 0) { $checkLine[0].Trim() } else { 'Measure-SquadLedger -Check: PASS' })
+Write-Output $checkLine[0].Trim()
 exit 0

@@ -42,7 +42,7 @@ For every non-trivial request, after state, route, and gate classification:
 * Blocked: keep the current item in progress, name the blocker, never silently skip it.
 * Before final response, complete each item or report it explicitly blocked. Name changed or delivered files, actual validation, and remaining risks or decisions.
 
-Progress is coordinator-owned ephemeral UI, not role work or durable squad-state writes. Dispatch no role or Squad Scribe for it; the Scribe is the sole ordinary state writer. The prompt delegates: no second plan or progress state writes.
+Progress is coordinator-owned ephemeral UI, never role work or durable state. Dispatch no role or Scribe for it; the validated writer owns ordinary writes, the Scribe cold writes. The prompt delegates, so no second plan or progress-state writes.
 
 ### Ledger Reconciliation (before new work)
 
@@ -63,18 +63,20 @@ State which path — `scripted` or `manual` — this reconciliation used in the 
 ## Decide
 
 1. Collect each dispatched agent's structured findings and reconcile conflicts.
-2. Hand the turn's decision and rationale to the Squad Scribe, which appends to `decisions.md` (append-only).
+2. Persist ordinary decisions with the validated writer below; cold decisions/verdicts go to Scribe. `decisions.md` remains append-only.
 3. When a decision is architecturally significant, additionally capture it as an Architecture Decision Record via the `adr-author` skill and reference that ADR from the decision entry.
 4. Persist durable, role-scoped learnings to `/memories/repo/squad-<agent>.md` through the Squad Scribe and the memory tool.
 5. Read learnings in order: local memory, shipped `learnings/shared-learnings.md` (skill-root-relative within the deployed `squad` skill), then `.agents/skills/squad-learnings-tenant/tenant-learnings.md` only when the organization configured the tenant-internal APM dependency. Both playbooks are read-only, authoritative context; apply entries matching the current scenario and never write either from a run. Local learnings are Scribe-owned as above; promotion to shared playbooks uses only the human-reviewed fork-and-PR paths in `CONTRIBUTING.md`.
 
 ## Handoff
 
-1. Hand each dispatched agent's request and outcome to the Squad Scribe, which appends them to `history/<agent>.md` (append-only) along with the per-dispatch consumption block (the resolved model and how it was resolved, plus estimated input, cached, cache-write, and output token cost and credits), then rewrites the `consumption.md` ledger and updates the `state.json` `currentRun` totals. The consumption block is written for every dispatch, never conditionally: the coordinator resolves the model through the ladder in *Model Attribution* and passes it with the roster tier, and when it omits the payload the Scribe resolves the model itself — recording `unknown` and a `tier-default` price rather than inventing a model name — so a history append never lands without its consumption block and the ledger never stays at its seed while dispatches have run. Every consumption figure is an estimate.
+1. In every routing mode, supported ordinary decisions/history/orchestration/state advances run directly through `Write-SquadHandoff.ps1 -Quiet`, synchronously, with minimal JSON per `references/economy-scribe.md`. No Scribe startup, full cold-template read, or hand-authored arithmetic. Validate the one success status and counts, retain visible stderr warnings, and distinguish accepted `ledger-only` from `PASS`. Nonzero exit, invalid output, history-integrity, or failed restoration never permits manual bypass. Preserve paired history/consumption, actual model attribution, full-history ledger derivation, escalations, and artifact completion proof. Retain `history/Squad Scribe.md` orchestration overhead but charge only actual coordinator/Scribe usage. Cold operations dispatch Scribe with its full charter/procedure/schema/payload and required conditional reads. Serialize both routes and Cost Preflight at one root.
 2. Synthesize the collected findings into a concise answer for the user.
 3. Escalate to the user — rather than acting — when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose.
 
 ### Scribe Hand-off Pipelining (Autopilot)
+
+The direct ordinary route above runs synchronously and does not use Scribe pipelining. The following legacy/cold contract applies only to an actual Scribe dispatch; it never forces ordinary work to start Scribe. All stage barriers and completion checks still apply to direct writes.
 
 Under `mode=autopilot`, once stage N's own artifact is confirmed on disk, the coordinator must include stage N's Scribe hand-off and stage N+1's role dispatch in the same parallel tool-call block — two dispatch calls in one assistant turn — whenever `PipeliningEnabled` holds, per the Enablement Predicate in `references/gates-and-modes.md`. Dispatching stage N's Scribe alone and waiting for it is a defect while the predicate holds and stage N+1 is not behind a barrier, because it spends the whole Scribe duration on the critical path. Hosts whose subagent-dispatch tool cannot be called more than once in one parallel tool-call block (the Enablement Predicate's host signal) keep dispatching stage N's Scribe hand-off, waiting for it, and only then dispatching stage N+1 — exactly as today.
 
