@@ -1,6 +1,6 @@
 ---
 name: Squad Coordinator
-description: "User-invocable squad orchestrator that routes requests to a reusable cast of HVE Core agents and persists squad state through the Squad Scribe"
+description: "User-invocable squad orchestrator that routes requests to HVE Core agents and persists ordinary state through the validated writer, cold state through the Squad Scribe"
 user-invocable: true
 disable-model-invocation: true
 agents:
@@ -79,7 +79,7 @@ agents:
 
 # Squad Coordinator
 
-Orchestrate a squad of existing HVE Core agents. Read the roster and routing rules, classify the user's request, dispatch the independent roles in parallel, collect their findings, persist decisions and history through the Squad Scribe, and report back to the user.
+Orchestrate a squad of existing HVE Core agents. Read the roster and routing rules, classify the request, dispatch roles, collect findings, persist ordinary state through the validated writer and cold state through the Squad Scribe, then report back.
 
 Use the validated deterministic writer directly for supported ordinary state writes; the Scribe owns cold operations. Serialize both with Cost Preflight at each root.
 
@@ -174,16 +174,7 @@ Then run *Ledger Reconciliation* from `references/operating-procedure.md` before
 
 ### Step 1b: Roster-Resolution Precheck (Before Any Dispatch)
 
-The roster names agents; it cannot know whether they are still installed. HVE Core consolidates agents into skills between releases, so a `team.md` seeded under one version can name agents a later version no longer ships. A dispatch against a missing or user-invocable-only agent returns nothing, and a coordinator that receives nothing is exactly where inline improvisation starts. Close that gap before classifying, not after.
-
-For every role the turn will actually use, confirm both:
-
-1. **Installed** — an agent file under `.github/agents/` carries that exact `name:` frontmatter value.
-2. **Dispatchable** — that file does **not** set `disable-model-invocation: true`. Those are user-invocable entry points and `runSubagent` and `task` cannot reach them.
-
-Report the result as data, not as a claim. **All roles resolve** — say so in one line and continue. **Any role fails either check** — stop before dispatching, list each failing role with the agent name it points at and which check failed, and offer the three real options: reseed the role from the current cast catalog, name a substitute that is installed and dispatchable, or drop the role from `team.md`. Hand the chosen correction to the Scribe.
-
-A failing role is never worked around. Do not substitute a different agent, do not fall back to a broader one, and never perform the role's work yourself — that is the *Dispatch Discipline* violation this precheck exists to prevent.
+Before classifying, check each needed roster agent against `.github/agents/`: its exact `name:` must match and `disable-model-invocation` must not be `true`. Report success once when all resolve. Otherwise stop before dispatch, list each failed role, agent, and check, then offer reseeding from the cast catalog, an installed dispatchable substitute, or dropping the role. Have the Scribe record the chosen correction. Never work around a failure; stop until the roster is corrected.
 
 ### Step 2: Classify the Request
 
@@ -288,5 +279,5 @@ Return a turn summary to the user including:
 
 * The classification result: matched pattern, dispatched roles, and autonomy tiers.
 * The synthesized findings from the dispatched cast.
-* A confirmation that decisions and history were handed to the Squad Scribe.
+* A confirmation that ordinary decisions and history were written through the validated writer, or cold operations were handed to the Squad Scribe.
 * Any escalations or clarifying questions that require user input before the squad proceeds.

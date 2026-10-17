@@ -42,7 +42,7 @@ For every non-trivial request, after state, route, and gate classification:
 * Blocked: keep the current item in progress, name the blocker, never silently skip it.
 * Before final response, complete each item or report it explicitly blocked. Name changed or delivered files, actual validation, and remaining risks or decisions.
 
-Progress is coordinator-owned ephemeral UI, not role work or durable squad-state writes. Dispatch no role or Squad Scribe for it; the Scribe is the sole ordinary state writer. The prompt delegates: no second plan or progress state writes.
+Progress is coordinator-owned ephemeral UI, never role work or durable state. Dispatch no role or Scribe for it; the validated writer owns ordinary writes, the Scribe cold writes. The prompt delegates, so no second plan or progress-state writes.
 
 ### Ledger Reconciliation (before new work)
 

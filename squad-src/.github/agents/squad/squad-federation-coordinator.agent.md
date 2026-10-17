@@ -99,7 +99,7 @@ The federation coordinator only classifies to sub-squads, drives each sub-squad'
 ## Fast-Tier Robustness (Applies to Every Model)
 
 The federation coordinator may itself be running on a `fast` or auto-selected model. That never changes the contract: do **not** compensate for a lighter model by inlining a sub-squad's work, collapsing a sub-squad's turn into a summary, or skipping the Step 7 verification. When unsure whether a sub-squad turn completed, treat it as not run and verify against its `members/<name>/history/` and the federation `history/<sub-squad>.md`. Determinism — the checklists plus the two-level proof-of-dispatch rule — completes a federation turn, not model strength.
-This agent declares **no `model:` preference** because it is user-invocable: the consumer picks it, and their selected model is the session model. Dispatched roles do pin one, always as a single string — a YAML array makes an agent fail to load on the Copilot CLI. Per-role preference otherwise stays in the `Model Tier` column of each sub-squad's `team.md`. On the unattended path, Watch Mode passes `--model` to the CLI for the session.
+This agent has no model pin: the user's selection is the session model. Dispatched roles require a single-string pin; YAML arrays fail on Copilot CLI. Per-role tiers stay in each sub-squad's `team.md`. Watch Mode passes the session model with `--model`.
 
 ## Skill Reference Contract
 
@@ -118,7 +118,7 @@ Apply what you read verbatim.
 
 ## Governing Conventions
 
-The instruction files under `.github/instructions/squad/` define the data behind that procedure. `squad-floor` is scoped `**` and applies on every turn, at every root. `squad-federation` owns the federation layout, the parameterized squad root, the `federation.md` and `meta-routing.md` schemas, detection precedence, and the two-level single-writer rule. `squad-federation-autopilot` owns the meta-pipeline. `squad-roster`, `squad-routing`, and `squad-state` apply unchanged at each sub-squad root, as do the discovery, intake, council, autonomous, autopilot, notification, and watch-mode files. Each sub-squad's Discovery Verdict, brief, and Intake Readiness Verdict land in its own `members/<name>/` root, never at the federation root. The discovery gate is the one whose *question* is federation-level: asked once here and applied per sub-squad, exactly as naming and notifications are.
+The instruction files under `.github/instructions/squad/` define the data behind that procedure. `squad-floor` applies at every root; `squad-federation` and `squad-federation-autopilot` own federation structure and sequencing, while roster, routing, state, and gate instructions apply within each sub-squad. Discovery Verdicts, briefs, and Intake Readiness Verdicts stay under their member root. Ask discovery once at federation level and forward it to qualifying sub-squads, like naming and notifications.
 
 ## Inputs
 

@@ -75,7 +75,7 @@ Interactive mode only (no `mode=`). Besides the `Parallel-Eligible` flag, owners
 
 ## Dispatch Brief
 
-With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, the roster (agent and Alternates with dispatchability, pin, `Model` cell, rate row, deliverable root), ready consumption objects, the Scribe's hand-off command line, and the *Bounded Lane*, *Plan-Driven Parallelism*, and *Scripted Writes* sections verbatim. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
+With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, the roster (agent and Alternates with dispatchability, pin, `Model` cell, rate row, deliverable root), ready consumption objects, the direct ordinary-writer command, and the *Bounded Lane*, *Plan-Driven Parallelism*, and *Scripted Writes* sections verbatim. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
 
 ## Never Weakened
 

@@ -22,10 +22,9 @@
       - consumption: a ready ten-field consumption object per implementation- and
         review-class role, sized by the dispatch-size estimator floors in
         `references/consumption-rates-template.md`;
-      - hand-off: the `Write-SquadHandoff.ps1` command line the Squad Scribe runs;
+      - hand-off: the command line the coordinator runs synchronously for an ordinary write;
       - procedure: the verbatim Bounded Lane, Plan-Driven Parallelism, and Scripted Writes
-        sections of `references/economy-mode.md` (the hand-off payload shape and a complete
-        example), so a bounded request needs no whole reference file.
+        sections of `references/economy-mode.md`, so a bounded request needs no whole reference.
 
     Economy only (references/economy-mode.md): it reads `team.md` first and refuses with
     exit 7 unless it records `Model routing: economy`.
@@ -341,8 +340,9 @@ $out.Add('')
 $out.Add('## Hand-off')
 $out.Add('')
 $out.Add("Payload ``turn`` = $($turn + 1); ``timestamp`` = the current UTC time when you fill it (this brief's utc is $utc).")
-$out.Add('Dispatch the Squad Scribe with the payload JSON and this exact command line, which the Scribe runs as its first action; never run it yourself:')
-$out.Add("``pwsh -File '$(Join-Path $PSScriptRoot 'Write-SquadHandoff.ps1')' -SquadRoot '$SquadRoot' -PayloadPath <payload.json>``")
+$out.Add('For a supported ordinary hand-off, save minimal structured JSON per `references/economy-scribe.md` outside the squad root, then run the validated writer directly and synchronously. Do not dispatch the Scribe for this write:')
+$out.Add("``pwsh -NoProfile -File '$(Join-Path $PSScriptRoot 'Write-SquadHandoff.ps1')' -SquadRoot '$SquadRoot' -PayloadPath <payload.json> -Quiet``")
+$out.Add('Validate the returned status, turn, and history counts; preserve stderr warnings and distinguish `ledger-only` from `PASS`. Use the Squad Scribe for cold operations.')
 
 $out.Add('')
 $out.Add('## Procedure (verbatim, economy-mode.md)')
