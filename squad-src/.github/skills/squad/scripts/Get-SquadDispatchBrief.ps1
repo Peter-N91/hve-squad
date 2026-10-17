@@ -341,6 +341,12 @@ $out.Add('## Hand-off')
 $out.Add('')
 $out.Add("Payload ``turn`` = $($turn + 1); ``timestamp`` = the current UTC time when you fill it (this brief's utc is $utc).")
 $out.Add('For a supported ordinary hand-off, save minimal structured JSON per `references/economy-scribe.md` outside the squad root, then run the validated writer directly and synchronously. Do not dispatch the Scribe for this write:')
+$payloadContract = Get-Section 'economy-scribe.md' '## Payload Contract'
+if ($payloadContract -match "^\(section '## Payload Contract' not found") {
+    throw "Required ordinary hand-off payload contract is missing from references/economy-scribe.md."
+}
+$out.Add($payloadContract)
+$out.Add('')
 $out.Add("``pwsh -NoProfile -File '$(Join-Path $PSScriptRoot 'Write-SquadHandoff.ps1')' -SquadRoot '$SquadRoot' -PayloadPath <payload.json> -Quiet``")
 $out.Add('Validate the returned status, turn, and history counts; preserve stderr warnings and distinguish `ledger-only` from `PASS`. Use the Squad Scribe for cold operations.')
 

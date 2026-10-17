@@ -309,7 +309,7 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
                 ($route -match '(?m)^### Progress Presentation\r?$') -and
                 ($contract -match 'At run start, locate `squad` and read these files in one parallel block') -and
                 ($contract -match ('(?m)^' + [regex]::Escape($script:ProgressAuthorization))) -and
-                ($contract -match 'Other references belong to the Scribe or Federation Coordinator')
+                ($contract -match 'No other references: they belong to the Scribe or Federation Coordinator')
             )
         }
 

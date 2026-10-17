@@ -183,6 +183,11 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result = Invoke-Brief -Repo (New-BriefRepo)
         $result.Output | Should -Match 'run the validated writer directly and synchronously\. Do not dispatch the Scribe for this write:'
         $result.Output | Should -Match '`pwsh -NoProfile -File ''[^'']+Write-SquadHandoff\.ps1'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json> -Quiet`'
+        $result.Output | Should -Match '(?m)^## Payload Contract$'
+        $result.Output | Should -Match 'Optional `decision`:.*adrNoted: boolean'
+        $result.Output | Should -Match 'historyRecords\[\].*passedModel.*routingIdentity'
+        $result.Output | Should -Match 'routingIdentity.*requestedModel, effectiveModel, observedModel, routeRationale'
+        $result.Output | Should -Match 'stateAdvance.*required.*activeRoles: string\[\]'
         $result.Output | Should -Match 'Use the Squad Scribe for cold operations\.'
         $result.Output | Should -Not -Match ([regex]::Escape('-PayloadJson $p'))
         $result.Output | Should -Not -Match '(?m)^### Script Hand-off'

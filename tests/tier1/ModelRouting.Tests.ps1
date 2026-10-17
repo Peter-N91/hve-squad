@@ -339,8 +339,9 @@ Describe 'model-routing.md phrase-survival for security- and precedence-critical
         }
     }
 
-    It 'carries the default routing=off behavior statement verbatim' {
-        $script:RoutingRaw | Should -Match $([regex]::Escape('No policy is the default and is byte-for-byte today''s behavior'))
+    It 'leaves dispatch model selection unchanged when no routing policy applies' {
+        $script:RoutingRaw | Should -Match $([regex]::Escape('**No policy is the default; dispatch model selection is unchanged.**'))
+        $script:RoutingRaw | Should -Match 'omits the dispatch `model` parameter entirely'
     }
 
     It 'keeps the dispatched Scribe on its pin rather than the frontier session model' {

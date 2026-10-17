@@ -76,7 +76,7 @@ Markdown histories, decisions, ledger, and state remain the compatibility contra
 | ID | Assertion | Source |
 |---|---|---|
 | WRT-01 | Ordinary writes pass the ledger check under `off`, `ranked`, `economy`, `manual`, and an absent routing line, for single-squad and federation member roots | `Write-SquadHandoff.ps1`; `economy-scribe.md` |
-| WRT-02 | `-Quiet` emits exactly one JSON stdout line with `status`, `turn`, `dispatchEntries`, `historyCounts`, and `ledgerCheck`; warnings remain on stderr | `Write-SquadHandoff.ps1`, Quiet parameter |
+| WRT-02 | `-Quiet` emits exactly one JSON stdout line with `status`, `turn`, `dispatchEntries`, `historyCounts`, and `ledgerCheck`; warnings from the writer and successful ledger-helper calls remain on stderr | `Write-SquadHandoff.ps1`, Quiet parameter |
 | WRT-03 | Quiet mode preserves validation, unsupported-operation, rate-refusal, rollback, and history-integrity failures, with no success status on failure | `Write-SquadHandoff.ps1`, exit codes |
 | WRT-04 | A tolerated accounting mismatch reports `ledgerCheck: ledger-only`, never `PASS`, and retains its warning | `Write-SquadHandoff.ps1`, ledger check |
 | WRT-05 | Non-economy handoffs neither demand economy consent nor add economy routing markers | `Write-SquadHandoff.ps1`, routing-specific warnings |
@@ -297,7 +297,7 @@ The cases below hold only while `team.md` records `Model routing: economy` and t
 | RTE-40 | **`pipeline=full` forces the full pipeline** even when every bounded-lane criterion holds | Same |
 | RTE-41 | **Never outside economy, never unattended.** Under `off`, `ranked`, or `manual`, or with `mode=autonomous` or `mode=autopilot`, a fully specified request still runs every stage | Same |
 | RTE-42 | **Plan-driven parallelism (economy only).** Owners named by a `deliverable-fan-out` plan whose write sets are disjoint are dispatched concurrently under one confirmation that lists every owner, its tier, and its write set; an `escalate`-tier owner is never batched, and unproven disjointness (or budget as the only reason) dispatches sequentially | `economy-mode.md`, Plan-Driven Parallelism |
-| RTE-43 | **Dispatch brief (economy only).** `Get-SquadDispatchBrief.ps1` refuses with exit 7 outside economy; under it, when its `coverage:` line covers the request, it provides the direct synchronous ordinary-writer command and the coordinator reads no further reference, agent file, or rate table | `economy-mode.md`, Dispatch Brief; `GetSquadDispatchBrief.Tests.ps1` |
+| RTE-43 | **Dispatch brief (economy only).** `Get-SquadDispatchBrief.ps1` refuses with exit 7 outside economy; under it, when its `coverage:` line covers the request, it provides the direct synchronous ordinary-writer command and closed payload schemas for decisions, routed attribution, orchestration, and state advancement, so the coordinator reads no further reference, agent file, or rate table | `economy-mode.md`, Dispatch Brief; `GetSquadDispatchBrief.Tests.ps1` |
 
 ## Tier 1 — Profile seeding
 

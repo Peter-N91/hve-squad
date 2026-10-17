@@ -109,7 +109,7 @@ The `squad` skill owns squad procedure; this file binds identity, discipline, an
 * `references/operating-procedure.md` — turn stages, ledger reconciliation, and mechanism mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/economy-scribe.md` for ordinary handoffs in every routing mode; `references/scribe-payload-template.md` only for cold Scribe handoffs; `references/seed-templates.md` only during Init; `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`. Other references belong to the Scribe or Federation Coordinator.
+Read `references/economy-scribe.md` for ordinary handoffs in every routing mode; `references/scribe-payload-template.md` only for cold Scribe handoffs; `references/seed-templates.md` only during Init; `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`. No other references: they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 
@@ -222,14 +222,7 @@ For initialization, roster refresh, verdicts, notifications, memory, ceiling slo
 
 Hand the turn's **state advance** on the same call — the mode in effect, the roles dispatched, and any escalation raised or resolved — so the Scribe moves `state.json` forward with the logs it just appended. A turn that appends a decision and leaves the status document behind makes every later turn read a squad that never moved.
 
-**Always hand a consumption payload alongside them.** This is mandatory, not best-effort. For every dispatched agent supply:
-
-* **The resolved model and its source**, through the *Model Attribution* ladder. **Capture what the host reported for the dispatch before falling back to inference** — the Copilot CLI labels each dispatch `AgentName(model-id)`, and that label is rung 1 because it is the only signal that survives an entitlement gap. A frontmatter pin is a prediction: when the account cannot use the pinned model the host substitutes the session model, silently. **Never pass a model name you did not resolve**; `unknown` beats a fabricated attribution.
-* **The session model and any overrides.** Pass `sessionModel` — self-reported, since every agent without a frontmatter pin inherits it — and re-report it every turn so a mid-run switch is picked up. Pass `modelOverrides` when the user volunteered one; never prompt for one.
-* **The roster tier** (`model_tier`) as a preference only. It never determines what ran and never becomes the recorded model.
-* **The dispatch-size signals** the estimator needs: internal tool calls reported, files read and their approximate size, artifacts written, findings length. A dispatch is an internal loop of many model calls the Scribe cannot see, so reporting "one input and one output" undercounts by an order of magnitude.
-* **Orchestration** — actual coordinator usage plus Scribe usage only when dispatched. Retain `history/Squad Scribe.md` overhead entries on direct routes without inventing Scribe tokens.
-* **`observed_credits`** when the run's actual `ai_credits_used` delta is available. Never estimate that figure.
+**Always include a consumption payload.** Apply the *Model Attribution* ladder: capture the host-reported `AgentName(model-id)` first (rung 1), otherwise use a resolved pin or session model, and never invent one (`unknown` plus the roster tier is preferable). Re-report the self-reported `sessionModel` every turn; include volunteered `modelOverrides` without prompting. `model_tier` is a preference, not actual usage. Include estimator signals (internal calls, files and approximate size, artifacts, findings length). Record actual coordinator usage and Scribe usage only when dispatched; never invent Scribe tokens. Add `observed_credits` only from the actual `ai_credits_used` delta, never an estimate.
 
 Never drop the payload — even on a disrupted turn, an alternate-agent resolution, or a partial run. Only the validated writer or cold Scribe persists it; direct execution does not authorize unvalidated coordinator edits.
 

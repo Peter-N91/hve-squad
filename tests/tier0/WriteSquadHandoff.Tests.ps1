@@ -1398,6 +1398,7 @@ if ($Check) {
         'crash' { throw 'stub crash' }
         'empty' { exit 0 }
         'none' { Write-Host 'Measure-SquadLedger -Check: FAIL (1 mismatch(es))'; Write-Host '  - stub mismatch.'; exit 1 }
+        'helper-warning' { Write-Warning 'WARN: observed model differs from recorded attribution.'; Write-Host 'Measure-SquadLedger -Check: PASS'; exit 0 }
         default {
             Write-Host 'Measure-SquadLedger -Check: FAIL (2 mismatch(es))'
             Write-Host '  - Usage & Cost run-total row: expected 0.3171, found 0.4171.'
@@ -1408,7 +1409,10 @@ if ($Check) {
     }
 }
 $forward = @{ SquadRoot = $SquadRoot }
-if ($Write) { $forward.Write = $true }
+if ($Write) {
+    if ($env:HANDOFF_STUB_CLASS -eq 'helper-warning') { Write-Warning 'WARN: pricing fallback was applied.' }
+    $forward.Write = $true
+}
 if ($SessionLog) { $forward.SessionLog = $SessionLog }
 & (Join-Path $PSScriptRoot 'Measure-SquadLedger.real.ps1') @forward
 exit $LASTEXITCODE
@@ -1445,6 +1449,15 @@ exit $LASTEXITCODE
         $result.Stderr | Should -Match 'WARN ledger-only:'
         $result.Stdout | Should -Not -Match 'PASS|WARN'
         (Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json).turn | Should -Be 2
+    }
+
+    It 'forwards successful ledger-helper warnings to stderr without changing the quiet receipt' {
+        $root = New-Root
+        $result = Invoke-StubWriter -Root $root -Writer $script:StubWriter -Class 'helper-warning' -Quiet
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        ($result.Stdout | ConvertFrom-Json).ledgerCheck | Should -Be 'PASS'
+        $result.Stderr | Should -Match 'WARN: pricing fallback was applied'
+        $result.Stderr | Should -Match 'WARN: observed model differs from recorded attribution'
     }
 
     It 'rolls back and exits 3 on <Class>' -ForEach @(

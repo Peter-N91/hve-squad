@@ -16,7 +16,18 @@ Coordinator or Scribe runs synchronously; direct execution needs no Scribe start
 {"runId":"run-01","historyRecords":[{"agent":"Squad Researcher","request":"Survey.","deliverable":"research/topic.md","outcome":"Done."}],"stateAdvance":{"activeRoles":["Squad Researcher"]}}
 ```
 
-Closed keys: roster `agent` verbatim; existing `deliverable` written by that dispatch. Omitted turn/time/mode/consumption are derived. Use exact script keys for optional usage, routing, orchestration and escalations; `mode` is top-level, never send cold-template keys.
+## Payload Contract
+
+Only `runId`, `historyRecords`, and `stateAdvance.activeRoles` are required. Objects have closed key sets. Omitted `turn`, `timestamp`, `mode`, and consumption are derived. `route` requires a `decision`.
+
+* Optional `decision`: `{title: string, rationale: string, adrNoted: boolean}`. A top-level `route` requires it.
+* `historyRecords[]`: required `{agent, request, deliverable, outcome}`; optional `title`, `memberName`, `selectionCue`, `passedModel`, `costPreflightRef`, `costPreflightSlot`, `consumption`, and `routingIdentity`. Keep roster `agent` verbatim and name only an existing deliverable written by that dispatch. `selectionCue` is required for an Alternate; a ceiling slot requires the Scribe. For `cli-pinned` routing, supply `passedModel` and a `consumption` block whose `model_source` is `cli-pinned` and whose `model` equals `passedModel`. Under economy, include `routingIdentity` on each record to preserve routed attribution.
+* `consumption`: exactly `{model, model_source, priced_as, model_tier, internal_turns, input_tokens, cached_tokens, cache_write_tokens, output_tokens, basis}`.
+* `routingIdentity`: `{requestedModel, effectiveModel, observedModel, routeRationale}`; it records the routed model separately from the model attributed to consumption.
+* `orchestration`: optional `{request, outcome, passedModel, consumption}`; the consumption block uses the same ten-field schema.
+* `stateAdvance`: required `{activeRoles: string[]}`; optional `openEscalationsRaised: string[]`, `openEscalationsResolved: string[]`, `sessionModel: string`, and `modelOverrides: object`.
+
+Use these exact script keys for optional usage, routing, orchestration, and escalations; `mode` is top-level. Do not send cold-template keys.
 
 ## Verify and serialize
 

@@ -515,8 +515,27 @@ function Update-OwnedHash {
 
 function Invoke-ChildScript {
     param([string]$ScriptPath, [string[]]$Arguments)
-    $output = & $PwshPath -NoProfile -File $ScriptPath @Arguments 2>&1
-    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Text = (($output | ForEach-Object { "$_" }) -join "`n").Trim() }
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new($PwshPath)
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in @('-NoProfile', '-File', $ScriptPath) + $Arguments) {
+        $startInfo.ArgumentList.Add($argument)
+    }
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw "Could not start child PowerShell process for '$ScriptPath'." }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        $text = (@($stdout.Result, $stderr.Result) | Where-Object { $_ }) -join "`n"
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Text = $text.Trim() }
+    }
+    finally {
+        $process.Dispose()
+    }
 }
 
 function Test-NodeStrings {
@@ -736,6 +755,23 @@ function Get-DerivedConsumption {
 
 # A stamp later than now + 120 s cannot be real (typically local time labelled Z); it is never an ordering floor.
 $handoffWarnings = [System.Collections.Generic.List[string]]::new()
+function Get-ChildWarnings {
+    param([string]$Text)
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $plainText = [regex]::Replace($Text, '\x1B\[[0-?]*[ -/]*[@-~]', '')
+    foreach ($line in ($plainText -split '\r?\n')) {
+        $warning = $null
+        if ($line -match '^\s*(?:WARNING:|Write-Warning:)\s*(?<message>.+)$') {
+            $warning = $Matches['message'].Trim()
+        }
+        elseif ($line -match '^\s*WARN(?:ING)?(?::|\s+)(?<message>.+)$') {
+            $warning = "WARN: $($Matches['message'].Trim())"
+        }
+        if ($warning -and -not $warnings.Contains($warning)) { $warnings.Add($warning) }
+    }
+    return $warnings.ToArray()
+}
+
 $futureLimit = [DateTimeOffset]::UtcNow.AddSeconds(120)
 function Test-FutureStamp {
     param([string]$Value, [DateTimeOffset]$Time, [string]$Where)
@@ -1481,6 +1517,10 @@ try {
     $ledger = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Write', '-SessionLog', $SessionLog)
     Update-OwnedHash $consumptionPath, $statePath
     if ($ledger.ExitCode -ne 0) { throw "Measure-SquadLedger -Write failed: $($ledger.Text)" }
+    $childWarnings = @(Get-ChildWarnings -Text $ledger.Text)
+    foreach ($warning in $childWarnings) {
+        if (-not $handoffWarnings.Contains($warning)) { $handoffWarnings.Add($warning) }
+    }
     $written.Add("WROTE consumption.md ($(($ledger.Text -split "`n" | Select-Object -Last 1).Trim()))")
 
     # The ledger helper leaves the heading run id and the Cost Comparison section as written. The seed placeholder and this script's own
@@ -1549,6 +1589,10 @@ try {
         if ($failureClass -ne 'ledger-only') { throw "Measure-SquadLedger -Check failed (failure class: $(if ($failureClass) { $failureClass } else { 'none reported' })): $($check.Text)" }
         $firstMismatches = @($check.Text -split "`n" | Where-Object { $_ -match '^\s+- ' } | Select-Object -First 3 | ForEach-Object { ($_ -replace '^\s+- ', '').Trim() })
         $ledgerOnly = "WARN ledger-only: $($firstMismatches -join ' | ') (writes kept; the next Measure-SquadLedger -Write re-derives consumption.md from history)"
+    }
+    $childWarnings = @(Get-ChildWarnings -Text $check.Text)
+    foreach ($warning in $childWarnings) {
+        if (-not $handoffWarnings.Contains($warning)) { $handoffWarnings.Add($warning) }
     }
 
     # A comparison that still quotes a squad total other than the ledger's own is self-refuting; the hand-off does not stand.
