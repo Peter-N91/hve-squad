@@ -35,7 +35,8 @@ if ($PesterPath) { Import-Module $PesterPath -Force } else { Import-Module Peste
 $config = New-PesterConfiguration
 $config.Run.Container = New-PesterContainer -Path @(
     (Join-Path $PSScriptRoot 'LiveBenchmark.Tests.ps1'),
-    (Join-Path $PSScriptRoot 'EfficiencyBenchmark.Tests.ps1')
+    (Join-Path $PSScriptRoot 'EfficiencyBenchmark.Tests.ps1'),
+    (Join-Path $PSScriptRoot 'Start-EfficiencyWizard.Tests.ps1')
 )
 $config.Run.PassThru = $true
 $config.Output.Verbosity = $Output

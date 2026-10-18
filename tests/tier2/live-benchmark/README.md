@@ -40,6 +40,117 @@ pwsh -NoProfile -File tests\tier2\live-benchmark\Invoke-LiveBenchmarkTests.ps1 -
 
 ## Unattended efficiency exercise
 
+### Guided setup
+
+Launch the interactive wizard in PowerShell 7.4 or newer:
+
+```powershell
+pwsh -NoProfile -File ./tests/tier2/live-benchmark/Start-EfficiencyWizard.ps1
+```
+
+From Ubuntu, start the same wizard through bash:
+
+```bash
+bash tests/tier2/live-benchmark/start-efficiency-wizard.sh
+
+# Optional paths are forwarded unchanged, including spaces.
+bash tests/tier2/live-benchmark/start-efficiency-wizard.sh \
+    -WorkRoot "$HOME/bench/squad efficiency"
+```
+
+The bash starter requires stable PowerShell Core 7.4 or newer. If `pwsh` is
+missing or too old, it prints official Ubuntu Microsoft-package-repository
+installation commands and stops; it never runs sudo, apt or downloads. Review
+the printed commands and supported Ubuntu/architecture guidance, install or
+upgrade PowerShell yourself, then rerun. Missing `pwsh` exits `127`; an old,
+preview or failing runtime exits `2`; once started, the wizard's exit status
+is preserved. No chmod is required when invoking it with `bash`.
+
+In WSL, a Windows checkout can be used directly through its mounted path, for
+example `/mnt/c/source/hve-squad`; no push, clone or copy is required. Use Linux
+paths for wizard arguments. Missing non-Windows prerequisites receive publisher
+installation guidance instead of WinGet commands; the wizard does not elevate
+or automatically execute Linux install scripts. The launcher was validated with
+Ubuntu 24.04 WSL, PowerShell 7.6.7 and isolated fake-runtime tests. Actual package
+installation and model-backed execution are not part of that validation.
+
+Optional `-WorkRoot 'C:\bench\efficiency'` and `-BaselineEvidencePath '<control-series.json>'`
+set initial paths. The default work root is `%LOCALAPPDATA%\hve-squad\efficiency`
+(the corresponding local application-data directory on Linux), outside the checkout.
+Every launch uses a fresh `run-<timestamp>-<id>` and preserves old reports and controls.
+
+| Choice | Work after setup |
+| --- | --- |
+| Establish | Full offline self-tests, then three complete controls; no improvement claim |
+| Series | Full offline self-tests, then three candidates using compatible saved controls, or six fresh paired trials |
+| Complete | Full offline self-tests, three fresh controls, then three candidates against them and automatic comparison |
+| Offline | Full offline self-tests only; no GitHub/Copilot login or model requests |
+
+Establish is recommended without saved controls; Series is recommended when a
+control file is supplied or discovered. Complete is not retry-until-success.
+Selecting the same source for both arms tests repeatability, not patch improvement.
+Select separate baseline/candidate checkouts to compare an actual patch.
+
+Defaults are `claude-sonnet-5.5`, 100 AI credits per complete run, 300 total for
+three new runs or 600 for six. These are ceilings, not cost predictions. Paths,
+model and credit ceilings can be changed. The wizard verifies the whole reservation,
+requires explicit disposable-isolation and spending confirmation, preserves the
+existing watchdog and continuation bounds, and never promotes an accepted baseline.
+Isolation is not created by the wizard or by a launcher flag.
+
+Missing Git, uv, GitHub CLI, Copilot CLI and APM can be installed with consent using
+exact official WinGet packages in user scope. Pester 5.7.1 can be installed in
+CurrentUser scope. Existing tools are not silently upgraded; incompatible versions
+stop with guidance. No elevation, downloaded-script execution or TLS bypass is
+attempted. If WinGet is missing, install Microsoft App Installer through the Store.
+If PowerShell is too old to run the script, bootstrap it first:
+
+```powershell
+winget install --id Microsoft.PowerShell --exact --source winget
+```
+
+The full offline stage uses isolated Python 3.12 and pinned `pytest==8.3.5` through
+uv, with the system certificate store and installed Pester. Downloads may be needed;
+no global Python packages are installed. Trusted feed/proxy/TLS failures stop
+before any paid trial; repair trust rather than disabling certificate checks.
+
+For live modes, the wizard checks `gh auth status` and offers native
+`gh auth login --hostname github.com --web`, followed by a separate Copilot
+authorization choice. OAuth obtains/stores credentials through the CLIs; browser,
+organization SSO and subscription approval cannot be bypassed. The wizard does
+not retrieve/print tokens, request guessed scopes, or fabricate a PAT. It warns
+about credential environment-variable precedence without reading values.
+Existing authorization can be reused but is not proof of Copilot entitlement;
+the first bounded live invocation remains the real validation.
+
+An organization-required PAT must be user-owned, fine-grained, and have the
+**Copilot Requests** account permission. Enter it directly into native
+`copilot login --with-token`, never a wizard field. Classic PATs are unsupported.
+Custom/BYOK provider environments are refused because GitHub credit ceilings
+cannot bound third-party spending.
+
+Package preparation reuses a clean full install or offers to archive only the
+managed `install/` directory before rebuilding it. Consent is required; contents
+are moved, not deleted. Source overlaps, filesystem roots and reparse-point
+ancestors are refused. No git cleanup/reset or old evidence deletion occurs.
+Choose a new work root when an existing directory cannot safely be reused.
+
+After setup and final launch consent, no routine questions are asked. Any failed
+stage stops dependent work: no benchmark after failed offline checks, no candidate
+after failed controls, and no outer retries. Terminal guidance identifies the
+failure and repair; `run-.../wizard-result.json` records status and not-run count.
+Benchmark reports are under `control/out/` and `comparison/out/`. Exit codes:
+`0` all selected stages passed; `1` setup/launch error; `2` failed checks/benchmark;
+`3` cancelled or declined consent. Type `q` at a wizard input to cancel; blank
+confirmations mean no. Failed evidence remains available for repair.
+
+Wizard tests mock installation, login, preparation and model-backed commands.
+Actual native setup and live provider enforcement remain operator-run validation;
+offline tests do not claim paid-run success. Official references:
+[GitHub CLI auth](https://cli.github.com/manual/gh_auth_login),
+[Copilot auth](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli),
+[APM install](https://microsoft.github.io/apm/getting-started/installation/).
+
 This is a separate scenario beside the existing inventory arms, not a replacement.
 One `Run` executes cold Squad Coordinator initialization, BRD and PRD authoring,
 the complete RPI task-CLI build, independent functional/state/history checks, and
