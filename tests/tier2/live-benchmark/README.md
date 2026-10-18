@@ -160,6 +160,16 @@ the complete RPI task-CLI build, independent functional/state/history checks, an
 independent document judging. Routine decisions come from the frozen
 [efficiency-scenario.json](efficiency-scenario.json); `ask_user` is disabled.
 
+Each stage must pass both process/telemetry checks and stage-readiness checks
+before the next stage launches. Initialization requires nonempty shared state,
+Scribe dispatch/history evidence and the existing state verifier. Requirements
+also require the published BRD/PRD and dispatch-backed history pointing to nonempty
+artifacts for both builders and both quality reviewers. Artifact presence does
+not replace workflow approval or final independent quality judging. Build retains
+the closing-review and role-evidence checks; functional acceptance and judging
+remain mandatory. A zero-exit blocked stage is not treated as successful merely
+because the CLI returned normally. Failures stop dependent work without retry.
+
 `Establish` runs three controls. `Series` runs three baseline/candidate pairs in
 AB, BA, AB order and automatically scores, aggregates and compares. Both stop
 without questions and leave a terminal summary plus reports. A failed trial is
@@ -168,7 +178,7 @@ series. A successful comparison never promotes an accepted report automatically.
 
 ### Live prerequisites
 
-* PowerShell 7.4+, Git, and an authenticated Copilot CLI supporting `--session-id`,
+* PowerShell 7.4+, Git, and an authenticated Copilot CLI supporting `--add-dir`, `--session-id`,
 	`--max-ai-credits`, `--max-autopilot-continues`, `--no-ask-user`, `--no-remote`,
 	`--no-remote-export`, and `--usage-output-file`
 * A clean, prepared full squad/hve-core installation containing deployed BRD
@@ -323,6 +333,11 @@ occurs before independent functional, state/history or document judging checks;
 their missing results do not identify the startup cause. New reports list the
 failed stage's exit/stop status and existing stage stderr paths directly.
 
+For stages that exited zero but failed readiness, inspect
+`stages[].readiness.checks` in the trial's `out/run.json`. Series diagnostics expose
+the failed check names as `failedStages[].failedChecks`, including missing reviewer
+history or artifacts. The judge is not launched when a preceding gate fails.
+
 CLI prompts are passed as one argv element, not as a shell-joined command. Secret
 variable names use one canonical comma-separated `--secret-env-vars=...` option.
 The CLI forbids combining one-shot `--trust-folder` with explicit `--session-id`,
@@ -330,6 +345,13 @@ so repository hooks are opted in through the child-only
 `GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS=true` environment setting instead. This
 does not persist trust, enable all path/URL permissions, or change global settings.
 The offline suite verifies the complete init argv using a non-model fake CLI.
+
+The launcher grants only the copied trial workspace through `--add-dir`; it does
+not enable unrestricted path or URL access or override managed/sandbox policy.
+The prompt resolves skills and customization within that root, requests ranged
+reads for large references and one complete Scribe handoff per completed dispatch.
+These measures preserve shared sessions, model selection and existing limits;
+they do not enlarge a model's context window or guarantee a successful live run.
 
 Wizard unit tests intentionally exercise failed/cancelled setup and suppress
 their simulated console messages. Only the Pester aggregate failure count decides

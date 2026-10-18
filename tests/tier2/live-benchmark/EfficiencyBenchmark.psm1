@@ -272,23 +272,61 @@ function Get-EfficiencyTreeHash {
     [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes(($Entries -join "`n")))).ToLowerInvariant()
 }
 
-function Test-EfficiencyWorkflow {
+function Get-EfficiencyHistoryDeliverable {
     <# .SYNOPSIS
-    Requires rostered role dispatches, real history deliverables, and the existing state checker.
+    Resolves nonempty, workspace-contained deliverables backed by an observed agent dispatch.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Workspace, [AllowNull()]$Metrics)
+    [OutputType([string])]
+    param([string]$Root, [string]$Squad, [string]$Agent, [AllowNull()]$Metrics)
+    if ($null -eq $Metrics -or $null -eq $Metrics.dispatches -or -not $Metrics.dispatches.Contains($Agent)) { return }
+    $History = Join-Path $Squad "history/$Agent.md"
+    if (-not (Test-Path -LiteralPath $History -PathType Leaf)) { return }
+    $Text = Get-Content -LiteralPath $History -Raw
+    if ($Text -notmatch ('(?m)^# History: ' + [regex]::Escape($Agent) + '\s*$')) { return }
+    foreach ($Match in [regex]::Matches($Text, '(?m)^\s*[*-]\s*Deliverable:\s*`?(?<path>[^`\r\n]+)`?\s*$')) {
+        $Relative = $Match.Groups['path'].Value.Trim()
+        try { $Full = [IO.Path]::GetFullPath((Join-Path $Root $Relative)) }
+        catch { continue }
+        if ($Full.StartsWith($Root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
+            (Test-Path -LiteralPath $Full -PathType Leaf) -and (Get-Item -LiteralPath $Full).Length -gt 0) { $Full }
+    }
+}
+
+function Test-EfficiencyWorkflow {
+    <# .SYNOPSIS
+    Checks stage-specific artifacts and history before advancement; defaults to final build verification.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Workspace, [AllowNull()]$Metrics, [ValidateSet('init', 'requirements', 'build')][string]$Stage = 'build')
     $Checks = [ordered]@{}
     $ReviewPaths = [Collections.Generic.List[string]]::new()
     $Root = [IO.Path]::GetFullPath($Workspace)
     $Squad = Join-Path $Root '.copilot-tracking/squad'
     foreach ($Name in @('team.md', 'routing.md', 'state.json', 'decisions.md', 'consumption.md', 'consumption-rates.md')) {
-        $Checks[$Name] = Test-Path -LiteralPath (Join-Path $Squad $Name) -PathType Leaf
+        $Path = Join-Path $Squad $Name
+        $Checks[$Name] = (Test-Path -LiteralPath $Path -PathType Leaf) -and (Get-Item -LiteralPath $Path).Length -gt 0
     }
     $Checks['dispatchEvidence'] = $null -ne $Metrics -and $null -ne $Metrics.dispatches
+    if ($Stage -in @('init', 'requirements')) {
+        $ScribeHistory = Join-Path $Squad 'history/Squad Scribe.md'
+        $Checks['scribeHistory'] = $Checks['dispatchEvidence'] -and $Metrics.dispatches.Contains('Squad Scribe') -and
+            (Test-Path -LiteralPath $ScribeHistory -PathType Leaf) -and
+            ((Get-Content -LiteralPath $ScribeHistory -Raw) -match '(?m)^# History: Squad Scribe\s*$')
+    }
+    if ($Stage -eq 'requirements') {
+        foreach ($Name in @('brd.md', 'prd.md')) {
+            $Path = Join-Path $Root "docs/requirements/$Name"
+            $Checks[$Name] = (Test-Path -LiteralPath $Path -PathType Leaf) -and (Get-Item -LiteralPath $Path).Length -gt 0
+        }
+        foreach ($Agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
+            $Checks[$Agent] = @(Get-EfficiencyHistoryDeliverable -Root $Root -Squad $Squad -Agent $Agent -Metrics $Metrics).Count -gt 0
+        }
+    }
+    $RequiredRoles = if ($Stage -eq 'build') { @('researcher', 'lead', 'developer', 'tester') } else { @() }
     if ($Checks['team.md'] -and $Checks['dispatchEvidence']) {
         $Team = Get-Content -LiteralPath (Join-Path $Squad 'team.md')
-        foreach ($Role in @('researcher', 'lead', 'developer', 'tester')) {
+        foreach ($Role in $RequiredRoles) {
             $Row = @($Team | Where-Object { $_ -match ('^\|\s*' + $Role + '\s*\|') })
             $Valid = $false
             if ($Row.Count -eq 1) {
@@ -296,19 +334,9 @@ function Test-EfficiencyWorkflow {
                 if ($Cells.Count -ge 4) {
                     $Candidates = @($Cells[2]) + @($Cells[3].Split(',') | ForEach-Object { $_.Trim() })
                     foreach ($Agent in $Candidates) {
-                        if (-not $Metrics.dispatches.Contains($Agent)) { continue }
-                        $History = Join-Path $Squad "history/$Agent.md"
-                        if (-not (Test-Path -LiteralPath $History -PathType Leaf)) { continue }
-                        $Text = Get-Content -LiteralPath $History -Raw
-                        if ($Text -notmatch ('(?m)^# History: ' + [regex]::Escape($Agent) + '\s*$')) { continue }
-                        $MatchesList = [regex]::Matches($Text, '(?m)^\s*[*-]\s*Deliverable:\s*`?(?<path>[^`\r\n]+)`?\s*$')
-                        foreach ($Match in $MatchesList) {
-                            $Relative = $Match.Groups['path'].Value.Trim()
-                            $Full = [IO.Path]::GetFullPath((Join-Path $Root $Relative))
-                            if ($Full.StartsWith($Root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $Full -PathType Leaf)) {
-                                $Valid = $true
-                                if ($Role -eq 'tester') { $ReviewPaths.Add($Full) }
-                            }
+                        foreach ($Full in @(Get-EfficiencyHistoryDeliverable -Root $Root -Squad $Squad -Agent $Agent -Metrics $Metrics)) {
+                            $Valid = $true
+                            if ($Role -eq 'tester') { $ReviewPaths.Add($Full) }
                         }
                     }
                 }
@@ -316,9 +344,9 @@ function Test-EfficiencyWorkflow {
             $Checks[$Role] = $Valid
         }
     }
-    else { foreach ($Role in @('researcher', 'lead', 'developer', 'tester')) { $Checks[$Role] = $false } }
+    else { foreach ($Role in $RequiredRoles) { $Checks[$Role] = $false } }
     $ReviewPath = $null
-    $Checks['reviewOutcome'] = $false
+    if ($Stage -eq 'build') { $Checks['reviewOutcome'] = $false }
     if ($ReviewPaths.Count -gt 0) {
         $ReviewPath = @($ReviewPaths | Sort-Object { (Get-Item -LiteralPath $_).LastWriteTimeUtc })[-1]
         $ReviewText = Get-Content -LiteralPath $ReviewPath -Raw
@@ -592,7 +620,7 @@ function ConvertTo-EfficiencyRunSummary {
     $Summary['metrics'] = $Run['metrics']
     $Summary['qualityScores'] = if ($Run['judge'] -and $Run['judge']['response']) { $Run['judge']['response']['scores'] } else { $null }
     $Summary['judgeMetrics'] = if ($Run['judge']) { $Run['judge']['metrics'] } else { $null }
-    $Summary['stages'] = @($Run['stages'] | ForEach-Object { @{ name = $_['name']; passed = $_['passed']; process = $_['process'] } })
+    $Summary['stages'] = @($Run['stages'] | ForEach-Object { @{ name = $_['name']; passed = $_['passed']; process = $_['process']; readiness = $_['readiness'] } })
     $Summary
 }
 
@@ -661,7 +689,8 @@ function Invoke-EfficiencySeries {
                 $Slot['checks'] = @{ completed = [bool]$Run['completed']; functional = ($Run['acceptance'] -and [bool]$Run['acceptance']['passed']); stateHistory = ($Run['workflow'] -and [bool]$Run['workflow']['passed']); telemetry = ($Run['metrics'] -and [bool]$Run['metrics']['complete']); judge = ($Run['judge'] -and [bool]$Run['judge']['valid']) }
                 $Slot['failedStages'] = @($Run['stages'] | Where-Object { -not $_['passed'] -and $_['name'] -in @('init', 'requirements', 'build') } | ForEach-Object {
                     $Cause = [string]$_['process']['stopCause']
-                    @{ name = $_['name']; exitCode = [int]$_['process']['exitCode']; stopCause = if ($Cause -in @('none', 'timeout', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' } }
+                    $ReadinessChecks = if ($_['readiness']) { $_['readiness']['checks'] } else { $null }
+                    @{ name = $_['name']; exitCode = [int]$_['process']['exitCode']; stopCause = if ($Cause -in @('none', 'timeout', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' }; failedChecks = @(if ($ReadinessChecks) { $ReadinessChecks.Keys | Where-Object { -not $ReadinessChecks[$_] } | Sort-Object }) }
                 })
                 $Failed = $true
             }

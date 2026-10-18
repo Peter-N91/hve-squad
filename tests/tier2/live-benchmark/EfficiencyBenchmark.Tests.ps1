@@ -113,6 +113,19 @@ Describe 'Efficiency process boundary' -Tag 'Unit' {
         Get-Content $Output -Raw | Should -Be 'true'
         [Environment]::GetEnvironmentVariable('GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS', 'Process') | Should -Be $Previous
     }
+    It 'preserves named readiness failures when a stage exits zero' {
+        $Trial = {
+            param($Arm, $Pair, $Credits)
+            $Run = @(New-TestRuns)[0]; $Run.completed = $false; $Run.judge = $null
+            $Run.stages = @(@{ name = 'requirements'; passed = $false; process = @{ exitCode = 0; stopCause = 'none' }; readiness = @{ passed = $false; checks = @{ 'PRD Quality Reviewer' = $false; 'brd.md' = $true } } })
+            $Run
+        }
+        $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial $Trial -PerRunCredits 10 -SeriesCredits 30
+        $Result.report.slots[0].failedStages[0].failedChecks | Should -Contain 'PRD Quality Reviewer'
+        $Result.report.slots[0].failedStages[0].failedChecks | Should -Not -Contain 'brd.md'
+        $Result.report.trials[0].stages[0].readiness.passed | Should -BeFalse
+        @($Result.report.slots | Where-Object status -EQ 'not-run').Count | Should -Be 2
+    }
     It 'transfers large input through stdin instead of the Windows command line' {
         $Output = Join-Path $TestDrive 'stdin.txt'
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', '$value=[Console]::In.ReadToEnd(); [Console]::Write($value.Length)') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 10 -InputText ('x' * 40000)
@@ -132,6 +145,63 @@ Describe 'Efficiency process boundary' -Tag 'Unit' {
     It 'returns a failed independent grade when the implementation is missing' {
         $Output = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $TestDrive | ConvertFrom-Json
         $Output.passed | Should -BeFalse
+    }
+}
+
+Describe 'Efficiency stage readiness' -Tag 'Unit' {
+    BeforeEach {
+        $script:StageWorkspace = Join-Path $TestDrive ([guid]::NewGuid().ToString())
+        $script:StageSquad = Join-Path $script:StageWorkspace '.copilot-tracking/squad'
+        New-Item -ItemType Directory -Path (Join-Path $script:StageSquad 'history'), (Join-Path $script:StageWorkspace 'docs/requirements/reviews') -Force | Out-Null
+        foreach ($Name in @('team.md', 'routing.md', 'state.json', 'decisions.md', 'consumption.md', 'consumption-rates.md')) {
+            Set-Content (Join-Path $script:StageSquad $Name) 'synthetic fixture; external state verification is mocked'
+        }
+        Set-Content (Join-Path $script:StageSquad 'history/Squad Scribe.md') '# History: Squad Scribe'
+        $script:StageMetrics = @{ dispatches = @{ 'Squad Scribe' = 1 } }
+        foreach ($Agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
+            $script:StageMetrics.dispatches[$Agent] = 1
+            $Relative = "docs/requirements/reviews/$Agent.md"
+            Set-Content (Join-Path $script:StageWorkspace $Relative) 'synthetic authored artifact'
+            Set-Content (Join-Path $script:StageSquad "history/$Agent.md") "# History: $Agent`n* Deliverable: $Relative"
+        }
+        foreach ($Name in @('brd.md', 'prd.md')) { Set-Content (Join-Path $script:StageWorkspace "docs/requirements/$Name") 'synthetic published requirements' }
+        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark { [pscustomobject]@{ exitCode = 0; stopCause = 'none' } }
+    }
+    It 'accepts initialized state without demanding implementation roles' {
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init).passed | Should -BeTrue
+    }
+    It 'accepts requirements with both author and reviewer evidence' {
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeTrue
+    }
+    It 'rejects a missing reviewer artifact despite existing dispatch and history' {
+        Remove-Item (Join-Path $script:StageWorkspace 'docs/requirements/reviews/PRD Quality Reviewer.md')
+        $Result = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements
+        $Result.passed | Should -BeFalse
+        $Result.checks['PRD Quality Reviewer'] | Should -BeFalse
+    }
+    It 'rejects reviewer artifacts with no dispatch history' {
+        Remove-Item (Join-Path $script:StageSquad 'history/BRD Quality Reviewer.md')
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
+    }
+    It 'requires published <Document> before advancing requirements' -ForEach @(@{ Document = 'brd.md' }, @{ Document = 'prd.md' }) {
+        Remove-Item (Join-Path $script:StageWorkspace "docs/requirements/$Document")
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
+    }
+    It 'does not accept a history deliverable outside the workspace' {
+        Set-Content (Join-Path $TestDrive 'outside.md') 'outside evidence'
+        Set-Content (Join-Path $script:StageSquad 'history/BRD Quality Reviewer.md') "# History: BRD Quality Reviewer`n* Deliverable: ../outside.md"
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
+    }
+    It 'rejects empty initialization state even if the external verifier passes' {
+        Set-Content (Join-Path $script:StageSquad 'team.md') '' -NoNewline
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init).passed | Should -BeFalse
+    }
+    It 'requires observed reviewer dispatches rather than only files' {
+        $script:StageMetrics.dispatches.Remove('PRD Quality Reviewer')
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
+    }
+    It 'retains build as the default and requires implementation evidence' {
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics).passed | Should -BeFalse
     }
 }
 
@@ -240,6 +310,36 @@ exit 0
         Get-Content -LiteralPath (Join-Path $Trial 'out/report.json') -Raw | Should -Not -Match 'OFFLINE PREFLIGHT SENTINEL|does not support --session-id'
         $Report.slots[1].status | Should -Be 'not-run'
     }
+    It 'stops after zero-exit initialization with missing readiness evidence' {
+        $Install = Join-Path $TestDrive 'incomplete-install'; $Trial = Join-Path $TestDrive 'incomplete-run'
+        New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
+        foreach ($Name in @('squad-coordinator.agent.md', 'brd-builder.agent.md', 'prd-builder.agent.md')) { Set-Content (Join-Path $Install ".github/agents/$Name") 'offline fixture' }
+        $Cli = Join-Path $TestDrive 'incomplete-cli.ps1'
+        @'
+if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
+if ($args -contains '--version') { 'offline-incomplete-cli'; exit 0 }
+if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+Add-Content 'stage-launches.txt' 'one invocation'
+$Session = $args[[array]::IndexOf($args, '--session-id') + 1]
+$SessionRoot = Join-Path $HOME ".copilot/session-state/$Session"
+New-Item -ItemType Directory -Path $SessionRoot -Force | Out-Null
+@{ type = 'session.usage_record'; data = @{ usage = @{ inputTokens = 10; outputTokens = 1; accounting = @{ sourceSessionId = $Session; usageId = 'fake-usage' } } } } | ConvertTo-Json -Depth 8 -Compress | Set-Content (Join-Path $SessionRoot 'events.jsonl')
+exit 0
+'@ | Set-Content $Cli -Encoding utf8NoBOM
+        $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '1', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'incomplete-command.txt') -TimeoutSeconds 60 -InputText ''
+        $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
+        try {
+            $Result.exitCode | Should -Be 2
+            @($Run.stages).Count | Should -Be 1
+            $Run.stages[0].process.exitCode | Should -Be 0
+            $Run.stages[0].readiness.passed | Should -BeFalse
+            $Run.stages[0].passed | Should -BeFalse
+            @(Get-Content (Join-Path $Trial 'workspace/stage-launches.txt')).Count | Should -Be 1
+            $Run.judge | Should -BeNullOrEmpty
+        }
+        finally { Remove-Item (Join-Path $HOME ".copilot/session-state/$($Run.metadata.sessionId)") -Recurse -Force }
+    }
     It 'passes the full init prompt and options as valid argv elements to the CLI process' {
         $Install = Join-Path $TestDrive 'argv-install'; $Trial = Join-Path $TestDrive 'argv-run'
         New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
@@ -248,7 +348,7 @@ exit 0
         @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-argv-cli'; exit 0 }
-if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export'; exit 0 }
+if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
 @{ arguments = @($args); repoHooks = $env:GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS } | ConvertTo-Json -Depth 6 -Compress
 exit 37
 '@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
@@ -264,6 +364,14 @@ exit 37
         $Captured.arguments | Should -Not -Contain '--trust-folder'
         $Captured.arguments | Should -Contain '--session-id'
         $Captured.arguments | Should -Contain '--allow-all-tools'
+        $DirectoryIndex = [array]::IndexOf($Captured.arguments, '--add-dir')
+        $DirectoryIndex | Should -BeGreaterThan 0
+        $Captured.arguments[$DirectoryIndex + 1] | Should -Be (Join-Path $Trial 'workspace')
+        $Captured.arguments | Should -Not -Contain '--allow-all-paths'
+        $Captured.arguments | Should -Not -Contain '--allow-all-urls'
+        $Captured.arguments | Should -Contain 'shell(git push)'
+        $Captured.arguments[1] | Should -Match 'split large reference reads into explicit ranges'
+        $Captured.arguments[1] | Should -Match 'one complete Scribe handoff per completed dispatch'
         $Captured.repoHooks | Should -Be 'true'
         $Run = Get-Content -LiteralPath (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         $Run.stages[0].process.exitCode | Should -Be 37

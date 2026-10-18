@@ -164,7 +164,10 @@ if ($MyInvocation.InvocationName -ne '.') {
                     $Lines += @('', "Failed: $($Slot.arm) pair $($Slot.pair); category: $($Slot.reason).")
                     if ($Slot.ContainsKey('childExitCode')) { $Lines += "Child exit: $($Slot.childExitCode); stop cause: $($Slot.stopCause)." }
                     if ($Slot.ContainsKey('failedStages')) {
-                        foreach ($FailedStage in $Slot.failedStages) { $Lines += "Stage: $($FailedStage.name); exit: $($FailedStage.exitCode); stop cause: $($FailedStage.stopCause)." }
+                        foreach ($FailedStage in $Slot.failedStages) {
+                            $Lines += "Stage: $($FailedStage.name); exit: $($FailedStage.exitCode); stop cause: $($FailedStage.stopCause)."
+                            if ($FailedStage.failedChecks.Count) { $Lines += "Failed readiness checks: $($FailedStage.failedChecks -join ', ')." }
+                        }
                     }
                     foreach ($Evidence in $Slot.evidence) { $Lines += "* $Evidence" }
                     if (-not $Slot.evidence.Count) { $Lines += 'No child evidence was written; inspect local launcher errors. No passing outcome was recorded.' }
@@ -178,7 +181,10 @@ if ($MyInvocation.InvocationName -ne '.') {
                 Write-Host "Failed $($Slot.arm) pair $($Slot.pair): $($Slot.reason)"
                 if ($Slot.ContainsKey('childExitCode')) { Write-Host "Child exit: $($Slot.childExitCode); stop cause: $($Slot.stopCause)" }
                 if ($Slot.ContainsKey('failedStages')) {
-                    foreach ($FailedStage in $Slot.failedStages) { Write-Host "Stage: $($FailedStage.name); exit: $($FailedStage.exitCode); stop cause: $($FailedStage.stopCause)" }
+                    foreach ($FailedStage in $Slot.failedStages) {
+                        Write-Host "Stage: $($FailedStage.name); exit: $($FailedStage.exitCode); stop cause: $($FailedStage.stopCause)"
+                        if ($FailedStage.failedChecks.Count) { Write-Host "Failed readiness checks: $($FailedStage.failedChecks -join ', ')" }
+                    }
                 }
                 foreach ($Evidence in $Slot.evidence) { Write-Host "Diagnostic: $(Join-Path $TrialRoot $Evidence)" }
             }
@@ -198,7 +204,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (-not $CliPath) { $CliPath = (Get-Command copilot -ErrorAction Stop).Source }
         $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
         $HelpText = (& $CliPath --help | Out-String)
-        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--no-remote', '--no-remote-export')) {
+        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--no-remote', '--no-remote-export', '--add-dir')) {
             if (-not $HelpText.Contains($Flag)) { throw "Installed CLI does not support $Flag" }
         }
         $Revision = (& git -C $SourceRoot rev-parse HEAD).Trim()
@@ -221,6 +227,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         $SessionEvents = Join-Path $HOME ".copilot/session-state/$Session/events.jsonl"
         if (Test-Path -LiteralPath $SessionEvents) { throw 'Fresh session UUID unexpectedly exists.' }
         $Common = 'This is a synthetic, preauthorized exercise in an isolated environment. Make all routine product and planning decisions from EXERCISE.txt. Do not ask questions, deploy, publish, access secrets, use external systems or install packages. Preserve all squad gates, state/history and role Deliverable Roots. If a safety or evidence gate cannot be satisfied, stop and record the blocker. No claim of human review unless actually provided.'
+        $Common += " The authorized local root is '$Workspace'; resolve installed skills from '$Workspace/.agents/skills' and customization from '$Workspace/.github'. Keep discovery and scripts inside that root, without parent traversal. Prefer native read/list/search tools; split large reference reads into explicit ranges covering all required sections. Send one complete Scribe handoff per completed dispatch, in order; do not merge stages into catch-up payloads or invent missing reviewer outputs."
         $Prompts = [ordered]@{
             init = "$Common Initialize the squad with profile=product and mode=autopilot. Use the current installed squad implementation. Set up the roster and routing, including BRD and PRD capability. Initialization only; no substantive business deliverables yet."
             requirements = "$Common Using the initialized squad, create both a BRD and a PRD for EXERCISE.txt. Use mapped requirements agents and the required methodology. Author at the roster roots and publish copies as docs/requirements/brd.md and docs/requirements/prd.md. Use BR-nnn and FR-nnn identifiers, explicit measurable acceptance criteria and traceability. All scenario facts are synthetic and the fixed brief is authoritative. Complete required reviews."
@@ -234,7 +241,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Watch = [Diagnostics.Stopwatch]::StartNew()
         foreach ($Stage in $Prompts.Keys) {
             $UsagePath = Join-Path $Out "$Stage-usage.json"
-            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', ($MaxCredits / 4).ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', ($MaxCredits / 4).ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
             foreach ($Server in $DisabledServers) { $CliArgs += @('--disable-mcp-server', $Server) }
             foreach ($Denied in @('shell(git push)', 'shell(gh)', 'shell(az)', 'shell(curl)', 'shell(wget)', 'shell(Invoke-WebRequest)', 'shell(Invoke-RestMethod)', 'shell(Start-Process)')) { $CliArgs += @('--deny-tool', $Denied) }
             $Executable = $CliPath
@@ -250,6 +257,8 @@ if ($MyInvocation.InvocationName -ne '.') {
                 $Metrics | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $Out "$Stage-metrics.json") -Encoding utf8NoBOM
             }
             $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $null -ne $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le 300 -and $Metrics.counts.questions -eq 0)
+            $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
+            $StagePassed = $StagePassed -and $Readiness.passed
             $Delta = @{}
             if ($Metrics) {
                 foreach ($Field in @('inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'requestBodyBytes', 'toolTokenCount')) {
@@ -257,11 +266,11 @@ if ($MyInvocation.InvocationName -ne '.') {
                     $Delta[$Field] = if ($null -ne $Metrics.totals[$Field] -and $null -ne $Prior) { $Metrics.totals[$Field] - $Prior } else { $null }
                 }
             }
-            $Stages.Add(@{ name = $Stage; process = $Result; metrics = $Metrics; metricScope = 'cumulative-session'; stageTokenDelta = $Delta; passed = $StagePassed })
+            $Stages.Add(@{ name = $Stage; process = $Result; readiness = $Readiness; metrics = $Metrics; metricScope = 'cumulative-session'; stageTokenDelta = $Delta; passed = $StagePassed })
             if (-not $StagePassed) { $AllPassed = $false; break }
         }
         $Acceptance = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json -AsHashtable
-        $Workflow = Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics
+        $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics }
         $Judge = $null
         if ($AllPassed -and $Acceptance.passed -and $Workflow.passed -and $Watch.Elapsed.TotalSeconds -lt 2700) {
             $Judge = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $CliPath -Model $Model -MaxCredits ($MaxCredits / 4) -ReviewPath $Workflow.reviewPath -TimeoutSeconds ([Math]::Max(1, [Math]::Min(300, 2700 - $Watch.Elapsed.TotalSeconds)))
