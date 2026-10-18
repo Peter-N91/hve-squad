@@ -45,18 +45,15 @@
   <main class="content">
     <div class="container">
       <h2>Appeler le coordinateur</h2>
-      <p>Adressez vos demandes Squad dans la conversation du coordinateur, et non dans le terminal de votre système. VS Code appelle des prompts ; la CLI et l'application utilisent l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
+      <p>Adressez vos demandes dans la conversation de l'agent Squad correspondant, et non dans le terminal de votre système. Dans Copilot Harness pour VS Code, choisissez l'agent dans le sélecteur d'agents ; la CLI et l'application utilisent aussi l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
         <p>
-          <strong>Deux entrées nommées <code>squad</code> dans VS Code ?</strong> Le sélecteur <code>/</code> de VS Code répertorie
-          les prompts et les skills, et le package en fournit un de chaque. Choisissez le
-          <strong>prompt</strong> — décrit comme <em>« Transmet une demande au Squad Coordinator… »</em> —
-          pour réellement exécuter la squad. Le <strong>skill</strong> — <em>« Procédure de fonctionnement du HVE
-          Core Squad Coordinator… »</em> — charge uniquement la procédure de la squad dans l'agent avec lequel
-          vous discutez déjà ; le coordinateur et ses sous-agents la chargent eux-mêmes, vous avez donc rarement
-          besoin de la sélectionner.
+          <strong>Vous utilisez Copilot Harness pour VS Code ?</strong> Sélectionnez <strong>Squad Coordinator</strong>
+          dans le sélecteur d'agents et envoyez le texte de la demande affiché dans l'onglet VS Code sélectionné
+          sans le préfixe <code>/squad</code>. Chaque onglet d'environnement nomme l'agent correspondant pour les
+          workflows de fédération, de document, de rapport de gouvernance et d'apprentissage.
         </p>
       </div>
 
@@ -1692,40 +1689,41 @@ layouts:
 
       <h2>Exécuter sur d'autres hôtes</h2>
       <p>
-        La squad fournit à la fois des prompts et des agents. <strong>Les fichiers de prompt sont une fonctionnalité de VS Code</strong> —
-        GitHub Copilot CLI et l'application GitHub Copilot ne les lisent jamais. Chaque point d'entrée de la squad
-        existe donc aussi sous forme d'<strong>agent</strong>, et sélectionner l'agent est la seule
-        méthode d'appel qui fonctionne partout.
+        La squad fournit à la fois des prompts et des agents. <strong>Copilot Harness pour VS Code,
+        GitHub Copilot CLI et l'application GitHub Copilot exécutent tous les workflows Squad au moyen
+        d'agents invocables par l'utilisateur.</strong> Les fichiers de prompt restent une solution de
+        remplacement dans VS Code, mais sélectionner l'agent associé évite un appel intermédiaire et
+        constitue la méthode d'appel qui fonctionne partout.
       </p>
 
       <table data-host-reference>
         <thead>
-          <tr><th>Point d'entrée</th><th>VS Code</th><th>Copilot CLI et application Copilot</th></tr>
+          <tr><th>Point d'entrée</th><th>Copilot Harness pour VS Code</th><th>Copilot CLI et application Copilot</th></tr>
         </thead>
         <tbody>
           <tr>
             <td>Exécuter une squad</td>
-            <td><code>/squad request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Coordinator</strong></td>
             <td>sélectionner l'agent <strong>Squad Coordinator</strong></td>
           </tr>
           <tr>
             <td>Exécuter une fédération</td>
-            <td><code>/squad-federation request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Federation Coordinator</strong></td>
             <td>sélectionner l'agent <strong>Squad Federation Coordinator</strong></td>
           </tr>
           <tr>
             <td>Rechercher et exporter</td>
-            <td><code>/squad-document request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Document</strong></td>
             <td>sélectionner l'agent <strong>Squad Document</strong></td>
           </tr>
           <tr>
             <td>Tableau de bord de gouvernance</td>
-            <td><code>/squad-governance-report</code></td>
+            <td>sélectionner l'agent <strong>Squad Governance Report</strong></td>
             <td>sélectionner l'agent <strong>Squad Governance Report</strong></td>
           </tr>
           <tr>
             <td>Partager un enseignement</td>
-            <td><code>/squad-learn</code></td>
+            <td>sélectionner l'agent <strong>Squad Learn</strong></td>
             <td>sélectionner l'agent <strong>Squad Learn</strong></td>
           </tr>
         </tbody>
