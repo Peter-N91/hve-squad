@@ -91,6 +91,30 @@ Describe 'Wizard unattended plan' -Tag 'Unit' {
 
 Describe 'Wizard setup boundaries' -Tag 'Unit' {
     BeforeEach { Mock Get-WizardHostPlatform { 'Windows' } }
+    It 'renders the existing-install reuse prompt under strict mode and reuses without installation' {
+        $Source = Join-Path $TestDrive 'reuse-source'; $Install = Join-Path $TestDrive 'reuse-install'
+        New-Item -ItemType Directory -Path $Source, $Install | Out-Null
+        Set-Content -LiteralPath (Join-Path $Source 'apm.yml') -Value 'name: fixture'
+        Mock Test-WizardInstall { $true }
+        Mock Confirm-WizardAction { $true }
+        Mock Move-WizardInstallArchive { throw 'A reusable installation must not be archived.' }
+        Initialize-WizardInstall -Path $Install -ManagedRoot $TestDrive -Source $Source
+        Should -Invoke Confirm-WizardAction -Times 1 -Exactly -ParameterFilter { $Question -ceq "Reuse clean prepared install ${Install}?" }
+        Should -Invoke Move-WizardInstallArchive -Times 0
+        Test-Path -LiteralPath (Join-Path $Install 'wizard-install.json') | Should -BeFalse
+    }
+    It 'allows declining reuse without archiving or modifying the existing installation' {
+        $Source = Join-Path $TestDrive 'decline-source'; $Install = Join-Path $TestDrive 'decline-install'
+        New-Item -ItemType Directory -Path $Source, $Install | Out-Null
+        Set-Content -LiteralPath (Join-Path $Source 'apm.yml') -Value 'name: fixture'
+        Set-Content -LiteralPath (Join-Path $Install 'preserve.txt') -Value 'keep'
+        Mock Test-WizardInstall { $true }
+        Mock Confirm-WizardAction { $false }
+        Mock Move-WizardInstallArchive { throw 'Declined reuse must not archive anything.' }
+        { Initialize-WizardInstall -Path $Install -ManagedRoot $TestDrive -Source $Source } | Should -Throw '*reuse declined*'
+        Get-Content -LiteralPath (Join-Path $Install 'preserve.txt') | Should -Be 'keep'
+        Should -Invoke Move-WizardInstallArchive -Times 0
+    }
     It 'gives Ubuntu installation guidance rather than attempting WinGet on Unix' {
         Mock Get-WizardHostPlatform { 'Unix' }
         Mock Get-Command { $null }

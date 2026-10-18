@@ -347,7 +347,7 @@ function Initialize-WizardInstall {
         try { $MatchesManifest = (Get-Content -LiteralPath $Receipt -Raw | ConvertFrom-Json).manifestHash -ceq $ManifestHash } catch { $MatchesManifest = $false }
     }
     if ((Test-WizardInstall $Path) -and $MatchesManifest) {
-        if (-not (Confirm-WizardAction "Reuse clean prepared install $Path?")) { throw [OperationCanceledException]::new('Install reuse declined; choose a new WorkRoot.') }
+        if (-not (Confirm-WizardAction "Reuse clean prepared install ${Path}?")) { throw [OperationCanceledException]::new('Install reuse declined; choose a new WorkRoot.') }
         return
     }
     if (Test-Path -LiteralPath $Path) { Move-WizardInstallArchive -Path $Path -ManagedRoot $ManagedRoot -Source $Source | Out-Null }
