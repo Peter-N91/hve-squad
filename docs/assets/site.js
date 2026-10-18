@@ -101,6 +101,15 @@
     '/squad-governance-report': 'Generate the governance report with default settings.',
     '/squad-learn': 'Help me propose a shared learning.'
   };
+  const instructions = french ? {
+    cli: 'Dans Copilot CLI, saisissez /agent et choisissez {agent}. Envoyez dans sa conversation :',
+    app: 'Dans Copilot App, choisissez {agent}. Envoyez dans sa conversation :',
+    vscode: "Dans Copilot Chat pour VS Code, sélectionnez {agent} dans le sélecteur d'agents. Envoyez dans sa conversation :"
+  } : {
+    cli: 'In Copilot CLI, enter /agent and choose {agent}. Send in its conversation:',
+    app: 'In Copilot App, select {agent}. Send in its conversation:',
+    vscode: 'In VS Code Copilot Chat, select {agent} from the agents dropdown. Send in its conversation:'
+  };
   const parseExample = text => {
     const requests = [];
     let current;
@@ -140,36 +149,29 @@
     for (const host of ['cli', 'app', 'vscode']) {
       const panel = document.createElement('section');
       panel.dataset.host = host;
-      if (host === 'vscode') {
+      requests.forEach(request => {
         const instruction = document.createElement('p');
         instruction.className = 'command-instruction';
-        instruction.textContent = french
-          ? 'Dans Copilot Chat, choisissez le prompt (pas le skill). Envoyez chaque demande s\u00e9par\u00e9ment.'
-          : 'In Copilot Chat, choose the prompt (not the skill). Send each request separately.';
-        panel.append(instruction, original.cloneNode(true));
-      } else {
-        requests.forEach(request => {
-          const instruction = document.createElement('p');
-          instruction.className = 'command-instruction';
-          instruction.textContent = host === 'cli'
-            ? (french ? 'Dans Copilot CLI, saisissez /agent et choisissez ' : 'In Copilot CLI, enter /agent and choose ')
-            : (french ? 'Dans Copilot App, choisissez ' : 'In Copilot App, select ');
-          const agent = document.createElement('strong');
-          agent.textContent = agents[request.command];
-          instruction.append(agent, french ? '. Envoyez dans sa conversation :' : '. Send in its conversation:');
-          if (request.notes.length) {
-            const note = document.createElement('p');
-            note.className = 'command-note';
-            note.textContent = request.notes.join('\n');
-            panel.append(note);
-          }
-          const pre = document.createElement('pre');
-          const input = document.createElement('code');
-          input.textContent = request.lines.join('\n') || defaultRequests[request.command];
-          pre.append(input);
-          panel.append(instruction, pre);
-        });
-      }
+        const [before, after] = instructions[host].split('{agent}');
+        const agent = document.createElement('strong');
+        agent.textContent = agents[request.command];
+        instruction.append(before, agent, after);
+        if (request.notes.length) {
+          const note = document.createElement('p');
+          note.className = 'command-note';
+          note.textContent = request.notes.join('\n');
+          panel.append(note);
+        }
+        const pre = document.createElement('pre');
+        const input = document.createElement('code');
+        input.textContent = request.lines.join('\n') || defaultRequests[request.command];
+        if (host === 'vscode') {
+          pre.className = original.className;
+          input.className = code.className;
+        }
+        pre.append(input);
+        panel.append(instruction, pre);
+      });
       guide.append(panel);
     }
     original.replaceWith(guide);
