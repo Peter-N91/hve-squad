@@ -235,7 +235,7 @@ Describe 'D7-1 Plugin build succeeds and carries every new reference file' {
     }
 
     It '<_> ships in the built plugin output' -ForEach @(
-        'model-catalog.md', 'model-routing.md', 'scribe-payload-template.md',
+        'model-catalog.md', 'model-benchmarks.md', 'model-routing.md', 'scribe-payload-template.md',
         'scribe-cold-init-and-seeding.md', 'scribe-cold-federation.md', 'scribe-cold-gates-and-verdicts.md',
         'consumption-rates-template.md'
     ) {

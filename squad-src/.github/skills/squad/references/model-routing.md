@@ -104,6 +104,8 @@ For a role resolving under `routing=ranked`, or to suggest a pick under `routing
 4. Prefer a `long_context`-capable id only when the estimated dispatch input exceeds the standard context window for the candidate; price it at its LC tier (below).
 5. The top-ranked id is the resolved id.
 
+**Benchmark evidence precedes the declared fit table.** Fit for each assignment class comes first from the pinned benchmark knowledge base ([model-benchmarks.md](model-benchmarks.md), refreshed by `.github/workflows/sync-model-benchmarks.yml` and read offline at dispatch time), using only rows with `Provenance = independent`. Self-reported scores (`Provenance = self-reported`) are shown for information only and cannot decide or boost a pick; at equal fit, a candidate backed by independent benchmark evidence outranks a declared-fit fallback. When `model-benchmarks.md` is missing, unparsable, older than 90 days from its `Retrieved:` date, or lacks independent evidence for the resolved candidate, ranking falls back to `model-catalog.md`'s *Catalog: Assignment Fit* table and logs one warning.
+
 `Blended` is the catalog's precomputed USD per 1M tokens of a representative agentic dispatch: `0.20 × Input + 0.80 × Cached + 0.08 × Cache write + 0.02 × Output`, the split `consumption-rates.md`'s dispatch-size estimator produces, since a dispatch reads mostly cached context. It ranks cost among equally fit models; Cost Preflight still prices the real dispatch.
 
 **Deterministic helper.** When a shell tool and `pwsh` 7+ are available, run `scripts/Resolve-SquadModelRoute.ps1 -SquadRoot <squadRoot>` from the installed squad skill, passing `-AvailableModels` with the `task` tool's enum on the CLI or app, or `-SessionModel` on VS Code. It applies this algorithm, the floors, and the *Allowlist* checks to every roster row, writes nothing, and returns each role's pick, candidates, and cell status. Use its output rather than ranking by hand; without a shell, apply the steps above.
@@ -147,7 +149,7 @@ The ten-field `#### Consumption` block defined in `entry-schemas.md` stays close
 * **Requested model** — the id routing resolved and passed through the dispatch `model` parameter, or "none (parameter omitted)".
 * **Effective model** — the `model` value the closed consumption block actually recorded for this dispatch (identical to Requested model unless a substitution occurred).
 * **Observed model** — what the host reported the dispatch ran on, per the *Model Attribution* ladder's rung 1; `unreported` when the host gave no dispatch-line or self-reported model, `unverified` when only a lower rung (pin, session, or declaration) was available.
-* **Route rationale** — the mode and assignment class used, the candidate's rank position with its fit (or "manual" / "floor fallback" / "stale-catalog fallback"), the floor applied, and any re-rank or refusal.
+* **Route rationale** — the mode and assignment class used, the candidate's rank position with its fit and the benchmark source, version, and evaluations used (or `declared-fit fallback` / "manual" / "floor fallback" / "stale-catalog fallback"), the floor applied, and any re-rank or refusal.
 
 These four names are the D9 contract: Tier1 fixtures and any Scribe-procedure wiring that populate them must use this exact wording and placement, never a new schema field.
 

@@ -546,7 +546,9 @@ function Test-NodeStrings {
 function ConvertFrom-ModelPin {
     # 'Claude Haiku 4.5 (copilot)' and 'claude-haiku-4.5' both -> 'claude-haiku-4.5'; only a trailing vendor suffix is dropped, so '(fast mode)' stays part of the name.
     param([string]$Text)
-    return (($Text.Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() -replace '\s+', '-').ToLowerInvariant()
+    $key = (($Text.Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() -replace '\s+', '-').ToLowerInvariant()
+    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    return $key
 }
 
 function Find-AgentPin {
@@ -722,8 +724,9 @@ function Get-DerivedConsumption {
     if (-not $priced) { $needsScribe.Add("$Where was omitted and model '$model' has no rate row and no '$tier' tier fallback row; the Scribe composes the block."); return $null }
     $pricedRow = @($RateRows | Where-Object { $_.Name -eq $priced }) | Select-Object -First 1
     $writesCache = ($pricedRow -and $pricedRow.CacheWrite -gt 0)
+    $tokenFactor = if ((ConvertFrom-ModelPin $model) -eq 'hydrafusion-max') { 0.35 } else { 1.0 }
     $average = $floors.Base + $floors.Growth * ($floors.Turns - 1) / 2.0
-    $gross = $floors.Turns * $average
+    $gross = $floors.Turns * $average * $tokenFactor
     return [ordered]@{
         model              = $model
         model_source       = $source
@@ -732,7 +735,7 @@ function Get-DerivedConsumption {
         internal_turns     = [long]$floors.Turns
         input_tokens       = [long][Math]::Round($gross * 0.20)
         cached_tokens      = [long][Math]::Round($gross * 0.80)
-        cache_write_tokens = $(if ($writesCache) { [long][Math]::Round($floors.Base + $floors.Growth * ($floors.Turns - 1)) } else { 0L })
+        cache_write_tokens = $(if ($writesCache) { [long][Math]::Round(($floors.Base + $floors.Growth * ($floors.Turns - 1)) * $tokenFactor) } else { 0L })
         output_tokens      = [long][Math]::Round($floors.Turns * $floors.Output)
         basis              = 'estimated'
     }

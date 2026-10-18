@@ -41,7 +41,7 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 | Claude Sonnet 5     | `claude-sonnet-5`    | default  | 2.00  | 0.20   | 2.50        | 10.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile (promo pricing)  |
 | Claude Sonnet 5.5   | `claude-sonnet-5.5`  | default  | 2.00  | 0.10   | 2.50        | 10.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile                  |
 | GPT-5.4             | `gpt-5.4`            | default  | 2.50  | 0.25   | 0           | 15.00  | \<=272K / >272K   | 5.00     | 0.50      | n/a             | 22.50     | versatile                  |
-| Gemini 3.1 Pro (retired) | —                    | default  | 2.00  | 0.20   | 0           | 12.00  | not currently listed | n/a  | n/a       | n/a             | n/a       | Deprecated 2026-09-27; no longer in official GitHub Copilot offering. Preserved for backward compatibility with existing consumption ledgers referencing this rate row. |
+| Gemini 3.1 Pro (retired) | —                    | default  | 2.00  | 0.20   | 0           | 12.00  | not currently listed | n/a  | n/a       | n/a             | n/a       | Deprecated 2026-09-27; kept for backward compatibility |
 | Claude Opus 4.8     | `claude-opus-4.8`    | extended | 5.00  | 0.50   | 6.25        | 25.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning  |
 | Claude Opus 5       | `claude-opus-5`      | extended | 5.00  | 0.50   | 6.25        | 25.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning  |
 | GPT-5.5             | `gpt-5.5`            | extended | 5.00  | 0.50   | 0           | 30.00  | \<=272K / >272K   | 10.00    | 1.00      | n/a             | 45.00     | high-capability reasoning  |
@@ -57,7 +57,7 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 | Claude Opus 4.7     | `claude-opus-4.7`    | extended | 5.00  | 0.50   | 6.25        | 25.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning  |
 | Claude Opus 4.8 (fast mode) | `claude-opus-4.8-fast` | extended | 10.00 | 1.00 | 12.50   | 50.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning, preview, latency-optimized |
 | Claude Opus 5.5     | `claude-opus-5.5`    | extended | 4.00  | 0.20   | 5.00        | 20.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability, long-running agentic |
-| Claude Sonnet 4     | `claude-sonnet-4`    | default  | 3.00  | 0.30   | 3.75        | 15.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | Priced per official GitHub Copilot billing docs but not in current "Supported AI models" list as of 2026-09-27. Preserved for backward compatibility; new routing should prefer Claude Sonnet 4.6 or Claude Sonnet 5. See model-catalog.md Contradictions. |
+| Claude Sonnet 4     | `claude-sonnet-4`    | default  | 3.00  | 0.30   | 3.75        | 15.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | Priced in billing docs; prefer Sonnet 4.6/5 (see model-catalog.md) |
 | Claude Fable 5      | `claude-fable-5`     | extended | 10.00 | 1.00   | 12.50       | 50.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability, enterprise data-retention gating (ZDR/EFS) |
 | Claude Fable 5.1    | `claude-fable-5.1`   | extended | 10.00 | 0.25   | 12.50       | 50.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability, same data-retention gating as Claude Fable 5 |
 | Gemini 3.5 Flash    | `gemini-3.5-flash`   | fast     | 1.50  | 0.15   | 0           | 9.00   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | lightweight                |
@@ -70,6 +70,7 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 | Grok 4.7            | `grok-4.7`           | default  | 2.00  | 0.50   | 0           | 6.00   | \<=200K / >200K   | 4.00     | 1.00      | n/a             | 12.00     | versatile                  |
 | Kimi K2.7 Code      | `kimi-k2.7-code`     | fast     | 0.95  | 0.19   | 0           | 4.00   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | code-specialized           |
 | Kimi K3             | `kimi-k3`            | default  | 3.00  | 0.30   | 0           | 15.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | code-specialized, long-context agentic; elevated-risk safeguards per source |
+| HydraFusion Max     | `hydrafusion-max`    | default  | 0.80  | 0.05   | 1.00        | 4.00   | \<=272K / >272K   | 1.60     | 0.10      | 2.00            | 6.00      | cascade solver routing (GPT-6.1 Sol + GPT-6 Luna); ~0.35x token footprint |
 | (additional)        |                      |          |       |        |             |        |                    |          |           |                 |           | update when GitHub changes |
 
 ## Tier fallback rates (used only when `basis: tier-default`)
@@ -100,9 +101,11 @@ Split `gross_input` across the billed rates. Turn 1 is fully uncached; on turns 
 ```text
 cached_tokens      = gross_input × 0.80
 input_tokens       = gross_input × 0.20
-cache_write_tokens = base_context + growth_per_turn × (internal_turns - 1)   (Anthropic models only; 0 otherwise)
+cache_write_tokens = base_context + growth_per_turn × (internal_turns - 1)   (Anthropic and HydraFusion; 0 otherwise)
 output_tokens      = internal_turns × output_per_turn
 ```
+
+For HydraFusion (`hydrafusion-max` / `hydrafusion`), multiply `gross_input` and `cache_write_tokens` by `0.35` (cascade solver routing and incremental WebSocket caching use ~65% fewer tokens).
 
 Estimate `internal_turns` and `base_context` from what the dispatch actually reported. These class rows are **floors, not fallbacks** — start here and raise, never start below:
 

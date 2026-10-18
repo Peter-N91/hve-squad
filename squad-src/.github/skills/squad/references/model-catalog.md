@@ -81,6 +81,7 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 | `gpt-6-luna` | advertised | GPT-6 Luna | GA | fast-lightweight | undocumented | undocumented | intake, bookkeeping | "Fast help with simple or repetitive tasks"; card "Coming soon" |
 | `gpt-6-sol` | advertised | GPT-6 Sol | GA | balanced | undocumented | undocumented | planning, implementation, review | "Interactive and agentic coding... all-round development tasks that benefit from careful, multistep validation"; card "Coming soon" |
 | `gpt-6.1-sol` | advertised | GPT-6.1 Sol | GA | frontier-reasoning | undocumented | undocumented | implementation, review, planning | "Complex coding tasks... advanced, efficient reasoning for complex coding tasks"; "Powerful" category on the pricing page; card "Coming soon" |
+| `hydrafusion-max` | constructed | HydraFusion Max | GA (documented, not advertised) | frontier-reasoning | undocumented | undocumented | research, planning, implementation, review, council, intake | Copilot cascade routing policy (`policy=max`); dynamically routes solver turns across GPT-6.1 Sol and GPT-6 Luna with incremental WebSocket prompt caching (~0.35x token footprint) |
 
 ### Anthropic
 
@@ -151,6 +152,7 @@ Every price below is transcribed verbatim from the "Models and pricing" page ret
 | `gpt-6-luna` | GPT-6 Luna | ≤272K / >272K | 0.10 | 0.01 | 0.125 | 0.50 | 0.20 | 0.02 | 0.25 | 0.75 |
 | `gpt-6-sol` | GPT-6 Sol | ≤272K / >272K | 2.00 | 0.20 | 2.50 | 10.00 | 4.00 | 0.40 | 5.00 | 15.00 |
 | `gpt-6.1-sol` | GPT-6.1 Sol | ≤272K / >272K | 2.00 | 0.10 | 2.50 | 10.00 | 4.00 | 0.20 | 5.00 | 15.00 |
+| `hydrafusion-max` | HydraFusion Max | ≤272K / >272K | 0.80 | 0.05 | 1.00 | 4.00 | 1.60 | 0.10 | 2.00 | 6.00 |
 
 ### Anthropic (Claude Haiku 5.5 has a documented long-context tier)
 
@@ -199,7 +201,7 @@ Gemini 3.6/3.7/3.8 Flash are priced at a promotional rate ($0.75 / $0.075 / – 
 
 ## Catalog: Assignment Fit
 
-This table is what ranked routing reads. Each row scores how well a model suits each of the seven assignment classes, so ranking matches a model to the work rather than to its price or its name:
+This table is what ranked routing reads when falling back from or cross-checking the pinned benchmark knowledge base (`model-benchmarks.md`). Each row scores how well a model suits each of the seven assignment classes, so ranking matches a model to the work rather than to its price or its name:
 
 * `3` — best in class: the source pages name this model for exactly this kind of work.
 * `2` — capable: a sound choice for the class, but not what the sources lead with.
@@ -248,6 +250,7 @@ The scores are this catalog's editorial curation over the sources' task-area and
 | `kimi-k3` | kimi | 3 | 1 | 1 | 2 | 1 | 0 | 1 | 0 | 1.140 |
 | `kimi-k2.7-code` | kimi-code | 2.7 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0.422 |
 | `mai-code-1.1-flash` | mai-code-flash | 1.1 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.080 |
+| `hydrafusion-max` | hydrafusion | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 0.360 |
 ## Advertised but Unevaluated
 
 This host's `task` dispatch tool advertises `model` values that this snapshot's three sources do not document at all. Each is `unevaluated`: excluded from automatic ranking, priced `unpriced` (never `0`), and reachable only as an explicit `routing=manual` pick.
@@ -270,6 +273,7 @@ These models are named by at least one of the three sources but are not in this 
 | `claude-fable-5.1` | Claude Fable 5.1 | Same gating as Claude Fable 5; not in this host's `model` enum at retrieval |
 | `kimi-k2.7-code` | Kimi K2.7 Code | Not in this host's `model` enum at retrieval; documented and priced normally |
 | `kimi-k3` | Kimi K3 | Not in this host's `model` enum at retrieval; source notes elevated-risk safeguards |
+| `hydrafusion-max` | HydraFusion Max | Host-level cascade routing policy (`selectedModel: hydrafusion-max`); not in this host's static `model` enum at retrieval |
 
 ## Named Only in the Comparison Guide (Degraded Confidence)
 

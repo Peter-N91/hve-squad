@@ -221,7 +221,8 @@ $rates = @(Get-TableRows (Join-Path $SquadRoot 'consumption-rates.md') | Where-O
 function Find-Rate {
     param([string]$Model)
     if (-not $Model) { return $null }
-    $key = $Model.ToLowerInvariant()
+    $key = $Model.ToLowerInvariant().Trim()
+    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { $key = 'hydrafusion-max' }
     foreach ($row in $rates) { if ($row[0].ToLowerInvariant() -eq $key -or $row[1].ToLowerInvariant() -eq $key) { return $row } }
     $null
 }
@@ -252,7 +253,9 @@ function New-Consumption {
     param([string]$Model, [string]$Source, [string]$Class)
     $floor = if ($estimator.ContainsKey($Class)) { $estimator[$Class] } else { $estimator['implementation'] }
     $t, $base, $growth, $perTurn = $floor
-    $gross = $t * ($base + $growth * ($t - 1) / 2)
+    $isHydra = ($Model -match '(?i)^hydrafusion')
+    $tokenFactor = if ($isHydra) { 0.35 } else { 1.0 }
+    $gross = $t * ($base + $growth * ($t - 1) / 2) * $tokenFactor
     $rate = Find-Rate $Model
     [ordered]@{
         model              = $Model
@@ -262,7 +265,7 @@ function New-Consumption {
         internal_turns     = $t
         input_tokens       = [long][math]::Round($gross * 0.2)
         cached_tokens      = [long][math]::Round($gross * 0.8)
-        cache_write_tokens = if ($Model -match 'claude') { [long]($base + $growth * ($t - 1)) } else { 0 }
+        cache_write_tokens = if ($Model -match 'claude' -or $isHydra) { [long][math]::Round(($base + $growth * ($t - 1)) * $tokenFactor) } else { 0 }
         output_tokens      = [long]($t * $perTurn)
         basis              = 'estimated'
     }

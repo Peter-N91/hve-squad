@@ -81,6 +81,8 @@ param(
 
     [datetime]$AsOf = (Get-Date),
 
+    [string]$BenchmarksPath,
+
     [ValidateSet('json', 'markdown')]
     [string]$Format = 'json'
 )
@@ -90,6 +92,9 @@ Set-StrictMode -Version Latest
 [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::InvariantCulture
 
 $ReferencesRoot = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'references'
+if (-not $BenchmarksPath) {
+    $BenchmarksPath = Join-Path -Path $ReferencesRoot -ChildPath 'model-benchmarks.md'
+}
 $Classes = @('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping')
 $MetacharacterPattern = '[\s;|&$<>`''"(){}\[\]]'
 $StaleAfterDays = 90
@@ -198,14 +203,26 @@ function Get-CatalogLocal {
             $order = 0
             foreach ($row in $table.Rows) {
                 $scores = @{}
-                foreach ($class in $Classes) { $scores[$class] = [int](ConvertTo-NumberLocal $row[$class]) }
+                $declaredScores = @{}
+                $backedByEvidence = @{}
+                $evidence = @{}
+                foreach ($class in $Classes) {
+                    $val = [int](ConvertTo-NumberLocal $row[$class])
+                    $scores[$class] = $val
+                    $declaredScores[$class] = $val
+                    $backedByEvidence[$class] = $false
+                    $evidence[$class] = 'declared-fit fallback'
+                }
                 $fit.Add([pscustomobject]@{
-                        Id         = $row['Catalog ID']
-                        Family     = $row['Family']
-                        Generation = ConvertTo-VersionLocal $row['Generation']
-                        Scores     = $scores
-                        Blended    = [double](ConvertTo-NumberLocal $row['Blended'])
-                        Order      = $order++
+                        Id               = $row['Catalog ID']
+                        Family           = $row['Family']
+                        Generation       = ConvertTo-VersionLocal $row['Generation']
+                        Scores           = $scores
+                        DeclaredScores   = $declaredScores
+                        BackedByEvidence = $backedByEvidence
+                        Evidence         = $evidence
+                        Blended          = [double](ConvertTo-NumberLocal $row['Blended'])
+                        Order            = $order++
                     })
             }
         }
@@ -219,6 +236,183 @@ function Get-CatalogLocal {
         DisplayName = $displayName
         InputRate   = $inputRate
         Fit         = $fit
+    }
+}
+
+function Get-BenchmarksLocal {
+    <#
+    .SYNOPSIS
+        Reads model-benchmarks.md, validates per-row provenance metadata, excludes
+        self-reported scores from ranking, and maps independent evidence per model
+        and assignment class.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return [pscustomobject]@{
+            Exists    = $false
+            Retrieved = $null
+            Fit       = @{}
+            Evidence  = @{}
+            HasIndep  = @{}
+        }
+    }
+
+    $raw = Get-Content -LiteralPath $Path -Raw
+    $retrieved = $null
+    $match = [regex]::Match($raw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
+    if ($match.Success) {
+        $retrieved = [datetime]::ParseExact($match.Groups['date'].Value, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+
+    $classEvalMap = @{}
+    foreach ($c in $Classes) {
+        $classEvalMap[$c] = [System.Collections.Generic.List[string]]::new()
+    }
+
+    $fitTable = @{}
+    $indepRowsByModel = @{}
+    $foundScoresTable = $false
+
+    foreach ($table in (Get-MarkdownTableLocal -Content $raw)) {
+        if ('Assignment class' -in $table.Header -and 'Primary evaluations' -in $table.Header) {
+            foreach ($row in $table.Rows) {
+                $cls = $row['Assignment class'].Trim('`').Trim()
+                if (-not $classEvalMap.ContainsKey($cls)) { continue }
+                foreach ($col in @('Primary evaluations', 'Secondary evaluations')) {
+                    if (-not $row.Contains($col)) { continue }
+                    foreach ($part in ($row[$col] -split ',')) {
+                        $evalName = $part.Trim().Trim('`').Trim()
+                        if ($evalName -and -not $classEvalMap[$cls].Contains($evalName)) {
+                            $classEvalMap[$cls].Add($evalName)
+                        }
+                    }
+                }
+            }
+        }
+        elseif ('Catalog ID' -in $table.Header -and 'Composite' -in $table.Header -and 'Sources' -in $table.Header) {
+            foreach ($row in $table.Rows) {
+                $id = $row['Catalog ID']
+                if (-not $id) { continue }
+                $scores = @{}
+                foreach ($c in $Classes) {
+                    $scores[$c] = [int](ConvertTo-NumberLocal $row[$c])
+                }
+                $fitTable[$id] = $scores
+            }
+        }
+        elseif ('Catalog ID' -in $table.Header -and 'Evaluation' -in $table.Header -and 'Score' -in $table.Header) {
+            $foundScoresTable = $true
+            foreach ($row in $table.Rows) {
+                $id = if ($row.Contains('Catalog ID')) { [string]$row['Catalog ID'] } else { '' }
+                $eval = if ($row.Contains('Evaluation')) { [string]$row['Evaluation'] } else { '' }
+                $scoreNum = if ($row.Contains('Score')) { ConvertTo-NumberLocal $row['Score'] } else { $null }
+                $sourceId = if ($row.Contains('Source ID')) { ([string]$row['Source ID']).Trim('`').Trim() } else { '' }
+                $sourceVer = if ($row.Contains('Source version')) { ([string]$row['Source version']).Trim('`').Trim() } else { '' }
+                $rowDate = if ($row.Contains('Retrieved')) { ([string]$row['Retrieved']).Trim('`').Trim() } else { '' }
+                $prov = if ($row.Contains('Provenance')) { ([string]$row['Provenance']).Trim('`').Trim() } else { '' }
+
+                if (-not $id -or -not $eval -or $null -eq $scoreNum -or -not $sourceId -or -not $sourceVer -or $rowDate -notmatch '^\d{4}-\d{2}-\d{2}$' -or $prov -notin @('independent', 'self-reported')) {
+                    throw "Invalid benchmark score row in $Path for '$id' / '$eval': Source ID='$sourceId', Source version='$sourceVer', Retrieved='$rowDate', Provenance='$prov'. Every score row must declare source, version, date, and provenance ('independent' or 'self-reported')."
+                }
+
+                # Self-reported figures are informational only and never enter independent ranking evidence.
+                if ($prov -ne 'independent') { continue }
+
+                if (-not $indepRowsByModel.ContainsKey($id)) {
+                    $indepRowsByModel[$id] = [System.Collections.Generic.List[pscustomobject]]::new()
+                }
+                $indepRowsByModel[$id].Add([pscustomobject]@{
+                        Evaluation    = $eval
+                        Score         = [double]$scoreNum
+                        SourceId      = $sourceId
+                        SourceVersion = $sourceVer
+                        Retrieved     = $rowDate
+                    })
+            }
+        }
+    }
+
+    if (-not $foundScoresTable) {
+        return [pscustomobject]@{
+            Exists     = $true
+            ParseError = "No 'Benchmark Scores' table found in $Path"
+            Retrieved  = $retrieved
+            Fit        = @{}
+            Evidence   = @{}
+            HasIndep   = @{}
+        }
+    }
+
+    $resolvedFit = @{}
+    $resolvedEvidence = @{}
+    $hasIndep = @{}
+
+    foreach ($id in $indepRowsByModel.Keys) {
+        $modelRows = $indepRowsByModel[$id]
+        if ($modelRows.Count -eq 0) { continue }
+
+        $byEval = @{}
+        foreach ($r in $modelRows) {
+            $byEval[$r.Evaluation] = $r
+        }
+
+        $resolvedFit[$id] = @{}
+        $resolvedEvidence[$id] = @{}
+        $hasIndep[$id] = @{}
+
+        foreach ($c in $Classes) {
+            $mappedEvals = $classEvalMap[$c]
+            $classRows = [System.Collections.Generic.List[pscustomobject]]::new()
+            if ($mappedEvals.Count -gt 0) {
+                foreach ($evalName in $mappedEvals) {
+                    if ($byEval.ContainsKey($evalName)) {
+                        $classRows.Add($byEval[$evalName])
+                    }
+                }
+            }
+            else {
+                foreach ($r in $modelRows) {
+                    $classRows.Add($r)
+                }
+            }
+
+            if ($classRows.Count -eq 0) {
+                $hasIndep[$id][$c] = $false
+                continue
+            }
+
+            $sourceSet = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::Ordinal)
+            $topEvals = [System.Collections.Generic.List[string]]::new()
+            $sum = 0.0
+            foreach ($r in $classRows) {
+                [void]$sourceSet.Add("$($r.SourceId)@$($r.SourceVersion)")
+                if ($topEvals.Count -lt 3) {
+                    $topEvals.Add($r.Evaluation)
+                }
+                $sum += $r.Score
+            }
+
+            $resolvedEvidence[$id][$c] = "$([string]::Join(', ', $sourceSet)) [$([string]::Join(', ', $topEvals))]"
+            $hasIndep[$id][$c] = $true
+
+            if ($fitTable.ContainsKey($id)) {
+                $resolvedFit[$id][$c] = $fitTable[$id][$c]
+            }
+            else {
+                $avg = $sum / $classRows.Count
+                $resolvedFit[$id][$c] = if ($avg -ge 0.75) { 3 } elseif ($avg -ge 0.50) { 2 } elseif ($avg -ge 0.25) { 1 } else { 0 }
+            }
+        }
+    }
+
+    [pscustomobject]@{
+        Exists     = $true
+        ParseError = $null
+        Retrieved  = $retrieved
+        Fit        = $resolvedFit
+        Evidence   = $resolvedEvidence
+        HasIndep   = $hasIndep
     }
 }
 
@@ -307,13 +501,23 @@ function Get-RankedCandidatesLocal {
 
     # Newer generation wins only against the same family; across families the fit
     # table's own row order (grouped by family, newest first) is the final tie-break.
+    # At equal fit, candidates backed by independent benchmark evidence rank ahead of
+    # candidates that fell back to the declared fit table (self-reported or unmeasured).
     $comparer = [System.Comparison[object]] {
         param($a, $b)
         $byFit = $b.Scores[$Class].CompareTo($a.Scores[$Class])
         $byCost = $a.Blended.CompareTo($b.Blended)
-        $first, $second = if ($Order -eq 'cost') { $byCost, $byFit } else { $byFit, $byCost }
-        if ($first -ne 0) { return $first }
-        if ($second -ne 0) { return $second }
+        $byEvidence = ([int][bool]$b.BackedByEvidence[$Class]).CompareTo([int][bool]$a.BackedByEvidence[$Class])
+        if ($Order -eq 'cost') {
+            if ($byEvidence -ne 0) { return $byEvidence }
+            if ($byCost -ne 0) { return $byCost }
+            if ($byFit -ne 0) { return $byFit }
+        }
+        else {
+            if ($byFit -ne 0) { return $byFit }
+            if ($byEvidence -ne 0) { return $byEvidence }
+            if ($byCost -ne 0) { return $byCost }
+        }
         if ($a.Family -eq $b.Family) {
             $byGeneration = $b.Generation.CompareTo($a.Generation)
             if ($byGeneration -ne 0) { return $byGeneration }
@@ -372,6 +576,7 @@ $teamPath = Join-Path -Path $SquadRoot -ChildPath 'team.md'
 if (-not (Test-Path -LiteralPath $teamPath -PathType Leaf)) { throw "team.md not found under $SquadRoot." }
 
 $catalog = Get-CatalogLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-catalog.md')
+$benchmarks = Get-BenchmarksLocal -Path $BenchmarksPath
 $classMap = Get-RoleClassMapLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-routing.md')
 $roster = Get-RosterLocal -Path $teamPath
 $effectiveMode = if ($Mode) { $Mode } else { $roster.Mode }
@@ -387,6 +592,39 @@ elseif (($AsOf.Date - $catalog.Retrieved.Date).TotalDays -gt $StaleAfterDays) {
     $stale = $true
     $warnings.Add("model-catalog.md was retrieved $($catalog.Retrieved.ToString('yyyy-MM-dd')), more than $StaleAfterDays days before $($AsOf.ToString('yyyy-MM-dd')); ranking falls back to static tiers.")
 }
+
+$benchmarksFallback = $false
+if (-not $stale) {
+    if (-not $benchmarks.Exists) {
+        $benchmarksFallback = $true
+        $warnings.Add('model-benchmarks.md was not found; ranking falls back to the declared fit table in model-catalog.md.')
+    }
+    elseif ($benchmarks.ParseError) {
+        $benchmarksFallback = $true
+        $warnings.Add("model-benchmarks.md could not be parsed ($($benchmarks.ParseError)); ranking falls back to the declared fit table in model-catalog.md.")
+    }
+    elseif (-not $benchmarks.Retrieved) {
+        $benchmarksFallback = $true
+        $warnings.Add('model-benchmarks.md has no parsable Retrieved date; ranking falls back to the declared fit table in model-catalog.md.')
+    }
+    elseif (($AsOf.Date - $benchmarks.Retrieved.Date).TotalDays -gt $StaleAfterDays) {
+        $benchmarksFallback = $true
+        $warnings.Add("model-benchmarks.md was retrieved $($benchmarks.Retrieved.ToString('yyyy-MM-dd')), more than $StaleAfterDays days before $($AsOf.ToString('yyyy-MM-dd')); ranking falls back to the declared fit table in model-catalog.md.")
+    }
+    else {
+        foreach ($fitEntry in $catalog.Fit) {
+            if (-not $benchmarks.HasIndep.ContainsKey($fitEntry.Id)) { continue }
+            foreach ($c in $Classes) {
+                if ($benchmarks.HasIndep[$fitEntry.Id][$c]) {
+                    $fitEntry.Scores[$c] = $benchmarks.Fit[$fitEntry.Id][$c]
+                    $fitEntry.BackedByEvidence[$c] = $true
+                    $fitEntry.Evidence[$c] = $benchmarks.Evidence[$fitEntry.Id][$c]
+                }
+            }
+        }
+    }
+}
+$loggedMissingEvidenceFallback = $false
 
 $available = $null
 $availability = 'unverified'
@@ -429,10 +667,15 @@ $results = foreach ($row in $roster.Rows) {
     $offered = @(if ($manualAdmitted.Count -gt 0) { Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $manualAdmitted -Available $available })
 
     $suggested = if ($ranked.Count -gt 0) { $ranked[0].Id } else { $null }
+    if (-not $stale -and -not $benchmarksFallback -and $suggested -and -not $ranked[0].BackedByEvidence[$class] -and -not $loggedMissingEvidenceFallback) {
+        $loggedMissingEvidenceFallback = $true
+        $warnings.Add("missing independent benchmark evidence for $suggested in $class; ranking falls back to the declared fit table in model-catalog.md.")
+    }
     $rationale = if ($stale) { 'stale-catalog fallback' }
     elseif ($rankedAdmitted.Count -eq 0) { "no routable floor ('$tier')" }
     elseif (-not $suggested) { 'floor exhausted' }
-    else { "rank 1 of $($ranked.Count) in $class at fit $($ranked[0].Scores[$class]), floor $tier" }
+    elseif ($ranked[0].BackedByEvidence[$class]) { "rank 1 of $($ranked.Count) in $class at fit $($ranked[0].Scores[$class]) (evidence: $($ranked[0].Evidence[$class])), floor $tier" }
+    else { "rank 1 of $($ranked.Count) in $class at fit $($ranked[0].Scores[$class]) (declared-fit fallback), floor $tier" }
 
     # Economy narrows only allowlisted, mapped implementation roles; an unmapped role's class is a guess.
     $economyApplies = $effectiveMode -eq 'economy' -and $roleId -in $EconomyRoles -and $classSource -eq 'mapped' -and $class -eq 'implementation'
@@ -440,7 +683,8 @@ $results = foreach ($row in $roster.Rows) {
         $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -MinFit 2)
         if ($economy.Count -gt 0) {
             $suggested = $economy[0].Id
-            $rationale = "economy pick: rank 1 of $($economy.Count) in $class at fit $($economy[0].Scores[$class]) (fit >= 2, lowest Blended), floor $tier"
+            $econEvidence = if ($economy[0].BackedByEvidence[$class]) { "evidence: $($economy[0].Evidence[$class])" } else { 'declared-fit fallback' }
+            $rationale = "economy pick: rank 1 of $($economy.Count) in $class at fit $($economy[0].Scores[$class]) (fit >= 2, lowest Blended; $econEvidence), floor $tier"
         }
         else { $rationale = "economy: no id at fit >= 2; $rationale" }
     }
@@ -492,14 +736,15 @@ $results = foreach ($row in $roster.Rows) {
 }
 
 $report = [pscustomobject][ordered]@{
-    squadRoot        = $SquadRoot
-    recordedMode     = $roster.Mode
-    mode             = $effectiveMode
-    catalogRetrieved = if ($catalog.Retrieved) { $catalog.Retrieved.ToString('yyyy-MM-dd') } else { $null }
-    availability     = $availability
-    unevaluated      = $unevaluated
-    warnings         = @($warnings)
-    roles            = @($results)
+    squadRoot           = $SquadRoot
+    recordedMode        = $roster.Mode
+    mode                = $effectiveMode
+    catalogRetrieved    = if ($catalog.Retrieved) { $catalog.Retrieved.ToString('yyyy-MM-dd') } else { $null }
+    benchmarksRetrieved = if ($benchmarks.Retrieved) { $benchmarks.Retrieved.ToString('yyyy-MM-dd') } else { $null }
+    availability        = $availability
+    unevaluated         = $unevaluated
+    warnings            = @($warnings)
+    roles               = @($results)
 }
 if ($effectiveMode -eq 'economy') { $report | Add-Member -NotePropertyName consent -NotePropertyValue $consent }
 

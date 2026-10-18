@@ -853,3 +853,184 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         }
     }
 }
+
+Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case o)' {
+    BeforeAll {
+        $script:Resolver = Join-Path $script:ReferencesRoot '../scripts/Resolve-SquadModelRoute.ps1'
+        $script:BenchmarksPath = Join-Path $script:ReferencesRoot 'model-benchmarks.md'
+        $script:BenchmarksRaw = Get-Content -LiteralPath $script:BenchmarksPath -Raw
+        $script:BenchmarkTables = @(Get-MarkdownTable -Content $script:BenchmarksRaw)
+        $seedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
+        $script:SeedTeam = [regex]::Match($seedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
+        $script:CliEnum = @(
+            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
+            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'
+            'gpt-5.3-codex', 'gpt-5.4-nano', 'gpt-5-mini', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'
+            'gemini-3.5-flash', 'grok-4.5', 'claude-sonnet-5.5', 'gpt-6.1-sol', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
+        )
+
+        function New-BenchmarkRosterRoot {
+            param([string]$Content = $script:SeedTeam)
+            $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $root | Out-Null
+            Set-Content -LiteralPath (Join-Path $root 'team.md') -Value $Content -Encoding utf8NoBOM
+            return $root
+        }
+    }
+
+    It 'declares a parsable Retrieved date, a SHA-256 Content Digest, and verified source licensing' {
+        $dateMatch = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
+        $dateMatch.Success | Should -BeTrue
+        { [datetime]::ParseExact($dateMatch.Groups['date'].Value, 'yyyy-MM-dd', $null) } | Should -Not -Throw
+
+        $digestMatch = [regex]::Match($script:BenchmarksRaw, '\*\*Content Digest:\s*sha256:[0-9a-f]{64}\*\*')
+        $digestMatch.Success | Should -BeTrue
+
+        $sourceTable = @($script:BenchmarkTables | Where-Object { 'Source ID' -in $_.Header -and 'License' -in $_.Header })[0]
+        $sourceTable | Should -Not -BeNullOrEmpty
+        $bySource = @{}
+        foreach ($r in $sourceTable.Rows) {
+            $bySource[$r['Source ID']] = $r
+        }
+        $bySource['epoch-ai']['License'] | Should -Be 'CC-BY-4.0'
+        $bySource['epoch-ai']['Status'] | Should -Be 'active'
+        $bySource['artificial-analysis']['Status'] | Should -Be 'active'
+        $bySource['llm-stats']['Status'] | Should -Be 'excluded'
+        $bySource['lmarena']['Status'] | Should -Be 'excluded'
+    }
+
+    It 'documents an evidence mapping for every one of the seven assignment classes' {
+        $mappingTable = @($script:BenchmarkTables | Where-Object { 'Assignment class' -in $_.Header -and 'Primary evaluations' -in $_.Header })[0]
+        $mappingTable | Should -Not -BeNullOrEmpty
+        $mappedClasses = @($mappingTable.Rows | ForEach-Object { $_['Assignment class'] } | Sort-Object)
+        $mappedClasses | Should -Be (@('bookkeeping', 'council', 'implementation', 'intake', 'planning', 'research', 'review') | Sort-Object)
+        foreach ($row in $mappingTable.Rows) {
+            $row['Primary evaluations'] | Should -Not -BeNullOrEmpty
+            $row['Primary sources'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    It 'tags every score row with source, version, date, and provenance (independent or self-reported)' {
+        $scoreTable = @($script:BenchmarkTables | Where-Object { 'Catalog ID' -in $_.Header -and 'Evaluation' -in $_.Header -and 'Provenance' -in $_.Header })[0]
+        $scoreTable | Should -Not -BeNullOrEmpty
+        $scoreTable.Rows.Count | Should -BeGreaterThan 100
+
+        $invalid = @(
+            foreach ($row in $scoreTable.Rows) {
+                if (-not $row['Catalog ID'] -or -not $row['Evaluation'] -or $row['Score'] -notmatch '^-?\d+(\.\d+)?$' -or -not $row['Source ID'] -or -not $row['Source version'] -or $row['Retrieved'] -notmatch '^\d{4}-\d{2}-\d{2}$' -or $row['Provenance'] -notin @('independent', 'self-reported')) {
+                    "$($row['Catalog ID'])/$($row['Evaluation']): prov='$($row['Provenance'])'"
+                }
+            }
+        )
+        $invalid -join ', ' | Should -BeNullOrEmpty
+    }
+
+    It 'rejects a benchmark snapshot row that is missing provenance or has an unrecognized provenance value' {
+        $root = New-BenchmarkRosterRoot
+        $badBenchmarks = Join-Path $TestDrive 'bad-provenance-benchmarks.md'
+        $badContent = @(
+            '# Bad Benchmarks'
+            '* **Retrieved: 2026-10-18**'
+            ''
+            '## Benchmark Scores'
+            ''
+            '| Catalog ID | Evaluation | Category | Score | Source ID | Source version | Retrieved | Provenance |'
+            '| --- | --- | --- | ---: | --- | --- | --- | --- |'
+            '| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | 0.913 | `epoch-ai` | `2026-10-18` | `2026-10-18` |  |'
+        ) -join "`n"
+        Set-Content -LiteralPath $badBenchmarks -Value $badContent -Encoding utf8NoBOM
+
+        { & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $badBenchmarks } |
+            Should -Throw '*Provenance*'
+    }
+
+    It 'uses independent benchmark evidence before model-catalog.md and records source, version, and evaluations in Route rationale' {
+        $root = New-BenchmarkRosterRoot
+        $run = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('researcher', 'lead', 'developer') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $run.benchmarksRetrieved | Should -Be '2026-10-18'
+        $run.warnings | Should -BeNullOrEmpty
+        foreach ($roleEntry in $run.roles) {
+            $roleEntry.rationale | Should -Match '\(evidence: artificial-analysis@v4\.3\.2, epoch-ai@2026-10-18 \['
+        }
+
+        # Override benchmark evidence so claude-opus-4.8 has fit 3 in research while claude-opus-5.5 has fit 2
+        # (reversing model-catalog.md's declared fit table) and verify routing=ranked follows the benchmark evidence.
+        $customBench = Join-Path $TestDrive 'override-benchmarks.md'
+        $customContent = @(
+            '# Custom Benchmarks'
+            '* **Retrieved: 2026-10-18**'
+            ''
+            '## Assignment Class Evidence Mapping'
+            ''
+            '| Assignment class | Primary evaluations | Secondary evaluations | Primary sources | Evidence rule |'
+            '| --- | --- | --- | --- | --- |'
+            '| `research` | `GDP.pdf`, `GPQA diamond` | `CritPt` | `artificial-analysis`, `epoch-ai` | test |'
+            ''
+            '## Benchmark Scores'
+            ''
+            '| Catalog ID | Evaluation | Category | Score | Source ID | Source version | Retrieved | Provenance |'
+            '| --- | --- | --- | ---: | --- | --- | --- | --- |'
+            '| `claude-opus-4.8` | GDP.pdf | `general-long-doc` | 0.920 | `artificial-analysis` | `v4.3.2` | `2026-10-18` | `independent` |'
+            '| `claude-opus-5.5` | GDP.pdf | `general-long-doc` | 0.600 | `artificial-analysis` | `v4.3.2` | `2026-10-18` | `independent` |'
+        ) -join "`n"
+        Set-Content -LiteralPath $customBench -Value $customContent -Encoding utf8NoBOM
+
+        $overridden = & $script:Resolver -SquadRoot $root -AvailableModels @('claude-opus-4.8', 'claude-opus-5.5') -Mode ranked -Role @('researcher') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $customBench | ConvertFrom-Json
+        $overridden.roles[0].suggested | Should -Be 'claude-opus-4.8'
+        $overridden.roles[0].rationale | Should -Match 'artificial-analysis@v4\.3\.2 \[GDP\.pdf\]'
+    }
+
+    It 'never lets self-reported scores decide or boost a ranked pick alone' {
+        $root = New-BenchmarkRosterRoot
+        $selfReportBench = Join-Path $TestDrive 'self-reported-benchmarks.md'
+        $selfReportContent = @(
+            '# Self-Reported Test Benchmarks'
+            '* **Retrieved: 2026-10-18**'
+            ''
+            '## Benchmark Scores'
+            ''
+            '| Catalog ID | Evaluation | Category | Score | Source ID | Source version | Retrieved | Provenance |'
+            '| --- | --- | --- | ---: | --- | --- | --- | --- |'
+            '| `gpt-5.4` | FrontierMath-Tiers-1-3-v2 | `math` | 0.999 | `vendor-model-card` | `2026-10` | `2026-10-18` | `self-reported` |'
+            '| `gpt-5.6-sol` | FrontierMath-Tiers-1-3-v2 | `math` | 0.891 | `epoch-ai` | `2026-10-18` | `2026-10-18` | `independent` |'
+        ) -join "`n"
+        Set-Content -LiteralPath $selfReportBench -Value $selfReportContent -Encoding utf8NoBOM
+
+        # gpt-5.4 is cheaper (Blended 1.000 vs 1.920) and has a 0.999 self-reported score,
+        # but only gpt-5.6-sol has independent benchmark evidence, so gpt-5.6-sol wins.
+        $res = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.4', 'gpt-5.6-sol') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $selfReportBench | ConvertFrom-Json
+        $res.roles[0].suggested | Should -Be 'gpt-5.6-sol'
+        $res.roles[0].rationale | Should -Match 'epoch-ai@2026-10-18 \[FrontierMath-Tiers-1-3-v2\]'
+
+        # When only a self-reported model (mai-code-1.1-flash) is available, it falls back to declared fit and logs a warning.
+        $onlySelfReported = & $script:Resolver -SquadRoot $root -AvailableModels @('mai-code-1.1-flash') -Mode ranked -Role @('scribe') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $onlySelfReported.roles[0].suggested | Should -Be 'mai-code-1.1-flash'
+        $onlySelfReported.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
+        $onlySelfReported.warnings.Count | Should -Be 1
+        $onlySelfReported.warnings[0] | Should -Match 'missing independent benchmark evidence for mai-code-1\.1-flash'
+    }
+
+    It 'falls back to the declared fit table in model-catalog.md and logs one warning when model-benchmarks.md is missing or stale' {
+        $root = New-BenchmarkRosterRoot
+        $missingPath = Join-Path $TestDrive 'does-not-exist-benchmarks.md'
+        $missingRun = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $missingPath | ConvertFrom-Json
+        $missingRun.warnings.Count | Should -Be 1
+        $missingRun.warnings[0] | Should -Match 'model-benchmarks\.md was not found; ranking falls back to the declared fit table'
+        $missingRun.roles[0].suggested | Should -Be 'gpt-5.6-sol'
+        $missingRun.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
+
+        $staleBench = Join-Path $TestDrive 'stale-benchmarks.md'
+        Set-Content -LiteralPath $staleBench -Value ($script:BenchmarksRaw -replace '\*\*Retrieved:\s*\d{4}-\d{2}-\d{2}\*\*', '**Retrieved: 2026-01-01**') -Encoding utf8NoBOM
+        $staleRun = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $staleBench | ConvertFrom-Json
+        $staleRun.warnings.Count | Should -Be 1
+        $staleRun.warnings[0] | Should -Match 'model-benchmarks\.md was retrieved 2026-01-01, more than 90 days before 2026-10-18; ranking falls back to the declared fit table'
+        $staleRun.roles[0].suggested | Should -Be 'gpt-5.6-sol'
+        $staleRun.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
+    }
+
+    It 'contains no network cmdlets in Resolve-SquadModelRoute.ps1 so runtime dispatches never fetch live web pages' {
+        $resolverRaw = Get-Content -LiteralPath $script:Resolver -Raw
+        $bannedPattern = 'Invoke-WebRequest|Invoke-RestMethod|System\.Net\.(WebClient|Http)|New-WebServiceProxy|Start-BitsTransfer|curl(\.exe)?\s|wget\s|gh\s+api'
+        $resolverRaw | Should -Not -Match $bannedPattern
+    }
+}

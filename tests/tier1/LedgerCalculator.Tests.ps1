@@ -1716,6 +1716,31 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
         $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
         $json.observed.observedTokens | Should -Be 400000
     }
+
+    It 'prices hydrafusion-max in Observed Usage (never 0.0000) and reports HydraFusion token and cost savings against the default baseline' {
+        $events = @(
+            '{"type":"session.start","data":{"selectedModel":"hydrafusion-max"},"timestamp":"2026-10-01T10:00:00.000Z"}'
+            '{"type":"session.fusion_resolved","data":{"syntheticModel":"hydrafusion-max","policy":"max","primaryModel":"gpt-6.1-sol"},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"h1","agentName":"Squad Researcher","model":"hydrafusion-max","firstDispatchedModel":"gpt-6.1-sol","totalTokens":200000,"durationMs":60000},"timestamp":"2026-10-01T10:02:01.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"h2","agentName":"Squad Scribe","model":"claude-haiku-5.5","firstDispatchedModel":"claude-haiku-5.5","totalTokens":100000,"durationMs":30000},"timestamp":"2026-10-01T10:03:01.000Z"}'
+            '{"type":"session.usage_checkpoint","data":{"totalNanoAiu":8000000000},"timestamp":"2026-10-01T10:04:00.000Z"}'
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        # 200,000 tokens x 0.360 / 1e6 = 0.0720 USD (never 0.0000!)
+        $ledger | Should -Match '\| Squad Researcher \| 1 \| hydrafusion-max \| Claude Sonnet 4\.6 \| no \| 200,000 \| 71,000 \| 1\.0 \| 0\.0720 \|'
+        $ledger | Should -Match 'HydraFusion savings: \*\*1\*\* role dispatch\(es\) on `hydrafusion-max` \(solver: gpt-6\.1-sol\) consumed \*\*200,000 observed tokens \(0\.0720 USD\)\*\*'
+
+        $jsonResult = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $json = ($jsonResult.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.observed.hydraFusion.dispatches | Should -Be 1
+        $json.observed.hydraFusion.blendedCostUsd | Should -Be 0.072
+        $json.observed.hydraFusion.solverModels | Should -Contain 'gpt-6.1-sol'
+        $json.observed.baselineModel | Should -BeIn @('claude-sonnet-4.6', 'Claude Sonnet 4.6')
+    }
 }
 Describe 'Measure-SquadLedger names an insert-above-the-end as an ordering defect, not lost content' {
     It 'reports entries inserted inside the file, with every original byte kept, distinctly from a prefix edit' {
