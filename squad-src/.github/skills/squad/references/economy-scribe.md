@@ -18,7 +18,7 @@ Applies in **off, ranked, economy, and manual**; no economy flag or `handoff` ma
 
 Closed keys. Required `runId`, `historyRecords`, `stateAdvance.activeRoles`; omitted `turn`/`timestamp`/`mode`/consumption derive. `mode` is top-level; `route` needs `decision`.
 
-* Optional `decision`: `{title:str,rationale:str,adrNoted:bool}`.
+* Optional `decision`: `{title: string,rationale: string,adrNoted: boolean}`.
 * `historyRecords[]`: required agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Use roster-exact agent and an existing deliverable. Alternate needs selectionCue; ceiling slot needs Scribe. cli-pinned needs passedModel and consumption.model_source=cli-pinned/model=passedModel. Economy needs routingIdentity per record.
 * consumption keys: model/model_source/priced_as/model_tier/internal_turns/input_tokens/cached_tokens/cache_write_tokens/output_tokens/basis.
 * routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
