@@ -105,6 +105,14 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
 }
 
 Describe 'Efficiency process boundary' -Tag 'Unit' {
+    It 'sets repository-hook opt-in only for the child process' {
+        $Previous = [Environment]::GetEnvironmentVariable('GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS', 'Process')
+        $Output = Join-Path $TestDrive 'child-environment.txt'
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', '[Console]::Write($env:GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS)') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 10 -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
+        $Result.exitCode | Should -Be 0
+        Get-Content $Output -Raw | Should -Be 'true'
+        [Environment]::GetEnvironmentVariable('GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS', 'Process') | Should -Be $Previous
+    }
     It 'transfers large input through stdin instead of the Windows command line' {
         $Output = Join-Path $TestDrive 'stdin.txt'
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', '$value=[Console]::In.ReadToEnd(); [Console]::Write($value.Length)') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 10 -InputText ('x' * 40000)
@@ -232,6 +240,35 @@ exit 0
         Get-Content -LiteralPath (Join-Path $Trial 'out/report.json') -Raw | Should -Not -Match 'OFFLINE PREFLIGHT SENTINEL|does not support --session-id'
         $Report.slots[1].status | Should -Be 'not-run'
     }
+    It 'passes the full init prompt and options as valid argv elements to the CLI process' {
+        $Install = Join-Path $TestDrive 'argv-install'; $Trial = Join-Path $TestDrive 'argv-run'
+        New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
+        foreach ($Name in @('squad-coordinator.agent.md', 'brd-builder.agent.md', 'prd-builder.agent.md')) { Set-Content -LiteralPath (Join-Path $Install ".github/agents/$Name") -Value 'offline fixture' }
+        $Cli = Join-Path $TestDrive 'argv-only-cli.ps1'
+        @'
+if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
+if ($args -contains '--version') { 'offline-argv-cli'; exit 0 }
+if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export'; exit 0 }
+@{ arguments = @($args); repoHooks = $env:GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS } | ConvertTo-Json -Depth 6 -Compress
+exit 37
+'@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
+        $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '1', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'argv-command.txt') -TimeoutSeconds 60 -InputText ''
+        $Result.exitCode | Should -Be 2
+        $Captured = Get-Content -LiteralPath (Join-Path $Trial 'out/init-stdout.jsonl') -Raw | ConvertFrom-Json
+        $Captured.arguments[0] | Should -Be '-p'
+        $Captured.arguments[1] | Should -Match '^This is a synthetic, preauthorized exercise.*Initialization only; no substantive business deliverables yet\.$'
+        $Captured.arguments[2] | Should -Be '--agent'
+        $Captured.arguments | Should -Contain '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN'
+        $Captured.arguments | Should -Not -Contain 'GITHUB_TOKEN'
+        $Captured.arguments | Should -Not -Contain '--trust-folder'
+        $Captured.arguments | Should -Contain '--session-id'
+        $Captured.arguments | Should -Contain '--allow-all-tools'
+        $Captured.repoHooks | Should -Be 'true'
+        $Run = Get-Content -LiteralPath (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
+        $Run.stages[0].process.exitCode | Should -Be 37
+        $Run.completed | Should -BeFalse
+    }
 }
 
 Describe 'Independent functional acceptance contract' -Tag 'Unit' {
@@ -340,6 +377,15 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $Result.report.slots[0].reason | Should -Be 'run-failed-independent-checks'
         $Result.report.slots[0].checks.judge | Should -BeFalse
         $Result.report.slots[0].checks.telemetry | Should -BeFalse
+        $Result.exitCode | Should -Be 2
+    }
+    It 'reports an immediate init process failure without calling it a document-quality failure' {
+        $Trial = { param($Arm, $Pair, $Credits) $Run = @(New-TestRuns)[0]; $Run.completed = $false; $Run.stages = @(@{ name = 'init'; passed = $false; process = @{ exitCode = 1; stopCause = 'none' } }); $Run.judge = $null; $Run.metrics = $null; $Run }
+        $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial $Trial -PerRunCredits 10 -SeriesCredits 30
+        $Result.report.slots[0].failedStages[0].name | Should -Be init
+        $Result.report.slots[0].failedStages[0].exitCode | Should -Be 1
+        $Result.report.slots[0].failedStages[0].stopCause | Should -Be none
+        $Result.report.quality.scores.Count | Should -Be 0
         $Result.exitCode | Should -Be 2
     }
     It 'does not leak arbitrary callback exception text into portable reports' {

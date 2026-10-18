@@ -136,6 +136,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 if ($Slot.status -ne 'failed') { continue }
                 $Prefix = "$($Slot.arm)-$($Slot.pair)"
                 $Candidates = @("out/$Prefix-launch.jsonl.stderr", "out/$Prefix-launch.jsonl.exception.txt", "trials/$Prefix/out/error.json", "trials/$Prefix/out/run.json")
+                foreach ($StageName in @('init', 'requirements', 'build', 'judge')) { $Candidates += "trials/$Prefix/out/$StageName-stdout.jsonl.stderr" }
                 $Slot['evidence'] = @($Candidates | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf })
             }
             $Series.report | ConvertTo-Json -Depth 60 | Set-Content -LiteralPath (Join-Path $Out 'report.json') -Encoding utf8NoBOM
@@ -162,6 +163,9 @@ if ($MyInvocation.InvocationName -ne '.') {
                 foreach ($Slot in $FailedSlots) {
                     $Lines += @('', "Failed: $($Slot.arm) pair $($Slot.pair); category: $($Slot.reason).")
                     if ($Slot.ContainsKey('childExitCode')) { $Lines += "Child exit: $($Slot.childExitCode); stop cause: $($Slot.stopCause)." }
+                    if ($Slot.ContainsKey('failedStages')) {
+                        foreach ($FailedStage in $Slot.failedStages) { $Lines += "Stage: $($FailedStage.name); exit: $($FailedStage.exitCode); stop cause: $($FailedStage.stopCause)." }
+                    }
                     foreach ($Evidence in $Slot.evidence) { $Lines += "* $Evidence" }
                     if (-not $Slot.evidence.Count) { $Lines += 'No child evidence was written; inspect local launcher errors. No passing outcome was recorded.' }
                 }
@@ -173,6 +177,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             foreach ($Slot in $FailedSlots) {
                 Write-Host "Failed $($Slot.arm) pair $($Slot.pair): $($Slot.reason)"
                 if ($Slot.ContainsKey('childExitCode')) { Write-Host "Child exit: $($Slot.childExitCode); stop cause: $($Slot.stopCause)" }
+                if ($Slot.ContainsKey('failedStages')) {
+                    foreach ($FailedStage in $Slot.failedStages) { Write-Host "Stage: $($FailedStage.name); exit: $($FailedStage.exitCode); stop cause: $($FailedStage.stopCause)" }
+                }
                 foreach ($Evidence in $Slot.evidence) { Write-Host "Diagnostic: $(Join-Path $TrialRoot $Evidence)" }
             }
             exit $Series.exitCode
@@ -227,12 +234,12 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Watch = [Diagnostics.Stopwatch]::StartNew()
         foreach ($Stage in $Prompts.Keys) {
             $UsagePath = Join-Path $Out "$Stage-usage.json"
-            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', ($MaxCredits / 4).ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--no-ask-user', '--disable-builtin-mcps', '--trust-folder', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars', 'GH_TOKEN', 'GITHUB_TOKEN', 'COPILOT_GITHUB_TOKEN')
+            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', ($MaxCredits / 4).ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
             foreach ($Server in $DisabledServers) { $CliArgs += @('--disable-mcp-server', $Server) }
             foreach ($Denied in @('shell(git push)', 'shell(gh)', 'shell(az)', 'shell(curl)', 'shell(wget)', 'shell(Invoke-WebRequest)', 'shell(Invoke-RestMethod)', 'shell(Start-Process)')) { $CliArgs += @('--deny-tool', $Denied) }
             $Executable = $CliPath
             if ($CliPath.EndsWith('.ps1')) { $Executable = (Get-Command pwsh).Source; $CliArgs = @('-NoProfile', '-File', $CliPath) + $CliArgs }
-            $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $CliArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-stdout.jsonl") -TimeoutSeconds ([Math]::Max(1, [Math]::Min(900, 2700 - $Watch.Elapsed.TotalSeconds))) -EventsPath $SessionEvents -StartLine $StartLine -MaxRequests 96
+            $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $CliArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-stdout.jsonl") -TimeoutSeconds ([Math]::Max(1, [Math]::Min(900, 2700 - $Watch.Elapsed.TotalSeconds))) -EventsPath $SessionEvents -StartLine $StartLine -MaxRequests 96 -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
             $PreviousMetrics = $Metrics
             $Metrics = $null
             if (Test-Path -LiteralPath $SessionEvents) {

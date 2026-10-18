@@ -62,7 +62,16 @@ function Confirm-WizardAction {
     #>
     [CmdletBinding()]
     param([string]$Question)
-    (Read-WizardText -Question "$Question (yes/no)" -Default 'no') -ceq 'yes'
+    while ($true) {
+        $Answer = Read-WizardText -Question "$Question (yes/no; y/n accepted)" -Default 'no'
+        switch ($Answer.Trim().ToLowerInvariant()) {
+            'yes' { return $true }
+            'y' { return $true }
+            'no' { return $false }
+            'n' { return $false }
+            default { Write-Host 'Please enter yes/y or no/n, or q to cancel. Blank means no.' }
+        }
+    }
 }
 
 function Get-WizardMode {

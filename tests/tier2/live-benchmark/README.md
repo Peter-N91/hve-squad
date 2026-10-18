@@ -143,6 +143,9 @@ Benchmark reports are under `control/out/` and `comparison/out/`. Exit codes:
 `0` all selected stages passed; `1` setup/launch error; `2` failed checks/benchmark;
 `3` cancelled or declined consent. Type `q` at a wizard input to cancel; blank
 confirmations mean no. Failed evidence remains available for repair.
+Confirmation prompts accept `yes`/`y` and `no`/`n`, ignoring case and surrounding
+whitespace. Other text displays guidance and repeats the question without
+authorizing an action or terminating the wizard. Blank remains no; `q` cancels.
 
 Wizard tests mock installation, login, preparation and model-backed commands.
 Actual native setup and live provider enforcement remain operator-run validation;
@@ -313,6 +316,24 @@ Some files may not exist after an early preflight failure; the new report lists
 only existing paths. Raw stderr/exception files stay local and may contain
 sensitive content: review/redact before sharing. Portable reports contain paths,
 categories and status, not arbitrary exception messages or raw CLI output.
+
+If `run.json` contains only a failed `init` stage with no metrics, inspect
+`trials/baseline-1/out/init-stdout.jsonl.stderr` first. A CLI argument/startup error
+occurs before independent functional, state/history or document judging checks;
+their missing results do not identify the startup cause. New reports list the
+failed stage's exit/stop status and existing stage stderr paths directly.
+
+CLI prompts are passed as one argv element, not as a shell-joined command. Secret
+variable names use one canonical comma-separated `--secret-env-vars=...` option.
+The CLI forbids combining one-shot `--trust-folder` with explicit `--session-id`,
+so repository hooks are opted in through the child-only
+`GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS=true` environment setting instead. This
+does not persist trust, enable all path/URL permissions, or change global settings.
+The offline suite verifies the complete init argv using a non-model fake CLI.
+
+Wizard unit tests intentionally exercise failed/cancelled setup and suppress
+their simulated console messages. Only the Pester aggregate failure count decides
+whether the offline test stage passed. Actual live stage diagnostics remain visible.
 
 On Linux, deployed agents live under the hidden `.github/agents` directory. The
 launcher checks that directory explicitly; a recursive install-root scan without

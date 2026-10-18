@@ -5,6 +5,7 @@
 
 BeforeAll {
     . (Join-Path $PSScriptRoot 'Start-EfficiencyWizard.ps1')
+    Mock Write-Host {}
     function New-WizardTestConfig {
         @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 10.0; TotalCredits = 60.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = '' }
     }
@@ -19,6 +20,42 @@ Describe 'Wizard decisions and guards' -Tag 'Unit' {
     It 'does not interpret blank confirmation as consent' {
         Mock Read-Host { '' }
         Confirm-WizardAction 'Install?' | Should -BeFalse
+    }
+    It 'accepts confirmation <ConfirmationInput> as <ExpectedConsent>' -ForEach @(
+        @{ ConfirmationInput = 'yes'; ExpectedConsent = $true },
+        @{ ConfirmationInput = 'YES'; ExpectedConsent = $true },
+        @{ ConfirmationInput = 'Yes'; ExpectedConsent = $true },
+        @{ ConfirmationInput = 'y'; ExpectedConsent = $true },
+        @{ ConfirmationInput = ' Y '; ExpectedConsent = $true },
+        @{ ConfirmationInput = 'no'; ExpectedConsent = $false },
+        @{ ConfirmationInput = 'NO'; ExpectedConsent = $false },
+        @{ ConfirmationInput = 'No'; ExpectedConsent = $false },
+        @{ ConfirmationInput = 'n'; ExpectedConsent = $false },
+        @{ ConfirmationInput = ' N '; ExpectedConsent = $false }
+    ) {
+        Mock Read-Host { $ConfirmationInput }
+        Confirm-WizardAction 'Continue?' | Should -Be $ExpectedConsent
+        Should -Invoke Read-Host -Times 1 -Exactly
+    }
+    It 'reprompts for typos instead of treating them as a decline or consent' {
+        $script:ConfirmationAnswers = [Collections.Generic.Queue[string]]::new()
+        foreach ($Answer in @('maybe', 'yse', 'YeS')) { $script:ConfirmationAnswers.Enqueue($Answer) }
+        Mock Read-Host { $script:ConfirmationAnswers.Dequeue() }
+        Confirm-WizardAction 'Continue?' | Should -BeTrue
+        Should -Invoke Read-Host -Times 3 -Exactly
+    }
+    It 'keeps reprompting after repeated invalid text and preserves an explicit no' {
+        $script:ConfirmationAnswers = [Collections.Generic.Queue[string]]::new()
+        foreach ($Answer in @('yes please', 'true', '1', 'yess', 'No')) { $script:ConfirmationAnswers.Enqueue($Answer) }
+        Mock Read-Host { $script:ConfirmationAnswers.Dequeue() }
+        Confirm-WizardAction 'Spend credits?' | Should -BeFalse
+        Should -Invoke Read-Host -Times 5 -Exactly
+    }
+    It 'allows cancellation after an invalid answer' {
+        $script:ConfirmationAnswers = [Collections.Generic.Queue[string]]::new()
+        foreach ($Answer in @('typo', 'q')) { $script:ConfirmationAnswers.Enqueue($Answer) }
+        Mock Read-Host { $script:ConfirmationAnswers.Dequeue() }
+        { Confirm-WizardAction 'Continue?' } | Should -Throw '*cancelled*'
     }
     It 'cancels explicitly before work is launched' {
         Mock Read-Host { 'q' }

@@ -196,7 +196,8 @@ function Invoke-EfficiencyProcess {
         [string]$EventsPath = '',
         [int]$MaxRequests = 100,
         [int]$StartLine = 0,
-        [AllowEmptyString()][string]$InputText
+        [AllowEmptyString()][string]$InputText,
+        [hashtable]$EnvironmentVariables = @{}
     )
     $Info = [Diagnostics.ProcessStartInfo]::new()
     $Info.FileName = $FilePath; $Info.WorkingDirectory = $WorkingDirectory
@@ -205,6 +206,7 @@ function Invoke-EfficiencyProcess {
     if ($Info.RedirectStandardInput) { $Info.StandardInputEncoding = [Text.UTF8Encoding]::new($false) }
     foreach ($Argument in $Arguments) { $Info.ArgumentList.Add($Argument) }
     foreach ($Name in @('COPILOT_AGENT', 'COPILOT_DEBUG_NONCE', 'COPILOT_ENTRA_AUTH_AUD')) { $Info.Environment.Remove($Name) | Out-Null }
+    foreach ($Name in $EnvironmentVariables.Keys) { $Info.Environment[$Name] = [string]$EnvironmentVariables[$Name] }
     $Info.Environment['GIT_TERMINAL_PROMPT'] = '0'
     $Process = [Diagnostics.Process]::new(); $Process.StartInfo = $Info
     $Watch = [Diagnostics.Stopwatch]::StartNew()
@@ -657,6 +659,10 @@ function Invoke-EfficiencySeries {
             if ($Slot.status -ne 'completed') {
                 $Slot['reason'] = 'run-failed-independent-checks'
                 $Slot['checks'] = @{ completed = [bool]$Run['completed']; functional = ($Run['acceptance'] -and [bool]$Run['acceptance']['passed']); stateHistory = ($Run['workflow'] -and [bool]$Run['workflow']['passed']); telemetry = ($Run['metrics'] -and [bool]$Run['metrics']['complete']); judge = ($Run['judge'] -and [bool]$Run['judge']['valid']) }
+                $Slot['failedStages'] = @($Run['stages'] | Where-Object { -not $_['passed'] -and $_['name'] -in @('init', 'requirements', 'build') } | ForEach-Object {
+                    $Cause = [string]$_['process']['stopCause']
+                    @{ name = $_['name']; exitCode = [int]$_['process']['exitCode']; stopCause = if ($Cause -in @('none', 'timeout', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' } }
+                })
                 $Failed = $true
             }
         }
