@@ -33,7 +33,10 @@ if ($LASTEXITCODE -ne 0) {
 if ($PesterPath) { Import-Module $PesterPath -Force } else { Import-Module Pester -MinimumVersion 5.0 -Force }
 
 $config = New-PesterConfiguration
-$config.Run.Container = New-PesterContainer -Path (Join-Path $PSScriptRoot 'LiveBenchmark.Tests.ps1')
+$config.Run.Container = New-PesterContainer -Path @(
+    (Join-Path $PSScriptRoot 'LiveBenchmark.Tests.ps1'),
+    (Join-Path $PSScriptRoot 'EfficiencyBenchmark.Tests.ps1')
+)
 $config.Run.PassThru = $true
 $config.Output.Verbosity = $Output
 
