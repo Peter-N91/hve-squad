@@ -726,12 +726,39 @@ function Resolve-RoleForAgentLocal {
         [AllowEmptyString()][string]$MemberName = '',
         # Not Mandatory -- see Resolve-RateForBlockLocal for why an empty
         # collection argument must not carry [Parameter(Mandatory)].
-        [System.Collections.Generic.List[pscustomobject]]$Roster
+        [System.Collections.Generic.List[pscustomobject]]$Roster,
+        [AllowEmptyString()][string]$ExternalProvenance = ''
     )
 
+    $member = ([string]$MemberName).Trim()
     $matches = [System.Collections.Generic.List[pscustomobject]]::new()
     for ($i = 0; $i -lt $Roster.Count; $i++) {
         if ($AgentName -in $Roster[$i].AgentNames) { $matches.Add([pscustomobject]@{ Index = $i; Row = $Roster[$i] }) }
+    }
+
+    $provMatch = [regex]::Match($ExternalProvenance, '^(?i)connector=[^;]+;\s*binding=(?:legacy-1\.0|none\s*\(legacy-1\.0\));\s*endpoint=agent;\s*mode=replace;\s*target=role:(?<role>[a-z0-9-]+)(?:/(?<targetMember>[^\r\n;]+))?\s*$')
+    if ($AgentName -eq 'Squad Connector' -and $provMatch.Success) {
+        $legacyRole = $provMatch.Groups['role'].Value.ToLowerInvariant()
+        $legacyTargetMember = if ($provMatch.Groups['targetMember'].Success) { ([string]$provMatch.Groups['targetMember'].Value).Trim() } else { '' }
+        $directMatches = @(if ($member) { $matches | Where-Object { ([string]$_.Row.MemberName).Trim() -ceq $member } } else { $matches })
+        if ($directMatches.Count -eq 0) {
+            for ($i = 0; $i -lt $Roster.Count; $i++) {
+                $r = $Roster[$i]
+                if (([string]$r.Role).Trim().ToLowerInvariant() -ne $legacyRole) { continue }
+                if ($legacyTargetMember -and ([string]$r.MemberName).Trim() -cne $legacyTargetMember) { continue }
+                $resolvedMember = if ($member) { $member } else { ([string]$r.MemberName).Trim() }
+                $aggregateKey = if ($resolvedMember) { "$AgentName`n$resolvedMember" } else { $AgentName }
+                return [pscustomobject]@{
+                    Index              = $i
+                    Role               = $r.Role
+                    ClassificationRole = if ($r.AlignedRole) { $r.AlignedRole } else { $r.Role }
+                    MemberName         = $resolvedMember
+                    Tier               = $r.Tier
+                    AggregateKey       = $aggregateKey
+                    Status             = 'ok'
+                }
+            }
+        }
     }
 
     if ($matches.Count -eq 0) {
@@ -746,7 +773,6 @@ function Resolve-RoleForAgentLocal {
         }
     }
 
-    $member = ([string]$MemberName).Trim()
     if ($member) {
         $matches = @($matches | Where-Object { ([string]$_.Row.MemberName).Trim() -ceq $member })
         if ($matches.Count -eq 0) {
@@ -2246,18 +2272,19 @@ function Get-HistoryEntryRecordsLocal {
         $deliverable = (& $field 'Deliverable').Replace('`', '').Trim().Replace('\', '/').ToLowerInvariant()
         if ($deliverable -in @('none', 'n/a', '-', [string][char]0x2014)) { $deliverable = '' }
         [pscustomobject]@{
-            Agent       = $AgentName
-            Start       = $start
-            End         = $end
-            Timestamp   = if ($stamp -match '^\d{4}-\d\d-\d\dT') { $stamp } else { '' }
-            Turn        = (& $field 'Turn')
-            Workstream  = (& $field 'Workstream').ToLowerInvariant()
-            MemberName  = (& $field 'Member Name')
-            Deliverable = $deliverable
-            Request     = (& $field 'Request')
-            Outcome     = (& $field 'Outcome')
-            Cost        = 0.0
-            Seq         = 0
+            Agent              = $AgentName
+            Start              = $start
+            End                = $end
+            Timestamp          = if ($stamp -match '^\d{4}-\d\d-\d\dT') { $stamp } else { '' }
+            Turn               = (& $field 'Turn')
+            Workstream         = (& $field 'Workstream').ToLowerInvariant()
+            MemberName         = (& $field 'Member Name')
+            ExternalProvenance = (& $field 'External provenance')
+            Deliverable        = $deliverable
+            Request            = (& $field 'Request')
+            Outcome            = (& $field 'Outcome')
+            Cost               = 0.0
+            Seq                = 0
         }
     }
 }
@@ -2285,7 +2312,8 @@ function Get-UnitEconomicsLocal {
 
     $seen = @{}
     foreach ($e in $sorted) {
-        $resolvedRole = Resolve-RoleForAgentLocal -AgentName $e.Agent -MemberName $e.MemberName -Roster $Roster
+        $extProv = if ($e.PSObject.Properties['ExternalProvenance']) { [string]$e.ExternalProvenance } else { '' }
+        $resolvedRole = Resolve-RoleForAgentLocal -AgentName $e.Agent -MemberName $e.MemberName -Roster $Roster -ExternalProvenance $extProv
         $role = $resolvedRole.ClassificationRole
         $e | Add-Member -NotePropertyName IsReview -NotePropertyValue ($role.ToLowerInvariant() -in $script:UnitEconomicsReviewRoles) -Force
         $isRework = $false
@@ -2649,7 +2677,8 @@ foreach ($file in $historyFiles) {
 
         $entryForBlock = @($fileEntries | Where-Object { $block.Offset -ge $_.Start -and $block.Offset -lt $_.End } | Select-Object -First 1)
         $memberForBlock = if ($entryForBlock) { [string]$entryForBlock.MemberName } else { '' }
-        $resolved = Resolve-RoleForAgentLocal -AgentName $agentName -MemberName $memberForBlock -Roster $roster
+        $extProvForBlock = if ($entryForBlock -and $entryForBlock.PSObject.Properties['ExternalProvenance']) { [string]$entryForBlock.ExternalProvenance } else { '' }
+        $resolved = Resolve-RoleForAgentLocal -AgentName $agentName -MemberName $memberForBlock -Roster $roster -ExternalProvenance $extProvForBlock
         if ($resolved.Status -in @('ambiguous-missing-member', 'ambiguous-member', 'member-not-found', 'connector-missing-member')) {
             $problem = "history/$($file.Name) consumption block $($block.Ordinal) cannot be attributed for agent '$agentName'$(if ($memberForBlock) { ", member '$memberForBlock'" } else { '' }) (status: $($resolved.Status))."
             $warnings.Add("WARN: $problem")

@@ -876,8 +876,12 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           trailing dots or spaces.
         </li>
         <li>
-          <strong>No auto-overwrite:</strong> A resolved artifact path that already exists on disk is
-          a validation failure, not a file to silently overwrite.
+          <strong>No auto-overwrite; in-place validation:</strong> Your producer writes each new
+          task-owned artifact directly under <code>deliverableRoot</code> (or its declared
+          <code>allowedOutputs[].deliverableRoot</code> slot) before publishing
+          <code>&lt;taskId&gt;.result.json</code>. The shim snapshots pre-existing paths before
+          issuing the request and rejects any declared artifact path that already existed before the
+          task, duplicates another path in the same result, or is missing on disk when validated.
         </li>
       </ul>
 

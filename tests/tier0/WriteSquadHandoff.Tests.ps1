@@ -1195,6 +1195,60 @@ Describe 'Write-SquadHandoff.ps1 refuses what it cannot admit or verify' {
             $history | Should -Match ([regex]::Escape('* External-unmetered: connector=acme-delivery-orchestrator-v3'))
         }
 
+        It 'persists a binding-free legacy 1.0 connector exchange through history and ledger verification' {
+            $root = New-Root
+            Add-Content -LiteralPath (Join-Path $root 'team.md') -Value '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/ |'
+            $examples = Join-Path $PSScriptRoot '..\..\docs\templates\connector-example'
+            $manifest = Get-Content -LiteralPath (Join-Path $examples 'manifest.json') -Raw | ConvertFrom-Json
+            $request = Get-Content -LiteralPath (Join-Path $examples 'delegation-request.sample.json') -Raw | ConvertFrom-Json
+            $resultEnvelope = Get-Content -LiteralPath (Join-Path $examples 'result-envelope.sample.json') -Raw | ConvertFrom-Json
+
+            $request.deliverableRoot = Join-Path $root 'changes'
+            New-Item -ItemType Directory -Path $request.deliverableRoot -Force | Out-Null
+            $deliveredFile = Join-Path $request.deliverableRoot $resultEnvelope.artifacts[0].path
+            New-Item -ItemType Directory -Path (Split-Path -Parent $deliveredFile) -Force | Out-Null
+            Set-Content -LiteralPath $deliveredFile -Value 'Validated legacy 1.0 connector implementation report.' -Encoding utf8NoBOM
+
+            $exchangeInput = @{
+                manifest      = $manifest
+                request       = $request
+                result        = $resultEnvelope
+                workspaceRoot = $root
+            } | ConvertTo-Json -Depth 32 -Compress
+            $exchange = & pwsh -NoProfile -File $script:Resolver -Operation validate-exchange -InputJson $exchangeInput | ConvertFrom-Json
+            $exchange.Status | Should -Be 'ok' -Because ($exchange | ConvertTo-Json -Depth 10)
+            $exchange.TrustedProvenance.bindingId | Should -Be 'legacy-1.0'
+
+            $payload = New-Payload
+            $payload.historyRecords[0].agent = 'Squad Connector'
+            $payload.historyRecords[0].memberName = 'Partner Developer'
+            $payload.historyRecords[0].request = $request.task
+            $payload.historyRecords[0].deliverable = "changes/$($resultEnvelope.artifacts[0].path)"
+            $payload.historyRecords[0].outcome = 'Completed legacy 1.0 connector exchange.'
+            $payload.historyRecords[0].externalProvenance = [ordered]@{
+                connectorId  = [string]$exchange.TrustedProvenance.connectorId
+                bindingId    = [string]$exchange.TrustedProvenance.bindingId
+                endpointKind = [string]$exchange.TrustedProvenance.endpointKind
+                roleMode     = [string]$exchange.TrustedProvenance.roleMode
+                targetKind   = [string]$exchange.TrustedProvenance.targetKind
+                target       = 'role:developer/Gamma'
+                verification = [string]$exchange.TrustedProvenance.verification
+                metering     = [string]$exchange.TrustedProvenance.metering
+            }
+            $payload.stateAdvance = [ordered]@{ activeRoles = @('developer') }
+            $payload.timestamp = [DateTime]::UtcNow.ToString('o')
+
+            $written = Invoke-Writer -Root $root -Payload $payload
+            $written.ExitCode | Should -Be 0 -Because $written.Output
+            $history = Get-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Raw
+            $history | Should -Match '\* Member Name: Partner Developer'
+            $history | Should -Match ([regex]::Escape('* External provenance: connector=acme-coordinator-v2; binding=legacy-1.0; endpoint=agent; mode=replace; target=role:developer/Gamma'))
+            $history | Should -Match ([regex]::Escape('* Verification: external, unverified'))
+            $history | Should -Match ([regex]::Escape('* External-unmetered: connector=acme-coordinator-v2'))
+            $check = Invoke-LedgerCheck -Root $root -Counts '{"Squad Connector":1,"Squad Scribe":1}'
+            $check.ExitCode | Should -Be 0 -Because $check.Output
+        }
+
         It 'fails closed when connector Member Name is reused across additive and replacement bindings' {
             $root = New-ConnectorRoot
             Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'

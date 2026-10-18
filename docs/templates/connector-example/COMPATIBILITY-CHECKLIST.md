@@ -24,9 +24,11 @@ and this one is a convenience copy.
 * [ ] In 1.1 mode, echoes and binds trusted identity fields correctly:
       `connectorId`, `bindingId`, `taskId`, and only declared `outputId`
       values from `allowedOutputs`.
-* [ ] Places every artifact path strictly under the `deliverableRoot` named
-      in the matching delegation-request, as one of `md`, `json`, or `txt`,
-      within the numeric caps in *Envelope Artifact-Path Validation Rules*.
+* [ ] Writes each task-owned artifact directly under the `deliverableRoot` (or
+      declared `allowedOutputs[].deliverableRoot` slot) named in the matching
+      delegation-request before publishing `<taskId>.result.json`, as one of
+      `md`, `json`, or `txt`, within the numeric caps in *Envelope Artifact-Path
+      Validation Rules*, without overwriting any pre-existing file.
 * [ ] Honors `deadline` and `retryCap`; a coordinator that cannot finish in
       time writes `status: "failed"` or lets the request time out to
       `unreachable` rather than writing a late, unsolicited result.

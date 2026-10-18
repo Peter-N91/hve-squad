@@ -60,15 +60,15 @@ Everything below this line changes turn to turn and is appended after the stable
 payloadType: <decision|history|initialization|memory|Council Verdict|autonomous-loop summary|autopilot-run summary|Intake Readiness Verdict|promotion|expansion|Discovery Verdict>
 squadRoot: <resolved path>
 roster: <initialization/roster refresh only: every confirmed team.md row, cells verbatim; the Scribe never derives an agent name>
-connectorBindings: <confirmed binding rows; omit on refresh to preserve existing rows>
-customRoutingRows: <confirmed routing rows/overrides; omit on refresh to preserve existing rows>
+connectorBindings: <confirmed binding rows; omit on refresh to keep existing>
+customRoutingRows: <confirmed routing rows; omit on refresh to keep existing>
 runId: <id>
 turn: <n>
 stage: <stage name, autopilot/autonomous runs only>
 timestamp: <ISO or the entry-heading format in use>
 historyRecords:
   - agent: <name: frontmatter value, verbatim>
-    memberName: <binding member identity for Squad Connector; omit when not needed>
+    memberName: <binding member identity for Squad Connector; omit otherwise>
     externalProvenance: <closed object per entry-schemas.md; Squad Connector only>
     request: <scoped request>
     deliverable: <path> (<size or word count>)

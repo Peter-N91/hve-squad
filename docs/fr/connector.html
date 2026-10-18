@@ -902,9 +902,14 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           espaces finaux.
         </li>
         <li>
-          <strong>Pas de remplacement automatique :</strong> Un chemin d'artefact résolu qui
-          existe déjà sur le disque est une défaillance de validation, pas un fichier à
-          silencieusement remplacer.
+          <strong>Pas de remplacement automatique ; validation sur place :</strong> Votre producteur
+          écrit chaque nouvel artefact propre à la tâche directement sous
+          <code>deliverableRoot</code> (ou son emplacement
+          <code>allowedOutputs[].deliverableRoot</code> déclaré) avant de publier
+          <code>&lt;taskId&gt;.result.json</code>. Le shim photographie les chemins préexistants
+          avant d'émettre la demande et rejette tout chemin d'artefact déclaré qui existait déjà
+          avant la tâche, duplique un autre chemin du même résultat ou est absent sur le disque lors
+          de la validation.
         </li>
       </ul>
 

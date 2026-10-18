@@ -176,7 +176,7 @@ including `developer`, without changing HVE's coordination or persistence.
 
 ## 9) Trusted Provenance
 
-Trusted provenance is derived from validated binding + manifest, not from envelope narrative.
+Trusted provenance is derived from validated binding + manifest (or, for a legacy `1.0` exchange with no `Connector Bindings` row, from the validated `1.0` manifest + request with `bindingId: legacy-1.0`, `endpointKind: agent`, `roleMode: replace`, `targetKind: role`, and `target: role:<role>` or `role:<role>/<member-name>`), never from envelope narrative.
 
 History payload **must** carry closed `externalProvenance` for every completed `Squad Connector` record, and it is rejected for non-connector records:
 

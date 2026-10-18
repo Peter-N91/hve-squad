@@ -93,7 +93,7 @@ Four statuses, and only four:
 | Status | Meaning | Escalation |
 |---|---|---|
 | `awaiting` | The delegation-request has been written (or re-confirmed) and no result envelope exists yet at `dropPath`, and the deadline has not passed. | Reported to the coordinator as a normal, expected status — not a failure. Proof of Dispatch is **not** satisfied: no artifact exists yet, so the Scribe writes no history entry for this turn. |
-| `completed` | A result envelope exists, validated in full against every rule below, and its artifact has been placed at the dispatching role's Deliverable Root. | Reported `external, unverified` until a human confirms it — see *Proof-of-Dispatch Self-Attestation Guard*. |
+| `completed` | A result envelope exists, validated in full against every rule below, and its task-owned artifact(s) have been validated in place at the dispatching role's Deliverable Root without colliding with any pre-existing file. | Reported `external, unverified` until a human confirms it — see *Proof-of-Dispatch Self-Attestation Guard*. |
 | `failed` | The consumer's coordinator reported it could not complete the task, or wrote back an envelope that fails validation (malformed, unsolicited, replayed, oversized, or carrying a disallowed path or file type). | Escalated exactly like any other absent-role failure: name the role, the connector, and what failed. Never retried silently past `retryCap`. |
 | `unreachable` | No manifest exists for the named connector, the manifest itself fails validation, or no result envelope has arrived by the deadline. | Escalated exactly as the roster escalates an absent external agent (`.github/instructions/squad/squad-roster.instructions.md`, *Resolving a Role to an Agent*): never a silent no-op, never an inline substitute performed by the shim or any other role. |
 
@@ -114,7 +114,7 @@ Every artifact path in a result envelope is validated, in this order, before the
    * 5 levels maximum nesting depth under `deliverableRoot`.
    * 10,000 characters maximum for any single string value anywhere in the envelope (including `narrative`).
 6. **Reject reserved Windows device names** (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`) in any path component, and reject any component with trailing dots or trailing spaces.
-7. **Never auto-overwrite.** A resolved artifact path that already exists on disk is a validation failure to escalate, not a file to overwrite silently.
+7. **Never auto-overwrite; validate task-owned deliverables in place.** Because the result envelope carries relative paths and types rather than inline file content, the consumer's producer writes each new artifact directly under `deliverableRoot` (or its declared `allowedOutputs[].deliverableRoot` slot in `1.1` orchestrator mode) before publishing `<taskId>.result.json`. The shim snapshots pre-existing paths under `deliverableRoot` before issuing the delegation-request (`preExistingPaths`) and rejects any declared artifact path that already existed before the task (`existing-file-collision`), duplicates another path in the same result (`duplicate-artifact-path`), or is absent on disk when a `completed` result is validated (`missing-delivered-artifact`). Pre-existing files are never overwritten or accepted as task output.
 
 ## Request Binding, Replay Protection, and Manifest Hygiene
 
@@ -153,7 +153,7 @@ A consumer's coordinator is compatible with this contract when it:
 * [ ] Authors one manifest per connector, validating clean against the closed *Manifest Schema* above (no extra fields, `transport: file`, no secret-shaped content).
 * [ ] Watches or polls the manifest's `dropPath` for a delegation-request, by whatever means it chooses.
 * [ ] Writes back exactly one result envelope per `taskId`, never reusing a `taskId` and never writing to a `dropPath` it was not given.
-* [ ] Places every artifact path strictly under the `deliverableRoot` named in the matching delegation-request, as one of `md`, `json`, or `txt`, within the numeric caps in *Envelope Artifact-Path Validation Rules*.
+* [ ] Writes each task-owned artifact directly under the `deliverableRoot` (or declared `allowedOutputs[].deliverableRoot` slot) named in the matching delegation-request before publishing `<taskId>.result.json`, as one of `md`, `json`, or `txt`, within the numeric caps in *Envelope Artifact-Path Validation Rules*, without overwriting any pre-existing file.
 * [ ] For schema `1.1`: echoes `bindingId` correctly, returns only declared `outputId` values from `allowedOutputs`, and returns orchestrator fan-out through one bounded envelope `outputs[]` set.
 * [ ] Honors `deadline` and `retryCap`; a coordinator that cannot finish in time writes `status: "failed"` or lets the request time out to `unreachable` rather than writing a late, unsolicited result.
 * [ ] Never embeds credentials, tokens, or other secret-shaped content in the manifest, request, or result.

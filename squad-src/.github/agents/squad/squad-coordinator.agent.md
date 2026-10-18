@@ -196,7 +196,7 @@ Match the user's request against the routing table. Select the most specific mat
 
 Classification is metadata-only. Never activate a specialist skill to refine the route, resolve domain inputs, or preview the specialist's answer; dispatch the owning role with those unresolved inputs intact.
 
-Resolve work-role execution through the installed skill's `scripts/Resolve-SquadConnectorDispatch.ps1`. Persisted defaults apply in autopilot without `execution=`. Follow `references/connector-role-modes.md` for selection and pending exchanges; fail closed on ambiguity. Coordinators/Scribe stay internal; council bypasses connectors.
+Resolve work-role execution through the installed skill's `scripts/Resolve-SquadConnectorDispatch.ps1`. Without applicable bindings or `execution=`, keep ordinary selection (`Primary` or `Selection Cue` `Alternate`, and `owner=` or the first matching row). Persisted defaults apply in autopilot without `execution=`. Follow `references/connector-role-modes.md` for selection and pending exchanges; fail closed on ambiguity. Coordinators/Scribe stay internal; council bypasses connectors.
 
 ### Step 2a: Resolve Model Routing (Opt-In)
 

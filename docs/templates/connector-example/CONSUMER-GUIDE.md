@@ -123,7 +123,7 @@ Get-ChildItem -Path '.\connectors\*.json' | ForEach-Object {
             $agentFile = $EndpointMap[$req.connectorId]
             # 1. Invoke your agent/CLI ($agentFile) with $req.task and the read-only sources it names.
             #    The generated Markdown must cite the actual project sources (generic placeholders are rejected).
-            # 2. Save the Markdown report(s) in $dropDir and write $resultPath matching the 1.1 Result Envelope schema.
+            # 2. Save the new task-owned Markdown report(s) under $req.deliverableRoot (or declared allowedOutputs[].deliverableRoot) without overwriting pre-existing files, then write $resultPath in $dropDir matching the 1.1 Result Envelope schema.
         }
     }
 }

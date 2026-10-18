@@ -592,7 +592,14 @@ function Resolve-SquadConnectorExecution {
     }
 
     if ($rows.Count -gt 1) {
-        if ($Unattended) {
+        $hasConnectorCandidate = @($rows | Where-Object { ([string]$_.Agent).Trim() -ceq 'Squad Connector' }).Count -gt 0
+        $hasApplicableBinding = @($rows | ForEach-Object { Get-ApplicableBindingsForMemberRowLocal -Row $_ -Bindings @($roster.Bindings) }).Count -gt 0
+        if (-not $Execution -and -not $hasConnectorCandidate -and -not $hasApplicableBinding) {
+            # CONN-24: when neither applicable connector bindings nor an execution override exists,
+            # preserve ordinary member selection (first matching internal row in document order).
+            $rows = @($rows[0])
+        }
+        elseif ($Unattended) {
             return [pscustomobject]@{
                 Status  = 'error'
                 Reason  = 'unattended-member-ambiguity'
@@ -600,11 +607,13 @@ function Resolve-SquadConnectorExecution {
                 Members = @($rows | ForEach-Object { $_.MemberName })
             }
         }
-        return [pscustomobject]@{
-            Status  = 'clarify'
-            Reason  = 'interactive-member-ambiguity'
-            Role    = $roleKey
-            Members = @($rows | ForEach-Object { $_.MemberName })
+        else {
+            return [pscustomobject]@{
+                Status  = 'clarify'
+                Reason  = 'interactive-member-ambiguity'
+                Role    = $roleKey
+                Members = @($rows | ForEach-Object { $_.MemberName })
+            }
         }
     }
 
@@ -1033,12 +1042,36 @@ function Test-SquadConnectorResultShape {
     }
 }
 
+function Test-ConnectorReparsePointInChainLocal {
+    param(
+        [Parameter(Mandatory)][string]$RootPath,
+        [Parameter(Mandatory)][string]$TargetPath
+    )
+    $rootFull = [System.IO.Path]::GetFullPath($RootPath)
+    $current = [System.IO.Path]::GetFullPath($TargetPath)
+    while ($current -and $current.Length -ge $rootFull.Length) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+            if ($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                return $true
+            }
+        }
+        if ($current.Equals($rootFull, [System.StringComparison]::OrdinalIgnoreCase)) { break }
+        $parent = Split-Path -Path $current -Parent
+        if (-not $parent -or $parent -eq $current) { break }
+        $current = $parent
+    }
+    $false
+}
+
 function Test-SquadConnectorExchange {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Manifest,
         [Parameter(Mandatory)]$Request,
-        [Parameter(Mandatory)]$Result
+        [Parameter(Mandatory)]$Result,
+        [AllowEmptyString()][string]$WorkspaceRoot = '',
+        [AllowEmptyCollection()][string[]]$PreExistingPaths = @()
     )
 
     $issues = [System.Collections.Generic.List[string]]::new()
@@ -1076,10 +1109,18 @@ function Test-SquadConnectorExchange {
         $issues.Add("unsupported-result-status:$resultStatus")
     }
 
+    $declaredArtifactSlots = [System.Collections.Generic.List[pscustomobject]]::new()
     foreach ($artifact in @($Result.artifacts)) {
         $path = if ($null -eq $artifact) { '' } else { [string]$artifact.path }
         $pathIssue = Get-ConnectorArtifactPathIssueLocal -DeliverableRoot ([string]$Request.deliverableRoot) -ArtifactPath $path
         if ($pathIssue) { $issues.Add("result-artifact-path:${pathIssue}:$path") }
+        else {
+            $declaredArtifactSlots.Add([pscustomobject]@{
+                    Root     = [string]$Request.deliverableRoot
+                    Path     = $path
+                    OutputId = ''
+                })
+        }
     }
 
     if ($schemaVersion -eq '1.1') {
@@ -1130,13 +1171,79 @@ function Test-SquadConnectorExchange {
                 $path = if ($null -eq $artifact) { '' } else { [string]$artifact.path }
                 $pathIssue = Get-ConnectorArtifactPathIssueLocal -DeliverableRoot $root -ArtifactPath $path
                 if ($pathIssue) { $issues.Add("declared-output-artifact-path:${outputId}:${pathIssue}:$path") }
+                else {
+                    $declaredArtifactSlots.Add([pscustomobject]@{
+                            Root     = $root
+                            Path     = $path
+                            OutputId = $outputId
+                        })
+                }
             }
         }
     }
 
+    $preExistingKeySet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $requestRootKey = ConvertTo-ConnectorPathKeyLocal -Path ([string]$Request.deliverableRoot)
+    foreach ($pre in @($PreExistingPaths)) {
+        $preKey = ConvertTo-ConnectorPathKeyLocal -Path ([string]$pre)
+        if (-not $preKey) { continue }
+        [void]$preExistingKeySet.Add($preKey)
+        if ($requestRootKey -and -not $preKey.StartsWith("$requestRootKey/", [System.StringComparison]::OrdinalIgnoreCase)) {
+            [void]$preExistingKeySet.Add((ConvertTo-ConnectorPathKeyLocal -Path (Join-Path ([string]$Request.deliverableRoot) ([string]$pre))))
+        }
+    }
+
+    $seenResolvedTargets = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $totalBytes = 0L
+    foreach ($slot in $declaredArtifactSlots) {
+        $resolvedKey = ConvertTo-ConnectorPathKeyLocal -Path (Join-Path $slot.Root $slot.Path)
+        if ($resolvedKey -and -not $seenResolvedTargets.Add($resolvedKey)) {
+            $issues.Add("duplicate-artifact-path:$($slot.Path)")
+        }
+        if ($resolvedKey -and $preExistingKeySet.Contains($resolvedKey)) {
+            $issues.Add("existing-file-collision:$($slot.Path)")
+        }
+        if ($WorkspaceRoot -and $resultStatus -eq 'completed') {
+            $diskRoot = if ([System.IO.Path]::IsPathRooted($slot.Root)) { $slot.Root } else { Join-Path $WorkspaceRoot $slot.Root }
+            $diskPath = Join-Path $diskRoot $slot.Path
+            if (-not (Test-Path -LiteralPath $diskPath -PathType Leaf)) {
+                $issues.Add("missing-delivered-artifact:$($slot.Path)")
+            }
+            else {
+                if (Test-ConnectorReparsePointInChainLocal -RootPath $diskRoot -TargetPath $diskPath) {
+                    $issues.Add("reparse-point-artifact:$($slot.Path)")
+                }
+                $length = (Get-Item -LiteralPath $diskPath -Force).Length
+                if ($length -gt 1048576) {
+                    $issues.Add("oversize-artifact:$($slot.Path)")
+                }
+                $totalBytes += $length
+            }
+        }
+    }
+    if ($totalBytes -gt 5242880) {
+        $issues.Add('oversize-envelope-artifacts')
+    }
+
+    $trustedProvenance = $null
+    if ($issues.Count -eq 0 -and $resultStatus -eq 'completed') {
+        $roleKey = ([string]$Request.role).Trim().ToLowerInvariant()
+        $trustedProvenance = [ordered]@{
+            connectorId  = [string]$Manifest.connectorId
+            bindingId    = if ($schemaVersion -eq '1.1') { [string]$Request.bindingId } else { 'legacy-1.0' }
+            endpointKind = $endpointKind
+            roleMode     = 'replace'
+            targetKind   = 'role'
+            target       = "role:$roleKey"
+            verification = 'external-unverified'
+            metering     = 'external-unmetered'
+        }
+    }
+
     [pscustomobject]@{
-        Status = if ($issues.Count -eq 0) { 'ok' } else { 'error' }
-        Issues = $issues.ToArray()
+        Status            = if ($issues.Count -eq 0) { 'ok' } else { 'error' }
+        Issues            = $issues.ToArray()
+        TrustedProvenance = $trustedProvenance
     }
 }
 
@@ -1183,7 +1290,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Run') {
                 Test-SquadConnectorExchange `
                     -Manifest (Get-ConnectorInputValueLocal -Object $input -Name 'manifest' -Default $null) `
                     -Request (Get-ConnectorInputValueLocal -Object $input -Name 'request' -Default $null) `
-                    -Result (Get-ConnectorInputValueLocal -Object $input -Name 'result' -Default $null)
+                    -Result (Get-ConnectorInputValueLocal -Object $input -Name 'result' -Default $null) `
+                    -WorkspaceRoot ([string](Get-ConnectorInputValueLocal -Object $input -Name 'workspaceRoot' -Default '')) `
+                    -PreExistingPaths @((Get-ConnectorInputValueLocal -Object $input -Name 'preExistingPaths' -Default @()) | ForEach-Object { [string]$_ })
             }
         }
     }

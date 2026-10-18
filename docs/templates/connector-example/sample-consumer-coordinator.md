@@ -114,7 +114,7 @@ while ($true) {
             if (-not (Test-Path -LiteralPath $resultPath)) {
                 $agentCharter = $EndpointMap[$req.connectorId]
                 # 1. Run your agent host with $agentCharter and $req.task (reading the sources named in $req.task).
-                # 2. Write the resulting .md/.json/.txt artifact into $dropDir.
+                # 2. Write the resulting task-owned .md/.json/.txt artifact under $req.deliverableRoot (or declared allowedOutputs[].deliverableRoot) without overwriting pre-existing files.
                 # 3. Write $resultPath echoing taskId, connectorId, bindingId, role, status='completed', and artifacts/outputs.
             }
         }

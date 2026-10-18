@@ -806,17 +806,30 @@ Describe 'resolve-execution process CLI fail-closed guards (F-01/F-02/F-03/F-07)
         }
     }
 
-    It 'returns structured status when optional resolve-execution JSON fields are omitted' {
+    It 'returns structured status when optional resolve-execution JSON fields are omitted and preserves first-row internal selection without connectors' {
         $singleMemberTeam = New-TempTeamFile -Content @'
 | Role | Member Name | Agent Name (Primary) |
 | --- | --- | --- |
 | developer | Gamma | Squad Implementor |
+'@
+        $multiInternalTeam = New-TempTeamFile -Content @'
+| Role | Member Name | Agent Name (Primary) |
+| --- | --- | --- |
+| developer | Gamma | Squad Implementor |
+| developer | Delta | Squad Implementor |
 '@
         $ambiguousTeam = New-TempTeamFile -Content @'
 | Role | Member Name | Agent Name (Primary) |
 | --- | --- | --- |
 | developer | Gamma | Squad Implementor |
 | developer | Delta | Squad Implementor |
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| developer-gamma | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | Partner Gamma |  | developer | connector |
+| developer-delta | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Delta | Partner Delta |  | developer | connector |
 '@
         try {
             $noBinding = Invoke-ResolveExecutionCli -Payload @{
@@ -825,6 +838,27 @@ Describe 'resolve-execution process CLI fail-closed guards (F-01/F-02/F-03/F-07)
             }
             $noBinding.Status | Should -Be 'ok'
             $noBinding.Choice | Should -Be 'original'
+
+            $multiAttended = Invoke-ResolveExecutionCli -Payload @{
+                teamPath = $multiInternalTeam
+                role = 'developer'
+            }
+            $multiAttended.Status | Should -Be 'ok'
+            $multiAttended.Choice | Should -Be 'original'
+            $multiAttended.Reason | Should -Be 'no-applicable-binding'
+            $multiAttended.MemberName | Should -Be 'Gamma'
+            $multiAttended.Agent | Should -Be 'Squad Implementor'
+
+            $multiUnattended = Invoke-ResolveExecutionCli -Payload @{
+                teamPath = $multiInternalTeam
+                role = 'developer'
+                unattended = $true
+            }
+            $multiUnattended.Status | Should -Be 'ok'
+            $multiUnattended.Choice | Should -Be 'original'
+            $multiUnattended.Reason | Should -Be 'no-applicable-binding'
+            $multiUnattended.MemberName | Should -Be 'Gamma'
+            $multiUnattended.Agent | Should -Be 'Squad Implementor'
 
             $attended = Invoke-ResolveExecutionCli -Payload @{
                 teamPath = $ambiguousTeam
@@ -843,6 +877,7 @@ Describe 'resolve-execution process CLI fail-closed guards (F-01/F-02/F-03/F-07)
         }
         finally {
             Remove-Item -LiteralPath $singleMemberTeam -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $multiInternalTeam -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $ambiguousTeam -ErrorAction SilentlyContinue
         }
     }
@@ -1172,6 +1207,71 @@ Describe 'validate-exchange process CLI hardened allowlist and boundary checks (
         $requestOriginal.executionChoice = 'original'
         $choiceExchange = Invoke-DispatchHelperCli -Operation 'validate-exchange' -Payload @{ manifest = $manifest; request = $requestOriginal; result = $resultOriginal }
         @($choiceExchange.Issues) | Should -Contain 'execution-choice-result-mismatch:original'
+    }
+
+    It 'validates task-owned deliverables in place under deliverableRoot while rejecting pre-existing collisions, missing files, and duplicate paths' {
+        $workRoot = Join-Path $TestDrive 'in-place-exchange'
+        $manifest = Get-ExampleJson -Name 'manifest.json'
+        $request = Get-ExampleJson -Name 'delegation-request.sample.json'
+        $result = Get-ExampleJson -Name 'result-envelope.sample.json'
+
+        $deliverableDir = Join-Path $workRoot $request.deliverableRoot
+        New-Item -ItemType Directory -Path $deliverableDir -Force | Out-Null
+        $preExistingRel = 'pre-existing-note.md'
+        Set-Content -LiteralPath (Join-Path $deliverableDir $preExistingRel) -Value 'Pre-existing report before task dispatch.' -Encoding utf8NoBOM
+
+        # Missing task-owned file on disk is rejected when WorkspaceRoot is supplied
+        $missingCheck = Invoke-DispatchHelperCli -Operation 'validate-exchange' -Payload @{
+            manifest         = $manifest
+            request          = $request
+            result           = $result
+            workspaceRoot    = $workRoot
+            preExistingPaths = @($preExistingRel)
+        }
+        $missingCheck.Status | Should -Be 'error'
+        @($missingCheck.Issues) | Should -Contain "missing-delivered-artifact:$($result.artifacts[0].path)"
+
+        # Producer writes task-owned deliverable under deliverableRoot before result publication -> passes in-place validation
+        $deliveredPath = Join-Path $deliverableDir $result.artifacts[0].path
+        New-Item -ItemType Directory -Path (Split-Path -Parent $deliveredPath) -Force | Out-Null
+        Set-Content -LiteralPath $deliveredPath -Value 'Task-owned deliverable written under deliverableRoot.' -Encoding utf8NoBOM
+
+        $validCheck = Invoke-DispatchHelperCli -Operation 'validate-exchange' -Payload @{
+            manifest         = $manifest
+            request          = $request
+            result           = $result
+            workspaceRoot    = $workRoot
+            preExistingPaths = @($preExistingRel)
+        }
+        $validCheck.Status | Should -Be 'ok' -Because ($validCheck | ConvertTo-Json -Depth 10)
+        @($validCheck.Issues) | Should -BeNullOrEmpty
+        $validCheck.TrustedProvenance.bindingId | Should -Be 'legacy-1.0'
+        $validCheck.TrustedProvenance.connectorId | Should -Be $manifest.connectorId
+
+        # Claiming a pre-existing file path is rejected as existing-file-collision
+        $collisionResult = Get-ExampleJson -Name 'result-envelope.sample.json'
+        $collisionResult.artifacts[0].path = $preExistingRel
+        $collisionCheck = Invoke-DispatchHelperCli -Operation 'validate-exchange' -Payload @{
+            manifest         = $manifest
+            request          = $request
+            result           = $collisionResult
+            workspaceRoot    = $workRoot
+            preExistingPaths = @($preExistingRel)
+        }
+        $collisionCheck.Status | Should -Be 'error'
+        @($collisionCheck.Issues) | Should -Contain "existing-file-collision:$preExistingRel"
+
+        # Duplicate artifact path in the same result is rejected
+        $dupResult = Get-ExampleJson -Name 'result-envelope.sample.json'
+        $dupResult.artifacts = @($dupResult.artifacts[0], $dupResult.artifacts[0])
+        $dupCheck = Invoke-DispatchHelperCli -Operation 'validate-exchange' -Payload @{
+            manifest      = $manifest
+            request       = $request
+            result        = $dupResult
+            workspaceRoot = $workRoot
+        }
+        $dupCheck.Status | Should -Be 'error'
+        @($dupCheck.Issues) | Should -Contain "duplicate-artifact-path:$($result.artifacts[0].path)"
     }
 }
 

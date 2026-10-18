@@ -1057,6 +1057,72 @@ function Resolve-RosterIdentityLocal {
             $problems.Add("$Where.memberName is required when agent is 'Squad Connector'.")
             return $null
         }
+        $isLegacy10Provenance = $false
+        if ($null -ne $ExternalProvenance -and $ExternalProvenance.Contains('bindingId')) {
+            $provBindingId = ([string]$ExternalProvenance['bindingId']).Trim()
+            if ($provBindingId -in @('legacy-1.0', 'none (legacy-1.0)')) {
+                $isLegacy10Provenance = $true
+            }
+        }
+        if ($isLegacy10Provenance) {
+            if ([string]$ExternalProvenance['endpointKind'] -ne 'agent') {
+                $problems.Add("$Where.externalProvenance.endpointKind must be 'agent' for legacy 1.0 provenance.")
+                return $null
+            }
+            if ([string]$ExternalProvenance['roleMode'] -ne 'replace') {
+                $problems.Add("$Where.externalProvenance.roleMode must be 'replace' for legacy 1.0 provenance.")
+                return $null
+            }
+            if ([string]$ExternalProvenance['targetKind'] -ne 'role') {
+                $problems.Add("$Where.externalProvenance.targetKind must be 'role'; coordinator and Scribe cannot be connected.")
+                return $null
+            }
+            $target = Get-ConnectorTargetRoleLocal -Target ([string]$ExternalProvenance['target'])
+            if ($target.Kind -ne 'role' -or $target.Role -in @('scribe', 'coordinator', 'federation-coordinator', 'council')) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' is not a valid legacy 1.0 work-role target.")
+                return $null
+            }
+            if (-not $RoleClassMap.ContainsKey($target.Role)) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' requires a 1.1 Connector Bindings row with Aligned Role.")
+                return $null
+            }
+            $existingRoleBindings = @(
+                $allConnectorBindings | Where-Object {
+                    $bt = Get-ConnectorTargetRoleLocal -Target $_.Target
+                    ($_.RoleMode -eq 'add' -and $_.AddedRole -eq $target.Role) -or
+                    ($_.RoleMode -eq 'replace' -and $bt.Kind -eq 'role' -and $bt.Role -eq $target.Role -and (-not $target.MemberName -or -not $bt.MemberName -or $bt.MemberName -ceq $target.MemberName))
+                }
+            )
+            if ($existingRoleBindings.Count -gt 0) {
+                $problems.Add("$Where.externalProvenance.bindingId '$($ExternalProvenance['bindingId'])' cannot bypass existing Connector Bindings for role '$($target.Role)'.")
+                return $null
+            }
+            $roleRows = @($allRosterRows | Where-Object { $_.Role -eq $target.Role })
+            if ($target.MemberName) {
+                $roleRows = @($roleRows | Where-Object { ([string]$_.MemberName).Trim() -ceq $target.MemberName })
+            }
+            if ($roleRows.Count -eq 0) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' has no matching roster row in team.md.")
+                return $null
+            }
+            return [pscustomobject]@{
+                Row              = [pscustomobject]@{ Role = $target.Role; MemberName = $member; PrimaryAgent = 'Squad Connector' }
+                Role             = $target.Role
+                ClassRole        = $target.Role
+                IsPrimary        = $true
+                Binding          = $null
+                LegacyProvenance = [ordered]@{
+                    connectorId  = [string]$ExternalProvenance['connectorId']
+                    bindingId    = [string]$ExternalProvenance['bindingId']
+                    endpointKind = 'agent'
+                    roleMode     = 'replace'
+                    targetKind   = 'role'
+                    target       = [string]$ExternalProvenance['target']
+                    verification = 'external-unverified'
+                    metering     = 'external-unmetered'
+                }
+            }
+        }
         if ($candidates.Count -gt 0) {
             $candidates = @($candidates | Where-Object { ([string]$_.MemberName).Trim() -ceq $member })
         }
@@ -1363,6 +1429,9 @@ else {
                 verification = 'external-unverified'
                 metering     = 'external-unmetered'
             }
+        }
+        elseif ($agent -eq 'Squad Connector' -and $identity.PSObject.Properties['LegacyProvenance'] -and $identity.LegacyProvenance) {
+            $trustedProvenance = $identity.LegacyProvenance
         }
         $renderedOutcome = if ($agent -eq 'Squad Connector') { 'external, unverified' } else { $outcome }
         $records.Add(@{
