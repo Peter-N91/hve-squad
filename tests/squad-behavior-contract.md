@@ -236,6 +236,7 @@ The ledger has replace semantics but the rows accumulate. The documented failure
 | CON-46 | Every planned-demand row is rederived from count, the canonical dispatch-class inputs, candidate model rates, and eligible calibration; `auto`, unresolved, unrated, invalid, or incomplete rows cannot admit | `consumption.md`, Cost Preflight |
 | CON-47 | `projectedCostUsd` and `admissionCostUsd` are independently rounded to four decimals from the same unrounded row sum; admission is never derived by multiplying an already rounded point estimate | Same |
 | CON-48 | Each permitted run/round/slot tuple appears in history at most once | `scribe-procedure.md`, admitted slot consumption |
+| CON-49 | Fresh Init keeps supplied setup usage for one actor and estimates only the missing coordinator or scribe actor, marking only derived entries as estimates | `scribe-init.md`; `Initialize-Squad.ps1` |
 
 ## Tier 1 — Routing and role selection
 

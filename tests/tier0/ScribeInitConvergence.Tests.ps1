@@ -214,6 +214,28 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         @(Get-ChildItem -LiteralPath $Repository -Filter state.json -File -Recurse -Force).Count | Should -Be 1
     }
 
+    It 'preserves supplied <Supplied> usage and estimates only the missing <Missing> actor' -ForEach @(
+        @{ Supplied = 'coordinator'; Missing = 'scribe' }
+        @{ Supplied = 'scribe'; Missing = 'coordinator' }
+    ) {
+        $Payload = Get-InitPayload
+        $Payload.usage = @($Payload.usage | Where-Object { $_.actor -eq $Supplied })
+        $Repository = Join-Path $TestDrive "one-actor-$Supplied"
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Status = $Result.Output | ConvertFrom-Json
+        $Status.historyEntries | Should -Be 2
+        $Status.ledgerCheck | Should -Be 'PASS'
+        ($Status.warnings -join ' ') | Should -Match "Estimator-derived setup usage for ${Missing}:"
+        $History = Get-Content -LiteralPath (Join-Path $Repository "$($Payload.squadRoot)/history/Squad Scribe.md") -Raw
+        $History | Should -Match 'Initialization coordinator'
+        $History | Should -Match 'Initialization scribe'
+        $History | Should -Match "Setup usage recorded for $Supplied\."
+        $History | Should -Match "Estimator-derived setup usage for $Missing;"
+        $History | Should -Not -Match "Estimator-derived setup usage for $Supplied;"
+        $History | Should -Match '"input_tokens": 100'
+    }
+
     It 'derives only permitted coordinator session attribution for <Session>' -ForEach @(
         @{ Session = 'GPT-5.4'; Identity = 'GPT-5.4'; Source = 'session-inherited'; Price = 'GPT-5.4'; Basis = 'estimated'; CacheWrite = 0 }
         @{ Session = ''; Identity = 'unknown'; Source = 'unresolved'; Price = 'Claude Sonnet 4.6'; Basis = 'tier-default'; CacheWrite = 24000 }

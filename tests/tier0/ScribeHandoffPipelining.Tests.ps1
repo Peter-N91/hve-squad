@@ -65,10 +65,10 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
         }
 
         It 'serializes the direct writer with cold Scribe and Cost Preflight, never using a lock as a cold-editor guard' {
-            $script:OrdinaryHandoffBody | Should -Match 'serialize direct script, cold Scribe, and Cost Preflight in stage order'
-            $script:OrdinaryHandoffBody | Should -Match 'lock does not protect a separate cold editor'
+            $script:OrdinaryHandoffBody | Should -Match 'Serialize writer, cold Scribe and Cost Preflight per root'
+            $script:OrdinaryHandoffBody | Should -Match 'a lock does not cover cold editors'
             $script:FloorInstructions.Body | Should -Match 'Never overlap direct writer, cold Scribe, or Cost Preflight at one root'
-            $script:OrdinaryHandoffBody | Should -Match 'Neither a summary nor status replaces artifact/history completion proof'
+            $script:OrdinaryHandoffBody | Should -Match 'Receipt is not artifact/history proof'
         }
 
         It 'keeps quiet verification explicit and failures closed without hand fallback' {
@@ -77,7 +77,7 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $script:OrdinaryHandoffBody | Should -Match '\*\*not PASS\*\*'
             $script:OrdinaryHandoffBody | Should -Match 'RESTORE FAILED'
             $script:OrdinaryHandoffBody | Should -Match 'history-integrity'
-            $script:OrdinaryHandoffBody | Should -Match 'never auto-bypass a refusal by hand'
+            $script:OrdinaryHandoffBody | Should -Match 'Never bypass a refusal by hand'
             $script:OrdinaryHandoffBody | Should -Not -Match 'compose the hand-off by hand'
         }
     }

@@ -32,10 +32,10 @@ its payload. Legacy prose/YAML is adapted to this JSON, never executed:
   do not select a profile, pack, agent, alternate, or model.
 * Optional `usage`: array of `{ "actor": "coordinator" | "scribe", "consumption": {...} }`,
   one entry per actor whose actual setup usage was supplied. Each actor appears
-  at most once. Both actors' supplied usage must be included. Explicitly empty,
+  at most once. Supplied usage is kept; each missing actor is estimated. Explicitly empty,
   null, or malformed usage fails closed. When the field is absent, omit it from
-  JSON: the helper computes setup orchestration estimates for the coordinator
-  turn and this actually dispatched Scribe Init using the shipped rate template's
+  JSON: the helper computes setup orchestration estimates for each missing actor
+  (the coordinator turn, this actually dispatched Scribe Init, or both) using the shipped rate template's
   `Scribe state write` estimator floor and formula, as the ordinary writer does
   for orchestration. These are documented estimates, not measured tokens or
   billed telemetry. Return the estimator-derived setup usage warning. Do not

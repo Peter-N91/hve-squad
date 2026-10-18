@@ -162,7 +162,7 @@ Describe 'The ordinary writer is universal while economy consent and routing rem
     It 'does not gate ordinary handoffs or rate seeding on economy mode' {
         $script:OrdinaryWriter | Should -Match '\*\*off, ranked, economy, and manual\*\*'
         $script:OrdinaryWriter | Should -Match 'no economy flag or `handoff` marker is required'
-        $script:OrdinaryWriter | Should -Match 'There is no exit 7 routing guard'
+        $script:OrdinaryWriter | Should -Match 'no exit 7 routing guard'
         $script:EconomySection | Should -Match 'retained `-Mode` parameter does not affect rates'
         $script:EconomySection | Should -Match 'Only under economy, the writer warns for missing consent'
         $script:EconomySection | Should -Match 'these rules do not apply to other modes'
@@ -176,13 +176,16 @@ Describe 'The ordinary writer is universal while economy consent and routing rem
         $status.ledgerCheck | Should -Be 'PASS'
         $script:OrdinaryWriter | Should -Match '`ledgerCheck` is `PASS` or `ledger-only`'
         $script:OrdinaryWriter | Should -Match 'Warnings remain visible on stderr'
+        $script:OrdinaryWriter | Should -Match 'Missing/malformed status or unexpected counts are failure'
+        $script:OrdinaryWriter | Should -Match '\*\*not PASS\*\*'
         $script:OrdinaryWriter | Should -Not -Match 'quietStatus|directWriter'
     }
 
     It 'retains overhead artifacts without charging fictional Scribe dispatches' {
-        $script:OrdinaryWriter | Should -Match 'history/Squad Scribe\.md'
-        $script:OrdinaryWriter | Should -Match 'actual coordinator usage, not fictional Scribe tokens'
-        $script:OrdinaryWriter | Should -Match 'when Scribe actually ran, include its actual overhead'
+        $scribeAgent = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0].Body
+        $scribeAgent | Should -Match 'history/Squad Scribe\.md'
+        $script:OrdinaryWriter | Should -Match 'actual coordinator usage only, never fictional Scribe tokens'
+        $script:OrdinaryWriter | Should -Match 'add Scribe''s actual overhead if it ran'
     }
 }
 

@@ -245,12 +245,15 @@ if ($MyInvocation.InvocationName -ne '.') {
             '| ' + (($Columns | ForEach-Object { $Row[$_] }) -join ' | ') + ' |'
         }
         if ('scribe' -notin $Roles -or @($Payload.roster | Where-Object { $_.Role -eq 'scribe' -and $_['Agent Name (Primary)'] -eq 'Squad Scribe' }).Count -ne 1) { throw 'Confirmed Squad Scribe roster row required.' }
-        $UsageEstimated = -not $Payload.Contains('usage')
+        if ($Payload.Contains('usage') -and ($Payload.usage -isnot [array] -or $Payload.usage.Count -eq 0)) { throw 'Supplied usage must be a nonempty array.' }
+        $SuppliedActors = @(if ($Payload.Contains('usage')) { $Payload.usage | Where-Object { $_ -is [System.Collections.IDictionary] } | ForEach-Object { $_['actor'] } })
+        $EstimatedActors = @('coordinator', 'scribe' | Where-Object { $_ -notin $SuppliedActors })
+        $UsageEstimated = $EstimatedActors.Count -gt 0
         if ($UsageEstimated) {
             $ScribeRow = @($Payload.roster | Where-Object { $_.Role -eq 'scribe' })[0]
-            $Payload.usage = @(Get-InitUsage -SessionModel $State.currentRun.sessionModel -ScribeTier $ScribeRow['Model Tier'])
+            $Derived = @(Get-InitUsage -SessionModel $State.currentRun.sessionModel -ScribeTier $ScribeRow['Model Tier'] | Where-Object { $_.actor -in $EstimatedActors })
+            $Payload.usage = @(@(if ($Payload.Contains('usage')) { $Payload.usage }) + $Derived)
         }
-        if ($Payload.usage -isnot [array] -or $Payload.usage.Count -eq 0) { throw 'Supplied usage must be a nonempty array.' }
         $ConsumptionKeys = @('model', 'model_source', 'priced_as', 'model_tier', 'internal_turns', 'input_tokens', 'cached_tokens', 'cache_write_tokens', 'output_tokens', 'basis')
         $History = (Get-Seed 'entry-schemas.md' 'history/<agent>.md').Replace('<agent>', 'Squad Scribe')
         $Actors = @()
@@ -274,7 +277,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             if ($Block.model_source -eq 'agent-pinned') { throw 'Supply actual dispatch-reported usage rather than inferring a pin.' }
             $Fence = '```'
             $Heading = '#### Consumption ' + [char]0x2014 + ' Orchestration'
-            $Outcome = if ($UsageEstimated) { "Estimator-derived setup usage for $($Usage.actor); documented orchestration floor, not measured tokens or billed telemetry." } else { "Setup usage recorded for $($Usage.actor)." }
+            $Outcome = if ($Usage.actor -in $EstimatedActors) { "Estimator-derived setup usage for $($Usage.actor); documented orchestration floor, not measured tokens or billed telemetry." } else { "Setup usage recorded for $($Usage.actor)." }
             $History += "`n### $($State.updated) Initialization $($Usage.actor)`n`n* Turn: 1`n* Request: Confirmed initialization`n* Deliverable: squad state`n* Outcome: $Outcome`n`n$Heading`n`n${Fence}json`n$($Block | ConvertTo-Json)`n$Fence`n"
         }
         $Team = Get-Seed 'seed-templates.md' 'team.md'
@@ -306,7 +309,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if ($Check -notmatch 'Measure-SquadLedger -Check: PASS') { throw 'Ledger returned no PASS.' }
         $Warnings = @(("$SeedStatus`n$LedgerStatus`n$Check" -split "`n") | Where-Object { $_ -match '^WARN(?:ING)?[: ]' } | Select-Object -Unique)
         if ($NotifyDefaulted) { $Warnings += 'Notifications defaulted to disabled in-chat.' }
-        if ($UsageEstimated) { $Warnings += 'Estimator-derived setup usage: coordinator turn and dispatched Scribe state write use the shipped Scribe state write orchestration floor; estimates are not measured tokens or billed telemetry.' }
+        if ($UsageEstimated) { $Warnings += "Estimator-derived setup usage for $($EstimatedActors -join ' and '): shipped Scribe state write orchestration floor; estimates are not measured tokens or billed telemetry." }
         $WrittenTeam = [System.IO.File]::ReadAllText((Join-Path $Stage 'team.md'))
         if ($WrittenTeam -ne $Team -or @((Get-ChildItem -LiteralPath (Join-Path $Stage 'history') -File)).Count -ne 1) { throw 'Roster/history verification failed.' }
         Assert-UnlinkedPath $Root

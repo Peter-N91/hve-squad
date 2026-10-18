@@ -12,7 +12,7 @@ metadata:
 
 ## Scribe Write Procedure
 
-This full procedure applies to cold Scribe operations, not the ordinary hot path or fresh scripted Init. Fresh single-squad/member-root Init reads only [scribe-init.md](scribe-init.md), runs its helper, reports validated status, and stops. In every routing mode, supported ordinary writes use the synchronous `Write-SquadHandoff.ps1 -Quiet` contract in [economy-scribe.md](economy-scribe.md), directly by the coordinator or by Scribe. Other cold operations first load [scribe-cold-charter.md](scribe-cold-charter.md), this procedure, entry schemas and the full payload template. Initialization is outside admission. Serialize all writers with the coordinator's Cost Preflight transaction per root; failures never authorize hand-written ordinary fallback.
+This full procedure applies to cold Scribe operations. Fresh single-squad/member-root Init reads only [scribe-init.md](scribe-init.md), runs its helper, reports validated status, and stops. In every routing mode, supported ordinary writes use the synchronous `Write-SquadHandoff.ps1 -Quiet` contract in [economy-scribe.md](economy-scribe.md), directly by the coordinator or by Scribe. Other cold operations first load [scribe-cold-charter.md](scribe-cold-charter.md), this procedure, entry schemas and the full payload template. Initialization is outside admission. Serialize all writers with Cost Preflight per root; failures never authorize hand-written ordinary fallback.
 
 Every path below is relative to the resolved `squadRoot`. The default `.copilot-tracking/squad/` preserves single-squad behavior; a federation sub-squad resolves to `.copilot-tracking/squad/members/<name>/`; a federation-level payload resolves to the federation root.
 
@@ -85,9 +85,8 @@ Initialization (`team.md`/`routing.md` seeding, the full state-tree seed includi
 ### Consumption Accounting
 
 For helper Init, `Measure-SquadLedger.ps1` owns the initialization-only Cost
-Comparison and its validation. After its `-Write` / `-Check` succeed, report the
-helper status and stop: skip every manual derivation, reread, and completeness
-audit below. Actual-work comparisons and Observed Usage remain unchanged.
+Comparison and its validation; after its `-Write` / `-Check` succeed, report the
+helper status and stop, skipping every manual derivation and audit below.
 
 Write a consumption block for **every** dispatch recorded in the history append — never conditionally. All figures are estimates, not billed amounts: no per-dispatch token telemetry exists, so every numeric output carries an "estimated, not billed" disclaimer.
 
