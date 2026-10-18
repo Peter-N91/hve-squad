@@ -25,9 +25,24 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 1. Read `team.md` and `routing.md`.
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
-3. Resolve work roles through the roster, then persisted connector defaults per `references/connector-role-modes.md`, including autopilot and setup for manual bindings. Governance stays internal. Missing capability escalates, never substitutes.
-4. Dispatch all parallel-eligible roles concurrently through `runSubagent` or `task`; run non-parallel roles (such as planning before implementation) sequentially.
-5. Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles. A user tier hint overrides the per-role default for the turn. When `team.md` records `Model routing: ranked|economy|manual` or the turn passes `routing=`, `references/model-routing.md` resolves the dispatched id instead; with the mode `off`, this step is unchanged.
+3. Resolve work roles through the roster, then persisted connector defaults per `references/connector-role-modes.md`, including autopilot and setup for manual bindings. Governance stays internal. A role marked **thin charter needed** or missing capability escalates, never substitutes.
+4. Select cost-first: `fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`; user tier hints override per-role defaults for this turn. For `team.md` `Model routing: ranked|economy|manual` or `routing=`, resolve ids per `references/model-routing.md`; `off` keeps cost-first selection.
+5. Determine which gates apply and establish the actual stage shape. Apply Progress Presentation before the first work dispatch.
+6. Dispatch all parallel-eligible roles concurrently through `runSubagent` or `task`; run non-parallel roles (such as planning before implementation) sequentially.
+
+### Progress Presentation
+
+For every non-trivial request, after state, route, and gate classification:
+
+* Create 3 to 7 high-level outcome items, including verification and final reporting; no reads, searches, Scribe mechanics, or individual edits.
+* Before first substantive dispatch, show the same concise `## Plan` in chat and a compatible native todo or task-list tracker when available by advertised host capability, not literal tool name. Otherwise maintain the Markdown checklist or status ledger in later updates without delay or degraded squad methodology.
+* Keep item identity and order stable unless material scope changes; exactly one item in progress during active work.
+* Complete an item only after its outcome and applicable artifact, history, and consumption gates are verified.
+* After each meaningful phase, update tracker or ledger and emit exactly: `Completed: <item>. Next: <next item>.`
+* Blocked: keep the current item in progress, name the blocker, never silently skip it.
+* Before final response, complete each item or report it explicitly blocked. Name changed or delivered files, actual validation, and remaining risks or decisions.
+
+Progress is coordinator-owned ephemeral UI, not role work or durable squad-state writes. Dispatch no role or Squad Scribe for it; the Scribe is the sole ordinary state writer. The prompt delegates: no second plan or progress state writes.
 
 ### Ledger Reconciliation (before new work)
 
@@ -51,7 +66,7 @@ State which path — `scripted` or `manual` — this reconciliation used in the 
 2. Hand the turn's decision and rationale to the Squad Scribe, which appends to `decisions.md` (append-only).
 3. When a decision is architecturally significant, additionally capture it as an Architecture Decision Record via the `adr-author` skill and reference that ADR from the decision entry.
 4. Persist durable, role-scoped learnings to `/memories/repo/squad-<agent>.md` through the Squad Scribe and the memory tool.
-5. Consult the shipped `learnings/shared-learnings.md` playbook (skill-root-relative within the deployed `squad` skill) as read-only, authoritative context and apply any curated entry whose scenario matches the work at hand. This shipped file complements the consumer-local memory written in the prior step: the coordinator reads the shared playbook and writes local learnings, and it never writes back to the shipped file. When the organization has configured the tenant-internal APM dependency, the consumer also carries a tenant playbook at `.agents/skills/squad-learnings-tenant/tenant-learnings.md`; consult it after the shipped playbook as additional read-only, authoritative context and apply any entry whose scenario matches. That tenant file is present only when the organization configured the dependency, and the coordinator never writes to it. The full read order is local memory first, then the shipped playbook, then the optional tenant playbook. A local learning reaches the shared playbook only through the fork-and-PR promotion path in `CONTRIBUTING.md`.
+5. Read learnings in order: local memory, shipped `learnings/shared-learnings.md` (skill-root-relative within the deployed `squad` skill), then `.agents/skills/squad-learnings-tenant/tenant-learnings.md` only when the organization configured the tenant-internal APM dependency. Both playbooks are read-only, authoritative context; apply entries matching the current scenario and never write either from a run. Local learnings are Scribe-owned as above; promotion to shared playbooks uses only the human-reviewed fork-and-PR paths in `CONTRIBUTING.md`.
 
 ## Handoff
 
@@ -86,5 +101,3 @@ The full barrier list, the Enablement Predicate, and the Per-Stage Advance Check
 | `squad_memory`   | Write durable per-agent notes with the memory tool to `/memories/repo/squad-<agent>.md`                   |
 | `squad_notify`   | Fire a notification per `squad-notifications.instructions.md`; deliver via a configured tool when present, else in-chat, and append the record to `notifications.md` |
 | `squad_escalate` | Apply the escalate-to-user convention from the routing rules before any role acts                         |
-
-`squad_memory` spans up to three surfaces. It reads the shipped `learnings/shared-learnings.md` playbook (skill-root-relative within the deployed `squad` skill) as read-only, authoritative shared context, and when the organization configured the tenant-internal APM dependency it also reads the tenant playbook at `.agents/skills/squad-learnings-tenant/tenant-learnings.md` as read-only context, in addition to writing durable per-agent notes to the consumer-local `/memories/repo/squad-<agent>.md`. Neither shared playbook is ever written from a run: promotion of a local learning into a shared surface flows only through the human-reviewed promotion paths in `CONTRIBUTING.md`.

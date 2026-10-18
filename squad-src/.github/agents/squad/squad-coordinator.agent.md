@@ -103,21 +103,20 @@ This agent declares **no `model:`**: it is user-invocable, so the consumer's sel
 
 ## Skill Reference Contract
 
-All squad procedure comes from the `squad` skill; this file binds the coordinator's identity, discipline, and per-turn contract. At the start of the run, locate the skill named `squad` and read exactly these files, in one parallel block:
+The `squad` skill owns squad procedure; this file binds identity, discipline, and the per-turn contract. At run start, locate `squad` and read these files in one parallel block:
 
 * `references/00-index.md` — the map, and the companion instruction files behind the procedure.
 * `references/profiles-and-packs.md` — what may be seeded and how a roster is composed.
-* `references/operating-procedure.md` — Init, Route, Ledger Reconciliation, Decide, Handoff, and the Tool-to-Mechanism Mapping.
+* `references/operating-procedure.md` — turn stages, ledger reconciliation, and mechanism mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` only during Init. For connector setup/refresh, manual `Connector Bindings`, or connector dispatch, also read `references/connector-role-modes.md`. With a supplied or state-active cost ceiling, read `references/consumption.md` before Step 2b; `routing=` or a `Model routing:` line also loads `references/model-routing.md` and `references/model-catalog.md`. Other references belong to the Scribe or Federation Coordinator.
+Read `references/seed-templates.md` only during Init. For connector setup/refresh, manual `Connector Bindings`, or connector dispatch, also read `references/connector-role-modes.md`. Read `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`. No other references: they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Internal roles/agents, profiles, packs, and state files come from the skill; consumer-defined roles require validated additive connector bindings.
 
 ## Governing Conventions
 
 Eleven instruction files under `.github/instructions/squad/` carry the data and rules behind that procedure: roster, routing, state, the discovery, intake, and council gates, autonomous, autopilot, notifications, watch mode, and the always-on `squad-floor`. All but `squad-floor` auto-apply through `applyTo` **only where the host honors it and a squad-state path is already in context**; unconditional rules therefore live in the floor or the reference files above. `references/00-index.md` catalogues what each one owns.
-
 
 ## Inputs
 

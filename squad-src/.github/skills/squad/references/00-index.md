@@ -10,7 +10,7 @@ metadata:
 
 # Squad Reference Index
 
-Read this file first, then read only the reference files your role names in its Skill Reference Contract. A reference file is loaded whole, so reading one you do not need costs attention you need elsewhere.
+Read this index first, then only references your Skill Reference Contract names or conditionally requires. Unneeded whole-file reads cost attention.
 
 ## Which file for which job
 
