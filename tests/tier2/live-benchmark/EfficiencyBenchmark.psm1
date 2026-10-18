@@ -654,9 +654,23 @@ function Invoke-EfficiencySeries {
             $ArmSources[$Slot.arm] = $Identity
             $Runs.Add($Run)
             $Slot.status = if (Test-EfficiencyRun $Run) { 'completed' } else { 'failed' }
-            if ($Slot.status -ne 'completed') { $Failed = $true }
+            if ($Slot.status -ne 'completed') {
+                $Slot['reason'] = 'run-failed-independent-checks'
+                $Slot['checks'] = @{ completed = [bool]$Run['completed']; functional = ($Run['acceptance'] -and [bool]$Run['acceptance']['passed']); stateHistory = ($Run['workflow'] -and [bool]$Run['workflow']['passed']); telemetry = ($Run['metrics'] -and [bool]$Run['metrics']['complete']); judge = ($Run['judge'] -and [bool]$Run['judge']['valid']) }
+                $Failed = $true
+            }
         }
-        catch { $Slot.status = 'failed'; $Slot['reason'] = 'trial-error-or-missing-evidence'; $Failed = $true }
+        catch {
+            $Slot.status = 'failed'; $Slot['reason'] = 'trial-error-or-missing-evidence'
+            $Slot['errorType'] = $_.Exception.GetType().Name
+            if ($_.Exception.Data['efficiencyCategory'] -eq 'child-exited-without-run-evidence') {
+                $Slot['reason'] = 'child-exited-without-run-evidence'
+                $Slot['childExitCode'] = [int]$_.Exception.Data['efficiencyExitCode']
+                $Cause = [string]$_.Exception.Data['efficiencyStopCause']
+                $Slot['stopCause'] = if ($Cause -in @('none', 'timeout', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' }
+            }
+            $Failed = $true
+        }
     }
     $Comparison = $null; $Controls = $null; $Outcome = 'incomplete'; $Message = 'series failed/incomplete; failed and not-run slots preserved'
     if (-not $Failed -and $Kind -eq 'Establish') {

@@ -203,6 +203,35 @@ Describe 'Efficiency quality and comparison gates' -Tag 'Unit' {
         (Get-Content (Join-Path $Destination 'metrics.json') -Raw | ConvertFrom-Json).complete | Should -BeFalse
         Test-Path (Join-Path $Destination 'events.jsonl') | Should -BeTrue
     }
+    It 'actually launches an Establish child and retains its failed preflight stderr' {
+        $Source = Join-Path $TestDrive 'launch-source'
+        $Install = Join-Path $TestDrive 'launch-install'
+        $Trial = Join-Path $TestDrive 'launch-series'
+        New-Item -ItemType Directory -Path (Join-Path $Source 'squad-src/.github/agents'), (Join-Path $Install '.github/agents') -Force | Out-Null
+        foreach ($Name in @('squad-coordinator.agent.md', 'brd-builder.agent.md', 'prd-builder.agent.md')) { Set-Content -LiteralPath (Join-Path $Install ".github/agents/$Name") -Value 'offline fixture' }
+        $Cli = Join-Path $TestDrive 'no-model-cli.ps1'
+        @'
+if ($args -contains 'mcp') { '{"mcpServers":{}}' }
+elseif ($args -contains '--help') { 'OFFLINE PREFLIGHT SENTINEL: no live invocation is supported' }
+elseif ($args -contains '--version') { 'offline-cli-1.0' }
+else { throw 'A model-backed invocation is forbidden in this test.' }
+exit 0
+'@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Establish', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '1', '-MaxSeriesCredits', '3', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'establish-command.txt') -TimeoutSeconds 30 -InputText ''
+        $Result.exitCode | Should -Be 2
+        $LaunchError = Join-Path $Trial 'out/baseline-1-launch.jsonl.stderr'
+        Test-Path -LiteralPath $LaunchError | Should -BeTrue
+        Get-Content -LiteralPath $LaunchError -Raw | Should -Match 'does not support --session-id'
+        $Report = Get-Content -LiteralPath (Join-Path $Trial 'out/report.json') -Raw | ConvertFrom-Json
+        $Report.outcome | Should -Be incomplete
+        $Report.slots[0].status | Should -Be failed
+        $Report.slots[0].reason | Should -Be 'child-exited-without-run-evidence'
+        $Report.slots[0].childExitCode | Should -Be 1
+        $Report.slots[0].evidence | Should -Contain 'out/baseline-1-launch.jsonl.stderr'
+        Get-Content -LiteralPath (Join-Path $Trial 'out/report.md') -Raw | Should -Match 'Failure Diagnostics'
+        Get-Content -LiteralPath (Join-Path $Trial 'out/report.json') -Raw | Should -Not -Match 'OFFLINE PREFLIGHT SENTINEL|does not support --session-id'
+        $Report.slots[1].status | Should -Be 'not-run'
+    }
 }
 
 Describe 'Independent functional acceptance contract' -Tag 'Unit' {
@@ -304,6 +333,19 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $Result.exitCode | Should -Be 2
         $Result.report.outcome | Should -Be 'incomplete'
         $Result.controls | Should -BeNullOrEmpty
+    }
+    It 'reports missing judge or telemetry as failed checks without losing the failure category' {
+        $Trial = { param($Arm, $Pair, $Credits) $Run = @(New-TestRuns)[0]; $Run.completed = $false; $Run.judge = $null; $Run.metrics = $null; $Run }
+        $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial $Trial -PerRunCredits 10 -SeriesCredits 30
+        $Result.report.slots[0].reason | Should -Be 'run-failed-independent-checks'
+        $Result.report.slots[0].checks.judge | Should -BeFalse
+        $Result.report.slots[0].checks.telemetry | Should -BeFalse
+        $Result.exitCode | Should -Be 2
+    }
+    It 'does not leak arbitrary callback exception text into portable reports' {
+        $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial { throw 'PRIVATE-TOKEN-OR-PROMPT-CONTENT' } -PerRunCredits 10 -SeriesCredits 30
+        $Result.report | ConvertTo-Json -Depth 30 | Should -Not -Match 'PRIVATE-TOKEN-OR-PROMPT-CONTENT'
+        $Result.report.slots[0].reason | Should -Be 'trial-error-or-missing-evidence'
     }
 }
 

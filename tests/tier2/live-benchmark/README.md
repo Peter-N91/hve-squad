@@ -295,6 +295,33 @@ previous-comparison deltas; failed/incomplete series never count as passing.
 
 ### Individual and offline commands
 
+For an incomplete Establish/Series run, inspect the first failed slot, not the
+not-run trials. New reports include `Failure Diagnostics`, safe failure categories,
+child exit/stop status where available, and paths to existing local evidence:
+
+```bash
+# Set this to the Establish/Series directory, e.g. <wizard-run>/control.
+series=/path/to/control
+cat "$series/out/baseline-1-launch.jsonl.stderr"
+cat "$series/out/baseline-1-launch.jsonl.exception.txt"
+# When the child reached evidence creation:
+cat "$series/trials/baseline-1/out/error.json"
+cat "$series/trials/baseline-1/out/run.json"
+```
+
+Some files may not exist after an early preflight failure; the new report lists
+only existing paths. Raw stderr/exception files stay local and may contain
+sensitive content: review/redact before sharing. Portable reports contain paths,
+categories and status, not arbitrary exception messages or raw CLI output.
+
+On Linux, deployed agents live under the hidden `.github/agents` directory. The
+launcher checks that directory explicitly; a recursive install-root scan without
+hidden-directory traversal could incorrectly report missing BRD/PRD agents.
+The offline suite now exercises the actual Establish child launch with a fake
+CLI on Ubuntu, including this early-failure path. No paid retry is necessary to
+verify this fix. Keep failed evidence and choose a new bounded run only after
+updating the affected files and inspecting any remaining diagnostic.
+
 ```powershell
 # One complete trial, independently scored and judged.
 pwsh -NoProfile -File $Harness -Mode Run -SourceRoot $Source `

@@ -110,15 +110,34 @@ if ($MyInvocation.InvocationName -ne '.') {
             $EntryScript = $PSCommandPath
             $SourcePaths = @{ baseline = $BaselineSourceRoot; candidate = $CandidateSourceRoot }
             $TrialRunner = {
-                param($TrialArm, $TrialPair, $Credits)
+                param($TrialArm, $TrialPair, $CreditCeiling)
                 $TrialPath = Join-Path $Trials "$TrialArm-$TrialPair"
-                $Arguments = @('-NoProfile', '-File', $EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $SourcePaths[$TrialArm], '-InstallRoot', $InstallRoot, '-Arm', $TrialArm, '-Pair', [string]$TrialPair, '-Model', $Model, '-CliPath', $CliPath, '-MaxCredits', $Credits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
-                Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Trials -OutputPath (Join-Path $Out "$TrialArm-$TrialPair-launch.jsonl") -TimeoutSeconds 2820 | Out-Null
-                $EvidencePath = Join-Path $TrialPath 'out/run.json'
-                if (-not (Test-Path -LiteralPath $EvidencePath)) { throw 'Trial did not produce run evidence.' }
-                Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json -AsHashtable
+                $Arguments = @('-NoProfile', '-File', $EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $SourcePaths[$TrialArm], '-InstallRoot', $InstallRoot, '-Arm', $TrialArm, '-Pair', [string]$TrialPair, '-Model', $Model, '-CliPath', $CliPath, '-MaxCredits', $CreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
+                $LaunchPath = Join-Path $Out "$TrialArm-$TrialPair-launch.jsonl"
+                try {
+                    $Process = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Trials -OutputPath $LaunchPath -TimeoutSeconds 2820
+                    $EvidencePath = Join-Path $TrialPath 'out/run.json'
+                    if (-not (Test-Path -LiteralPath $EvidencePath)) {
+                        $Failure = [InvalidOperationException]::new('Trial did not produce run evidence; inspect its retained launch stderr.')
+                        $Failure.Data['efficiencyCategory'] = 'child-exited-without-run-evidence'
+                        $Failure.Data['efficiencyExitCode'] = [int]$Process.exitCode
+                        $Failure.Data['efficiencyStopCause'] = [string]$Process.stopCause
+                        throw $Failure
+                    }
+                    Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json -AsHashtable
+                }
+                catch {
+                    ($_ | Out-String) + "`n" + $_.ScriptStackTrace | Set-Content -LiteralPath ($LaunchPath + '.exception.txt') -Encoding utf8NoBOM
+                    throw
+                }
             }.GetNewClosure()
             $Series = Invoke-EfficiencySeries -Kind $Mode -RunTrial $TrialRunner -PerRunCredits $MaxCredits -SeriesCredits $MaxSeriesCredits -BaselineEvidence $Saved -ExpectedCompatibility $Expected
+            foreach ($Slot in $Series.report.slots) {
+                if ($Slot.status -ne 'failed') { continue }
+                $Prefix = "$($Slot.arm)-$($Slot.pair)"
+                $Candidates = @("out/$Prefix-launch.jsonl.stderr", "out/$Prefix-launch.jsonl.exception.txt", "trials/$Prefix/out/error.json", "trials/$Prefix/out/run.json")
+                $Slot['evidence'] = @($Candidates | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf })
+            }
             $Series.report | ConvertTo-Json -Depth 60 | Set-Content -LiteralPath (Join-Path $Out 'report.json') -Encoding utf8NoBOM
             @{ runs = $Series.runs } | ConvertTo-Json -Depth 60 | Set-Content -LiteralPath (Join-Path $Out 'series-evidence.json') -Encoding utf8NoBOM
             if ($Series.controls) { $Series.controls | ConvertTo-Json -Depth 60 | Set-Content -LiteralPath (Join-Path $Out 'control-series.json') -Encoding utf8NoBOM }
@@ -137,18 +156,35 @@ if ($MyInvocation.InvocationName -ne '.') {
             else { $Lines += 'No baseline/candidate deltas are available for this outcome.' }
             $Lines += @('', '## Trial Outcomes', '', '| Arm | Pair | Status |', '|---|---:|---|')
             foreach ($Slot in $Series.report.slots) { $Lines += "| $($Slot.arm) | $($Slot.pair) | $($Slot.status) |" }
+            $FailedSlots = @($Series.report.slots | Where-Object status -EQ 'failed')
+            if ($FailedSlots.Count) {
+                $Lines += @('', '## Failure Diagnostics', '', 'Raw diagnostics stay local and may contain sensitive content. Review before sharing.')
+                foreach ($Slot in $FailedSlots) {
+                    $Lines += @('', "Failed: $($Slot.arm) pair $($Slot.pair); category: $($Slot.reason).")
+                    if ($Slot.ContainsKey('childExitCode')) { $Lines += "Child exit: $($Slot.childExitCode); stop cause: $($Slot.stopCause)." }
+                    foreach ($Evidence in $Slot.evidence) { $Lines += "* $Evidence" }
+                    if (-not $Slot.evidence.Count) { $Lines += 'No child evidence was written; inspect local launcher errors. No passing outcome was recorded.' }
+                }
+            }
             $Lines += @('', 'Hook interval sums/unions are diagnostics, not blocking-time measurements. No composite score is used. Accepted baseline unchanged.')
             $Lines | Set-Content -LiteralPath (Join-Path $Out 'report.md') -Encoding utf8NoBOM
             Write-Host $Series.report.message
             Write-Host "Quality: $($Series.report.quality.checksPassed). Regression: $($Series.report.regressionVerdict). Report: $(Join-Path $Out 'report.md')"
+            foreach ($Slot in $FailedSlots) {
+                Write-Host "Failed $($Slot.arm) pair $($Slot.pair): $($Slot.reason)"
+                if ($Slot.ContainsKey('childExitCode')) { Write-Host "Child exit: $($Slot.childExitCode); stop cause: $($Slot.stopCause)" }
+                foreach ($Evidence in $Slot.evidence) { Write-Host "Diagnostic: $(Join-Path $TrialRoot $Evidence)" }
+            }
             exit $Series.exitCode
         }
         if (-not $TrialRoot -or -not $SourceRoot -or -not $InstallRoot) { throw 'Run requires TrialRoot, SourceRoot and a prepared full InstallRoot.' }
         if (Test-Path -LiteralPath $TrialRoot) { throw 'TrialRoot must not exist.' }
         $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
         $InstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
+        $InstalledAgents = Join-Path $InstallRoot '.github/agents'
+        if (-not (Test-Path -LiteralPath $InstalledAgents -PathType Container)) { throw 'Prepared install lacks deployed .github/agents.' }
         foreach ($Name in @('brd-builder.agent.md', 'prd-builder.agent.md', 'squad-coordinator.agent.md')) {
-            if (-not (Get-ChildItem -LiteralPath $InstallRoot -Recurse -File -Filter $Name | Select-Object -First 1)) { throw "Prepared install lacks $Name" }
+            if (-not (Get-ChildItem -LiteralPath $InstalledAgents -Recurse -File -Force -Filter $Name | Select-Object -First 1)) { throw "Prepared install lacks $Name" }
         }
         if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents'))) { throw 'SourceRoot must contain squad-src.' }
         if (Test-Path -LiteralPath (Join-Path $InstallRoot '.copilot-tracking')) { throw 'Prepared install must not contain runtime state.' }
