@@ -30,11 +30,18 @@ its payload. Legacy prose/YAML is adapted to this JSON, never executed:
 * `provenance`: one supplied string recording profile and applied packs, or
   `custom`. Adapt the coordinator's confirmed profile/packs into that string;
   do not select a profile, pack, agent, alternate, or model.
-* `usage`: array of `{ "actor": "coordinator" | "scribe", "consumption": {...} }`,
+* Optional `usage`: array of `{ "actor": "coordinator" | "scribe", "consumption": {...} }`,
   one entry per actor whose actual setup usage was supplied. Each actor appears
-  at most once. At least one supplied block is required; missing consumption is
-  a cheap failure, not permission to invent tokens. Both actors' supplied usage
-  must be included. Blocks use these ten keys in order:
+  at most once. Both actors' supplied usage must be included. Explicitly empty,
+  null, or malformed usage fails closed. When the field is absent, omit it from
+  JSON: the helper computes setup orchestration estimates for the coordinator
+  turn and this actually dispatched Scribe Init using the shipped rate template's
+  `Scribe state write` estimator floor and formula, as the ordinary writer does
+  for orchestration. These are documented estimates, not measured tokens or
+  billed telemetry. Return the estimator-derived setup usage warning. Do not
+  calculate tokens, read templates, request more coordinator input, or take the
+  cold path for omitted usage. This estimate never represents a direct route
+  as a Scribe dispatch. Blocks, when supplied, use these ten keys in order:
   `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`,
   `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`.
   Copy actual reported model/token signals and their declared estimate basis.
@@ -54,6 +61,12 @@ its payload. Legacy prose/YAML is adapted to this JSON, never executed:
 * Optional `sessionModel`: literal supplied value, including `auto`; default is
   the schema's empty string. `auto` is not an actual model. Do no tool, network,
   or model discovery to resolve it; keep actual unreported usage unresolved.
+  For derived usage, only a concrete session identity attributes the coordinator;
+  it does not identify the dispatched Scribe. Otherwise record `unknown` /
+  `unresolved`, `basis: tier-default`, priced at the matching tier fallback
+  (coordinator `default`, Scribe's confirmed roster tier). Never infer an actual
+  Scribe model from its roster pick, overrides, or agent pin. Concrete identities
+  and attribution supplied in usage remain subject to strict validation.
 * Optional `modelOverrides`: confirmed string map, default `{}`.
 * Optional `notify`: `{ "approvalChannel": "in-chat" | "github-issue" | "webhook",
   "enabled": true | false, "email": "...", "github": { "handle": "...",

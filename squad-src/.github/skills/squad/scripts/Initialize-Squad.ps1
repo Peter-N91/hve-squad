@@ -122,12 +122,52 @@ function Write-Seed {
     [System.IO.File]::WriteAllText((Join-Path $Stage $Name), $Text, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Get-InitUsage {
+    param([string]$SessionModel, [string]$ScribeTier)
+    . (Join-Path $PSScriptRoot 'Initialize-SquadConsumptionRates.ps1') -SquadRoot '.'
+    $Tables = @(Get-MarkdownTableLocal -Content (Get-TemplateSeedBlock -Path (Join-Path $PSScriptRoot '../references/consumption-rates-template.md')))
+    $Floors = @($Tables | Where-Object { 'Dispatch class' -in $_.Header } | ForEach-Object { $_.Rows } | Where-Object { $_['Dispatch class'] -eq 'Scribe state write' })
+    if ($Floors.Count -ne 1) { throw 'Missing shipped setup orchestration estimator floor.' }
+    $Sizes = @('Internal turns', 'Base context', 'Growth/turn', 'Output/turn' | ForEach-Object {
+        $Number = 0L
+        if (-not [long]::TryParse(($Floors[0][$_] -replace ',', ''), [ref]$Number) -or $Number -le 0) { throw "Invalid setup estimator floor: $_" }
+        $Number
+    })
+    $Turns, $Base, $Growth, $Output = $Sizes
+    $Gross = $Turns * ($Base + $Growth * ($Turns - 1) / 2.0)
+    $ModelRows = @($Tables | Where-Object { 'Model (as routed)' -in $_.Header } | ForEach-Object { $_.Rows })
+    $FallbackRows = @($Tables | Where-Object { 'Priced as' -in $_.Header } | ForEach-Object { $_.Rows })
+    foreach ($Actor in @('coordinator', 'scribe')) {
+        $ConcreteSession = $Actor -eq 'coordinator' -and $SessionModel.Trim() -notin @('', 'auto', 'fast', 'default', 'extended', 'unknown')
+        $Model = if ($ConcreteSession) { $SessionModel } else { 'unknown' }
+        $ModelKey = ($Model.Trim() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-').ToLowerInvariant()
+        $Own = @($ModelRows | Where-Object {
+            $NameKey = ($_['Model (as routed)'] -replace '\s+', '-').ToLowerInvariant()
+            $IdKey = $_['Model ID'].Trim('`').ToLowerInvariant()
+            $ModelKey -in @($NameKey, $IdKey)
+        }) | Select-Object -First 1
+        $Tier = if ($Own) { $Own.Tier } elseif ($Actor -eq 'scribe') { $ScribeTier } else { 'default' }
+        $Fallback = @($FallbackRows | Where-Object { $_.Tier -eq $Tier }) | Select-Object -First 1
+        if (-not $Own -and -not $Fallback) { throw "Missing setup pricing for $Tier." }
+        $Price = if ($Own) { $Own['Model (as routed)'] } else { $Fallback['Priced as'] }
+        $PriceRow = @($ModelRows | Where-Object { $_['Model (as routed)'] -eq $Price }) | Select-Object -First 1
+        if (-not $PriceRow) { throw 'Missing setup pricing row.' }
+        @{ actor = $Actor; consumption = [ordered]@{
+            model = $Model; model_source = $(if ($ConcreteSession) { 'session-inherited' } else { 'unresolved' })
+            priced_as = $Price; model_tier = $Tier; internal_turns = [long]$Turns
+            input_tokens = [long][Math]::Round($Gross * 0.20); cached_tokens = [long][Math]::Round($Gross * 0.80)
+            cache_write_tokens = $(if ([double]$PriceRow['Cache write'] -gt 0) { [long]($Base + $Growth * ($Turns - 1)) } else { 0L })
+            output_tokens = [long]($Turns * $Output); basis = $(if ($ConcreteSession) { 'estimated' } else { 'tier-default' })
+        } }
+    }
+}
+
 if ($MyInvocation.InvocationName -ne '.') {
     $Stage = $null
     try {
         $Payload = Get-Content -LiteralPath $PayloadPath -Raw | ConvertFrom-Json -AsHashtable
         if ($Payload.timestamp -is [DateTime]) { $Payload.timestamp = $Payload.timestamp.ToString('o') }
-        Assert-ObjectKey $Payload @('squadRoot', 'runId', 'timestamp', 'roster', 'provenance', 'usage') @('payloadType', 'turn', 'mode', 'modelRouting', 'sessionModel', 'modelOverrides', 'notify', 'stateAdvance', 'ledgerCommand')
+        Assert-ObjectKey $Payload @('squadRoot', 'runId', 'timestamp', 'roster', 'provenance') @('usage', 'payloadType', 'turn', 'mode', 'modelRouting', 'sessionModel', 'modelOverrides', 'notify', 'stateAdvance', 'ledgerCommand')
         if ($Payload.Contains('payloadType') -and $Payload.payloadType -ne 'initialization') { throw 'Only fresh initialization is supported.' }
         if ($Payload.Contains('turn') -and $Payload.turn -ne 1) { throw 'Init turn must be 1.' }
         foreach ($Key in @('squadRoot', 'runId', 'timestamp', 'provenance')) { Assert-Text $Payload[$Key] }
@@ -205,7 +245,12 @@ if ($MyInvocation.InvocationName -ne '.') {
             '| ' + (($Columns | ForEach-Object { $Row[$_] }) -join ' | ') + ' |'
         }
         if ('scribe' -notin $Roles -or @($Payload.roster | Where-Object { $_.Role -eq 'scribe' -and $_['Agent Name (Primary)'] -eq 'Squad Scribe' }).Count -ne 1) { throw 'Confirmed Squad Scribe roster row required.' }
-        if ($Payload.usage -isnot [array] -or $Payload.usage.Count -eq 0) { throw 'Actual provided coordinator/Scribe usage is required.' }
+        $UsageEstimated = -not $Payload.Contains('usage')
+        if ($UsageEstimated) {
+            $ScribeRow = @($Payload.roster | Where-Object { $_.Role -eq 'scribe' })[0]
+            $Payload.usage = @(Get-InitUsage -SessionModel $State.currentRun.sessionModel -ScribeTier $ScribeRow['Model Tier'])
+        }
+        if ($Payload.usage -isnot [array] -or $Payload.usage.Count -eq 0) { throw 'Supplied usage must be a nonempty array.' }
         $ConsumptionKeys = @('model', 'model_source', 'priced_as', 'model_tier', 'internal_turns', 'input_tokens', 'cached_tokens', 'cache_write_tokens', 'output_tokens', 'basis')
         $History = (Get-Seed 'entry-schemas.md' 'history/<agent>.md').Replace('<agent>', 'Squad Scribe')
         $Actors = @()
@@ -229,7 +274,8 @@ if ($MyInvocation.InvocationName -ne '.') {
             if ($Block.model_source -eq 'agent-pinned') { throw 'Supply actual dispatch-reported usage rather than inferring a pin.' }
             $Fence = '```'
             $Heading = '#### Consumption ' + [char]0x2014 + ' Orchestration'
-            $History += "`n### $($State.updated) Initialization $($Usage.actor)`n`n* Turn: 1`n* Request: Confirmed initialization`n* Deliverable: squad state`n* Outcome: Setup usage recorded for $($Usage.actor).`n`n$Heading`n`n${Fence}json`n$($Block | ConvertTo-Json)`n$Fence`n"
+            $Outcome = if ($UsageEstimated) { "Estimator-derived setup usage for $($Usage.actor); documented orchestration floor, not measured tokens or billed telemetry." } else { "Setup usage recorded for $($Usage.actor)." }
+            $History += "`n### $($State.updated) Initialization $($Usage.actor)`n`n* Turn: 1`n* Request: Confirmed initialization`n* Deliverable: squad state`n* Outcome: $Outcome`n`n$Heading`n`n${Fence}json`n$($Block | ConvertTo-Json)`n$Fence`n"
         }
         $Team = Get-Seed 'seed-templates.md' 'team.md'
         $Team = $Team.Substring(0, $Team.IndexOf('| Role'))
@@ -260,6 +306,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if ($Check -notmatch 'Measure-SquadLedger -Check: PASS') { throw 'Ledger returned no PASS.' }
         $Warnings = @(("$SeedStatus`n$LedgerStatus`n$Check" -split "`n") | Where-Object { $_ -match '^WARN(?:ING)?[: ]' } | Select-Object -Unique)
         if ($NotifyDefaulted) { $Warnings += 'Notifications defaulted to disabled in-chat.' }
+        if ($UsageEstimated) { $Warnings += 'Estimator-derived setup usage: coordinator turn and dispatched Scribe state write use the shipped Scribe state write orchestration floor; estimates are not measured tokens or billed telemetry.' }
         $WrittenTeam = [System.IO.File]::ReadAllText((Join-Path $Stage 'team.md'))
         if ($WrittenTeam -ne $Team -or @((Get-ChildItem -LiteralPath (Join-Path $Stage 'history') -File)).Count -ne 1) { throw 'Roster/history verification failed.' }
         Assert-UnlinkedPath $Root

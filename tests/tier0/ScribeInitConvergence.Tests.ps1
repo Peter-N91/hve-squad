@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+﻿#Requires -Modules Pester
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
@@ -181,6 +181,83 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $LASTEXITCODE | Should -Be 0
     }
 
+    It 'accepts legacy absent usage with estimator floors and unresolved auto without partial state' {
+        $Payload = Get-InitPayload
+        $Payload.Remove('usage')
+        $Repository = Join-Path $TestDrive 'legacy-absent-usage'
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Status = $Result.Output | ConvertFrom-Json
+        $Status.historyEntries | Should -Be 2
+        $Status.ledgerCheck | Should -Be 'PASS'
+        ($Status.warnings -join ' ') | Should -Match 'Estimator-derived setup usage.*not measured tokens or billed telemetry'
+        $Root = Join-Path $Repository $Payload.squadRoot
+        (Get-Content -LiteralPath (Join-Path $Root 'state.json') -Raw | ConvertFrom-Json).currentRun.sessionModel | Should -BeExactly 'auto'
+        $History = Get-Content -LiteralPath (Join-Path $Root 'history/Squad Scribe.md') -Raw
+        $History | Should -Match 'Initialization coordinator'
+        $History | Should -Match 'Initialization scribe'
+        $Blocks = @([regex]::Matches($History, '(?ms)^```json\n(.*?)\n```') | ForEach-Object { $_.Groups[1].Value | ConvertFrom-Json })
+        $Blocks.Count | Should -Be 2
+        $Blocks.model | Should -Be @('unknown', 'unknown')
+        $Blocks.model_source | Should -Be @('unresolved', 'unresolved')
+        $Blocks.basis | Should -Be @('tier-default', 'tier-default')
+        $Blocks.model_tier | Should -Be @('default', 'fast')
+        $Blocks.priced_as | Should -Be @('Claude Sonnet 4.6', 'Claude Haiku 4.5')
+        foreach ($Block in $Blocks) {
+            $Block.internal_turns | Should -Be 4
+            $Block.input_tokens | Should -Be 15600
+            $Block.cached_tokens | Should -Be 62400
+            $Block.cache_write_tokens | Should -Be 24000
+            $Block.output_tokens | Should -Be 3200
+        }
+        @(Get-ChildItem -LiteralPath $Repository -Directory -Filter '.squad-init-*' -Recurse -Force).Count | Should -Be 0
+        @(Get-ChildItem -LiteralPath $Repository -Filter state.json -File -Recurse -Force).Count | Should -Be 1
+    }
+
+    It 'derives only permitted coordinator session attribution for <Session>' -ForEach @(
+        @{ Session = 'GPT-5.4'; Identity = 'GPT-5.4'; Source = 'session-inherited'; Price = 'GPT-5.4'; Basis = 'estimated'; CacheWrite = 0 }
+        @{ Session = ''; Identity = 'unknown'; Source = 'unresolved'; Price = 'Claude Sonnet 4.6'; Basis = 'tier-default'; CacheWrite = 24000 }
+        @{ Session = 'Claude Opus 5 (Copilot)'; Identity = 'Claude Opus 5 (Copilot)'; Source = 'session-inherited'; Price = 'Claude Opus 5'; Basis = 'estimated'; CacheWrite = 24000 }
+    ) {
+        $Payload = Get-InitPayload
+        $Payload.Remove('usage')
+        $Payload.sessionModel = $Session
+        $Repository = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $History = Get-Content -LiteralPath (Join-Path $Repository "$($Payload.squadRoot)/history/Squad Scribe.md") -Raw
+        $Blocks = @([regex]::Matches($History, '(?ms)^```json\n(.*?)\n```') | ForEach-Object { $_.Groups[1].Value | ConvertFrom-Json })
+        $Blocks[0].model | Should -BeExactly $Identity
+        $Blocks[0].model_source | Should -Be $Source
+        $Blocks[0].priced_as | Should -Be $Price
+        $Blocks[0].basis | Should -Be $Basis
+        $Blocks[0].cache_write_tokens | Should -Be $CacheWrite
+        $Blocks[1].model | Should -Be 'unknown'
+        $Blocks[1].model_source | Should -Be 'unresolved'
+        $Blocks[1].model_tier | Should -Be 'fast'
+    }
+
+    It 'rejects absent usage when the shipped estimator is unavailable without partial state' {
+        $HelperDirectory = Join-Path $TestDrive 'missing-estimator-helper'
+        Copy-Item -LiteralPath $script:Model.SquadSkillRoot -Destination $HelperDirectory -Recurse
+        $Template = Join-Path $HelperDirectory 'references/consumption-rates-template.md'
+        $Text = Get-Content -LiteralPath $Template -Raw
+        Set-Content -LiteralPath $Template -Value $Text.Replace('Scribe state write', 'Unavailable state write') -NoNewline
+        $Payload = Get-InitPayload
+        $Payload.Remove('usage')
+        $Repository = Join-Path $TestDrive 'missing-estimator'
+        $OriginalInit = $script:InitScript
+        try {
+            $script:InitScript = Join-Path $HelperDirectory 'scripts/Initialize-Squad.ps1'
+            $Result = Invoke-InitPayload $Payload $Repository
+        }
+        finally { $script:InitScript = $OriginalInit }
+        $Result.ExitCode | Should -Not -Be 0
+        $Result.Output | Should -Match 'Missing shipped setup orchestration estimator floor'
+        @(Get-ChildItem -LiteralPath $Repository -Filter state.json -File -Recurse -Force).Count | Should -Be 0
+        @(Get-ChildItem -LiteralPath $Repository -Directory -Filter '.squad-init-*' -Recurse -Force).Count | Should -Be 0
+    }
+
     It 'refuses re-init without altering any state bytes' {
         $Before = @(Get-ChildItem -LiteralPath $script:FreshRoot -File -Recurse | Get-FileHash | ForEach-Object Hash) -join ','
         $Result = Invoke-InitPayload (Get-InitPayload) (Split-Path (Split-Path $script:FreshRoot))
@@ -342,16 +419,20 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 
     It 'fails closed for <Case>' -ForEach @(
-        @{ Case = 'missing roster' }, @{ Case = 'missing primary' }, @{ Case = 'duplicate names' }, @{ Case = 'traversal' }, @{ Case = 'deliverable traversal' }, @{ Case = 'invalid usage' }, @{ Case = 'invalid source' }, @{ Case = 'unknown attribution' }, @{ Case = 'invalid notifications' }
+        @{ Case = 'missing roster' }, @{ Case = 'missing roster and usage' }, @{ Case = 'missing primary' }, @{ Case = 'duplicate names' }, @{ Case = 'traversal' }, @{ Case = 'deliverable traversal' }, @{ Case = 'invalid usage' }, @{ Case = 'empty usage' }, @{ Case = 'null usage' }, @{ Case = 'malformed usage' }, @{ Case = 'invalid source' }, @{ Case = 'unknown attribution' }, @{ Case = 'invalid notifications' }
     ) {
         $Payload = Get-InitPayload
         switch ($Case) {
             'missing roster' { $Payload.Remove('roster') }
+            'missing roster and usage' { $Payload.Remove('roster'); $Payload.Remove('usage') }
             'missing primary' { $Payload.roster[0].Remove('Agent Name (Primary)') }
             'duplicate names' { $Payload.roster[1]['Member Name'] = 'Delta' }
             'traversal' { $Payload.squadRoot = '.copilot-tracking/squad/../escape' }
             'deliverable traversal' { $Payload.roster[0]['Deliverable Root'] = '../outside' }
             'invalid usage' { $Payload.usage[0].consumption.input_tokens = -1 }
+            'empty usage' { $Payload.usage = @() }
+            'null usage' { $Payload.usage = $null }
+            'malformed usage' { $Payload.usage = @{} }
             'invalid source' { $Payload.usage[0].consumption.model_source = 'fictional' }
             'unknown attribution' { $Payload.usage[0].consumption.model_source = 'dispatch-reported' }
             'invalid notifications' { $Payload.notify = @{ enabled = $true; approvalChannel = 'github' } }
@@ -359,7 +440,7 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Repository = Join-Path $TestDrive $Case.Replace(' ', '-')
         $Result = Invoke-InitPayload $Payload $Repository
         $Result.ExitCode | Should -Not -Be 0 -Because $Result.Output
-        @(Get-ChildItem -LiteralPath $Repository -Filter state.json -File -Recurse).Count | Should -Be 0
+        @(Get-ChildItem -LiteralPath $Repository -Filter state.json -File -Recurse -Force).Count | Should -Be 0
         @(Get-ChildItem -LiteralPath $Repository -Directory -Filter '.squad-init-*' -Recurse -Force).Count | Should -Be 0
     }
 
@@ -394,6 +475,9 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         [System.Text.Encoding]::UTF8.GetByteCount($Brief) | Should -BeLessThan 8000
         $Brief | Should -Match 'Return the compact JSON status and warnings, then stop'
         $Brief | Should -Match 'do not read the'
+        $Brief | Should -Match 'Optional `usage`'
+        $Brief | Should -Match 'documented estimates, not measured tokens or'
+        $Brief | Should -Match 'cold path for omitted usage'
         $script:ScribeHot | Should -Match 'no full reference reads, manual accounting audit, or extra file rereads'
     }
 
