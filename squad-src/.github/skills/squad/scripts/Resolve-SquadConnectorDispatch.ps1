@@ -20,6 +20,7 @@
     * `resolve-execution`
     * `validate-manifest`
     * `validate-request`
+    * `validate-snapshot`
     * `validate-result`
     * `validate-exchange`
 .PARAMETER InputPath
@@ -31,7 +32,7 @@
 [CmdletBinding(DefaultParameterSetName = 'Library')]
 param(
     [Parameter(ParameterSetName = 'Run', Mandatory)]
-    [ValidateSet('resolve-execution', 'validate-manifest', 'validate-request', 'validate-result', 'validate-exchange')]
+    [ValidateSet('resolve-execution', 'validate-manifest', 'validate-request', 'validate-snapshot', 'validate-result', 'validate-exchange')]
     [string]$Operation,
 
     [Parameter(ParameterSetName = 'Run')]
@@ -997,6 +998,71 @@ function Test-SquadConnectorRequestShape {
     }
 }
 
+function Test-SquadConnectorSnapshot {
+    <#
+    .SYNOPSIS
+        Validates the shim-owned durable pre-existing-path snapshot for one request.
+    .DESCRIPTION
+        The snapshot is not part of the consumer envelope contract. It is persisted
+        beside the request so a later resume can prove which paths predated the task
+        without rebuilding that baseline after the producer has written its result.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Snapshot,
+        [Parameter(Mandatory)]$Request
+    )
+
+    $issues = [System.Collections.Generic.List[string]]::new()
+    foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $Snapshot -Required @('taskId', 'deliverableRoot', 'preExistingPaths', 'createdAt'))) {
+        $issues.Add($issue)
+    }
+
+    $snapshotTaskId = ([string](Get-ConnectorInputValueLocal -Object $Snapshot -Name 'taskId' -Default '')).Trim()
+    $snapshotRoot = ([string](Get-ConnectorInputValueLocal -Object $Snapshot -Name 'deliverableRoot' -Default '')).Trim()
+    $requestTaskId = ([string](Get-ConnectorInputValueLocal -Object $Request -Name 'taskId' -Default '')).Trim()
+    $requestRoot = ([string](Get-ConnectorInputValueLocal -Object $Request -Name 'deliverableRoot' -Default '')).Trim()
+    if (-not $snapshotTaskId) { $issues.Add('invalid:taskId') }
+    elseif ($requestTaskId -and $snapshotTaskId -cne $requestTaskId) { $issues.Add('binding-mismatch:taskId') }
+    if (-not $snapshotRoot) { $issues.Add('invalid:deliverableRoot') }
+    elseif ($requestRoot -and $snapshotRoot -cne $requestRoot) { $issues.Add('binding-mismatch:deliverableRoot') }
+
+    $createdAt = ([string](Get-ConnectorInputValueLocal -Object $Snapshot -Name 'createdAt' -Default '')).Trim()
+    try {
+        if (-not $createdAt) { throw 'missing timestamp' }
+        [void][DateTimeOffset]::Parse($createdAt, [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+    catch {
+        $issues.Add('invalid:createdAt')
+    }
+
+    $paths = Get-ConnectorInputValueLocal -Object $Snapshot -Name 'preExistingPaths' -Default $null
+    if (-not (Test-ConnectorArrayLikeLocal -Value $paths)) {
+        $issues.Add('invalid:preExistingPaths-not-array')
+    }
+    else {
+        $rootKey = ConvertTo-ConnectorPathKeyLocal -Path $snapshotRoot
+        $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($pathValue in @($paths)) {
+            if ($pathValue -isnot [string] -or [string]::IsNullOrWhiteSpace(([string]$pathValue).Trim())) {
+                $issues.Add('invalid:preExistingPaths-item')
+                continue
+            }
+            $pathKey = ConvertTo-ConnectorPathKeyLocal -Path ([string]$pathValue)
+            if (-not $seen.Add($pathKey)) { $issues.Add("duplicate:preExistingPath:$pathValue") }
+            if ($rootKey -and -not $pathKey.StartsWith("$rootKey/", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $issues.Add("outside-deliverable-root:preExistingPath:$pathValue")
+            }
+        }
+    }
+
+    [pscustomobject]@{
+        Status           = if ($issues.Count -eq 0) { 'ok' } else { 'error' }
+        Issues           = $issues.ToArray()
+        PreExistingPaths = if (Test-ConnectorArrayLikeLocal -Value $paths) { @($paths | ForEach-Object { [string]$_ }) } else { @() }
+    }
+}
+
 function Test-SquadConnectorResultShape {
     [CmdletBinding()]
     param(
@@ -1279,6 +1345,11 @@ if ($PSCmdlet.ParameterSetName -eq 'Run') {
                 Test-SquadConnectorRequestShape `
                     -Request (Get-ConnectorInputValueLocal -Object $input -Name 'request' -Default $null) `
                     -SchemaVersion ([string](Get-ConnectorInputValueLocal -Object $input -Name 'schemaVersion' -Default ''))
+            }
+            'validate-snapshot' {
+                Test-SquadConnectorSnapshot `
+                    -Snapshot (Get-ConnectorInputValueLocal -Object $input -Name 'snapshot' -Default $null) `
+                    -Request (Get-ConnectorInputValueLocal -Object $input -Name 'request' -Default $null)
             }
             'validate-result' {
                 Test-SquadConnectorResultShape `

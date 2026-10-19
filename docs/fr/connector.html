@@ -777,8 +777,8 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           </tr>
           <tr>
             <td><code>failed</code></td>
-            <td>Le travail n'a pas pu être complété ou une défaillance délibérée s'est produite.</td>
-            <td>Le shim escalade vers l'orchestrateur comme rôle défaillant, avec votre récit comme contexte. L'étape peut être relancée ou abandonnée selon la politique de l'orchestrateur.</td>
+            <td>Le travail n'a pas pu être terminé, un résultat a échoué à la validation, ou la photographie de collision interne au shim est absente, modifiée ou incohérente.</td>
+            <td>Le shim rejette l'échange et escalade vers l'orchestrateur comme rôle défaillant. Il ne reconstruit jamais la photographie antérieure à la tâche depuis le système de fichiers repris.</td>
           </tr>
           <tr>
             <td><code>awaiting</code></td>
@@ -808,17 +808,20 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           ambiguïté subsiste ; en mode non assisté, cette ambiguïté provoque arrêt et escalade.
         </li>
         <li>
-          <strong>Le shim écrit l'enveloppe de demande de délégation.</strong> Le shim Squad Connector
-          écrit un fichier JSON au <code>dropPath</code> de votre manifeste. La demande contient le
-          travail borné, les contraintes temporelles, et en <code>1.1</code> les allowlists fiables
-          de liaison/sortie. Le shim revient immédiatement avec le statut <code>awaiting</code> — il
-          ne bloque pas en attente de votre réponse.
+          <strong>Le shim photographie l'état, puis écrit la demande de délégation.</strong> Le shim
+          Squad Connector écrit d'abord sa référence de collision fermée et interne
+          <code>&lt;taskId&gt;.snapshot.json</code>, puis publie
+          <code>&lt;taskId&gt;.request.json</code> dans le <code>dropPath</code> de votre manifeste.
+          La demande contient le travail borné, les contraintes temporelles, et en <code>1.1</code>
+          les allowlists fiables de liaison/sortie. Le shim revient immédiatement avec le statut
+          <code>awaiting</code> — il ne bloque pas en attente de votre réponse.
         </li>
         <li>
           <strong>Votre coordinateur observe/interroge.</strong> Votre coordinateur (s'exécutant
-          entièrement en dehors de ce package) observe le <code>dropPath</code> pour les nouvelles
-          enveloppes de demande de délégation par les moyens que vous choisissez — observateur de
-          fichiers, tâche cron, script déclenché manuellement, etc. Il n'y a pas de mécanisme prescrit.
+          entièrement en dehors de ce package) observe le <code>dropPath</code> pour les nouveaux
+          fichiers <code>*.request.json</code> par les moyens que vous choisissez — observateur de
+          fichiers, tâche cron, script déclenché manuellement, etc. Il ignore et ne modifie jamais
+          <code>*.snapshot.json</code>. Il n'y a pas de mécanisme prescrit.
         </li>
         <li>
           <strong>Le coordinateur effectue le travail.</strong> Votre coordinateur lit l'enveloppe
@@ -833,9 +836,10 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         <li>
           <strong>Une délégation ultérieure du shim vérifie le résultat.</strong> Une délégation
           ultérieure du shim Squad Connector (par l'orchestrateur au prochain tour ou chaque fois
-          que l'équipe s'exécute à nouveau) lit le <code>dropPath</code>, trouve votre enveloppe de
-          résultat, la valide et signale <code>completed</code>, <code>failed</code> ou
-          <code>unreachable</code>.
+          que l'équipe s'exécute à nouveau) relit la demande inchangée et la photographie de collision
+          d'origine, trouve votre enveloppe de résultat, valide l'échange complet et signale
+          <code>completed</code>, <code>failed</code> ou <code>unreachable</code>. Il ne reconstruit
+          jamais la photographie après que votre producteur a écrit ses fichiers.
         </li>
       </ol>
 
@@ -907,10 +911,11 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           écrit chaque nouvel artefact propre à la tâche directement sous
           <code>deliverableRoot</code> (ou son emplacement
           <code>allowedOutputs[].deliverableRoot</code> déclaré) avant de publier
-          <code>&lt;taskId&gt;.result.json</code>. Le shim photographie les chemins préexistants
-          avant d'émettre la demande et rejette tout chemin d'artefact déclaré qui existait déjà
-          avant la tâche, duplique un autre chemin du même résultat ou est absent sur le disque lors
-          de la validation.
+          <code>&lt;taskId&gt;.result.json</code>. Le shim lit les chemins préexistants depuis le
+          fichier fermé <code>&lt;taskId&gt;.snapshot.json</code> qu'il a écrit avant la demande et
+          rejette tout chemin d'artefact déclaré qui existait déjà avant la tâche, duplique un autre
+          chemin du même résultat ou est absent sur le disque lors de la validation. Une photographie
+          absente, modifiée ou incohérente fait échouer l'échange au lieu d'être reconstruite.
         </li>
       </ul>
 

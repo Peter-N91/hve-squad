@@ -130,20 +130,35 @@ function Invoke-SquadTurn {
         [Parameter(Mandatory)]
         [string]$TranscriptPath,
 
+        [string]$LogDir,
+
+        [switch]$CaptureDispatchEvents,
+
         [int]$TimeoutMinutes = 20
     )
 
     $errorPath = [System.IO.Path]::ChangeExtension($TranscriptPath, '.err.log')
     $started = Get-Date
+    if ($LogDir) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
 
     # Start-Process joins its argument list with spaces, so the prompt has to arrive
     # already quoted or the CLI reads each word as a separate argument.
-    $arguments = @(
+    $argumentValues = @(
         '-p', (ConvertTo-ProcessArgument $Prompt)
         '--model', (ConvertTo-ProcessArgument $Model)
         '--allow-all-tools'
         '--deny-tool', (ConvertTo-ProcessArgument 'shell(rm)')
-    ) -join ' '
+    )
+    if ($CaptureDispatchEvents) {
+        $argumentValues += @('--output-format', 'json')
+    }
+    if ($LogDir) {
+        $argumentValues += @(
+            '--log-dir', (ConvertTo-ProcessArgument $LogDir)
+            '--log-level', 'debug'
+        )
+    }
+    $arguments = $argumentValues -join ' '
 
     $process = Start-Process -FilePath 'copilot' -ArgumentList $arguments `
         -WorkingDirectory $Workspace -NoNewWindow -PassThru `
@@ -165,7 +180,141 @@ function Invoke-SquadTurn {
         Transcript = $transcript
         Answer     = $transcript
         ErrorLog   = if (Test-Path -LiteralPath $errorPath) { Get-Content -LiteralPath $errorPath -Raw } else { '' }
+        LogDir     = $LogDir
     }
+}
+
+function Publish-ConnectorConsumerResult {
+    <#
+    .SYNOPSIS
+        Writes one deterministic external result for the Tier 1 connector resume scenario.
+    .DESCRIPTION
+        This helper is the consumer side only. It requires the real Squad Connector
+        dispatch to have published both request and snapshot first, preserves both
+        byte-for-byte, writes the requested task-owned artifact, and then publishes the
+        matching result envelope.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Workspace,
+        [Parameter(Mandatory)][string]$ConnectorId,
+        [Parameter(Mandatory)][string]$ArtifactPath,
+        [Parameter(Mandatory)][string]$ArtifactContent,
+        [Parameter(Mandatory)][string]$Narrative
+    )
+
+    $dropPath = Join-Path $Workspace '.connector-drops' $ConnectorId
+    $requests = @(Get-ChildItem -LiteralPath $dropPath -Filter '*.request.json' -File -ErrorAction SilentlyContinue)
+    if ($requests.Count -ne 1) {
+        throw "Expected one request in '$dropPath', found $($requests.Count)."
+    }
+
+    $requestPath = $requests[0].FullName
+    $request = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
+    if ([string]$request.connectorId -cne $ConnectorId) {
+        throw "Request connectorId '$($request.connectorId)' does not match '$ConnectorId'."
+    }
+    if (-not $request.taskId -or -not $request.deliverableRoot -or -not $request.bindingId) {
+        throw 'The connector request is missing taskId, deliverableRoot, or bindingId.'
+    }
+
+    $snapshotPath = Join-Path $dropPath "$($request.taskId).snapshot.json"
+    if (-not (Test-Path -LiteralPath $snapshotPath -PathType Leaf)) {
+        throw "The connector request has no durable snapshot at '$snapshotPath'."
+    }
+    $snapshot = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json
+    if ([string]$snapshot.taskId -cne [string]$request.taskId -or
+        [string]$snapshot.deliverableRoot -cne [string]$request.deliverableRoot -or
+        $snapshot.PSObject.Properties.Name -notcontains 'preExistingPaths') {
+        throw 'The connector snapshot does not bind to the request or omits preExistingPaths.'
+    }
+
+    $requestHash = (Get-FileHash -LiteralPath $requestPath -Algorithm SHA256).Hash
+    $snapshotHash = (Get-FileHash -LiteralPath $snapshotPath -Algorithm SHA256).Hash
+    $artifactRoot = if ([System.IO.Path]::IsPathRooted([string]$request.deliverableRoot)) {
+        [string]$request.deliverableRoot
+    }
+    else {
+        Join-Path $Workspace ([string]$request.deliverableRoot)
+    }
+    $deliveredPath = Join-Path $artifactRoot $ArtifactPath
+    New-Item -ItemType Directory -Path (Split-Path -Parent $deliveredPath) -Force | Out-Null
+    Set-Content -LiteralPath $deliveredPath -Value $ArtifactContent -Encoding utf8NoBOM -NoNewline
+
+    $result = [ordered]@{
+        taskId      = [string]$request.taskId
+        connectorId = [string]$request.connectorId
+        bindingId   = [string]$request.bindingId
+        role        = [string]$request.role
+        status      = 'completed'
+        artifacts   = @(
+            [ordered]@{
+                path = $ArtifactPath -replace '\\', '/'
+                type = [System.IO.Path]::GetExtension($ArtifactPath).TrimStart('.').ToLowerInvariant()
+            }
+        )
+        narrative   = $Narrative
+        createdAt   = [DateTime]::UtcNow.ToString('o')
+    }
+    $resultPath = Join-Path $dropPath "$($request.taskId).result.json"
+    $result | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $resultPath -Encoding utf8NoBOM
+
+    [pscustomobject]@{
+        TaskId       = [string]$request.taskId
+        RequestPath  = $requestPath
+        RequestHash  = $requestHash
+        SnapshotPath = $snapshotPath
+        SnapshotHash = $snapshotHash
+        ResultPath   = $resultPath
+        ArtifactPath = $deliveredPath
+    }
+}
+
+function Get-SquadDispatchEvidence {
+    <#
+    .SYNOPSIS
+        Finds machine-generated dispatch-start evidence for one agent.
+    .DESCRIPTION
+        Model prose is never evidence. JSON output is accepted only for start/invoke
+        events whose serialized event contains the exact agent name. Debug logs are a
+        fallback only when a line contains both a dispatch/tool marker and that name.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TranscriptPath,
+        [string]$LogDir,
+        [Parameter(Mandatory)][string]$AgentName
+    )
+
+    $evidence = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $TranscriptPath) {
+        foreach ($line in (Get-Content -LiteralPath $TranscriptPath)) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed.StartsWith('{')) { continue }
+            try { $event = $trimmed | ConvertFrom-Json -Depth 64 } catch { continue }
+            $type = @('type', 'event', 'kind') |
+                ForEach-Object { $event.PSObject.Properties[$_]?.Value } |
+                Where-Object { $_ } |
+                Select-Object -First 1
+            if (-not $type -or [string]$type -notmatch '(?i)start|begin|invoke|dispatch') { continue }
+            $serialized = $event | ConvertTo-Json -Depth 64 -Compress
+            if ($serialized.Contains($AgentName, [System.StringComparison]::Ordinal)) {
+                $evidence.Add("json:$type")
+            }
+        }
+    }
+
+    if ($evidence.Count -eq 0 -and $LogDir -and (Test-Path -LiteralPath $LogDir)) {
+        foreach ($file in (Get-ChildItem -LiteralPath $LogDir -Filter '*.log' -File -Recurse -ErrorAction SilentlyContinue)) {
+            foreach ($line in (Get-Content -LiteralPath $file.FullName -ErrorAction SilentlyContinue)) {
+                if ($line -notmatch '(?i)dispatch|subagent|tool|task|invoke') { continue }
+                if ($line.Contains($AgentName, [System.StringComparison]::Ordinal)) {
+                    $evidence.Add("log:$($file.Name)")
+                }
+            }
+        }
+    }
+    $evidence.ToArray()
 }
 
 function Get-RosterMap {
@@ -336,4 +485,4 @@ function Get-RunObservation {
     }
 }
 
-Export-ModuleMember -Function New-SquadWorkspace, Invoke-SquadTurn, Get-RunObservation, Get-RosterMap, Get-GateVerdict, ConvertTo-ComparableName
+Export-ModuleMember -Function New-SquadWorkspace, Invoke-SquadTurn, Publish-ConnectorConsumerResult, Get-SquadDispatchEvidence, Get-RunObservation, Get-RosterMap, Get-GateVerdict, ConvertTo-ComparableName

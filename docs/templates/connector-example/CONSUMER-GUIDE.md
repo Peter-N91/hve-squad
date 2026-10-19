@@ -102,7 +102,7 @@ Configure your adapter's trusted endpoint mapping:
 3. **Your consumer `.agent.md` files and skills can live anywhere.**
    They can stay in `.github/agents/` inside the repository or in a separate central folder or repository on your machine—HVE Squad never dispatches consumer `.agent.md` files directly because `Squad Coordinator` only dispatches its built-in `Squad Connector` shim.
 4. **Your adapter script bridges `.connector-drops/<connectorId>/` to your `.agent.md` or workflow.**
-   When a bound role runs, `Squad Connector` writes `<taskId>.request.json` into the manifest's `dropPath` and pauses (`awaiting`). A lightweight PowerShell watcher (or your own agent host) polls `.connector-drops/`, maps `connectorId` to your `.agent.md` or orchestrator, runs it against the real source files named in `request.task`, writes the source-grounded `.md` deliverable(s), and writes `<taskId>.result.json`.
+   When a bound role runs, `Squad Connector` first writes its internal `<taskId>.snapshot.json` collision baseline, then publishes `<taskId>.request.json` into the manifest's `dropPath` and pauses (`awaiting`). A lightweight PowerShell watcher (or your own agent host) polls only `*.request.json`, ignores and never edits `*.snapshot.json`, maps `connectorId` to your `.agent.md` or orchestrator, runs it against the real source files named in `request.task`, writes the source-grounded `.md` deliverable(s), and writes `<taskId>.result.json`.
 
 Below is a reference PowerShell watcher loop you can adapt for your own host (save it outside the package or in your own tooling folder and replace the inner agent call with your CLI or SDK runner):
 

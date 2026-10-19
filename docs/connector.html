@@ -763,8 +763,8 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           </tr>
           <tr>
             <td><code>failed</code></td>
-            <td>Work could not be completed, or a deliberate failure occurred.</td>
-            <td>Shim escalates to the orchestrator as a failed role, with your narrative as context. The stage may be retried or abandoned depending on the orchestrator's policy.</td>
+            <td>Work could not be completed, a result failed validation, or the shim-owned collision snapshot is missing, changed, or mismatched.</td>
+            <td>Shim rejects the exchange and escalates to the orchestrator as a failed role. It never rebuilds the pre-task snapshot from the resumed filesystem.</td>
           </tr>
           <tr>
             <td><code>awaiting</code></td>
@@ -793,16 +793,18 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           Interactive clarification occurs only when ambiguity remains; unattended ambiguity stops and escalates.
         </li>
         <li>
-          <strong>Shim writes delegation-request.</strong> The Squad Connector shim writes a JSON file
-          to your manifest's <code>dropPath</code>. The request contains bounded work, timing, and in
-          <code>1.1</code> trusted binding/output allowlists. The shim returns immediately with status
+          <strong>Shim snapshots, then writes delegation-request.</strong> The Squad Connector shim
+          first writes its closed, shim-owned <code>&lt;taskId&gt;.snapshot.json</code> collision
+          baseline, then publishes <code>&lt;taskId&gt;.request.json</code> to your manifest's
+          <code>dropPath</code>. The request contains bounded work, timing, and in <code>1.1</code>
+          trusted binding/output allowlists. The shim returns immediately with status
           <code>awaiting</code> — it does not block waiting for your response.
         </li>
         <li>
           <strong>Your coordinator watches/polls.</strong> Your coordinator (running entirely outside
-          this package) watches the <code>dropPath</code> for new delegation-requests by whatever means
-          you choose — file watcher, cron job, human-triggered script, etc. There is no prescribed
-          mechanism.
+          this package) watches the <code>dropPath</code> for new <code>*.request.json</code> files by
+          whatever means you choose — file watcher, cron job, human-triggered script, etc. It ignores
+          and never edits <code>*.snapshot.json</code>. There is no prescribed mechanism.
         </li>
         <li>
           <strong>Coordinator does the work.</strong> Your coordinator reads the delegation-request,
@@ -816,8 +818,9 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         <li>
           <strong>Later dispatch of shim checks for result.</strong> A later dispatch of the Squad
           Connector shim (by the orchestrator on the next turn, or whenever the squad runs again) reads
-          the <code>dropPath</code>, finds your result envelope, validates it, and reports
-          <code>completed</code>, <code>failed</code>, or <code>unreachable</code>.
+          the unchanged request and original collision snapshot, finds your result envelope, validates
+          the complete exchange, and reports <code>completed</code>, <code>failed</code>, or
+          <code>unreachable</code>. It never rebuilds the snapshot after your producer has written files.
         </li>
       </ol>
 
@@ -880,9 +883,11 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           <strong>No auto-overwrite; in-place validation:</strong> Your producer writes each new
           task-owned artifact directly under <code>deliverableRoot</code> (or its declared
           <code>allowedOutputs[].deliverableRoot</code> slot) before publishing
-          <code>&lt;taskId&gt;.result.json</code>. The shim snapshots pre-existing paths before
-          issuing the request and rejects any declared artifact path that already existed before the
-          task, duplicates another path in the same result, or is missing on disk when validated.
+          <code>&lt;taskId&gt;.result.json</code>. The shim reads pre-existing paths from the closed
+          <code>&lt;taskId&gt;.snapshot.json</code> it wrote before the request and rejects any declared
+          artifact path that already existed before the task, duplicates another path in the same
+          result, or is missing on disk when validated. A missing, changed, or mismatched snapshot
+          fails the exchange rather than being regenerated.
         </li>
       </ul>
 

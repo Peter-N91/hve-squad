@@ -17,8 +17,9 @@ and this one is a convenience copy.
       content).
 * [ ] Treats requests as bounded, idempotent work units. A duplicate
       `taskId` is replay and is rejected rather than re-executed.
-* [ ] Watches or polls the manifest's `dropPath` for a delegation-request, by
-      whatever means it chooses.
+* [ ] Watches or polls the manifest's `dropPath` for `*.request.json`, by
+      whatever means it chooses, and ignores the shim-owned `*.snapshot.json`
+      collision baseline.
 * [ ] Writes back exactly one result envelope per `taskId`, never reusing a
       `taskId` and never writing to a `dropPath` it was not given.
 * [ ] In 1.1 mode, echoes and binds trusted identity fields correctly:

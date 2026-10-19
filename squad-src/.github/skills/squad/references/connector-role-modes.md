@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.1"
-  last_updated: "2026-10-15"
+  last_updated: "2026-10-19"
 ---
 
 # Squad Connector Role Modes (Contract 1.1)
@@ -126,8 +126,11 @@ plan must actually require its work.
 Automatic selection is not synchronous transport. An external `awaiting`
 result holds the current stage; it is not completion, permission to advance,
 or a reason to fall back to the internal agent. Keep the pending request's
-task/binding identity in the handoff decision and request file, and re-dispatch
-the shim with the same `taskId` when the result is available. Record no
+task/binding identity in the handoff decision and request file, preserve the
+shim-owned `<taskId>.snapshot.json` collision baseline unchanged, and
+re-dispatch the shim with the same `taskId` when the result is available. The
+resume dispatch loads that original snapshot rather than rebuilding it after
+the producer has written artifacts. Record no
 completed dispatch history until artifacts validate. Consumer automation may
 trigger the resume; this package supplies no external runner or automatic
 cross-process wake-up service.

@@ -98,6 +98,21 @@ test("connector guides keep retry exhaustion aligned with the unreachable runtim
   }
 });
 
+test("connector guides preserve the collision snapshot across ordinary resume", () => {
+  for (const prefix of ["", "fr/"]) {
+    const { $ } = readSource("connector", prefix);
+    const text = $("main").text();
+    const failedRow = $("tr").filter((_, row) => $(row).find("td code").first().text() === "failed").first().text();
+    for (const term of ["<taskId>.snapshot.json", "<taskId>.request.json", "*.snapshot.json"]) {
+      assert(text.includes(term), `${prefix}connector: missing durable resume term ${term}`);
+    }
+    assert(text.includes("validate") || text.includes("valide"));
+    assert(text.includes("never") || text.includes("jamais"));
+    assert(failedRow.includes("snapshot") || failedRow.includes("photographie"),
+      `${prefix}connector: failed status must cover invalid collision snapshots`);
+  }
+});
+
 test("the consumer companion teaches onboarding rather than developer smoke tests", () => {
   const guide = readFileSync(new URL("../../docs/templates/connector-example/CONSUMER-GUIDE.md", import.meta.url), "utf8");
   for (let step = 1; step <= 6; step++) assert.match(guide, new RegExp(`^## Step ${step}:`, "m"));
@@ -107,6 +122,8 @@ test("the consumer companion teaches onboarding rather than developer smoke test
   }
   assert.match(guide, /asks for missing decisions one at a time/);
   assert.match(guide, /implementation coordinator/);
+  assert.match(guide, /<taskId>\.snapshot\.json/);
+  assert.match(guide, /ignores and never edits `\*\.snapshot\.json`/);
   assert(!guide.includes("Build-SquadPlugin.ps1"));
   assert(!guide.includes("configuration-only test"));
 });

@@ -108,6 +108,7 @@ while ($true) {
     Get-ChildItem -Path '.\connectors\*.json' -File | ForEach-Object {
         $manifest = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
         $dropDir  = Join-Path (Get-Location) $manifest.dropPath
+        # The shim owns *.snapshot.json. Poll only requests and never edit the snapshot.
         Get-ChildItem -Path $dropDir -Filter '*.request.json' -File -ErrorAction SilentlyContinue | ForEach-Object {
             $req        = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
             $resultPath = Join-Path $dropDir "$($req.taskId).result.json"

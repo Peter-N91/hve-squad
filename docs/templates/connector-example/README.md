@@ -50,6 +50,12 @@ The retained 1.0 result narrative predates the trusted-provenance
 clarification and repeats an accounting marker as text. It remains untrusted
 narrative and is preserved only as compatibility evidence.
 
+For both contract versions, the shim also writes a closed
+`<taskId>.snapshot.json` collision baseline before publishing
+`<taskId>.request.json`. That sidecar is shim-owned runtime evidence, not a
+consumer template: watchers ignore it and never edit it, while later resumes
+reuse it unchanged.
+
 ## Role-mode 1.1 worked example
 
 | File | What it is |

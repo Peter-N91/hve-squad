@@ -20,7 +20,7 @@ Read this file in full before authoring a manifest, before registering a connect
 
 This contract defines exactly one invocation mode. No other exists today.
 
-**Mode 2 — human-in-the-loop file drop.** The Squad Connector shim writes the delegation-request envelope to the manifest's `dropPath` and returns `awaiting` in the **same** turn — it never blocks waiting for a result, and it never shells out to, imports, or directly invokes anything the manifest names. The consumer's own coordinator, running entirely outside this package and outside this turn, picks up the delegation-request by whatever means it likes — a file watcher, a cron job, a human running it by hand — and writes back a result envelope at the same `dropPath`. A **later** dispatch of the Squad Connector shim, naming the same `taskId`, reads that result envelope, validates it, and reports `completed`, `failed`, or — if still absent — `awaiting` or `unreachable`.
+**Mode 2 — human-in-the-loop file drop.** The Squad Connector shim writes `<taskId>.snapshot.json` and then the `<taskId>.request.json` delegation-request envelope to the manifest's `dropPath`, and returns `awaiting` in the **same** turn — it never blocks waiting for a result, and it never shells out to, imports, or directly invokes anything the manifest names. The consumer's own coordinator, running entirely outside this package and outside this turn, picks up the delegation-request by whatever means it likes — a file watcher, a cron job, a human running it by hand — and writes back `<taskId>.result.json` at the same `dropPath`. A **later** dispatch of the Squad Connector shim, naming the same `taskId`, reads the unchanged request, the shim-owned snapshot, and that result envelope, validates them, and reports `completed`, `failed`, or — if still absent — `awaiting` or `unreachable`.
 
 No command-invocation mode is introduced by this contract. `dropPath` is a location to read and write files, not an executable to run, and the shim never treats it as one. A consumer who wants a faster loop polls or watches `dropPath` themselves; that is their coordinator's concern, not this contract's.
 
@@ -46,7 +46,7 @@ No other field is defined, and the schema is **closed**. A manifest, delegation-
 
 ## Delegation-Request Envelope
 
-Written by the shim to `dropPath` in Step 2 of its dispatch.
+Written by the shim as `<taskId>.request.json` at `dropPath` in Step 2 of its dispatch.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
@@ -86,6 +86,21 @@ Written by the consumer's own coordinator back to `dropPath`, read by a later di
 
 The shim must reject 1.1-only behavior under a 1.0 request/result shape rather than inferring an upgrade.
 
+## Durable Collision Snapshot
+
+Before publishing a first-time request, the shim records the pre-task filesystem boundary in a separate shim-owned `<taskId>.snapshot.json` file at the same `dropPath`:
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `taskId` | string | yes | Must match the adjacent request exactly. |
+| `deliverableRoot` | string | yes | Must match the adjacent request exactly. |
+| `preExistingPaths` | array of string | yes | Normalized repository-relative file paths that existed under `deliverableRoot` before this task. Every value remains under that root. |
+| `createdAt` | string (ISO 8601) | yes | When the pre-task snapshot was taken. |
+
+The snapshot schema is closed. It is internal collision evidence, not a consumer-authored envelope: consumers watch `*.request.json`, ignore `*.snapshot.json`, and never edit or replace the snapshot. The shim validates the snapshot with `Resolve-SquadConnectorDispatch.ps1 validate-snapshot`, writes it before the request becomes visible, and preserves both files unchanged across every resume.
+
+A later dispatch must load the original sidecar and pass its validated `preExistingPaths` into exchange validation. It never rebuilds the snapshot from the current filesystem, because the producer may already have written the result artifact by then. A missing, malformed, mismatched, or rewritten snapshot is a validation failure (`failed`), and no artifact from that exchange is accepted.
+
 ## Statuses
 
 Four statuses, and only four:
@@ -94,7 +109,7 @@ Four statuses, and only four:
 |---|---|---|
 | `awaiting` | The delegation-request has been written (or re-confirmed) and no result envelope exists yet at `dropPath`, and the deadline has not passed. | Reported to the coordinator as a normal, expected status — not a failure. Proof of Dispatch is **not** satisfied: no artifact exists yet, so the Scribe writes no history entry for this turn. |
 | `completed` | A result envelope exists, validated in full against every rule below, and its task-owned artifact(s) have been validated in place at the dispatching role's Deliverable Root without colliding with any pre-existing file. | Reported `external, unverified` until a human confirms it — see *Proof-of-Dispatch Self-Attestation Guard*. |
-| `failed` | The consumer's coordinator reported it could not complete the task, or wrote back an envelope that fails validation (malformed, unsolicited, replayed, oversized, or carrying a disallowed path or file type). | Escalated exactly like any other absent-role failure: name the role, the connector, and what failed. A present failure or invalid envelope is `failed`; absence remains governed by `awaiting` / `unreachable`. |
+| `failed` | The consumer's coordinator reported it could not complete the task, the result envelope fails validation (malformed, unsolicited, replayed, oversized, or carrying a disallowed path or file type), or the shim-owned collision snapshot is missing, malformed, mismatched, or rewritten. | Escalated exactly like any other absent-role failure: name the role, the connector, and what failed. A present failure or invalid exchange is `failed`; absence remains governed by `awaiting` / `unreachable`. |
 | `unreachable` | No manifest exists for the named connector, the manifest itself fails validation, no result envelope has arrived by the deadline, or the unanswered request has exhausted `retryCap`. | Escalated exactly as the roster escalates an absent external agent (`.github/instructions/squad/squad-roster.instructions.md`, *Resolving a Role to an Agent*): never a silent no-op, never an inline substitute performed by the shim or any other role. |
 
 A missing or malformed envelope is **never fabricated into a `completed` result.** Before the deadline and while retry attempts remain, a missing envelope is `awaiting`. At or after the deadline, or when `retryCap` is exhausted, it is `unreachable`. A present-but-invalid envelope is `failed`. There is no path from "file absent or broken" to "treat it as a success anyway."
@@ -114,7 +129,7 @@ Every artifact path in a result envelope is validated, in this order, before the
    * 5 levels maximum nesting depth under `deliverableRoot`.
    * 10,000 characters maximum for any single string value anywhere in the envelope (including `narrative`).
 6. **Reject reserved Windows device names** (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`) in any path component, and reject any component with trailing dots or trailing spaces.
-7. **Never auto-overwrite; validate task-owned deliverables in place.** Because the result envelope carries relative paths and types rather than inline file content, the consumer's producer writes each new artifact directly under `deliverableRoot` (or its declared `allowedOutputs[].deliverableRoot` slot in `1.1` orchestrator mode) before publishing `<taskId>.result.json`. The shim snapshots pre-existing paths under `deliverableRoot` before issuing the delegation-request (`preExistingPaths`) and rejects any declared artifact path that already existed before the task (`existing-file-collision`), duplicates another path in the same result (`duplicate-artifact-path`), or is absent on disk when a `completed` result is validated (`missing-delivered-artifact`). Pre-existing files are never overwritten or accepted as task output.
+7. **Never auto-overwrite; validate task-owned deliverables in place.** Because the result envelope carries relative paths and types rather than inline file content, the consumer's producer writes each new artifact directly under `deliverableRoot` (or its declared `allowedOutputs[].deliverableRoot` slot in `1.1` orchestrator mode) before publishing `<taskId>.result.json`. The shim reads `preExistingPaths` only from the validated, unchanged `<taskId>.snapshot.json` written before `<taskId>.request.json`, and rejects any declared artifact path that already existed before the task (`existing-file-collision`), duplicates another path in the same result (`duplicate-artifact-path`), or is absent on disk when a `completed` result is validated (`missing-delivered-artifact`). Pre-existing files are never overwritten or accepted as task output.
 
 ## Request Binding, Replay Protection, and Manifest Hygiene
 
@@ -151,7 +166,7 @@ A connector **never self-attests** Proof of Dispatch. Any claim inside a result 
 A consumer's coordinator is compatible with this contract when it:
 
 * [ ] Authors one manifest per connector, validating clean against the closed *Manifest Schema* above (no extra fields, `transport: file`, no secret-shaped content).
-* [ ] Watches or polls the manifest's `dropPath` for a delegation-request, by whatever means it chooses.
+* [ ] Watches or polls the manifest's `dropPath` for `*.request.json`, by whatever means it chooses, and ignores the shim-owned `*.snapshot.json` collision baseline.
 * [ ] Writes back exactly one result envelope per `taskId`, never reusing a `taskId` and never writing to a `dropPath` it was not given.
 * [ ] Writes each task-owned artifact directly under the `deliverableRoot` (or declared `allowedOutputs[].deliverableRoot` slot) named in the matching delegation-request before publishing `<taskId>.result.json`, as one of `md`, `json`, or `txt`, within the numeric caps in *Envelope Artifact-Path Validation Rules*, without overwriting any pre-existing file.
 * [ ] For schema `1.1`: echoes `bindingId` correctly, returns only declared `outputId` values from `allowedOutputs`, and returns orchestrator fan-out through one bounded envelope `outputs[]` set.

@@ -402,17 +402,31 @@ BeforeAll {
         $root
     }
 
-    function Use-ConnectorReplacementState {
-        param([string]$Root)
+    function Copy-ConnectorManifestFixture {
+        param(
+            [string]$Root,
+            [string]$Name
+        )
 
-        Add-Content -LiteralPath (Join-Path $Root 'team.md') -Encoding utf8NoBOM -Value @'
+        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        $source = Join-Path $repoRoot 'docs' 'templates' 'connector-example' $Name
+        $projectRoot = Split-Path (Split-Path $Root -Parent) -Parent
+        $destinationDirectory = Join-Path $projectRoot 'connectors'
+        New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+        Copy-Item -LiteralPath $source -Destination (Join-Path $destinationDirectory $Name)
+        "connectors/$Name"
+    }
 
-## Connector Bindings
-
-| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
-|------------|--------------|----------|---------------|-----------|-------------|--------|-------------|------------|--------------|-------------------|
-| research-org | acme-research-agent | docs/templates/connector-example/manifest.research-agent.1.1.json | agent | replace | role | role:researcher | Org Researcher | | researcher | connector |
-'@
+    function Set-ConnectorHistoryFixture {
+        param(
+            [string]$Root,
+            [string]$MemberName,
+            [string]$ConnectorId,
+            [string]$BindingId,
+            [string]$EndpointKind,
+            [string]$RoleMode,
+            [string]$Target
+        )
 
         $internalHistory = Join-Path $Root 'history/Squad Researcher.md'
         $connectorHistory = Join-Path $Root 'history/Squad Connector.md'
@@ -420,19 +434,89 @@ BeforeAll {
         $history = Get-Content -LiteralPath $connectorHistory -Raw
         $history = $history.Replace('# History: Squad Researcher', '# History: Squad Connector')
         $history = $history -replace '(?m)^\* Outcome: .+$', ("* Outcome: external, unverified`n" +
-            "* Member Name: Org Researcher`n" +
-            "* External provenance: connector=acme-research-agent; binding=research-org; endpoint=agent; mode=replace; target=role:researcher`n" +
+            "* Member Name: $MemberName`n" +
+            "* External provenance: connector=$ConnectorId; binding=$BindingId; endpoint=$EndpointKind; mode=$RoleMode; target=$Target`n" +
             "* Verification: external, unverified`n" +
-            '* External-unmetered: connector=acme-research-agent')
+            "* External-unmetered: connector=$ConnectorId")
         Set-Content -LiteralPath $connectorHistory -Value $history -Encoding utf8NoBOM -NoNewline
+    }
+
+    function Set-ConnectorLedgerFixture {
+        param(
+            [string]$Root,
+            [string]$Role,
+            [string]$MemberName
+        )
 
         $ledgerPath = Join-Path $Root 'consumption.md'
         $ledger = Get-Content -LiteralPath $ledgerPath -Raw
         $updated = $ledger.Replace(
             '| researcher    |        | Squad Researcher               |',
-            '| researcher    | Org Researcher | Squad Connector                |')
-        if ($updated -eq $ledger) { throw 'The replacement-flow fixture could not update the researcher attribution row.' }
+            ("| {0,-13} | {1} | Squad Connector                |" -f $Role, $MemberName))
+        if ($updated -eq $ledger) { throw 'The connector fixture could not update the researcher attribution row.' }
+        if ($Role -ne 'researcher') {
+            $updated = $updated.Replace('| researcher    | 1     |', ("| {0,-13} | 1     |" -f $Role))
+            $updated = $updated.Replace('researcher     turns 1', ("{0,-14} turns 1" -f $Role))
+        }
         Set-Content -LiteralPath $ledgerPath -Value $updated -Encoding utf8NoBOM -NoNewline
+    }
+
+    function Use-ConnectorReplacementState {
+        param([string]$Root)
+
+        $manifest = Copy-ConnectorManifestFixture -Root $Root -Name 'manifest.research-agent.1.1.json'
+        $bindings = @'
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+|------------|--------------|----------|---------------|-----------|-------------|--------|-------------|------------|--------------|-------------------|
+| research-org | acme-research-agent | __MANIFEST__ | agent | replace | role | role:researcher | Org Researcher | | researcher | connector |
+'@.Replace('__MANIFEST__', $manifest)
+        Add-Content -LiteralPath (Join-Path $Root 'team.md') -Encoding utf8NoBOM -Value $bindings
+
+        Set-ConnectorHistoryFixture -Root $Root -MemberName 'Org Researcher' -ConnectorId 'acme-research-agent' `
+            -BindingId 'research-org' -EndpointKind 'agent' -RoleMode 'replace' -Target 'role:researcher'
+        Set-ConnectorLedgerFixture -Root $Root -Role 'researcher' -MemberName 'Org Researcher'
+    }
+
+    function Use-ConnectorAdditiveState {
+        param([string]$Root)
+
+        $manifest = Copy-ConnectorManifestFixture -Root $Root -Name 'manifest.capability-assessor.1.1.json'
+        $teamPath = Join-Path $Root 'team.md'
+        $team = Get-Content -LiteralPath $teamPath -Raw
+        $memberRow = '| gcp         | GCP Assessor | Squad Connector      |                  | —                                                   | runSubagent | fast       | `.copilot-tracking/research/` |'
+        $updated = [regex]::Replace($team, '(?m)^(\| scribe[^\r\n]+\|\r?\n)', ('$1' + $memberRow + "`n"), 1)
+        if ($updated -eq $team) { throw 'The additive fixture could not add the connector Members row.' }
+        Set-Content -LiteralPath $teamPath -Value $updated -Encoding utf8NoBOM -NoNewline
+
+        $bindings = @'
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+|------------|--------------|----------|---------------|-----------|-------------|--------|-------------|------------|--------------|-------------------|
+| gcp-assessor | acme-capability-assessor | __MANIFEST__ | agent | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | researcher | connector |
+'@.Replace('__MANIFEST__', $manifest)
+        Add-Content -LiteralPath $teamPath -Encoding utf8NoBOM -Value $bindings
+
+        Set-ConnectorHistoryFixture -Root $Root -MemberName 'GCP Assessor' -ConnectorId 'acme-capability-assessor' `
+            -BindingId 'gcp-assessor' -EndpointKind 'agent' -RoleMode 'add' -Target 'role:gcp/GCP Assessor'
+        Set-ConnectorLedgerFixture -Root $Root -Role 'gcp' -MemberName 'GCP Assessor'
+
+        $statePath = Join-Path $Root 'state.json'
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+        $state['activeRoles'] = @('gcp')
+        $state | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
+    }
+
+    function Use-LegacyConnectorState {
+        param([string]$Root)
+
+        Set-ConnectorHistoryFixture -Root $Root -MemberName 'Org Researcher' -ConnectorId 'acme-research-legacy' `
+            -BindingId 'legacy-1.0' -EndpointKind 'agent' -RoleMode 'replace' -Target 'role:researcher'
+        Set-ConnectorLedgerFixture -Root $Root -Role 'researcher' -MemberName 'Org Researcher'
     }
 
     function Test-FederationPreflightFixture {
@@ -526,6 +610,27 @@ Describe 'The contract passes on a schema-correct tree' {
         @($memberRows | Where-Object { $_['Role'] -eq 'researcher' }).Count | Should -Be 1
         @($memberRows | Where-Object { $_['Member Name'] -eq 'Org Researcher' }).Count | Should -Be 0
         (Test-Contract $root).Passed | Should -BeTrue -Because 'a replacement binding adds a connector history identity without rewriting Members'
+    }
+
+    It 'accepts a completed additive connector with its exact Members row' {
+        $root = New-Fixture 'connector-additive'
+        Use-ConnectorAdditiveState -Root $root
+
+        $model = Get-SquadStateModel -SquadRoot $root
+        $model.RoleAgents['gcp'] | Should -Contain 'Squad Connector'
+        $model.ConnectorHistoryIdentities[0].MemberName | Should -Be 'GCP Assessor'
+        (Test-Contract $root).Passed | Should -BeTrue -Because 'an additive binding is valid only with its exact connector member row'
+    }
+
+    It 'accepts a binding-free legacy 1.0 connector identity' {
+        $root = New-Fixture 'connector-legacy'
+        Use-LegacyConnectorState -Root $root
+
+        $model = Get-SquadStateModel -SquadRoot $root
+        $model.ConnectorBindings.Count | Should -Be 0
+        $model.RoleAgents['researcher'] | Should -Contain 'Squad Connector'
+        $model.ConnectorHistoryIdentities[0].BindingId | Should -Be 'legacy-1.0'
+        (Test-Contract $root).Passed | Should -BeTrue -Because 'legacy provenance derives role identity without inventing a 1.1 binding'
     }
 
     It 'preserves legacy state while upgrading the preflight schema' {
@@ -641,6 +746,81 @@ Describe 'The contract passes on a schema-correct tree' {
         $state['currentRun']['estCostUsd'] | Should -Be 2.45
         $state['currentRun']['costPreflight']['decision'] | Should -Be 'not-requested'
         $state['currentRun']['costPreflight']['ceilingUsd'] | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'The contract rejects invalid connector binding and provenance state' {
+    It 'rejects a replacement target naming a missing internal member' {
+        $root = New-Fixture 'connector-wrong-target-member'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern 'role:researcher' -Replacement 'role:researcher/Missing Researcher'
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Connector.md') -Pattern 'role:researcher' -Replacement 'role:researcher/Missing Researcher'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a malformed connector role target' {
+        $root = New-Fixture 'connector-malformed-target'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern 'role:researcher' -Replacement 'researcher'
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Connector.md') -Pattern 'role:researcher' -Replacement 'researcher'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a connector binding whose manifest is missing' {
+        $root = New-Fixture 'connector-missing-manifest'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern 'connectors/manifest\.research-agent\.1\.1\.json' -Replacement 'connectors/missing.json'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a connector id that does not match the manifest' {
+        $root = New-Fixture 'connector-mismatched-id'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern 'acme-research-agent' -Replacement 'wrong-research-agent'
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Connector.md') -Pattern 'acme-research-agent' -Replacement 'wrong-research-agent'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a blank connector binding id' {
+        $root = New-Fixture 'connector-blank-binding'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern '\| research-org \|' -Replacement '|  |'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects conflicting duplicate connector bindings' {
+        $root = New-Fixture 'connector-duplicate-binding'
+        Use-ConnectorReplacementState -Root $root
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Encoding utf8NoBOM -Value '| research-org | acme-research-agent | connectors/manifest.research-agent.1.1.json | agent | replace | role | role:researcher | Other Researcher | | researcher | ask |'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a connector history member that does not match its binding' {
+        $root = New-Fixture 'connector-wrong-history-member'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Connector.md') -Pattern '\* Member Name: Org Researcher' -Replacement '* Member Name: Wrong Researcher'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a connector history binding id that does not resolve exactly' {
+        $root = New-Fixture 'connector-wrong-history-binding'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Connector.md') -Pattern 'binding=research-org' -Replacement 'binding=other-binding'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a connector ledger member that differs from history' {
+        $root = New-Fixture 'connector-wrong-ledger-member'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') -Pattern '\| researcher\s+\| Org Researcher \| Squad Connector' -Replacement '| researcher    | Wrong Researcher | Squad Connector'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects an additive binding whose connector Members row is missing' {
+        $root = New-Fixture 'connector-orphan-additive'
+        Use-ConnectorAdditiveState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern '(?m)^\| gcp[ \t]+\| GCP Assessor[^\r\n]*\r?\n' -Replacement ''
+        (Test-Contract $root).Passed | Should -BeFalse
     }
 }
 

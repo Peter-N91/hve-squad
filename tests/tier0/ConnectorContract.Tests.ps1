@@ -556,6 +556,66 @@ Describe 'CONN-26 retry exhaustion preserves the runtime unreachable status' {
     }
 }
 
+Describe 'CONN-28 ordinary resume preserves a durable collision snapshot' {
+    It 'validates the closed snapshot sidecar against its unchanged request' {
+        $request = Get-ExampleJson -Name 'delegation-request.agent.1.1.sample.json'
+        $snapshot = [ordered]@{
+            taskId          = $request.taskId
+            deliverableRoot = $request.deliverableRoot
+            preExistingPaths = @(
+                "$($request.deliverableRoot)/existing.md"
+                "$($request.deliverableRoot)/nested/existing.json"
+            )
+            createdAt       = $request.createdAt
+        }
+
+        $direct = Test-SquadConnectorSnapshot -Snapshot $snapshot -Request $request
+        $direct.Status | Should -Be 'ok' -Because ($direct.Issues -join ', ')
+        $cli = Invoke-DispatchHelperCli -Operation 'validate-snapshot' -Payload @{
+            snapshot = $snapshot
+            request  = $request
+        }
+        $cli.Status | Should -Be 'ok' -Because ($cli.Issues -join ', ')
+        @($cli.PreExistingPaths).Count | Should -Be 2
+    }
+
+    It 'rejects missing bindings, extra fields, duplicate paths, and paths outside the request root' {
+        $request = Get-ExampleJson -Name 'delegation-request.agent.1.1.sample.json'
+        $snapshot = [ordered]@{
+            taskId          = 'wrong-task'
+            deliverableRoot = 'other/root'
+            preExistingPaths = @(
+                'other/root/existing.md'
+                'other/root/existing.md'
+                'outside.md'
+            )
+            createdAt       = 'not-a-date'
+            regenerated     = $true
+        }
+
+        $check = Test-SquadConnectorSnapshot -Snapshot $snapshot -Request $request
+        $check.Status | Should -Be 'error'
+        @($check.Issues) | Should -Contain 'binding-mismatch:taskId'
+        @($check.Issues) | Should -Contain 'binding-mismatch:deliverableRoot'
+        @($check.Issues) | Should -Contain 'invalid:createdAt'
+        @($check.Issues) | Should -Contain 'extra:regenerated'
+        @($check.Issues | Where-Object { $_ -like 'duplicate:preExistingPath:*' }).Count | Should -Be 1
+        @($check.Issues | Where-Object { $_ -like 'outside-deliverable-root:preExistingPath:*' }).Count | Should -Be 1
+    }
+
+    It 'requires snapshot-before-request publication and reuse on later dispatches' {
+        $agent = Get-Content -LiteralPath $script:AgentPath -Raw
+        $contract = Get-Content -LiteralPath $script:ContractPath -Raw
+
+        $agent | Should -Match ([regex]::Escape('Write this sidecar **before** publishing `<taskId>.request.json`'))
+        $agent | Should -Match ([regex]::Escape('Do not rewrite either file and never regenerate `preExistingPaths` from the current filesystem'))
+        $agent | Should -Match ([regex]::Escape('Revalidate `<taskId>.snapshot.json` against the unchanged request with `validate-snapshot`'))
+        $contract | Should -Match ([regex]::Escape('The snapshot schema is closed. It is internal collision evidence, not a consumer-authored envelope'))
+        $contract | Should -Match ([regex]::Escape('A later dispatch must load the original sidecar'))
+        $contract | Should -Match ([regex]::Escape('A missing, malformed, mismatched, or rewritten snapshot is a validation failure (`failed`)'))
+    }
+}
+
 Describe 'CONN-24 and CONN-25 version gates, binding checks, and allowed-output checks' {
     It 'accepts the legacy 1.0 fixtures and rejects 1.1-only fields under 1.0' {
         $manifest = Get-ExampleJson -Name 'manifest.json'
