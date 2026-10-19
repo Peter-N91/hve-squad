@@ -147,10 +147,70 @@ Describe 'Measure-SquadLedger reproduces the correct ledger on a fully-applied f
         $result.Output | Should -Match 'PASS'
     }
 
-    It 'emits well-formed json with -Format json' {
+    It 'emits well-formed json regardless of consumption whitespace and rejects invalid new block schemas' {
         $result = Invoke-Ledger -SquadRoot $script:AppliedRoot -Format json
         { $result.Output | ConvertFrom-Json } | Should -Not -Throw
         ($result.Output | ConvertFrom-Json).total.estCostUsd | Should -Be 0.3171
+
+        $compactRoot = New-BaselineTestRootLocal
+        foreach ($history in Get-ChildItem -LiteralPath (Join-Path $compactRoot 'history') -Filter '*.md') {
+            $raw = Get-Content -LiteralPath $history.FullName -Raw
+            $compact = [regex]::Replace($raw, '(?ms)(```json\r?\n)(.*?)(\r?\n```)', {
+                param($match)
+                $match.Groups[1].Value +
+                    (($match.Groups[2].Value | ConvertFrom-Json -AsHashtable) | ConvertTo-Json -Depth 10 -Compress) +
+                    $match.Groups[3].Value
+            })
+            Set-Content -LiteralPath $history.FullName -Value $compact -NoNewline
+        }
+        $compactResult = Invoke-Ledger -SquadRoot $compactRoot -Check
+        $compactResult.ExitCode | Should -Be 0 -Because $compactResult.Output
+        $compactJson = (Invoke-Ledger -SquadRoot $compactRoot -Format json).Output | ConvertFrom-Json
+        $compactJson.total.estCostUsd | Should -Be 0.3171
+        $compactJson.total.turns | Should -Be ($result.Output | ConvertFrom-Json).total.turns
+
+        Import-Module (Join-Path $PSScriptRoot 'SquadState.psm1') -Force
+        $historyPath = Join-Path $compactRoot 'history/Squad Researcher.md'
+        $original = Get-Content -LiteralPath $historyPath -Raw
+        $json = [regex]::Match($original, '(?ms)```json\r?\n(.*?)\r?\n```').Groups[1].Value
+        $fields = $json | ConvertFrom-Json -AsHashtable
+        $names = @($fields.Keys)
+        $verified = @(Get-ConsumptionBlock -Path $historyPath)[0]
+        ($verified.Order -join '|') | Should -BeExactly ($names -join '|')
+        $verified.ParseError | Should -BeNullOrEmpty
+        $verified.NonNumeric | Should -BeNullOrEmpty
+        $reordered = [ordered]@{}
+        foreach ($name in (@($names[1], $names[0]) + $names[2..9])) { $reordered[$name] = $fields[$name] }
+        $nonNumeric = $json | ConvertFrom-Json -AsHashtable
+        $nonNumeric['input_tokens'] = '100'
+        $missing = $json | ConvertFrom-Json -AsHashtable
+        $missing.Remove('basis')
+        $extra = $json | ConvertFrom-Json -AsHashtable
+        $extra['extra'] = 1
+        $invalid = @(
+            @{ Json = ($reordered | ConvertTo-Json -Compress); Error = 'field order/set' }
+            @{ Json = $json.Insert(1, '"model":"duplicate",'); Error = 'field order/set' }
+            @{ Json = $json.Replace('"model":', '"Model":'); Error = 'field order/set' }
+            @{ Json = ($missing | ConvertTo-Json -Compress); Error = 'field order/set' }
+            @{ Json = ($extra | ConvertTo-Json -Compress); Error = 'field order/set' }
+            @{ Json = ($nonNumeric | ConvertTo-Json -Compress); Error = 'non-numeric' }
+            @{ Json = '[]'; Error = 'JSON parse error' }
+            @{ Json = '"not an object"'; Error = 'JSON parse error' }
+        )
+        $baselinePath = Join-Path $TestDrive 'compact-json-baseline.json'
+        (Invoke-Ledger -SquadRoot $compactRoot -EmitBaseline $baselinePath).ExitCode | Should -Be 0
+        foreach ($case in $invalid) {
+            $entry = "`n`n### 2026-10-19T18:00:00Z Schema regression`n`n#### Consumption`n`n" +
+                '```json' + "`n" + $case.Json + "`n" + '```' + "`n"
+            Set-Content -LiteralPath $historyPath -Value ($original + $entry) -NoNewline
+            $rejected = Invoke-Ledger -SquadRoot $compactRoot -Check -BaselinePath $baselinePath
+            $rejected.ExitCode | Should -Be 1 -Because $case.Json
+            $rejected.Output | Should -Match $case.Error
+            $verified = @(Get-ConsumptionBlock -Path $historyPath)[-1]
+            $validShape = ($verified.Order -join '|') -ceq ($names -join '|')
+            ($validShape -and -not $verified.ParseError -and $verified.NonNumeric.Count -eq 0) |
+                Should -BeFalse -Because $case.Json
+        }
     }
 }
 
