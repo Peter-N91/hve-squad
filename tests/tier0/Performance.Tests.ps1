@@ -448,10 +448,12 @@ Describe 'The verifier resolves known rate spellings without guessing costs' -Ta
 
     It 'does not invent a rate for an unknown model or guess from its tier' {
         $History = Get-Content -LiteralPath $script:RateHistory -Raw
-        Set-Content -LiteralPath $script:RateHistory -Value ($History.Replace('"priced_as": "Claude Haiku 4.5"', '"priced_as": "unknown-provider-99.9"')) -Encoding utf8NoBOM
-        $Outcome = Invoke-Verifier -SquadRootPath $script:RateFixture
-        $Outcome.ExitCode | Should -Not -Be 0
-        ($Outcome.Result.failures -join ' | ') | Should -Match 'no rate row for:'
+        foreach ($PricedAs in @('unknown-provider-99.9', 'rate-table fallback for unknown (default tier)')) {
+            Set-Content -LiteralPath $script:RateHistory -Value ($History.Replace('"priced_as": "Claude Haiku 4.5"', '"priced_as": "' + $PricedAs + '"')) -Encoding utf8NoBOM
+            $Outcome = Invoke-Verifier -SquadRootPath $script:RateFixture
+            $Outcome.ExitCode | Should -Not -Be 0
+            ($Outcome.Result.failures -join ' | ') | Should -Match 'no rate row for:'
+        }
     }
 
     It 'uses exact precedence and rejects ambiguous fallback for <PricedAs>' -ForEach @(

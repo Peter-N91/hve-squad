@@ -191,7 +191,7 @@ Presence of a consumption block is not the same as a correct ledger. These cases
 | CON-05 | When `basis` is `tier-default`, the rates used are the **tier fallback** rates, priced at the tier's most expensive member — deliberately conservative-high | `consumption-rates.md`, Tier fallback |
 | CON-06 | `model_source` is one of `dispatch-reported`, `agent-pinned`, `operator-declared`, `session-inherited`, `cli-pinned`, or the unresolved value — never a free-text string | `scribe-procedure.md` Step 5 |
 | CON-07 | `model` is either a model present in `consumption-rates.md` or the literal `unknown` — **never an invented model name** | `squad-scribe.agent.md`: "never carries an invented model name" |
-| CON-08 | `priced_as` is populated only when it differs from `model` | `scribe-procedure.md` Step 8 |
+| CON-08 | `priced_as` is populated only when it differs from `model`; a populated value names a rate-table model key, never fallback instructions. Resolve that key before the append; helper tier-fallback warnings do not validate new metadata | `scribe-procedure.md` Consumption Accounting item 2; `scribe-cold-consumption.md` pricing rule |
 | CON-09 | A block is produced for **every** dispatch, including ones where no consumption payload was supplied | `squad-scribe.agent.md`: Step 7 runs for every dispatch recorded in Step 2 |
 | CON-10 | Anthropic-family models carry a non-zero `cache_write_rate`; models without one leave it at `0` | `consumption-rates.md` |
 

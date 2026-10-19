@@ -180,6 +180,10 @@ Describe 'GATE-46 through GATE-48 Scribe context and write-path contracts' {
             $row[0] | Should -Match 'Manual Consumption Derivation'
         }
         $script:ScribeProcedure | Should -Match '(?m)^\| decision, history with complete dispatch and orchestration.+supported `ledgerCommand`.+no calibration.+none'
+        $script:Scribe | Should -Match 'Resolve `priced_as` to a rate-table model key before writing, never fallback prose'
+        $script:ScribeProcedure | Should -Match '`priced_as` must name a literal `Model \(as routed\)` key'
+        $script:ScribeProcedure | Should -Match "Resolve an unpriced key from the recorded model's rate row or, only if unavailable, its roster tier fallback before appending"
+        $script:ScribeProcedure | Should -Match "tier-fallback warning does not validate a new block's"
         $script:Scribe | Should -Not -Match 'When in doubt, read it'
         $script:Scribe | Should -Match 'bounded follow-up read targeted at that section'
         $manualIntro = [regex]::Match($script:ConsumptionReference, '(?s)## Manual Consumption Derivation\s+([^\r\n]+)').Groups[1].Value
