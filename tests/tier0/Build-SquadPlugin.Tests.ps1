@@ -11,6 +11,7 @@ param(
 
 BeforeAll {
     $script:BuildScript = Join-Path $SourceRoot 'scripts/Build-SquadPlugin.ps1'
+    $script:ProgressSourcePath = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/operating-procedure.md'
     $script:OutputRoot = Join-Path $TestDrive 'plugin-output'
     $script:HookScriptNames = @(
         'autonomous-escalation-check'
@@ -64,6 +65,22 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         Test-Path -LiteralPath $script:NestedManifestPath -PathType Leaf | Should -BeTrue
         Get-Content -LiteralPath $script:RootManifestPath -Raw |
             Should -BeExactly (Get-Content -LiteralPath $script:NestedManifestPath -Raw)
+    }
+
+    It 'ships the measured inline progress contract without an extra reference read' {
+        $procedurePath = Join-Path $script:OutputRoot 'skills/squad/references/operating-procedure.md'
+        Test-Path -LiteralPath $procedurePath -PathType Leaf | Should -BeTrue
+        $procedure = Get-Content -LiteralPath $procedurePath -Raw
+        $progressPattern = '(?ms)^### Progress Presentation\r?\n(?<Body>.*?)(?=^#{1,3} |\z)'
+        $sourceProcedure = Get-Content -LiteralPath $script:ProgressSourcePath -Raw
+        $progress = [regex]::Match($procedure, $progressPattern).Value
+        $progress | Should -Not -BeNullOrEmpty
+        $progress | Should -BeExactly ([regex]::Match($sourceProcedure, $progressPattern).Value)
+        $procedure | Should -Match '(?m)^### Progress Presentation\r?$'
+        $procedure | Should -Match 'Apply Progress Presentation before the first work dispatch'
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/references/progress.md') -PathType Leaf | Should -BeFalse
+        Get-Content -LiteralPath (Join-Path $script:OutputRoot 'agents/squad/squad-coordinator.agent.md') -Raw |
+            Should -Not -Match 'references/progress\.md'
     }
 
     It 'qualifies every hook command with the installed plugin root' {
