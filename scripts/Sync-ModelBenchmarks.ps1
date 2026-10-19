@@ -55,8 +55,8 @@
     Defaults to `$env:ARTIFICIAL_ANALYSIS_API_KEY`.
 .PARAMETER EpochVersion
     Version identifier for the Epoch AI snapshot. Defaults to a deterministic
-    semantic fingerprint of the normalized archive contents, so retrieval-only
-    date changes do not churn the snapshot digest.
+    semantic fingerprint of unique normalized archive records, so redundant
+    identical records and retrieval-only dates do not churn the snapshot digest.
 .PARAMETER ArtificialAnalysisVersion
     Version identifier for the Artificial Analysis methodology. Defaults to `v4.3.2`.
 .PARAMETER AsOf
@@ -325,65 +325,75 @@ function Get-SourceDetailLocal {
     $id = $DefaultId
     $name = $DefaultName
     $url = ''
+    $independentSources = @{
+        'epoch-ai' = 'Epoch AI Benchmarking Hub'
+        'artificial-analysis' = 'Artificial Analysis'
+        'cognition-frontiercode' = 'Cognition FrontierCode'
+        'terminal-bench' = 'Terminal-Bench'
+        'surge-gdp-pdf' = 'Surge AI GDP.pdf'
+        'deepswe-datacurve-ai' = 'deepswe.datacurve.ai'
+        'evals-futuresearch-ai' = 'evals.futuresearch.ai'
+        'frontierswe-com' = 'frontierswe.com'
+        'osworld-v2-xlang-ai' = 'osworld-v2.xlang.ai'
+        'vals-ai' = 'vals.ai'
+    }
+    $knownIndependent = -not $source -and $independentSources.ContainsKey($DefaultId)
+    $publisherId = $null
 
     $uri = $null
     if ($source -and [uri]::TryCreate($source, [System.UriKind]::Absolute, [ref]$uri)) {
         $url = $uri.AbsoluteUri
         $sourceHost = $uri.Host.ToLowerInvariant() -replace '^www\.', ''
-        switch -Regex ($sourceHost) {
-            '(^|\.)epoch\.ai$' {
-                $id = 'epoch-ai'
-                $name = 'Epoch AI Benchmarking Hub'
-            }
-            '(^|\.)artificialanalysis\.ai$' {
-                $id = 'artificial-analysis'
-                $name = 'Artificial Analysis'
-            }
-            '(^|\.)cognition\.com$' {
-                $id = 'cognition-frontiercode'
-                $name = 'Cognition FrontierCode'
-            }
-            '(^|\.)tbench\.ai$' {
-                $id = 'terminal-bench'
-                $name = 'Terminal-Bench'
-            }
-            '(^|\.)surgehq\.ai$' {
-                $id = 'surge-gdp-pdf'
-                $name = 'Surge AI GDP.pdf'
-            }
-            default {
-                $id = ConvertTo-SourceSlug -Value $sourceHost
-                $name = $sourceHost
+        $id = ConvertTo-SourceSlug -Value $sourceHost
+        $name = $sourceHost
+        if ($uri.Scheme -in @('http', 'https')) {
+            $publisherId = switch -Regex ($sourceHost) {
+                '(^|\.)epoch\.ai$' { 'epoch-ai' }
+                '(^|\.)artificialanalysis\.ai$' { 'artificial-analysis' }
+                '(^|\.)cognition\.com$' { 'cognition-frontiercode' }
+                '(^|\.)tbench\.ai$' { 'terminal-bench' }
+                '(^|\.)surgehq\.ai$' { 'surge-gdp-pdf' }
+                '^deepswe\.datacurve\.ai$' { 'deepswe-datacurve-ai' }
+                '^evals\.futuresearch\.ai$' { 'evals-futuresearch-ai' }
+                '^frontierswe\.com$' { 'frontierswe-com' }
+                '^osworld-v2\.xlang\.ai$' { 'osworld-v2-xlang-ai' }
+                '^vals\.ai$' { 'vals-ai' }
             }
         }
     }
     elseif ($source) {
-        switch -Regex ($source) {
+        $id = ConvertTo-SourceSlug -Value $source
+        $name = $source
+        $publisherId = switch -Regex ($source) {
+            '(?i)^\s*epoch[- ]ai\s*$' {
+                'epoch-ai'
+            }
             '(?i)^\s*artificial analysis(?:\s+(?:scicode|critpt))?\s*$' {
-                $id = 'artificial-analysis'
-                $name = 'Artificial Analysis'
                 $url = 'https://artificialanalysis.ai'
+                'artificial-analysis'
             }
             '(?i)^\s*terminal[- ]bench\s*$' {
-                $id = 'terminal-bench'
-                $name = 'Terminal-Bench'
                 $url = 'https://www.tbench.ai'
+                'terminal-bench'
             }
             '(?i)^\s*(?:cognition(?:\s+frontiercode)?|frontiercode)\s*$' {
-                $id = 'cognition-frontiercode'
-                $name = 'Cognition FrontierCode'
                 $url = 'https://cognition.com/frontiercode'
+                'cognition-frontiercode'
             }
             '(?i)^\s*surge(?:\s+ai)?\s+gdp(?:\.pdf)?\s*$' {
-                $id = 'surge-gdp-pdf'
-                $name = 'Surge AI GDP.pdf'
                 $url = 'https://surgehq.ai/leaderboards/gdp-pdf'
-            }
-            default {
-                $id = ConvertTo-SourceSlug -Value $source
-                $name = $source
+                'surge-gdp-pdf'
             }
         }
+    }
+
+    if ($publisherId) {
+        $id = $publisherId
+        $name = $independentSources[$publisherId]
+        $knownIndependent = $true
+    }
+    elseif (-not $knownIndependent -and $independentSources.ContainsKey($id)) {
+        $id = "unverified-$id"
     }
 
     if (-not $url) {
@@ -397,18 +407,6 @@ function Get-SourceDetailLocal {
         }
     }
 
-    $knownIndependent = $id -in @(
-        'epoch-ai'
-        'artificial-analysis'
-        'cognition-frontiercode'
-        'terminal-bench'
-        'surge-gdp-pdf'
-        'deepswe-datacurve-ai'
-        'evals-futuresearch-ai'
-        'frontierswe-com'
-        'osworld-v2-xlang-ai'
-        'vals-ai'
-    )
     $provenance = if ($knownIndependent) { 'independent' } else { 'self-reported' }
 
     $version = switch ($id) {
@@ -500,7 +498,7 @@ function Get-NormalizedDataSetRecord {
             $lines.Add("$dataSetName|$($fields -join '|')")
         }
     }
-    @($lines | Sort-Object)
+    @($lines | Sort-Object -Unique -CaseSensitive)
 }
 
 function Get-UniqueProcessedEvaluationRow {
@@ -1235,6 +1233,8 @@ try {
         ''
         'Every source evaluated for `routing=ranked` was checked for methodology transparency, provenance separation (`independent` versus `self-reported`), and redistribution licensing before any score entered this repository:'
         ''
+        'Independence is established from a recognized publisher''s original HTTP(S) authority or explicit publisher identity, never from a punctuation-normalized source ID. Unrecognized sources retain their original URL for audit and remain informational-only; IDs that would collide with a recognized publisher are prefixed with `unverified-`.'
+        ''
     ) + $sourcesTableLines + @(
         ''
         '### Required Attributions and Redistribution Notes'
@@ -1257,6 +1257,7 @@ try {
         '3. **Snapshot refresh cadence and staleness threshold**: `.github/workflows/sync-model-benchmarks.yml` runs daily at `06:30 UTC`, runs `scripts/Sync-ModelBenchmarks.ps1`, validates the snapshot with Pester, and opens or updates a reviewed pull request whenever benchmark scores or source versions change (or when the snapshot age reaches 60 days). At runtime, a snapshot older than **90 days** from its `Retrieved:` date (or one that fails to parse or lacks independent evidence for a candidate) falls back to `model-catalog.md`''s declared fit table and logs one warning.'
         '4. **Coverage continuity**: An automatic refresh may add models or change evidence, but it refuses to remove any independent model/evaluation evidence key present in the current snapshot. An intentional upstream removal requires a reviewed rerun with `-AllowCoverageReduction`; this avoids guessing an arbitrary minimum model or score count while preserving the last-good snapshot through broad source or mapping outages.'
         '5. **Materialized fit versus runtime freshness**: The table below is the fit view on this snapshot''s `Retrieved:` date. Its primary-plus-secondary aggregation is identical to the router''s, while `Resolve-SquadModelRoute.ps1` re-applies the 90-day row window on the actual dispatch date. The semantic digest therefore covers sources, mappings, and scores, not age-only changes to this derived view.'
+        '6. **Semantic duplicate normalization**: Inferred archive versions hash unique normalized records across every input dataset. Redundant identical records do not change the source version, semantic digest, or emitted evidence; conflicting model/evaluation records are still rejected before the previous snapshot can be replaced.'
         ''
         '## Evidence-Derived Assignment Fit'
         ''

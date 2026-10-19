@@ -1012,6 +1012,65 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'hydrafusion-max' }).Count | Should -Be 0
         }
 
+        It 'separates unknown URI authorities from the trusted source ID <TrustedId>' -ForEach @(
+            @{ Source = 'https://epoch-ai/vendor-self-reported'; TrustedSource = 'https://epoch.ai/benchmarks'; TrustedId = 'epoch-ai' }
+            @{ Source = 'https://artificial-analysis/vendor-self-reported'; TrustedSource = 'https://artificialanalysis.ai/data-api'; TrustedId = 'artificial-analysis' }
+            @{ Source = 'https://cognition-frontiercode/vendor-self-reported'; TrustedSource = 'https://cognition.com/frontiercode'; TrustedId = 'cognition-frontiercode' }
+            @{ Source = 'https://terminal-bench/vendor-self-reported'; TrustedSource = 'https://www.tbench.ai/leaderboard'; TrustedId = 'terminal-bench' }
+            @{ Source = 'https://surge-gdp-pdf/vendor-self-reported'; TrustedSource = 'https://surgehq.ai/benchmarks/gdp-pdf'; TrustedId = 'surge-gdp-pdf' }
+            @{ Source = 'https://deepswe-datacurve.ai/vendor-self-reported'; TrustedSource = 'https://deepswe.datacurve.ai/'; TrustedId = 'deepswe-datacurve-ai' }
+            @{ Source = 'https://evals-futuresearch.ai/vendor-self-reported'; TrustedSource = 'https://evals.futuresearch.ai/'; TrustedId = 'evals-futuresearch-ai' }
+            @{ Source = 'https://frontierswe-com/vendor-self-reported'; TrustedSource = 'https://www.frontierswe.com/'; TrustedId = 'frontierswe-com' }
+            @{ Source = 'https://osworld-v2-xlang.ai/vendor-self-reported'; TrustedSource = 'https://osworld-v2.xlang.ai/'; TrustedId = 'osworld-v2-xlang-ai' }
+            @{ Source = 'https://vals-ai/vendor-self-reported'; TrustedSource = 'https://www.vals.ai/benchmarks/proof_bench'; TrustedId = 'vals-ai' }
+        ) {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                "gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,$TrustedSource"
+                "gpt56,swe,0.990,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,$Source"
+            )
+            $output = Join-Path $TestDrive "$TrustedId-authority.md"
+            $result = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -ArtificialAnalysisApiKey '' -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1')[-1]
+            $result.ModelsCovered | Should -Be 1
+
+            $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
+            $scores = @($tables | Where-Object { 'Evaluation' -in $_.Header -and 'Provenance' -in $_.Header })[0]
+            $trusted = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' })[0]
+            $trusted['Source ID'] | Should -Be $TrustedId
+            $trusted['Provenance'] | Should -Be 'independent'
+
+            $unknown = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-sol' })[0]
+            $unknown['Source ID'] | Should -Be "unverified-$TrustedId"
+            $unknown['Provenance'] | Should -Be 'self-reported'
+            $sources = @($tables | Where-Object { 'Source ID' -in $_.Header -and 'License' -in $_.Header })[0]
+            $unknownSource = @($sources.Rows | Where-Object { $_['Source ID'] -eq $unknown['Source ID'] })[0]
+            $unknownSource['Source name'] | Should -Be ([uri]$Source).Host
+            $unknownSource['URL'] | Should -Be "<$Source>"
+            $unknownSource['Status'] | Should -Be 'self-reported-only'
+            $unknownSource['Redistribution'] | Should -Be 'informational-only'
+
+            $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
+            @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-sol' }).Count | Should -Be 0
+        }
+
+        It 'continues recognizing the explicit publisher identity <Publisher>' -ForEach @(
+            @{ Publisher = 'Epoch AI'; SourceId = 'epoch-ai' }
+            @{ Publisher = 'Artificial Analysis SciCode'; SourceId = 'artificial-analysis' }
+            @{ Publisher = 'Terminal-Bench'; SourceId = 'terminal-bench' }
+            @{ Publisher = 'Cognition FrontierCode'; SourceId = 'cognition-frontiercode' }
+            @{ Publisher = 'Surge AI GDP.pdf'; SourceId = 'surge-gdp-pdf' }
+        ) {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                "gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,$Publisher"
+            )
+            $output = Join-Path $TestDrive "$SourceId-publisher.md"
+            & $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -ArtificialAnalysisApiKey '' -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' | Out-Null
+            $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
+            $scores = @($tables | Where-Object { 'Evaluation' -in $_.Header -and 'Provenance' -in $_.Header })[0]
+            $row = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' })[0]
+            $row['Source ID'] | Should -Be $SourceId
+            $row['Provenance'] | Should -Be 'independent'
+        }
+
         It 'refuses empty independent coverage and preserves the last good snapshot' {
             $archive = New-SyncArchiveLocal
             $output = Join-Path $TestDrive 'last-good.md'
@@ -1061,6 +1120,44 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             Get-Content -LiteralPath $output -Raw | Should -Match '<https://cognition\.com/frontiercode-v2>'
         }
 
+        It 'treats identical duplicate <DataSet> records as a semantic no-op' -ForEach @(
+            @{ DataSet = 'processed'; File = 'processed_data_for_eci.csv'; Header = ''; Rows = @() }
+            @{ DataSet = 'eci'; File = 'eci_scores.csv'; Header = 'Model,eci'; Rows = @('GPT-5.4,160', 'GPT-5.6 Sol,150') }
+            @{ DataSet = 'scicode'; File = 'scicode_external.csv'; Header = 'Model version,Score,Source'; Rows = @('gpt-5.4,0.700,Artificial Analysis SciCode', 'gpt-5.6-sol,0.600,Artificial Analysis SciCode') }
+            @{ DataSet = 'critpt'; File = 'critpt_external.csv'; Header = 'Model version,Accuracy'; Rows = @('gpt-5.4,0.700', 'gpt-5.6-sol,0.600') }
+            @{ DataSet = 'gdpPdf'; File = 'gdp_pdf_external.csv'; Header = 'Model version,GDP.pdf score,Source link,Source,Last updated'; Rows = @('gpt-5.4,0.700,https://surgehq.ai/benchmarks/gdp-pdf,Surge AI GDP.pdf,', 'gpt-5.6-sol,0.600,https://surgehq.ai/benchmarks/gdp-pdf,Surge AI GDP.pdf,') }
+        ) {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56,swe,0.600,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+            )
+            $dataRoot = if ($DataSet -in @('processed', 'eci')) { Join-Path $archive 'epoch_capabilities_index' } else { $archive }
+            $dataPath = Join-Path $dataRoot $File
+            if ($DataSet -ne 'processed') {
+                @($Header; $Rows) | Set-Content -LiteralPath $dataPath -Encoding utf8NoBOM
+            }
+
+            $output = Join-Path $TestDrive "$DataSet-duplicates.md"
+            $first = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -ArtificialAnalysisApiKey '' -AsOf ([datetime]'2026-10-19'))[-1]
+            $firstRaw = Get-Content -LiteralPath $output -Raw
+            $before = (Get-FileHash -LiteralPath $output).Hash
+            $dataLines = @(Get-Content -LiteralPath $dataPath)
+            $records = @($dataLines | Select-Object -Skip 1)
+            @($dataLines[0]; $records[-1]; $records; $records[0]) |
+                Set-Content -LiteralPath $dataPath -Encoding utf8NoBOM
+
+            $duplicate = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -ArtificialAnalysisApiKey '' -AsOf ([datetime]'2026-10-20'))[-1]
+            $duplicate.Updated | Should -BeFalse
+            $duplicate.Digest | Should -Be $first.Digest
+            $duplicate.ModelsCovered | Should -Be $first.ModelsCovered
+            $duplicate.ScoresCount | Should -Be $first.ScoresCount
+            (Get-FileHash -LiteralPath $output).Hash | Should -Be $before
+
+            $freshOutput = Join-Path $TestDrive "$DataSet-duplicates-fresh.md"
+            & $script:SyncScript -ArchivePath $archive -OutputPath $freshOutput -CatalogPath $script:CatalogPath -ArtificialAnalysisApiKey '' -AsOf ([datetime]'2026-10-19') | Out-Null
+            Get-Content -LiteralPath $freshOutput -Raw | Should -BeExactly $firstRaw
+        }
+
         It 'does not rewrite when only the derived fit view crosses the 90-day row boundary' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
                 'gpt54,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-07-21,'
@@ -1088,7 +1185,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
                 'gpt54,swe,0.200,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
                 'gpt54,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
             )
-            { & $script:SyncScript -ArchivePath $conflicting -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' } |
+            { & $script:SyncScript -ArchivePath $conflicting -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') } |
                 Should -Throw '*Conflicting benchmark rows*refusing row-order-dependent selection*'
             (Get-FileHash -LiteralPath $output).Hash | Should -Be $before
         }
