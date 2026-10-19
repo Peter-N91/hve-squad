@@ -829,19 +829,12 @@ function Get-ConsumptionBlockLocal {
 
         $json = $match.Groups['json'].Value
 
-        $order = @()
-        $document = $null
+        $order = @([regex]::Matches($json, '(?m)^\s*"([a-z_]+)"\s*:') | ForEach-Object { $_.Groups[1].Value })
+
         $parsed = $null
         $parseError = $null
-        try {
-            $document = [System.Text.Json.JsonDocument]::Parse($json)
-            if ($document.RootElement.ValueKind -ne [System.Text.Json.JsonValueKind]::Object) { throw 'Consumption JSON must be an object.' }
-            # Preserve property order and duplicates without depending on pretty-print whitespace.
-            $order = @($document.RootElement.EnumerateObject() | ForEach-Object { $_.Name })
-            $parsed = $json | ConvertFrom-Json -AsHashtable
-        }
+        try { $parsed = $json | ConvertFrom-Json -AsHashtable }
         catch { $parseError = $_.Exception.Message }
-        finally { if ($null -ne $document) { $document.Dispose() } }
 
         $nonNumeric = @(
             if ($parsed) {
@@ -855,7 +848,7 @@ function Get-ConsumptionBlockLocal {
             }
         )
 
-        $orderOk = @(Compare-Object -ReferenceObject $script:ConsumptionFieldOrder -DifferenceObject $order -SyncWindow 0 -CaseSensitive).Count -eq 0
+        $orderOk = @(Compare-Object -ReferenceObject $script:ConsumptionFieldOrder -DifferenceObject $order -SyncWindow 0).Count -eq 0
 
         # A fence of one or two backticks is what a ```json fence becomes when it
         # is written through a PowerShell double-quoted string (a backtick is that

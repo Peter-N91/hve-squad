@@ -1,11 +1,11 @@
 ---
 name: squad-consumption
-description: "Squad consumption ledger templates, the dispatch-size cost estimator, cost formula, and Cost Preflight; the per-model rate table, tier fallback, and calibration block live in consumption-rates-template.md. Scribe Manual Consumption Derivation is a separate cold file, scribe-cold-consumption.md, read only when dispatch or orchestration inputs need derivation, no supported ledgerCommand is supplied, or observed_credits requires calibration."
+description: "Squad consumption ledger templates, the dispatch-size cost estimator, cost formula, and Cost Preflight; the per-model rate table, tier fallback, and calibration block live in consumption-rates-template.md."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-19"
+  last_updated: "2026-09-28"
 ---
 
 # Squad Consumption Ledger

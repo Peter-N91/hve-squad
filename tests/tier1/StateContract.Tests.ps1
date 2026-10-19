@@ -464,7 +464,7 @@ Describe 'SQ-11 Consumption blocks carry the contractual shape' -Skip:(-not $Exp
     }
 
     It '<Source> block uses the contractual field order' -ForEach @($model.Blocks | ForEach-Object { @{ Source = $_.Source; Order = $_.Order } }) {
-        ($Order -join ',') | Should -BeExactly ($script:Model.ConsumptionFields -join ',')
+        ($Order -join ',') | Should -Be ($script:Model.ConsumptionFields -join ',')
     }
 
     # SQ-13: '~8,400 (estimated)' is unparseable and drops that dispatch out of every

@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-19"
+  last_updated: "2026-09-27"
 ---
 
 # Scribe Payload Template
@@ -32,7 +32,7 @@ State `run id`, `turn`, `stage` (when the run is autopilot or autonomous), and a
 
 ### 1.4 History Records (When Payload Type Is `history`)
 
-For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, an optional `decisionRef` (a `decisions.md` anchor — never swap it with `deliverable`, and never carry a `#` fragment inside `deliverable`), and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. Each history record's consumption JSON follows immediately, in the fixed field order from [entry-schemas.md](entry-schemas.md): `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Supply one consumption object per history record — never one without the other, per the `per-dispatch-history-and-consumption` rule.
+For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. Each history record's consumption JSON follows immediately, in the fixed field order from [entry-schemas.md](entry-schemas.md): `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Supply one consumption object per history record — never one without the other, per the `per-dispatch-history-and-consumption` rule.
 
 When a routing policy resolved this dispatch's model, also supply its `routingIdentity` values (`requestedModel`, `effectiveModel`, `observedModel`, `routeRationale`) so the Scribe can render the four identity bullets `entry-schemas.md` defines. Omit `routingIdentity` entirely when no policy applied — never emit it for a no-policy dispatch.
 
@@ -67,9 +67,8 @@ timestamp: <ISO or the entry-heading format in use>
 historyRecords:
   - agent: <name: frontmatter value, verbatim>
     request: <scoped request>
-    deliverable: <literal file path>
-    outcome: <one-line summary; optional size or word count>
-    decisionRef: <decisions.md#anchor | omit when this dispatch names no grounding decision>
+    deliverable: <path> (<size or word count>)
+    outcome: <one-line summary>
     costPreflightRef: <decisions.md#cost-preflight-... | omit when no ceiling>
     costPreflightSlot: <slot id | omit when no ceiling>
     consumption:

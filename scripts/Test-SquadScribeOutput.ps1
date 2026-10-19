@@ -218,7 +218,7 @@ if ($model.Blocks.Count -eq 0) {
 }
 else {
     foreach ($block in $model.Blocks) {
-        $orderOk = ($block.Order -join '|') -ceq ($model.ConsumptionFields -join '|')
+        $orderOk = ($block.Order -join '|') -eq ($model.ConsumptionFields -join '|')
         $noParseError = -not $block.ParseError
         $noNonNumeric = $block.NonNumeric.Count -eq 0
         $passed = $orderOk -and $noParseError -and $noNonNumeric

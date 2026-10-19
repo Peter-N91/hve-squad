@@ -111,7 +111,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $EntryScript = $PSCommandPath
             $SourcePaths = @{ baseline = $BaselineSourceRoot; candidate = $CandidateSourceRoot }
             $TrialRunner = {
-                param($TrialArm, $TrialPair, $CreditCeiling)
+                param($TrialArm, $TrialPair, [double]$CreditCeiling)
                 $TrialPath = Join-Path $Trials "$TrialArm-$TrialPair"
                 $Arguments = @('-NoProfile', '-File', $EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $SourcePaths[$TrialArm], '-InstallRoot', $InstallRoot, '-Arm', $TrialArm, '-Pair', [string]$TrialPair, '-Model', $Model, '-CliPath', $CliPath, '-MaxCredits', $CreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
                 if ($ObservationOnly) { $Arguments += '-ObservationOnly' }
