@@ -341,7 +341,7 @@ function Write-FakeEvent([string]$Type,[hashtable]$Data) {
 Write-FakeEvent 'session.usage_record' @{usage=@{inputTokens=10;outputTokens=1;aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=$(if($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'credit-limit'){751000000000}else{1000000})};accounting=@{sourceSessionId=$Session;usageId="$Kind-usage"}}}
 if($Kind -eq 'init') {
     New-Item -ItemType Directory -Path '.copilot-tracking' -Force|Out-Null
-    Copy-Item -LiteralPath '__FIXTURE__' -Destination '.copilot-tracking/squad' -Recurse
+    foreach($Item in Get-ChildItem -LiteralPath '__FIXTURE__' -Force) { Copy-Item -LiteralPath $Item.FullName -Destination '.copilot-tracking/squad' -Recurse -Force }
     Write-FakeEvent 'subagent.started' @{agentName='Squad Scribe'}
 } elseif($Kind -eq 'requirements' -or ($Kind -eq 'continuation' -and '__OUTCOME__' -eq 'still-fails')) {
     Write-FakeEvent 'session.error' @{message="Request exceeds the model's prompt budget after reserving output (127666 tokens; limit 100000)."}
@@ -801,7 +801,7 @@ exit 0
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-argv-cli'; exit 0 }
 if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
-@{ arguments = @($args); repoHooks = $env:GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS } | ConvertTo-Json -Depth 6 -Compress
+@{ arguments = @($args); repoHooks = $env:GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS; stateParentsReady = (Test-Path -LiteralPath '.copilot-tracking/squad/history' -PathType Container); stateFiles = if(Test-Path -LiteralPath '.copilot-tracking/squad'){@(Get-ChildItem -LiteralPath '.copilot-tracking/squad' -Recurse -File).Count}else{-1} } | ConvertTo-Json -Depth 6 -Compress
 exit 37
 '@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
         $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -827,6 +827,8 @@ exit 37
         $Captured.arguments[1] | Should -Match 'every dispatched role and Scribe prompt, outside any schema payload'
         $Captured.arguments[1] | Should -Match ([regex]::Escape("absolute workspace '$(Join-Path $Trial 'workspace')'; absolute skill root '$(Join-Path $Trial 'workspace')/.agents/skills'"))
         $Captured.repoHooks | Should -Be 'true'
+        $Captured.stateParentsReady | Should -BeTrue
+        $Captured.stateFiles | Should -Be 0
         $Run = Get-Content -LiteralPath (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         $Run.stages[0].process.exitCode | Should -Be 37
         $Run.completed | Should -BeFalse
