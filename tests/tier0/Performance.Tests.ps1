@@ -94,6 +94,7 @@ BeforeAll {
         $researchTimestamp = [datetimeoffset]::UtcNow
         $scribeTimestamp = $researchTimestamp.AddSeconds(30)
         $tsFormat = 'yyyy-MM-ddTHH:mm:ssZ'
+        $decisionAnchor = "decision-$($researchTimestamp.ToString('yyyy-MM-ddTHHmmssZ').ToLowerInvariant())-rp-fixture-01"
 
         $researcherHistory = @"
 ---
@@ -110,6 +111,7 @@ description: "Append-only dispatch history for a single squad agent"
 * Request: Survey the fixture-topic's existing conventions and report the shape a synthetic harness fixture should follow.
 * Deliverable: ``research/fixture-topic.md``
 * Outcome: Surveyed three comparable fixtures and recommended a minimal seed shape.
+* Decision Ref: ``decisions.md#$decisionAnchor``
 
 #### Consumption
 
@@ -145,6 +147,7 @@ description: "Append-only dispatch history for a single squad agent"
 * Request: Record the research-stage history entry, the fixture-shape decision, and advance state.
 * Deliverable: ``decisions.md``, ``state.json``, ``consumption.md``, ``history/Squad Researcher.md``
 * Outcome: Recorded the research-stage history entry, the fixture-shape decision, and advanced state.
+* Decision Ref: ``decisions.md#$decisionAnchor``
 
 #### Consumption — Orchestration
 
@@ -271,6 +274,15 @@ Describe 'The performance harness runs and its output schema is valid' {
         foreach ($key in $expectedKeys) {
             $actualKeys | Should -Contain $key
         }
+        foreach ($hostPath in @('plugin-cli', 'vscode-apm')) {
+            $manifest = $script:Measured.scribe.historyDispatch.$hostPath
+            $manifest.completePayloadBytes | Should -Be $manifest.hotCoreBytes
+            $manifest.completePayloadBytes | Should -BeLessThan $manifest.historyDispatchBytes
+            $manifest.historyDispatchBytes | Should -Be ($manifest.hotCoreBytes + $manifest.consumptionBytes)
+            $manifest.completePayloadTokensApprox | Should -Be ([Math]::Round($manifest.completePayloadBytes / 4))
+            $manifest.manualFallbackBytes | Should -Be ($manifest.hotCoreBytes + $manifest.manualAccountingBytes)
+            $manifest.manualFallbackBytes | Should -BeLessThan $manifest.historyDispatchBytes
+        }
     }
 
     It 'reports a plugin-cli row and a bundle-eligible vscode-apm row for every session type' {
@@ -389,6 +401,25 @@ Describe 'The verifier passes a correct write and fails a dropped-history-entry 
         $outcome.ExitCode | Should -Not -Be 0
         $outcome.Result.passed | Should -BeFalse
         $outcome.Result.failures | Should -Contain 'history/Squad Researcher.md has >= 1 entries: found 0'
+    }
+
+    It 'GATE-48 rejects a Decision Ref placed in Deliverable while the real-file fixture passes' {
+        $linkedRoot = Get-CorrectWriteFixture
+        try {
+            $historyPath = Join-Path $linkedRoot 'history/Squad Researcher.md'
+            $history = Get-Content -LiteralPath $historyPath -Raw
+            $linked = $history.Replace('`research/fixture-topic.md`', '`research/fixture-topic.md#fixture-decision`')
+            $linked | Should -Not -Be $history
+            Set-Content -LiteralPath $historyPath -Value $linked -Encoding utf8NoBOM
+
+            $outcome = Invoke-Verifier -SquadRootPath $linkedRoot -ExpectationPath $script:ExpectedPath
+            $outcome.ExitCode | Should -Not -Be 0
+            $outcome.Result.passed | Should -BeFalse
+            ($outcome.Result.failures -join ' | ') | Should -Match 'declared deliverable'
+        }
+        finally {
+            Remove-Item -LiteralPath $linkedRoot -Recurse -Force
+        }
     }
 }
 
@@ -643,4 +674,3 @@ Describe 'Script hygiene' {
         $raw | Should -Match '\$PSCmdlet\.ShouldProcess\('
     }
 }
-

@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-19"
 ---
 
 # Entry Schemas
@@ -20,7 +20,7 @@ Write semantics follow the state layout: `decisions.md`, `history/<agent>.md`, `
 
 ## decisions.md
 
-Append-only log. The header is written once; every decision is appended below it and prior entries are never edited. Council Verdicts (from the Council Procedure) use the same append-only contract but a fixed schema; the placeholder shapes are in [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md).
+Append-only log. The header is written once; every decision is appended below it and prior entries are never edited. Council Verdicts use the same append-only contract with a fixed schema; placeholder shapes are in [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md).
 
 ```markdown
 ---
@@ -32,11 +32,11 @@ description: "Append-only log of squad decisions and their rationale"
 Entries are appended below in chronological order. Each entry records the decision, its rationale, the turn it was made on, and a reference to an ADR when the decision is architecturally significant. Council Verdicts use the `## Council Verdict <timestamp> <topic-id>` heading and the schema in `.github/instructions/squad/squad-council.instructions.md`; Discovery Verdicts and Intake Readiness Verdicts use their own headings and schemas from `.github/instructions/squad/squad-discovery-gate.instructions.md` and `.github/instructions/squad/squad-intake-gate.instructions.md`. Prior entries are never edited or removed.
 ```
 
-No append-only file ends with a marker comment: the last entry is the last thing in the file, so a new entry is always written at the very end.
+No append-only file ends with a marker comment; a new entry is always written at the very end.
 
 ## history/<agent>.md
 
-One append-only file per dispatched agent. Replace `<agent>` with the agent's `name:` frontmatter value **verbatim** — the display name, spaces and capitalization intact, as in `history/Squad Researcher.md` or `history/BRD Builder.md`. Never slugify it, never lowercase it, and never substitute the role id: the file name is how a later turn matches a history entry back to the roster row it came from, so `squad-researcher.md` and `researcher.md` both read as a missing entry and the ledger rewrite drops that agent. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
+One append-only file per dispatched agent. Replace `<agent>` with the agent's `name:` frontmatter value **verbatim** — the display name, spaces and capitalization intact, as in `history/Squad Researcher.md` or `history/BRD Builder.md`. Never slugify, lowercase, or substitute the role id: `squad-researcher.md` and `researcher.md` both read as a missing entry and the ledger rewrite drops that agent. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
 
 **The file is created by the first dispatch to that agent, never before it.** Init seeds the `history/` directory and nothing inside it. A header-only file seeded for every roster member at Init destroys the one signal this directory exists to carry — a file's presence is the proof a stage ran — and turns "which roles have been dispatched" into a question the state can no longer answer. Create the file with its header at the moment the first entry is appended, in the same write.
 
@@ -82,6 +82,7 @@ Every appended dispatch entry uses exactly this shape. The `#### Consumption` he
 * Request: <scoped request the agent received>
 * Deliverable: `<the role's Deliverable Root cell, extended verbatim, plus the filename>` (<size or word count>)
 * Outcome: <one-line summary>
+* Decision Ref: `decisions.md#<anchor>` (optional)
 * Cost Preflight Ref: `decisions.md#cost-preflight-<timestamp>-<run-id>-<round-id>`
 * Cost Preflight Slot: <permitted slot id>
 
@@ -102,6 +103,8 @@ Every appended dispatch entry uses exactly this shape. The `#### Consumption` he
 }
 ```
 ````
+
+**`Deliverable:` is a literal existing or planned file path, never a fragment.** Reject a malformed (`#` fragment, or unresolvable) value before any content write in the hand-off — never silently strip the fragment. May predate this hand-off; confirm it exists on disk immediately before recording its path. See [scribe-procedure.md](scribe-procedure.md).
 
 Field order is contractual and every numeric field is a bare number. The block records consumption only: rates, `est_cost_usd`, and `est_credits` are the ledger's, and `priced_as` is what tells it which rate row to use. See *Consumption Accounting* in [scribe-procedure.md](scribe-procedure.md) for how each value is resolved and how the ledger prices them.
 

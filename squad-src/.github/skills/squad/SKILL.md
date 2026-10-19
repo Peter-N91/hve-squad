@@ -42,6 +42,7 @@ Read [references/00-index.md](references/00-index.md) first, then only files you
 | [scribe-cold-init-and-seeding.md](references/scribe-cold-init-and-seeding.md) | Full state-tree seed and Repository Memory promotion — Scribe only, conditional |
 | [scribe-cold-federation.md](references/scribe-cold-federation.md) | Federation promotion, expansion, and federation-level summaries — Scribe only, conditional |
 | [scribe-cold-gates-and-verdicts.md](references/scribe-cold-gates-and-verdicts.md) | Verdict schemas, autonomous-loop and autopilot-run summaries, notifications.md — Scribe only, conditional |
+| [scribe-cold-consumption.md](references/scribe-cold-consumption.md) | Manual accounting: Scribe only, conditional |
 | [seed-templates.md](references/seed-templates.md)             | First-run state templates: team.md and routing.md                              |
 | [consumption.md](references/consumption.md)                   | Consumption ledger templates, the cost estimator, and Cost Preflight           |
 | [consumption-rates-template.md](references/consumption-rates-template.md) | Cold seed template for consumption-rates.md: rate tables, tier fallback, calibration |

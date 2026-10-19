@@ -37,6 +37,9 @@ BeforeAll {
     $script:InitCold = Get-SquadReferenceBody -Name 'scribe-cold-init-and-seeding.md'
     $script:PayloadTemplate = Get-SquadReferenceBody -Name 'scribe-payload-template.md'
     $script:ScribeProcedure = Get-SquadReferenceBody -Name 'scribe-procedure.md'
+    $script:ReferenceIndex = Get-SquadReferenceBody -Name '00-index.md'
+    $script:EntrySchemas = Get-SquadReferenceBody -Name 'entry-schemas.md'
+    $script:ConsumptionReference = Get-SquadReferenceBody -Name 'scribe-cold-consumption.md'
     $script:OperatingProcedure = Get-SquadReferenceBody -Name 'operating-procedure.md'
     $script:GatesAndModes = Get-SquadReferenceBody -Name 'gates-and-modes.md'
     $script:LedgerScript = Join-Path $script:Model.SquadSkillRoot 'scripts/Measure-SquadLedger.ps1'
@@ -130,6 +133,8 @@ Describe 'GATE-39 Init records its orchestration block and runs ledgerCommand la
         $initRow = @($script:ScribeProcedure -split '\r?\n' | Where-Object { $_ -match '^\| initialization or roster refresh \(3\)' })
         $initRow.Count | Should -Be 1
         $initRow[0] | Should -Match '\[consumption\.md\]\(consumption\.md\)'
+        $initRow[0] | Should -Match '\[scribe-cold-gates-and-verdicts\.md\]\(scribe-cold-gates-and-verdicts\.md\).+notifications\.md'
+        $script:Scribe | Should -Match '\| `references/scribe-cold-gates-and-verdicts\.md` \| Initialization,'
     }
 }
 
@@ -159,6 +164,49 @@ Describe 'GATE-40 Init verification and ledger repair are bounded and never bloc
         $script:OperatingProcedure | Should -Match 'A \*\*`history-integrity`\*\* failure of a \*\*pipelined\*\* hand-off'
         $script:GatesAndModes | Should -Match 'no pipelined hand-off has failed verification with `failure class: history-integrity` this run'
         $script:GatesAndModes | Should -Match 'reports only `failure class: ledger-only` counts as verified for the barrier'
+    }
+}
+
+Describe 'GATE-46 through GATE-48 Scribe context and write-path contracts' {
+    It 'GATE-46 aligns complete-payload and derivation/calibration reads across all three policy surfaces' {
+        foreach ($body in @($script:Scribe, $script:ScribeProcedure, $script:ReferenceIndex)) {
+            $row = @($body -split '\r?\n' | Where-Object {
+                $_ -match '^\|.*consumption\.md' -and $_ -match 'observed_credits'
+            })
+            $row.Count | Should -Be 1
+            $row[0] | Should -Match 'required dispatch or orchestration'
+            $row[0] | Should -Match 'no supported `ledgerCommand` was supplied'
+            $row[0] | Should -Match 'only the needed part of'
+            $row[0] | Should -Match 'Manual Consumption Derivation'
+        }
+        $script:ScribeProcedure | Should -Match '(?m)^\| decision, history with complete dispatch and orchestration.+supported `ledgerCommand`.+no calibration.+none'
+        $script:Scribe | Should -Not -Match 'When in doubt, read it'
+        $script:Scribe | Should -Match 'bounded follow-up read targeted at that section'
+        $manualIntro = [regex]::Match($script:ConsumptionReference, '(?s)## Manual Consumption Derivation\s+([^\r\n]+)').Groups[1].Value
+        $manualIntro | Should -Match 'required dispatch or orchestration'
+        $manualIntro | Should -Match 'no supported `ledgerCommand` was supplied'
+        $manualIntro | Should -Match '`observed_credits` requires calibration'
+    }
+
+    It 'GATE-47 prepares scoped state/history parents before content creation without shell-writing files' {
+        $script:Scribe | Should -Match 'Before the first content-create call of this step, prepare the resolved `squadRoot` and `history/`'
+        $script:InitCold | Should -Match 'Before the first content-create call[^\r\n]+ensure the resolved `squadRoot` and its `history/`'
+        $script:InitCold | Should -Match 'directory-only shell command scoped to exactly those two paths'
+        $script:InitCold | Should -Match 'Never use a shell command to write file contents'
+        $script:InitCold | Should -Match 'missing ancestor strictly necessary.+already-authorized workspace'
+        $script:InitCold | Should -Match 'never a Research or Plan artifact directory'
+    }
+
+    It 'GATE-48 separates actual file paths and optional decision links and rejects malformed inputs before content writes' {
+        $script:Scribe | Should -Match 'Before any content write, validate every incoming `deliverable`'
+        $script:Scribe | Should -Match 'leaving the hand-off unwritten'
+        $script:EntrySchemas | Should -Match '(?m)^\* Decision Ref: .+optional'
+        $pathContract = $script:EntrySchemas + $script:ScribeProcedure
+        $pathContract | Should -Match 'before any content write in the hand-off'
+        $pathContract | Should -Match 'never silently strip the fragment'
+        $pathContract | Should -Match 'confirm it exists on disk immediately before recording its path'
+        $script:PayloadTemplate | Should -Match 'optional `decisionRef`'
+        $script:PayloadTemplate | Should -Match 'never carry a `#` fragment inside `deliverable`'
     }
 }
 

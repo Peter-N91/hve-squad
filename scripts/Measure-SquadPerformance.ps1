@@ -336,6 +336,9 @@ foreach ($manifest in $sessionManifests) {
 $scribePlugin = $sessionTypeRows | Where-Object { $_.sessionType -eq 'scribe' -and $_.hostPath -eq 'plugin-cli' } | Select-Object -First 1
 $scribeVsCode = $sessionTypeRows | Where-Object { $_.sessionType -eq 'scribe' -and $_.hostPath -eq 'vscode-apm' } | Select-Object -First 1
 $consumptionBytes = Get-FileByteCount "$referencesRoot/consumption.md"
+# Older source snapshots kept manual derivation in the shared consumption reference.
+$manualAccountingReference = if (Test-Path -LiteralPath "$referencesRoot/scribe-cold-consumption.md") { 'scribe-cold-consumption.md' } else { 'consumption.md' }
+$manualAccountingBytes = Get-FileByteCount "$referencesRoot/$manualAccountingReference"
 
 # Canonical autopilot run dispatch count (Q2 of performance-research.md, derived from
 # the pipeline text in squad-autopilot.instructions.md and its Artifact Gates table --
@@ -359,21 +362,26 @@ function Get-ScribeRunTotal {
     }
 }
 
-# D6b (routing-performance remedy): the Scribe's Cold-File Dispatch Table reads
-# references/consumption.md on every history dispatch (every history-entry write, not
-# only the subset of turns a "consumption-write" trigger implies), so the honest
-# per-dispatch read set for that history-dispatch class is the unconditional hot core
-# PLUS consumption.md, every time -- never the hot core alone. This is reported as its
-# own manifest (not multiplied by a run's dispatch count) precisely so a BEFORE/AFTER
-# -SourceRoot comparison isolates the effect of the D3/D6b consumption.md byte change
-# from the unrelated per-run dispatch-count model.
+# Complete dispatch/orchestration inputs plus a ledger helper need only the core.
+# Preserve the legacy ledger-reference bound and report the actual manual-file bound.
 function Get-ScribeHistoryDispatchManifest {
-    param([Parameter(Mandatory)]$UnconditionalBytes, [Parameter(Mandatory)][int]$ConsumptionBytes)
+    param(
+        [Parameter(Mandatory)]$UnconditionalBytes,
+        [Parameter(Mandatory)][int]$ConsumptionBytes,
+        [Parameter(Mandatory)][int]$ManualAccountingBytes,
+        [Parameter(Mandatory)][string]$ManualAccountingReference
+    )
 
     $historyDispatchBytes = $UnconditionalBytes + $ConsumptionBytes
+    $completePayloadBytes = if ($ManualAccountingReference -eq 'consumption.md') { $historyDispatchBytes } else { $UnconditionalBytes }
     [ordered]@{
-        description                 = 'Honest per-history-dispatch read set: the Scribe unconditional hot core plus consumption.md, read on every history-entry write per the Cold-File Dispatch Table.'
+        description                 = 'Complete dispatch/orchestration inputs with a supported ledgerCommand and no calibration use completePayloadBytes. manualFallbackBytes bounds the full manual reference; actual reads target needed sections. historyDispatchBytes retains the legacy hot-core plus ledger-reference figure.'
         hotCoreBytes                = $UnconditionalBytes
+        completePayloadBytes        = $completePayloadBytes
+        completePayloadTokensApprox = [Math]::Round($completePayloadBytes / 4)
+        manualAccountingReference   = $ManualAccountingReference
+        manualAccountingBytes       = $ManualAccountingBytes
+        manualFallbackBytes         = $UnconditionalBytes + $ManualAccountingBytes
         consumptionBytes            = $ConsumptionBytes
         historyDispatchBytes        = $historyDispatchBytes
         historyDispatchTokensApprox = [Math]::Round($historyDispatchBytes / 4)
@@ -387,8 +395,8 @@ $scribeSummary = [ordered]@{
         'vscode-apm' = Get-ScribeRunTotal -UnconditionalBytes $scribeVsCode.unconditionalBytes -Dispatches $canonicalScribeDispatches -ConsumptionBytes $consumptionBytes
     }
     historyDispatch = [ordered]@{
-        'plugin-cli' = Get-ScribeHistoryDispatchManifest -UnconditionalBytes $scribePlugin.unconditionalBytes -ConsumptionBytes $consumptionBytes
-        'vscode-apm' = Get-ScribeHistoryDispatchManifest -UnconditionalBytes $scribeVsCode.unconditionalBytes -ConsumptionBytes $consumptionBytes
+        'plugin-cli' = Get-ScribeHistoryDispatchManifest -UnconditionalBytes $scribePlugin.unconditionalBytes -ConsumptionBytes $consumptionBytes -ManualAccountingBytes $manualAccountingBytes -ManualAccountingReference $manualAccountingReference
+        'vscode-apm' = Get-ScribeHistoryDispatchManifest -UnconditionalBytes $scribeVsCode.unconditionalBytes -ConsumptionBytes $consumptionBytes -ManualAccountingBytes $manualAccountingBytes -ManualAccountingReference $manualAccountingReference
     }
 }
 
@@ -625,4 +633,3 @@ if ($UpdateBaseline) {
 }
 
 $result
-
