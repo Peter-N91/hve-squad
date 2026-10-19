@@ -778,7 +778,14 @@ function Test-SquadWatchOutcomeComplete {
         [string]$Value
     )
 
-    [bool]($Value -and $Value -notmatch '(?i)\b(fail(?:ed|ure)?|incomplete|pending|running|blocked|escalated|stopped|cancelled|canceled|error)\b')
+    $outcome = $Value -replace '(?i)\b(?:0|zero|no)\s+(?:fail(?:ed|ures?|ing)?|errors?)\b', ''
+    $outcome = $outcome -replace '(?i)\b(?:fail(?:ed|ures?|ing)?|errors?)\s*[:=]\s*0\b(?!\.\d)', ''
+    [bool]($Value -and $outcome -notmatch '(?ix)\b(
+        fail(?:ed|ures?|ing)? | errors? | incomplete | pending | running |
+        blocked | escalated | stopped | cancelled | canceled |
+        not[\s-]+(?:yet[\s-]+)?(?:started|run|complet(?:e|ed)|finished|done|successful) |
+        never[\s-]+started | in[\s-]+progress
+    )\b')
 }
 
 function Test-SquadWatchStructuredFile {
@@ -794,7 +801,8 @@ function Test-SquadWatchStructuredFile {
     if ((Get-Item -LiteralPath $Path).Length -eq 0) {
         return $false
     }
-    if ([System.IO.Path]::GetExtension($Path) -notin @('.md', '.markdown')) {
+    $extension = [System.IO.Path]::GetExtension($Path)
+    if ($extension -notin @('.md', '.markdown', '.txt')) {
         return $true
     }
 
@@ -812,20 +820,34 @@ function Test-SquadWatchStructuredFile {
             }
     ).Count -gt 0
 
-    $hasHeading -and $hasBody
+    $hasBody -and ($hasHeading -or $extension -eq '.txt')
+}
+
+function Test-SquadWatchEmptyCouncilItem {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [string]$Value
+    )
+
+    $Value.Trim() -match '^(?i:none|n/?a|not applicable|not required|[-\u2014])?\.?$'
 }
 
 function Get-SquadWatchLatestCouncilVerdict {
     [CmdletBinding()]
     param(
         [AllowEmptyString()]
-        [string]$Content
+        [string]$Content,
+
+        [string]$TopicId
     )
 
     $verdictMatches = @([regex]::Matches(
             $Content,
             '(?ms)^## Council Verdict\s+(?<timestamp>\S+)\s+(?<topic>[^\r\n]+)\r?\n(?<body>.*?)(?=^## |\z)'
-        ))
+        ) | Where-Object {
+            -not $TopicId -or $_.Groups['topic'].Value.Trim() -ceq $TopicId
+        })
     if ($verdictMatches.Count -eq 0) {
         return $null
     }
@@ -835,7 +857,7 @@ function Get-SquadWatchLatestCouncilVerdict {
     $fields = @{}
     foreach ($match in [regex]::Matches(
             $body,
-            '(?m)^\s*\*\s*(?<key>Topic|Proposal Ref|Council Members Dispatched|Council Members Not Proposed|Verdict):\s*(?<value>.+)$'
+            '(?m)^\s*\*\s*(?<key>Topic|Proposal Ref|Council Members Dispatched|Council Members Not Proposed|Verdict|Blocking Issues|Conditions|Conditions Outstanding|Conditions Satisfied|Conditions Accepted):[ \t]*(?<value>[^\r\n]*)\r?$'
         )) {
         $fields[$match.Groups['key'].Value] = $match.Groups['value'].Value.Trim()
     }
@@ -861,6 +883,11 @@ function Get-SquadWatchLatestCouncilVerdict {
         )
         Verdict           = [string]$fields['Verdict']
         Findings          = $findings
+        BlockingIssues    = [string]$fields['Blocking Issues']
+        Conditions        = [string]$fields['Conditions']
+        ConditionsOutstanding = [string]$fields['Conditions Outstanding']
+        ConditionsSatisfied = [string]$fields['Conditions Satisfied']
+        ConditionsAccepted = [string]$fields['Conditions Accepted']
         PermitsImplement  = $body -match '(?im)^\s*\*\s*Permits Implementation Dispatch:\s*yes\b'
         HasSynthesis      = $body -match '(?m)^### Synthesis\s*$' -and
         $body -match '(?m)^\s*\*\s*(Blocking Issues|Conditions|Suggested Follow-ups):\s*\S'
@@ -1554,7 +1581,7 @@ function Resolve-SquadWatchDeliverable {
             }
             foreach ($label in $provenance.Keys) {
                 $actual = Get-SquadWatchLatestBullet -Content $currentSummaryPreamble -Label $label
-                $expected = [string]$baseline.Trigger[$provenance[$label]]
+                $expected = $baseline.Trigger[$provenance[$label]]
                 if ($label -eq 'Trigger Received At') {
                     $actualTime = ConvertTo-SquadWatchTimestamp -Value $actual
                     $expectedTime = ConvertTo-SquadWatchTimestamp -Value $expected
@@ -1575,7 +1602,9 @@ function Resolve-SquadWatchDeliverable {
         $historyReferences = @()
         if ($summaryText) {
             $outcomes = @([regex]::Matches($currentSummaryPreamble, '(?m)^\*\s*Outcome:\s*(?<value>.+)$'))
-            if ($outcomes.Count -eq 0 -or $outcomes[-1].Groups['value'].Value -notmatch '^completed\b') {
+            if ($outcomes.Count -eq 0 -or
+                $outcomes[-1].Groups['value'].Value -notmatch '^completed\b' -or
+                -not (Test-SquadWatchOutcomeComplete -Value $outcomes[-1].Groups['value'].Value)) {
                 $failures.Add('current autopilot summary does not report a completed outcome')
             }
 
@@ -1693,11 +1722,23 @@ function Resolve-SquadWatchDeliverable {
                 (Get-SquadWatchStageKey -Stage ([string]$_.Stage)) -eq 'council'
             })
         if ($councilRows.Count -gt 0) {
+            $decisionsPath = Join-Path $member 'decisions.md'
+            $decisions = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) {
+                Get-Content -LiteralPath $decisionsPath -Raw
+            }
+            else {
+                ''
+            }
+            $expectedTopicId = ($runId -replace '^autopilot-run-', '') -replace '\.md$', ''
+            $verdict = Get-SquadWatchLatestCouncilVerdict -Content $decisions -TopicId $expectedTopicId
             $councilSkipped = @($councilRows | Where-Object {
                     $_.Result -match '(?i)\b(skipped|not required|not applicable)\b'
                 }).Count -eq $councilRows.Count
 
             if ($councilSkipped) {
+                if ($verdict) {
+                    $failures.Add('skipped council row contradicts the recorded Council Verdict for this run')
+                }
                 foreach ($row in $councilRows) {
                     if (@(Get-SquadWatchRowRole -Roles ([string]$row.Roles)).Count -gt 0) {
                         $failures.Add('skipped council row must not name selected roles')
@@ -1754,14 +1795,6 @@ function Resolve-SquadWatchDeliverable {
                     }
                 }
 
-                $decisionsPath = Join-Path $member 'decisions.md'
-                $decisions = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) {
-                    Get-Content -LiteralPath $decisionsPath -Raw
-                }
-                else {
-                    ''
-                }
-                $verdict = Get-SquadWatchLatestCouncilVerdict -Content $decisions
                 if (-not $verdict) {
                     $failures.Add("council ran without a structured '## Council Verdict' decision")
                 }
@@ -1771,10 +1804,6 @@ function Resolve-SquadWatchDeliverable {
                         $failures.Add('current council dispatches have no current Council Verdict write')
                     }
 
-                    $expectedTopicId = ($runId -replace '^autopilot-run-', '') -replace '\.md$', ''
-                    if ($verdict.TopicId -cne $expectedTopicId) {
-                        $failures.Add("council verdict topic id '$($verdict.TopicId)' does not match run '$expectedTopicId'")
-                    }
                     $verdictTimestamp = ConvertTo-SquadWatchTimestamp -Value $verdict.Timestamp
                     if ($councilEvidenceChanged -and
                         (-not $verdictTimestamp -or $verdictTimestamp -lt $baseline.CapturedAt)) {
@@ -1811,16 +1840,72 @@ function Resolve-SquadWatchDeliverable {
                     if ($actualCouncilRoles -cne $expectedCouncilRoles) {
                         $failures.Add('council verdict membership does not match the selected council roles')
                     }
+                    $findingRoles = @($verdict.Findings | ForEach-Object {
+                            ([string]$_['Role']).Trim().ToLowerInvariant()
+                        } | Sort-Object)
+                    if (($findingRoles -join ',') -cne $expectedCouncilRoles) {
+                        $failures.Add('council findings do not match the selected council roles')
+                    }
+
+                    $requiresConditions = -not (Test-SquadWatchEmptyCouncilItem -Value $verdict.Conditions)
+                    if (-not (Test-SquadWatchEmptyCouncilItem -Value $verdict.BlockingIssues)) {
+                        $failures.Add('council findings still have synthesized blocking issues')
+                    }
+                    $conditions = [System.Collections.Generic.List[object]]::new()
                     foreach ($role in $councilRoles) {
                         $finding = @($verdict.Findings | Where-Object {
                                 ([string]$_['Role']).Trim().ToLowerInvariant() -eq $role
                             })
                         if ($finding.Count -ne 1 -or
-                            -not [string]$finding[0]['Verdict'] -or
-                            -not [string]$finding[0]['Risk'] -or
-                            [string]$finding[0]['Verdict'] -match '<|>' -or
-                            [string]$finding[0]['Risk'] -match '<|>') {
-                            $failures.Add("council verdict has no structured finding for selected role '$role'")
+                            [string]$finding[0]['Verdict'] -notin @('Approve', 'Conditional', 'Concern', 'Block') -or
+                            [string]$finding[0]['Risk'] -notmatch '^Risk:\s*(Low|Medium|High)$' -or
+                            -not $finding[0].Contains('Blocking Issues') -or
+                            -not $finding[0].Contains('Conditions')) {
+                            $failures.Add("council finding for selected role '$role' is missing or invalid")
+                            continue
+                        }
+                        $roleFinding = $finding[0]
+                        if ($roleFinding['Verdict'] -eq 'Block' -or
+                            $roleFinding['Risk'] -match '^Risk:\s*High$' -or
+                            -not (Test-SquadWatchEmptyCouncilItem -Value $roleFinding['Blocking Issues'])) {
+                            $failures.Add("council finding for '$role' blocks implementation under most-restrictive-wins synthesis")
+                        }
+                        if ($roleFinding['Verdict'] -eq 'Conditional' -or
+                            -not (Test-SquadWatchEmptyCouncilItem -Value $roleFinding['Conditions'])) {
+                            $requiresConditions = $true
+                        }
+                        if (-not (Test-SquadWatchEmptyCouncilItem -Value $roleFinding['Conditions'])) {
+                            $conditions.Add([pscustomobject]@{
+                                    Role = $role
+                                    Text = [string]$roleFinding['Conditions']
+                                })
+                        }
+                    }
+                    $expectedVerdict = if ($requiresConditions) { 'Go-With-Conditions' } else { 'Go' }
+                    if ($verdict.Verdict -cne $expectedVerdict) {
+                        $failures.Add("council findings require '$expectedVerdict', not '$($verdict.Verdict)'")
+                    }
+                    if ($requiresConditions -and
+                        (Test-SquadWatchEmptyCouncilItem -Value $verdict.Conditions)) {
+                        $failures.Add('council findings have conditions without consolidated synthesis evidence')
+                    }
+                    $outstanding = -1
+                    if (-not [int]::TryParse($verdict.ConditionsOutstanding, [ref]$outstanding) -or
+                        $outstanding -lt 0) {
+                        $failures.Add('council Conditions Outstanding must be a nonnegative integer')
+                    }
+                    elseif ($outstanding -gt 0) {
+                        $unresolved = @(
+                            foreach ($condition in $conditions) {
+                                $attributed = "($($condition.Role)) $($condition.Text)"
+                                if ($verdict.ConditionsSatisfied.IndexOf($attributed, [StringComparison]::OrdinalIgnoreCase) -lt 0 -and
+                                    $verdict.ConditionsAccepted.IndexOf($attributed, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                                    $attributed
+                                }
+                            }
+                        )
+                        if ($conditions.Count -eq 0 -or $unresolved.Count -gt 0) {
+                            $failures.Add('council conditions remain unresolved or unaccepted at handoff')
                         }
                     }
                 }

@@ -12,6 +12,8 @@
     Justification = 'Fixture helper writes only beneath Pester TestDrive.', Scope = 'Function', Target = 'New-CompleteWatchModeMember')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
     Justification = 'Fixture helper writes only beneath Pester TestDrive.', Scope = 'Function', Target = 'New-WatchModeBaseline')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+    Justification = 'Fixture helper writes only beneath Pester TestDrive.', Scope = 'Function', Target = 'New-WatchModeStagingCase')]
 param(
     [Parameter(Mandatory)]
     [string]$SourceRoot
@@ -133,7 +135,9 @@ BeforeAll {
             [Parameter(Mandatory)]
             [string]$Workspace,
 
-            [string]$SubSquad = 'issue-1'
+            [string]$SubSquad = 'issue-1',
+
+            [string]$ReceivedAt = $script:WatchTrigger.ReceivedAt
         )
 
         New-SquadWatchBaseline `
@@ -144,7 +148,7 @@ BeforeAll {
             -EventRef $script:WatchTrigger.Ref `
             -EventId $script:WatchTrigger.EventId `
             -Actor $script:WatchTrigger.Actor `
-            -ReceivedAt $script:WatchTrigger.ReceivedAt
+            -ReceivedAt $ReceivedAt
     }
 
     function New-CompleteWatchModeMember {
@@ -153,6 +157,8 @@ BeforeAll {
             [string]$Workspace,
 
             [string]$SubSquad = 'issue-1',
+
+            [string]$ReceivedAt = $script:WatchTrigger.ReceivedAt,
 
             [switch]$CouncilSkipped,
 
@@ -233,7 +239,7 @@ BeforeAll {
                 ref        = $script:WatchTrigger.Ref
                 eventId    = $script:WatchTrigger.EventId
                 actor      = $script:WatchTrigger.Actor
-                receivedAt = $script:WatchTrigger.ReceivedAt
+                receivedAt = $ReceivedAt
                 runId      = 'autopilot-run-fixture'
             }
         }
@@ -355,7 +361,7 @@ BeforeAll {
         $summary.Add("* Trigger Ref: $($script:WatchTrigger.Ref)")
         $summary.Add("* Trigger Event ID: $($script:WatchTrigger.EventId)")
         $summary.Add("* Trigger Actor: $($script:WatchTrigger.Actor)")
-        $summary.Add("* Trigger Received At: $($script:WatchTrigger.ReceivedAt)")
+        $summary.Add("* Trigger Received At: $ReceivedAt")
         $summary.Add('')
 
         if ($IncludeEarlierIncomplete) {
@@ -378,7 +384,7 @@ BeforeAll {
             $summary.Add("* Trigger Ref: $($script:WatchTrigger.Ref)")
             $summary.Add("* Trigger Event ID: $($script:WatchTrigger.EventId)")
             $summary.Add("* Trigger Actor: $($script:WatchTrigger.Actor)")
-            $summary.Add("* Trigger Received At: $($script:WatchTrigger.ReceivedAt)")
+            $summary.Add("* Trigger Received At: $ReceivedAt")
             $summary.Add('')
         }
 
@@ -408,6 +414,30 @@ BeforeAll {
 
         Set-WatchModeTestFile -Path (Join-Path $member 'history/autopilot-run-fixture.md') -Content ($summary -join "`n")
         $member
+    }
+
+    function New-WatchModeStagingCase {
+        param(
+            [string]$ReceivedAt = $script:WatchTrigger.ReceivedAt,
+
+            [string]$EvidenceAt = $ReceivedAt
+        )
+
+        $workspace = Join-Path $TestDrive "staging-$([guid]::NewGuid().ToString('N'))"
+        Initialize-WatchModeRepository -Repository $workspace
+        Set-WatchModeTestFile -Path (Join-Path $workspace 'app.txt') -Content 'before'
+        Save-WatchModeRepository -Repository $workspace
+        $baseline = New-WatchModeBaseline -Workspace $workspace -ReceivedAt $ReceivedAt
+        $member = New-CompleteWatchModeMember -Workspace $workspace -ReceivedAt $EvidenceAt -IncludeSecurityCouncil
+        Set-WatchModeTestFile -Path (Join-Path $workspace 'app.txt') -Content 'after'
+
+        @{
+            WorkspaceRoot        = $workspace
+            MemberRoot           = $member
+            PatchPath            = "$workspace.patch"
+            BaselinePath         = $baseline.Path
+            ExpectedBaselineHash = $baseline.Hash
+        }
     }
 
     $script:SourceRootResolved = (Resolve-Path -LiteralPath $SourceRoot).Path
@@ -746,9 +776,9 @@ Describe 'GATE-46 Watch Mode lifecycle handoff gate' {
         Set-WatchModeTestFile `
             -Path $summaryPath `
             -Content ($summary.Replace(
-                    '| plan | lead | `history/Squad Lead.md` | complete | none |',
-                    '| plan | lead | `history/Squad Lead.md` | failed | none |'
-                ))
+                '| plan | lead | `history/Squad Lead.md` | complete | none |',
+                '| plan | lead | `history/Squad Lead.md` | failed | none |'
+            ))
         Set-WatchModeTestFile -Path (Join-Path $workspace 'app.txt') -Content 'after'
 
         {
@@ -886,9 +916,9 @@ Describe 'GATE-46 Watch Mode lifecycle handoff gate' {
         Set-WatchModeTestFile `
             -Path $reviewHistory `
             -Content ($history.Replace(
-                    '.copilot-tracking/squad/members/issue-1/reviews/review.md',
-                    $otherReview
-                ))
+                '.copilot-tracking/squad/members/issue-1/reviews/review.md',
+                $otherReview
+            ))
         Set-WatchModeTestFile -Path (Join-Path $workspace 'app.txt') -Content 'after'
 
         {
@@ -959,5 +989,253 @@ Describe 'GATE-46 Watch Mode lifecycle handoff gate' {
         $script:WatchWorkflow | Should -Match ([regex]::Escape('triggerReceivedAt: ${{ steps.prep.outputs.triggerReceivedAt }}'))
         $script:WatchWorkflow | Should -Match ([regex]::Escape('-ReceivedAt $env:TRIGGER_RECEIVED_AT'))
         $script:WatchWorkflow | Should -Not -Match ([regex]::Escape("'.agents', 'apm_modules', 'install.log'"))
+    }
+}
+
+Describe 'GATE-46 Watch Mode third-pass handoff regressions' {
+    It 'preserves the real producer timestamp through baseline and staging: <Name>' -ForEach @(
+        @{ Name = 'nonzero milliseconds'; Instant = '2026-10-19T12:30:45.258Z'; EvidenceAt = '2026-10-19T12:30:45.258Z' }
+        @{ Name = 'zero milliseconds'; Instant = '2026-10-19T12:30:45.000Z'; EvidenceAt = '2026-10-19T12:30:45.000Z' }
+        @{ Name = 'whole seconds'; Instant = '2026-10-19T12:30:45Z'; EvidenceAt = '2026-10-19T12:30:45Z' }
+        @{ Name = 'equivalent timezone'; Instant = '2026-10-19T12:30:45.258Z'; EvidenceAt = '2026-10-19T14:30:45.258+02:00' }
+    ) {
+        $script:WatchWorkflow | Should -Match ([regex]::Escape('const receivedAt = new Date().toISOString();'))
+        $receivedAt = & node -p "new Date('$Instant').toISOString()"
+        $LASTEXITCODE | Should -Be 0
+        $handoff = New-WatchModeStagingCase -ReceivedAt $receivedAt -EvidenceAt $EvidenceAt
+
+        $result = New-SquadWatchHandoff @handoff
+
+        $result.HasChanges | Should -BeTrue
+        Test-Path -LiteralPath $result.PatchPath | Should -BeTrue
+    }
+
+    It 'does not conflate genuinely different millisecond timestamps' {
+        $handoff = New-WatchModeStagingCase `
+            -ReceivedAt '2026-10-19T12:30:45.258Z' `
+            -EvidenceAt '2026-10-19T12:30:45.259Z'
+
+        { New-SquadWatchHandoff @handoff } | Should -Throw '*does not match the authorized event*'
+        Test-Path -LiteralPath $handoff.PatchPath | Should -BeFalse
+    }
+
+    It 'accepts successful zero-failure results on every completion surface: <Outcome>' -ForEach @(
+        @{ Outcome = 'Completed successfully. npm test: 8 tests, 8 pass, 0 fail.' }
+        @{ Outcome = 'complete (8 pass, 0 fail)' }
+        @{ Outcome = 'Completed successfully with 0 errors.' }
+        @{ Outcome = 'Completed successfully: 8 passed, 0 failed tests.' }
+        @{ Outcome = 'Completed successfully with no failures.' }
+        @{ Outcome = 'Completed successfully. Failures: 0; errors: 0.' }
+    ) {
+        $handoff = New-WatchModeStagingCase
+        $summaryPath = Join-Path $handoff.MemberRoot 'history/autopilot-run-fixture.md'
+        $summary = Get-Content -LiteralPath $summaryPath -Raw
+        Set-WatchModeTestFile -Path $summaryPath -Content (
+            $summary.Replace('| complete |', "| $Outcome |").Replace(
+                '* Outcome: completed (awaiting final validation)',
+                "* Outcome: completed. $Outcome"
+            )
+        )
+        foreach ($agent in @('Squad Researcher', 'Squad Lead', 'Squad Implementor', 'Squad Reviewer', 'Squad Scribe')) {
+            $historyPath = Join-Path $handoff.MemberRoot "history/$agent.md"
+            $history = Get-Content -LiteralPath $historyPath -Raw
+            Set-WatchModeTestFile -Path $historyPath -Content (
+                $history.Replace('* Outcome: Completed successfully.', "* Outcome: $Outcome")
+            )
+        }
+
+        (New-SquadWatchHandoff @handoff).HasChanges | Should -BeTrue
+    }
+
+    It 'rejects an unfinished or failed <Surface> result: <Outcome>' -ForEach @(
+        @{ Surface = 'stage'; Outcome = 'not started' }
+        @{ Surface = 'history'; Outcome = 'Not started.' }
+        @{ Surface = 'scribe'; Outcome = 'Not started.' }
+        @{ Surface = 'summary'; Outcome = 'completed. Not started.' }
+        @{ Surface = 'stage'; Outcome = 'not completed' }
+        @{ Surface = 'history'; Outcome = 'Not yet complete.' }
+        @{ Surface = 'stage'; Outcome = 'in progress' }
+        @{ Surface = 'history'; Outcome = 'Pending validation.' }
+        @{ Surface = 'stage'; Outcome = 'complete (7 pass, 1 fail)' }
+        @{ Surface = 'history'; Outcome = 'Completed successfully. npm test: 7 pass, 1 fail.' }
+        @{ Surface = 'scribe'; Outcome = 'Failed to persist final state.' }
+        @{ Surface = 'summary'; Outcome = 'completed. Review failed.' }
+    ) {
+        $handoff = New-WatchModeStagingCase
+        if ($Surface -in @('stage', 'summary')) {
+            $path = Join-Path $handoff.MemberRoot 'history/autopilot-run-fixture.md'
+            $content = Get-Content -LiteralPath $path -Raw
+            $content = if ($Surface -eq 'stage') {
+                $content.Replace(
+                    '| research | researcher | `history/Squad Researcher.md` | complete | none |',
+                    ('| research | researcher | `history/Squad Researcher.md` | {0} | none |' -f $Outcome)
+                )
+            }
+            else {
+                $content.Replace('* Outcome: completed (awaiting final validation)', "* Outcome: $Outcome")
+            }
+        }
+        else {
+            $agent = if ($Surface -eq 'scribe') { 'Squad Scribe' } else { 'Squad Researcher' }
+            $path = Join-Path $handoff.MemberRoot "history/$agent.md"
+            $content = (Get-Content -LiteralPath $path -Raw).Replace(
+                '* Outcome: Completed successfully.',
+                "* Outcome: $Outcome"
+            )
+        }
+        Set-WatchModeTestFile -Path $path -Content $content
+
+        { New-SquadWatchHandoff @handoff } | Should -Throw '*handoff blocked*'
+        Test-Path -LiteralPath $handoff.PatchPath | Should -BeFalse
+    }
+
+    It 'rejects heading-only evidence regardless of its text extension: <Extension>' -ForEach @(
+        @{ Extension = '.md' }
+        @{ Extension = '.txt' }
+        @{ Extension = '.TXT' }
+    ) {
+        $handoff = New-WatchModeStagingCase
+        $historyPath = Join-Path $handoff.MemberRoot 'history/Squad Reviewer.md'
+        $history = (Get-Content -LiteralPath $historyPath -Raw).Replace('reviews/review.md', "reviews/review$Extension")
+        Set-WatchModeTestFile -Path $historyPath -Content $history
+        Set-WatchModeTestFile -Path (Join-Path $handoff.MemberRoot "reviews/review$Extension") -Content "# Review`n`n"
+
+        { New-SquadWatchHandoff @handoff } | Should -Throw '*has no structured evidence*'
+        Test-Path -LiteralPath $handoff.PatchPath | Should -BeFalse
+    }
+
+    It 'preserves substantive plain-text deliverables without requiring a Markdown heading' {
+        $handoff = New-WatchModeStagingCase
+        $historyPath = Join-Path $handoff.MemberRoot 'history/Squad Reviewer.md'
+        Set-WatchModeTestFile -Path $historyPath -Content (
+            (Get-Content -LiteralPath $historyPath -Raw).Replace('reviews/review.md', 'reviews/review.txt')
+        )
+        Set-WatchModeTestFile -Path (Join-Path $handoff.MemberRoot 'reviews/review.txt') `
+            -Content 'Reviewed the implementation and confirmed that all eight acceptance tests passed.'
+
+        (New-SquadWatchHandoff @handoff).HasChanges | Should -BeTrue
+    }
+
+    It 'preserves successful narrative history outcomes: <Outcome>' -ForEach @(
+        @{ Outcome = 'Recorded the research-stage history entry and advanced state.' }
+        @{ Outcome = 'Surveyed three comparable fixtures and recommended a minimal seed shape.' }
+    ) {
+        $handoff = New-WatchModeStagingCase
+        $historyPath = Join-Path $handoff.MemberRoot 'history/Squad Researcher.md'
+        Set-WatchModeTestFile -Path $historyPath -Content (
+            (Get-Content -LiteralPath $historyPath -Raw).Replace(
+                '* Outcome: Completed successfully.', "* Outcome: $Outcome"
+            )
+        )
+
+        (New-SquadWatchHandoff @handoff).HasChanges | Should -BeTrue
+    }
+
+    It 'preserves non-blocking Concern findings and CRLF Council records' {
+        $handoff = New-WatchModeStagingCase
+        $decisionsPath = Join-Path $handoff.MemberRoot 'decisions.md'
+        $decisions = (Get-Content -LiteralPath $decisionsPath -Raw).Replace(
+            '| security | Approve | Risk: Low | none | none | none |',
+            '| security | Concern | Risk: Medium | none | none | review audit logging later |'
+        ) -replace '\r?\n', "`r`n"
+        Set-WatchModeTestFile -Path $decisionsPath -Content $decisions
+
+        (New-SquadWatchHandoff @handoff).HasChanges | Should -BeTrue
+    }
+
+    It 'rejects aggregate Go when the selected Security finding is <Finding>' -ForEach @(
+        @{ Finding = 'Block'; Row = '| security | Block | Risk: Low | none | none | none |' }
+        @{ Finding = 'High risk'; Row = '| security | Concern | Risk: High | none | none | none |' }
+        @{ Finding = 'blocking issue'; Row = '| security | Concern | Risk: Medium | missing audit trail | none | none |' }
+        @{ Finding = 'unknown verdict'; Row = '| security | unknown | Risk: Low | none | none | none |' }
+        @{ Finding = 'unknown risk'; Row = '| security | Approve | unknown | none | none | none |' }
+    ) {
+        $handoff = New-WatchModeStagingCase
+        $decisionsPath = Join-Path $handoff.MemberRoot 'decisions.md'
+        Set-WatchModeTestFile -Path $decisionsPath -Content (
+            (Get-Content -LiteralPath $decisionsPath -Raw).Replace(
+                '| security | Approve | Risk: Low | none | none | none |',
+                $Row
+            )
+        )
+
+        { New-SquadWatchHandoff @handoff } | Should -Throw '*council finding*'
+        Test-Path -LiteralPath $handoff.PatchPath | Should -BeFalse
+    }
+
+    It 'does not let a skipped summary override a current <Verdict> Council decision with permission <Permission>' -ForEach @(
+        @{ Verdict = 'Stop'; Permission = 'no' }
+        @{ Verdict = 'Go'; Permission = 'no' }
+        @{ Verdict = 'Go'; Permission = 'yes' }
+    ) {
+        $handoff = New-WatchModeStagingCase
+        $summaryPath = Join-Path $handoff.MemberRoot 'history/autopilot-run-fixture.md'
+        Set-WatchModeTestFile -Path $summaryPath -Content (
+            (Get-Content -LiteralPath $summaryPath -Raw).Replace(
+                '| council | architect, security | `history/System Architecture Reviewer.md`, `history/Security Planner.md` | Go | none |',
+                '| council | none | n/a | skipped - not applicable | none |'
+            )
+        )
+        $decisionsPath = Join-Path $handoff.MemberRoot 'decisions.md'
+        Set-WatchModeTestFile -Path $decisionsPath -Content (
+            (Get-Content -LiteralPath $decisionsPath -Raw).Replace(
+                '* Verdict: Go', "* Verdict: $Verdict"
+            ).Replace('* Permits Implementation Dispatch: yes', "* Permits Implementation Dispatch: $Permission")
+        )
+
+        { New-SquadWatchHandoff @handoff } | Should -Throw '*skipped council*Council Verdict*'
+        Test-Path -LiteralPath $handoff.PatchPath | Should -BeFalse
+    }
+
+    It 'enforces the final conditional-Council disposition: <Name>' -ForEach @(
+        @{ Name = 'unresolved condition'; Outstanding = '1'; Verdict = 'Go-With-Conditions'; Pass = $false }
+        @{ Name = 'satisfied condition'; Outstanding = '0'; Verdict = 'Go-With-Conditions'; Pass = $true }
+        @{ Name = 'accepted deferred condition'; Outstanding = '0'; Verdict = 'Go-With-Conditions'; Pass = $true }
+        @{ Name = 'outstanding but explicitly accepted'; Outstanding = '1'; Verdict = 'Go-With-Conditions'; Pass = $true }
+        @{ Name = 'outstanding but recorded satisfied'; Outstanding = '1'; Verdict = 'Go-With-Conditions'; Pass = $true }
+        @{ Name = 'unrelated acceptance'; Outstanding = '1'; Verdict = 'Go-With-Conditions'; Pass = $false }
+        @{ Name = 'missing disposition'; Outstanding = ''; Verdict = 'Go-With-Conditions'; Pass = $false }
+        @{ Name = 'negative count'; Outstanding = '-1'; Verdict = 'Go-With-Conditions'; Pass = $false }
+        @{ Name = 'contradictory Go'; Outstanding = '0'; Verdict = 'Go'; Pass = $false }
+    ) {
+        $handoff = New-WatchModeStagingCase
+        $decisionsPath = Join-Path $handoff.MemberRoot 'decisions.md'
+        $decisions = (Get-Content -LiteralPath $decisionsPath -Raw).Replace(
+            '| security | Approve | Risk: Low | none | none | none |',
+            '| security | Conditional | Risk: Low | none | retain audit logging | none |'
+        ).Replace('* Verdict: Go', "* Verdict: $Verdict").Replace(
+            '* Conditions: none', '* Conditions: (security) retain audit logging'
+        ).Replace('* Conditions Outstanding: 0', "* Conditions Outstanding: $Outstanding")
+        if ($Pass) {
+            $resolution = if ($Name -eq 'accepted deferred condition') {
+                'The deferred audit-logging condition was explicitly accepted for this bounded change.'
+            }
+            else {
+                'The audit-logging condition was satisfied and verified before handoff.'
+            }
+            $decisions += "`n### Condition Resolution`n`n$($resolution)`n"
+        }
+        if ($Name -eq 'outstanding but explicitly accepted') {
+            $decisions += "`n* Conditions Accepted: (security) retain audit logging`n"
+        }
+        elseif ($Name -eq 'outstanding but recorded satisfied') {
+            $decisions += "`n* Conditions Satisfied: (security) retain audit logging`n"
+        }
+        elseif ($Name -eq 'unrelated acceptance') {
+            $decisions += "`n* Conditions Accepted: (architect) update the component diagram`n"
+        }
+        Set-WatchModeTestFile -Path $decisionsPath -Content $decisions
+        $summaryPath = Join-Path $handoff.MemberRoot 'history/autopilot-run-fixture.md'
+        Set-WatchModeTestFile -Path $summaryPath -Content (
+            (Get-Content -LiteralPath $summaryPath -Raw).Replace('| Go | none |', "| $Verdict | none |")
+        )
+
+        if ($Pass) {
+            (New-SquadWatchHandoff @handoff).HasChanges | Should -BeTrue
+        }
+        else {
+            { New-SquadWatchHandoff @handoff } | Should -Throw '*council*'
+            Test-Path -LiteralPath $handoff.PatchPath | Should -BeFalse
+        }
     }
 }

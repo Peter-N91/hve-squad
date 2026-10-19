@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-19"
 ---
 
 # Scribe Cold Section: Gates, Verdicts, and Run Summaries
@@ -85,6 +85,8 @@ The Scribe stamps this shape when a council runs. The council is task-fit, so th
 * Permits Implementation Dispatch: yes (Go, Go-With-Conditions) | no (Stop)
 * Conditions Outstanding: <count>
 ```
+
+For a Watch Mode material handoff, the final topic verdict must agree with the most-restrictive findings: a `Block`, `Risk: High`, or unresolved blocking issue cannot be synthesized as `Go`. A skipped summary row never overrides a Council Verdict already recorded for that run. `Go-With-Conditions` still permits implementation dispatch with the conditions attached. Before handoff, record their satisfaction or explicit acceptance in the latest verdict for the topic; append a resolved verdict rather than rewriting an earlier decision. `Conditions Outstanding` must be a nonnegative integer. Zero declares no unresolved conditions. When a positive count remains (for example, an accepted deferral), add `* Conditions Satisfied:` and/or `* Conditions Accepted:` bullets naming every condition as `(role) <exact condition text from Findings by Role>`. Missing, unrelated, or incomplete disposition records block handoff; a valid explicit acceptance still permits it.
 
 ### Intake Readiness Verdict Placeholder
 
@@ -222,6 +224,8 @@ description: "Autopilot-run summary for topic <id>"
 `Dispatch Record` names the history file the Scribe wrote for that stage, and is filled from `history/` rather than from the coordinator's account of the run. A stage with no such file carries the literal `— none recorded`, and any such cell forces the `incomplete` outcome above. This is the run's own report that its cast was not dispatched, written by the only participant that knows.
 
 The five `Trigger ...` bullets are omitted outside Watch Mode. In Watch Mode they are required, copied exactly from `state.json trigger`, and repeated on a resumed run's latest summary entry so the trusted handoff can bind the latest stages to the authorized event rather than to an older committed summary.
+
+Preserve fractional seconds in `receivedAt`; the handoff compares timestamp instants, so equivalent timezone offsets are valid without rounding away milliseconds. Stage results, the latest role outcomes, and the final summary must describe completed work, never `not started`, `in progress`, or a failed result. Successful test reports such as `8 pass, 0 fail` remain successful outcomes. Plain-text deliverables may omit Markdown headings, but a heading alone is not substantive evidence in either `.md` or `.txt` files.
 
 In a deliverable fan-out run, the single `implement` row expands into one row per deliverable (`implement: <deliverable>` with its owning agent).
 
