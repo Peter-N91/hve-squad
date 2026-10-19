@@ -44,12 +44,13 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
         New-TestEvent 'session.usage_record' @{ usage = @{ inputTokens = 100; outputTokens = 10; toolTokenCount = 20; availableToolCount = 3; requestBodyBytes = 400; aiCreditsStatus = 'complete'; copilotUsage = @{ totalNanoAiu = 1000000 }; accounting = @{ sourceSessionId = 'child'; usageId = $Id } } }
     }
     function New-TestRuns {
+        param([switch]$ObservationOnly)
         foreach ($Arm in @('baseline', 'candidate')) {
             foreach ($Pair in 1..3) {
                 $Scores = @{ businessClarity = 20; scopeFidelity = 20; acceptanceCriteria = 20; traceability = 20; risksAndDecisions = 20 }
                 $Evidence = @{}; foreach ($Name in $Scores.Keys) { $Evidence[$Name] = 'Specific evidence in frozen document.' }
                 $Hashes = @{ brd = 'brd-hash'; prd = 'prd-hash' }
-                @{
+                $Run = @{
                     schemaVersion = 'squad-efficiency-v1'
                     metadata = @{ runId = "$Arm-$Pair"; pair = $Pair; arm = $Arm; revision = "$Arm-revision"; sourceHash = "$Arm-tree"; compatibility = @{ fixture = 'frozen'; model = 'same'; cli = 'same' } }
                     completed = $true; acceptance = @{ passed = $true }; workflow = @{ passed = $true }
@@ -57,6 +58,14 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
                     metrics = @{ complete = $true; modelRequests = $(if ($Arm -eq 'baseline') { 100 } else { 80 }); toolCalls = $(if ($Arm -eq 'baseline') { 100 } else { 80 }); totals = @{ inputTokens = $(if ($Arm -eq 'baseline') { 10000 } else { 8000 }); outputTokens = 1000 }; counts = @{ failures = 0 } }
                     judge = @{ valid = $true; documentHashes = $Hashes; response = @{ scores = $Scores; evidence = $Evidence; documentHashes = $Hashes; criticalHighFindings = 0 }; metrics = @{ complete = $true; modelRequests = 5; toolCalls = 0; totals = @{ inputTokens = 100; outputTokens = 100 }; counts = @{ failures = 0 } } }
                 }
+                if ($ObservationOnly) {
+                    $Run.metadata.compatibility.evaluationPolicy = 'baseline-observation-v1'
+                    $Run.metrics.credits = @{ complete = $true; used = 2 }
+                    $Run.judge.metrics.credits = @{ complete = $true; used = 1 }
+                    $Run.collection = @{ recorded = $true; policy = 'baseline-observation-v1' }
+                    foreach ($Stage in $Run.stages) { $Stage.process = @{ exitCode = 0; stopCause = 'none' } }
+                }
+                $Run
             }
         }
     }
@@ -303,6 +312,8 @@ Describe 'Efficiency recovery end to end' -Tag 'Unit' {
         @{ Outcome = 'recovered' }
         @{ Outcome = 'still-fails' }
         @{ Outcome = 'credit-limit' }
+        @{ Outcome = 'observe-readiness' }
+        @{ Outcome = 'observe-credit-limit' }
     ) {
         $Install = Join-Path $TestDrive "$Outcome-install"; $Trial = Join-Path $TestDrive "$Outcome-run"
         New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
@@ -324,7 +335,7 @@ __ACP__
 $ErrorActionPreference='Stop'
 $Session=$args[[array]::IndexOf($args,'--session-id')+1]
 $Prompt=$args[[array]::IndexOf($args,'-p')+1]
-$Kind=if($Prompt -match 'Initialization only;'){'init'}elseif($Prompt -match 'Implement docs/requirements/prd.md'){'build'}elseif($Prompt -match 'This is a continuation of this same stage'){'continuation'}else{'requirements'}
+$Kind=if($Prompt -match 'Initialization only;'){'init'}elseif($Prompt -match 'Implement (?:docs/requirements/prd.md|the frozen EXERCISE.txt)'){'build'}elseif($Prompt -match 'This is a continuation of this same stage'){'continuation'}else{'requirements'}
 $Ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1]
 if(-not (Test-Path 'initial-credit-limit.txt')){Set-Content 'initial-credit-limit.txt' $Ceiling}
 $EffectiveCeiling=[double](Get-Content 'initial-credit-limit.txt')
@@ -338,7 +349,7 @@ function Write-FakeEvent([string]$Type,[hashtable]$Data) {
     Add-Content -LiteralPath $Events -Value $Line
     Write-Output $Line
 }
-Write-FakeEvent 'session.usage_record' @{usage=@{inputTokens=10;outputTokens=1;aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=$(if($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'credit-limit'){751000000000}else{1000000})};accounting=@{sourceSessionId=$Session;usageId="$Kind-usage"}}}
+Write-FakeEvent 'session.usage_record' @{usage=@{inputTokens=10;outputTokens=1;aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=$(if($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'credit-limit'){751000000000}elseif($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'observe-credit-limit'){971000000000}else{1000000})};accounting=@{sourceSessionId=$Session;usageId="$Kind-usage"}}}
 if($Kind -eq 'init') {
     New-Item -ItemType Directory -Path '.copilot-tracking' -Force|Out-Null
     foreach($Item in Get-ChildItem -LiteralPath '__FIXTURE__' -Force) { Copy-Item -LiteralPath $Item.FullName -Destination '.copilot-tracking/squad' -Recurse -Force }
@@ -360,9 +371,32 @@ if($Kind -eq 'init') {
 exit 0
 '@
         Set-Content -LiteralPath $Cli -Value ($Fake.Replace('__ACP__',$Acp).Replace('__FIXTURE__',$Fixture).Replace('__OUTCOME__',$Outcome)) -Encoding utf8NoBOM
-        $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'),'-Mode','Run','-SourceRoot',$Source,'-InstallRoot',$Install,'-CliPath',$Cli,'-TrialRoot',$Trial,'-MaxCredits','1000','-Live','-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 90 -InputText ''
+        $Arguments = @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'),'-Mode','Run','-SourceRoot',$Source,'-InstallRoot',$Install,'-CliPath',$Cli,'-TrialRoot',$Trial,'-MaxCredits','1000','-Live','-IsolatedEnvironment')
+        if ($Outcome -like 'observe-*') { $Arguments += '-ObservationOnly' }
+        $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 90 -InputText ''
         $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         try {
+            if ($Outcome -like 'observe-*') {
+                $Execution.exitCode | Should -Be 0
+                $Run.collection.recorded | Should -BeTrue
+                $Run.completed | Should -BeFalse
+                $Run.stages[1].passed | Should -BeFalse
+                $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+                @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(970)
+                if ($Outcome -eq 'observe-credit-limit') {
+                    $Run.stages.Count | Should -Be 2
+                    $Run.stages[1].process.stopCause | Should -Be 'credit-limit'
+                    $Calls.Count | Should -Be 2
+                }
+                else {
+                    $Run.stages.name -join ',' | Should -Be 'init,requirements,build'
+                    $Calls.kind -join ',' | Should -Be 'init,requirements,build'
+                    $Run.stages[2].process.exitCode | Should -Be 37
+                }
+                $Run.judge.valid | Should -BeFalse
+                $Run.judge.reason | Should -Be 'missing-or-oversized-document'
+                return
+            }
             $Execution.exitCode | Should -Be 2
             $Run.stages[0].passed | Should -BeTrue
             $Stage = $Run.stages[1]
@@ -466,7 +500,7 @@ $Scores=@{};$Evidence=@{}
 foreach($Name in @('businessClarity','scopeFidelity','acceptanceCriteria','traceability','risksAndDecisions')){$Scores[$Name]=20;$Evidence[$Name]='specific synthetic document evidence'}
 $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHashes=$Payload.documentHashes}|ConvertTo-Json -Compress
 @{type='assistant.message';data=@{content=$Response}}|ConvertTo-Json -Compress|Add-Content $Events
-@{session=$Session;ceiling=$Ceiling}|ConvertTo-Json -Compress|Set-Content 'judge-call.json'
+@{session=$Session;ceiling=$Ceiling;missingReview=$Payload.closingReviewMissing;review=$Payload.documents.closingReview}|ConvertTo-Json -Compress|Set-Content 'judge-call.json'
 '@ | Set-Content -LiteralPath $Cli
         $Policy = Get-EfficiencyRecoveryPolicy -MaxCredits 1000
         $Judge = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits $Policy.judgeCredits -ReviewPath 'docs/requirements/review.md'
@@ -476,6 +510,22 @@ $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHas
             $Call.ceiling | Should -Be 250
             $Judge.process.creditCeiling | Should -Be 250
             $Judge.metrics.credits.used | Should -Be 1
+        }
+        finally { Remove-Item -LiteralPath (Join-Path $HOME ".copilot/session-state/$($Call.session)") -Recurse -Force }
+        $Policy = Get-EfficiencyRecoveryPolicy -MaxCredits 1000 -ObservationOnly
+        $Out = Join-Path $TestDrive 'judge-observation-out'
+        New-Item -ItemType Directory -Path $Out | Out-Null
+        $Policy.workflowCredits | Should -Be 970
+        $Policy.judgeCredits | Should -Be 30
+        $Judge = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits $Policy.judgeCredits -ReviewPath '' -ObservationOnly
+        $Call = Get-Content (Join-Path $Out 'judge-call.json') -Raw | ConvertFrom-Json
+        try {
+            $Judge.valid | Should -BeTrue
+            $Call.ceiling | Should -Be 30
+            $Call.missingReview | Should -BeTrue
+            $Call.review | Should -BeNullOrEmpty
+            $Judge.documentHashes.closingReview | Should -Be ([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]]@())))
+            (Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits 250 -ReviewPath '').valid | Should -BeFalse
         }
         finally { Remove-Item -LiteralPath (Join-Path $HOME ".copilot/session-state/$($Call.session)") -Recurse -Force }
     }
@@ -702,6 +752,44 @@ exit 37
         Test-EfficiencyRun $Run | Should -BeTrue
         $Run.metrics.modelRequests++
         Test-EfficiencyRun $Run | Should -BeFalse
+        Test-EfficiencyRun $Run -ObservationOnly | Should -BeTrue
+        $Run.workflow.passed = $false
+        Test-EfficiencyRun $Run -ObservationOnly | Should -BeFalse
+    }
+    It 'compares imperfect observations relatively without promoting them or hiding reliability regressions' {
+        $Runs = @(New-TestRuns -ObservationOnly)
+        foreach ($Run in $Runs) { $Run.judge.response.scores.businessClarity = 0 }
+        foreach ($Index in @(0, 1, 3)) { $Runs[$Index].completed = $false; $Runs[$Index].workflow.passed = $false }
+        $Runs[0].judge.response.criticalHighFindings = 1
+        $Report = Compare-EfficiencyRuns $Runs -ObservationOnly
+        $Report.evaluable | Should -BeTrue
+        $Report.eligible | Should -BeTrue
+        $Report.metrics.quality.baseline | Should -Be 80
+        $Report.metrics.reliability.baseline | Should -Be (1.0 / 3)
+        $Report.metrics.reliability.candidate | Should -Be (2.0 / 3)
+        $Report.metrics.criticalHighFindings.baseline | Should -Be 1
+        { Save-EfficiencyBaseline $Runs (Join-Path $TestDrive 'unapproved-observations.json') } | Should -Throw '*not eligible*'
+        $Runs[4].completed = $false; $Runs[5].completed = $false
+        $Regressed = Compare-EfficiencyRuns $Runs -ObservationOnly
+        $Regressed.eligible | Should -BeFalse
+        $Regressed.reasons | Should -Contain 'Reliability declined'
+        foreach ($Run in $Runs) { foreach ($Name in @($Run.judge.response.scores.Keys)) { $Run.judge.response.scores[$Name] = 0 } }
+        (Compare-EfficiencyRuns $Runs -ObservationOnly).metrics.quality.baseline | Should -Be 0
+    }
+    It 'retains unavailable observation grades and measurements without inventing zero scores' {
+        foreach ($Missing in @('judge', 'judge-telemetry', 'workflow-telemetry')) {
+            $Runs = @(New-TestRuns -ObservationOnly)
+            switch ($Missing) {
+                judge { $Runs[0].judge = $null }
+                judge-telemetry { $Runs[0].judge.metrics.complete = $false }
+                workflow-telemetry { $Runs[0].metrics.totals.inputTokens = $null }
+            }
+            $Report = Compare-EfficiencyRuns $Runs -ObservationOnly
+            $Report.evaluable | Should -BeFalse
+            $Report.eligible | Should -BeFalse
+            $Report.metrics.Count | Should -Be 0
+            $Report.reasons -join ',' | Should -Match 'unavailable'
+        }
     }
     It 'refuses offline promotion when a required stage is missing despite a saved success flag' {
         $Runs = @(New-TestRuns); $Runs[3].stages[2].passed = $false
@@ -942,6 +1030,41 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $Result.report.efficiency | Should -BeNullOrEmpty
         $Result.controls.runs.Count | Should -Be 3
         $script:SeriesCalls.Count | Should -Be 3
+        $Observer = {
+            param($Arm, $Pair, $Credits)
+            $script:SeriesCalls.Add("$Arm-$Pair")
+            $Run = @(New-TestRuns -ObservationOnly | Where-Object { $_.metadata.arm -eq $Arm -and $_.metadata.pair -eq $Pair })[0]
+            $Run.completed = $false; $Run.acceptance.passed = $false; $Run.workflow.passed = $false
+            $Run.judge.response.scores.businessClarity = 0
+            $Run.metadata.compatibility.evaluationPolicy = 'baseline-observation-v1'
+            $Run.metrics.credits = @{ complete = $true; used = 1 }
+            $Run.collection = @{ recorded = $true; policy = 'baseline-observation-v1' }
+            $Run
+        }
+        $Observed = Invoke-EfficiencySeries -Kind Establish -RunTrial $Observer -PerRunCredits 10 -SeriesCredits 30 -ObservationOnly
+        $Observed.exitCode | Should -Be 0
+        $Observed.report.outcome | Should -Be 'baseline-recorded'
+        $Observed.controls.runs.Count | Should -Be 3
+        $Observed.report.quality.checksPassed | Should -BeFalse
+        $Observed.report.reliability.workflowCompleted | Should -Be 0
+        $Observed.report.quality.scores[0].total | Should -Be 80
+        @($Observed.report.slots | Where-Object status -EQ failed).Count | Should -Be 3
+        $Unmetered = { param($Arm, $Pair, $Credits) $Run = & $Observer $Arm $Pair $Credits; $Run.metrics.credits.complete = $false; $Run }.GetNewClosure()
+        $Rejected = Invoke-EfficiencySeries -Kind Establish -RunTrial $Unmetered -PerRunCredits 10 -SeriesCredits 30 -ObservationOnly
+        $Rejected.exitCode | Should -Be 2
+        $Rejected.controls | Should -BeNullOrEmpty
+        @($Rejected.report.slots | Where-Object status -EQ 'not-run').Count | Should -Be 2
+        $Run = @(New-TestRuns -ObservationOnly)[0]
+        $Run.judge.process = @{ exitCode = 1; stopCause = 'none' }
+        $Run.judge.metrics.credits.complete = $false
+        Test-EfficiencyObservation $Run | Should -BeFalse
+        $Run.judge.metrics.credits.complete = $true
+        Test-EfficiencyObservation $Run | Should -BeTrue
+        $Run.stages[2].process = @{ stopCause = 'incomplete-credit-metering' }
+        Test-EfficiencyObservation $Run | Should -BeFalse
+        $Run.stages[2].process = @{ stopCause = 'none' }
+        $Run.collection.policy = 'strict-v1'
+        Test-EfficiencyObservation $Run | Should -BeFalse
     }
     It 'executes all six paired slots and automatically compares without promotion' {
         $Result = Invoke-EfficiencySeries -Kind Series -RunTrial $script:Trial -PerRunCredits 10 -SeriesCredits 60

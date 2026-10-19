@@ -13,5 +13,6 @@
   "maxModelRequests": 1000,
   "maxDriverDecisions": 8,
   "maxContinuationsPerStage": 2,
-  "timeoutMinutes": 45
+  "timeoutMinutes": 45,
+  "observationTimeoutMinutes": 180
 }
