@@ -778,8 +778,8 @@ function Test-SquadWatchOutcomeComplete {
         [string]$Value
     )
 
-    $outcome = $Value -replace '(?i)\b(?:0|zero|no)\s+(?:fail(?:ed|ures?|ing)?|errors?)\b', ''
-    $outcome = $outcome -replace '(?i)\b(?:fail(?:ed|ures?|ing)?|errors?)\s*[:=]\s*0\b(?!\.\d)', ''
+    $outcome = $Value -replace '(?i)(?<![\w.+-])(?<!\d,)(?:0+(?:[.,]0+)?|zero|no)\s+(?:fail(?:ed|ures?|ing)?|errors?)\b', ''
+    $outcome = $outcome -replace '(?i)\b(?:fail(?:ed|ures?|ing)?|errors?)\s*[:=]\s*0+(?:[.,]0+)?\b(?![.,]\d)', ''
     [bool]($Value -and $outcome -notmatch '(?ix)\b(
         fail(?:ed|ures?|ing)? | errors? | incomplete | pending | running |
         blocked | escalated | stopped | cancelled | canceled |
@@ -939,6 +939,7 @@ function Get-SquadWatchHistoryReference {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [object[]]$Rows
     )
 

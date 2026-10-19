@@ -1019,6 +1019,19 @@ Describe 'GATE-46 Watch Mode third-pass handoff regressions' {
         Test-Path -LiteralPath $handoff.PatchPath | Should -BeFalse
     }
 
+    It 'reports lifecycle failures for a malformed summary table without a parameter-binding exception' {
+        $handoff = New-WatchModeStagingCase
+        $summaryPath = Join-Path $handoff.MemberRoot 'history/autopilot-run-fixture.md'
+        $summary = Get-Content -LiteralPath $summaryPath -Raw
+        Set-WatchModeTestFile -Path $summaryPath -Content (
+            $summary -replace '(?m)\|[^|\r\n]*\|[ \t]*\r?$', '|'
+        )
+
+        { New-SquadWatchHandoff @handoff } |
+            Should -Throw "*current autopilot summary is missing the 'research' stage row*"
+        Test-Path -LiteralPath $handoff.PatchPath | Should -BeFalse
+    }
+
     It 'accepts successful zero-failure results on every completion surface: <Outcome>' -ForEach @(
         @{ Outcome = 'Completed successfully. npm test: 8 tests, 8 pass, 0 fail.' }
         @{ Outcome = 'complete (8 pass, 0 fail)' }
@@ -1026,6 +1039,7 @@ Describe 'GATE-46 Watch Mode third-pass handoff regressions' {
         @{ Outcome = 'Completed successfully: 8 passed, 0 failed tests.' }
         @{ Outcome = 'Completed successfully with no failures.' }
         @{ Outcome = 'Completed successfully. Failures: 0; errors: 0.' }
+        @{ Outcome = 'Completed successfully. 8 pass,0 fail; 0.00 errors.' }
     ) {
         $handoff = New-WatchModeStagingCase
         $summaryPath = Join-Path $handoff.MemberRoot 'history/autopilot-run-fixture.md'
@@ -1058,6 +1072,10 @@ Describe 'GATE-46 Watch Mode third-pass handoff regressions' {
         @{ Surface = 'history'; Outcome = 'Pending validation.' }
         @{ Surface = 'stage'; Outcome = 'complete (7 pass, 1 fail)' }
         @{ Surface = 'history'; Outcome = 'Completed successfully. npm test: 7 pass, 1 fail.' }
+        @{ Surface = 'stage'; Outcome = 'complete (7 pass, 1.0 fail)' }
+        @{ Surface = 'history'; Outcome = 'Completed. 1,0 failures.' }
+        @{ Surface = 'history'; Outcome = 'Completed. 1e-0 failures.' }
+        @{ Surface = 'summary'; Outcome = 'completed. Failures: 0.5.' }
         @{ Surface = 'scribe'; Outcome = 'Failed to persist final state.' }
         @{ Surface = 'summary'; Outcome = 'completed. Review failed.' }
     ) {
