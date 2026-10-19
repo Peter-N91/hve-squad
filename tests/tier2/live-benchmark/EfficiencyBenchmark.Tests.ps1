@@ -283,7 +283,7 @@ Describe 'Efficiency native compaction boundary' -Tag 'Unit' {
         Set-Content -LiteralPath $Cli -Value $script:FakeAcpText -Encoding utf8NoBOM
         @(New-TestUsage; New-TestEvent 'session.compaction_complete' @{}) | Set-Content $Events
         $Session = [guid]::NewGuid().ToString()
-        $Result = Invoke-EfficiencyCompaction -CliPath $Cli -SessionId $Session -Workspace $TestDrive -EventsPath $Events -OutputPath $Output -UsagePath (Join-Path $TestDrive "$Mode-usage.json") -MaxCredits $(if($Mode -eq 'credit-limit'){1}else{10}) -Model fake -TimeoutSeconds $(if($Mode -eq 'timeout'){1}else{10}) -MaxRequests 10 -EnvironmentVariables @{HVE_FAKE_ACP_MODE=$Mode;HVE_FAKE_ACP_EVENTS=$Events;HVE_FAKE_ACP_TRACE=$Trace}
+        $Result = Invoke-EfficiencyCompaction -CliPath $Cli -SessionId $Session -Workspace $TestDrive -EventsPath $Events -OutputPath $Output -UsagePath (Join-Path $TestDrive "$Mode-usage.json") -MaxCredits $(if($Mode -eq 'credit-limit'){1}else{10}) -Model fake -TimeoutSeconds $(if($Mode -eq 'timeout'){1}else{10}) -MaxRequests $(if($Mode -eq 'success'){990}else{10}) -EnvironmentVariables @{HVE_FAKE_ACP_MODE=$Mode;HVE_FAKE_ACP_EVENTS=$Events;HVE_FAKE_ACP_TRACE=$Trace}
         $Result.stopCause | Should -Be $Expected
         $Result.succeeded | Should -Be ($Mode -eq 'success')
         ($Result | ConvertTo-Json -Depth 10) | Should -Not -Match 'PRIVATE REPLAY|PRIVATE PROTOCOL DIAGNOSTIC'
@@ -675,6 +675,13 @@ exit 37
     It 'does not trust a saved completed flag when independent checks fail' {
         $Runs = @(New-TestRuns); $Runs[3].workflow.passed = $false
         (Compare-EfficiencyRuns $Runs).eligible | Should -BeFalse
+        $Run = @(New-TestRuns)[0]
+        $Limit = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json).maxModelRequests
+        $Run.judge.metrics.modelRequests = 10
+        $Run.metrics.modelRequests = $Limit - 10
+        Test-EfficiencyRun $Run | Should -BeTrue
+        $Run.metrics.modelRequests++
+        Test-EfficiencyRun $Run | Should -BeFalse
     }
     It 'refuses offline promotion when a required stage is missing despite a saved success flag' {
         $Runs = @(New-TestRuns); $Runs[3].stages[2].passed = $false

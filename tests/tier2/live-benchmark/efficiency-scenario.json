@@ -10,7 +10,7 @@
   "improvementPercent": 10,
   "regressionPercent": 5,
   "repeats": 3,
-  "maxModelRequests": 300,
+  "maxModelRequests": 1000,
   "maxDriverDecisions": 8,
   "maxContinuationsPerStage": 2,
   "timeoutMinutes": 45

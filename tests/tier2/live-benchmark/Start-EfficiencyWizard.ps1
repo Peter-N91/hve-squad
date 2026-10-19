@@ -402,7 +402,8 @@ function Get-WizardConfiguration {
         }
     }
     $Mode = Get-WizardMode -HasBaseline:([bool]$SavedControl)
-    Write-Host 'Defaults: offline self-tests first; model claude-sonnet-5.5; 100 AI credits per run (ceiling, not predicted cost); three repeats; no outer retries; 300 total model requests; 45-minute run watchdog; two host continuations per stage; no automatic promotion.'
+    $ScenarioDefaults = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
+    Write-Host "Defaults: offline self-tests first; model claude-sonnet-5.5; 100 AI credits per run (ceiling, not predicted cost); three repeats; no outer retries; $($ScenarioDefaults.maxModelRequests) total model requests; $($ScenarioDefaults.timeoutMinutes)-minute run watchdog; two host continuations per stage; no automatic promotion."
     Write-Host 'Isolation is NOT created by the wizard. Live modes require a disposable OS-isolated environment, restricted credentials and no sensitive source data. Fresh run directories preserve previous evidence.'
     $Scratch = Assert-WizardScratchPath (Read-WizardText -Question 'Dedicated work/evidence root outside the checkout' -Default $Scratch -Required) $Source
     $Config = @{

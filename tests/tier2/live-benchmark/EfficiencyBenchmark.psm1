@@ -412,7 +412,7 @@ function Invoke-EfficiencyCompaction {
         [Parameter(Mandatory)][string]$OutputPath, [Parameter(Mandatory)][string]$UsagePath,
         [Parameter(Mandatory)][double]$MaxCredits, [string]$Model,
         [ValidateRange(1, 300)][int]$TimeoutSeconds = 120, [int]$StartLine = 0,
-        [ValidateRange(1, 300)][int]$MaxRequests = 96, [string[]]$DisabledServers = @(),
+        [ValidateRange(1, 2147483647)][int]$MaxRequests = 96, [string[]]$DisabledServers = @(),
         [hashtable]$EnvironmentVariables = @{}
     )
     $Info = [Diagnostics.ProcessStartInfo]::new()
@@ -967,7 +967,8 @@ function Test-EfficiencyRun {
         foreach ($Metrics in @($Run.metrics, $Run.judge.metrics)) {
             Get-EfficiencyMedian @($Metrics.modelRequests, $Metrics.toolCalls, $Metrics.totals.inputTokens, $Metrics.totals.outputTokens, $Metrics.counts.failures) | Out-Null
         }
-        if ($Run.metrics.modelRequests + $Run.judge.metrics.modelRequests -gt 300) { return $false }
+        $Scenario = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
+        if ($Run.metrics.modelRequests + $Run.judge.metrics.modelRequests -gt $Scenario.maxModelRequests) { return $false }
         return $true
     }
     catch { return $false }
