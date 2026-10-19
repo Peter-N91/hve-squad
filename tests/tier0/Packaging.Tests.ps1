@@ -242,6 +242,11 @@ Describe 'D7-1 Plugin build succeeds and carries every new reference file' {
         Test-Path -LiteralPath (Join-Path $script:PluginReferencesRoot $_) -PathType Leaf |
             Should -BeTrue -Because 'the deliverable requires every new reference file to ship in the plugin build, not only in squad-src'
     }
+
+    It 'ships the deterministic Watch Mode handoff module in the plugin output' {
+        Test-Path -LiteralPath (Join-Path $script:PluginOutputRoot 'skills/squad/scripts/SquadWatch.psm1') -PathType Leaf |
+            Should -BeTrue -Because 'consumer handoff prerequisites must be delivered with the squad skill'
+    }
 }
 
 Describe 'D7-2 Plugin output has no dangling instructions/squad path prose' {
@@ -327,6 +332,9 @@ Describe 'GATE-46 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
     BeforeAll {
         $script:RepoSquadWatch = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml') -Raw
         $script:RepoSyncHveCore = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/sync-hve-core.yml') -Raw
+        $script:ReferenceSquadWatch = Get-Content -LiteralPath (
+            Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml'
+        ) -Raw
     }
 
     It 'provisions the squad package before running Copilot CLI and restores the owned runtime overlay before staging in squad-watch.yml' {
@@ -334,17 +342,30 @@ Describe 'GATE-46 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('Install-SquadPackage -Destination $staging -SourceRoot .'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('Enable-SquadWatchRuntimeOverlay'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('Restore-SquadWatchRuntimeOverlay'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('New-SquadWatchBaseline'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('ExpectedBaselineHash'))
         $script:RepoSquadWatch | Should -Not -Match ([regex]::Escape("'.agents', 'apm_modules', 'install.log'"))
     }
 
     It 'wires issues, pull_request, issue_comment, and workflow_dispatch with per-case/per-ask squad selection and a gated full RPI handoff in squad-watch.yml' {
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('SQUAD SELECTION PER CASE AND PER ASK (NON-NEGOTIABLE).'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('COMPLETE SQUAD LIFECYCLE (FULL RPI - NON-NEGOTIABLE).'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('IMMEDIATE SCRIBE CHECKPOINTS (NON-NEGOTIABLE).'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape("github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/squad')"))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape("contains(join(github.event.pull_request.labels.*.name, ','), 'squad/review')"))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('New-SquadWatchHandoff'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('sourceSha: ${{ steps.source.outputs.sha }}'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('ref: ${{ needs.interpret.outputs.sourceSha }}'))
+    }
+
+    It 'narrows the consumer reference claim and names every deterministic handoff prerequisite' {
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('does NOT claim the source repository''s enforced patch'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('.agents/skills/squad/scripts/SquadWatch.psm1'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('New-SquadWatchBaseline'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('New-SquadWatchHandoff'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('recorded source SHA'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('separate,'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('minimally-scoped write job'))
     }
 
     It 'requires per-case/per-ask squad composition and the full RPI lifecycle in sync-hve-core.yml adaptation briefs' {
@@ -356,4 +377,3 @@ Describe 'GATE-46 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSyncHveCore | Should -Match ([regex]::Escape('Full RPI stage artifacts (`research/<date>/*.md`, `plans/*.md`, `changes/*.md`, `reviews/*.md`) and `history/autopilot-run-*.md` are produced'))
     }
 }
-

@@ -195,6 +195,11 @@ description: "Autopilot-run summary for topic <id>"
 * Opt-In: mode=autopilot
 * Cost Ceiling: <value or unset>
 * Outcome: completed (awaiting final validation) | incomplete (<n> stage(s) without a dispatch record) | escalated (<reason>) | stopped (<reason>)
+* Trigger Source: <state.json trigger.source; Watch Mode only>
+* Trigger Ref: <state.json trigger.ref; Watch Mode only>
+* Trigger Event ID: <state.json trigger.eventId; Watch Mode only>
+* Trigger Actor: <state.json trigger.actor; Watch Mode only>
+* Trigger Received At: <state.json trigger.receivedAt; Watch Mode only>
 
 ## Cost Preflight Rounds
 
@@ -215,6 +220,8 @@ description: "Autopilot-run summary for topic <id>"
 ```
 
 `Dispatch Record` names the history file the Scribe wrote for that stage, and is filled from `history/` rather than from the coordinator's account of the run. A stage with no such file carries the literal `— none recorded`, and any such cell forces the `incomplete` outcome above. This is the run's own report that its cast was not dispatched, written by the only participant that knows.
+
+The five `Trigger ...` bullets are omitted outside Watch Mode. In Watch Mode they are required, copied exactly from `state.json trigger`, and repeated on a resumed run's latest summary entry so the trusted handoff can bind the latest stages to the authorized event rather than to an older committed summary.
 
 In a deliverable fan-out run, the single `implement` row expands into one row per deliverable (`implement: <deliverable>` with its owning agent).
 

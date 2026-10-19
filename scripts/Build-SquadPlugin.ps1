@@ -621,7 +621,7 @@ metadata:
 * **squad** (optional): The registered sub-squad to route this request to (for example, `squad=product`). Overrides meta-routing for the turn; when omitted, the coordinator matches `meta-routing.md`.
 * **init** (optional): When present, triggers Federation Init Mode (propose → confirm → create) before routing. When a federation already exists, the same flag runs Federation Expansion Mode instead.
 * **promote** (optional): When present on an existing single-squad project, triggers Federation Promotion Mode, adopting the existing squad into a federation as its first sub-squad before routing.
-* **watch** (optional): Watch Mode provenance supplied by an event-triggered run — the event `source`, `ref`, `eventId`, `actor`, and the derived sub-squad name. When present, the coordinator runs Watch Mode Bootstrap Mode.
+* **watch** (optional): Watch Mode provenance supplied by an event-triggered run — the event `source`, `ref`, `eventId`, `actor`, `receivedAt`, and the derived sub-squad name. When present, the coordinator runs Watch Mode Bootstrap Mode.
 * **profile** (optional): A profile hint forwarded to a sub-squad's Init when that sub-squad has no squad yet.
 * **discovery** (optional): The discovery-gate depth (`quick`, `standard`, `deep`, or `skip`) forwarded to every qualifying sub-squad the turn starts. Ignored on a Watch Mode or otherwise unattended run.
 * **tier** (optional): A model-tier hint (`fast` or `default`) forwarded to the selected sub-squad's coordinator run.

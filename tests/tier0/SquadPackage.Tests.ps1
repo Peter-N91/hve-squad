@@ -450,6 +450,7 @@ Describe 'GATE-46 Watch Mode per-case/per-ask squad selection and full RPI lifec
     It 'wires per-case/per-ask squad selection and the full RPI spine across all trigger branches in squad-watch.workflow.yml' {
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('SQUAD SELECTION PER CASE AND PER ASK (NON-NEGOTIABLE).'))
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('COMPLETE SQUAD LIFECYCLE (FULL RPI - NON-NEGOTIABLE).'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('IMMEDIATE SCRIBE CHECKPOINTS (NON-NEGOTIABLE).'))
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Never copy a team.md, routing.md, or history/ layout from an earlier members/*'))
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Stage 1 (Research): dispatch researcher'))
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Stage 2 (Plan): gated on the research artifact existing on disk'))
@@ -458,5 +459,13 @@ Describe 'GATE-46 Watch Mode per-case/per-ask squad selection and full RPI lifec
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Stage 6 (Final-Outcome & Two-Level Verification): have Squad Scribe write'))
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Run /squad-federation mode=autopilot ${watchArg({ source: ''issue_comment'''))
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Run /squad-federation mode=autopilot ${watchArg({ source: ''workflow_dispatch'''))
+    }
+
+    It 'ships the handoff module and explicitly scopes the reference template prerequisites' {
+        Test-Path -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -PathType Leaf |
+            Should -BeTrue -Because 'installed consumers need the deterministic handoff helper in the deployed squad skill'
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('New-SquadWatchBaseline'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('New-SquadWatchHandoff'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('rather than as lifecycle-enforcement parity'))
     }
 }

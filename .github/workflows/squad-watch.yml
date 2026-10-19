@@ -175,6 +175,11 @@ jobs:
       subSquad: ${{ steps.prep.outputs.subSquad }}
       branch: ${{ steps.prep.outputs.branch }}
       sourceSha: ${{ steps.source.outputs.sha }}
+      triggerSource: ${{ steps.prep.outputs.triggerSource }}
+      triggerRef: ${{ steps.prep.outputs.triggerRef }}
+      triggerEventId: ${{ steps.prep.outputs.triggerEventId }}
+      triggerActor: ${{ steps.prep.outputs.triggerActor }}
+      triggerReceivedAt: ${{ steps.prep.outputs.triggerReceivedAt }}
       hasChanges: ${{ steps.stage.outputs.hasChanges }}
       hasReview: ${{ steps.review_check.outputs.hasReview }}
     steps:
@@ -187,6 +192,7 @@ jobs:
             const path = require('path');
             const { owner, repo } = context.repo;
             const evt = context.eventName;
+            const receivedAt = new Date().toISOString();
 
             async function isCollaborator(username) {
               if (!username) return false;
@@ -240,6 +246,13 @@ jobs:
               'stage\'s artifact on disk under .copilot-tracking/squad/members/<name>/ and',
               'backed by a members/<name>/history/<agent>.md entry (with its consumption',
               'block) written by Squad Scribe:',
+              '',
+              'IMMEDIATE SCRIBE CHECKPOINTS (NON-NEGOTIABLE).',
+              'After each role returns, and after the Council batch returns, dispatch Squad',
+              'Scribe immediately before starting the next stage. Read back the written',
+              'history entry, consumption ledger, and state.json advance before proceeding.',
+              'Never defer per-role history or state writes to the final summary. On resume,',
+              'repair any missing checkpoint before dispatching another work role.',
               '1. For any autopilot or substantive work trigger (issues, workflow_dispatch,',
               '   or an issue_comment requesting changes or deliverables), execute the full',
               '   pipeline in order:',
@@ -281,6 +294,10 @@ jobs:
               '     and Review rows with each dispatched agent history path. When Council is',
               '     not applicable, keep its row, set Dispatch Record to n/a, and record a',
               '     concise skipped reason instead of inventing a council dispatch.',
+              '     Copy the exact watch source, ref, eventId, actor, and receivedAt into',
+              '     state.json trigger, set trigger.runId to this autopilot summary basename,',
+              '     and record the same values as Trigger Source, Trigger Ref, Trigger Event ID,',
+              '     Trigger Actor, and Trigger Received At bullets in the run summary.',
               '   Numbered steps or checklists in an issue body (including Sync and Adapt',
               '   adaptation briefs) or request are input requirements to research, plan,',
               '   implement, and review - never a substitute for the Research or Plan stages.',
@@ -350,10 +367,11 @@ jobs:
             }
 
             function watchArg({ source, ref, eventId, sub }) {
-              return `watch="source=${source} ref=${ref} eventId=${eventId} actor=${context.actor} sub=${sub}"`;
+              return `watch="source=${source} ref=${ref} eventId=${eventId} actor=${context.actor} receivedAt=${receivedAt} sub=${sub}"`;
             }
 
             let authorized = false, notify = false, target = '', kind = 'skip', prompt = '', sub = '', checkoutRef = '';
+            let triggerSource = '', triggerRef = '', triggerEventId = '';
 
             if (evt === 'issues' && context.payload.label && context.payload.label.name === 'squad/auto') {
               kind = 'issue';
@@ -364,9 +382,12 @@ jobs:
               notify = !authorized;
               if (authorized) {
                 const ref = `${owner}/${repo}#${issue.number}`;
+                triggerSource = 'issue';
+                triggerRef = ref;
+                triggerEventId = `issues:${issue.id}`;
                 prompt = [
                   SPINE, '',
-                  `Run /squad-federation mode=autopilot ${watchArg({ source: 'issue', ref, eventId: `issues:${issue.id}`, sub })}`,
+                  `Run /squad-federation mode=autopilot ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
                   `for this issue, inside the sub-squad "${sub}". Select the squad profile and`,
                   'any optional packs per case and per ask from the issue content and affected',
                   'domain; fall back to the default profile when ambiguous, always seeding the',
@@ -398,9 +419,12 @@ jobs:
                 authorized = true;
                 checkoutRef = pr.head.sha;
                 const ref = `${owner}/${repo}#${pr.number}`;
+                triggerSource = 'pull_request';
+                triggerRef = ref;
+                triggerEventId = `pull_request:${pr.id}`;
                 prompt = [
                   SPINE, '',
-                  `Run /squad-federation ${watchArg({ source: 'pull_request', ref, eventId: `pull_request:${pr.id}`, sub })}`,
+                  `Run /squad-federation ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
                   `to review this pull request inside the sub-squad "${sub}". Select the squad`,
                   'profile and any optional packs per case and per ask from the PR diff and',
                   'description. Dispatch researcher (when codebase/diff context investigation is',
@@ -443,9 +467,12 @@ jobs:
                   if (authorized) {
                     sub = subSquadName(`${onPr ? 'pr' : 'issue'}-${context.payload.issue.number}`);
                     const ref = `${owner}/${repo}#${context.payload.issue.number}`;
+                    triggerSource = 'issue_comment';
+                    triggerRef = ref;
+                    triggerEventId = `issue_comment:${context.payload.comment.id}`;
                     prompt = [
                       SPINE, '',
-                      `Run /squad-federation mode=autopilot ${watchArg({ source: 'issue_comment', ref, eventId: `issue_comment:${context.payload.comment.id}`, sub })}`,
+                      `Run /squad-federation mode=autopilot ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
                       `for a comment command on ${onPr ? 'a pull request' : 'an issue'}, inside the`,
                       `sub-squad "${sub}". Select or adapt the sub-squad profile and packs per case`,
                       'and per ask. The command arguments are the request: for any substantive',
@@ -473,9 +500,12 @@ jobs:
                 target = String(num);
                 sub = subSquadName(`issue-${num}`);
                 const ref = `${owner}/${repo}#${num}`;
+                triggerSource = 'workflow_dispatch';
+                triggerRef = ref;
+                triggerEventId = `workflow_dispatch:${context.runId}`;
                 prompt = [
                   SPINE, '',
-                  `Run /squad-federation mode=autopilot ${watchArg({ source: 'workflow_dispatch', ref, eventId: `workflow_dispatch:${context.runId}`, sub })}`,
+                  `Run /squad-federation mode=autopilot ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
                   `for the referenced issue (manual dispatch), inside the sub-squad "${sub}".`,
                   'Select the squad profile and any optional packs per case and per ask from',
                   'the issue content and affected domain, always seeding the full methodology',
@@ -493,9 +523,12 @@ jobs:
               } else if (authorized && req) {
                 sub = subSquadName(`dispatch-${context.runId}`);
                 const ref = `${owner}/${repo}@dispatch-${context.runId}`;
+                triggerSource = 'workflow_dispatch';
+                triggerRef = ref;
+                triggerEventId = `workflow_dispatch:${context.runId}`;
                 prompt = [
                   SPINE, '',
-                  `Run /squad-federation mode=autopilot ${watchArg({ source: 'workflow_dispatch', ref, eventId: `workflow_dispatch:${context.runId}`, sub })}`,
+                  `Run /squad-federation mode=autopilot ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
                   `for a manual request (dispatch), inside the sub-squad "${sub}". Select the`,
                   'squad profile and any optional packs per case and per ask from the request,',
                   'execute the complete autopilot RPI lifecycle (Research -> Plan -> Council',
@@ -524,6 +557,11 @@ jobs:
             core.setOutput('subSquad', sub);
             core.setOutput('branch', branchName);
             core.setOutput('checkoutRef', checkoutRef);
+            core.setOutput('triggerSource', triggerSource);
+            core.setOutput('triggerRef', triggerRef);
+            core.setOutput('triggerEventId', triggerEventId);
+            core.setOutput('triggerActor', context.actor);
+            core.setOutput('triggerReceivedAt', receivedAt);
 
             if (authorized && prompt) {
               const file = path.join(process.env.RUNNER_TEMP, 'squad-prompt.txt');
@@ -567,6 +605,12 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUB_SQUAD: ${{ steps.prep.outputs.subSquad }}
+          TRIGGER_SOURCE: ${{ steps.prep.outputs.triggerSource }}
+          TRIGGER_REF: ${{ steps.prep.outputs.triggerRef }}
+          TRIGGER_EVENT_ID: ${{ steps.prep.outputs.triggerEventId }}
+          TRIGGER_ACTOR: ${{ steps.prep.outputs.triggerActor }}
+          TRIGGER_RECEIVED_AT: ${{ steps.prep.outputs.triggerReceivedAt }}
         run: |
           # In this source repository, squad agents/prompts/instructions/skills live under
           # squad-src/ and upstream hve-core dependencies are declared in apm.yml rather
@@ -575,19 +619,30 @@ jobs:
           # CLI loads Squad Federation Coordinator, Squad Coordinator, and the entire
           # hve-core + squad cast for runSubagent/task dispatches.
           Import-Module ./tests/lib/SquadInstall.psm1 -Force
-          Import-Module ./scripts/SquadWatch.psm1 -Force
+          $watchModule = (Resolve-Path ./squad-src/.github/skills/squad/scripts/SquadWatch.psm1).Path
+          $watchModuleHash = (Get-FileHash -LiteralPath $watchModule -Algorithm SHA256).Hash.ToLowerInvariant()
+          "watchModuleHash=$watchModuleHash" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          Import-Module $watchModule -Force
+          $workspace = (Resolve-Path .).Path
+          $memberRoot = Join-Path $workspace ".copilot-tracking/squad/members/$env:SUB_SQUAD"
+          $baseline = New-SquadWatchBaseline `
+            -WorkspaceRoot $workspace `
+            -MemberRoot $memberRoot `
+            -Path (Join-Path $env:RUNNER_TEMP 'squad-watch-baseline.json') `
+            -Source $env:TRIGGER_SOURCE `
+            -EventRef $env:TRIGGER_REF `
+            -EventId $env:TRIGGER_EVENT_ID `
+            -Actor $env:TRIGGER_ACTOR `
+            -ReceivedAt $env:TRIGGER_RECEIVED_AT
+          "baselineHash=$($baseline.Hash)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
           $staging = Join-Path $env:RUNNER_TEMP 'squad-watch-pkg'
           $backup = Join-Path $env:RUNNER_TEMP 'squad-watch-runtime-backup'
           Install-SquadPackage -Destination $staging -SourceRoot . | Out-Null
           $overlay = Enable-SquadWatchRuntimeOverlay `
             -PackageRoot $staging `
-            -WorkspaceRoot (Resolve-Path .).Path `
+            -WorkspaceRoot $workspace `
             -BackupRoot $backup
           "manifestHash=$($overlay.ManifestHash)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
-          "watchModuleHash=$((Get-FileHash -LiteralPath ./scripts/SquadWatch.psm1 -Algorithm SHA256).Hash.ToLowerInvariant())" |
-            Add-Content -LiteralPath $env:GITHUB_OUTPUT
-          "stateModuleHash=$((Get-FileHash -LiteralPath ./tests/tier1/SquadState.psm1 -Algorithm SHA256).Hash.ToLowerInvariant())" |
-            Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
       - name: Set up Node.js
         if: steps.prep.outputs.authorized == 'true'
@@ -649,16 +704,29 @@ jobs:
         env:
           RUNTIME_MANIFEST_HASH: ${{ steps.runtime.outputs.manifestHash }}
           WATCH_MODULE_HASH: ${{ steps.runtime.outputs.watchModuleHash }}
+          RUNTIME_OUTCOME: ${{ steps.runtime.outcome }}
         run: |
-          $watchModule = (Resolve-Path ./scripts/SquadWatch.psm1).Path
+          $watchModule = (Resolve-Path ./squad-src/.github/skills/squad/scripts/SquadWatch.psm1).Path
+          $backup = Join-Path $env:RUNNER_TEMP 'squad-watch-runtime-backup'
+          if ($env:RUNTIME_OUTCOME -ne 'success') {
+            if (-not (Test-Path -LiteralPath $backup)) {
+              Write-Host 'Squad Watch runtime provisioning failed before leaving an overlay; no cleanup is required.'
+              return
+            }
+            Import-Module $watchModule -Force
+            Restore-SquadWatchRuntimeOverlay `
+              -WorkspaceRoot (Resolve-Path .).Path `
+              -BackupRoot $backup
+            return
+          }
           $actualHash = (Get-FileHash -LiteralPath $watchModule -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actualHash -ne $env:WATCH_MODULE_HASH) {
             throw 'Squad Watch runtime helper changed after provisioning; refusing cleanup.'
           }
-          Import-Module ./scripts/SquadWatch.psm1 -Force
+          Import-Module $watchModule -Force
           Restore-SquadWatchRuntimeOverlay `
             -WorkspaceRoot (Resolve-Path .).Path `
-            -BackupRoot (Join-Path $env:RUNNER_TEMP 'squad-watch-runtime-backup') `
+            -BackupRoot $backup `
             -ExpectedManifestHash $env:RUNTIME_MANIFEST_HASH
 
       - name: Stage changes for handoff
@@ -668,21 +736,22 @@ jobs:
         env:
           SUB_SQUAD: ${{ steps.prep.outputs.subSquad }}
           WATCH_MODULE_HASH: ${{ steps.runtime.outputs.watchModuleHash }}
-          STATE_MODULE_HASH: ${{ steps.runtime.outputs.stateModuleHash }}
+          BASELINE_HASH: ${{ steps.runtime.outputs.baselineHash }}
         run: |
-          $watchModule = (Resolve-Path ./scripts/SquadWatch.psm1).Path
+          $watchModule = (Resolve-Path ./squad-src/.github/skills/squad/scripts/SquadWatch.psm1).Path
           $actualHash = (Get-FileHash -LiteralPath $watchModule -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actualHash -ne $env:WATCH_MODULE_HASH) {
             throw 'Squad Watch handoff helper changed after provisioning; refusing to stage.'
           }
-          Import-Module ./scripts/SquadWatch.psm1 -Force
+          Import-Module $watchModule -Force
           $workspace = (Resolve-Path .).Path
           $memberRoot = Join-Path $workspace ".copilot-tracking/squad/members/$env:SUB_SQUAD"
           $result = New-SquadWatchHandoff `
             -WorkspaceRoot $workspace `
             -MemberRoot $memberRoot `
             -PatchPath (Join-Path $env:RUNNER_TEMP 'squad-watch.patch') `
-            -ExpectedStateModuleHash $env:STATE_MODULE_HASH
+            -BaselinePath (Join-Path $env:RUNNER_TEMP 'squad-watch-baseline.json') `
+            -ExpectedBaselineHash $env:BASELINE_HASH
           "hasChanges=$($result.HasChanges.ToString().ToLowerInvariant())" |
             Add-Content -LiteralPath $env:GITHUB_OUTPUT
           if (-not $result.HasChanges) {

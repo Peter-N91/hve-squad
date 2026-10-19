@@ -13,6 +13,21 @@
 #   `.github/workflows/squad-watch.yml` in your consumer repo, wire the runtime
 #   step to your CLI Action (DR-01a), review it, and commit it deliberately.
 #
+# Deterministic handoff prerequisite
+#   This trigger scaffold does NOT claim the source repository's enforced patch
+#   handoff by itself. Before enabling write-capable automation, the consumer must
+#   use the packaged Watch helper (`.agents/skills/squad/scripts/SquadWatch.psm1`
+#   in an APM deployment; `skills/squad/scripts/SquadWatch.psm1` in the plugin
+#   distribution, materialized by the consumer runtime) to:
+#     1. capture `New-SquadWatchBaseline` before the untrusted CLI step,
+#     2. run that CLI without repository-write credentials,
+#     3. call `New-SquadWatchHandoff` with the baseline hash, and
+#     4. apply the resulting patch from its recorded source SHA in a separate,
+#        minimally-scoped write job.
+#   Until those prerequisites are wired, treat this file as a reviewed trigger
+#   example rather than as lifecycle-enforcement parity with hve-squad's live
+#   `.github/workflows/squad-watch.yml`.
+#
 # Triggers (the full event-to-intent map — all wired)
 #   | Event                | Opt-in gate                     | What the squad does                          |
 #   |----------------------|---------------------------------|----------------------------------------------|
@@ -178,6 +193,7 @@ jobs:
             const path = require('path');
             const { owner, repo } = context.repo;
             const evt = context.eventName;
+            const receivedAt = new Date().toISOString();
 
             async function isCollaborator(username) {
               if (!username) return false;
@@ -228,6 +244,13 @@ jobs:
               'stage\'s artifact on disk under .copilot-tracking/squad/members/<name>/ and',
               'backed by a members/<name>/history/<agent>.md entry (with its consumption',
               'block) written by Squad Scribe:',
+              '',
+              'IMMEDIATE SCRIBE CHECKPOINTS (NON-NEGOTIABLE).',
+              'After each role returns, and after the Council batch returns, dispatch Squad',
+              'Scribe immediately before starting the next stage. Read back the written',
+              'history entry, consumption ledger, and state.json advance before proceeding.',
+              'Never defer per-role history or state writes to the final summary. On resume,',
+              'repair any missing checkpoint before dispatching another work role.',
               '1. For any autopilot or substantive work trigger (issues, schedule,',
               '   workflow_dispatch, or an issue_comment requesting changes or deliverables),',
               '   execute the full pipeline in order:',
@@ -269,6 +292,10 @@ jobs:
               '     and Review rows with each dispatched agent history path. When Council is',
               '     not applicable, keep its row, set Dispatch Record to n/a, and record a',
               '     concise skipped reason instead of inventing a council dispatch.',
+              '     Copy the exact watch source, ref, eventId, actor, and receivedAt into',
+              '     state.json trigger, set trigger.runId to this autopilot summary basename,',
+              '     and record the same values as Trigger Source, Trigger Ref, Trigger Event ID,',
+              '     Trigger Actor, and Trigger Received At bullets in the run summary.',
               '   Numbered steps or checklists in an issue body or request are input',
               '   requirements to research, plan, implement, and review - never a substitute',
               '   for the Research or Plan stages.',
@@ -307,7 +334,7 @@ jobs:
 
             // The watch provenance handed to /squad-federation.
             function watchArg({ source, ref, eventId, sub }) {
-              return `watch="source=${source} ref=${ref} eventId=${eventId} actor=${context.actor} sub=${sub}"`;
+              return `watch="source=${source} ref=${ref} eventId=${eventId} actor=${context.actor} receivedAt=${receivedAt} sub=${sub}"`;
             }
 
             let authorized = false, notify = false, target = '', kind = 'skip', prompt = '', sub = '';
