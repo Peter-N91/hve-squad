@@ -546,6 +546,11 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
     }
     It 'accepts initialized state without demanding implementation roles' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init).passed | Should -BeTrue
+        Set-Content (Join-Path $script:StageSquad 'history/Squad Scribe.md') '# Squad Scribe History'
+        $Malformed = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init
+        $Malformed.checks['stateVerifier'] | Should -BeTrue
+        $Malformed.checks['scribeHistory'] | Should -BeFalse
+        $Malformed.passed | Should -BeFalse
     }
     It 'accepts requirements with both author and reviewer evidence' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeTrue

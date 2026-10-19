@@ -189,6 +189,10 @@ Describe 'GATE-46 through GATE-48 Scribe context and write-path contracts' {
     }
 
     It 'GATE-47 prepares scoped state/history parents before content creation without shell-writing files' {
+        $script:Scribe | Should -Match 'Seed absent files with H1 `# History: <agent>`'
+        foreach ($Body in @($script:Scribe, $script:ScribeProcedure)) {
+            $Body | Should -Match 'with (?:literal )?H1 `# History: Squad Scribe`'
+        }
         $script:Scribe | Should -Match 'Before the first content-create call of this step, prepare the resolved `squadRoot` and `history/`'
         $script:InitCold | Should -Match 'Before the first content-create call[^\r\n]+ensure the resolved `squadRoot` and its `history/`'
         $script:InitCold | Should -Match 'directory-only shell command scoped to exactly those two paths'
