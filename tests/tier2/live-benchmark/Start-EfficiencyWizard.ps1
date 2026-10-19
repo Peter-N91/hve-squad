@@ -81,7 +81,7 @@ function Get-WizardMode {
     [CmdletBinding()]
     param([switch]$HasBaseline)
     $Choice = Read-WizardChoice -Question 'What should run?' -Default $(if ($HasBaseline) { '2' } else { '1' }) -Options ([ordered]@{
-        '1' = 'Establish: all offline checks, then three complete controls; no improvement claim.'
+        '1' = 'Establish: all offline checks, then three baseline observations, retaining failures; no improvement claim.'
         '2' = 'Series: all offline checks, then three candidates against compatible saved controls, or six fresh paired trials.'
         '3' = 'Complete: all offline checks, establish three fresh controls, then run three candidates and compare.'
         '4' = 'Offline: all benchmark self-tests only; no model requests, login or accepted-baseline changes.'
@@ -137,7 +137,7 @@ function New-WizardRunPlan {
     foreach ($Limit in @($Config.PerRunCredits, $Config.TotalCredits)) { if ([double]$Limit -le 0 -or [double]::IsNaN([double]$Limit) -or [double]::IsInfinity([double]$Limit)) { throw 'Finite positive credit ceilings are required.' } }
     $NeededRuns = if ($Config.Mode -eq 'Establish' -or ($Config.Mode -eq 'Series' -and $Config.BaselineEvidencePath)) { 3 } else { 6 }
     if ($Config.TotalCredits -lt $NeededRuns * $Config.PerRunCredits) { throw 'Total credit ceiling is smaller than the scheduled run reservations.' }
-    $Common = @{ InstallRoot = $Config.InstallRoot; Model = $Config.Model; MaxCredits = $Config.PerRunCredits; Live = $true; IsolatedEnvironment = $true }
+    $Common = @{ InstallRoot = $Config.InstallRoot; Model = $Config.Model; MaxCredits = $Config.PerRunCredits; Live = $true; IsolatedEnvironment = $true; ObservationOnly = $true }
     if ($Config.Mode -in @('Establish', 'Complete')) {
         $Arguments = $Common.Clone(); $Arguments.Mode = 'Establish'; $Arguments.SourceRoot = $Config.BaselineSourceRoot; $Arguments.TrialRoot = Join-Path $Config.RunRoot 'control'; $Arguments.MaxSeriesCredits = 3 * $Config.PerRunCredits
         $Steps.Add(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $Arguments })
@@ -402,7 +402,8 @@ function Get-WizardConfiguration {
         }
     }
     $Mode = Get-WizardMode -HasBaseline:([bool]$SavedControl)
-    Write-Host 'Defaults: offline self-tests first; model claude-sonnet-5.5; 100 AI credits per run (ceiling, not predicted cost); three repeats; no outer retries; 45-minute run watchdog; two host continuations per stage; no automatic promotion.'
+    $ScenarioDefaults = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
+    Write-Host "Defaults: offline self-tests first; model claude-sonnet-5.5; 100 AI credits per run (ceiling, not predicted cost); three observations; no outer retries or request-count cap; $($ScenarioDefaults.observationTimeoutMinutes)-minute hung-run watchdog; quality/readiness failures are recorded, not collection gates; no automatic promotion."
     Write-Host 'Isolation is NOT created by the wizard. Live modes require a disposable OS-isolated environment, restricted credentials and no sensitive source data. Fresh run directories preserve previous evidence.'
     $Scratch = Assert-WizardScratchPath (Read-WizardText -Question 'Dedicated work/evidence root outside the checkout' -Default $Scratch -Required) $Source
     $Config = @{
@@ -447,13 +448,13 @@ function Test-WizardCompatibility {
     [CmdletBinding()]
     param([Collections.IDictionary]$Config)
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
-    $Expected = Get-EfficiencyCompatibility -SourceRoot $Config.CandidateSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits
+    $Expected = Get-EfficiencyCompatibility -SourceRoot $Config.CandidateSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly
     if ($Config.BaselineEvidencePath) {
         $Controls = Get-Content -LiteralPath $Config.BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable
         $Identity = $null; $Pairs = [Collections.Generic.HashSet[int]]::new(); $Ids = [Collections.Generic.HashSet[string]]::new()
         if ($Controls['schemaVersion'] -ne 'efficiency-control-v1' -or @($Controls['runs']).Count -ne 3) { throw 'Saved controls are incomplete.' }
         foreach ($Run in $Controls['runs']) {
-            if (-not (Test-EfficiencyRun $Run) -or $Run.metadata.arm -ne 'baseline' -or $Run.metadata.pair -notin @(1, 2, 3) -or -not $Pairs.Add([int]$Run.metadata.pair) -or -not $Ids.Add([string]$Run.metadata.runId)) { throw 'Saved controls are failed, incomplete, duplicated or incorrectly paired.' }
+            if (-not (Test-EfficiencyObservation $Run) -or $Run.metadata.arm -ne 'baseline' -or $Run.metadata.pair -notin @(1, 2, 3) -or -not $Pairs.Add([int]$Run.metadata.pair) -or -not $Ids.Add([string]$Run.metadata.runId)) { throw 'Saved observations are unmetered, incomplete, duplicated or incorrectly paired.' }
             $Current = $Run.metadata.revision + ':' + $Run.metadata.sourceHash
             if ($Identity -and $Identity -cne $Current) { throw 'Saved controls mix different source revisions.' }
             $Identity = $Current
@@ -463,7 +464,7 @@ function Test-WizardCompatibility {
         }
     }
     elseif ($Config.Mode -in @('Series', 'Complete')) {
-        $Baseline = Get-EfficiencyCompatibility -SourceRoot $Config.BaselineSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits
+        $Baseline = Get-EfficiencyCompatibility -SourceRoot $Config.BaselineSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly
         foreach ($Key in $Expected.Keys) { if (($Baseline[$Key] | ConvertTo-Json -Depth 10 -Compress) -cne ($Expected[$Key] | ConvertTo-Json -Depth 10 -Compress)) { throw "Baseline/candidate environments differ in $Key; repair compatibility before launching." } }
     }
 }
@@ -537,7 +538,7 @@ function Invoke-EfficiencyWizard {
             if (-not (Confirm-WizardAction 'I confirm this is a disposable OS-isolated environment with restricted credentials and no sensitive data, and authorize the displayed bounded spending after offline checks pass')) { throw [OperationCanceledException]::new('Isolation/spending authorization declined.') }
         }
         else { Write-Host "Mode: Offline. No login/model requests. Reports: $($Config.RunRoot)" }
-        if (-not (Confirm-WizardAction 'Provision isolated Python/pytest if needed and run the selected plan unattended (stop on first failure)?')) { throw [OperationCanceledException]::new('Launch declined.') }
+        if (-not (Confirm-WizardAction 'Provision isolated Python/pytest if needed and run the selected plan unattended (retain quality failures; stop for execution/accounting errors)?')) { throw [OperationCanceledException]::new('Launch declined.') }
         New-Item -ItemType Directory -Path $Config.RunRoot | Out-Null
         Set-Location $Config.RunRoot
         $Stage = 'Unattended execution'
@@ -551,7 +552,7 @@ function Invoke-EfficiencyWizard {
         $Result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $Config.RunRoot 'wizard-result.json') -Encoding utf8NoBOM
         Write-Host "Wizard outcome: $($Result.outcome). Exit: $($Result.exitCode). Summary: $(Join-Path $Config.RunRoot 'wizard-result.json')"
         if ($Result.repair) { Write-Host "Stopped at $($Result.failedStage). $($Result.repair)" }
-        else { Write-Host 'Selected stages passed. See control/out/report.md or comparison/out/report.md for benchmark results. Accepted baseline unchanged.' }
+        else { Write-Host 'Selected collection/comparison stages finished. Inspect recorded quality and failure results in control/out/report.md or comparison/out/report.md. Accepted baseline unchanged.' }
         $Result
     }
     catch {

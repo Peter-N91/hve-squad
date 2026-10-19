@@ -1,11 +1,11 @@
 ---
 name: squad-scribe-cold-init-and-seeding
-description: "Scribe cold section: Initialization, Deliverable Root resolution, and repository-memory/learning-promotion writes. Read only for an initialization payload, a memory payload, or the roster-rebasing step of a promotion/expansion."
+description: "Scribe cold section: Initialization, Deliverable Root resolution, Resolved-Root Directory Preparation, and repository-memory/learning-promotion writes. Read only for an initialization payload, a memory payload, or the roster-rebasing step of a promotion/expansion."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-19"
 ---
 
 # Scribe Cold Section: Init, Seeding, and Repository Memory
@@ -31,6 +31,10 @@ Create `team.md` from the coordinator-confirmed roster — the chosen profile's 
 **On a refresh, preserve every `Deliverable Root` cell already present.** The column is consumer-editable and the roster is the running value the coordinator dispatches against, so a refresh reseeds a root only for a role whose row it is adding. Rewriting an existing cell back to the default silently redirects a role the user deliberately pointed elsewhere.
 
 **Write the model-routing mode and `Model` column exactly as handed over.** When the payload carries a routing mode (`ranked`, `economy`, or `manual`), write the single line `Model routing: <mode>` directly beneath `team.md`'s H1, and a `Model` column between `Model Tier` and `Deliverable Root` holding each role's Model ID as supplied — one lowercase id per cell, never a display name, and empty for a role the payload leaves unset. On a routing refresh, change only that line and the `Model` cells the payload names, preserving every other cell and row. When the mode is `off`, remove both the line and the column, and list the removed picks in the same turn's decision entry so a later switch back to `manual` can offer them. Record every mode change and every `manual` pick in a decision entry; a ranked or economy readout refresh needs only the `state.json` advance. See `model-routing.md` for what each mode means; the Scribe never ranks or picks a model itself.
+
+### Resolved-Root Directory Preparation
+
+**Scope: this section governs only the Scribe's own state and history directories — `<squadRoot>` and `<squadRoot>/history/` — never a Research or Plan artifact directory, which a different role resolves and creates.** Before the first content-create call of an initialization, a roster refresh, or a promotion's relocated-root seed, ensure the resolved `squadRoot` and its `history/` subdirectory exist as parents. Use the host's own directory-creation capability when the file edit or create tool provides one; when it does not, issue a directory-only shell command scoped to exactly those two paths (for example `mkdir -p` or `New-Item -ItemType Directory -Force` against `<squadRoot>` and `<squadRoot>/history/`, and nothing else). Never use a shell command to write file contents — every file write still goes through the file edit or create tool. Create no directory outside the resolved `squadRoot` except a missing ancestor strictly necessary to reach that root within the already-authorized workspace; this exception permits no sibling directory, role artifact directory, workspace escape, new writer, or new allowed root.
 
 ### Repository Memory and Learning Promotion
 

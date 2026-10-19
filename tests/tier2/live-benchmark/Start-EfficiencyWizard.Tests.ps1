@@ -125,6 +125,8 @@ Describe 'Wizard unattended plan' -Tag 'Unit' {
         $Steps.Count | Should -Be 3
         $Steps[1].arguments.Mode | Should -Be Establish
         $Steps[2].arguments.Mode | Should -Be Series
+        $Steps[1].arguments.ObservationOnly | Should -BeTrue
+        $Steps[2].arguments.ObservationOnly | Should -BeTrue
         $Steps[2].arguments.BaselineEvidencePath | Should -Be (Join-Path $TestDrive 'control/out/control-series.json')
         $Steps[1].arguments.MaxSeriesCredits + $Steps[2].arguments.MaxSeriesCredits | Should -Be 60
     }

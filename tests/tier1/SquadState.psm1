@@ -57,13 +57,19 @@ function Get-ConsumptionBlock {
 
     foreach ($match in [regex]::Matches($raw, '(?ms)^####\s+Consumption(?<orchestration>\s+[-\u2014]\s+Orchestration)?\s*$\r?\n+```json\r?\n(?<json>.*?)\r?\n```')) {
         $json = $match.Groups['json'].Value
+        $order = @()
+        $document = $null
         $parsed = $null
         $parseError = $null
-        try { $parsed = $json | ConvertFrom-Json -AsHashtable }
+        try {
+            $document = [System.Text.Json.JsonDocument]::Parse($json)
+            if ($document.RootElement.ValueKind -ne [System.Text.Json.JsonValueKind]::Object) { throw 'Consumption JSON must be an object.' }
+            # Enumerate actual properties so whitespace and duplicate keys cannot hide fields.
+            $order = @($document.RootElement.EnumerateObject() | ForEach-Object { $_.Name })
+            $parsed = $json | ConvertFrom-Json -AsHashtable
+        }
         catch { $parseError = $_.Exception.Message }
-
-        # Order is read from the raw text, because ConvertFrom-Json does not preserve it.
-        $order = @([regex]::Matches($json, '(?m)^\s*"([a-z_]+)"\s*:') | ForEach-Object { $_.Groups[1].Value })
+        finally { if ($null -ne $document) { $document.Dispose() } }
 
         # A bare number is the contract. '~8,400 (estimated)' parses as a string and drops
         # the dispatch out of every later aggregate, so the shape is checked, not just the value.

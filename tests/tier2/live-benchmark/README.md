@@ -81,7 +81,7 @@ Every launch uses a fresh `run-<timestamp>-<id>` and preserves old reports and c
 
 | Choice | Work after setup |
 | --- | --- |
-| Establish | Full offline self-tests, then three complete controls; no improvement claim |
+| Establish | Full offline self-tests, then three baseline observations, retaining failures; no improvement claim |
 | Series | Full offline self-tests, then three candidates using compatible saved controls, or six fresh paired trials |
 | Complete | Full offline self-tests, three fresh controls, then three candidates against them and automatic comparison |
 | Offline | Full offline self-tests only; no GitHub/Copilot login or model requests |
@@ -95,8 +95,27 @@ Defaults are `claude-sonnet-5.5`, 100 AI credits per complete run, 300 total for
 three new runs or 600 for six. These are ceilings, not cost predictions. Paths,
 model and credit ceilings can be changed. The wizard verifies the whole reservation,
 requires explicit disposable-isolation and spending confirmation, preserves the
-existing watchdog and continuation bounds, and never promotes an accepted baseline.
+financial and isolation protections, and never automatically promotes a baseline.
 Isolation is not created by the wizard or by a launcher flag.
+
+Wizard live modes use **observational collection** (`-ObservationOnly`). Readiness,
+functional, review and quality failures are measured, not prerequisites for collecting
+the baseline. Feasible later stages and remaining samples still run; missing grades
+remain unavailable, never zero or invented success. `baseline-recorded` means three
+observations were saved, not that the workflow passed. Reports retain individual
+checks, independent scores, timing, tokens, requests, credits and reliability counts.
+Comparisons assess relative quality and reliability as well as efficiency; an
+imperfect baseline need not first score 90. Unavailable evidence makes a comparison
+not evaluable, and observations are never automatically promoted.
+
+Observational workflows have no request-count cap, allow up to 1,000 native autopilot
+continuations, and use a 180-minute hung-run watchdog. They reserve 30 credits for
+the independently metered judge and the remainder for the shared workflow: 970/30
+at a 1,000-credit trial ceiling. At least 60 total credits are required because both
+native sessions need a 30-credit minimum. Credit exhaustion, invalid metering,
+credential/setup failures, actual safety boundaries and evidence-identity changes
+still stop affected work. Native context-window limits remain unchanged.
+The independently tool-denied judge retains its ten-request allowance.
 
 Missing Git, Python 3.12, GitHub CLI, Copilot CLI and APM can be installed with consent using
 exact official WinGet packages in user scope. Pester 5.7.1 can be installed in
@@ -135,12 +154,13 @@ are moved, not deleted. Source overlaps, filesystem roots and reparse-point
 ancestors are refused. No git cleanup/reset or old evidence deletion occurs.
 Choose a new work root when an existing directory cannot safely be reused.
 
-After setup and final launch consent, no routine questions are asked. Any failed
-stage stops dependent work: no benchmark after failed offline checks, no candidate
-after failed controls, and no outer retries. Terminal guidance identifies the
+After setup and final launch consent, no routine questions are asked. Setup,
+offline-test, accounting or collection failures stop dependent work; observed
+workflow/quality failures do not. There are no outer retries. Terminal guidance identifies the
 failure and repair; `run-.../wizard-result.json` records status and not-run count.
 Benchmark reports are under `control/out/` and `comparison/out/`. Exit codes:
-`0` all selected stages passed; `1` setup/launch error; `2` failed checks/benchmark;
+`0` collection/comparison finished (not a workflow-quality pass); `1` setup/launch error;
+`2` failed setup/collection or comparative regression/unavailable comparison;
 `3` cancelled or declined consent. Type `q` at a wizard input to cancel; blank
 confirmations mean no. Failed evidence remains available for repair.
 Confirmation prompts accept `yes`/`y` and `no`/`n`, ignoring case and surrounding
@@ -160,7 +180,11 @@ the complete RPI task-CLI build, independent functional/state/history checks, an
 independent document judging. Routine decisions come from the frozen
 [efficiency-scenario.json](efficiency-scenario.json); `ask_user` is disabled.
 
-Each stage must pass both process/telemetry checks and stage-readiness checks
+The direct exercise CLI remains **strict by default** unless `-ObservationOnly`
+is supplied. The strict readiness, recovery, quality and promotion rules below
+are unchanged; observational collection records their failures separately.
+
+In strict mode, each stage must pass both process/telemetry checks and stage-readiness checks
 before the next stage launches. Initialization requires nonempty shared state,
 Scribe dispatch/history evidence and the existing state verifier. Requirements
 also require the published BRD/PRD and dispatch-backed history pointing to nonempty
@@ -199,7 +223,7 @@ stops. The continuation repairs the interrupted Scribe handoff first, without
 rerunning completed roles or duplicating history, then finishes pending stage work.
 A failed continuation stops; there is no second cycle or replacement trial.
 
-The shared workflow receives **75% of the complete run's credit ceiling from its
+In strict mode, the shared workflow receives **75% of the complete run's credit ceiling from its
 first CLI invocation**; the independent judge keeps the other 25%. Initialization,
 requirements, build, compaction and continuation all use that same workflow cap.
 There are no smaller stage caps to retain on session resume. For example,
@@ -219,7 +243,7 @@ metered against its own allowance, never borrowed by workflow recovery.
 
 These are soft limits, not a billing guarantee: asynchronously reported usage
 and in-flight requests can overshoot before a stop takes effect. Recovery does
-not reset the 96-request/900-second stage or 2700-second trial limits. The
+not reset the scenario's shared 1,000-request/45-minute strict-run limits. The
 model's context-window limit is separate and is not raised by this credit policy.
 
 Original evidence files remain unchanged. Compaction and continuation write
