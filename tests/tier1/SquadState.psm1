@@ -543,26 +543,55 @@ function Get-SquadStateModel {
 
     # The ledger rewrite matches a history file back to its roster row by file name, so
     # the roster is what makes a basename legal. Alternates count: a dispatch can be
-    # routed to one and it writes its own history file.
+    # routed to one and it writes its own history file. A connector replacement retains
+    # the internal Members row, so its binding must separately admit Squad Connector as
+    # the history agent for the target role.
     $roleAgents = @{}
-    $rosterAgents = @(
-        foreach ($table in (Get-MarkdownTable -Content $teamContent)) {
-            if ('Agent Name (Primary)' -notin $table.Header) { continue }
-            foreach ($row in $table.Rows) {
-                $names = @(
-                    if ($row['Agent Name (Primary)']) { $row['Agent Name (Primary)'] }
-                    if ('Alternate Agents' -in $table.Header) {
-                        foreach ($alternate in ($row['Alternate Agents'] -split ',')) {
-                            $trimmed = $alternate.Trim()
-                            if ($trimmed -and $trimmed -notmatch '^[-\u2014]$') { $trimmed }
-                        }
+    $rosterAgentCandidates = [System.Collections.Generic.List[string]]::new()
+    $teamTables = @(Get-MarkdownTable -Content $teamContent)
+    foreach ($table in $teamTables) {
+        if ('Agent Name (Primary)' -notin $table.Header) { continue }
+        foreach ($row in $table.Rows) {
+            $names = @(
+                if ($row['Agent Name (Primary)']) { $row['Agent Name (Primary)'] }
+                if ('Alternate Agents' -in $table.Header) {
+                    foreach ($alternate in ($row['Alternate Agents'] -split ',')) {
+                        $trimmed = $alternate.Trim()
+                        if ($trimmed -and $trimmed -notmatch '^[-\u2014]$') { $trimmed }
                     }
-                )
-                if ('Role' -in $table.Header -and $row['Role']) { $roleAgents[$row['Role']] = $names }
-                $names
+                }
+            )
+            if ('Role' -in $table.Header -and $row['Role']) {
+                $role = ([string]$row['Role']).Trim()
+                $combined = @($roleAgents[$role]) + $names
+                $roleAgents[$role] = @($combined | Where-Object { $_ } | Sort-Object -Unique)
             }
+            foreach ($name in $names) { [void]$rosterAgentCandidates.Add([string]$name) }
         }
-    ) | Sort-Object -Unique
+    }
+
+    foreach ($table in $teamTables) {
+        if ('Binding ID' -notin $table.Header -or 'Role Mode' -notin $table.Header -or 'Target' -notin $table.Header) { continue }
+        foreach ($row in $table.Rows) {
+            if ('Target Kind' -in $table.Header -and $row['Target Kind'] -and $row['Target Kind'] -ne 'role') { continue }
+
+            $bindingRole = ''
+            $roleMode = ([string]$row['Role Mode']).Trim().ToLowerInvariant()
+            if ($roleMode -eq 'replace') {
+                $target = ([string]$row['Target']).Trim()
+                if ($target -match '^role:(?<role>[^/]+)(?:/.*)?$') { $bindingRole = $Matches['role'].Trim() }
+            }
+            elseif ($roleMode -eq 'add' -and 'Added Role' -in $table.Header) {
+                $bindingRole = ([string]$row['Added Role']).Trim()
+            }
+
+            if (-not $bindingRole) { continue }
+            $combined = @($roleAgents[$bindingRole]) + @('Squad Connector')
+            $roleAgents[$bindingRole] = @($combined | Where-Object { $_ } | Sort-Object -Unique)
+            [void]$rosterAgentCandidates.Add('Squad Connector')
+        }
+    }
+    $rosterAgents = @($rosterAgentCandidates | Sort-Object -Unique)
 
     # Only this file holds token rates, so every block's rates are checked against it.
     $rates = Get-RateTable -Content $ratesContent

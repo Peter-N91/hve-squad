@@ -111,7 +111,7 @@ Describe 'GATE-38 Init copies roster rows from the payload and never derives an 
     }
 
     It 'the Scribe charter binds verbatim row copying at Step 3' {
-        $script:Scribe | Should -Match 'Copy each `team.md` row verbatim from payload `roster`; never derive an agent name\.'
+        $script:Scribe | Should -Match 'Copy each `team.md` row verbatim from the payload `roster`; never derive an agent name\.'
     }
 
     It 'the coordinator fills roster with the resolved catalog rows' {

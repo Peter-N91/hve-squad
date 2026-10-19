@@ -402,6 +402,39 @@ BeforeAll {
         $root
     }
 
+    function Use-ConnectorReplacementState {
+        param([string]$Root)
+
+        Add-Content -LiteralPath (Join-Path $Root 'team.md') -Encoding utf8NoBOM -Value @'
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+|------------|--------------|----------|---------------|-----------|-------------|--------|-------------|------------|--------------|-------------------|
+| research-org | acme-research-agent | docs/templates/connector-example/manifest.research-agent.1.1.json | agent | replace | role | role:researcher | Org Researcher | | researcher | connector |
+'@
+
+        $internalHistory = Join-Path $Root 'history/Squad Researcher.md'
+        $connectorHistory = Join-Path $Root 'history/Squad Connector.md'
+        Move-Item -LiteralPath $internalHistory -Destination $connectorHistory
+        $history = Get-Content -LiteralPath $connectorHistory -Raw
+        $history = $history.Replace('# History: Squad Researcher', '# History: Squad Connector')
+        $history = $history -replace '(?m)^\* Outcome: .+$', ("* Outcome: external, unverified`n" +
+            "* Member Name: Org Researcher`n" +
+            "* External provenance: connector=acme-research-agent; binding=research-org; endpoint=agent; mode=replace; target=role:researcher`n" +
+            "* Verification: external, unverified`n" +
+            '* External-unmetered: connector=acme-research-agent')
+        Set-Content -LiteralPath $connectorHistory -Value $history -Encoding utf8NoBOM -NoNewline
+
+        $ledgerPath = Join-Path $Root 'consumption.md'
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $updated = $ledger.Replace(
+            '| researcher    |        | Squad Researcher               |',
+            '| researcher    | Org Researcher | Squad Connector                |')
+        if ($updated -eq $ledger) { throw 'The replacement-flow fixture could not update the researcher attribution row.' }
+        Set-Content -LiteralPath $ledgerPath -Value $updated -Encoding utf8NoBOM -NoNewline
+    }
+
     function Test-FederationPreflightFixture {
         param([string]$Root)
 
@@ -474,6 +507,25 @@ Describe 'The contract passes on a schema-correct tree' {
         $state['currentRun'].Remove('costPreflight')
         $state | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
         (Test-Contract $root).Passed | Should -BeTrue -Because 'an existing no-ceiling squad upgrades on its next write rather than failing on read'
+    }
+
+    It 'accepts a completed connector replacement while retaining the internal Members row' {
+        $root = New-Fixture 'connector-replacement'
+        Use-ConnectorReplacementState -Root $root
+
+        $model = Get-SquadStateModel -SquadRoot $root
+        $model.RosterAgents | Should -Contain 'Squad Connector'
+        $model.RoleAgents['researcher'] | Should -Contain 'Squad Researcher'
+        $model.RoleAgents['researcher'] | Should -Contain 'Squad Connector'
+
+        $memberRows = @(
+            foreach ($table in (Get-MarkdownTable -Content $model.Team)) {
+                if ('Agent Name (Primary)' -in $table.Header) { $table.Rows }
+            }
+        )
+        @($memberRows | Where-Object { $_['Role'] -eq 'researcher' }).Count | Should -Be 1
+        @($memberRows | Where-Object { $_['Member Name'] -eq 'Org Researcher' }).Count | Should -Be 0
+        (Test-Contract $root).Passed | Should -BeTrue -Because 'a replacement binding adds a connector history identity without rewriting Members'
     }
 
     It 'preserves legacy state while upgrading the preflight schema' {

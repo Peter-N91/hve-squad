@@ -29,9 +29,10 @@ and this one is a convenience copy.
       delegation-request before publishing `<taskId>.result.json`, as one of
       `md`, `json`, or `txt`, within the numeric caps in *Envelope Artifact-Path
       Validation Rules*, without overwriting any pre-existing file.
-* [ ] Honors `deadline` and `retryCap`; a coordinator that cannot finish in
-      time writes `status: "failed"` or lets the request time out to
-      `unreachable` rather than writing a late, unsolicited result.
+* [ ] Honors `deadline` and `retryCap`; a coordinator with a failure result
+      writes `status: "failed"`, while an unanswered request reaches
+      `unreachable` when its deadline or retry cap is exhausted rather than
+      accepting a late, unsolicited result.
 * [ ] Never embeds credentials, tokens, or other secret-shaped content in the
       manifest, request, or result.
 * [ ] Never emits action fields (`command`, `exec`, `script`, `url`, `fetch`)

@@ -551,7 +551,7 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
             <td><code>retryCapDefault</code></td>
             <td>integer</td>
             <td>yes</td>
-            <td>How many times the shim re-writes a delegation-request (if no result arrives) before giving up and escalating to <code>failed</code>. Example: <code>3</code>.</td>
+            <td>How many result-check or resume attempts the shim allows while no result exists before escalating to <code>unreachable</code>. Example: <code>3</code>.</td>
           </tr>
           <tr>
             <td><code>contact</code></td>
@@ -644,7 +644,7 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           <tr>
             <td><code>retryCap</code></td>
             <td>integer</td>
-            <td>How many times the shim will re-write this request if no result arrives before giving up.</td>
+            <td>How many result-check or resume attempts remain while no result exists before the request becomes <code>unreachable</code>.</td>
           </tr>
           <tr>
             <td><code>createdAt</code></td>
@@ -657,8 +657,9 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
       <p>
         Read every field as data. The <code>task</code> field is bounded, human-readable
         instructions, not a script to parse and execute. Respect the <code>deadline</code> and
-        <code>retryCap</code>; if you cannot finish in time, write back a <code>failed</code> status
-        instead of attempting a late result.
+        <code>retryCap</code>: write back <code>failed</code> when your coordinator has a failure
+        result; if no result arrives, the shim reports <code>unreachable</code> when the deadline
+        or retry cap is exhausted.
       </p>
 
       <p>
@@ -767,12 +768,12 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           </tr>
           <tr>
             <td><code>awaiting</code></td>
-            <td>The delegation-request is still being processed; no result envelope exists yet, and the deadline has not passed.</td>
-            <td>You typically do not write this status yourself. The shim writes it when it finds no result envelope on a dispatch before the deadline.</td>
+            <td>The delegation-request is still being processed; no result envelope exists yet, the deadline has not passed, and retry attempts remain.</td>
+            <td>You typically do not write this status yourself. The shim writes it when it finds no result envelope before either terminal bound is reached.</td>
           </tr>
           <tr>
             <td><code>unreachable</code></td>
-            <td>No result envelope has arrived by the deadline, or the manifest itself is invalid or absent.</td>
+            <td>No result envelope has arrived by the deadline or before <code>retryCap</code> is exhausted, or the manifest itself is invalid or absent.</td>
             <td>Shim escalates as if a critical role went offline: the stage fails, and the stage may be retried or abandoned. This is not a soft timeout; it is treated as a missing resource.</td>
           </tr>
         </tbody>
@@ -968,9 +969,10 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           levels, 10,000 chars per string).
         </li>
         <li>
-          [ ] You honor <code>deadline</code> and <code>retryCap</code>; if you cannot finish in time,
-          you write <code>status: "failed"</code> or let the request time out to <code>unreachable</code>
-          rather than writing a late, unsolicited result.
+          [ ] You honor <code>deadline</code> and <code>retryCap</code>; when your coordinator has a
+          failure result, you write <code>status: "failed"</code>. When no result arrives, the request
+          becomes <code>unreachable</code> at its deadline or retry cap rather than accepting a late,
+          unsolicited result.
         </li>
         <li>
           [ ] You never embed credentials, tokens, or other secret-shaped content in the manifest,

@@ -85,6 +85,19 @@ test("connector guides explain consumer seats, arbitrary additions, and squad-lo
   }
 });
 
+test("connector guides keep retry exhaustion aligned with the unreachable runtime status", () => {
+  for (const prefix of ["", "fr/"]) {
+    const { $ } = readSource("connector", prefix);
+    const rowFor = label => $("tr").filter((_, row) => $(row).find("td code").first().text() === label).first().text().replace(/\s+/g, " ");
+    for (const label of ["retryCapDefault", "retryCap"]) {
+      const row = rowFor(label);
+      assert(row.includes("unreachable"), `${prefix}connector: ${label} must terminate as unreachable`);
+      assert(!row.includes("failed"), `${prefix}connector: ${label} must not terminate as failed`);
+    }
+    assert(rowFor("unreachable").includes("retryCap"), `${prefix}connector: unreachable status must name retryCap exhaustion`);
+  }
+});
+
 test("the consumer companion teaches onboarding rather than developer smoke tests", () => {
   const guide = readFileSync(new URL("../../docs/templates/connector-example/CONSUMER-GUIDE.md", import.meta.url), "utf8");
   for (let step = 1; step <= 6; step++) assert.match(guide, new RegExp(`^## Step ${step}:`, "m"));

@@ -561,7 +561,7 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
             <td><code>retryCapDefault</code></td>
             <td>entier</td>
             <td>oui</td>
-            <td>Combien de fois le shim réécrit une enveloppe de demande de délégation (si aucun résultat n'arrive) avant d'abandonner et de passer à <code>failed</code>. Exemple : <code>3</code>.</td>
+            <td>Combien de tentatives de vérification ou de reprise le shim autorise tant qu'aucun résultat n'existe avant de passer à <code>unreachable</code>. Exemple : <code>3</code>.</td>
           </tr>
           <tr>
             <td><code>contact</code></td>
@@ -656,7 +656,7 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           <tr>
             <td><code>retryCap</code></td>
             <td>entier</td>
-            <td>Combien de fois le shim réécrit cette demande si aucun résultat n'arrive avant d'abandonner.</td>
+            <td>Combien de tentatives de vérification ou de reprise restent tant qu'aucun résultat n'existe avant que la demande devienne <code>unreachable</code>.</td>
           </tr>
           <tr>
             <td><code>createdAt</code></td>
@@ -669,8 +669,9 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
       <p>
         Lisez chaque champ comme données. Le champ <code>task</code> est des instructions
         délimitées et lisibles par l'homme, pas un script à analyser et exécuter. Respectez
-        <code>deadline</code> et <code>retryCap</code> ; si vous ne pouvez pas terminer à temps,
-        écrivez un statut <code>failed</code> au lieu de tenter un résultat tardif.
+        <code>deadline</code> et <code>retryCap</code> : écrivez <code>failed</code> lorsque votre
+        coordinateur dispose d'un résultat d'échec ; si aucun résultat n'arrive, le shim signale
+        <code>unreachable</code> lorsque la deadline ou la limite de tentatives est épuisée.
       </p>
 
       <p>
@@ -781,12 +782,12 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           </tr>
           <tr>
             <td><code>awaiting</code></td>
-            <td>La demande de délégation est toujours traitée ; aucune enveloppe de résultat n'existe encore et la deadline n'a pas été dépassée.</td>
-            <td>Vous n'écrivez généralement pas ce statut vous-même. Le shim l'écrit quand il ne trouve aucune enveloppe de résultat lors d'une délégation avant la deadline.</td>
+            <td>La demande de délégation est toujours traitée ; aucune enveloppe de résultat n'existe encore, la deadline n'a pas été dépassée et des tentatives restent disponibles.</td>
+            <td>Vous n'écrivez généralement pas ce statut vous-même. Le shim l'écrit quand il ne trouve aucune enveloppe de résultat avant qu'une des deux limites terminales soit atteinte.</td>
           </tr>
           <tr>
             <td><code>unreachable</code></td>
-            <td>Aucune enveloppe de résultat n'est arrivée avant la deadline, ou le manifeste lui-même est invalide ou absent.</td>
+            <td>Aucune enveloppe de résultat n'est arrivée avant la deadline ou avant l'épuisement de <code>retryCap</code>, ou le manifeste lui-même est invalide ou absent.</td>
             <td>Le shim escalade comme si un rôle critique était hors ligne : l'étape échoue et peut être relancée ou abandonnée. Ce n'est pas un timeout léger ; c'est traité comme une ressource manquante.</td>
           </tr>
         </tbody>
@@ -1006,10 +1007,10 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
           par chaîne).
         </li>
         <li>
-          [ ] Vous respectez <code>deadline</code> et <code>retryCap</code> ; si vous ne pouvez
-          pas terminer à temps, vous écrivez <code>status: "failed"</code> ou laissez la demande
-          dépasser le délai à <code>unreachable</code> au lieu d'écrire un résultat tardif non
-          sollicité.
+          [ ] Vous respectez <code>deadline</code> et <code>retryCap</code> ; lorsque votre
+          coordinateur dispose d'un résultat d'échec, vous écrivez <code>status: "failed"</code>.
+          Si aucun résultat n'arrive, la demande devient <code>unreachable</code> à sa deadline ou
+          à sa limite de tentatives au lieu d'accepter un résultat tardif non sollicité.
         </li>
         <li>
           [ ] Vous n'intégrez jamais de donnée d'identification, de jeton ou d'autre contenu en

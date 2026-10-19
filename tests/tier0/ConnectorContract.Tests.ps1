@@ -537,6 +537,25 @@ Describe 'CONN-12 the sample coordinator is never auto-run, and blank templates 
     }
 }
 
+Describe 'CONN-26 retry exhaustion preserves the runtime unreachable status' {
+    It 'the connector agent returns unreachable when either unanswered terminal bound is reached' {
+        $agent = Get-Content -LiteralPath $script:AgentPath -Raw
+        $agent | Should -Match ([regex]::Escape('When none exists and the deadline has passed, or `retryCap` is exhausted, return `unreachable` and escalate.'))
+    }
+
+    It 'the normative contract distinguishes unanswered exhaustion from a present failed result' {
+        $contract = Get-Content -LiteralPath $script:ContractPath -Raw
+        $contract | Should -Match ([regex]::Escape('At or after the deadline, or when `retryCap` is exhausted, it is `unreachable`.'))
+        $contract | Should -Match ([regex]::Escape('A present-but-invalid envelope is `failed`.'))
+        $contract | Should -Match ([regex]::Escape('`retryCap` also turns a stalled retry loop into `unreachable`'))
+    }
+
+    It 'the consumer checklist carries the same terminal-status split' {
+        $checklist = Get-ExampleText -Name 'COMPATIBILITY-CHECKLIST.md'
+        $checklist | Should -Match '(?s)a coordinator with a failure result\s+writes `status: "failed"`.*?an unanswered request reaches\s+`unreachable`'
+    }
+}
+
 Describe 'CONN-24 and CONN-25 version gates, binding checks, and allowed-output checks' {
     It 'accepts the legacy 1.0 fixtures and rejects 1.1-only fields under 1.0' {
         $manifest = Get-ExampleJson -Name 'manifest.json'
