@@ -48,6 +48,7 @@ function Measure-EfficiencyEvents {
     $Intervals = [Collections.Generic.List[object]]::new()
     $Counts = @{ lines = 0; malformed = 0; duplicates = 0; usage = 0; duplicateUsage = 0; missingUsageIds = 0; turns = 0; turnEnds = 0; messages = 0; failures = 0; questions = 0; compactions = 0; hookFailures = 0 }
     $First = $null; $Last = $null
+    $Credits = New-EfficiencyCreditMonitor -MaxCredits ([double]::MaxValue)
     $Reader = [IO.File]::OpenText((Resolve-Path -LiteralPath $Path).Path)
     try {
         while ($null -ne ($Line = $Reader.ReadLine())) {
@@ -58,6 +59,7 @@ function Measure-EfficiencyEvents {
             if ($LogEvent -isnot [Collections.IDictionary] -or -not $LogEvent['type'] -or $LogEvent['data'] -isnot [Collections.IDictionary]) { $Counts.malformed++; continue }
             if ($LogEvent['id'] -and -not $EventsSeen.Add([string]$LogEvent['id'])) { $Counts.duplicates++; continue }
             $Data = $LogEvent['data']; $Time = $null
+            Update-EfficiencyCreditMonitor -Context $Credits -LogEvent $LogEvent
             if ($LogEvent['timestamp']) {
                 try {
                     $Time = if ($LogEvent['timestamp'] -is [datetime]) { [DateTimeOffset]$LogEvent['timestamp'] } else { [DateTimeOffset]::Parse([string]$LogEvent['timestamp'], [Globalization.CultureInfo]::InvariantCulture) }
@@ -173,6 +175,7 @@ function Measure-EfficiencyEvents {
         sources = $Sources
         dispatches = $Dispatches
         models = $Models
+        credits = @{ complete = ($Credits.reason -eq 'none' -and $Credits.usageIds.Count -gt 0); used = if ($Credits.reason -eq 'none' -and $Credits.usageIds.Count -gt 0) { $Credits.nanoAiu / 1e9 } else { $null } }
         hooks = @{ count = $Intervals.Count; sumMs = $Sum; unionMs = $Union; overlapMs = $Sum - $Union; byType = $HookTypes; blockingMs = $null; criticalPathMs = $null; basis = 'wall-clock event intervals, not monotonic await instrumentation' }
         completeness = @{ malformed = $Counts.malformed; unmatchedTools = $UnmatchedTools; unmatchedHooks = $UnmatchedHooks; unmatchedTurns = [Math]::Abs($Counts.turns - $Counts.turnEnds); usageIdsMissing = $Counts.missingUsageIds }
         complete = ($Counts.lines -gt 0 -and $Counts.malformed -eq 0 -and $UnmatchedTools -eq 0 -and $UnmatchedHooks -eq 0 -and $Counts.turns -eq $Counts.turnEnds -and $Counts.missingUsageIds -eq 0)
@@ -184,16 +187,58 @@ function Measure-EfficiencyEvents {
 
 function Get-EfficiencyRecoveryPolicy {
     <# .SYNOPSIS
-    Reserves one same-stage compact/continuation inside the original run ceiling.
+    Allocates the workflow's full initial allowance separately from the judge.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][double]$MaxCredits)
     if ([double]::IsNaN($MaxCredits) -or [double]::IsInfinity($MaxCredits) -or $MaxCredits -le 0) { throw 'A finite positive credit ceiling is required.' }
     [pscustomobject]@{
-        id = 'same-session-acp-compact-v2-discovery'; maxCyclesPerStage = 1
-        initialCredits = $MaxCredits / 8; compactionCredits = $MaxCredits / 16
-        continuationCredits = $MaxCredits / 16; judgeCredits = $MaxCredits / 4
+        id = 'same-session-acp-compact-v3-workflow-credits'; maxCyclesPerStage = 1
+        workflowCredits = $MaxCredits * 0.75; judgeCredits = $MaxCredits / 4
     }
+}
+
+function New-EfficiencyCreditMonitor {
+    <# .SYNOPSIS
+    Creates a cumulative native-usage ledger; zero disables the optional process guard.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Creates an in-memory ledger only; does not mutate system state.')]
+    [CmdletBinding()]
+    param([double]$MaxCredits = 0)
+    if ([double]::IsNaN($MaxCredits) -or [double]::IsInfinity($MaxCredits) -or $MaxCredits -lt 0) { throw 'Credit guard requires a finite nonnegative ceiling.' }
+    @{ ceiling = $MaxCredits; nanoAiu = [decimal]0; reason = 'none'; usageIds = [Collections.Generic.HashSet[string]]::new() }
+}
+
+function Update-EfficiencyCreditMonitor {
+    <# .SYNOPSIS
+    Counts native currency once per accounting identity, including descendant usage.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Updates an in-memory ledger only; does not mutate system state.')]
+    [CmdletBinding()]
+    param([hashtable]$Context, [Collections.IDictionary]$LogEvent)
+    if ($Context.ceiling -eq 0) { return }
+    if ($LogEvent['type'] -eq 'session.usage_record') {
+        $Usage = $LogEvent['data']['usage']
+        $Accounting = if ($Usage -is [Collections.IDictionary]) { $Usage['accounting'] } else { $null }
+        if ($Accounting -isnot [Collections.IDictionary] -or -not $Accounting['sourceSessionId'] -or -not $Accounting['usageId']) { $Context.reason = 'incomplete-credit-metering'; return }
+        $Key = 'usage:' + [string]$Accounting['sourceSessionId'] + ':' + [string]$Accounting['usageId']
+    }
+    elseif ($LogEvent['type'] -eq 'session.compaction_complete' -and $LogEvent['data']['compactionTokensUsed']) {
+        $Usage = $LogEvent['data']['compactionTokensUsed']
+        if (-not $LogEvent['data']['compactionAttemptId']) { $Context.reason = 'incomplete-credit-metering'; return }
+        $Key = 'compaction:' + [string]$LogEvent['data']['compactionAttemptId']
+    }
+    else { return }
+    $Native = if ($Usage -is [Collections.IDictionary]) { $Usage['copilotUsage'] } else { $null }
+    if ($Native -isnot [Collections.IDictionary] -or $Usage['aiCreditsStatus'] -ne 'complete') {
+        $Context.reason = 'incomplete-credit-metering'; return
+    }
+    $Value = $Native['totalNanoAiu']
+    if ($null -eq $Value -or $Value -isnot [ValueType] -or $Value -is [bool] -or [double]$Value -lt 0 -or [double]::IsNaN([double]$Value) -or [double]::IsInfinity([double]$Value) -or [double]$Value -gt [decimal]::MaxValue) {
+        $Context.reason = 'incomplete-credit-metering'; return
+    }
+    if ($Context.usageIds.Add($Key)) { $Context.nanoAiu += [decimal]$Value }
+    if ($Context.reason -eq 'none' -and $Context.nanoAiu / 1e9 -ge $Context.ceiling) { $Context.reason = 'credit-limit' }
 }
 
 function Get-EfficiencyDiscoveryReference {
@@ -339,6 +384,8 @@ function Update-EfficiencyCompactionMonitor {
         $Context.lines++
         try { $Event = $Line | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop } catch { continue }
         if ($Event['id'] -and -not $Context.eventIds.Add([string]$Event['id'])) { continue }
+        Update-EfficiencyCreditMonitor -Context $Context.credits -LogEvent $Event
+        if ($Context.credits.reason -ne 'none') { $Context.reason = $Context.credits.reason; throw 'Cumulative credit guard stopped compaction.' }
         if ($Event['type'] -eq 'session.usage_record') {
             $Accounting = $Event['data']['usage']['accounting']
             if (-not $Accounting['sourceSessionId'] -or -not $Accounting['usageId']) { $Context.reason = 'incomplete-metering'; throw 'Missing usage identity.' }
@@ -382,7 +429,7 @@ function Invoke-EfficiencyCompaction {
     $Info.Environment['GIT_TERMINAL_PROMPT'] = '0'
     $Process = [Diagnostics.Process]::new(); $Process.StartInfo = $Info
     $Watch = [Diagnostics.Stopwatch]::StartNew(); $Started = $false; $Succeeded = $false; $ExitCode = $null
-    $Context = @{ pending = ''; lines = 0; proofLine = [int]::MaxValue; requests = 0; freshUsage = 0; freshCompactions = 0; reason = 'protocol-error'; usageIds = [Collections.Generic.HashSet[string]]::new(); eventIds = [Collections.Generic.HashSet[string]]::new(); commands = [Collections.Generic.HashSet[string]]::new() }
+    $Context = @{ pending = ''; lines = 0; proofLine = [int]::MaxValue; requests = 0; freshUsage = 0; freshCompactions = 0; reason = 'protocol-error'; usageIds = [Collections.Generic.HashSet[string]]::new(); eventIds = [Collections.Generic.HashSet[string]]::new(); commands = [Collections.Generic.HashSet[string]]::new(); credits = (New-EfficiencyCreditMonitor -MaxCredits $MaxCredits) }
     $Raw = $null; $Errors = $null
     try {
         $Context.reader = [IO.StreamReader]::new([IO.File]::Open($EventsPath, 'Open', 'Read', 'ReadWrite'))
@@ -446,7 +493,37 @@ function Invoke-EfficiencyCompaction {
         if ($Raw) { $Raw.Dispose() }; if ($Errors) { $Errors.Dispose() }
         $Process.Dispose()
     }
-    [pscustomobject]@{ succeeded = $Succeeded; stopCause = $Context.reason; exitCode = $ExitCode; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $Context.requests; freshCompactions = $Context.freshCompactions; freshUsage = $Context.freshUsage }
+    [pscustomobject]@{ succeeded = $Succeeded; stopCause = $Context.reason; exitCode = $ExitCode; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $Context.requests; freshCompactions = $Context.freshCompactions; freshUsage = $Context.freshUsage; creditsUsed = $Context.credits.nanoAiu / 1e9; creditCeiling = $MaxCredits }
+}
+
+function Update-EfficiencyProcessMonitor {
+    <# .SYNOPSIS
+    Reads prior and fresh currency evidence while counting requests only in this attempt.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Reads telemetry into in-memory counters only; does not mutate system state.')]
+    [CmdletBinding()]
+    param([hashtable]$Context, [string]$EventsPath, [int]$StartLine, [int]$MaxRequests)
+    if ($EventsPath -and -not $Context.reader -and (Test-Path -LiteralPath $EventsPath)) {
+        $Context.reader = [IO.StreamReader]::new([IO.File]::Open($EventsPath, 'Open', 'Read', 'ReadWrite'))
+    }
+    if (-not $Context.reader) { return }
+    $Context.pending += $Context.reader.ReadToEnd()
+    while (($Boundary = $Context.pending.IndexOf("`n")) -ge 0) {
+        $Line = $Context.pending.Substring(0, $Boundary)
+        $Context.pending = $Context.pending.Substring($Boundary + 1)
+        $Context.lines++
+        try { $LogEvent = ConvertFrom-Json -InputObject $Line -AsHashtable -ErrorAction Stop } catch { continue }
+        Update-EfficiencyCreditMonitor -Context $Context.credits -LogEvent $LogEvent
+        if ($Context.lines -le $StartLine) { continue }
+        if ($LogEvent['type'] -eq 'session.usage_record') {
+            $Accounting = $LogEvent['data']['usage']['accounting']
+            if ($Accounting) { $null = $Context.requestIds.Add([string]$Accounting['sourceSessionId'] + ':' + [string]$Accounting['usageId']) }
+        }
+        if ($LogEvent['type'] -eq 'tool.execution_start' -and $LogEvent['data']['toolName'] -eq 'ask_user') { $Context.questions++ }
+    }
+    if ($Context.requestIds.Count -ge $MaxRequests) { $Context.reason = 'request-limit' }
+    if ($Context.questions -gt 0) { $Context.reason = 'unexpected-question' }
+    if ($Context.credits.reason -ne 'none') { $Context.reason = $Context.credits.reason }
 }
 
 function Save-EfficiencyAttemptEvidence {
@@ -477,9 +554,11 @@ function Invoke-EfficiencyProcess {
         [string]$EventsPath = '',
         [int]$MaxRequests = 100,
         [int]$StartLine = 0,
+        [double]$MaxCredits = 0,
         [AllowEmptyString()][string]$InputText,
         [hashtable]$EnvironmentVariables = @{}
     )
+    if ($MaxCredits -gt 0 -and -not $EventsPath) { throw 'A credit-guarded process requires an events path.' }
     $Info = [Diagnostics.ProcessStartInfo]::new()
     $Info.FileName = $FilePath; $Info.WorkingDirectory = $WorkingDirectory
     $Info.UseShellExecute = $false; $Info.RedirectStandardOutput = $true; $Info.RedirectStandardError = $true
@@ -491,11 +570,16 @@ function Invoke-EfficiencyProcess {
     $Info.Environment['GIT_TERMINAL_PROMPT'] = '0'
     $Process = [Diagnostics.Process]::new(); $Process.StartInfo = $Info
     $Watch = [Diagnostics.Stopwatch]::StartNew()
-    $StopCause = 'none'; $RequestIds = [Collections.Generic.HashSet[string]]::new(); $QuestionCount = 0
-    $Reader = $null; $ReadLines = 0; $Pending = ''; $Started = $false
+    $StopCause = 'none'; $Started = $false
+    $Monitor = @{ reader = $null; lines = 0; pending = ''; reason = 'none'; requestIds = [Collections.Generic.HashSet[string]]::new(); questions = 0; credits = (New-EfficiencyCreditMonitor -MaxCredits $MaxCredits) }
     $OutputStream = [IO.File]::Create($OutputPath)
     $ErrorStream = [IO.File]::Create($OutputPath + '.stderr')
     try {
+        Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
+        if ($Monitor.reason -ne 'none') {
+            return [pscustomobject]@{ exitCode = -1; stopCause = $Monitor.reason; seconds = 0; observedRequests = 0; creditsUsed = $Monitor.credits.nanoAiu / 1e9; creditCeiling = $MaxCredits }
+        }
+        $PriorCreditRecords = $Monitor.credits.usageIds.Count
         if (-not $Process.Start()) { throw 'Subprocess failed to start.' }
         $Started = $true
         $OutputCopy = $Process.StandardOutput.BaseStream.CopyToAsync($OutputStream)
@@ -507,34 +591,18 @@ function Invoke-EfficiencyProcess {
         }
         while (-not $Process.WaitForExit(250)) {
             if ($Watch.Elapsed.TotalSeconds -gt $TimeoutSeconds) { $StopCause = 'timeout' }
-            if ($EventsPath -and -not $Reader -and (Test-Path -LiteralPath $EventsPath)) {
-                $Stream = [IO.File]::Open($EventsPath, 'Open', 'Read', 'ReadWrite')
-                $Reader = [IO.StreamReader]::new($Stream)
-            }
-            if ($Reader) {
-                $Pending += $Reader.ReadToEnd()
-                while (($Boundary = $Pending.IndexOf("`n")) -ge 0) {
-                    $Line = $Pending.Substring(0, $Boundary)
-                    $Pending = $Pending.Substring($Boundary + 1)
-                    $ReadLines++
-                    if ($ReadLines -le $StartLine) { continue }
-                    try { $LogEvent = ConvertFrom-Json -InputObject $Line -AsHashtable -ErrorAction Stop } catch { continue }
-                    if ($LogEvent['type'] -eq 'session.usage_record') {
-                        $Accounting = $LogEvent['data']['usage']['accounting']
-                        if ($Accounting) { $RequestIds.Add([string]$Accounting['sourceSessionId'] + ':' + [string]$Accounting['usageId']) | Out-Null }
-                    }
-                    if ($LogEvent['type'] -eq 'tool.execution_start' -and $LogEvent['data']['toolName'] -eq 'ask_user') { $QuestionCount++ }
-                }
-                if ($RequestIds.Count -ge $MaxRequests) { $StopCause = 'request-limit' }
-                if ($QuestionCount -gt 0) { $StopCause = 'unexpected-question' }
-            }
+            Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
+            if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
             if ($StopCause -ne 'none') { $Process.Kill($true); $Process.WaitForExit(); break }
         }
         $null = $OutputCopy.GetAwaiter().GetResult(); $null = $ErrorCopy.GetAwaiter().GetResult()
-        [pscustomobject]@{ exitCode = $Process.ExitCode; stopCause = $StopCause; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $RequestIds.Count }
+        Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
+        if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
+        if ($MaxCredits -gt 0 -and ($Monitor.credits.usageIds.Count -le $PriorCreditRecords -or $Monitor.pending.Trim())) { $StopCause = 'incomplete-credit-metering' }
+        [pscustomobject]@{ exitCode = $Process.ExitCode; stopCause = $StopCause; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $Monitor.requestIds.Count; creditsUsed = if ($MaxCredits -gt 0) { $Monitor.credits.nanoAiu / 1e9 } else { $null }; creditCeiling = if ($MaxCredits -gt 0) { $MaxCredits } else { $null } }
     }
     finally {
-        if ($Reader) { $Reader.Dispose() }
+        if ($Monitor.reader) { $Monitor.reader.Dispose() }
         if ($Started -and -not $Process.HasExited) { $Process.Kill($true) }
         $OutputStream.Dispose(); $ErrorStream.Dispose(); $Process.Dispose()
     }
@@ -691,7 +759,7 @@ function Invoke-EfficiencyJudge {
     $Arguments = @('-p', $Prompt, '--model', $Model, '--session-id', $Session, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--available-tools', 'view', '--deny-tool', 'view', '--output-format', 'json', '--usage-output-file', (Join-Path $Out 'judge-usage.json'))
     $Executable = $CliPath
     if ($CliPath.EndsWith('.ps1')) { $Executable = (Get-Command pwsh).Source; $Arguments = @('-NoProfile', '-File', $CliPath) + $Arguments }
-    $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $Arguments -WorkingDirectory $Out -OutputPath (Join-Path $Out 'judge-stdout.jsonl') -TimeoutSeconds $TimeoutSeconds -EventsPath $Events -MaxRequests 10 -InputText $Payload
+    $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $Arguments -WorkingDirectory $Out -OutputPath (Join-Path $Out 'judge-stdout.jsonl') -TimeoutSeconds $TimeoutSeconds -EventsPath $Events -MaxRequests 10 -MaxCredits $MaxCredits -InputText $Payload
     $Response = $null; $Metrics = $null
     if (Test-Path -LiteralPath $Events) {
         $Snapshot = Join-Path $Out 'judge-events.jsonl'

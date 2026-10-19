@@ -25,7 +25,7 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
             if($Mode -eq 'rpc-failure'){@{jsonrpc='2.0';id=$Request.id;error=@{code=-32603;message='PRIVATE PROTOCOL DIAGNOSTIC'}}|ConvertTo-Json -Compress;continue}
             @{jsonrpc='2.0';method='session/update';params=@{sessionId=$Session;update=@{sessionUpdate='compaction_update';compactionId='old-replayed';status='completed';summary=@(@{type='text';text='PRIVATE REPLAY'})}}}|ConvertTo-Json -Depth 12 -Compress
             if($Mode -ne 'no-proof') {@{id=[guid]::NewGuid().ToString();type='session.compaction_complete';data=@{}}|ConvertTo-Json -Compress|Add-Content -LiteralPath $env:HVE_FAKE_ACP_EVENTS}
-            if($Mode -ne 'unmetered') {@{id=[guid]::NewGuid().ToString();type='session.usage_record';data=@{usage=@{inputTokens=20;outputTokens=3;accounting=@{sourceSessionId=$Session;usageId='compact-usage'}}}}|ConvertTo-Json -Depth 10 -Compress|Add-Content -LiteralPath $env:HVE_FAKE_ACP_EVENTS}
+            if($Mode -ne 'unmetered') {@{id=[guid]::NewGuid().ToString();type='session.usage_record';data=@{usage=@{inputTokens=20;outputTokens=3;aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=$(if($Mode -eq 'credit-limit'){2000000000}else{1000000})};accounting=@{sourceSessionId=$Session;usageId='compact-usage'}}}}|ConvertTo-Json -Depth 10 -Compress|Add-Content -LiteralPath $env:HVE_FAKE_ACP_EVENTS}
             $Result=@{stopReason='end_turn'}
         }
         'session/close' { }
@@ -41,7 +41,7 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
     }
     function New-TestUsage {
         param([string]$Id = 'usage-1')
-        New-TestEvent 'session.usage_record' @{ usage = @{ inputTokens = 100; outputTokens = 10; toolTokenCount = 20; availableToolCount = 3; requestBodyBytes = 400; accounting = @{ sourceSessionId = 'child'; usageId = $Id } } }
+        New-TestEvent 'session.usage_record' @{ usage = @{ inputTokens = 100; outputTokens = 10; toolTokenCount = 20; availableToolCount = 3; requestBodyBytes = 400; aiCreditsStatus = 'complete'; copilotUsage = @{ totalNanoAiu = 1000000 }; accounting = @{ sourceSessionId = 'child'; usageId = $Id } } }
     }
     function New-TestRuns {
         foreach ($Arm in @('baseline', 'candidate')) {
@@ -146,9 +146,10 @@ Describe 'Efficiency bounded recovery policy' -Tag 'Unit' {
             RemainingRequests = 10; RemainingSeconds = 60; AcpSupported = $true; RecoveryUsed = $false
         }
     }
-    It 'reserves recovery without increasing the per-run credit sum' {
+    It 'reserves the full workflow allowance from the outset without borrowing judge credits' {
         $Policy = Get-EfficiencyRecoveryPolicy -MaxCredits 1000
-        (3 * ($Policy.initialCredits + $Policy.compactionCredits + $Policy.continuationCredits) + $Policy.judgeCredits) | Should -Be 1000
+        ($Policy.workflowCredits + $Policy.judgeCredits) | Should -Be 1000
+        $Policy.workflowCredits | Should -Be 750
         $Policy.maxCyclesPerStage | Should -Be 1
     }
     It 'permits one healthy structured context-budget recovery' {
@@ -273,6 +274,7 @@ Describe 'Efficiency native compaction boundary' -Tag 'Unit' {
         @{ Mode = 'permission'; Expected = 'client-request' }
         @{ Mode = 'rpc-failure'; Expected = 'protocol-error' }
         @{ Mode = 'timeout'; Expected = 'timeout' }
+        @{ Mode = 'credit-limit'; Expected = 'credit-limit' }
     ) {
         $Cli = Join-Path $TestDrive "$Mode-cli.ps1"
         $Events = Join-Path $TestDrive "$Mode-events.jsonl"
@@ -281,7 +283,7 @@ Describe 'Efficiency native compaction boundary' -Tag 'Unit' {
         Set-Content -LiteralPath $Cli -Value $script:FakeAcpText -Encoding utf8NoBOM
         @(New-TestUsage; New-TestEvent 'session.compaction_complete' @{}) | Set-Content $Events
         $Session = [guid]::NewGuid().ToString()
-        $Result = Invoke-EfficiencyCompaction -CliPath $Cli -SessionId $Session -Workspace $TestDrive -EventsPath $Events -OutputPath $Output -UsagePath (Join-Path $TestDrive "$Mode-usage.json") -MaxCredits 10 -Model fake -TimeoutSeconds $(if($Mode -eq 'timeout'){1}else{10}) -MaxRequests 10 -EnvironmentVariables @{HVE_FAKE_ACP_MODE=$Mode;HVE_FAKE_ACP_EVENTS=$Events;HVE_FAKE_ACP_TRACE=$Trace}
+        $Result = Invoke-EfficiencyCompaction -CliPath $Cli -SessionId $Session -Workspace $TestDrive -EventsPath $Events -OutputPath $Output -UsagePath (Join-Path $TestDrive "$Mode-usage.json") -MaxCredits $(if($Mode -eq 'credit-limit'){1}else{10}) -Model fake -TimeoutSeconds $(if($Mode -eq 'timeout'){1}else{10}) -MaxRequests 10 -EnvironmentVariables @{HVE_FAKE_ACP_MODE=$Mode;HVE_FAKE_ACP_EVENTS=$Events;HVE_FAKE_ACP_TRACE=$Trace}
         $Result.stopCause | Should -Be $Expected
         $Result.succeeded | Should -Be ($Mode -eq 'success')
         ($Result | ConvertTo-Json -Depth 10) | Should -Not -Match 'PRIVATE REPLAY|PRIVATE PROTOCOL DIAGNOSTIC'
@@ -300,6 +302,7 @@ Describe 'Efficiency recovery end to end' -Tag 'Unit' {
     It 'preserves same-run evidence and stops correctly for <Outcome>' -ForEach @(
         @{ Outcome = 'recovered' }
         @{ Outcome = 'still-fails' }
+        @{ Outcome = 'credit-limit' }
     ) {
         $Install = Join-Path $TestDrive "$Outcome-install"; $Trial = Join-Path $TestDrive "$Outcome-run"
         New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
@@ -322,7 +325,11 @@ $ErrorActionPreference='Stop'
 $Session=$args[[array]::IndexOf($args,'--session-id')+1]
 $Prompt=$args[[array]::IndexOf($args,'-p')+1]
 $Kind=if($Prompt -match 'Initialization only;'){'init'}elseif($Prompt -match 'Implement docs/requirements/prd.md'){'build'}elseif($Prompt -match 'This is a continuation of this same stage'){'continuation'}else{'requirements'}
-@{kind=$Kind;session=$Session;ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1];resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
+$Ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1]
+if(-not (Test-Path 'initial-credit-limit.txt')){Set-Content 'initial-credit-limit.txt' $Ceiling}
+$EffectiveCeiling=[double](Get-Content 'initial-credit-limit.txt')
+@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
+if($EffectiveCeiling -lt 750){exit 38}
 $SessionRoot=Join-Path $HOME ".copilot/session-state/$Session"
 New-Item -ItemType Directory -Path $SessionRoot -Force|Out-Null
 $Events=Join-Path $SessionRoot 'events.jsonl'
@@ -331,7 +338,7 @@ function Write-FakeEvent([string]$Type,[hashtable]$Data) {
     Add-Content -LiteralPath $Events -Value $Line
     Write-Output $Line
 }
-Write-FakeEvent 'session.usage_record' @{usage=@{inputTokens=10;outputTokens=1;accounting=@{sourceSessionId=$Session;usageId="$Kind-usage"}}}
+Write-FakeEvent 'session.usage_record' @{usage=@{inputTokens=10;outputTokens=1;aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=$(if($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'credit-limit'){751000000000}else{1000000})};accounting=@{sourceSessionId=$Session;usageId="$Kind-usage"}}}
 if($Kind -eq 'init') {
     New-Item -ItemType Directory -Path '.copilot-tracking' -Force|Out-Null
     Copy-Item -LiteralPath '__FIXTURE__' -Destination '.copilot-tracking/squad' -Recurse
@@ -359,6 +366,15 @@ exit 0
             $Run.stages[0].passed | Should -BeTrue
             $Stage = $Run.stages[1]
             $Stage.name | Should -Be requirements
+            if ($Outcome -eq 'credit-limit') {
+                $Stage.process.stopCause | Should -Be 'credit-limit'
+                $Stage.attempts[0].process.creditsUsed | Should -Be 751.001
+                $Stage.recovery.count | Should -Be 0
+                @($Run.stages).Count | Should -Be 2
+                $Run.judge | Should -BeNullOrEmpty
+                @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl')).Count | Should -Be 2
+                return
+            }
             $Stage.attempts.kind -join ',' | Should -Be 'stage,compaction,continuation'
             $Stage.recovery.count | Should -Be 1
             $Stage.passed | Should -Be ($Outcome -eq 'recovered')
@@ -370,7 +386,12 @@ exit 0
             $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
             @($Calls.session | Sort-Object -Unique).Count | Should -Be 1
             ($Calls | Where-Object kind -EQ continuation).resumeOnly | Should -BeTrue
-            ($Calls | Where-Object kind -EQ continuation).ceiling | Should -Be 375
+            @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(750)
+            @($Calls.effectiveCeiling | Sort-Object -Unique) | Should -Be @(750)
+            $Stage.attempts.sessionCreditCeiling | Should -Be @(750,750,750)
+            $Stage.attempts[1].process.creditCeiling | Should -Be 750
+            $Stage.metrics.credits.complete | Should -BeTrue
+            $Stage.metrics.credits.used | Should -Be 0.004
             $AcpCalls = @(Get-Content (Join-Path $Trial 'workspace/acp-trace.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
             @($AcpCalls | Where-Object method -EQ 'session/prompt').Count | Should -Be 1
             ($AcpCalls | Where-Object method -EQ 'session/load').params.sessionId | Should -Be $Run.metadata.sessionId
@@ -383,6 +404,79 @@ exit 0
 }
 
 Describe 'Efficiency process boundary' -Tag 'Unit' {
+    It 'guards cumulative credits for <Case>' -ForEach @(
+        @{ Case = 'reset-counter'; Amount = 1200000000; Delay = 3000; Expected = 'credit-limit'; Prior = $true }
+        @{ Case = 'fast-exit'; Amount = 1200000000; Delay = 0; Expected = 'credit-limit'; Prior = $true }
+        @{ Case = 'replay'; Amount = 500000000; Delay = 0; Expected = 'none'; Prior = $true }
+        @{ Case = 'negative'; Amount = -1; Delay = 0; Expected = 'incomplete-credit-metering'; Prior = $false }
+        @{ Case = 'invalid'; Amount = 'unknown'; Delay = 0; Expected = 'incomplete-credit-metering'; Prior = $false }
+        @{ Case = 'missing'; Amount = $null; Delay = 0; Expected = 'incomplete-credit-metering'; Prior = $false }
+        @{ Case = 'no-records'; Amount = 0; Delay = 0; Expected = 'incomplete-credit-metering'; Prior = $false }
+        @{ Case = 'no-fresh-records'; Amount = 0; Delay = 0; Expected = 'incomplete-credit-metering'; Prior = $true }
+        @{ Case = 'native-compaction'; Amount = 1200000000; Delay = 0; Expected = 'credit-limit'; Prior = $true }
+    ) {
+        $Events = Join-Path $TestDrive "$Case-events.jsonl"
+        $Cli = Join-Path $TestDrive "$Case-credit-cli.ps1"
+        $PriorLine = New-TestEvent 'session.usage_record' @{usage=@{aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=1000000000};accounting=@{sourceSessionId='workflow';usageId='initial'}}}
+        if ($Prior) { Set-Content -LiteralPath $Events -Value $PriorLine }
+        $Data = @{aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=$Amount};accounting=@{sourceSessionId='descendant';usageId='next'}}
+        $Line = if ($Case -eq 'native-compaction') {
+            New-TestEvent 'session.compaction_complete' @{compactionAttemptId='compact-one';compactionTokensUsed=$Data}
+        } else { New-TestEvent 'session.usage_record' @{usage=$Data} }
+        $Encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Line))
+        @'
+param($Events,$Encoded,$Delay,$Case)
+Set-Content -LiteralPath ($Events+'.started') -Value 'started'
+if($Case -eq 'replay'){$Replay=@(Get-Content -LiteralPath $Events);$Replay|Add-Content -LiteralPath $Events}
+if($Case -notin @('no-records','no-fresh-records')){Add-Content -LiteralPath $Events -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Encoded)))}
+Start-Sleep -Milliseconds ([int]$Delay)
+'@ | Set-Content -LiteralPath $Cli
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',$Cli,$Events,$Encoded,[string]$Delay,$Case) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-credit-output.txt") -EventsPath $Events -StartLine $(if($Prior){1}else{0}) -MaxCredits 2 -TimeoutSeconds 10
+        $Result.stopCause | Should -Be $Expected
+        if ($Expected -eq 'credit-limit') {
+            $Result.creditsUsed | Should -Be 2.2
+            $Marker = $Events + '.started'
+            Remove-Item -LiteralPath $Marker
+            $Blocked = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',$Cli,$Events,$Encoded,'0',$Case) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-blocked.txt") -EventsPath $Events -StartLine 100 -MaxCredits 2
+            $Blocked.stopCause | Should -Be 'credit-limit'
+            Test-Path -LiteralPath $Marker | Should -BeFalse
+        }
+        if ($Case -eq 'replay') {
+            $Result.creditsUsed | Should -Be 1.5
+            (Measure-EfficiencyEvents $Events).credits.used | Should -Be 1.5
+        }
+        if ($Delay -gt 0) { $Result.seconds | Should -BeLessThan 3 }
+    }
+    It 'keeps judge credit accounting separate from the workflow' {
+        $Workspace = Join-Path $TestDrive 'judge-workspace'; $Out = Join-Path $TestDrive 'judge-out'
+        New-Item -ItemType Directory -Path (Join-Path $Workspace 'docs/requirements'),$Out -Force | Out-Null
+        foreach ($Name in @('brd','prd','review')) { Set-Content -LiteralPath (Join-Path $Workspace "docs/requirements/$Name.md") -Value 'synthetic document' }
+        $Cli = Join-Path $TestDrive 'judge-credit-cli.ps1'
+        @'
+$Payload=[Console]::In.ReadToEnd()|ConvertFrom-Json -AsHashtable
+$Session=$args[[array]::IndexOf($args,'--session-id')+1]
+$Ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1]
+$SessionRoot=Join-Path $HOME ".copilot/session-state/$Session"
+New-Item -ItemType Directory -Path $SessionRoot -Force|Out-Null
+$Events=Join-Path $SessionRoot 'events.jsonl'
+@{type='session.usage_record';data=@{usage=@{inputTokens=10;outputTokens=1;aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=1000000000};accounting=@{sourceSessionId=$Session;usageId='judge'}}}}|ConvertTo-Json -Depth 10 -Compress|Set-Content $Events
+$Scores=@{};$Evidence=@{}
+foreach($Name in @('businessClarity','scopeFidelity','acceptanceCriteria','traceability','risksAndDecisions')){$Scores[$Name]=20;$Evidence[$Name]='specific synthetic document evidence'}
+$Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHashes=$Payload.documentHashes}|ConvertTo-Json -Compress
+@{type='assistant.message';data=@{content=$Response}}|ConvertTo-Json -Compress|Add-Content $Events
+@{session=$Session;ceiling=$Ceiling}|ConvertTo-Json -Compress|Set-Content 'judge-call.json'
+'@ | Set-Content -LiteralPath $Cli
+        $Policy = Get-EfficiencyRecoveryPolicy -MaxCredits 1000
+        $Judge = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits $Policy.judgeCredits -ReviewPath 'docs/requirements/review.md'
+        $Call = Get-Content (Join-Path $Out 'judge-call.json') -Raw | ConvertFrom-Json
+        try {
+            $Judge.valid | Should -BeTrue
+            $Call.ceiling | Should -Be 250
+            $Judge.process.creditCeiling | Should -Be 250
+            $Judge.metrics.credits.used | Should -Be 1
+        }
+        finally { Remove-Item -LiteralPath (Join-Path $HOME ".copilot/session-state/$($Call.session)") -Recurse -Force }
+    }
     It 'sets repository-hook opt-in only for the child process' {
         $Previous = [Environment]::GetEnvironmentVariable('GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS', 'Process')
         $Output = Join-Path $TestDrive 'child-environment.txt'
@@ -635,7 +729,7 @@ Add-Content 'stage-launches.txt' 'one invocation'
 $Session = $args[[array]::IndexOf($args, '--session-id') + 1]
 $SessionRoot = Join-Path $HOME ".copilot/session-state/$Session"
 New-Item -ItemType Directory -Path $SessionRoot -Force | Out-Null
-@{ type = 'session.usage_record'; data = @{ usage = @{ inputTokens = 10; outputTokens = 1; accounting = @{ sourceSessionId = $Session; usageId = 'fake-usage' } } } } | ConvertTo-Json -Depth 8 -Compress | Set-Content (Join-Path $SessionRoot 'events.jsonl')
+@{ type = 'session.usage_record'; data = @{ usage = @{ inputTokens = 10; outputTokens = 1; aiCreditsStatus = 'complete'; copilotUsage = @{ totalNanoAiu = 1000000 }; accounting = @{ sourceSessionId = $Session; usageId = 'fake-usage' } } } } | ConvertTo-Json -Depth 8 -Compress | Set-Content (Join-Path $SessionRoot 'events.jsonl')
 exit 0
 '@ | Set-Content $Cli -Encoding utf8NoBOM
         $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))

@@ -51,6 +51,16 @@ Scribe hand-off pipelining (GATE-22 through GATE-28 below) is one more case this
 
 The live harness needs `COPILOT_GITHUB_TOKEN`, the `apm` CLI, and a pinned `@github/copilot`. Everything else needs only Pester 5.7.1.
 
+### Efficiency benchmark credit bounds
+
+These offline cases exercise the benchmark driver, not model behavior.
+
+| ID | Assertion | Source |
+|---|---|---|
+| EFF-01 | Initialization, resumed stages, compaction, and continuation receive the full 75% workflow allowance from the first invocation; the independent judge retains 25% | `tests/tier2/live-benchmark/EfficiencyBenchmark.psm1`, `Get-EfficiencyRecoveryPolicy`; `Invoke-EfficiencyExercise.ps1` |
+| EFF-02 | Active ordinary and ACP processes stop on cumulative native credit exhaustion; previous stages and descendants count once, replayed identities do not inflate spend, and exhausted budgets prevent another process from launching | `tests/tier2/live-benchmark/EfficiencyBenchmark.psm1`, credit and process monitors |
+| EFF-03 | Final usage is reconciled before advancement; missing or invalid credit evidence fails closed, and the judge uses an independent metered session | `tests/tier2/live-benchmark/EfficiencyBenchmark.psm1`, `Invoke-EfficiencyProcess`, `Invoke-EfficiencyJudge` |
+
 ## Verified parity evidence
 
 Checked directly while writing this plan, comparing `origin/main` (`de7feef`, 0.15.3) against the branch:

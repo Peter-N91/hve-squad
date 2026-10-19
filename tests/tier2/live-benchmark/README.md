@@ -199,12 +199,28 @@ stops. The continuation repairs the interrupted Scribe handoff first, without
 rerunning completed roles or duplicating history, then finishes pending stage work.
 A failed continuation stops; there is no second cycle or replacement trial.
 
-Each stage keeps its original quarter of the run's credit reservation: half goes
-to initial work, a quarter to compaction and a quarter to continuation. The judge
-keeps its quarter-run reservation. The shared session's CLI credit ceiling grows
-only by admitted reservations; it is not reset for each subprocess. These are
-bounded reservations and provider soft limits, not a billing guarantee. Recovery
-does not reset the 96-request/900-second stage or 2700-second trial limits.
+The shared workflow receives **75% of the complete run's credit ceiling from its
+first CLI invocation**; the independent judge keeps the other 25%. Initialization,
+requirements, build, compaction and continuation all use that same workflow cap.
+There are no smaller stage caps to retain on session resume. For example,
+`-MaxCredits 1000` gives the workflow 750 credits from the outset and the judge 250.
+Changing the credit policy requires a fresh run; it does not repair an already
+saved session with a lower native limit.
+
+The harness also monitors cumulative native currency usage across the shared
+session and its descendants, independently of CLI invocation counters. It counts
+unique usage accounting IDs and native compaction attempts, including earlier
+stages, and stops active work or prevents the next launch at the workflow ceiling.
+Missing or invalid credit evidence stops with `incomplete-credit-metering`;
+exhaustion stops with `credit-limit`. Final records are checked even on fast exits.
+Actual AI credits are recorded in `*-metrics.json` under `credits.used` and in
+attempt process results separately from the configured ceiling. The judge is
+metered against its own allowance, never borrowed by workflow recovery.
+
+These are soft limits, not a billing guarantee: asynchronously reported usage
+and in-flight requests can overshoot before a stop takes effect. Recovery does
+not reset the 96-request/900-second stage or 2700-second trial limits. The
+model's context-window limit is separate and is not raised by this credit policy.
 
 Original evidence files remain unchanged. Compaction and continuation write
 separate `*-compaction-*` and `*-continuation-*` files. Trial and series JSON retain
