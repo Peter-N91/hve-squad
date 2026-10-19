@@ -298,21 +298,34 @@ function Get-BenchmarksLocal {
 
     $raw = Get-Content -LiteralPath $Path -Raw
     $retrieved = $null
-    $match = [regex]::Match($raw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
-    if ($match.Success) {
-        $retrieved = [datetime]::ParseExact($match.Groups['date'].Value, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
-    }
-
     $classEvalMap = @{}
     foreach ($c in $Classes) {
         $classEvalMap[$c] = [System.Collections.Generic.List[string]]::new()
     }
 
-    $fitTable = @{}
     $indepRowsByModel = @{}
+    $scoreRowSignatures = @{}
     $foundScoresTable = $false
 
     try {
+        $match = [regex]::Match($raw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
+        if ($match.Success) {
+            $parsedRetrieved = [datetime]::MinValue
+            if (-not [datetime]::TryParseExact(
+                    $match.Groups['date'].Value,
+                    'yyyy-MM-dd',
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::None,
+                    [ref]$parsedRetrieved
+                )) {
+                throw "Invalid benchmark snapshot Retrieved date '$($match.Groups['date'].Value)' in $Path."
+            }
+            if ($parsedRetrieved.Date -gt $AsOf.Date) {
+                throw "Benchmark snapshot Retrieved date '$($parsedRetrieved.ToString('yyyy-MM-dd'))' is after routing date '$($AsOf.ToString('yyyy-MM-dd'))' in $Path."
+            }
+            $retrieved = $parsedRetrieved
+        }
+
         foreach ($table in (Get-MarkdownTableLocal -Content $raw)) {
             if ('Assignment class' -in $table.Header -and 'Primary evaluations' -in $table.Header) {
                 foreach ($row in $table.Rows) {
@@ -329,22 +342,11 @@ function Get-BenchmarksLocal {
                     }
                 }
             }
-            elseif ('Catalog ID' -in $table.Header -and 'Composite' -in $table.Header -and 'Sources' -in $table.Header) {
-                foreach ($row in $table.Rows) {
-                    $id = $row['Catalog ID']
-                    if (-not $id) { continue }
-                    $scores = @{}
-                    foreach ($c in $Classes) {
-                        $scores[$c] = [int](ConvertTo-NumberLocal $row[$c])
-                    }
-                    $fitTable[$id] = $scores
-                }
-            }
             elseif ('Catalog ID' -in $table.Header -and 'Evaluation' -in $table.Header -and 'Score' -in $table.Header) {
                 $foundScoresTable = $true
                 foreach ($row in $table.Rows) {
-                    $id = if ($row.Contains('Catalog ID')) { [string]$row['Catalog ID'] } else { '' }
-                    $eval = if ($row.Contains('Evaluation')) { [string]$row['Evaluation'] } else { '' }
+                    $id = if ($row.Contains('Catalog ID')) { ([string]$row['Catalog ID']).Trim() } else { '' }
+                    $eval = if ($row.Contains('Evaluation')) { ([string]$row['Evaluation']).Trim() } else { '' }
                     $scoreNum = if ($row.Contains('Score')) { ConvertTo-NumberLocal $row['Score'] } else { $null }
                     $sourceId = if ($row.Contains('Source ID')) { ([string]$row['Source ID']).Trim('`').Trim() } else { '' }
                     $sourceVer = if ($row.Contains('Source version')) { ([string]$row['Source version']).Trim('`').Trim() } else { '' }
@@ -354,11 +356,42 @@ function Get-BenchmarksLocal {
                     if (-not $id -or -not $eval -or $null -eq $scoreNum -or -not $sourceId -or -not $sourceVer -or $rowDate -notmatch '^\d{4}-\d{2}-\d{2}$' -or $prov -notin @('independent', 'self-reported')) {
                         throw "Invalid benchmark score row in $Path for '$id' / '$eval': Source ID='$sourceId', Source version='$sourceVer', Retrieved='$rowDate', Provenance='$prov'. Every score row must declare source, version, date, and provenance ('independent' or 'self-reported')."
                     }
+                    if ($scoreNum -lt 0.0 -or $scoreNum -gt 1.0) {
+                        throw "Invalid benchmark score '$scoreNum' in $Path for '$id' / '$eval'; normalized scores must be between 0.0 and 1.0."
+                    }
+
+                    $scoreDate = [datetime]::MinValue
+                    if (-not [datetime]::TryParseExact(
+                            $rowDate,
+                            'yyyy-MM-dd',
+                            [System.Globalization.CultureInfo]::InvariantCulture,
+                            [System.Globalization.DateTimeStyles]::None,
+                            [ref]$scoreDate
+                        )) {
+                        throw "Invalid benchmark score Retrieved date '$rowDate' in $Path for '$id' / '$eval'."
+                    }
+                    if ($scoreDate.Date -gt $AsOf.Date) {
+                        throw "Benchmark score date '$rowDate' in $Path for '$id' / '$eval' is after routing date '$($AsOf.ToString('yyyy-MM-dd'))'."
+                    }
+                    $scoreKey = "$id`n$eval"
+                    $scoreSignature = @(
+                        ([double]$scoreNum).ToString('0.###############', [System.Globalization.CultureInfo]::InvariantCulture)
+                        $sourceId
+                        $sourceVer
+                        $rowDate
+                        $prov
+                    ) -join '|'
+                    if ($scoreRowSignatures.ContainsKey($scoreKey)) {
+                        if ($scoreRowSignatures[$scoreKey] -ne $scoreSignature) {
+                            throw "Conflicting duplicate benchmark score rows in $Path for '$id' / '$eval'."
+                        }
+                        continue
+                    }
+                    $scoreRowSignatures[$scoreKey] = $scoreSignature
 
                     # Self-reported figures are informational only and never enter independent ranking evidence.
                     if ($prov -ne 'independent') { continue }
 
-                    $scoreDate = [datetime]::ParseExact($rowDate, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
                     if (($AsOf.Date - $scoreDate.Date).TotalDays -gt $StaleAfterDays) {
                         continue
                     }

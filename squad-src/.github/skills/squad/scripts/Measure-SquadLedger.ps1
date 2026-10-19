@@ -1840,20 +1840,29 @@ function Get-ObservedUsageLocal {
             Total  = $agg.Input + $agg.Cached + $agg.CacheWrite + $agg.Output
         }
         $hydraScaled = 0.0
+        $hydraInput = 0.0
+        $hydraCached = 0.0
+        $hydraCacheWrite = 0.0
         $hydraOutput = 0.0
         foreach ($blockEntry in $agg.Blocks) {
             $fields = $blockEntry.Block.Fields
             if ((ConvertTo-RateKeyLocal ([string]$fields['model'])) -ne 'hydrafusion-max') {
                 continue
             }
-            $hydraScaled += [double]$fields['input_tokens'] + [double]$fields['cached_tokens'] + [double]$fields['cache_write_tokens']
+            $hydraInput += [double]$fields['input_tokens']
+            $hydraCached += [double]$fields['cached_tokens']
+            $hydraCacheWrite += [double]$fields['cache_write_tokens']
             $hydraOutput += [double]$fields['output_tokens']
         }
+        $hydraScaled = $hydraInput + $hydraCached + $hydraCacheWrite
         if ($hydraScaled -gt 0 -or $hydraOutput -gt 0) {
             $hydraEstimateByAgent[$entry.AgentName] = [pscustomobject]@{
-                Scaled = $hydraScaled
-                Output = $hydraOutput
-                Total  = $hydraScaled + $hydraOutput
+                Input      = $hydraInput
+                Cached     = $hydraCached
+                CacheWrite = $hydraCacheWrite
+                Scaled     = $hydraScaled
+                Output     = $hydraOutput
+                Total      = $hydraScaled + $hydraOutput
             }
         }
         $ledgerModelsByAgent[$entry.AgentName] = @($agg.Models)
@@ -1951,11 +1960,14 @@ function Get-ObservedUsageLocal {
 
         $hydraEstimatedTokens = 0.0
         $hasHydraEstimate = $false
+        $hasCategoryEstimate = $false
+        $hasProportionalEstimate = $false
         foreach ($agentGroup in ($hydraDispatchRows | Group-Object AgentName)) {
             if ($hydraEstimateByAgent.ContainsKey($agentGroup.Name)) {
                 $estimate = $hydraEstimateByAgent[$agentGroup.Name]
                 $hydraEstimatedTokens += ($estimate.Scaled / 0.35) + $estimate.Output
                 $hasHydraEstimate = $true
+                $hasCategoryEstimate = $true
                 continue
             }
             if (-not $estimatedByAgent.ContainsKey($agentGroup.Name)) {
@@ -1971,6 +1983,19 @@ function Get-ObservedUsageLocal {
             $share = [math]::Min(1.0, [math]::Max(0.0, $hydraAgentTokens / $allAgentTokens))
             $hydraEstimatedTokens += $estimatedByAgent[$agentGroup.Name].Total * $share
             $hasHydraEstimate = $true
+            $hasProportionalEstimate = $true
+        }
+        $counterfactualBasis = if ($hasCategoryEstimate -and $hasProportionalEstimate) {
+            'mixed category-specific 0.35x inverse and proportional token-share estimate; representative blended-rate pricing'
+        }
+        elseif ($hasCategoryEstimate) {
+            'category-specific 0.35x inverse for input/cache/cache-write with output unchanged; representative blended-rate pricing'
+        }
+        elseif ($hasProportionalEstimate) {
+            'proportional token-share estimate; representative blended-rate pricing'
+        }
+        else {
+            $null
         }
         $hydraSolvers = @(
             $hydraDispatchRows |
@@ -1992,6 +2017,7 @@ function Get-ObservedUsageLocal {
             BlendedCostUsd        = $hydraCostUsd
             CounterfactualModel   = $baseline
             CounterfactualCostUsd = if ($hasHydraEstimate -and $null -ne $baselineRate) { $hydraEstimatedTokens * $baselineRate / 1e6 } else { $null }
+            CounterfactualBasis   = $counterfactualBasis
             SolverModels          = @($hydraSolvers)
         }
     }
@@ -2025,8 +2051,8 @@ function Get-ObservedSectionLinesLocal {
     $scope = if ($s.MemberName) { " Only dispatches whose prompt names ``members/$($s.MemberName)`` are counted." } else { '' }
     $lines.Add("Source: Copilot session ``$($s.SessionId)`` (``events.jsonl``, $($s.First) to $($s.Last)). The host reports one real token total per dispatch, not split into input, cached, and output, so these figures sit beside the estimates above rather than replacing them. Blended USD prices each total with model-catalog.md's blended mix (0.20 input, 0.80 cached, 0.08 cache write, 0.02 output) over this root's rate rows.$scope")
     $lines.Add('')
-    $lines.Add('| Agent | Dispatches | Observed Model | Ledger Model | Match | Observed Tokens | Estimated Tokens | Minutes | Blended USD |')
-    $lines.Add('| ----- | ---------- | -------------- | ------------ | ----- | --------------- | ---------------- | ------- | ----------- |')
+    $lines.Add('| Agent | Dispatches | Observed Model | Ledger Model | Match | Observed Tokens | Estimated Tokens | Minutes | Calculated Blended USD |')
+    $lines.Add('| ----- | ---------- | -------------- | ------------ | ----- | --------------- | ---------------- | ------- | ---------------------- |')
     foreach ($r in ($Observed.Rows | Sort-Object IsScribe, Agent)) {
         $ledger = if ($r.LedgerModels.Count -gt 0) { $r.LedgerModels -join ', ' } else { '—' }
         $lines.Add(('| {0} | {1} | {2} | {3} | {4} | {5:N0} | {6:N0} | {7:N1} | {8:N4} |' -f $r.Agent, $r.Dispatches, ($r.ObservedModels -join ', '), $ledger, $r.Match, $r.Tokens, $r.Estimated, $r.Minutes, $r.CostUsd))
@@ -2040,8 +2066,8 @@ function Get-ObservedSectionLinesLocal {
     if ($null -ne $Observed.BaselineCostUsd) {
         $lines.Add('### Without HVE Squad')
         $lines.Add('')
-        $lines.Add('| Scenario | Tokens | Model | Blended USD |')
-        $lines.Add('| -------- | ------ | ----- | ----------- |')
+        $lines.Add('| Scenario | Tokens | Model | Calculated Blended USD |')
+        $lines.Add('| -------- | ------ | ----- | ---------------------- |')
         $lines.Add(('| With HVE Squad: routed roles plus Scribe, as observed | {0:N0} | as routed | {1:N4} |' -f $Observed.ObservedTokens, $Observed.SquadCostUsd))
         $lines.Add(('| Without HVE Squad: the same role work on one model, no Scribe | {0:N0} | {1} | {2:N4} |' -f $Observed.RoleTokens, $Observed.BaselineModel, $Observed.BaselineCostUsd))
         $lines.Add('')
@@ -2059,7 +2085,7 @@ function Get-ObservedSectionLinesLocal {
             $costSaved = $hf.CounterfactualCostUsd - $hf.BlendedCostUsd
             $costPct = if ($hf.CounterfactualCostUsd -gt 0) { [math]::Abs($costSaved) / $hf.CounterfactualCostUsd * 100.0 } else { 0.0 }
             $costDirection = if ($costSaved -ge 0) { 'lower' } else { 'higher' }
-            $lines.Add(('HydraFusion comparison: **{0}** role dispatch(es) on `hydrafusion-max`{1} consumed **{2:N0} observed tokens ({3:N4} USD)** against an **estimated counterfactual of {4:N0} standard-model tokens ({5:N4} USD on `{6}`)** — **{7:N1}% {8} tokens and {9:N4} USD ({10:N1}%) {11} cost** on those dispatches. Observed tokens and blended cost are host-reported; the standard-model side is an estimate.' -f $hf.Dispatches, $solverNote, $hf.ObservedTokens, $hf.BlendedCostUsd, $hf.EstimatedTokens, $hf.CounterfactualCostUsd, $hf.CounterfactualModel, $tokPct, $tokDirection, [math]::Abs($costSaved), $costPct, $costDirection))
+            $lines.Add(('HydraFusion comparison: **{0}** role dispatch(es) on `hydrafusion-max`{1} consumed **{2:N0} host-reported tokens** with a **calculated representative-blend cost of {3:N4} USD**, against an **estimated counterfactual of {4:N0} standard-model tokens ({5:N4} calculated USD on `{6}`)** — **{7:N1}% {8} tokens and {9:N4} USD ({10:N1}%) {11} calculated cost** on those dispatches. Counterfactual basis: {12}.' -f $hf.Dispatches, $solverNote, $hf.ObservedTokens, $hf.BlendedCostUsd, $hf.EstimatedTokens, $hf.CounterfactualCostUsd, $hf.CounterfactualModel, $tokPct, $tokDirection, [math]::Abs($costSaved), $costPct, $costDirection, $hf.CounterfactualBasis))
             $lines.Add('')
         }
     }
@@ -3123,6 +3149,7 @@ if ($Format -eq 'json') {
                         blendedCostUsd        = [math]::Round($observed.HydraFusion.BlendedCostUsd, 4)
                         counterfactualModel   = $observed.HydraFusion.CounterfactualModel
                         counterfactualCostUsd = if ($null -ne $observed.HydraFusion.CounterfactualCostUsd) { [math]::Round($observed.HydraFusion.CounterfactualCostUsd, 4) } else { $null }
+                        counterfactualBasis   = $observed.HydraFusion.CounterfactualBasis
                         solverModels          = @($observed.HydraFusion.SolverModels)
                     }
                 }

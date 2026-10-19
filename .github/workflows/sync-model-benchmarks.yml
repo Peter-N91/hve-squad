@@ -36,6 +36,10 @@ on:
         description: 'Force snapshot refresh even if benchmark scores are unchanged'
         type: boolean
         default: false
+      allow_coverage_reduction:
+        description: 'Accept intentional loss of existing independent model/evaluation coverage'
+        type: boolean
+        default: false
       dry_run:
         description: 'Compute and validate the snapshot without pushing a branch or opening a PR'
         type: boolean
@@ -66,6 +70,7 @@ jobs:
         shell: pwsh
         env:
           FORCE: ${{ inputs.force }}
+          ALLOW_COVERAGE_REDUCTION: ${{ inputs.allow_coverage_reduction }}
           ARTIFICIAL_ANALYSIS_API_KEY: ${{ secrets.ARTIFICIAL_ANALYSIS_API_KEY }}
         run: |
           $params = @{
@@ -73,6 +78,9 @@ jobs:
           }
           if ($env:FORCE -eq 'true') {
             $params['Force'] = $true
+          }
+          if ($env:ALLOW_COVERAGE_REDUCTION -eq 'true') {
+            $params['AllowCoverageReduction'] = $true
           }
           $result = ./scripts/Sync-ModelBenchmarks.ps1 @params
           @(

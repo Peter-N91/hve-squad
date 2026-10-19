@@ -25,12 +25,15 @@
     `squad-src/.github/skills/squad/references/model-benchmarks.md`.
 
     To avoid daily commit churn when upstream scores have not changed, the
-    script computes a SHA-256 content digest over the normalized source-version,
-    score, evidence-fit, and mapping data (excluding the snapshot `Retrieved:`
-    date stamp). When the digest matches the existing file on disk and the
-    existing `Retrieved:` date is younger than -RefreshThresholdDays (default
-    60 days, well below the 90-day staleness cliff), the script reports no
-    update needed unless -Force is set.
+    script computes a SHA-256 content digest over normalized source metadata,
+    scores, and assignment mappings (excluding the snapshot `Retrieved:` date
+    stamp and the date-relative materialized fit view). Runtime routing
+    recomputes row freshness from the committed scores, so a score merely
+    crossing the 90-day boundary does not create a noisy daily snapshot PR.
+    When the semantic digest matches the existing file on disk and the existing
+    `Retrieved:` date is younger than -RefreshThresholdDays (default 60 days,
+    well below the 90-day staleness cliff), the script reports no update needed
+    unless -Force is set.
 
     Runtime squad dispatches NEVER call this script or fetch live web pages;
     `Resolve-SquadModelRoute.ps1` reads the committed `model-benchmarks.md`
@@ -51,7 +54,9 @@
     Optional API key for `https://artificialanalysis.ai/api/v2/language/models/free`.
     Defaults to `$env:ARTIFICIAL_ANALYSIS_API_KEY`.
 .PARAMETER EpochVersion
-    Version identifier for the Epoch AI snapshot. Defaults to -AsOf (`yyyy-MM-dd`).
+    Version identifier for the Epoch AI snapshot. Defaults to a deterministic
+    semantic fingerprint of the normalized archive contents, so retrieval-only
+    date changes do not churn the snapshot digest.
 .PARAMETER ArtificialAnalysisVersion
     Version identifier for the Artificial Analysis methodology. Defaults to `v4.3.2`.
 .PARAMETER AsOf
@@ -60,6 +65,11 @@
     Maximum age in days before a date-only refresh is written even if the
     content digest has not changed. Defaults to 60 (30 days before the 90-day
     staleness threshold).
+.PARAMETER AllowCoverageReduction
+    Explicitly accepts removing independent model/evaluation evidence coverage
+    that exists in the current snapshot. By default, any such removal is treated
+    as an ambiguous upstream truncation or mapping outage and the last-good
+    snapshot is kept.
 .PARAMETER Force
     Write the snapshot even when the content digest is unchanged and the
     existing file is younger than -RefreshThresholdDays.
@@ -114,6 +124,9 @@ param(
     [int]$RefreshThresholdDays = 60,
 
     [Parameter(Mandatory = $false)]
+    [switch]$AllowCoverageReduction,
+
+    [Parameter(Mandatory = $false)]
     [switch]$Force,
 
     [Parameter(Mandatory = $false)]
@@ -136,9 +149,6 @@ if (-not $CatalogPath) {
 }
 
 $retrievedDate = $AsOf.ToString('yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
-if (-not $EpochVersion) {
-    $EpochVersion = $retrievedDate
-}
 
 $classes = @('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping')
 
@@ -235,6 +245,7 @@ function Get-BestVersionRow {
     }
 
     $best = $null
+    $bestSignature = $null
     $bestRow = $null
     foreach ($row in $Rows) {
         $ver = [string]$row.'Model version'
@@ -246,8 +257,14 @@ function Get-BestVersionRow {
             continue
         }
         $val = [double]$rawVal
-        if ($null -eq $best -or $val -gt $best) {
+        $signature = @(
+            $row.PSObject.Properties |
+                Sort-Object Name |
+                ForEach-Object { "$($_.Name)=$(([string]$_.Value).Trim())" }
+        ) -join '|'
+        if ($null -eq $best -or $val -gt $best -or ($val -eq $best -and [string]::CompareOrdinal($signature, $bestSignature) -lt 0)) {
             $best = $val
+            $bestSignature = $signature
             $bestRow = $row
         }
     }
@@ -342,22 +359,22 @@ function Get-SourceDetailLocal {
     }
     elseif ($source) {
         switch -Regex ($source) {
-            '(?i)artificial analysis' {
+            '(?i)^\s*artificial analysis(?:\s+(?:scicode|critpt))?\s*$' {
                 $id = 'artificial-analysis'
                 $name = 'Artificial Analysis'
                 $url = 'https://artificialanalysis.ai'
             }
-            '(?i)terminal[- ]bench' {
+            '(?i)^\s*terminal[- ]bench\s*$' {
                 $id = 'terminal-bench'
                 $name = 'Terminal-Bench'
                 $url = 'https://www.tbench.ai'
             }
-            '(?i)cognition|frontiercode' {
+            '(?i)^\s*(?:cognition(?:\s+frontiercode)?|frontiercode)\s*$' {
                 $id = 'cognition-frontiercode'
                 $name = 'Cognition FrontierCode'
                 $url = 'https://cognition.com/frontiercode'
             }
-            '(?i)surge.*gdp' {
+            '(?i)^\s*surge(?:\s+ai)?\s+gdp(?:\.pdf)?\s*$' {
                 $id = 'surge-gdp-pdf'
                 $name = 'Surge AI GDP.pdf'
                 $url = 'https://surgehq.ai/leaderboards/gdp-pdf'
@@ -380,9 +397,19 @@ function Get-SourceDetailLocal {
         }
     }
 
-    $vendorPattern = '(?i)(^|[^a-z0-9])(openai|anthropic|google|deepmind|xai|x\.ai|meta|microsoft|mistral|cohere|moonshot|kimi|minimax|alibaba|qwen|zhipu)([^a-z0-9]|$)'
-    $knownIndependent = $id -in @('epoch-ai', 'artificial-analysis', 'cognition-frontiercode', 'terminal-bench', 'surge-gdp-pdf')
-    $provenance = if (-not $knownIndependent -and $source -match $vendorPattern) { 'self-reported' } else { 'independent' }
+    $knownIndependent = $id -in @(
+        'epoch-ai'
+        'artificial-analysis'
+        'cognition-frontiercode'
+        'terminal-bench'
+        'surge-gdp-pdf'
+        'deepswe-datacurve-ai'
+        'evals-futuresearch-ai'
+        'frontierswe-com'
+        'osworld-v2-xlang-ai'
+        'vals-ai'
+    )
+    $provenance = if ($knownIndependent) { 'independent' } else { 'self-reported' }
 
     $version = switch ($id) {
         'epoch-ai' { $DefaultVersion }
@@ -446,7 +473,7 @@ function Get-ModelLookupKey {
 }
 
 function Get-StringSha256 {
-    param([Parameter(Mandatory)][string]$Text)
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
 
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
@@ -457,6 +484,87 @@ function Get-StringSha256 {
     finally {
         $sha.Dispose()
     }
+}
+
+function Get-NormalizedDataSetRecord {
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$DataSets)
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    foreach ($dataSetName in @($DataSets.Keys | Sort-Object)) {
+        foreach ($row in @($DataSets[$dataSetName])) {
+            $fields = @(
+                $row.PSObject.Properties |
+                    Sort-Object Name |
+                    ForEach-Object { "$($_.Name)=$(([string]$_.Value).Trim())" }
+            )
+            $lines.Add("$dataSetName|$($fields -join '|')")
+        }
+    }
+    @($lines | Sort-Object)
+}
+
+function Get-UniqueProcessedEvaluationRow {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
+        [Parameter(Mandatory)][string]$CatalogId,
+        [Parameter(Mandatory)][string]$Evaluation
+    )
+
+    $candidates = [System.Collections.Generic.List[pscustomobject]]::new()
+    foreach ($row in $Rows) {
+        $rawScore = [string]$row.performance
+        if ($rawScore -notmatch '^-?\d+(\.\d+)?([eE][+-]?\d+)?$') {
+            continue
+        }
+        $score = [double]$rawScore
+        if ($score -lt 0.0 -or $score -gt 1.0) {
+            throw "Benchmark row for '$CatalogId' / '$Evaluation' has out-of-range normalized score '$rawScore'; expected 0.0 through 1.0."
+        }
+        $signature = @(
+            $score.ToString('0.###############', [System.Globalization.CultureInfo]::InvariantCulture)
+            ([string]$row.benchmark_release_date).Trim()
+            ([string]$row.model_version).Trim()
+            ([string]$row.date).Trim()
+            ([string]$row.source).Trim()
+        ) -join '|'
+        $candidates.Add([pscustomobject]@{
+                Signature = $signature
+                Row       = $row
+            })
+    }
+
+    if ($candidates.Count -eq 0) {
+        return $null
+    }
+    $signatures = @($candidates | ForEach-Object { $_.Signature } | Sort-Object -Unique)
+    if ($signatures.Count -gt 1) {
+        throw "Conflicting benchmark rows for '$CatalogId' / '$Evaluation'; refusing row-order-dependent selection."
+    }
+    @($candidates | Sort-Object Signature | Select-Object -First 1)[0].Row
+}
+
+function Get-IndependentSnapshotEvidenceKey {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return @()
+    }
+
+    $keys = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::Ordinal)
+    $inScores = $false
+    foreach ($line in (Get-Content -LiteralPath $Path)) {
+        if ($line -match '^## Benchmark Scores\s*$') {
+            $inScores = $true
+            continue
+        }
+        if ($inScores -and $line -match '^## ') {
+            break
+        }
+        if ($inScores -and $line -match '^\|\s*`(?<id>[^`]+)`\s*\|\s*(?<evaluation>[^|]+?)\s*\|.*\|\s*`independent`\s*\|\s*$') {
+            [void]$keys.Add("$($Matches['id'])`n$($Matches['evaluation'].Trim())")
+        }
+    }
+    @($keys)
 }
 
 $catalogFit = Get-CatalogFitMap -Path $CatalogPath
@@ -523,6 +631,18 @@ try {
     }
     else {
         @()
+    }
+
+    if (-not $EpochVersion) {
+        $semanticLines = Get-NormalizedDataSetRecord -DataSets ([ordered]@{
+                processed = $procRows
+                eci       = $eciRows
+                scicode   = $scicodeRows
+                critpt    = $critptRows
+                gdpPdf    = $gdpPdfRows
+            })
+        $semanticHash = Get-StringSha256 -Text ($semanticLines -join "`n")
+        $EpochVersion = "archive-$($semanticHash.Substring(0, 16))"
     }
 
     $aaApiModels = @{}
@@ -606,13 +726,15 @@ try {
         $versionRegex = $spec.VersionRegex
         $modelEvalLookup[$catalogId] = [ordered]@{}
 
-        $modelProcRows = @($procRows | Where-Object { $_.model_display -eq $display })
+        $displayKey = Get-ModelLookupKey -Value $display
+        $modelProcRows = @($procRows | Where-Object { (Get-ModelLookupKey -Value ([string]$_.model_display)) -eq $displayKey })
         foreach ($evalSpec in $procEvalSpecs) {
             if ($evalSpec.EvalName -eq 'FrontierMath-v1' -and $modelEvalLookup[$catalogId].Contains('FrontierMath-Tiers-1-3-v2')) {
                 continue
             }
-            $matchRow = $modelProcRows | Where-Object { $_.benchmark -eq $evalSpec.RawName } | Select-Object -First 1
-            if ($matchRow -and $matchRow.performance -match '^-?\d+(\.\d+)?([eE][+-]?\d+)?$') {
+            $matchRows = @($modelProcRows | Where-Object { ([string]$_.benchmark).Trim() -eq $evalSpec.RawName })
+            $matchRow = Get-UniqueProcessedEvaluationRow -Rows $matchRows -CatalogId $catalogId -Evaluation $evalSpec.EvalName
+            if ($matchRow) {
                 $scoreVal = [Math]::Round([double]$matchRow.performance, 3)
                 $source = Get-SourceDetailLocal `
                     -RawSource ([string]$matchRow.source) `
@@ -716,7 +838,7 @@ try {
                 -RawSource $gdpSource `
                 -DefaultId 'surge-gdp-pdf' `
                 -DefaultName 'Surge AI GDP.pdf' `
-                -DefaultVersion $retrievedDate `
+                -DefaultVersion $EpochVersion `
                 -VersionHint ([string]$gdpBest.Row.'Last updated') `
                 -RetrievedHint ([string]$gdpBest.Row.'Last updated') `
                 -SnapshotRetrieved $retrievedDate
@@ -741,9 +863,34 @@ try {
         }
 
         # Epoch Capabilities Index (composite normalized capability score across 40+ evaluations)
-        $eciMatch = $eciRows | Where-Object { $_.Model -eq $display } | Select-Object -First 1
+        $eciMatches = @($eciRows | Where-Object { (Get-ModelLookupKey -Value ([string]$_.Model)) -eq $displayKey })
+        $eciCandidates = @(
+            foreach ($eciRow in $eciMatches) {
+                $signature = @(
+                    $eciRow.PSObject.Properties |
+                        Sort-Object Name |
+                        ForEach-Object { "$($_.Name)=$(([string]$_.Value).Trim())" }
+                ) -join '|'
+                [pscustomobject]@{
+                    Signature = $signature
+                    Row       = $eciRow
+                }
+            }
+        )
+        if (@($eciCandidates | ForEach-Object { $_.Signature } | Sort-Object -Unique).Count -gt 1) {
+            throw "Conflicting Epoch Capabilities Index rows for '$catalogId'; refusing row-order-dependent selection."
+        }
+        $eciMatch = if ($eciCandidates.Count -gt 0) {
+            @($eciCandidates | Sort-Object Signature | Select-Object -First 1)[0].Row
+        }
+        else {
+            $null
+        }
         if ($eciMatch -and $eciMatch.eci -match '^-?\d+(\.\d+)?$') {
             $eciNormalized = [Math]::Round(([double]$eciMatch.eci - 100.0) / 100.0, 3)
+            if ($eciNormalized -lt 0.0 -or $eciNormalized -gt 1.0) {
+                throw "Epoch Capabilities Index for '$catalogId' normalizes to '$eciNormalized'; expected 0.0 through 1.0."
+            }
             $source = Get-SourceDetailLocal `
                 -RawSource 'https://epoch.ai/benchmarks' `
                 -DefaultId 'epoch-ai' `
@@ -840,15 +987,61 @@ try {
             Status        = 'self-reported-only'
         })
 
-    # Class evaluation preference order for summarizing key evaluations per class/model.
-    $classPreferredEvals = [ordered]@{
-        research       = @('Artificial Analysis Intelligence Index', 'GDP.pdf', 'GPQA diamond', 'HLE', 'CritPt', 'DeepResearch Bench', 'SimpleQA Verified', 'Artificial Analysis Agentic Index', 'APEX-Agents', 'Epoch Capabilities Index')
-        planning       = @('FrontierMath-Tiers-1-3-v2', 'FrontierMath-Tier-4-v2', 'GPQA diamond', 'CritPt', 'HLE', 'GDP.pdf', 'Artificial Analysis Intelligence Index', 'Artificial Analysis Agentic Index', 'APEX-Agents', 'ProofBench', 'OTIS Mock AIME')
-        implementation = @('Artificial Analysis Coding Index', 'Artificial Analysis Agentic Index', 'SciCode', 'Terminal-Bench', 'SWE-Bench verified', 'FrontierCode', 'DeepSWE', 'APEX-Agents', 'FrontierSWE')
-        review         = @('Artificial Analysis Coding Index', 'SWE-Bench verified', 'Terminal-Bench', 'SciCode', 'GPQA diamond', 'CritPt', 'HLE', 'FrontierCode', 'DeepSWE', 'ProofBench')
-        council        = @('Artificial Analysis Intelligence Index', 'GPQA diamond', 'FrontierMath-Tiers-1-3-v2', 'FrontierMath-Tier-4-v2', 'CritPt', 'HLE', 'GDP.pdf', 'Artificial Analysis Agentic Index', 'APEX-Agents')
-        intake         = @('Artificial Analysis Agentic Index', 'Artificial Analysis Intelligence Index', 'APEX-Agents', 'GDP.pdf', 'GPQA diamond', 'SimpleQA Verified', 'FrontierCode', 'Artificial Analysis Coding Index', 'SciCode')
-        bookkeeping    = @('Artificial Analysis Intelligence Index', 'GPQA diamond', 'Artificial Analysis Coding Index', 'SciCode', 'Artificial Analysis Agentic Index', 'APEX-Agents', 'FrontierCode', 'Epoch Capabilities Index')
+    function Test-RoutingFreshScoreLocal {
+        param([Parameter(Mandatory)]$Row)
+
+        $scoreDate = [datetime]::MinValue
+        if (-not [datetime]::TryParseExact(
+                [string]$Row.Retrieved,
+                'yyyy-MM-dd',
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [System.Globalization.DateTimeStyles]::None,
+                [ref]$scoreDate
+            )) {
+            return $false
+        }
+        $ageDays = ($AsOf.Date - $scoreDate.Date).TotalDays
+        return $ageDays -ge 0 -and $ageDays -le 90
+    }
+
+    # One mapping drives both the materialized fit table and the runtime-readable
+    # Assignment Class Evidence Mapping table, preventing aggregation drift.
+    $classEvidenceMap = [ordered]@{
+        research = [ordered]@{
+            Primary   = @('Artificial Analysis Intelligence Index', 'GDP.pdf', 'GPQA diamond', 'HLE', 'CritPt', 'DeepResearch Bench', 'SimpleQA Verified')
+            Secondary = @('Artificial Analysis Agentic Index', 'APEX-Agents', 'Epoch Capabilities Index')
+            Rule      = 'Long-document synthesis, scientific/general reasoning, and factual accuracy (`fit 3..0`, then `Blended` cost)'
+        }
+        planning = [ordered]@{
+            Primary   = @('FrontierMath-Tiers-1-3-v2', 'FrontierMath-Tier-4-v2', 'GPQA diamond', 'CritPt', 'HLE', 'GDP.pdf', 'Artificial Analysis Intelligence Index')
+            Secondary = @('Artificial Analysis Agentic Index', 'APEX-Agents', 'ProofBench', 'OTIS Mock AIME', 'Epoch Capabilities Index')
+            Rule      = 'Multi-step architectural, mathematical, and scientific reasoning (`fit 3..0`, then `Blended` cost)'
+        }
+        implementation = [ordered]@{
+            Primary   = @('Artificial Analysis Coding Index', 'Artificial Analysis Agentic Index', 'SciCode', 'Terminal-Bench', 'SWE-Bench verified', 'FrontierCode', 'DeepSWE', 'APEX-Agents')
+            Secondary = @('FrontierSWE', 'OSWorld 2.0', 'Epoch Capabilities Index')
+            Rule      = 'Agentic software engineering and coding sub-evaluations; math-specific sources (`FrontierMath`, `ProofBench`) apply to quantitative analysis roles (`data-scientist`, `experimenter`, `performance`) rather than general implementation (`fit 3..0`, then `Blended` cost)'
+        }
+        review = [ordered]@{
+            Primary   = @('Artificial Analysis Coding Index', 'SWE-Bench verified', 'Terminal-Bench', 'SciCode', 'GPQA diamond', 'CritPt', 'HLE')
+            Secondary = @('DeepSWE', 'FrontierCode', 'ProofBench', 'Epoch Capabilities Index')
+            Rule      = 'Code verification, defect detection, and adversarial scientific reasoning (`fit 3..0`, then `Blended` cost)'
+        }
+        council = [ordered]@{
+            Primary   = @('Artificial Analysis Intelligence Index', 'GPQA diamond', 'FrontierMath-Tiers-1-3-v2', 'FrontierMath-Tier-4-v2', 'CritPt', 'HLE', 'GDP.pdf')
+            Secondary = @('Artificial Analysis Agentic Index', 'APEX-Agents', 'SimpleQA Verified', 'Epoch Capabilities Index')
+            Rule      = 'Cross-domain architectural, security, cost, and governance judgment (`fit 3..0`, then `Blended` cost)'
+        }
+        intake = [ordered]@{
+            Primary   = @('Artificial Analysis Agentic Index', 'Artificial Analysis Intelligence Index', 'APEX-Agents', 'GDP.pdf', 'GPQA diamond', 'SimpleQA Verified')
+            Secondary = @('FrontierCode', 'Artificial Analysis Coding Index', 'SciCode', 'Epoch Capabilities Index')
+            Rule      = 'Cost and latency (`Blended`) among models clearing the requirements-judgment capability floor (`fit 3..0`, then `Blended` cost)'
+        }
+        bookkeeping = [ordered]@{
+            Primary   = @('Artificial Analysis Intelligence Index', 'GPQA diamond', 'Artificial Analysis Coding Index', 'SciCode', 'Artificial Analysis Agentic Index', 'APEX-Agents', 'FrontierCode')
+            Secondary = @('Epoch Capabilities Index')
+            Rule      = 'Cost and latency (`Blended`) first among models clearing the structured-output capability floor (`ECI >= 140` or `GPQA diamond >= 0.60`; `fit 3..0`, then `Blended` cost)'
+        }
     }
 
     $evidenceFitRows = [System.Collections.Generic.List[pscustomobject]]::new()
@@ -865,15 +1058,18 @@ try {
             continue
         }
 
-        $numericValues = @($evalMap.Values | Where-Object { $_.Provenance -eq 'independent' } | ForEach-Object { $_.NumericScore })
+        $freshIndependentRows = @(
+            $evalMap.Values |
+                Where-Object { $_.Provenance -eq 'independent' -and (Test-RoutingFreshScoreLocal -Row $_) }
+        )
+        $numericValues = @($freshIndependentRows | ForEach-Object { $_.NumericScore })
         if ($numericValues.Count -eq 0) {
             continue
         }
         $composite = [Math]::Round((($numericValues | Measure-Object -Average).Average), 3)
 
         $sourceTokens = @(
-            $evalMap.Values |
-                Where-Object { $_.Provenance -eq 'independent' } |
+            $freshIndependentRows |
                 ForEach-Object { "$($_.SourceId)@$($_.SourceVersion)" } |
                 Sort-Object -Unique
         )
@@ -882,8 +1078,12 @@ try {
         $fitValues = [ordered]@{}
         foreach ($classKey in $classes) {
             $classRows = @(
-                foreach ($pref in $classPreferredEvals[$classKey]) {
-                    if ($evalMap.Contains($pref) -and $evalMap[$pref].Provenance -eq 'independent') {
+                foreach ($pref in @($classEvidenceMap[$classKey].Primary + $classEvidenceMap[$classKey].Secondary)) {
+                    if (
+                        $evalMap.Contains($pref) -and
+                        $evalMap[$pref].Provenance -eq 'independent' -and
+                        (Test-RoutingFreshScoreLocal -Row $evalMap[$pref])
+                    ) {
                         $evalMap[$pref]
                     }
                 }
@@ -917,17 +1117,50 @@ try {
     if ($independentScoreCount -eq 0 -or $evidenceFitRows.Count -eq 0) {
         throw "Benchmark refresh produced no usable independent model coverage; preserving the existing snapshot instead of replacing it."
     }
+    if (-not $AllowCoverageReduction -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
+        $existingEvidenceKeys = @(Get-IndependentSnapshotEvidenceKey -Path $OutputPath)
+        if ($existingEvidenceKeys.Count -gt 0) {
+            $nextEvidenceKeys = [System.Collections.Generic.HashSet[string]]::new(
+                [string[]]@(
+                    $scoreRows |
+                        Where-Object { $_.Provenance -eq 'independent' } |
+                        ForEach-Object { "$($_.CatalogId)`n$($_.Evaluation)" } |
+                        Sort-Object -Unique
+                ),
+                [System.StringComparer]::Ordinal
+            )
+            $removedKeys = @($existingEvidenceKeys | Where-Object { -not $nextEvidenceKeys.Contains($_) })
+            if ($removedKeys.Count -gt 0) {
+                $removedLabels = @(
+                    $removedKeys |
+                        ForEach-Object {
+                            $parts = @($_ -split "`n", 2)
+                            "$($parts[0])/$($parts[1])"
+                        }
+                )
+                $preview = @($removedLabels | Select-Object -First 8) -join ', '
+                $remainder = if ($removedLabels.Count -gt 8) { " (and $($removedLabels.Count - 8) more)" } else { '' }
+                throw "Benchmark refresh would remove existing independent evidence coverage for $preview$remainder; preserving the last-good snapshot. Re-run with -AllowCoverageReduction only after confirming the upstream removal is intentional."
+            }
+        }
+    }
 
     # Build canonical tables first so we can compute a date-independent content digest.
     $sourcesTableLines = @(
         '| Source ID | Source name | Version | Retrieved | License | Redistribution | Status | URL |'
         '| --- | --- | --- | --- | --- | --- | --- | --- |'
     )
+    $digestSourceLines = [System.Collections.Generic.List[string]]::new()
     foreach ($group in ($scoreRows | Group-Object SourceId | Sort-Object Name)) {
-        $first = $group.Group | Select-Object -First 1
+        $sourceNames = @($group.Group | ForEach-Object { $_.SourceName } | Where-Object { $_ } | Sort-Object -Unique)
         $versions = @($group.Group | ForEach-Object { $_.SourceVersion } | Where-Object { $_ } | Sort-Object -Unique)
-        $sourceUrl = if ($first.SourceUrl) { "<$($first.SourceUrl)>" } else { '—' }
-        $sourcesTableLines += "| ``$($group.Name)`` | $($first.SourceName) | ``$($versions -join ', ')`` | ``$retrievedDate`` | $($first.License) | $($first.Redistribution) | $($first.Status) | $sourceUrl |"
+        $licenses = @($group.Group | ForEach-Object { $_.License } | Where-Object { $_ } | Sort-Object -Unique)
+        $redistributions = @($group.Group | ForEach-Object { $_.Redistribution } | Where-Object { $_ } | Sort-Object -Unique)
+        $statuses = @($group.Group | ForEach-Object { $_.Status } | Where-Object { $_ } | Sort-Object -Unique)
+        $sourceUrls = @($group.Group | ForEach-Object { $_.SourceUrl } | Where-Object { $_ } | Sort-Object -Unique)
+        $sourceUrlCell = if ($sourceUrls.Count -gt 0) { @($sourceUrls | ForEach-Object { "<$_>" }) -join ', ' } else { '—' }
+        $sourcesTableLines += "| ``$($group.Name)`` | $($sourceNames -join '; ') | ``$($versions -join ', ')`` | ``$retrievedDate`` | $($licenses -join '; ') | $($redistributions -join '; ') | $($statuses -join '; ') | $sourceUrlCell |"
+        $digestSourceLines.Add("$($group.Name)|$($sourceNames -join ';')|$($versions -join ',')|$($licenses -join ';')|$($redistributions -join ';')|$($statuses -join ';')|$($sourceUrls -join ',')")
     }
     $sourcesTableLines += @(
         "| ``llm-stats`` | LLM Stats (ZeroEval) | ``2026-10`` | ``$retrievedDate`` | Commercial contract required for dataset redistribution | prohibited-on-free-tier | excluded | <https://llm-stats.com/developer> |"
@@ -937,14 +1170,13 @@ try {
     $mappingTableLines = @(
         '| Assignment class | Primary evaluations | Secondary evaluations | Primary sources | Evidence rule |'
         '| --- | --- | --- | --- | --- |'
-        '| `research` | `Artificial Analysis Intelligence Index`, `GDP.pdf`, `GPQA diamond`, `HLE`, `CritPt`, `DeepResearch Bench`, `SimpleQA Verified` | `Artificial Analysis Agentic Index`, `APEX-Agents`, `Epoch Capabilities Index` | source-specific rows from the pinned snapshot | Long-document synthesis, scientific/general reasoning, and factual accuracy (`fit 3..0`, then `Blended` cost) |'
-        '| `planning` | `FrontierMath-Tiers-1-3-v2`, `FrontierMath-Tier-4-v2`, `GPQA diamond`, `CritPt`, `HLE`, `GDP.pdf`, `Artificial Analysis Intelligence Index` | `Artificial Analysis Agentic Index`, `APEX-Agents`, `ProofBench`, `OTIS Mock AIME`, `Epoch Capabilities Index` | source-specific rows from the pinned snapshot | Multi-step architectural, mathematical, and scientific reasoning (`fit 3..0`, then `Blended` cost) |'
-        '| `implementation` | `Artificial Analysis Coding Index`, `Artificial Analysis Agentic Index`, `SciCode`, `Terminal-Bench`, `SWE-Bench verified`, `FrontierCode`, `DeepSWE`, `APEX-Agents` | `FrontierSWE`, `OSWorld 2.0`, `Epoch Capabilities Index` | source-specific rows from the pinned snapshot | Agentic software engineering and coding sub-evaluations; math-specific sources (`FrontierMath`, `ProofBench`) apply to quantitative analysis roles (`data-scientist`, `experimenter`, `performance`) rather than general implementation (`fit 3..0`, then `Blended` cost) |'
-        '| `review` | `Artificial Analysis Coding Index`, `SWE-Bench verified`, `Terminal-Bench`, `SciCode`, `GPQA diamond`, `CritPt`, `HLE` | `DeepSWE`, `FrontierCode`, `ProofBench`, `Epoch Capabilities Index` | source-specific rows from the pinned snapshot | Code verification, defect detection, and adversarial scientific reasoning (`fit 3..0`, then `Blended` cost) |'
-        '| `council` | `Artificial Analysis Intelligence Index`, `GPQA diamond`, `FrontierMath-Tiers-1-3-v2`, `FrontierMath-Tier-4-v2`, `CritPt`, `HLE`, `GDP.pdf` | `Artificial Analysis Agentic Index`, `APEX-Agents`, `SimpleQA Verified`, `Epoch Capabilities Index` | source-specific rows from the pinned snapshot | Cross-domain architectural, security, cost, and governance judgment (`fit 3..0`, then `Blended` cost) |'
-        '| `intake` | `Artificial Analysis Agentic Index`, `Artificial Analysis Intelligence Index`, `APEX-Agents`, `GDP.pdf`, `GPQA diamond`, `SimpleQA Verified` | `FrontierCode`, `Artificial Analysis Coding Index`, `SciCode`, `Epoch Capabilities Index` | source-specific rows from the pinned snapshot | Cost and latency (`Blended`) among models clearing the requirements-judgment capability floor (`fit 3..0`, then `Blended` cost) |'
-        '| `bookkeeping` | `Artificial Analysis Intelligence Index`, `GPQA diamond`, `Artificial Analysis Coding Index`, `SciCode`, `Artificial Analysis Agentic Index`, `APEX-Agents`, `FrontierCode` | `Epoch Capabilities Index` | source-specific rows from the pinned snapshot | Cost and latency (`Blended`) first among models clearing the structured-output capability floor (`ECI >= 140` or `GPQA diamond >= 0.60`; `fit 3..0`, then `Blended` cost) |'
     )
+    foreach ($classKey in $classes) {
+        $mapping = $classEvidenceMap[$classKey]
+        $primary = @($mapping.Primary | ForEach-Object { "``$_``" }) -join ', '
+        $secondary = @($mapping.Secondary | ForEach-Object { "``$_``" }) -join ', '
+        $mappingTableLines += "| ``$classKey`` | $primary | $secondary | source-specific rows from the pinned snapshot | $($mapping.Rule) |"
+    }
 
     $fitTableLines = [System.Collections.Generic.List[string]]::new()
     $fitTableLines.Add('| Catalog ID | research | planning | implementation | review | council | intake | bookkeeping | Composite | Sources | Key evaluations |')
@@ -959,10 +1191,10 @@ try {
     $digestScoreLines = [System.Collections.Generic.List[string]]::new()
     foreach ($row in $scoreRows) {
         $scoreTableLines.Add("| ``$($row.CatalogId)`` | $($row.Evaluation) | ``$($row.Category)`` | $($row.Score) | ``$($row.SourceId)`` | ``$($row.SourceVersion)`` | ``$($row.Retrieved)`` | ``$($row.Provenance)`` |")
-        $digestScoreLines.Add("$($row.CatalogId)|$($row.Evaluation)|$($row.Category)|$($row.Score)|$($row.SourceId)|$($row.SourceVersion)|$($row.Provenance)")
+        $digestScoreLines.Add("$($row.CatalogId)|$($row.Evaluation)|$($row.Category)|$($row.Score)|$($row.SourceId)|$($row.SourceVersion)|$($row.SourceUrl)|$($row.Provenance)")
     }
 
-    $digestInput = (($mappingTableLines + $fitTableLines + $digestScoreLines) -join "`n")
+    $digestInput = (($digestSourceLines + $mappingTableLines + $digestScoreLines) -join "`n")
     $digest = "sha256:$(Get-StringSha256 -Text $digestInput)"
 
     $needsUpdate = $true
@@ -1023,10 +1255,12 @@ try {
         "1. **Coverage and licensing**: Confirmed as of ``$retrievedDate``. The generated snapshot contains $independentScoreCount independently sourced score rows across $($evidenceFitRows.Count) catalog models. Every row retains its actual publisher, version, score date, and provenance; synthetic aliases such as ``hydrafusion-max`` are not presented as measured models."
         '2. **Math-specific sources (`FrontierMath`, `ProofBench`, `OTIS Mock AIME`)**: Required for `planning`, `council`, and math-heavy analysis roles (`data-scientist`, `experimenter`, `performance`, `cost-manager`), where quantitative and formal reasoning drive task quality. Standard `implementation` roles (`developer`, `iac-author`, `deployer`, `release-engineer`, `technical-writer`, `presenter`, `prompt-engineer`) rank on Coding and Agents sub-evaluations (`SciCode`, `Terminal-Bench`, `SWE-Bench verified`, `FrontierCode`, `DeepSWE`, `APEX-Agents`) without requiring `FrontierMath`.'
         '3. **Snapshot refresh cadence and staleness threshold**: `.github/workflows/sync-model-benchmarks.yml` runs daily at `06:30 UTC`, runs `scripts/Sync-ModelBenchmarks.ps1`, validates the snapshot with Pester, and opens or updates a reviewed pull request whenever benchmark scores or source versions change (or when the snapshot age reaches 60 days). At runtime, a snapshot older than **90 days** from its `Retrieved:` date (or one that fails to parse or lacks independent evidence for a candidate) falls back to `model-catalog.md`''s declared fit table and logs one warning.'
+        '4. **Coverage continuity**: An automatic refresh may add models or change evidence, but it refuses to remove any independent model/evaluation evidence key present in the current snapshot. An intentional upstream removal requires a reviewed rerun with `-AllowCoverageReduction`; this avoids guessing an arbitrary minimum model or score count while preserving the last-good snapshot through broad source or mapping outages.'
+        '5. **Materialized fit versus runtime freshness**: The table below is the fit view on this snapshot''s `Retrieved:` date. Its primary-plus-secondary aggregation is identical to the router''s, while `Resolve-SquadModelRoute.ps1` re-applies the 90-day row window on the actual dispatch date. The semantic digest therefore covers sources, mappings, and scores, not age-only changes to this derived view.'
         ''
         '## Evidence-Derived Assignment Fit'
         ''
-        'Each row below is derived exclusively from rows in *Benchmark Scores* with `Provenance = independent`. Models with no independent benchmark evaluations (`mai-code-1.1-flash`) are omitted from this table so `Resolve-SquadModelRoute.ps1` falls back to `model-catalog.md`''s declared fit table with a warning and never ranks on self-reported numbers.'
+        'Each row below is derived exclusively from rows in *Benchmark Scores* with `Provenance = independent` that are no more than 90 days old on the snapshot date. Models with no fresh independent benchmark evaluations (`mai-code-1.1-flash`) are omitted from this table so `Resolve-SquadModelRoute.ps1` falls back to `model-catalog.md`''s declared fit table with a warning and never ranks on self-reported or stale numbers.'
         ''
     ) + $fitTableLines + @(
         ''

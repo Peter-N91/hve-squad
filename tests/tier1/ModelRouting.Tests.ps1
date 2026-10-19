@@ -955,6 +955,9 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $archive = New-SyncArchiveLocal -ProcessedRows @(
                 'gpt54,frontier,0.400,FrontierCode,2026-06-08,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-18,https://cognition.com/frontiercode'
                 'gptmini,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5-mini,gpt-5-mini,GPT-5 mini,2026-10-18,OpenAI'
+                'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-18,vendor self-reported'
+                'gpt61,swe,0.850,SWE-Bench verified,2024-08-13,gpt-6.1-sol,gpt-6.1-sol,GPT-6.1 Sol,2026-10-18,unverified user submission'
+                'gpt6,swe,0.820,SWE-Bench verified,2024-08-13,gpt-6-sol,gpt-6-sol,GPT-6 Sol,2026-10-18,unverified Cognition user submission'
             )
             $aaPath = Join-Path $TestDrive 'aa.json'
             @{
@@ -984,6 +987,18 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $vendor['Source ID'] | Should -Be 'openai'
             $vendor['Provenance'] | Should -Be 'self-reported'
 
+            $explicitSelfReport = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-sol' -and $_['Evaluation'] -eq 'SWE-Bench verified' })[0]
+            $explicitSelfReport['Source ID'] | Should -Be 'vendor-self-reported'
+            $explicitSelfReport['Provenance'] | Should -Be 'self-reported'
+
+            $unverified = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-6.1-sol' -and $_['Evaluation'] -eq 'SWE-Bench verified' })[0]
+            $unverified['Source ID'] | Should -Be 'unverified-user-submission'
+            $unverified['Provenance'] | Should -Be 'self-reported'
+
+            $spoofedPublisher = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-6-sol' -and $_['Evaluation'] -eq 'SWE-Bench verified' })[0]
+            $spoofedPublisher['Source ID'] | Should -Be 'unverified-cognition-user-submission'
+            $spoofedPublisher['Provenance'] | Should -Be 'self-reported'
+
             $aaCoding = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' -and $_['Evaluation'] -eq 'Artificial Analysis Coding Index' })[0]
             $aaCoding['Score'] | Should -Be '0.990'
             $aaCoding['Source version'] | Should -Be 'v4.3.2'
@@ -991,6 +1006,9 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'hydrafusion-max' }).Count | Should -Be 0
             $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
             @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5-mini' }).Count | Should -Be 0
+            @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-sol' }).Count | Should -Be 0
+            @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-6.1-sol' }).Count | Should -Be 0
+            @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-6-sol' }).Count | Should -Be 0
             @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'hydrafusion-max' }).Count | Should -Be 0
         }
 
@@ -1017,11 +1035,139 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $second.Digest | Should -Not -Be $first.Digest
         }
 
+        It 'uses a stable semantic archive version across retrieval-only dates and persists source URL changes' {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,frontier,0.800,FrontierCode,2026-06-08,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,https://cognition.com/frontiercode'
+            )
+            $output = Join-Path $TestDrive 'stable-version.md'
+            $first = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19'))[-1]
+            $second = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-20') -DryRun)[-1]
+            $day59 = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-12-17') -DryRun)[-1]
+            $day60 = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-12-18') -DryRun)[-1]
+
+            $second.Updated | Should -BeFalse
+            $second.Digest | Should -Be $first.Digest
+            $day59.Updated | Should -BeFalse
+            $day59.Digest | Should -Be $first.Digest
+            $day60.Updated | Should -BeTrue
+            $day60.Digest | Should -Be $first.Digest
+
+            $changedArchive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,frontier,0.800,FrontierCode,2026-06-08,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,https://cognition.com/frontiercode-v2'
+            )
+            $changed = @(& $script:SyncScript -ArchivePath $changedArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-20'))[-1]
+            $changed.Updated | Should -BeTrue
+            $changed.Digest | Should -Not -Be $first.Digest
+            Get-Content -LiteralPath $output -Raw | Should -Match '<https://cognition\.com/frontiercode-v2>'
+        }
+
+        It 'does not rewrite when only the derived fit view crosses the 90-day row boundary' {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-07-21,'
+                'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+            )
+            $output = Join-Path $TestDrive 'age-only-fit-change.md'
+            $first = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1')[-1]
+            $second = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-20') -EpochVersion 'fixture-v1' -DryRun)[-1]
+
+            $second.Updated | Should -BeFalse
+            $second.Digest | Should -Be $first.Digest
+        }
+
+        It 'normalizes padded model display names and rejects conflicting duplicate evaluations before mutation' {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4," GPT-5.4 ",2026-10-19,'
+            )
+            $output = Join-Path $TestDrive 'normalized-display.md'
+            $result = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1')[-1]
+            $result.ModelsCovered | Should -Be 1
+            Get-Content -LiteralPath $output -Raw | Should -Match '\| `gpt-5\.4` \| SWE-Bench verified \|'
+
+            $before = (Get-FileHash -LiteralPath $output).Hash
+            $conflicting = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.200,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt54,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+            )
+            { & $script:SyncScript -ArchivePath $conflicting -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' } |
+                Should -Throw '*Conflicting benchmark rows*refusing row-order-dependent selection*'
+            (Get-FileHash -LiteralPath $output).Hash | Should -Be $before
+        }
+
+        It 'preserves prior independent model coverage unless a reviewed reduction is explicit' {
+            $broadArchive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+                'gpt61,swe,0.900,SWE-Bench verified,2024-08-13,gpt-6.1-sol,gpt-6.1-sol,GPT-6.1 Sol,2026-10-19,'
+            )
+            $output = Join-Path $TestDrive 'coverage-continuity.md'
+            & $script:SyncScript -ArchivePath $broadArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' | Out-Null
+            $before = (Get-FileHash -LiteralPath $output).Hash
+
+            $narrowArchive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+            )
+            { & $script:SyncScript -ArchivePath $narrowArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' } |
+                Should -Throw '*would remove existing independent evidence coverage*gpt-6.1-sol/SWE-Bench verified*AllowCoverageReduction*'
+            (Get-FileHash -LiteralPath $output).Hash | Should -Be $before
+
+            $accepted = @(& $script:SyncScript -ArchivePath $narrowArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' -AllowCoverageReduction)[-1]
+            $accepted.ModelsCovered | Should -Be 2
+            Get-Content -LiteralPath $output -Raw | Should -Not -Match '\| `gpt-6\.1-sol` \|'
+        }
+
+        It 'requires the same explicit override when an evaluation disappears but model coverage remains' {
+            $broadArchive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt54,os,0.600,OSWorld 2.0,2026-06-26,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,https://osworld-v2.xlang.ai/'
+                'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+            )
+            $output = Join-Path $TestDrive 'score-coverage-continuity.md'
+            & $script:SyncScript -ArchivePath $broadArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' | Out-Null
+            $before = (Get-FileHash -LiteralPath $output).Hash
+
+            $narrowArchive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+            )
+            { & $script:SyncScript -ArchivePath $narrowArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' } |
+                Should -Throw '*would remove existing independent evidence coverage*gpt-5.4/OSWorld 2.0*AllowCoverageReduction*'
+            (Get-FileHash -LiteralPath $output).Hash | Should -Be $before
+        }
+
+        It 'materializes the same primary-plus-secondary class aggregation the router consumes' {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt54,os,0.100,OSWorld 2.0,2026-06-26,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,https://osworld-v2.xlang.ai/'
+                'gpt56,swe,0.600,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+                'gpt56,os,0.900,OSWorld 2.0,2026-06-26,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,https://osworld-v2.xlang.ai/'
+            )
+            $output = Join-Path $TestDrive 'aggregation-consistency.md'
+            & $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' | Out-Null
+
+            $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
+            $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
+            $fitById = @{}
+            foreach ($row in $fit.Rows) { $fitById[$row['Catalog ID']] = [int]$row['implementation'] }
+            $fitById['gpt-5.4'] | Should -Be 2
+            $fitById['gpt-5.6-sol'] | Should -Be 3
+
+            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.4', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output | ConvertFrom-Json
+            foreach ($candidate in $route.roles[0].candidates) {
+                if ($fitById.ContainsKey($candidate.id)) {
+                    $candidate.fit | Should -Be $fitById[$candidate.id]
+                }
+            }
+            $route.roles[0].suggested | Should -Be 'gpt-5.6-sol'
+        }
+
         It 'writes a transient snapshot for dry-run validation but gates publication on the typed boolean' {
             $workflow = Get-Content -LiteralPath $script:WorkflowPath -Raw
             $workflow | Should -Match "if:\s*steps\.sync\.outputs\.updated == 'true' && !inputs\.dry_run"
             $workflow | Should -Not -Match "inputs\.dry_run != 'true'"
             $workflow | Should -Not -Match '\$params\[''DryRun''\]'
+            $workflow | Should -Match 'allow_coverage_reduction:'
+            $workflow | Should -Match '\$params\[''AllowCoverageReduction''\]\s*=\s*\$true'
         }
     }
 
@@ -1100,6 +1246,83 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         $off.warnings | Should -BeNullOrEmpty
     }
 
+    It 'treats invalid headers, out-of-range or conflicting scores, and future dates as ranked-only fallback evidence' {
+        $root = New-BenchmarkRosterRoot
+        $cases = @(
+            @{
+                Name = 'invalid-header'
+                HeaderDate = '2026-02-30'
+                Rows = @('| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | 0.900 | `epoch-ai` | `fixture-v1` | `2026-10-19` | `independent` |')
+                Error = 'Invalid benchmark snapshot Retrieved date'
+            }
+            @{
+                Name = 'high-score'
+                HeaderDate = '2026-10-19'
+                Rows = @('| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | 9.99 | `epoch-ai` | `fixture-v1` | `2026-10-19` | `independent` |')
+                Error = 'normalized scores must be between'
+            }
+            @{
+                Name = 'negative-score'
+                HeaderDate = '2026-10-19'
+                Rows = @('| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | -0.99 | `epoch-ai` | `fixture-v1` | `2026-10-19` | `independent` |')
+                Error = 'normalized scores must be between'
+            }
+            @{
+                Name = 'conflicting-duplicate'
+                HeaderDate = '2026-10-19'
+                Rows = @(
+                    '| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | 0.900 | `epoch-ai` | `fixture-v1` | `2026-10-19` | `independent` |'
+                    '| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | 0.800 | `epoch-ai` | `fixture-v1` | `2026-10-19` | `independent` |'
+                )
+                Error = 'Conflicting duplicate benchmark score rows'
+            }
+            @{
+                Name = 'future-header'
+                HeaderDate = '2026-10-20'
+                Rows = @('| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | 0.900 | `epoch-ai` | `fixture-v1` | `2026-10-19` | `independent` |')
+                Error = 'snapshot Retrieved date.*is after routing date'
+            }
+            @{
+                Name = 'future-row'
+                HeaderDate = '2026-10-19'
+                Rows = @('| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | 0.900 | `epoch-ai` | `fixture-v1` | `2026-10-20` | `independent` |')
+                Error = 'score date.*is after routing date'
+            }
+        )
+
+        foreach ($case in $cases) {
+            $path = Join-Path $TestDrive "$($case.Name)-invalid-benchmarks.md"
+            Set-Content -LiteralPath $path -Value (@(
+                    '# Invalid Benchmarks'
+                    "* **Retrieved: $($case.HeaderDate)**"
+                    ''
+                    '## Assignment Class Evidence Mapping'
+                    ''
+                    '| Assignment class | Primary evaluations | Secondary evaluations | Primary sources | Evidence rule |'
+                    '| --- | --- | --- | --- | --- |'
+                    '| `planning` | `GPQA diamond` |  | `epoch-ai` | test |'
+                    ''
+                    '## Benchmark Scores'
+                    ''
+                    '| Catalog ID | Evaluation | Category | Score | Source ID | Source version | Retrieved | Provenance |'
+                    '| --- | --- | --- | ---: | --- | --- | --- | --- |'
+                    $case.Rows
+                ) -join "`n") -Encoding utf8NoBOM
+
+            $ranked = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $path | ConvertFrom-Json
+            $ranked.warnings.Count | Should -Be 1 -Because $case.Name
+            $ranked.warnings[0] | Should -Match "could not be parsed.*$($case.Error).*ranking falls back" -Because $case.Name
+            $ranked.roles[0].rationale | Should -Match '\(declared-fit fallback\)' -Because $case.Name
+
+            $manual = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode manual -Role @('lead') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $path | ConvertFrom-Json
+            $manual.warnings | Should -BeNullOrEmpty -Because $case.Name
+
+            $off = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Role @('lead') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $path | ConvertFrom-Json
+            $off.recordedMode | Should -Be 'off' -Because $case.Name
+            $off.warnings | Should -BeNullOrEmpty -Because $case.Name
+        }
+    }
+
     It 'uses independent benchmark evidence before model-catalog.md and records source, version, and evaluations in Route rationale' {
         $root = New-BenchmarkRosterRoot
         $snapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
@@ -1166,7 +1389,8 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         $res.roles[0].rationale | Should -Match 'epoch-ai@2026-10-18 \[FrontierMath-Tiers-1-3-v2\]'
 
         # When only a self-reported model (mai-code-1.1-flash) is available, it falls back to declared fit and logs a warning.
-        $onlySelfReported = & $script:Resolver -SquadRoot $root -AvailableModels @('mai-code-1.1-flash') -Mode ranked -Role @('scribe') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $currentSnapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $onlySelfReported = & $script:Resolver -SquadRoot $root -AvailableModels @('mai-code-1.1-flash') -Mode ranked -Role @('scribe') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
         $onlySelfReported.roles[0].suggested | Should -Be 'mai-code-1.1-flash'
         $onlySelfReported.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
         $onlySelfReported.warnings.Count | Should -Be 1
@@ -1175,8 +1399,9 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
     It 'falls back to the declared fit table in model-catalog.md and logs one warning when model-benchmarks.md is missing or stale' {
         $root = New-BenchmarkRosterRoot
+        $currentSnapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
         $missingPath = Join-Path $TestDrive 'does-not-exist-benchmarks.md'
-        $missingRun = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $missingPath | ConvertFrom-Json
+        $missingRun = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]$currentSnapshotDate) -BenchmarksPath $missingPath | ConvertFrom-Json
         $missingRun.warnings.Count | Should -Be 1
         $missingRun.warnings[0] | Should -Match 'model-benchmarks\.md was not found; ranking falls back to the declared fit table'
         $missingRun.roles[0].suggested | Should -Be 'gpt-5.6-sol'
@@ -1184,9 +1409,9 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         $staleBench = Join-Path $TestDrive 'stale-benchmarks.md'
         Set-Content -LiteralPath $staleBench -Value ($script:BenchmarksRaw -replace '\*\*Retrieved:\s*\d{4}-\d{2}-\d{2}\*\*', '**Retrieved: 2026-01-01**') -Encoding utf8NoBOM
-        $staleRun = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $staleBench | ConvertFrom-Json
+        $staleRun = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]$currentSnapshotDate) -BenchmarksPath $staleBench | ConvertFrom-Json
         $staleRun.warnings.Count | Should -Be 1
-        $staleRun.warnings[0] | Should -Match 'model-benchmarks\.md was retrieved 2026-01-01, more than 90 days before 2026-10-18; ranking falls back to the declared fit table'
+        $staleRun.warnings[0] | Should -Match "model-benchmarks\.md was retrieved 2026-01-01, more than 90 days before $currentSnapshotDate; ranking falls back to the declared fit table"
         $staleRun.roles[0].suggested | Should -Be 'gpt-5.6-sol'
         $staleRun.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
     }
