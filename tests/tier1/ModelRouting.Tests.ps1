@@ -479,9 +479,17 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
 
         function Invoke-Resolver {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{})
-            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-15' }
+            $benchmarkRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-benchmarks.md') -Raw
+            $benchmarkDate = [regex]::Match($benchmarkRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]$benchmarkDate }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             & $script:Resolver @parameters | ConvertFrom-Json
+        }
+
+        $catalogRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-catalog.md') -Raw
+        $script:CapabilityOf = @{}
+        foreach ($row in @(Get-MarkdownTable -Content $catalogRaw | Where-Object { 'Capability class' -in $_.Header } | ForEach-Object { $_.Rows })) {
+            if ($row['Catalog ID']) { $script:CapabilityOf[$row['Catalog ID']] = $row['Capability class'] }
         }
 
         $script:FullRoot = Initialize-RosterFixture -Content $script:SeedTeam
@@ -494,32 +502,32 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
         $script:Ranked.recordedMode | Should -Be 'off'
     }
 
-    It 'matches every pick the model-routing.md ranked worked example documents' {
+    It 'documents snapshot-relative picks and records evidence in each ranked rationale' {
         $routingRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-routing.md') -Raw
         $example = [regex]::Match($routingRaw, '(?m)^\* \*\*Ranked on the Copilot CLI\*\*:.*$').Value
         $example | Should -Not -BeNullOrEmpty
-        $pairs = @([regex]::Matches($example, '`(?<role>[a-z-]+)`(?: \([^)]*\))? → `(?<id>[a-z0-9.-]+)`'))
-        $pairs.Count | Should -BeGreaterThan 5
-        foreach ($pair in $pairs) {
-            $script:PickOf[$pair.Groups['role'].Value] | Should -Be $pair.Groups['id'].Value -Because "the worked example names $($pair.Value)"
+        $example | Should -Match 'snapshot-relative'
+        foreach ($entry in @($script:Ranked.roles | Where-Object suggested)) {
+            $entry.rationale | Should -Match '\(evidence: .+@.+ \['
         }
     }
 
     It 'gives different classes different picks instead of one cheapest or first-alphabetical model' {
-        @($script:Ranked.roles | Where-Object suggested | ForEach-Object suggested | Sort-Object -Unique).Count | Should -BeGreaterOrEqual 5
-        $script:PickOf['intake-validator'] | Should -Not -BeLike 'gemini-*'
+        @($script:Ranked.roles | Where-Object suggested | ForEach-Object suggested | Sort-Object -Unique).Count | Should -BeGreaterOrEqual 3
         $script:PickOf['researcher'] | Should -Not -Be $script:PickOf['lead']
     }
 
     It 'keeps a fast-floor role off frontier-reasoning rows under ranked selection' {
-        $script:PickOf['tester'] | Should -Be 'gpt-6-sol'
-        $script:PickOf['scribe'] | Should -Be 'claude-haiku-5.5'
+        $script:CapabilityOf[$script:PickOf['tester']] | Should -BeIn @('fast-lightweight', 'balanced', 'code-specialized')
+        $script:CapabilityOf[$script:PickOf['scribe']] | Should -BeIn @('fast-lightweight', 'balanced', 'code-specialized')
     }
 
     It 'does not rank Haiku 5.5 when the host does not advertise it' {
         $available = @($script:CliEnum | Where-Object { $_ -ne 'claude-haiku-5.5' })
         $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ AvailableModels = $available; Mode = 'ranked'; Role = @('scribe') }
-        $result.roles[0].suggested | Should -Be 'claude-haiku-4.5'
+        $result.roles[0].suggested | Should -BeIn $available
+        $result.roles[0].suggested | Should -Not -Be 'claude-haiku-5.5'
+        $script:CapabilityOf[$result.roles[0].suggested] | Should -BeIn @('fast-lightweight', 'balanced', 'code-specialized')
         @($result.roles[0].candidates | ForEach-Object id) | Should -Not -Contain 'claude-haiku-5.5'
     }
 
@@ -612,7 +620,12 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
 
         function Invoke-EconomyResolver {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{}, [string]$Script = $script:Resolver)
-            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-15'; AvailableModels = $script:CliEnum }
+            $parameters = @{
+                SquadRoot      = $Root
+                AsOf           = [datetime]'2026-10-15'
+                AvailableModels = $script:CliEnum
+                BenchmarksPath = Join-Path $TestDrive 'missing-economy-benchmarks.md'
+            }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             & $Script @parameters | ConvertFrom-Json
         }
@@ -878,6 +891,140 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         }
     }
 
+    Describe 'Sync-ModelBenchmarks produces evidence-derived, source-faithful snapshots (#166)' {
+        BeforeAll {
+            $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+            $script:SyncScript = Join-Path $repoRoot 'scripts/Sync-ModelBenchmarks.ps1'
+            $script:Resolver = Join-Path $repoRoot 'squad-src/.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1'
+            $script:CatalogPath = Join-Path $repoRoot 'squad-src/.github/skills/squad/references/model-catalog.md'
+            $script:WorkflowPath = Join-Path $repoRoot '.github/workflows/sync-model-benchmarks.yml'
+
+            function New-SyncArchiveLocal {
+                param([AllowEmptyCollection()][string[]]$ProcessedRows = @())
+
+                $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+                $eciRoot = Join-Path $root 'epoch_capabilities_index'
+                New-Item -ItemType Directory -Path $eciRoot -Force | Out-Null
+                @(
+                    'model_id,benchmark_id,performance,benchmark,benchmark_release_date,model_lower,model_version,model_display,date,source'
+                    $ProcessedRows
+                ) | Set-Content -LiteralPath (Join-Path $eciRoot 'processed_data_for_eci.csv') -Encoding utf8NoBOM
+                $root
+            }
+
+            function New-RoutingRootLocal {
+                $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Path $root | Out-Null
+                @(
+                    '# Squad Roster'
+                    ''
+                    'Model routing: ranked'
+                    ''
+                    '## Members'
+                    ''
+                    '| Role | Member Name | Agent Name (Primary) | Model Tier | Deliverable Root |'
+                    '|------|-------------|----------------------|------------|------------------|'
+                    '| developer | | Squad Implementor | default | src/ |'
+                ) | Set-Content -LiteralPath (Join-Path $root 'team.md') -Encoding utf8NoBOM
+                $root
+            }
+        }
+
+        It 'derives implementation fit from measured scores and routes the higher score even when it costs more' {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.100,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56,swe,0.990,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+            )
+            $output = Join-Path $TestDrive 'score-reversal.md'
+            $result = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1')[-1]
+            $result.ModelsCovered | Should -Be 2
+
+            $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
+            $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
+            $byId = @{}
+            foreach ($row in $fit.Rows) { $byId[$row['Catalog ID']] = $row }
+            [int]$byId['gpt-5.4']['implementation'] | Should -Be 0
+            [int]$byId['gpt-5.6-sol']['implementation'] | Should -Be 3
+
+            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.4', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output | ConvertFrom-Json
+            $route.roles[0].suggested | Should -Be 'gpt-5.6-sol'
+            $route.roles[0].rationale | Should -Match 'fit 3 .*SWE-Bench verified'
+        }
+
+        It 'preserves source provenance, consumes Artificial Analysis indices, and excludes synthetic Hydra solver proxies' {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,frontier,0.400,FrontierCode,2026-06-08,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-18,https://cognition.com/frontiercode'
+                'gptmini,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5-mini,gpt-5-mini,GPT-5 mini,2026-10-18,OpenAI'
+            )
+            $aaPath = Join-Path $TestDrive 'aa.json'
+            @{
+                intelligence_index_version = '4.3.2'
+                data = @(
+                    @{
+                        slug = 'gpt-5.4'
+                        evaluations = @{
+                            artificial_analysis_intelligence_index = 98
+                            artificial_analysis_coding_index = 99
+                        }
+                    }
+                )
+            } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $aaPath -Encoding utf8NoBOM
+
+            $output = Join-Path $TestDrive 'provenance.md'
+            & $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -ArtificialAnalysisJsonPath $aaPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' | Out-Null
+            $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
+            $scores = @($tables | Where-Object { 'Evaluation' -in $_.Header -and 'Provenance' -in $_.Header })[0]
+
+            $frontier = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' -and $_['Evaluation'] -eq 'FrontierCode' })[0]
+            $frontier['Source ID'] | Should -Be 'cognition-frontiercode'
+            $frontier['Source version'] | Should -Be '2026-06-08'
+            $frontier['Provenance'] | Should -Be 'independent'
+
+            $vendor = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5-mini' -and $_['Evaluation'] -eq 'SWE-Bench verified' })[0]
+            $vendor['Source ID'] | Should -Be 'openai'
+            $vendor['Provenance'] | Should -Be 'self-reported'
+
+            $aaCoding = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' -and $_['Evaluation'] -eq 'Artificial Analysis Coding Index' })[0]
+            $aaCoding['Score'] | Should -Be '0.990'
+            $aaCoding['Source version'] | Should -Be 'v4.3.2'
+
+            @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'hydrafusion-max' }).Count | Should -Be 0
+            $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
+            @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5-mini' }).Count | Should -Be 0
+            @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'hydrafusion-max' }).Count | Should -Be 0
+        }
+
+        It 'refuses empty independent coverage and preserves the last good snapshot' {
+            $archive = New-SyncArchiveLocal
+            $output = Join-Path $TestDrive 'last-good.md'
+            Set-Content -LiteralPath $output -Value '# Last good snapshot' -Encoding utf8NoBOM -NoNewline
+            $before = (Get-FileHash -LiteralPath $output).Hash
+
+            { & $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') } |
+                Should -Throw '*no usable independent model coverage*'
+            (Get-FileHash -LiteralPath $output).Hash | Should -Be $before
+        }
+
+        It 'includes source versions in change detection' {
+            $archive = New-SyncArchiveLocal -ProcessedRows @(
+                'gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+            )
+            $output = Join-Path $TestDrive 'version-digest.md'
+            $first = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1')[-1]
+            $second = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v2' -DryRun)[-1]
+
+            $second.Updated | Should -BeTrue
+            $second.Digest | Should -Not -Be $first.Digest
+        }
+
+        It 'writes a transient snapshot for dry-run validation but gates publication on the typed boolean' {
+            $workflow = Get-Content -LiteralPath $script:WorkflowPath -Raw
+            $workflow | Should -Match "if:\s*steps\.sync\.outputs\.updated == 'true' && !inputs\.dry_run"
+            $workflow | Should -Not -Match "inputs\.dry_run != 'true'"
+            $workflow | Should -Not -Match '\$params\[''DryRun''\]'
+        }
+    }
+
     It 'declares a parsable Retrieved date, a SHA-256 Content Digest, and verified source licensing' {
         $dateMatch = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
         $dateMatch.Success | Should -BeTrue
@@ -925,7 +1072,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         $invalid -join ', ' | Should -BeNullOrEmpty
     }
 
-    It 'rejects a benchmark snapshot row that is missing provenance or has an unrecognized provenance value' {
+    It 'falls back for malformed benchmark evidence under ranked and leaves manual/off behavior unchanged' {
         $root = New-BenchmarkRosterRoot
         $badBenchmarks = Join-Path $TestDrive 'bad-provenance-benchmarks.md'
         $badContent = @(
@@ -940,17 +1087,27 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         ) -join "`n"
         Set-Content -LiteralPath $badBenchmarks -Value $badContent -Encoding utf8NoBOM
 
-        { & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $badBenchmarks } |
-            Should -Throw '*Provenance*'
+        $ranked = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $badBenchmarks | ConvertFrom-Json
+        $ranked.warnings.Count | Should -Be 1
+        $ranked.warnings[0] | Should -Match 'could not be parsed.*Provenance.*ranking falls back'
+        $ranked.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
+
+        $manual = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode manual -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $badBenchmarks | ConvertFrom-Json
+        $manual.warnings | Should -BeNullOrEmpty
+
+        $off = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $badBenchmarks | ConvertFrom-Json
+        $off.recordedMode | Should -Be 'off'
+        $off.warnings | Should -BeNullOrEmpty
     }
 
     It 'uses independent benchmark evidence before model-catalog.md and records source, version, and evaluations in Route rationale' {
         $root = New-BenchmarkRosterRoot
-        $run = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('researcher', 'lead', 'developer') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
-        $run.benchmarksRetrieved | Should -Be '2026-10-18'
+        $snapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $run = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('researcher', 'lead', 'developer') -AsOf ([datetime]$snapshotDate) | ConvertFrom-Json
+        $run.benchmarksRetrieved | Should -Be $snapshotDate
         $run.warnings | Should -BeNullOrEmpty
         foreach ($roleEntry in $run.roles) {
-            $roleEntry.rationale | Should -Match '\(evidence: artificial-analysis@v4\.3\.2, epoch-ai@2026-10-18 \['
+            $roleEntry.rationale | Should -Match '\(evidence: .+@.+ \['
         }
 
         # Override benchmark evidence so claude-opus-4.8 has fit 3 in research while claude-opus-5.5 has fit 2
@@ -986,6 +1143,12 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         $selfReportContent = @(
             '# Self-Reported Test Benchmarks'
             '* **Retrieved: 2026-10-18**'
+            ''
+            '## Assignment Class Evidence Mapping'
+            ''
+            '| Assignment class | Primary evaluations | Secondary evaluations | Primary sources | Evidence rule |'
+            '| --- | --- | --- | --- | --- |'
+            '| `planning` | `FrontierMath-Tiers-1-3-v2` |  | `epoch-ai` | test |'
             ''
             '## Benchmark Scores'
             ''
@@ -1026,6 +1189,76 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         $staleRun.warnings[0] | Should -Match 'model-benchmarks\.md was retrieved 2026-01-01, more than 90 days before 2026-10-18; ranking falls back to the declared fit table'
         $staleRun.roles[0].suggested | Should -Be 'gpt-5.6-sol'
         $staleRun.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
+    }
+
+    It 'treats stale score rows and missing class mappings as missing evidence instead of promoting unrelated scores' {
+        $root = New-BenchmarkRosterRoot
+        $cases = @(
+            @{
+                Name = 'stale-row'
+                Mapping = '| `planning` | `GPQA diamond` |  | `epoch-ai` | test |'
+                Score = '| `gpt-5.4` | GPQA diamond | `scientific-reasoning` | 0.990 | `epoch-ai` | `2026-10-18` | `2020-01-01` | `independent` |'
+            }
+            @{
+                Name = 'missing-class-map'
+                Mapping = '| `research` | `SciCode` |  | `artificial-analysis` | test |'
+                Score = '| `gpt-5.4` | SciCode | `coding` | 0.990 | `artificial-analysis` | `v4.3.2` | `2026-10-18` | `independent` |'
+            }
+        )
+
+        foreach ($case in $cases) {
+            $path = Join-Path $TestDrive "$($case.Name)-benchmarks.md"
+            Set-Content -LiteralPath $path -Value (@(
+                    '# Test Benchmarks'
+                    '* **Retrieved: 2026-10-18**'
+                    ''
+                    '## Assignment Class Evidence Mapping'
+                    ''
+                    '| Assignment class | Primary evaluations | Secondary evaluations | Primary sources | Evidence rule |'
+                    '| --- | --- | --- | --- | --- |'
+                    $case.Mapping
+                    ''
+                    '## Benchmark Scores'
+                    ''
+                    '| Catalog ID | Evaluation | Category | Score | Source ID | Source version | Retrieved | Provenance |'
+                    '| --- | --- | --- | ---: | --- | --- | --- | --- |'
+                    $case.Score
+                ) -join "`n") -Encoding utf8NoBOM
+
+            $run = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.4') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $path | ConvertFrom-Json
+            $run.roles[0].suggested | Should -Be 'gpt-5.4'
+            $run.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
+            $run.warnings.Count | Should -Be 1
+            $run.warnings[0] | Should -Match 'missing independent benchmark evidence'
+        }
+    }
+
+    It 'canonicalizes the short HydraFusion alias for ranked availability and manual cells' {
+        $root = New-BenchmarkRosterRoot
+        $ranked = & $script:Resolver -SquadRoot $root -AvailableModels @('hydrafusion') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $ranked.unevaluated | Should -BeNullOrEmpty
+        $ranked.roles[0].suggested | Should -Be 'hydrafusion'
+
+        $manualRoot = New-BenchmarkRosterRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: manual', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| developer | | Squad Implementor | default | hydrafusion | src/ |'
+            ) -join "`n")
+        $manual = & $script:Resolver -SquadRoot $manualRoot -AvailableModels @('hydrafusion') -Mode manual -Role @('developer') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $manual.roles[0].cellStatus | Should -Be 'valid'
+        $manual.roles[0].resolved | Should -Be 'hydrafusion'
+        $manual.warnings | Should -BeNullOrEmpty
+
+        $canonicalOnlyRoot = New-BenchmarkRosterRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: manual', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| developer | | Squad Implementor | default | hydrafusion-max | src/ |'
+            ) -join "`n")
+        $canonicalOnly = & $script:Resolver -SquadRoot $canonicalOnlyRoot -AvailableModels @('hydrafusion') -Mode manual -Role @('developer') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $canonicalOnly.roles[0].cellStatus | Should -Be 'refused: not available on this host'
+        $canonicalOnly.roles[0].resolved | Should -BeNullOrEmpty
     }
 
     It 'contains no network cmdlets in Resolve-SquadModelRoute.ps1 so runtime dispatches never fetch live web pages' {

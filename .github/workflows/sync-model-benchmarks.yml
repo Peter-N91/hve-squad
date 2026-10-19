@@ -30,7 +30,7 @@ on:
   schedule:
     - cron: '30 6 * * *'
   workflow_dispatch:
-    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); inputs are typed boolean and only compared as strings.
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); dry_run is a typed boolean that gates publication directly.
     inputs:
       force:
         description: 'Force snapshot refresh even if benchmark scores are unchanged'
@@ -66,7 +66,6 @@ jobs:
         shell: pwsh
         env:
           FORCE: ${{ inputs.force }}
-          DRY_RUN: ${{ inputs.dry_run }}
           ARTIFICIAL_ANALYSIS_API_KEY: ${{ secrets.ARTIFICIAL_ANALYSIS_API_KEY }}
         run: |
           $params = @{
@@ -74,9 +73,6 @@ jobs:
           }
           if ($env:FORCE -eq 'true') {
             $params['Force'] = $true
-          }
-          if ($env:DRY_RUN -eq 'true') {
-            $params['DryRun'] = $true
           }
           $result = ./scripts/Sync-ModelBenchmarks.ps1 @params
           @(
@@ -110,7 +106,7 @@ jobs:
           }
 
       - name: Propose reviewed pull request
-        if: steps.sync.outputs.updated == 'true' && inputs.dry_run != 'true'
+        if: steps.sync.outputs.updated == 'true' && !inputs.dry_run
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}

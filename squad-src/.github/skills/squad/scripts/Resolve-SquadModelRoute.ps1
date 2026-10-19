@@ -154,6 +154,39 @@ function ConvertTo-NumberLocal {
     return $null
 }
 
+function ConvertTo-CanonicalModelIdLocal {
+    <#
+    .SYNOPSIS
+        Normalizes host-advertised aliases to the catalog id without widening
+        the advertised set.
+    #>
+    param([AllowNull()][AllowEmptyString()][string]$Value)
+
+    if (-not $Value) {
+        return ''
+    }
+    $id = $Value.Trim().ToLowerInvariant()
+    if ($id -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) {
+        return 'hydrafusion-max'
+    }
+    return $id
+}
+
+function Get-AdvertisedModelIdLocal {
+    param(
+        [AllowNull()][AllowEmptyString()][string]$CatalogId,
+        [Parameter(Mandatory)][hashtable]$AdvertisedIdByCanonical
+    )
+
+    if (-not $CatalogId) {
+        return $null
+    }
+    if ($AdvertisedIdByCanonical.ContainsKey($CatalogId)) {
+        return $AdvertisedIdByCanonical[$CatalogId]
+    }
+    return $CatalogId
+}
+
 function ConvertTo-VersionLocal {
     <#
     .SYNOPSIS
@@ -246,15 +279,20 @@ function Get-BenchmarksLocal {
         self-reported scores from ranking, and maps independent evidence per model
         and assignment class.
     #>
-    param([Parameter(Mandatory)][string]$Path)
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][datetime]$AsOf,
+        [Parameter(Mandatory)][int]$StaleAfterDays
+    )
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return [pscustomobject]@{
-            Exists    = $false
-            Retrieved = $null
-            Fit       = @{}
-            Evidence  = @{}
-            HasIndep  = @{}
+            Exists     = $false
+            ParseError = $null
+            Retrieved  = $null
+            Fit        = @{}
+            Evidence   = @{}
+            HasIndep   = @{}
         }
     }
 
@@ -274,62 +312,79 @@ function Get-BenchmarksLocal {
     $indepRowsByModel = @{}
     $foundScoresTable = $false
 
-    foreach ($table in (Get-MarkdownTableLocal -Content $raw)) {
-        if ('Assignment class' -in $table.Header -and 'Primary evaluations' -in $table.Header) {
-            foreach ($row in $table.Rows) {
-                $cls = $row['Assignment class'].Trim('`').Trim()
-                if (-not $classEvalMap.ContainsKey($cls)) { continue }
-                foreach ($col in @('Primary evaluations', 'Secondary evaluations')) {
-                    if (-not $row.Contains($col)) { continue }
-                    foreach ($part in ($row[$col] -split ',')) {
-                        $evalName = $part.Trim().Trim('`').Trim()
-                        if ($evalName -and -not $classEvalMap[$cls].Contains($evalName)) {
-                            $classEvalMap[$cls].Add($evalName)
+    try {
+        foreach ($table in (Get-MarkdownTableLocal -Content $raw)) {
+            if ('Assignment class' -in $table.Header -and 'Primary evaluations' -in $table.Header) {
+                foreach ($row in $table.Rows) {
+                    $cls = $row['Assignment class'].Trim('`').Trim()
+                    if (-not $classEvalMap.ContainsKey($cls)) { continue }
+                    foreach ($col in @('Primary evaluations', 'Secondary evaluations')) {
+                        if (-not $row.Contains($col)) { continue }
+                        foreach ($part in ($row[$col] -split ',')) {
+                            $evalName = $part.Trim().Trim('`').Trim()
+                            if ($evalName -and -not $classEvalMap[$cls].Contains($evalName)) {
+                                $classEvalMap[$cls].Add($evalName)
+                            }
                         }
                     }
                 }
             }
-        }
-        elseif ('Catalog ID' -in $table.Header -and 'Composite' -in $table.Header -and 'Sources' -in $table.Header) {
-            foreach ($row in $table.Rows) {
-                $id = $row['Catalog ID']
-                if (-not $id) { continue }
-                $scores = @{}
-                foreach ($c in $Classes) {
-                    $scores[$c] = [int](ConvertTo-NumberLocal $row[$c])
+            elseif ('Catalog ID' -in $table.Header -and 'Composite' -in $table.Header -and 'Sources' -in $table.Header) {
+                foreach ($row in $table.Rows) {
+                    $id = $row['Catalog ID']
+                    if (-not $id) { continue }
+                    $scores = @{}
+                    foreach ($c in $Classes) {
+                        $scores[$c] = [int](ConvertTo-NumberLocal $row[$c])
+                    }
+                    $fitTable[$id] = $scores
                 }
-                $fitTable[$id] = $scores
+            }
+            elseif ('Catalog ID' -in $table.Header -and 'Evaluation' -in $table.Header -and 'Score' -in $table.Header) {
+                $foundScoresTable = $true
+                foreach ($row in $table.Rows) {
+                    $id = if ($row.Contains('Catalog ID')) { [string]$row['Catalog ID'] } else { '' }
+                    $eval = if ($row.Contains('Evaluation')) { [string]$row['Evaluation'] } else { '' }
+                    $scoreNum = if ($row.Contains('Score')) { ConvertTo-NumberLocal $row['Score'] } else { $null }
+                    $sourceId = if ($row.Contains('Source ID')) { ([string]$row['Source ID']).Trim('`').Trim() } else { '' }
+                    $sourceVer = if ($row.Contains('Source version')) { ([string]$row['Source version']).Trim('`').Trim() } else { '' }
+                    $rowDate = if ($row.Contains('Retrieved')) { ([string]$row['Retrieved']).Trim('`').Trim() } else { '' }
+                    $prov = if ($row.Contains('Provenance')) { ([string]$row['Provenance']).Trim('`').Trim() } else { '' }
+
+                    if (-not $id -or -not $eval -or $null -eq $scoreNum -or -not $sourceId -or -not $sourceVer -or $rowDate -notmatch '^\d{4}-\d{2}-\d{2}$' -or $prov -notin @('independent', 'self-reported')) {
+                        throw "Invalid benchmark score row in $Path for '$id' / '$eval': Source ID='$sourceId', Source version='$sourceVer', Retrieved='$rowDate', Provenance='$prov'. Every score row must declare source, version, date, and provenance ('independent' or 'self-reported')."
+                    }
+
+                    # Self-reported figures are informational only and never enter independent ranking evidence.
+                    if ($prov -ne 'independent') { continue }
+
+                    $scoreDate = [datetime]::ParseExact($rowDate, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
+                    if (($AsOf.Date - $scoreDate.Date).TotalDays -gt $StaleAfterDays) {
+                        continue
+                    }
+
+                    if (-not $indepRowsByModel.ContainsKey($id)) {
+                        $indepRowsByModel[$id] = [System.Collections.Generic.List[pscustomobject]]::new()
+                    }
+                    $indepRowsByModel[$id].Add([pscustomobject]@{
+                            Evaluation    = $eval
+                            Score         = [double]$scoreNum
+                            SourceId      = $sourceId
+                            SourceVersion = $sourceVer
+                            Retrieved     = $rowDate
+                        })
+                }
             }
         }
-        elseif ('Catalog ID' -in $table.Header -and 'Evaluation' -in $table.Header -and 'Score' -in $table.Header) {
-            $foundScoresTable = $true
-            foreach ($row in $table.Rows) {
-                $id = if ($row.Contains('Catalog ID')) { [string]$row['Catalog ID'] } else { '' }
-                $eval = if ($row.Contains('Evaluation')) { [string]$row['Evaluation'] } else { '' }
-                $scoreNum = if ($row.Contains('Score')) { ConvertTo-NumberLocal $row['Score'] } else { $null }
-                $sourceId = if ($row.Contains('Source ID')) { ([string]$row['Source ID']).Trim('`').Trim() } else { '' }
-                $sourceVer = if ($row.Contains('Source version')) { ([string]$row['Source version']).Trim('`').Trim() } else { '' }
-                $rowDate = if ($row.Contains('Retrieved')) { ([string]$row['Retrieved']).Trim('`').Trim() } else { '' }
-                $prov = if ($row.Contains('Provenance')) { ([string]$row['Provenance']).Trim('`').Trim() } else { '' }
-
-                if (-not $id -or -not $eval -or $null -eq $scoreNum -or -not $sourceId -or -not $sourceVer -or $rowDate -notmatch '^\d{4}-\d{2}-\d{2}$' -or $prov -notin @('independent', 'self-reported')) {
-                    throw "Invalid benchmark score row in $Path for '$id' / '$eval': Source ID='$sourceId', Source version='$sourceVer', Retrieved='$rowDate', Provenance='$prov'. Every score row must declare source, version, date, and provenance ('independent' or 'self-reported')."
-                }
-
-                # Self-reported figures are informational only and never enter independent ranking evidence.
-                if ($prov -ne 'independent') { continue }
-
-                if (-not $indepRowsByModel.ContainsKey($id)) {
-                    $indepRowsByModel[$id] = [System.Collections.Generic.List[pscustomobject]]::new()
-                }
-                $indepRowsByModel[$id].Add([pscustomobject]@{
-                        Evaluation    = $eval
-                        Score         = [double]$scoreNum
-                        SourceId      = $sourceId
-                        SourceVersion = $sourceVer
-                        Retrieved     = $rowDate
-                    })
-            }
+    }
+    catch {
+        return [pscustomobject]@{
+            Exists     = $true
+            ParseError = $_.Exception.Message
+            Retrieved  = $retrieved
+            Fit        = @{}
+            Evidence   = @{}
+            HasIndep   = @{}
         }
     }
 
@@ -371,11 +426,6 @@ function Get-BenchmarksLocal {
                     }
                 }
             }
-            else {
-                foreach ($r in $modelRows) {
-                    $classRows.Add($r)
-                }
-            }
 
             if ($classRows.Count -eq 0) {
                 $hasIndep[$id][$c] = $false
@@ -396,13 +446,10 @@ function Get-BenchmarksLocal {
             $resolvedEvidence[$id][$c] = "$([string]::Join(', ', $sourceSet)) [$([string]::Join(', ', $topEvals))]"
             $hasIndep[$id][$c] = $true
 
-            if ($fitTable.ContainsKey($id)) {
-                $resolvedFit[$id][$c] = $fitTable[$id][$c]
-            }
-            else {
-                $avg = $sum / $classRows.Count
-                $resolvedFit[$id][$c] = if ($avg -ge 0.75) { 3 } elseif ($avg -ge 0.50) { 2 } elseif ($avg -ge 0.25) { 1 } else { 0 }
-            }
+            # Recompute from the fresh class rows instead of trusting a generated
+            # fit cell that may have included a score row which is stale today.
+            $avg = $sum / $classRows.Count
+            $resolvedFit[$id][$c] = if ($avg -ge 0.75) { 3 } elseif ($avg -ge 0.50) { 2 } elseif ($avg -ge 0.25) { 1 } else { 0 }
         }
     }
 
@@ -503,12 +550,13 @@ function Get-RankedCandidatesLocal {
     # table's own row order (grouped by family, newest first) is the final tie-break.
     # At equal fit, candidates backed by independent benchmark evidence rank ahead of
     # candidates that fell back to the declared fit table (self-reported or unmeasured).
+    $orderMode = $Order
     $comparer = [System.Comparison[object]] {
         param($a, $b)
         $byFit = $b.Scores[$Class].CompareTo($a.Scores[$Class])
         $byCost = $a.Blended.CompareTo($b.Blended)
         $byEvidence = ([int][bool]$b.BackedByEvidence[$Class]).CompareTo([int][bool]$a.BackedByEvidence[$Class])
-        if ($Order -eq 'cost') {
+        if ($orderMode -eq 'cost') {
             if ($byEvidence -ne 0) { return $byEvidence }
             if ($byCost -ne 0) { return $byCost }
             if ($byFit -ne 0) { return $byFit }
@@ -576,11 +624,12 @@ $teamPath = Join-Path -Path $SquadRoot -ChildPath 'team.md'
 if (-not (Test-Path -LiteralPath $teamPath -PathType Leaf)) { throw "team.md not found under $SquadRoot." }
 
 $catalog = Get-CatalogLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-catalog.md')
-$benchmarks = Get-BenchmarksLocal -Path $BenchmarksPath
 $classMap = Get-RoleClassMapLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-routing.md')
 $roster = Get-RosterLocal -Path $teamPath
 $effectiveMode = if ($Mode) { $Mode } else { $roster.Mode }
 $purpose = if ($effectiveMode -eq 'manual') { 'manual' } else { 'ranked' }
+$usesBenchmarkRanking = $effectiveMode -in @('ranked', 'economy')
+$benchmarks = Get-BenchmarksLocal -Path $BenchmarksPath -AsOf $AsOf -StaleAfterDays $StaleAfterDays
 
 $warnings = [System.Collections.Generic.List[string]]::new()
 $stale = $false
@@ -594,7 +643,7 @@ elseif (($AsOf.Date - $catalog.Retrieved.Date).TotalDays -gt $StaleAfterDays) {
 }
 
 $benchmarksFallback = $false
-if (-not $stale) {
+if (-not $stale -and $usesBenchmarkRanking) {
     if (-not $benchmarks.Exists) {
         $benchmarksFallback = $true
         $warnings.Add('model-benchmarks.md was not found; ranking falls back to the declared fit table in model-catalog.md.')
@@ -627,19 +676,41 @@ if (-not $stale) {
 $loggedMissingEvidenceFallback = $false
 
 $available = $null
+$advertised = $null
+$advertisedIdByCanonical = @{}
 $availability = 'unverified'
 $unevaluated = @()
 if ($AvailableModels.Count -gt 0) {
-    $ids = @($AvailableModels | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$ids)
+    $rawIds = @(
+        $AvailableModels |
+            ForEach-Object { $_ -split ',' } |
+            ForEach-Object { $_.Trim().ToLowerInvariant() } |
+            Where-Object { $_ } |
+            Sort-Object -Unique
+    )
+    $advertised = [System.Collections.Generic.HashSet[string]]::new([string[]]$rawIds)
+    $canonicalIds = [System.Collections.Generic.List[string]]::new()
+    foreach ($rawId in $rawIds) {
+        $canonicalId = ConvertTo-CanonicalModelIdLocal -Value $rawId
+        if (-not $advertisedIdByCanonical.ContainsKey($canonicalId) -or $rawId -eq $canonicalId) {
+            $advertisedIdByCanonical[$canonicalId] = $rawId
+        }
+        if (-not $canonicalIds.Contains($canonicalId)) {
+            $canonicalIds.Add($canonicalId)
+        }
+    }
+    $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$canonicalIds)
     $availability = 'host-advertised'
-    $unevaluated = @($ids | Where-Object { -not $catalog.Capability.ContainsKey($_) } | Sort-Object -Unique)
+    $unevaluated = @($rawIds | Where-Object { -not $catalog.Capability.ContainsKey((ConvertTo-CanonicalModelIdLocal -Value $_)) } | Sort-Object -Unique)
 }
-elseif ($SessionModel -and $SessionModel -ne 'auto' -and $catalog.InputRate.ContainsKey($SessionModel)) {
-    $ceiling = $catalog.InputRate[$SessionModel]
-    $ids = @($catalog.Fit | Where-Object { $catalog.InputRate.ContainsKey($_.Id) -and $catalog.InputRate[$_.Id] -le $ceiling } | ForEach-Object { $_.Id })
-    $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$ids)
-    $availability = "unverified (priced at or below session model $SessionModel)"
+elseif ($SessionModel) {
+    $canonicalSessionModel = ConvertTo-CanonicalModelIdLocal -Value $SessionModel
+    if ($canonicalSessionModel -ne 'auto' -and $catalog.InputRate.ContainsKey($canonicalSessionModel)) {
+        $ceiling = $catalog.InputRate[$canonicalSessionModel]
+        $ids = @($catalog.Fit | Where-Object { $catalog.InputRate.ContainsKey($_.Id) -and $catalog.InputRate[$_.Id] -le $ceiling } | ForEach-Object { $_.Id })
+        $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$ids)
+        $availability = "unverified (priced at or below session model $canonicalSessionModel)"
+    }
 }
 
 # economy-mode.md *Consent*: report a missing ## Economy Mode Accepted entry; never refuse on it.
@@ -666,42 +737,45 @@ $results = foreach ($row in $roster.Rows) {
     $ranked = @(if (-not $stale -and $rankedAdmitted.Count -gt 0) { Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available })
     $offered = @(if ($manualAdmitted.Count -gt 0) { Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $manualAdmitted -Available $available })
 
-    $suggested = if ($ranked.Count -gt 0) { $ranked[0].Id } else { $null }
-    if (-not $stale -and -not $benchmarksFallback -and $suggested -and -not $ranked[0].BackedByEvidence[$class] -and -not $loggedMissingEvidenceFallback) {
+    $suggestedCatalogId = if ($ranked.Count -gt 0) { $ranked[0].Id } else { $null }
+    if ($usesBenchmarkRanking -and -not $stale -and -not $benchmarksFallback -and $suggestedCatalogId -and -not $ranked[0].BackedByEvidence[$class] -and -not $loggedMissingEvidenceFallback) {
         $loggedMissingEvidenceFallback = $true
-        $warnings.Add("missing independent benchmark evidence for $suggested in $class; ranking falls back to the declared fit table in model-catalog.md.")
+        $warnings.Add("missing independent benchmark evidence for $suggestedCatalogId in $class; ranking falls back to the declared fit table in model-catalog.md.")
     }
     $rationale = if ($stale) { 'stale-catalog fallback' }
     elseif ($rankedAdmitted.Count -eq 0) { "no routable floor ('$tier')" }
-    elseif (-not $suggested) { 'floor exhausted' }
+    elseif (-not $suggestedCatalogId) { 'floor exhausted' }
     elseif ($ranked[0].BackedByEvidence[$class]) { "rank 1 of $($ranked.Count) in $class at fit $($ranked[0].Scores[$class]) (evidence: $($ranked[0].Evidence[$class])), floor $tier" }
     else { "rank 1 of $($ranked.Count) in $class at fit $($ranked[0].Scores[$class]) (declared-fit fallback), floor $tier" }
 
     # Economy narrows only allowlisted, mapped implementation roles; an unmapped role's class is a guess.
     $economyApplies = $effectiveMode -eq 'economy' -and $roleId -in $EconomyRoles -and $classSource -eq 'mapped' -and $class -eq 'implementation'
-    if ($economyApplies -and $suggested) {
+    if ($economyApplies -and $suggestedCatalogId) {
         $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -MinFit 2)
         if ($economy.Count -gt 0) {
-            $suggested = $economy[0].Id
+            $suggestedCatalogId = $economy[0].Id
             $econEvidence = if ($economy[0].BackedByEvidence[$class]) { "evidence: $($economy[0].Evidence[$class])" } else { 'declared-fit fallback' }
             $rationale = "economy pick: rank 1 of $($economy.Count) in $class at fit $($economy[0].Scores[$class]) (fit >= 2, lowest Blended; $econEvidence), floor $tier"
         }
         else { $rationale = "economy: no id at fit >= 2; $rationale" }
     }
+    $suggested = Get-AdvertisedModelIdLocal -CatalogId $suggestedCatalogId -AdvertisedIdByCanonical $advertisedIdByCanonical
 
     $cell = if ($roster.HasModel) { ([string]$row['Model']).Trim() } else { '' }
+    $cellId = $cell.ToLowerInvariant()
+    $canonicalCell = ConvertTo-CanonicalModelIdLocal -Value $cell
     $cellStatus = 'empty'
     if ($cell) {
         if ($cell -match $MetacharacterPattern) { $cellStatus = 'refused: metacharacter' }
-        elseif (-not $catalog.Capability.ContainsKey($cell) -and ($null -eq $available -or -not $available.Contains($cell))) { $cellStatus = 'refused: unknown id' }
-        elseif ($null -ne $available -and -not $available.Contains($cell)) { $cellStatus = 'refused: not available on this host' }
-        elseif (-not $catalog.Capability.ContainsKey($cell)) { $cellStatus = 'valid: unevaluated' }
-        elseif ($catalog.Capability[$cell] -notin $manualAdmitted) { $cellStatus = "refused: below the $tier floor" }
+        elseif (-not $catalog.Capability.ContainsKey($canonicalCell) -and ($null -eq $advertised -or -not $advertised.Contains($cellId))) { $cellStatus = 'refused: unknown id' }
+        elseif ($null -ne $advertised -and -not $advertised.Contains($cellId)) { $cellStatus = 'refused: not available on this host' }
+        elseif (-not $catalog.Capability.ContainsKey($canonicalCell)) { $cellStatus = 'valid: unevaluated' }
+        elseif ($catalog.Capability[$canonicalCell] -notin $manualAdmitted) { $cellStatus = "refused: below the $tier floor" }
         else { $cellStatus = 'valid' }
     }
 
     $resolved = switch ($effectiveMode) {
-        'manual' { if ($cellStatus -like 'valid*') { $cell } else { $null } }
+        'manual' { if ($cellStatus -like 'valid*') { $cellId } else { $null } }
         default { $suggested }
     }
 
@@ -718,7 +792,7 @@ $results = foreach ($row in $roster.Rows) {
         resolved    = $resolved
         candidates  = @($offered | Select-Object -First 8 | ForEach-Object {
                 [pscustomobject][ordered]@{
-                    id              = $_.Id
+                    id              = Get-AdvertisedModelIdLocal -CatalogId $_.Id -AdvertisedIdByCanonical $advertisedIdByCanonical
                     displayName     = $catalog.DisplayName[$_.Id]
                     capabilityClass = $catalog.Capability[$_.Id]
                     fit             = $_.Scores[$class]
@@ -727,7 +801,10 @@ $results = foreach ($row in $roster.Rows) {
             })
     }
     if ($effectiveMode -eq 'economy') {
-        $target = if ($economyApplies) { Get-EscalationTarget -Ranked $ranked } else { $null }
+        $target = if ($economyApplies) {
+            Get-AdvertisedModelIdLocal -CatalogId (Get-EscalationTarget -Ranked $ranked) -AdvertisedIdByCanonical $advertisedIdByCanonical
+        }
+        else { $null }
         $entry['escalation'] = if ($target -and $target -ne $suggested) { $target } else { $null }
         $primaryName = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent' | ForEach-Object { [string]$row[$_] } | Where-Object { $_ }) | Select-Object -First 1
         $entry['pin'] = Get-AgentPinLocal -AgentName ([string]$primaryName).Trim('`') -Root $SquadRoot
