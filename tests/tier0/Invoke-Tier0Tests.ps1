@@ -49,7 +49,7 @@
     ./Invoke-Tier0Tests.ps1 -SourceRoot .
 .NOTES
     See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-15,
-    GATE-22..GATE-28).
+    COACH-01..COACH-05, GATE-22..GATE-28).
 #>
 [CmdletBinding(DefaultParameterSetName = 'Install')]
 param(
@@ -139,6 +139,9 @@ $containers = @(
         PackageRoot = $PackageRoot
     }
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'GetSquadDispatchBrief.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'SquadCoach.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
 )

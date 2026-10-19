@@ -200,14 +200,144 @@ targets:
       </section>
       </div>
 
-      <h2>2. Initialize the squad</h2>
+      <h2 id="chat-with-the-squad-coach">2. New here? Chat with the Squad Coach</h2>
+      <p>
+        Once HVE Squad is installed, the <strong>Squad Coach works before initialization</strong>:
+        neither <code>team.md</code> nor <code>federation.md</code> has to exist. Describe the outcome
+        you want without choosing a profile, pack, or autonomy mode first. The Coach reads the
+        capabilities shipped in your installed version and any state that already exists, then advises
+        you without creating or changing anything.
+      </p>
+      <p>
+        In VS Code, choose the <code>/squad-coach</code> <strong>prompt</strong> in Copilot Chat, not a
+        similarly named skill. In Copilot CLI, enter <code>/agent</code> and choose
+        <strong>Squad Coach</strong>. In Copilot App, select <strong>Squad Coach</strong>. CLI and App
+        messages do not include the slash prefix; the host tabs below render the correct copyable form.
+      </p>
+      <pre><code>/squad-coach request="I need to modernize two applications owned by different teams. Help me choose the simplest setup and prepare my first prompt."</code></pre>
+      <div class="callout">
+        <p>
+          <strong>Advice only.</strong> The Coach does not initialize a squad, dispatch delivery work,
+          change configuration, or migrate state. It gives you a copy-ready handoff for the Squad
+          Coordinator or Federation Coordinator, which you invoke explicitly when you are ready.
+        </p>
+      </div>
+
+      <h3>What the Coach asks and returns</h3>
+      <p>
+        The Coach asks only questions that can change the recommendation: your goal and success
+        criteria, project and scope, required deliverables, owners and dependencies, constraints,
+        environment, access categories, and approval expectations. It never asks you to paste a secret.
+      </p>
+      <p>A complete recommendation includes:</p>
+      <ul>
+        <li>a justified single-squad or federation choice, including when to reconsider it;</li>
+        <li>supported profiles and capability packs, per federation member when needed, explained in plain language;</li>
+        <li>essential and optional inputs, with a safe way forward for missing information;</li>
+        <li>a valid starting prompt tailored to your installed version and host; and</li>
+        <li>concise next steps for initialization, approvals, models, cost, progress, review, and resuming.</li>
+      </ul>
+
+      <h3>Single squad or federation?</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Choose</th><th>When it is sufficient</th><th>Trade-off and later change</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Single squad (default)</strong></td>
+              <td>One shared outcome, delivery lifecycle, ownership boundary, and set of artifacts. Add a supported pack when the work needs a technology specialty.</td>
+              <td>Least setup and coordination overhead. Complexity or many roles alone is not a federation reason.</td>
+            </tr>
+            <tr>
+              <td><strong>Federation</strong></td>
+              <td>Two or more durable workstreams need independent owners, scopes, deliverables, routing, constraints, access boundaries, or cadence.</td>
+              <td>Independent state and routing, but duplicated rosters and more coordination. Each member needs its own profile and any packs.</td>
+            </tr>
+            <tr>
+              <td><strong>Promote later</strong></td>
+              <td>An existing single squad gains a genuinely independent team or workstream.</td>
+              <td>Ask the Coach to re-evaluate, then use the current promotion flow so the coordinator preserves existing state and artifacts:
+                <pre><code>/squad-federation promote</code></pre>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Preparation checklist</h3>
+      <p><strong>Essential inputs</strong> — prepare what determines the work and its safe boundaries:</p>
+      <ul>
+        <li>goal, audience, scope, required deliverables, and success or acceptance criteria;</li>
+        <li>repository or project context, hard constraints, known dependencies, and ownership;</li>
+        <li>environment prerequisites and the categories of access that will be required.</li>
+      </ul>
+      <p><strong>Optional inputs</strong> — useful when available, but not a reason to block a safe first conversation:</p>
+      <ul>
+        <li>requirements, relevant documents, current architecture, backlog, examples, and test evidence;</li>
+        <li>timelines, stakeholder preferences, detailed environment information, and non-blocking assumptions.</li>
+      </ul>
+      <p>
+        If an essential answer can change topology or safety, the Coach asks before recommending. It
+        labels non-blocking gaps as assumptions and tells you whether the coordinator can discover,
+        defer, or validate them. <strong>Never paste tokens, passwords, private keys, connection
+        strings, or credential values.</strong> State only that an access category is available and
+        configure its value through the host's secure secret mechanism later.
+      </p>
+
+      <h3>Beginner example conversations</h3>
+      <div class="callout">
+        <p><strong>One shared application</strong></p>
+        <p><strong>User:</strong> “We have one Node application and want a tested plan for adding login validation. One team owns it.”</p>
+        <p><strong>Coach:</strong> “Start with one <code>default</code> squad. The outcome, owner, plan, implementation, and review are shared, so a federation would add overhead without isolating anything. Prepare the repository, acceptance criteria, supported Node version, and test command. If security review becomes the primary outcome, we can re-evaluate the profile.”</p>
+      </div>
+      <div class="callout">
+        <p><strong>Independent product and platform work</strong></p>
+        <p><strong>User:</strong> “A product team owns requirements and launch material. A platform team independently owns the Azure landing zone, with separate approvals and release dates.”</p>
+        <p><strong>Coach:</strong> “Use a federation with a <code>product</code> member and an <code>azure</code> member. Their owners, deliverables, access, approvals, and cadence are independent; federation routing keeps those histories separate. Record their dependency—approved requirements before platform sizing—and initialize only after confirming both member proposals.”</p>
+      </div>
+
+      <h3>Copy-ready coordinator prompt templates</h3>
+      <p>
+        The Coach replaces these examples with the exact profile, packs, flags, and wording supported
+        by your installed version. These current examples show the handoff shape:
+      </p>
+      <pre><code># Start one squad
+/squad request="Create a tested implementation plan and add input validation to the login form" profile=default mode=autopilot routing=ranked cost-ceiling=10</code></pre>
+      <pre><code># Initialize independently owned product and platform members
+/squad-federation request="Plan the product launch and its Azure platform as separate owned workstreams" init mode=autopilot routing=ranked cost-ceiling=20</code></pre>
+      <pre><code># Promote an existing single squad only after the work splits
+/squad-federation request="Promote the existing squad and add separately owned product and Azure workstreams" promote</code></pre>
+
+      <h3>Beginner essentials after coaching</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Topic</th><th>What to expect</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Installation and hosts</td><td>VS Code uses the APM package and slash prompts. Copilot CLI and App use the paired plugins and selected agents. Follow the installation panel above for the current commands.</td></tr>
+            <tr><td>Initialization</td><td>The coordinator proposes the roster first and writes state only after you confirm. Coaching does not initialize it.</td></tr>
+            <tr><td>Autonomy</td><td>Omit <code>mode</code> for interactive approvals. <code>mode=autonomous</code> runs a bounded validation loop; <code>mode=autopilot</code> sequences the full pipeline but keeps mandatory human gates.</td></tr>
+            <tr><td>Approvals</td><td>Impactful actions, high-risk outcomes, unresolved cost gates, and final release decisions still stop for a human. Initialization also asks how approvals should reach you.</td></tr>
+            <tr><td>Models</td><td><code>routing=off</code> keeps host defaults; <code>ranked</code>, <code>economy</code>, and <code>manual</code> are opt-in policies. The Coach explains only modes present in your installed version.</td></tr>
+            <tr><td>Cost controls</td><td><code>cost-ceiling</code> is an estimated model-spend admission control, not a bill guarantee. Start without it or choose a deliberate ceiling; use <code>unset</code> to remove an active one.</td></tr>
+            <tr><td>Outputs and progress</td><td>Expect research, plan, implementation or requested deliverables, review evidence, and concise in-chat progress. Durable records live under the selected squad root.</td></tr>
+            <tr><td>Review</td><td>Read the coordinator's summary, inspect changed files and artifacts, run the project's validation, and resolve open questions before approving impactful actions.</td></tr>
+            <tr><td>Continue or resume</td><td>Return to the same coordinator conversation and describe the next outcome. Existing state is reused; in a federation, target a member when needed rather than reinitializing.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>3. Initialize the squad</h2>
       <p>
         The squad is a user-invocable Squad Coordinator that routes your request to a cast of HVE
         Core agents and persists its state under <code>.copilot-tracking/squad/</code>.
         Initialize and confirm the proposed team first:
       </p>
       <pre><code>/squad init</code></pre>
-      <h2>3. Send a work request</h2>
+      <h2>4. Send a work request</h2>
       <p>After confirmation, send a separate work request. Use <code>mode=autopilot</code> to sequence the work while keeping required human approvals, or omit it to approve each step:</p>
       <pre><code>/squad request="add input validation to the login form" mode=autopilot</code></pre>
       <p>

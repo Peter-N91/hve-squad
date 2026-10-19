@@ -74,12 +74,23 @@ No Copilot invocation. Install the ref into a scratch directory, then inspect th
 | PKG-06 | Every agent and prompt frontmatter parses, and agents carry `name`, `description`, `user-invocable`, `disable-model-invocation` | |
 | PKG-07 | `squad-floor.instructions.md` is delivered and declares `applyTo: '**'` | It is the always-on floor; if it is not delivered the floor is silently absent |
 | PKG-08 | No relative link inside a delivered skill reference points at a missing file | |
-| PKG-09 | All five entrypoint prompts are delivered: `squad`, `squad-federation`, `squad-document`, `squad-governance-report`, `squad-learn` | |
-| PKG-10 | Worker agents declare `user-invocable: false`; the three user-facing agents declare `user-invocable: true` | Wrong flag either hides an entrypoint or exposes a worker |
+| PKG-09 | All six entrypoint prompts are delivered: `squad`, `squad-coach`, `squad-federation`, `squad-document`, `squad-governance-report`, `squad-learn` | |
+| PKG-10 | Worker agents declare `user-invocable: false`; prompt-bound user-facing agents declare `user-invocable: true` | Wrong flag either hides an entrypoint or exposes a worker |
 | PKG-12 | Both squad entry points expose and forward `cost-ceiling=<positive USD\|unset>` with same-run inheritance | The lifecycle must be invocable from the delivered prompts |
 | PKG-13 | Initialization is outside Cost Preflight; ordinary federation routing forwards one independent ceiling to every selected sub-squad and resets root admission to `not-requested`; only untargeted federation autopilot owns aggregate admission and its federation-root rate table | Prevents bootstrap deadlock, stale aggregate gates, silent ungated sub-squads, and accidental double admission |
 | PKG-14 | The plugin build emits byte-identical `plugin.json` files at the distribution root and under `.github/plugin/`, and every generated hook command resolves its script through the `CLAUDE_PLUGIN_ROOT` environment variable | VS Code discovers agents through the root manifest, while CLI hooks execute from the consumer repository rather than the installed plugin directory |
 | PKG-15 | Every role named in a Squad Profiles or Squad Packs row (`squad-roster.instructions.md`, `references/profiles-and-packs.md`) resolves to a Cast Catalog row in `references/roster-catalog.md` | A profile or pack naming a role the catalog does not carry leaves the coordinator unable to cast it at runtime (Council condition C4) |
+
+### Squad Coach
+
+| ID | Assertion | Rationale |
+|---|---|---|
+| COACH-01 | The APM package and plugin deliver one prompt-bound, user-invocable Squad Coach and the plugin carries its invocation skill | A Coach present only in source is not discoverable to consumers |
+| COACH-02 | The Coach explicitly handles no state, an existing single squad, and an existing federation | Coaching must work before initialization without discarding useful existing context |
+| COACH-03 | Commands, profiles, packs, modes, models, and capabilities come from the installed prompts, invocation skills, and references | A copied feature list becomes incorrect as soon as the package evolves |
+| COACH-04 | Recommendations cover single squad, federation, later promotion, per-member profiles, preparation inputs, and host-correct copy-ready prompts | These are the actionable outcomes a beginner needs |
+| COACH-05 | The Coach never initializes, dispatches, changes configuration, migrates state, or requests secret values | Coaching is advisory and cannot cross the delivery or credential boundary |
+| COACH-06 | README, homepage, Getting Started, first-run guidance, and all three host renderers expose the Coach in English and French | Search-only discoverability does not help a first-time user |
 
 ## Tier 1 — Single squad
 

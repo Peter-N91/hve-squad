@@ -84,19 +84,22 @@
 
   const agents = {
     '/squad': 'Squad Coordinator',
+    '/squad-coach': 'Squad Coach',
     '/squad-federation': 'Squad Federation Coordinator',
     '/squad-document': 'Squad Document',
     '/squad-governance-report': 'Squad Governance Report',
     '/squad-learn': 'Squad Learn'
   };
-  const commandPattern = /^[ \t]*(\/squad(?:-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
+  const commandPattern = /^[ \t]*(\/squad(?:-coach|-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
   const defaultRequests = french ? {
     '/squad': 'Initialise la squad.',
+    '/squad-coach': 'Aide-moi \u00e0 choisir la configuration HVE Squad la plus simple pour mon objectif.',
     '/squad-federation': 'Initialise la f\u00e9d\u00e9ration.',
     '/squad-governance-report': 'G\u00e9n\u00e8re le rapport de gouvernance avec les param\u00e8tres par d\u00e9faut.',
     '/squad-learn': 'Aide-moi \u00e0 proposer un apprentissage partag\u00e9.'
   } : {
     '/squad': 'Initialize the squad.',
+    '/squad-coach': 'Help me choose the simplest HVE Squad setup for my goal.',
     '/squad-federation': 'Initialize the federation.',
     '/squad-governance-report': 'Generate the governance report with default settings.',
     '/squad-learn': 'Help me propose a shared learning.'

@@ -60,6 +60,14 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         $script:BuildExitCode | Should -Be 0 -Because ($script:BuildOutput -join "`n")
     }
 
+    It 'ships the Squad Coach agent and prompt-derived invocation skill' {
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot 'agents/squad/squad-coach.agent.md') -PathType Leaf |
+            Should -BeTrue
+        $skillPath = Join-Path $script:OutputRoot 'skills/squad/invocations/squad-coach/SKILL.md'
+        Test-Path -LiteralPath $skillPath -PathType Leaf | Should -BeTrue
+        Get-Content -LiteralPath $skillPath -Raw | Should -Match 'Squad Coach'
+    }
+
     It 'emits byte-identical root and GitHub plugin manifests' {
         Test-Path -LiteralPath $script:RootManifestPath -PathType Leaf | Should -BeTrue
         Test-Path -LiteralPath $script:NestedManifestPath -PathType Leaf | Should -BeTrue

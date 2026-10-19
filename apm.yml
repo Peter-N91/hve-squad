@@ -230,6 +230,7 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-azure-diagnose.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-backlog-executor.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-challenger.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coach.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-cost-manager.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-data-scientist.agent.md
@@ -267,6 +268,7 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-routing.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-state.instructions.md
     - Peter-N91/hve-squad/squad-src/.github/instructions/squad/squad-watch-mode.instructions.md
+    - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad-coach.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad-document.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad-federation.prompt.md
     - Peter-N91/hve-squad/squad-src/.github/prompts/squad/squad-governance-report.prompt.md

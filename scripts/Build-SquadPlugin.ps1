@@ -12,10 +12,10 @@
     plugin.json, .github/plugin/plugin.json, .github/plugin/marketplace.json) is generated
     output that never lives in hve-squad's own working tree. This script is
     the single, reproducible generator: it resolves an immutable source (a
-    git ref or, for local iteration only, a working copy), copies the 26
-    squad agents with their dead .instructions.md citations rewritten to the
+    git ref or, for local iteration only, a working copy), copies the squad
+    agents with their dead .instructions.md citations rewritten to the
     plugin's skill-reference targets, ports squad-src/.github/skills/squad/
-    with its two housekeeping edits, authors the 5 prompt-derived invocation
+    with its two housekeeping edits, authors the prompt-derived invocation
     skills, writes a cwd-independent hooks.json, and writes byte-identical
     version-stamped plugin.json manifests at the root and under
     .github/plugin/, plus a marketplace.json scaffold.
@@ -533,7 +533,7 @@ function Write-PluginHookManifest {
 function New-InvocationSkillContent {
     <#
     .SYNOPSIS
-        Returns the 5 prompt-derived invocation SKILL.md bodies (conversion
+        Returns the prompt-derived invocation SKILL.md bodies (conversion
         plan Section 2). Content is bespoke per skill, authored once here from
         each source .prompt.md's Inputs/Requirements, not mechanically derived.
     #>
@@ -542,6 +542,32 @@ function New-InvocationSkillContent {
     param()
 
     return [ordered]@{
+        'squad-coach'              = @'
+---
+name: squad-coach
+description: "Guides a user to the simplest supported HVE Squad setup for a plain-language goal and returns a preparation checklist plus a copy-ready coordinator prompt. Use for onboarding, setup choices, profile or pack guidance, federation decisions, or questions about how to start."
+license: MIT
+metadata:
+  authors: "Peter-N91/hve-squad"
+---
+
+# Squad Coach
+
+## Input
+
+* **request** (optional): The user's goal, question, or changed demand. Continue from conversation context when it is omitted.
+* **host** (optional): `vscode`, `cli`, or `app` when the active host is unclear.
+
+## Flow
+
+1. Dispatch the request to the `Squad Coach` agent.
+2. Let the Coach inspect the installed skill references, invocation skills, and any existing squad state read-only before recommending.
+3. Return only coaching, preparation checklists, and a copy-ready handoff. The Coach never initializes, dispatches delivery work, changes configuration, or migrates state.
+
+## Invocation
+
+Dispatch this request to the `Squad Coach` agent. This skill does not make or apply the recommendation itself.
+'@
         'squad-run'                = @'
 ---
 name: squad-run
@@ -566,7 +592,7 @@ metadata:
 ## Flow
 
 1. Hand **request** (and **owner** when provided) to the Squad Coordinator agent and let its per-turn protocol classify, dispatch, and synthesize the response.
-2. Pass **profile** through as the Init Mode profile hint when provided, and **pack** through as the Init Mode pack hint when provided. When the project has no squad and no profile is given, let the coordinator discover the project and propose a recommended profile before seeding.
+2. Pass **profile** through as the Init Mode profile hint when provided, and **pack** through as the Init Mode pack hint when provided. When the project has no squad and no profile is given, let the coordinator discover the project and propose a recommended profile before seeding. If no state exists and the user is unsure, mention the advisory Squad Coach once; never repeat the hint after squad or federation state exists.
 3. Pass **tier** through as the per-turn tier override when provided; otherwise leave model selection to the coordinator.
 4. Pass **discovery** through as the discovery-gate depth when provided; otherwise let the coordinator decide whether to offer the gate.
 5. When **mode** is `autonomous`, request the `auto-validated` tier (bounded re-validation loop, always-escalate triggers); when **mode** is `autopilot`, request the full research→plan→implement→review pipeline (Human Gates on impactful actions and final-outcome validation only); otherwise rely on the standard interactive tiers.
@@ -867,7 +893,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                     'the companion hook rules and reference files it depends on are catalogued in'
                 $content = $content.Replace(
                     ', and `squad-task.issue-template.yml` — keep their existing paths.',
-                    ', `squad-task.issue-template.yml`, and `invocations/` (the 5 prompt-derived invocation skills) — keep their existing paths.'
+                    ', `squad-task.issue-template.yml`, and `invocations/` (the prompt-derived invocation skills) — keep their existing paths.'
                 )
             }
             elseif ($subPath -eq 'references/00-index.md') {
@@ -887,7 +913,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/$subPath") -Content $content -DryRun:$DryRun
         }
 
-        # ── Invocation skills: 5 prompt-derived skills (P02-T04) ──
+        # ── Prompt-derived invocation skills (P02-T04) ──
         $invocationSkills = New-InvocationSkillContent
         Write-Host "Skills:  $($invocationSkills.Count) invocation skills" -ForegroundColor Cyan
         foreach ($name in $invocationSkills.Keys) {
@@ -902,7 +928,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             '$schema'     = 'https://raw.githubusercontent.com/github/open-plugin-spec/main/schemas/plugin.schema.json'
             name          = 'hve-squad'
             version       = $source.PluginVersion
-            description   = "Plugin distribution tree for hve-squad: $($agentFiles.Count) Squad Copilot agents and the squad skill (including 5 invocation skills under skills/squad/invocations/), generated and release-gated from Peter-N91/hve-squad."
+            description   = "Plugin distribution tree for hve-squad: $($agentFiles.Count) Squad Copilot agents and the squad skill (including $($invocationSkills.Count) invocation skills under skills/squad/invocations/), generated and release-gated from Peter-N91/hve-squad."
             agents        = @('agents/squad/')
             skills        = @('skills/squad/')
             hooks         = 'hooks.json'

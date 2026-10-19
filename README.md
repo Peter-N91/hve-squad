@@ -29,6 +29,27 @@
 </p>
 <!-- markdownlint-enable MD013 MD033 -->
 
+## New here? Chat with the Squad Coach
+
+After installing HVE Squad—but before initializing anything—describe your goal in everyday language:
+
+```text
+/squad-coach request="I need to modernize two applications owned by different teams. Help me choose the simplest setup and prepare my first prompt."
+```
+
+The advisory-only Coach asks focused questions, recommends a single squad or federation with current
+profiles and packs, identifies essential and optional inputs, and returns a host-correct, copy-ready
+coordinator prompt. It reads existing squad state when present but never initializes, dispatches, changes
+configuration, or migrates state.
+
+- **VS Code:** choose the `/squad-coach` **prompt** in Copilot Chat (not a similarly named skill).
+- **Copilot CLI:** enter `/agent`, choose **Squad Coach**, then send the request without `/squad-coach`.
+- **Copilot App:** select **Squad Coach**, then send the request without `/squad-coach`.
+
+See [Getting Started → Squad Coach](https://peter-n91.github.io/hve-squad/getting-started.html#chat-with-the-squad-coach)
+for example conversations, the topology decision guide, preparation checklists, and coordinator prompt
+templates.
+
 ## Documentation
 
 Full documentation lives on the project site:
