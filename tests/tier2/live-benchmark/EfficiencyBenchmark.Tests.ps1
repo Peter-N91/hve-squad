@@ -539,7 +539,7 @@ $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHas
     }
     It 'preserves named readiness failures when a stage exits zero' {
         $Trial = {
-            param($Arm, $Pair, $Credits)
+            param($Arm, $Pair, [double]$Credits)
             $Run = @(New-TestRuns)[0]; $Run.completed = $false; $Run.judge = $null
             $Run.stages = @(@{ name = 'requirements'; passed = $false; process = @{ exitCode = 0; stopCause = 'none' }; readiness = @{ passed = $false; checks = @{ 'PRD Quality Reviewer' = $false; 'brd.md' = $true } } })
             $Run
@@ -1017,7 +1017,7 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
     BeforeEach {
         $script:SeriesCalls = [Collections.Generic.List[string]]::new()
         $script:Trial = {
-            param($Arm, $Pair, $Credits)
+            param($Arm, $Pair, [double]$Credits)
             $script:SeriesCalls.Add("$Arm-$Pair")
             @(New-TestRuns | Where-Object { $_.metadata.arm -eq $Arm -and $_.metadata.pair -eq $Pair })[0]
         }
@@ -1031,7 +1031,7 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $Result.controls.runs.Count | Should -Be 3
         $script:SeriesCalls.Count | Should -Be 3
         $Observer = {
-            param($Arm, $Pair, $Credits)
+            param($Arm, $Pair, [double]$Credits)
             $script:SeriesCalls.Add("$Arm-$Pair")
             $Run = @(New-TestRuns -ObservationOnly | Where-Object { $_.metadata.arm -eq $Arm -and $_.metadata.pair -eq $Pair })[0]
             $Run.completed = $false; $Run.acceptance.passed = $false; $Run.workflow.passed = $false
@@ -1049,7 +1049,7 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $Observed.report.reliability.workflowCompleted | Should -Be 0
         $Observed.report.quality.scores[0].total | Should -Be 80
         @($Observed.report.slots | Where-Object status -EQ failed).Count | Should -Be 3
-        $Unmetered = { param($Arm, $Pair, $Credits) $Run = & $Observer $Arm $Pair $Credits; $Run.metrics.credits.complete = $false; $Run }.GetNewClosure()
+        $Unmetered = { param($Arm, $Pair, [double]$Credits) $Run = & $Observer $Arm $Pair $Credits; $Run.metrics.credits.complete = $false; $Run }.GetNewClosure()
         $Rejected = Invoke-EfficiencySeries -Kind Establish -RunTrial $Unmetered -PerRunCredits 10 -SeriesCredits 30 -ObservationOnly
         $Rejected.exitCode | Should -Be 2
         $Rejected.controls | Should -BeNullOrEmpty
@@ -1093,7 +1093,7 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $script:SeriesCalls.Count | Should -Be 0
     }
     It 'does not establish a control series whose source changes between trials' {
-        $Trial = { param($Arm, $Pair, $Credits) $Run = @(New-TestRuns | Where-Object { $_.metadata.arm -eq $Arm -and $_.metadata.pair -eq $Pair })[0]; $Run.metadata.sourceHash = "changed-$Pair"; $Run }
+        $Trial = { param($Arm, $Pair, [double]$Credits) $Run = @(New-TestRuns | Where-Object { $_.metadata.arm -eq $Arm -and $_.metadata.pair -eq $Pair })[0]; $Run.metadata.sourceHash = "changed-$Pair"; $Run }
         $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial $Trial -PerRunCredits 10 -SeriesCredits 30
         $Result.exitCode | Should -Be 2
         $Result.controls | Should -BeNullOrEmpty
@@ -1103,7 +1103,7 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $script:SeriesCalls.Count | Should -Be 0
     }
     It 'preserves a failed trial and all unstarted slots without retries' {
-        $Trial = { param($Arm, $Pair, $Credits) $script:SeriesCalls.Add("$Arm-$Pair"); $Run = @(New-TestRuns)[0]; $Run.acceptance.passed = $false; $Run }
+        $Trial = { param($Arm, $Pair, [double]$Credits) $script:SeriesCalls.Add("$Arm-$Pair"); $Run = @(New-TestRuns)[0]; $Run.acceptance.passed = $false; $Run }
         $Result = Invoke-EfficiencySeries -Kind Series -RunTrial $Trial -PerRunCredits 10 -SeriesCredits 60
         $Result.exitCode | Should -Be 2
         $Result.report.slots.Count | Should -Be 6
@@ -1118,7 +1118,7 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $Result.controls | Should -BeNullOrEmpty
     }
     It 'reports missing judge or telemetry as failed checks without losing the failure category' {
-        $Trial = { param($Arm, $Pair, $Credits) $Run = @(New-TestRuns)[0]; $Run.completed = $false; $Run.judge = $null; $Run.metrics = $null; $Run }
+        $Trial = { param($Arm, $Pair, [double]$Credits) $Run = @(New-TestRuns)[0]; $Run.completed = $false; $Run.judge = $null; $Run.metrics = $null; $Run }
         $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial $Trial -PerRunCredits 10 -SeriesCredits 30
         $Result.report.slots[0].reason | Should -Be 'run-failed-independent-checks'
         $Result.report.slots[0].checks.judge | Should -BeFalse
@@ -1126,7 +1126,7 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
         $Result.exitCode | Should -Be 2
     }
     It 'reports an immediate init process failure without calling it a document-quality failure' {
-        $Trial = { param($Arm, $Pair, $Credits) $Run = @(New-TestRuns)[0]; $Run.completed = $false; $Run.stages = @(@{ name = 'init'; passed = $false; process = @{ exitCode = 1; stopCause = 'none' } }); $Run.judge = $null; $Run.metrics = $null; $Run }
+        $Trial = { param($Arm, $Pair, [double]$Credits) $Run = @(New-TestRuns)[0]; $Run.completed = $false; $Run.stages = @(@{ name = 'init'; passed = $false; process = @{ exitCode = 1; stopCause = 'none' } }); $Run.judge = $null; $Run.metrics = $null; $Run }
         $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial $Trial -PerRunCredits 10 -SeriesCredits 30
         $Result.report.slots[0].failedStages[0].name | Should -Be init
         $Result.report.slots[0].failedStages[0].exitCode | Should -Be 1
