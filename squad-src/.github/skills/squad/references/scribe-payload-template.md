@@ -67,8 +67,8 @@ timestamp: <ISO or the entry-heading format in use>
 historyRecords:
   - agent: <name: frontmatter value, verbatim>
     request: <scoped request>
-    deliverable: <path> (<size or word count>)
-    outcome: <one-line summary>
+    deliverable: <literal file path only>
+    outcome: <one-line summary; optional size or word count>
     decisionRef: <decisions.md#anchor | omit when this dispatch names no grounding decision>
     costPreflightRef: <decisions.md#cost-preflight-... | omit when no ceiling>
     costPreflightSlot: <slot id | omit when no ceiling>

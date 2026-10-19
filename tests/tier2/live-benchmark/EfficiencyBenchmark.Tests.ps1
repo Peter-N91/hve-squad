@@ -348,9 +348,10 @@ if($Kind -eq 'init') {
 } elseif($Kind -eq 'continuation') {
     New-Item -ItemType Directory -Path 'docs/requirements/reviews' -Force|Out-Null
     foreach($Name in @('brd.md','prd.md')){Set-Content "docs/requirements/$Name" 'synthetic published requirement'}
-    foreach($Agent in @('BRD Builder','PRD Builder','BRD Quality Reviewer','PRD Quality Reviewer')) {
+    Add-Content -LiteralPath '.copilot-tracking/squad/team.md' -Value '| tester | Reviewer | Squad Reviewer | — | — | runSubagent / task | default | reviews/ |'
+    foreach($Agent in @('BRD Builder','PRD Builder','BRD Quality Reviewer','PRD Quality Reviewer','Squad Reviewer')) {
         $Relative="docs/requirements/reviews/$Agent.md"
-        Set-Content -LiteralPath $Relative -Value 'synthetic reviewer or author artifact'
+        Set-Content -LiteralPath $Relative -Value $(if($Agent -eq 'Squad Reviewer'){'Outcome: Pass'}else{'synthetic reviewer or author artifact'})
         $Block=[ordered]@{model='Claude Haiku 4.5';model_source='agent-pinned';priced_as='Claude Haiku 4.5';model_tier='fast';internal_turns=0;input_tokens=0;cached_tokens=0;cache_write_tokens=0;output_tokens=0;basis='estimated'}|ConvertTo-Json
         Set-Content -LiteralPath ".copilot-tracking/squad/history/$Agent.md" -Value ("# History: $Agent`n`n### $([datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')) Synthetic test dispatch`n* Deliverable: $Relative`n`n#### Consumption`n"+'```json'+"`n$Block`n"+'```')
         Write-FakeEvent 'subagent.started' @{agentName=$Agent}
@@ -529,7 +530,10 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
             Set-Content (Join-Path $script:StageSquad $Name) 'synthetic fixture; external state verification is mocked'
         }
         Set-Content (Join-Path $script:StageSquad 'history/Squad Scribe.md') '# History: Squad Scribe'
-        $script:StageMetrics = @{ dispatches = @{ 'Squad Scribe' = 1 } }
+        Set-Content (Join-Path $script:StageSquad 'team.md') '| tester | Closing reviewer | Squad Reviewer | n/a |'
+        Set-Content (Join-Path $script:StageWorkspace 'docs/requirements/reviews/closing.md') 'Outcome: Pass'
+        Set-Content (Join-Path $script:StageSquad 'history/Squad Reviewer.md') "# History: Squad Reviewer`n* Deliverable: docs/requirements/reviews/closing.md"
+        $script:StageMetrics = @{ dispatches = @{ 'Squad Scribe' = 1; 'Squad Reviewer' = 1 } }
         foreach ($Agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
             $script:StageMetrics.dispatches[$Agent] = 1
             $Relative = "docs/requirements/reviews/$Agent.md"
@@ -547,7 +551,28 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
         foreach ($Agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
             Set-Content (Join-Path $script:StageSquad "history/$Agent.md") "# History: $Agent`n* Deliverable: ``docs/requirements/reviews/$Agent.md`` (25 bytes); publication copy ``docs/requirements/prd.md``"
         }
+        Set-Content (Join-Path $script:StageWorkspace 'docs/requirements/reviews/closing.md') "## Verdict`n`n**Pass** (gate met)."
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeTrue
+        foreach ($Agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
+            Set-Content (Join-Path $script:StageSquad "history/$Agent.md") "# History: $Agent`n* Deliverable: docs/requirements/reviews/$Agent.md (25 bytes)"
+        }
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeTrue
+    }
+    It 'rejects a failed or conditional closing review despite complete intake artifacts' {
+        foreach ($Verdict in @('Fail', 'Pass-With-Conditions')) {
+            Set-Content (Join-Path $script:StageWorkspace 'docs/requirements/reviews/closing.md') "## Verdict`n`n**$Verdict** (gate not met)."
+            $Result = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements
+            foreach ($Agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
+                $Result.checks[$Agent] | Should -BeTrue
+            }
+            $Result.checks['tester'] | Should -BeTrue
+            $Result.checks['reviewOutcome'] | Should -BeFalse
+            $Result.passed | Should -BeFalse
+        }
+        Remove-Item (Join-Path $script:StageWorkspace 'docs/requirements/reviews/closing.md')
+        $Result = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements
+        $Result.checks['tester'] | Should -BeFalse
+        $Result.passed | Should -BeFalse
     }
     It 'rejects a missing reviewer artifact despite existing dispatch and history' {
         Remove-Item (Join-Path $script:StageWorkspace 'docs/requirements/reviews/PRD Quality Reviewer.md')
@@ -555,6 +580,9 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
         $Result = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements
         $Result.passed | Should -BeFalse
         $Result.checks['PRD Quality Reviewer'] | Should -BeFalse
+        Set-Content (Join-Path $script:StageWorkspace 'docs/requirements/reviews/PRD Quality Reviewer.md') 'synthetic authored artifact'
+        Set-Content (Join-Path $script:StageSquad 'history/PRD Quality Reviewer.md') "# History: PRD Quality Reviewer`n* Deliverable: ``docs/requirements/reviews/PRD Quality Reviewer.md (25 bytes)``"
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
     }
     It 'rejects reviewer artifacts with no dispatch history' {
         Remove-Item (Join-Path $script:StageSquad 'history/BRD Quality Reviewer.md')
@@ -569,6 +597,8 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
         Set-Content (Join-Path $script:StageSquad 'history/BRD Quality Reviewer.md') "# History: BRD Quality Reviewer`n* Deliverable: ../outside.md"
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
         Set-Content (Join-Path $script:StageSquad 'history/BRD Quality Reviewer.md') "# History: BRD Quality Reviewer`n* Deliverable: ``../outside.md`` (16 bytes)"
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
+        Set-Content (Join-Path $script:StageSquad 'history/BRD Quality Reviewer.md') "# History: BRD Quality Reviewer`n* Deliverable: ../outside.md (16 bytes)"
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
     }
     It 'rejects empty initialization state even if the external verifier passes' {

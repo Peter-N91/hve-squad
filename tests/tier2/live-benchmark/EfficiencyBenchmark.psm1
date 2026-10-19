@@ -633,12 +633,21 @@ function Get-EfficiencyHistoryDeliverable {
     if (-not (Test-Path -LiteralPath $History -PathType Leaf)) { return }
     $Text = Get-Content -LiteralPath $History -Raw
     if ($Text -notmatch ('(?m)^# History: ' + [regex]::Escape($Agent) + '\s*$')) { return }
-    foreach ($Match in [regex]::Matches($Text, '(?m)^\s*[*-]\s*Deliverable:\s*(?:`(?<path>[^`\r\n]+)`(?:[ \t][^\r\n]*)?|(?<path>[^`\r\n]+))\s*$')) {
+    foreach ($Match in [regex]::Matches($Text, '(?m)^\s*[*-]\s*Deliverable:\s*(?:(?<quoted>`(?<path>[^`\r\n]+)`)(?:[ \t][^\r\n]*)?|(?<path>[^`\r\n]+))\s*$')) {
         $Relative = $Match.Groups['path'].Value.Trim()
-        try { $Full = [IO.Path]::GetFullPath((Join-Path $Root $Relative)) }
-        catch { continue }
-        if ($Full.StartsWith($Root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
-            (Test-Path -LiteralPath $Full -PathType Leaf) -and (Get-Item -LiteralPath $Full).Length -gt 0) { $Full }
+        $Candidates = @($Relative)
+        if (-not $Match.Groups['quoted'].Success -and $Relative -match '^(?<file>.+?)[ \t]+\([0-9][0-9,]*[ \t]+(?:bytes?|words?)\)[ \t]*$') {
+            $Candidates += $Matches['file']
+        }
+        foreach ($Candidate in $Candidates) {
+            try { $Full = [IO.Path]::GetFullPath((Join-Path $Root $Candidate)) }
+            catch { continue }
+            if ($Full.StartsWith($Root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
+                (Test-Path -LiteralPath $Full -PathType Leaf) -and (Get-Item -LiteralPath $Full).Length -gt 0) {
+                $Full
+                break
+            }
+        }
     }
 }
 
@@ -672,7 +681,7 @@ function Test-EfficiencyWorkflow {
             $Checks[$Agent] = @(Get-EfficiencyHistoryDeliverable -Root $Root -Squad $Squad -Agent $Agent -Metrics $Metrics).Count -gt 0
         }
     }
-    $RequiredRoles = if ($Stage -eq 'build') { @('researcher', 'lead', 'developer', 'tester') } else { @() }
+    $RequiredRoles = if ($Stage -eq 'build') { @('researcher', 'lead', 'developer', 'tester') } elseif ($Stage -eq 'requirements') { @('tester') } else { @() }
     if ($Checks['team.md'] -and $Checks['dispatchEvidence']) {
         $Team = Get-Content -LiteralPath (Join-Path $Squad 'team.md')
         foreach ($Role in $RequiredRoles) {
@@ -695,11 +704,14 @@ function Test-EfficiencyWorkflow {
     }
     else { foreach ($Role in $RequiredRoles) { $Checks[$Role] = $false } }
     $ReviewPath = $null
-    if ($Stage -eq 'build') { $Checks['reviewOutcome'] = $false }
+    if ($Stage -in @('requirements', 'build')) { $Checks['reviewOutcome'] = $false }
     if ($ReviewPaths.Count -gt 0) {
         $ReviewPath = @($ReviewPaths | Sort-Object { (Get-Item -LiteralPath $_).LastWriteTimeUtc })[-1]
         $ReviewText = Get-Content -LiteralPath $ReviewPath -Raw
-        $Checks['reviewOutcome'] = $ReviewText -match '(?im)^\s*(?:[*-]\s*)?(?:\*\*)?(?:Final outcome|Outcome|Verdict|Review outcome)(?:\*\*)?\s*:\s*(?:\*\*)?(?:Pass(?:-With-Findings)?|Approved|Conformant(?: with justified divergence)?)\b'
+        $OutcomeLabel = '(?:Final outcome|Outcome|Verdict|Review outcome)'
+        $OutcomePrefix = '(?im)^[ \t]*(?:(?:[*-][ \t]*)?(?:\*\*)?' + $OutcomeLabel + '(?:\*\*)?[ \t]*:[ \t]*|#{1,6}[ \t]+' + $OutcomeLabel + '[ \t]*:?[ \t]*\r?\n(?:[ \t]*\r?\n)*[ \t]*)'
+        $PositiveOutcome = '(?:Pass(?:-With-Findings)?|Approved|Conformant(?: with justified divergence)?)(?=[ \t]*(?:\*\*|[.,;(:]|\r?$))'
+        $Checks['reviewOutcome'] = $ReviewText -match ($OutcomePrefix + '(?:\*\*)?' + $PositiveOutcome)
     }
     $Checker = Join-Path $PSScriptRoot '../../../scripts/Test-SquadScribeOutput.ps1'
     $Temp = Join-Path ([IO.Path]::GetTempPath()) ('efficiency-state-' + [guid]::NewGuid() + '.json')
