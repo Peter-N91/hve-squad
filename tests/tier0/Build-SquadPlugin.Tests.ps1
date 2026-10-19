@@ -61,8 +61,9 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
     }
 
     It 'ships the Squad Coach agent and prompt-derived invocation skill' {
-        Test-Path -LiteralPath (Join-Path $script:OutputRoot 'agents/squad/squad-coach.agent.md') -PathType Leaf |
-            Should -BeTrue
+        $agentPath = Join-Path $script:OutputRoot 'agents/squad/squad-coach.agent.md'
+        Test-Path -LiteralPath $agentPath -PathType Leaf | Should -BeTrue
+        Get-Content -LiteralPath $agentPath -Raw | Should -Match 'tools: \["read", "search"\]'
         $skillPath = Join-Path $script:OutputRoot 'skills/squad/invocations/squad-coach/SKILL.md'
         Test-Path -LiteralPath $skillPath -PathType Leaf | Should -BeTrue
         Get-Content -LiteralPath $skillPath -Raw | Should -Match 'Squad Coach'

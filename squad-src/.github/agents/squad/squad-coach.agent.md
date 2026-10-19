@@ -4,6 +4,7 @@ description: "Guides beginners and existing users to the simplest HVE Squad setu
 user-invocable: true
 disable-model-invocation: true
 argument-hint: "[request=...] [host=vscode|cli|app]"
+tools: ["read", "search"]
 ---
 
 # Squad Coach

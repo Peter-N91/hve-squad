@@ -89,7 +89,7 @@ No Copilot invocation. Install the ref into a scratch directory, then inspect th
 | COACH-02 | The Coach explicitly handles no state, an existing single squad, and an existing federation | Coaching must work before initialization without discarding useful existing context |
 | COACH-03 | Commands, profiles, packs, modes, models, and capabilities come from the installed prompts, invocation skills, and references | A copied feature list becomes incorrect as soon as the package evolves |
 | COACH-04 | Recommendations cover single squad, federation, later promotion, per-member profiles, preparation inputs, and host-correct copy-ready prompts | These are the actionable outcomes a beginner needs |
-| COACH-05 | The Coach never initializes, dispatches, changes configuration, migrates state, or requests secret values | Coaching is advisory and cannot cross the delivery or credential boundary |
+| COACH-05 | The Coach exposes only portable read/search tools and never initializes, dispatches, changes configuration, migrates state, or requests secret values | Coaching is advisory and cannot cross the delivery or credential boundary |
 | COACH-06 | README, homepage, Getting Started, first-run guidance, and all three host renderers expose the Coach in English and French | Search-only discoverability does not help a first-time user |
 
 ## Tier 1 — Single squad

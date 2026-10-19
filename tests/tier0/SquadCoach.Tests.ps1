@@ -27,6 +27,12 @@ Describe 'Squad Coach entrypoint and packaging' {
         $script:CoachPrompt[0].Meta['agent'] | Should -BeExactly 'Squad Coach'
     }
 
+    It 'limits the Coach to portable read-only tools' {
+        @($script:CoachAgent[0].Meta['tools']) | Should -HaveCount 2
+        $script:CoachAgent[0].Meta['tools'] | Should -Contain 'read'
+        $script:CoachAgent[0].Meta['tools'] | Should -Contain 'search'
+    }
+
     It 'surfaces the Coach once on the fresh path without interrupting existing squads' {
         $script:SquadPrompt | Should -HaveCount 1
         $script:SquadPrompt[0].Body | Should -Match 'mention the advisory Squad Coach once'
