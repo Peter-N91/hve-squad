@@ -10,7 +10,9 @@ param(
 )
 
 BeforeAll {
+    Import-Module (Join-Path $PSScriptRoot 'SquadPackage.psm1') -Force
     $script:BuildScript = Join-Path $SourceRoot 'scripts/Build-SquadPlugin.ps1'
+    $script:PackRosterBody = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/instructions/squad/squad-roster.instructions.md') -Raw
     $script:ProgressSourcePath = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/operating-procedure.md'
     $script:OutputRoot = Join-Path $TestDrive 'plugin-output'
     $script:HookScriptNames = @(
@@ -65,6 +67,24 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         Test-Path -LiteralPath $script:NestedManifestPath -PathType Leaf | Should -BeTrue
         Get-Content -LiteralPath $script:RootManifestPath -Raw |
             Should -BeExactly (Get-Content -LiteralPath $script:NestedManifestPath -Raw)
+    }
+
+    It 'offers exactly the registered packs in the generated invocation' {
+        $registered = @(Get-MarkdownTableRows -Body $script:PackRosterBody -HeaderCell 'Pack' |
+                ForEach-Object { $_[1].Trim().Trim('`') } | Sort-Object)
+        $registered | Should -Not -BeNullOrEmpty
+        $invocation = Get-Content -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/invocations/squad-run/SKILL.md') -Raw
+        $choices = [regex]::Match($invocation, '(?m)^\* \*\*pack\*\*.*?\((`[^)]+)\)').Groups[1].Value
+        $generated = @([regex]::Matches($choices, '`([^`]+)`') | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
+        $generated -join ',' | Should -BeExactly ($registered -join ',')
+    }
+
+    It 'rewrites compact coordinator conventions for the plugin instructions channel' {
+        $coordinator = Get-Content -LiteralPath (Join-Path $script:OutputRoot 'agents/squad/squad-coordinator.agent.md') -Raw
+        $coordinator | Should -Not -Match '\.github/instructions/squad/|auto-apply through'
+        $coordinator | Should -Match 'skills/squad/references/rules/'
+        $coordinator | Should -Match 'they do not auto-apply at all'
+        $coordinator | Should -Match 'Give each active pack'
     }
 
     It 'ships the measured inline progress contract without an extra reference read' {

@@ -269,10 +269,10 @@ function Convert-AgentCitations {
     # told the coordinator its rules live under .github/instructions/squad/ in a plugin that
     # ships no such directory. Point it at the ported rules instead.
     $Content = $Content -replace `
-        'Eleven instruction files under `\.github/instructions/squad/` carry the data and rules behind that procedure', `
+        'Eleven instruction files under `\.github/instructions/squad/` carry the data and rules (?:behind that procedure|for it)', `
         'Fifteen rule files under `skills/squad/references/rules/` carry the data and rules behind that procedure'
     $Content = $Content -replace `
-        'All but `squad-floor` auto-apply through their `applyTo` pattern \*\*only where the host honors it and a squad-state path is already in context\*\* — which is why every rule that must hold unconditionally lives in the floor or in the reference files above, not in them\.', `
+        'All but `squad-floor` auto-apply through their `applyTo` pattern \*\*only where the host honors it and a squad-state path is already in context\*\* — (?:which is why every rule that must hold unconditionally lives in the floor or in the reference files above, not in them|so every unconditional rule lives in the floor or the references above)\.', `
         'In this plugin distribution they do not auto-apply at all — there is no instructions channel to apply them — so read the rule file that owns a decision before making it, and treat `rules/squad-floor.md` as unconditional.'
     $Content = $Content -replace `
         'The instruction files under `\.github/instructions/squad/` define the data behind that procedure\.', `

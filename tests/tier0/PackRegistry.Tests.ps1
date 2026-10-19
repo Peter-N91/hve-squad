@@ -4,14 +4,9 @@
 
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SourceRoot',
     Justification = 'Read inside BeforeAll, which PSScriptAnalyzer treats as an unrelated scope.')]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'PackageRoot',
-    Justification = 'Read inside BeforeAll, which PSScriptAnalyzer treats as an unrelated scope.')]
 param(
     [Parameter(Mandatory)]
-    [string]$SourceRoot,
-
-    [Parameter(Mandatory)]
-    [string]$PackageRoot
+    [string]$SourceRoot
 )
 
 BeforeAll {
@@ -33,15 +28,10 @@ BeforeAll {
     $script:FederationBody = Get-Content -LiteralPath $script:FederationPath -Raw
     $script:EnglishDocs = Get-Content -LiteralPath (Join-Path $SourceRoot 'docs/usage.html') -Raw
     $script:FrenchDocs = Get-Content -LiteralPath (Join-Path $SourceRoot 'docs/fr/usage.html') -Raw
-
-    $script:InvocationPath = @(
-        Join-Path $PackageRoot '.agents/skills/squad/invocations/squad-run/SKILL.md'
-        Join-Path $PackageRoot '.github/skills/squad/invocations/squad-run/SKILL.md'
-    ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 }
 
 Describe 'Registered pack consistency' -Tag 'Unit' {
-    It 'keeps every pack aligned across roster, guidance, routing, entrypoints, package output, federation, and docs' {
+    It 'keeps every pack aligned across roster, guidance, routing, prompt, federation, and docs' {
         $rosterRows = @(Get-MarkdownTableRows -Body $script:RosterBody -HeaderCell 'Pack')
         $profileRows = @(Get-MarkdownTableRows -Body $script:ProfilesBody -HeaderCell 'Pack')
         $rosterRows | Should -Not -BeNullOrEmpty
@@ -88,13 +78,7 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
         )
 
         $promptPacks = [regex]::Match($script:PromptBody, '\[pack=([^\]]+)\]').Groups[1].Value -split '\|'
-        $script:InvocationPath | Should -Not -BeNullOrEmpty
-        $invocationBody = Get-Content -LiteralPath $script:InvocationPath -Raw
-        $invocationChoices = [regex]::Match($invocationBody, '(?m)^\* \*\*pack\*\*.*?\((`[^)]+)\)').Groups[1].Value
-        $generatedPacks = @([regex]::Matches($invocationChoices, '`([^`]+)`') | ForEach-Object { $_.Groups[1].Value })
-
         @($promptPacks | Sort-Object) -join ',' | Should -BeExactly (@($packs.Keys | Sort-Object) -join ',')
-        @($generatedPacks | Sort-Object) -join ',' | Should -BeExactly (@($packs.Keys | Sort-Object) -join ',')
 
         foreach ($name in $packs.Keys) {
             @($mirror[$name].roles | Sort-Object) -join ',' | Should -BeExactly (@($packs[$name].roles | Sort-Object) -join ',')

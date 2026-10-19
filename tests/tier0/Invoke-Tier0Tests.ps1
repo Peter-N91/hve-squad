@@ -145,8 +145,7 @@ $containers = @(
 
 if ($PSCmdlet.ParameterSetName -eq 'Source') {
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'PackRegistry.Tests.ps1') -Data @{
-        SourceRoot  = $SourceRoot
-        PackageRoot = $PackageRoot
+        SourceRoot = $SourceRoot
     }
 }
 

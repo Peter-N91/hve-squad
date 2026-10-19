@@ -23,8 +23,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 
 ## Route
 
-1. Read `team.md` and `routing.md`.
-   Resolve active packs from this root's Init and later accepted apply/remove decisions in `decisions.md`. For each active pack, read its optional `Guidance` cell in [Registered Packs](profiles-and-packs.md#registered-packs) and pass those files only to roles named in `Adds`. A blank cell adds no context. Clarify ambiguous provenance; never infer activation from role presence. This rule applies at Init and at a federation member root without changing siblings.
+1. Read `team.md` and `routing.md`. Apply `profiles-and-packs.md` guidance.
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
 3. Resolve each matched role to a deployed agent through the roster. A role marked **thin charter needed** has no deployed agent — escalate instead of substituting.
 4. Select cost-first: `fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`; user tier hints override per-role defaults for this turn. For `team.md` `Model routing: ranked|economy|manual` or `routing=`, resolve ids per `references/model-routing.md`; `off` keeps cost-first selection.
@@ -44,8 +43,6 @@ For every non-trivial request, after state, route, and gate classification:
 * Before final response, complete each item or report it explicitly blocked. Name changed or delivered files, actual validation, and remaining risks or decisions.
 
 Progress is coordinator-owned ephemeral UI, not role work or durable squad-state writes. Dispatch no role or Squad Scribe for it; the Scribe is the sole ordinary state writer. The prompt delegates: no second plan or progress state writes.
-
-Pack guidance supplements ordinary routing. It never replaces a role's governing skills, changes write permissions, installs an external resource, approves a preview, upgrades an SDK, or provisions infrastructure.
 
 ### Ledger Reconciliation (before new work)
 

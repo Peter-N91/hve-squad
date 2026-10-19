@@ -54,10 +54,12 @@ The live harness needs `COPILOT_GITHUB_TOKEN`, the `apm` CLI, and a pinned `@git
 
 ### Registered pack acceptance
 
-Tier 0 has one registry-driven test that loops over every Registered Packs row. It checks the
-canonical roster, the mirrored profiles reference, role routing, the prompt choices, generated
-plugin invocation, federation conventions, guidance-file existence, and both usage documents.
-Adding a pack extends the table and the test data rather than adding another pack-specific test.
+Tier 0's registry-driven tests check every Registered Packs row against the canonical roster,
+the mirrored profiles reference, role routing, prompt choices, federation conventions,
+guidance-file existence, and both usage documents. The plugin build suite checks the generated
+invocation against the same registry in the actual plugin output; APM installs do not contain
+plugin-only invocation skills. Adding a pack extends the table and test data rather than
+adding another pack-specific test.
 
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
