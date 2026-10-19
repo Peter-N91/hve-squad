@@ -98,7 +98,7 @@ requires explicit disposable-isolation and spending confirmation, preserves the
 existing watchdog and continuation bounds, and never promotes an accepted baseline.
 Isolation is not created by the wizard or by a launcher flag.
 
-Missing Git, uv, GitHub CLI, Copilot CLI and APM can be installed with consent using
+Missing Git, Python 3.12, GitHub CLI, Copilot CLI and APM can be installed with consent using
 exact official WinGet packages in user scope. Pester 5.7.1 can be installed in
 CurrentUser scope. Existing tools are not silently upgraded; incompatible versions
 stop with guidance. No elevation, downloaded-script execution or TLS bypass is
@@ -109,8 +109,8 @@ If PowerShell is too old to run the script, bootstrap it first:
 winget install --id Microsoft.PowerShell --exact --source winget
 ```
 
-The full offline stage uses isolated Python 3.12 and pinned `pytest==8.3.5` through
-uv, with the system certificate store and installed Pester. Downloads may be needed;
+The full offline stage uses a run-local Python 3.12 virtual environment and pinned
+`pytest==8.3.5` installed through pip, with installed Pester. Downloads may be needed;
 no global Python packages are installed. Trusted feed/proxy/TLS failures stop
 before any paid trial; repair trust rather than disabling certificate checks.
 
