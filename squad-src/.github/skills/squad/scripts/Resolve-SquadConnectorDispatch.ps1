@@ -156,14 +156,15 @@ function Get-ConnectorInputValueLocal {
         [Parameter(Mandatory)][string]$Name,
         [AllowNull()]$Default = $null
     )
-    if ($null -eq $Object) { return $Default }
+    # Preserve empty and singleton arrays rather than enumerating them into the pipeline.
+    if ($null -eq $Object) { return ,$Default }
     if ($Object -is [System.Collections.IDictionary]) {
-        if ($Object.Contains($Name)) { return $Object[$Name] }
-        return $Default
+        if ($Object.Contains($Name)) { return ,$Object[$Name] }
+        return ,$Default
     }
     $property = $Object.PSObject.Properties[$Name]
-    if ($property) { return $property.Value }
-    return $Default
+    if ($property) { return ,$property.Value }
+    return ,$Default
 }
 
 function Test-ConnectorArrayLikeLocal {
@@ -1059,7 +1060,11 @@ function Test-SquadConnectorSnapshot {
     [pscustomobject]@{
         Status           = if ($issues.Count -eq 0) { 'ok' } else { 'error' }
         Issues           = $issues.ToArray()
-        PreExistingPaths = if (Test-ConnectorArrayLikeLocal -Value $paths) { @($paths | ForEach-Object { [string]$_ }) } else { @() }
+        PreExistingPaths = @(
+            if (Test-ConnectorArrayLikeLocal -Value $paths) {
+                $paths | ForEach-Object { [string]$_ }
+            }
+        )
     }
 }
 

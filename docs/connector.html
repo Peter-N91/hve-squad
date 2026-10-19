@@ -1076,6 +1076,15 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
       </p>
 
       <p>
+        A confirmed unbind or identity-changing rebind preserves completed history and Attribution.
+        Before changing the active rows, the internal Scribe appends a
+        <code>Connector Binding Retirement</code> decision to the owning squad's
+        <code>decisions.md</code>, recording the prior validated identity, operator confirmation,
+        and exact completed history headings. This historical evidence grants no new dispatch
+        authority and cannot admit an unlisted entry. A default-only refresh leaves identity unchanged.
+      </p>
+
+      <p>
         <strong>MCP transport (reserved, not built).</strong> The manifest schema reserves a
         <code>transport: "mcp"</code> value as a placeholder for a possible future synchronous
         transport mode. It is not implemented today. The only transport mode that exists is

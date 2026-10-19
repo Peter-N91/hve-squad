@@ -94,7 +94,7 @@ Before publishing a first-time request, the shim records the pre-task filesystem
 |---|---|---|---|
 | `taskId` | string | yes | Must match the adjacent request exactly. |
 | `deliverableRoot` | string | yes | Must match the adjacent request exactly. |
-| `preExistingPaths` | array of string | yes | Normalized repository-relative file paths that existed under `deliverableRoot` before this task. Every value remains under that root. |
+| `preExistingPaths` | array of string | yes | Normalized repository-relative file paths that existed under `deliverableRoot` before this task. Empty, single-path, and multi-path arrays are valid; scalar values are not. Every value remains under that root. |
 | `createdAt` | string (ISO 8601) | yes | When the pre-task snapshot was taken. |
 
 The snapshot schema is closed. It is internal collision evidence, not a consumer-authored envelope: consumers watch `*.request.json`, ignore `*.snapshot.json`, and never edit or replace the snapshot. The shim validates the snapshot with `Resolve-SquadConnectorDispatch.ps1 validate-snapshot`, writes it before the request becomes visible, and preserves both files unchanged across every resume.

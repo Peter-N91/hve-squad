@@ -519,6 +519,40 @@ BeforeAll {
         Set-ConnectorLedgerFixture -Root $Root -Role 'researcher' -MemberName 'Org Researcher'
     }
 
+    function Save-ConnectorRetirementFixture {
+        param([string]$Root)
+
+        $model = Get-SquadStateModel -SquadRoot $Root
+        if ($model.ConnectorBindingIssues.Count -gt 0 -or $model.ConnectorHistoryIssues.Count -gt 0) {
+            throw 'Only a valid completed connector fixture can be retired.'
+        }
+        $binding = $model.ConnectorBindings[0]
+        $manifests = [ordered]@{}
+        foreach ($priorBinding in $model.ConnectorBindings) {
+            $manifests[$priorBinding.ManifestPath] = Get-Content -LiteralPath $priorBinding.ResolvedManifest -Raw | ConvertFrom-Json -AsHashtable
+        }
+        $record = [ordered]@{
+            team            = $model.Team
+            manifests       = $manifests
+            confirmed       = $true
+            confirmationRef = 'in-chat:fixture-confirmed-refresh'
+            historyEntries  = @(
+                $model.Entries | Where-Object { $_.Agent -ceq 'Squad Connector' -and $_.ExternalBindingId -ceq $binding.BindingId } |
+                    ForEach-Object Title
+            )
+        }
+        $json = $record | ConvertTo-Json -Depth 10
+        $entry = "`n## Connector Binding Retirement 2026-08-20T10:00:00Z $($binding.BindingId)`n`n" +
+            '```json' + "`n$json`n" + '```'
+        Add-Content -LiteralPath (Join-Path $Root 'decisions.md') -Value $entry -Encoding utf8NoBOM
+    }
+
+    function Remove-ConnectorBindingFixture {
+        param([string]$Root)
+
+        Edit-Fixture -Path (Join-Path $Root 'team.md') -Pattern '(?ms)\r?\n## Connector Bindings\r?\n.*\z' -Replacement ''
+    }
+
     function Test-FederationPreflightFixture {
         param([string]$Root)
 
@@ -631,6 +665,57 @@ Describe 'The contract passes on a schema-correct tree' {
         $model.RoleAgents['researcher'] | Should -Contain 'Squad Connector'
         $model.ConnectorHistoryIdentities[0].BindingId | Should -Be 'legacy-1.0'
         (Test-Contract $root).Passed | Should -BeTrue -Because 'legacy provenance derives role identity without inventing a 1.1 binding'
+    }
+
+    It 'preserves completed connector history after a confirmed unbind' {
+        $root = New-Fixture 'connector-confirmed-unbind'
+        Use-ConnectorReplacementState -Root $root
+        $historyPath = Join-Path $root 'history/Squad Connector.md'
+        $historyHash = (Get-FileHash -LiteralPath $historyPath).Hash
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+
+        (Test-Contract $root).Passed | Should -BeTrue -Because 'confirmed removal changes future execution, not completed history'
+        (Get-FileHash -LiteralPath $historyPath).Hash | Should -Be $historyHash
+        (Get-SquadStateModel -SquadRoot $root).ConnectorBindings.Count | Should -Be 0
+    }
+
+    It 'preserves the former identity when the same binding id is rebound to a different connector and member' {
+        $root = New-Fixture 'connector-confirmed-rebind'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern 'Org Researcher' -Replacement 'New Org Researcher'
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern 'acme-research-agent' -Replacement 'new-research-agent'
+        $projectRoot = Split-Path (Split-Path $root -Parent) -Parent
+        Edit-Fixture -Path (Join-Path $projectRoot 'connectors/manifest.research-agent.1.1.json') `
+            -Pattern 'acme-research-agent' -Replacement 'new-research-agent'
+
+        (Test-Contract $root).Passed | Should -BeTrue -Because 'retained provenance must not be reinterpreted through the new registration'
+        $model = Get-SquadStateModel -SquadRoot $root
+        $model.ConnectorBindings[0].MemberName | Should -Be 'New Org Researcher'
+        $model.ConnectorHistoryIdentities[0].MemberName | Should -Be 'Org Researcher'
+    }
+
+    It 'preserves completed additive history after its confirmed binding and member removal' {
+        $root = New-Fixture 'connector-confirmed-additive-unbind'
+        Use-ConnectorAdditiveState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern '(?m)^\| gcp[ \t]+\| GCP Assessor[^\r\n]*\r?\n' -Replacement ''
+        $statePath = Join-Path $root 'state.json'
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+        $state['activeRoles'] = @()
+        $state | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
+
+        (Test-Contract $root).Passed | Should -BeTrue -Because 'an additive member is removed without erasing its completed dispatches'
+    }
+
+    It 'keeps a default-only refresh compatible with completed connector history' {
+        $root = New-Fixture 'connector-default-only-refresh'
+        Use-ConnectorReplacementState -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern '\| connector \|' -Replacement '| ask |'
+
+        (Test-Contract $root).Passed | Should -BeTrue
     }
 
     It 'preserves legacy state while upgrading the preflight schema' {
@@ -750,6 +835,114 @@ Describe 'The contract passes on a schema-correct tree' {
 }
 
 Describe 'The contract rejects invalid connector binding and provenance state' {
+    It 'rejects a removed binding without confirmed historical evidence' {
+        $root = New-Fixture 'connector-unconfirmed-unbind'
+        Use-ConnectorReplacementState -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects an unconfirmed historical retirement' {
+        $root = New-Fixture 'connector-retirement-unconfirmed'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'decisions.md') -Pattern '"confirmed": true' -Replacement '"confirmed": false'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects historical evidence without an operator confirmation reference' {
+        $root = New-Fixture 'connector-retirement-no-confirmation-ref'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'decisions.md') -Pattern '"confirmationRef": "in-chat:fixture-confirmed-refresh"' -Replacement '"confirmationRef": ""'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a retained member identity that differs from the confirmed retirement' {
+        $root = New-Fixture 'connector-retirement-wrong-member'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Connector.md') -Pattern '\* Member Name: Org Researcher' -Replacement '* Member Name: Wrong Researcher'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects retired target/member provenance that was not valid in the saved roster' {
+        $root = New-Fixture 'connector-retirement-invalid-prior-target'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'decisions.md') -Pattern 'role:researcher' -Replacement 'role:researcher/Missing Researcher'
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Connector.md') -Pattern 'role:researcher' -Replacement 'role:researcher/Missing Researcher'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a retired binding without its saved manifest' {
+        $root = New-Fixture 'connector-retirement-missing-prior-manifest'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'decisions.md') `
+            -Pattern '"connectors/manifest\.research-agent\.1\.1\.json":' -Replacement '"connectors/missing.json":'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a retired connector id that differs from the saved manifest' {
+        $root = New-Fixture 'connector-retirement-prior-id-mismatch'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'decisions.md') `
+            -Pattern '"connectorId": "acme-research-agent"' -Replacement '"connectorId": "wrong-research-agent"'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a retired additive binding whose member was absent from the saved roster' {
+        $root = New-Fixture 'connector-retirement-prior-orphan-additive'
+        Use-ConnectorAdditiveState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'decisions.md') -Pattern '\| gcp[ \t]+\| GCP Assessor' -Replacement '| gcp | Wrong Assessor'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a retirement record with an undeclared field' {
+        $root = New-Fixture 'connector-retirement-open-schema'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'decisions.md') -Pattern '"confirmed": true' -Replacement '"unexpected": true, "confirmed": true'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects an entry heading not covered by the confirmed retirement' {
+        $root = New-Fixture 'connector-retirement-unlisted-entry'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'history/Squad Connector.md') -Pattern '(?m)^## .+' -Replacement '## 2026-08-21T10:00:00Z Unregistered later dispatch'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'rejects a retired connector ledger member that differs from retained history' {
+        $root = New-Fixture 'connector-retirement-wrong-ledger-member'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Remove-ConnectorBindingFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'consumption.md') -Pattern '\| researcher\s+\| Org Researcher \| Squad Connector' -Replacement '| researcher    | Wrong Researcher | Squad Connector'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
+    It 'does not let historical evidence hide an invalid current binding' {
+        $root = New-Fixture 'connector-retirement-invalid-active-binding'
+        Use-ConnectorReplacementState -Root $root
+        Save-ConnectorRetirementFixture -Root $root
+        Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern 'role:researcher' -Replacement 'role:researcher/Missing Researcher'
+        (Test-Contract $root).Passed | Should -BeFalse
+    }
+
     It 'rejects a replacement target naming a missing internal member' {
         $root = New-Fixture 'connector-wrong-target-member'
         Use-ConnectorReplacementState -Root $root

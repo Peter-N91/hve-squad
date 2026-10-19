@@ -113,6 +113,17 @@ test("connector guides preserve the collision snapshot across ordinary resume", 
   }
 });
 
+test("connector guides retain completed history across confirmed binding changes", () => {
+  for (const prefix of ["", "fr/"]) {
+    const { $ } = readSource("connector", prefix);
+    const paragraph = $("main p").filter((_, element) => $(element).text().includes("Connector Binding Retirement")).text();
+    assert(paragraph.includes("decisions.md"), `${prefix}connector: retirement must be Scribe-owned decision evidence`);
+    assert(paragraph.includes("Attribution"), `${prefix}connector: completed attribution must survive a binding change`);
+    assert.match(paragraph, prefix ? /n'autorise aucune nouvelle/ : /grants no new dispatch/);
+    assert.match(paragraph, prefix ? /confirmation de l'opérateur/ : /operator confirmation/);
+  }
+});
+
 test("the consumer companion teaches onboarding rather than developer smoke tests", () => {
   const guide = readFileSync(new URL("../../docs/templates/connector-example/CONSUMER-GUIDE.md", import.meta.url), "utf8");
   for (let step = 1; step <= 6; step++) assert.match(guide, new RegExp(`^## Step ${step}:`, "m"));
@@ -124,6 +135,8 @@ test("the consumer companion teaches onboarding rather than developer smoke test
   assert.match(guide, /implementation coordinator/);
   assert.match(guide, /<taskId>\.snapshot\.json/);
   assert.match(guide, /ignores and never edits `\*\.snapshot\.json`/);
+  assert.match(guide, /`Connector Binding Retirement`/);
+  assert.match(guide, /cannot\s+authorize a new dispatch or an unlisted entry/);
   assert(!guide.includes("Build-SquadPlugin.ps1"));
   assert(!guide.includes("configuration-only test"));
 });

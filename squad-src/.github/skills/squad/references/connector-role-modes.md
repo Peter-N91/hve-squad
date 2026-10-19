@@ -244,6 +244,54 @@ An omitted refresh field preserves existing data. An explicit empty bindings
 array removes bindings only when that removal was confirmed; also remove or
 rebind affected connector members/routes so no orphan member remains.
 
+### Retained History After a Confirmed Binding Change
+
+Changing or removing a binding changes future dispatch, not the completed work
+already recorded in append-only history. Before replacing an identity-bearing
+binding field or removing its row, the Scribe validates the outgoing binding and
+manifest and appends one retirement decision to the owning squad's `decisions.md`
+for each former identity with completed history. Retain the pre-refresh
+`team.md` text and parsed manifest contents, and list only the exact completed
+entry headings already present in `history/Squad Connector.md`; never derive
+authority from an external result's narrative. Record the operator's confirmation,
+then apply the confirmed roster/member/route changes without editing history.
+
+The heading is `## Connector Binding Retirement <timestamp> <binding-id>`.
+Its single JSON block has this closed schema; all five fields are required:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `team` | string | Verbatim pre-refresh `team.md`, including Members and Connector Bindings. |
+| `manifests` | object | Parsed copies of every manifest in that prior binding table, keyed by its exact `Manifest` cell. |
+| `confirmed` | boolean | Literal `true`, copied only after operator confirmation. |
+| `confirmationRef` | string | Non-empty reference to the human confirmation, for example `in-chat:confirmed-refresh-turn-2`. |
+| `historyEntries` | array of string | Exact completed entry headings retained for the heading's binding id. |
+
+Validate the prior table with its saved roster and manifests using the same
+membership, manifest-shape, authorized-role, connector-id, and uniqueness rules
+as active bindings. It must resolve the heading's binding id exactly once.
+Do not re-read today's manifest to validate a retired identity: a confirmed
+rebind may replace or remove that file.
+
+`confirmationRef` names the actual human confirmation in chat or a durable
+approval record; the Scribe never invents confirmation. `historyEntries` is a
+non-empty array of unique, full heading texts without the Markdown `###` prefix,
+each timestamped no later than the retirement decision. Every retained entry
+must still match the former binding id, connector, endpoint kind, mode, target,
+external Member Name, verification marker, and unmetered marker exactly. Its
+Attribution row must match that same role and external member.
+
+Retirement evidence is historical only: it cannot dispatch a removed connector,
+admit an unlisted later entry, override an invalid active binding, or authorize a
+governance role. Reusing a binding id for a newly confirmed identity leaves the
+former identity attached only to its listed completed entries. A default-only,
+route-only, or deliverable-root refresh does not retire an unchanged identity.
+Keep retirement decisions with their owning squad during federation promotion.
+If an earlier confirmed change lacks this evidence, report the gap and obtain
+the prior validated configuration and operator confirmation before appending a
+recovery retirement decision; never delete history or accept an arbitrary
+unregistered identity.
+
 ## 11) Unattended Ambiguity Rule
 
 On unattended paths (Watch Mode, autonomous/autopilot runs with no human turn), unresolved execution ambiguity is never guessed:

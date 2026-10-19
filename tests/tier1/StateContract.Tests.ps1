@@ -397,7 +397,12 @@ Describe 'CONN Connector-backed state resolves exact trusted identity' {
             Should -BeNullOrEmpty -Because 'a binding is authority only after its target, member, manifest, and unique id validate'
     }
 
-    It 'matches every connector history entry to its exact binding and provenance identity' {
+    It 'admits historical retirement evidence only for confirmed, bounded completed entries' {
+        $script:Model.ConnectorRetirementIssues -join '; ' |
+            Should -BeNullOrEmpty -Because 'a removed registration needs an explicit Scribe-owned confirmation record, not an arbitrary historical identity'
+    }
+
+    It 'matches every connector history entry to its exact active or retired binding and provenance identity' {
         $script:Model.ConnectorHistoryIssues -join '; ' |
             Should -BeNullOrEmpty -Because 'Squad Connector history must resolve to one exact member and trusted provenance source'
     }

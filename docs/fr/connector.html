@@ -1123,6 +1123,15 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
       </p>
 
       <p>
+        Une suppression ou réaffectation confirmée conserve l'historique terminé et les lignes Attribution.
+        Avant de modifier les lignes actives, le Scribe interne ajoute une décision
+        <code>Connector Binding Retirement</code> dans le fichier <code>decisions.md</code>
+        du squad propriétaire, avec l'identité précédemment validée, la confirmation de l'opérateur
+        et les titres exacts des entrées terminées. Cette preuve historique n'autorise aucune nouvelle
+        délégation ni entrée non répertoriée. Modifier seulement le choix par défaut ne change pas l'identité.
+      </p>
+
+      <p>
         <strong>Transport MCP (réservé, pas encore construit).</strong> Le schéma du manifeste
         réserve une valeur <code>transport: "mcp"</code> comme espace réservé pour un possible
         futur mode de transport synchrone. Ce n'est pas implémenté aujourd'hui. Le seul mode de

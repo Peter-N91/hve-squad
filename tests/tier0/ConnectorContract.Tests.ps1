@@ -557,26 +557,62 @@ Describe 'CONN-26 retry exhaustion preserves the runtime unreachable status' {
 }
 
 Describe 'CONN-28 ordinary resume preserves a durable collision snapshot' {
-    It 'validates the closed snapshot sidecar against its unchanged request' {
+    It 'preserves <_> pre-existing paths through library and CLI validation' -ForEach @(0, 1, 2, 3) {
+        $pathCount = $_
         $request = Get-ExampleJson -Name 'delegation-request.agent.1.1.sample.json'
         $snapshot = [ordered]@{
             taskId          = $request.taskId
             deliverableRoot = $request.deliverableRoot
             preExistingPaths = @(
-                "$($request.deliverableRoot)/existing.md"
-                "$($request.deliverableRoot)/nested/existing.json"
+                for ($index = 0; $index -lt $pathCount; $index++) {
+                    "$($request.deliverableRoot)/existing-$index.md"
+                }
             )
             createdAt       = $request.createdAt
         }
 
-        $direct = Test-SquadConnectorSnapshot -Snapshot $snapshot -Request $request
-        $direct.Status | Should -Be 'ok' -Because ($direct.Issues -join ', ')
+        foreach ($inputSnapshot in @($snapshot, [pscustomobject]$snapshot)) {
+            $direct = Test-SquadConnectorSnapshot -Snapshot $inputSnapshot -Request $request
+            $direct.Status | Should -Be 'ok' -Because ($direct.Issues -join ', ')
+            $direct.PreExistingPaths -is [array] | Should -BeTrue
+            $direct.PreExistingPaths.Count | Should -Be $pathCount
+            ($direct.PreExistingPaths -join ',') | Should -Be ($snapshot.preExistingPaths -join ',')
+        }
+
         $cli = Invoke-DispatchHelperCli -Operation 'validate-snapshot' -Payload @{
             snapshot = $snapshot
             request  = $request
         }
         $cli.Status | Should -Be 'ok' -Because ($cli.Issues -join ', ')
-        @($cli.PreExistingPaths).Count | Should -Be 2
+        $cli.PreExistingPaths -is [array] | Should -BeTrue
+        $cli.PreExistingPaths.Count | Should -Be $pathCount
+        ($cli.PreExistingPaths -join ',') | Should -Be ($snapshot.preExistingPaths -join ',')
+    }
+
+    It 'rejects <Name> pre-existing paths through library and CLI validation' -ForEach @(
+        @{ Name = 'a scalar string'; Value = '.copilot-tracking/research/existing.md' }
+        @{ Name = 'an empty string'; Value = '' }
+        @{ Name = 'a null value'; Value = $null }
+        @{ Name = 'a number'; Value = 1 }
+        @{ Name = 'an object'; Value = @{ path = '.copilot-tracking/research/existing.md' } }
+    ) {
+        $request = Get-ExampleJson -Name 'delegation-request.agent.1.1.sample.json'
+        $snapshot = [ordered]@{
+            taskId          = $request.taskId
+            deliverableRoot = $request.deliverableRoot
+            preExistingPaths = $Value
+            createdAt       = $request.createdAt
+        }
+
+        foreach ($inputSnapshot in @($snapshot, [pscustomobject]$snapshot)) {
+            $direct = Test-SquadConnectorSnapshot -Snapshot $inputSnapshot -Request $request
+            $direct.Status | Should -Be 'error'
+        }
+        $cli = Invoke-DispatchHelperCli -Operation 'validate-snapshot' -Payload @{
+            snapshot = $snapshot
+            request  = $request
+        }
+        $cli.Status | Should -Be 'error'
     }
 
     It 'rejects missing bindings, extra fields, duplicate paths, and paths outside the request root' {
@@ -613,6 +649,27 @@ Describe 'CONN-28 ordinary resume preserves a durable collision snapshot' {
         $contract | Should -Match ([regex]::Escape('The snapshot schema is closed. It is internal collision evidence, not a consumer-authored envelope'))
         $contract | Should -Match ([regex]::Escape('A later dispatch must load the original sidecar'))
         $contract | Should -Match ([regex]::Escape('A missing, malformed, mismatched, or rewritten snapshot is a validation failure (`failed`)'))
+    }
+}
+
+Describe 'CONN-29 confirmed binding changes preserve completed provenance' {
+    It 'defines bounded, confirmed historical evidence without granting active execution authority' {
+        $roleModes = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/connector-role-modes.md') -Raw
+        $roleModes | Should -Match ([regex]::Escape('## Connector Binding Retirement <timestamp> <binding-id>'))
+        foreach ($field in @('team', 'manifests', 'confirmed', 'confirmationRef', 'historyEntries')) {
+            $roleModes | Should -Match ([regex]::Escape("| ``$field`` |"))
+        }
+        $roleModes | Should -Match 'same\s+membership, manifest-shape, authorized-role, connector-id, and uniqueness rules'
+        $roleModes | Should -Match 'Retirement evidence is historical only: it cannot dispatch a removed connector'
+        $roleModes | Should -Match 'before replacing an identity-bearing|Before replacing an identity-bearing'
+        $roleModes | Should -Match 'without editing history'
+    }
+
+    It 'requires the initialization writer to preserve history evidence before replacing active rows' {
+        $coldInit = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/scribe-cold-init-and-seeding.md') -Raw
+        $coldInit | Should -Match 'Before a confirmed unbind or identity-changing rebind'
+        $coldInit | Should -Match 'Write that evidence before replacing the\s+active rows'
+        $coldInit | Should -Match ([regex]::Escape('`connector-role-modes.md`, section 10'))
     }
 }
 

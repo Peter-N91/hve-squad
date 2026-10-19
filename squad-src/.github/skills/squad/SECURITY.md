@@ -202,6 +202,9 @@ Scribe records bound member identities, timestamps, artifact references, and
 trusted accounting markers, and checks the resulting ledger. Local history is
 not an immutable audit store. Durable claim/consumed-task tracking belongs to
 the shim/adapter workflow; the stateless resolver cannot prevent replay alone.
+Confirmed binding changes retain prior identities through Scribe-owned retirement
+decisions scoped to exact completed history entries. These decisions do not grant
+dispatch authority and, like the roster, rely on trusted local state writers.
 
 ### Information Disclosure
 

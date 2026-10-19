@@ -280,6 +280,14 @@ connected role its own row in `consumption.md`, marking external work
 `external, unverified`.
 The ledger measures the shim, not your external workflow's spend.
 
+On a confirmed unbind or identity-changing rebind, the internal Scribe appends a
+`Connector Binding Retirement` decision to the owning squad's `decisions.md`
+before changing the active rows. It records the prior validated identity, the
+operator confirmation, and the exact completed history headings being retained.
+Completed history and its Attribution rows stay intact; this evidence cannot
+authorize a new dispatch or an unlisted entry. A default-only refresh does not
+retire an unchanged identity.
+
 Bindings belong to this squad. Federation promotion carries them with its roster,
 not to federation-global authority. Tracking roots are rebased; mailbox/manifest
 paths remain transport configuration. Complete or abandon pending exchanges

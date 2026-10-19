@@ -39,6 +39,12 @@ it needs a matching member with `Primary=Squad Connector`, a binding, a
 deliverable root, and a route. Reject coordinator/Scribe connector targets;
 preserve their internal identities rather than seeding proxy members.
 
+Before a confirmed unbind or identity-changing rebind, preserve completed
+connector provenance with the append-only retirement decision defined in
+`connector-role-modes.md`, section 10. Write that evidence before replacing the
+active rows; keep history and its exact external member attribution intact.
+An unchanged identity needs no retirement record.
+
 **Write the model-routing mode and `Model` column exactly as handed over.** When the payload carries a routing mode (`ranked`, `economy`, or `manual`), write the single line `Model routing: <mode>` directly beneath `team.md`'s H1, and a `Model` column between `Model Tier` and `Deliverable Root` holding each role's Model ID as supplied — one lowercase id per cell, never a display name, and empty for a role the payload leaves unset. On a routing refresh, change only that line and the `Model` cells the payload names, preserving every other cell and row. When the mode is `off`, remove both the line and the column, and list the removed picks in the same turn's decision entry so a later switch back to `manual` can offer them. Record every mode change and every `manual` pick in a decision entry; a ranked or economy readout refresh needs only the `state.json` advance. See `model-routing.md` for what each mode means; the Scribe never ranks or picks a model itself.
 
 ### Repository Memory and Learning Promotion

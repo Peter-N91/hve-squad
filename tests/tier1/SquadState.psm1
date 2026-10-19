@@ -424,12 +424,29 @@ function Resolve-ConnectorManifestPath {
     $null
 }
 
+function Get-ConnectorRosterRows {
+    param([AllowNull()][string]$TeamContent)
+
+    foreach ($table in (Get-MarkdownTable -Content $TeamContent)) {
+        if ('Agent Name (Primary)' -notin $table.Header -or 'Role' -notin $table.Header) { continue }
+        foreach ($row in $table.Rows) {
+            if (-not $row['Role'] -or -not $row['Agent Name (Primary)']) { continue }
+            [pscustomobject]@{
+                Role       = ([string]$row['Role']).Trim().ToLowerInvariant()
+                MemberName = if ('Member Name' -in $table.Header) { ([string]$row['Member Name']).Trim() } else { '' }
+                Agent      = ([string]$row['Agent Name (Primary)']).Trim()
+            }
+        }
+    }
+}
+
 function Get-ConnectorBindingModel {
     param(
         [AllowNull()][string]$TeamContent,
         [Parameter(Mandatory)][string]$TeamPath,
         [Parameter(Mandatory)][string]$ProjectRoot,
-        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$RosterRows
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$RosterRows,
+        [System.Collections.IDictionary]$ManifestSnapshots
     )
 
     $issues = [System.Collections.Generic.List[string]]::new()
@@ -541,31 +558,35 @@ function Get-ConnectorBindingModel {
                 if ($binding.AddedRole) { $binding.Role = $binding.AddedRole }
             }
 
-            $resolvedManifest = Resolve-ConnectorManifestPath -ManifestPath $binding.ManifestPath -ProjectRoot $ProjectRoot -TeamPath $TeamPath
+            $manifest = $null
             if (-not $binding.ManifestPath) {
                 $binding.Issues.Add('missing:manifestPath')
             }
-            elseif (-not $resolvedManifest) {
-                $binding.Issues.Add('manifest-not-found')
+            elseif ($PSBoundParameters.ContainsKey('ManifestSnapshots')) {
+                if ($null -eq $ManifestSnapshots -or -not $ManifestSnapshots.Contains($binding.ManifestPath)) {
+                    $binding.Issues.Add('snapshot-manifest-missing')
+                }
+                else { $manifest = $ManifestSnapshots[$binding.ManifestPath] }
             }
             else {
-                $binding.ResolvedManifest = $resolvedManifest
-                $manifest = $null
-                try { $manifest = Get-Content -LiteralPath $resolvedManifest -Raw | ConvertFrom-Json -AsHashtable -Depth 64 }
-                catch { $binding.Issues.Add('manifest-parse-failed') }
-                if ($manifest) {
-                    $shape = Test-SquadConnectorManifestShape -Manifest $manifest
-                    foreach ($shapeIssue in @($shape.Issues)) { $binding.Issues.Add("manifest-shape:$shapeIssue") }
-                    if ([string]$manifest['schemaVersion'] -ne '1.1') { $binding.Issues.Add('manifest-version-not-1.1') }
-                    if ([string]$manifest['connectorId'] -cne $binding.ConnectorId) { $binding.Issues.Add('manifest-connectorId-mismatch') }
-                    if (([string]$manifest['endpointKind']).Trim().ToLowerInvariant() -ne $binding.EndpointKind) { $binding.Issues.Add('manifest-endpointKind-mismatch') }
-                    $manifestRoles = @($manifest['roles'] | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() })
-                    if ($binding.Role -and $manifestRoles -notcontains $binding.Role) { $binding.Issues.Add("manifest-role-missing:$($binding.Role)") }
-                }
+                $resolvedManifest = Resolve-ConnectorManifestPath -ManifestPath $binding.ManifestPath -ProjectRoot $ProjectRoot -TeamPath $TeamPath
+                if (-not $resolvedManifest) { $binding.Issues.Add('manifest-not-found') }
                 else {
-                    $binding.Issues.Add('manifest-unreadable')
+                    $binding.ResolvedManifest = $resolvedManifest
+                    try { $manifest = Get-Content -LiteralPath $resolvedManifest -Raw | ConvertFrom-Json -AsHashtable -Depth 64 }
+                    catch { $binding.Issues.Add('manifest-parse-failed') }
                 }
             }
+            if ($manifest -is [System.Collections.IDictionary]) {
+                $shape = Test-SquadConnectorManifestShape -Manifest $manifest
+                foreach ($shapeIssue in @($shape.Issues)) { $binding.Issues.Add("manifest-shape:$shapeIssue") }
+                if ([string]$manifest['schemaVersion'] -ne '1.1') { $binding.Issues.Add('manifest-version-not-1.1') }
+                if ([string]$manifest['connectorId'] -cne $binding.ConnectorId) { $binding.Issues.Add('manifest-connectorId-mismatch') }
+                if (([string]$manifest['endpointKind']).Trim().ToLowerInvariant() -ne $binding.EndpointKind) { $binding.Issues.Add('manifest-endpointKind-mismatch') }
+                $manifestRoles = @($manifest['roles'] | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() })
+                if ($binding.Role -and $manifestRoles -notcontains $binding.Role) { $binding.Issues.Add("manifest-role-missing:$($binding.Role)") }
+            }
+            else { $binding.Issues.Add('manifest-unreadable') }
         }
     }
 
@@ -591,11 +612,96 @@ function Get-ConnectorBindingModel {
     }
 }
 
+function Get-ConnectorRetirementModel {
+    param(
+        [AllowNull()][string]$Content,
+        [Parameter(Mandatory)][string]$TeamPath,
+        [Parameter(Mandatory)][string]$ProjectRoot
+    )
+
+    $issues = [System.Collections.Generic.List[string]]::new()
+    $retirements = [System.Collections.Generic.List[object]]::new()
+    $required = @('team', 'manifests', 'confirmed', 'confirmationRef', 'historyEntries')
+    foreach ($entry in [regex]::Matches([string]$Content, '(?ms)^## Connector Binding Retirement(?<heading>[^\r\n]*)\r?\n(?<body>.*?)(?=^##[ \t]|\z)')) {
+        $issueCount = $issues.Count
+        $heading = [regex]::Match($entry.Groups['heading'].Value.Trim(), '^(?<timestamp>\S+)\s+(?<bindingId>[a-z0-9]+(?:-[a-z0-9]+)*)$')
+        $label = "Connector Binding Retirement $($entry.Groups['heading'].Value.Trim())"
+        if (-not $heading.Success) {
+            $issues.Add("${label}:invalid-heading")
+            continue
+        }
+        $retiredAt = $null
+        try { $retiredAt = [DateTimeOffset]::Parse($heading.Groups['timestamp'].Value, [System.Globalization.CultureInfo]::InvariantCulture) }
+        catch { $issues.Add("${label}:invalid-timestamp") }
+
+        $blocks = @([regex]::Matches($entry.Groups['body'].Value, '(?ms)^```json[ \t]*\r?\n(?<json>.*?)\r?\n```[ \t]*(?:\r?\n|\z)'))
+        if ($blocks.Count -ne 1) {
+            $issues.Add("${label}:one-json-record-required")
+            continue
+        }
+        $record = $null
+        try { $record = $blocks[0].Groups['json'].Value | ConvertFrom-Json -AsHashtable -Depth 64 }
+        catch { $issues.Add("${label}:invalid-json") }
+        if ($record -isnot [System.Collections.IDictionary]) {
+            $issues.Add("${label}:object-required")
+            continue
+        }
+        foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $record -Required $required)) {
+            $issues.Add("${label}:$issue")
+        }
+        foreach ($field in @('team', 'confirmationRef')) {
+            if ($record[$field] -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$record[$field])) {
+                $issues.Add("${label}:invalid:$field")
+            }
+        }
+        if ($record['confirmed'] -isnot [bool] -or $record['confirmed'] -ne $true) { $issues.Add("${label}:operator-confirmation-required") }
+        if ($record['manifests'] -isnot [System.Collections.IDictionary]) { $issues.Add("${label}:manifest-snapshots-required") }
+
+        $titles = $record['historyEntries']
+        if ($titles -isnot [array] -or $titles.Count -eq 0) {
+            $issues.Add("${label}:completed-history-entries-required")
+        }
+        else {
+            $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+            foreach ($title in $titles) {
+                if ($title -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$title)) {
+                    $issues.Add("${label}:invalid:history-entry")
+                    continue
+                }
+                if (-not $seen.Add($title)) { $issues.Add("${label}:duplicate:history-entry") }
+                try {
+                    $completedAt = [DateTimeOffset]::Parse(($title -split '\s+', 2)[0], [System.Globalization.CultureInfo]::InvariantCulture)
+                    if ($null -ne $retiredAt -and $completedAt -gt $retiredAt) { $issues.Add("${label}:history-postdates-retirement") }
+                }
+                catch { $issues.Add("${label}:invalid:history-entry-timestamp") }
+            }
+        }
+        if ($issues.Count -ne $issueCount) { continue }
+
+        $priorRows = @(Get-ConnectorRosterRows -TeamContent $record['team'])
+        $prior = Get-ConnectorBindingModel -TeamContent $record['team'] -TeamPath $TeamPath -ProjectRoot $ProjectRoot `
+            -RosterRows $priorRows -ManifestSnapshots $record['manifests']
+        foreach ($issue in $prior.Issues) { $issues.Add("${label}:prior-binding:$issue") }
+        $priorBinding = @($prior.ValidBindings | Where-Object { $_.BindingId -ceq $heading.Groups['bindingId'].Value })
+        if ($priorBinding.Count -ne 1) { $issues.Add("${label}:one-valid-prior-binding-required") }
+        if ($issues.Count -ne $issueCount) { continue }
+
+        $binding = $priorBinding[0]
+        $binding | Add-Member -NotePropertyName HistoryEntries -NotePropertyValue @($titles)
+        $retirements.Add($binding)
+    }
+    [pscustomobject]@{
+        Retirements = $retirements.ToArray()
+        Issues      = $issues.ToArray()
+    }
+}
+
 function Get-ConnectorHistoryModel {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Entries,
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Bindings,
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$ValidBindings,
+        [AllowEmptyCollection()][object[]]$RetiredBindings = @(),
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$RosterRows
     )
 
@@ -643,12 +749,27 @@ function Get-ConnectorHistoryModel {
             }
         }
         else {
-            $matches = @($ValidBindings | Where-Object { $_.BindingId -ceq $entry.ExternalBindingId })
-            if ($matches.Count -ne 1) {
+            $bindingMatches = @($ValidBindings | Where-Object { $_.BindingId -ceq $entry.ExternalBindingId })
+            $exactCurrent = @($bindingMatches | Where-Object {
+                    $_.ConnectorId -ceq $entry.ExternalConnectorId -and
+                    $_.EndpointKind -ceq $entry.ExternalEndpointKind -and
+                    $_.RoleMode -ceq $entry.ExternalRoleMode -and
+                    $_.Target -ceq $entry.ExternalTarget -and
+                    $_.MemberName -ceq $entry.MemberName
+                })
+            if ($exactCurrent.Count -eq 0) {
+                # Retirement evidence admits only the completed entries named before a
+                # confirmed change; it never becomes a current dispatch registration.
+                $retired = @($RetiredBindings | Where-Object {
+                        $_.BindingId -ceq $entry.ExternalBindingId -and $_.HistoryEntries -ccontains $entry.Title
+                    })
+                if ($retired.Count -gt 0) { $bindingMatches = $retired }
+            }
+            if ($bindingMatches.Count -ne 1) {
                 $issues.Add("$($entry.Source): connector history binding '$($entry.ExternalBindingId)' does not resolve to one valid binding")
             }
             else {
-                $binding = $matches[0]
+                $binding = $bindingMatches[0]
                 $role = $binding.Role
                 foreach ($comparison in @(
                         @{ Name = 'connector'; Actual = $entry.ExternalConnectorId; Expected = $binding.ConnectorId }
@@ -904,7 +1025,7 @@ function Get-SquadStateModel {
     # the history agent for the target role.
     $roleAgents = @{}
     $rosterAgentCandidates = [System.Collections.Generic.List[string]]::new()
-    $rosterRows = [System.Collections.Generic.List[object]]::new()
+    $rosterRows = @(Get-ConnectorRosterRows -TeamContent $teamContent)
     $teamTables = @(Get-MarkdownTable -Content $teamContent)
     foreach ($table in $teamTables) {
         if ('Agent Name (Primary)' -notin $table.Header) { continue }
@@ -922,20 +1043,13 @@ function Get-SquadStateModel {
                 $role = ([string]$row['Role']).Trim().ToLowerInvariant()
                 $combined = @($roleAgents[$role]) + $names
                 $roleAgents[$role] = @($combined | Where-Object { $_ } | Sort-Object -Unique)
-                if ($names.Count -gt 0) {
-                    $rosterRows.Add([pscustomobject]@{
-                            Role       = $role
-                            MemberName = if ('Member Name' -in $table.Header) { ([string]$row['Member Name']).Trim() } else { '' }
-                            Agent      = [string]$names[0]
-                        })
-                }
             }
             foreach ($name in $names) { [void]$rosterAgentCandidates.Add([string]$name) }
         }
     }
 
     $teamPath = Join-Path $SquadRoot 'team.md'
-    $connectorBindingModel = Get-ConnectorBindingModel -TeamContent $teamContent -TeamPath $teamPath -ProjectRoot $projectRoot -RosterRows $rosterRows.ToArray()
+    $connectorBindingModel = Get-ConnectorBindingModel -TeamContent $teamContent -TeamPath $teamPath -ProjectRoot $projectRoot -RosterRows $rosterRows
     foreach ($binding in $connectorBindingModel.ValidBindings) {
         $combined = @($roleAgents[$binding.Role]) + @('Squad Connector')
         $roleAgents[$binding.Role] = @($combined | Where-Object { $_ } | Sort-Object -Unique)
@@ -1011,8 +1125,9 @@ function Get-SquadStateModel {
 
     $declared = @(foreach ($file in $dispatchHistory) { Get-DeliverableEntry -Path $file.FullName })
     $entries = @(foreach ($file in $dispatchHistory) { Get-HistoryEntry -Path $file.FullName })
+    $connectorRetirementModel = Get-ConnectorRetirementModel -Content $decisionsContent -TeamPath $teamPath -ProjectRoot $projectRoot
     $connectorHistoryModel = Get-ConnectorHistoryModel -Entries $entries -Bindings $connectorBindingModel.Bindings `
-        -ValidBindings $connectorBindingModel.ValidBindings -RosterRows $rosterRows.ToArray()
+        -ValidBindings $connectorBindingModel.ValidBindings -RetiredBindings $connectorRetirementModel.Retirements -RosterRows $rosterRows
     foreach ($identity in $connectorHistoryModel.Identities) {
         $combined = @($roleAgents[$identity.Role]) + @('Squad Connector')
         $roleAgents[$identity.Role] = @($combined | Where-Object { $_ } | Sort-Object -Unique)
@@ -1129,6 +1244,8 @@ function Get-SquadStateModel {
         RoleAgents       = $roleAgents
         ConnectorBindings = @($connectorBindingModel.Bindings)
         ConnectorBindingIssues = @($connectorBindingModel.Issues)
+        ConnectorRetirements = @($connectorRetirementModel.Retirements)
+        ConnectorRetirementIssues = @($connectorRetirementModel.Issues)
         ConnectorHistoryIdentities = @($connectorHistoryModel.Identities)
         ConnectorHistoryIssues = @($connectorHistoryModel.Issues)
         ConnectorLedgerIssues = @($connectorLedgerIssues)
