@@ -176,8 +176,20 @@ bounded same-stage recovery below; other failures stop dependent work.
 A stage with a structured prompt-budget error can receive one native context
 compaction and one continuation in the same session. The CLI must advertise ACP
 session loading and the `compact` command. Recovery requires normal process exit,
-complete metered evidence, no questions and a passing state verifier. Permission,
-policy, user-abort, integrity and ordinary missing-evidence failures do not qualify.
+complete metered evidence, no questions and a passing state verifier. Unresolved
+permission, explicit policy/auth/credit, user-abort, integrity and ordinary
+missing-evidence failures do not qualify.
+
+A known Scribe reference discovery denial caused by unavailable interactive
+approval may be resolved only by later same-actor actual workspace content for
+that reference. The exact known reference glob requires all four core files.
+Relative views require native absolute-path metadata; single-file content grep
+requires nonzero matches and an already established actor workspace root. Size
+notices, prior reads, other actors, unknown targets and path escapes are not proof.
+Shell/write denials remain terminal. This neither approves the denied path nor
+changes native permissions. Child prompts carry explicit workspace and skill
+roots outside schema payloads. Portable results expose only the aggregate
+`resolvedDiscoveryDenials`, leaving original failed-tool counts and logs intact.
 
 The compaction controller uses ACP `initialize`, `session/load` and the advertised
 `/compact` command. Replayed history or a model claiming it compacted is not proof:

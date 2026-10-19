@@ -190,10 +190,61 @@ function Get-EfficiencyRecoveryPolicy {
     param([Parameter(Mandatory)][double]$MaxCredits)
     if ([double]::IsNaN($MaxCredits) -or [double]::IsInfinity($MaxCredits) -or $MaxCredits -le 0) { throw 'A finite positive credit ceiling is required.' }
     [pscustomobject]@{
-        id = 'same-session-acp-compact-v1'; maxCyclesPerStage = 1
+        id = 'same-session-acp-compact-v2-discovery'; maxCyclesPerStage = 1
         initialCredits = $MaxCredits / 8; compactionCredits = $MaxCredits / 16
         continuationCredits = $MaxCredits / 16; judgeCredits = $MaxCredits / 4
     }
+}
+
+function Get-EfficiencyDiscoveryReference {
+    <# .SYNOPSIS
+    Identifies only known Scribe schema discovery targets.
+    #>
+    [CmdletBinding()]
+    param([string]$Tool, [AllowNull()]$Arguments)
+    if ($Arguments -isnot [Collections.IDictionary]) { return }
+    if ($Tool -eq 'glob' -and $Arguments['pattern'] -ceq '**/squad/references/*.md') { return '@core-discovery' }
+    if ($Tool -ne 'view') { return }
+    $Target = ([string]$Arguments['path']).Replace('\', '/')
+    if ($Target -notmatch '(?:^|/)\.agents/skills/squad/references/(?<reference>[a-z0-9-]+\.md)$') { return }
+    $Reference = $Matches['reference']
+    if ($Reference -in @('00-index.md', 'scribe-procedure.md', 'entry-schemas.md', 'scribe-payload-template.md', 'consumption.md')) { $Reference }
+}
+
+function Get-EfficiencyLocalDiscoveryRead {
+    <# .SYNOPSIS
+    Proves local reference content, anchoring relative views in native metadata.
+    #>
+    [CmdletBinding()]
+    param([string]$Tool, [AllowNull()]$Arguments, [AllowNull()]$Result, [string]$Workspace, [bool]$ActorRootVerified)
+    if (-not $Workspace -or $Arguments -isnot [Collections.IDictionary] -or $Result -isnot [Collections.IDictionary]) { return }
+    $Content = $Result['content']
+    if ($Content -isnot [string] -or [string]::IsNullOrWhiteSpace($Content) -or $Content.TrimStart() -match '(?i)^(File too large|Permission denied|File not found|Error:)') { return }
+    $Target = if ($Tool -eq 'view') { [string]$Arguments['path'] }
+    elseif ($Tool -eq 'grep' -and $Arguments['output_mode'] -eq 'content' -and @($Arguments['paths']).Count -eq 1 -and $Content -match '^\[grep content: [1-9]\d* matches across 1 file\(s\)') { [string]$Arguments['paths'][0] }
+    else { return }
+    $Reference = Get-EfficiencyDiscoveryReference -Tool view -Arguments @{ path = $Target }
+    if (-not $Reference) { return }
+    try { $Expected = [IO.Path]::GetFullPath((Join-Path $Workspace ".agents/skills/squad/references/$Reference")) }
+    catch { return }
+    $Comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $Target = $Target.Replace('\', '/')
+    if ($Target -match '(?:^|/)\.\.(?:/|$)') { return }
+    if ([IO.Path]::IsPathRooted($Target)) {
+        try { $Full = [IO.Path]::GetFullPath($Target) } catch { return }
+        if (-not $Full.Equals($Expected, $Comparison)) { return }
+    }
+    else {
+        if ($Target.StartsWith('./', [StringComparison]::Ordinal)) { $Target = $Target.Substring(2) }
+        if ($Target -cne ".agents/skills/squad/references/$Reference") { return }
+        if ($Tool -eq 'view') {
+            $NativePath = $Expected.Replace('\', '/')
+            $Header = "diff --git a$NativePath b$NativePath"
+            if (-not @(([string]$Result['detailedContent']) -split '\r?\n' | Where-Object { $_.Equals($Header, $Comparison) }).Count) { return }
+        }
+        elseif (-not $ActorRootVerified) { return }
+    }
+    [pscustomobject]@{ reference = $Reference; rootVerified = $true }
 }
 
 function Get-EfficiencyRecoveryDecision {
@@ -202,7 +253,7 @@ function Get-EfficiencyRecoveryDecision {
     #>
     [CmdletBinding()]
     param(
-        [string]$Path, [AllowNull()]$Metrics, [AllowNull()]$Process, [AllowNull()]$Readiness,
+        [string]$Path, [AllowNull()]$Metrics, [AllowNull()]$Process, [AllowNull()]$Readiness, [string]$Workspace = '',
         [int]$RemainingRequests, [double]$RemainingSeconds, [bool]$AcpSupported, [bool]$RecoveryUsed
     )
     $Reason = if ($RecoveryUsed) { 'recovery-limit' }
@@ -214,29 +265,65 @@ function Get-EfficiencyRecoveryDecision {
     elseif ($RemainingRequests -lt 2 -or $RemainingSeconds -le 0) { 'stage-limit' }
     elseif (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { 'missing-evidence' }
     else { $null }
-    if ($Reason) { return [pscustomobject]@{ allowed = $false; reason = $Reason } }
+    if ($Reason) { return [pscustomobject]@{ allowed = $false; reason = $Reason; resolvedDiscoveryDenials = 0 } }
     $BudgetError = $false
-        $Reader = [IO.File]::OpenText($Path)
-        try {
-                while ($null -ne ($Line = $Reader.ReadLine())) {
-                        try { $Event = $Line | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop } catch { continue }
-                        $Data = $Event['data']
-                        if ($Data -isnot [Collections.IDictionary]) { continue }
-                        $Message = ''
-                        if ($Event['type'] -eq 'session.error') { $Message = [string]$Data['message'] }
-                        elseif ($Event['type'] -eq 'abort' -and $Data['reason'] -eq 'user_initiated') { return [pscustomobject]@{ allowed = $false; reason = 'safety-stop' } }
-                        elseif ($Event['type'] -eq 'tool.execution_complete' -and $Data['success'] -eq $false) {
-                                $Message = if ($Data['error'] -is [Collections.IDictionary]) { [string]$Data['error']['message'] } else { [string]$Data['error'] }
+    $Starts = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    $Completions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $ActorRoots = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $Pending = [Collections.Generic.List[object]]::new(); $Ordinal = 0
+    $Reader = [IO.File]::OpenText($Path)
+    try {
+        while ($null -ne ($Line = $Reader.ReadLine())) {
+            $Ordinal++
+            try { $Event = $Line | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop } catch { continue }
+            if ($Event -isnot [Collections.IDictionary]) { continue }
+            $Data = $Event['data']
+            if ($Data -isnot [Collections.IDictionary]) { continue }
+            $CallId = [string]$Data['toolCallId']
+            if ($Event['type'] -eq 'tool.execution_start' -and $CallId -and -not $Starts.ContainsKey($CallId)) {
+                $Actor = if ($Event['agentId']) { 'agent:' + [string]$Event['agentId'] } elseif ($Data['parentToolCallId']) { 'parent:' + [string]$Data['parentToolCallId'] } else { 'root' }
+                $Starts[$CallId] = @{ data = $Data; actor = $Actor; ordinal = $Ordinal }
+            }
+            $Message = ''
+            if ($Event['type'] -eq 'session.error') { $Message = [string]$Data['message'] }
+            elseif ($Event['type'] -eq 'abort' -and $Data['reason'] -eq 'user_initiated') { return [pscustomobject]@{ allowed = $false; reason = 'safety-stop'; resolvedDiscoveryDenials = 0 } }
+            elseif ($Event['type'] -eq 'tool.execution_complete') {
+                if ($CallId -and -not $Completions.Add($CallId)) { continue }
+                $Start = if ($CallId -and $Starts.ContainsKey($CallId)) { $Starts[$CallId] } else { $null }
+                if ($Data['success'] -eq $false) {
+                    $Message = if ($Data['error'] -is [Collections.IDictionary]) { [string]$Data['error']['message'] } else { [string]$Data['error'] }
+                    if ($Workspace -and $Start -and $Message -match '^Permission denied because no interactive user response was available\.' -and $Message -notmatch '(?i)blocked by policy|credit limit|not authorized') {
+                        $Reference = Get-EfficiencyDiscoveryReference -Tool $Start.data['toolName'] -Arguments $Start.data['arguments']
+                        if ($Reference) {
+                            $Needed = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                            $Names = if ($Reference -eq '@core-discovery') { @('00-index.md', 'scribe-procedure.md', 'entry-schemas.md', 'scribe-payload-template.md') } else { @($Reference) }
+                            foreach ($Name in $Names) { $null = $Needed.Add($Name) }
+                            $Pending.Add(@{ actor = $Start.actor; ordinal = $Ordinal; needed = $Needed })
+                            continue
                         }
-                        if ($Message -match '(?i)permission denied|not authorized|blocked by policy|credit limit') { return [pscustomobject]@{ allowed = $false; reason = 'safety-stop' } }
-                        if ($Event['type'] -eq 'session.error') {
-                            if ($Message -match "(?i)Request exceeds the model's prompt budget") { $BudgetError = $true }
-                            else { return [pscustomobject]@{ allowed = $false; reason = 'non-context-error' } }
+                    }
+                }
+                elseif ($Data['success'] -eq $true -and $Start) {
+                    $Proof = Get-EfficiencyLocalDiscoveryRead -Tool $Start.data['toolName'] -Arguments $Start.data['arguments'] -Result $Data['result'] -Workspace $Workspace -ActorRootVerified ($ActorRoots.Contains($Start.actor))
+                    if ($Proof) {
+                        $null = $ActorRoots.Add($Start.actor)
+                        foreach ($Failure in $Pending) {
+                            if ($Failure.actor -ceq $Start.actor -and $Start.ordinal -gt $Failure.ordinal) { $null = $Failure.needed.Remove($Proof.reference) }
                         }
+                    }
+                }
+            }
+            if ($Message -match '(?i)permission denied|not authorized|blocked by policy|credit limit') { return [pscustomobject]@{ allowed = $false; reason = 'safety-stop'; resolvedDiscoveryDenials = 0 } }
+            if ($Event['type'] -eq 'session.error') {
+                if ($Message -match "(?i)Request exceeds the model's prompt budget") { $BudgetError = $true }
+                else { return [pscustomobject]@{ allowed = $false; reason = 'non-context-error'; resolvedDiscoveryDenials = 0 } }
+            }
         }
     }
-        finally { $Reader.Dispose() }
-    [pscustomobject]@{ allowed = $BudgetError; reason = if ($BudgetError) { 'context-budget' } else { 'not-context-budget' } }
+    finally { $Reader.Dispose() }
+    $Resolved = @($Pending | Where-Object { $_.needed.Count -eq 0 }).Count
+    if ($Resolved -ne $Pending.Count) { return [pscustomobject]@{ allowed = $false; reason = 'unresolved-discovery'; resolvedDiscoveryDenials = $Resolved } }
+    [pscustomobject]@{ allowed = $BudgetError; reason = if ($BudgetError) { 'context-budget' } else { 'not-context-budget' }; resolvedDiscoveryDenials = $Resolved }
 }
 
 function Update-EfficiencyCompactionMonitor {
@@ -601,7 +688,7 @@ function Invoke-EfficiencyJudge {
     $Session = [guid]::NewGuid().ToString()
     $Events = Join-Path $HOME ".copilot/session-state/$Session/events.jsonl"
     $Prompt += ' Also count unresolved critical/high findings from closingReview. Copy ALL documentHashes, including closingReview. Do not count findings explicitly resolved by the closing review.'
-    $Arguments = @('-p', $Prompt, '--model', $Model, '--session-id', $Session, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--deny-tool', '*', '--output-format', 'json', '--usage-output-file', (Join-Path $Out 'judge-usage.json'))
+    $Arguments = @('-p', $Prompt, '--model', $Model, '--session-id', $Session, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--available-tools', 'view', '--deny-tool', 'view', '--output-format', 'json', '--usage-output-file', (Join-Path $Out 'judge-usage.json'))
     $Executable = $CliPath
     if ($CliPath.EndsWith('.ps1')) { $Executable = (Get-Command pwsh).Source; $Arguments = @('-NoProfile', '-File', $CliPath) + $Arguments }
     $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $Arguments -WorkingDirectory $Out -OutputPath (Join-Path $Out 'judge-stdout.jsonl') -TimeoutSeconds $TimeoutSeconds -EventsPath $Events -MaxRequests 10 -InputText $Payload

@@ -241,6 +241,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (Test-Path -LiteralPath $SessionEvents) { throw 'Fresh session UUID unexpectedly exists.' }
         $Common = 'This is a synthetic, preauthorized exercise in an isolated environment. Make all routine product and planning decisions from EXERCISE.txt. Do not ask questions, deploy, publish, access secrets, use external systems or install packages. Preserve all squad gates, state/history and role Deliverable Roots. If a safety or evidence gate cannot be satisfied, stop and record the blocker. No claim of human review unless actually provided.'
         $Common += " The authorized local root is '$Workspace'; resolve installed skills from '$Workspace/.agents/skills' and customization from '$Workspace/.github'. Keep discovery and scripts inside that root, without parent traversal. Prefer native read/list/search tools; split large reference reads into explicit ranges covering all required sections. Send one complete Scribe handoff per completed dispatch, in order; do not merge stages into catch-up payloads or invent missing reviewer outputs."
+        $Common += " Prepend this context to every dispatched role and Scribe prompt, outside any schema payload: absolute workspace '$Workspace'; absolute skill root '$Workspace/.agents/skills'. Do not assume children inherit the working directory or discover skills from home directories."
         $Prompts = [ordered]@{
             init = "$Common Initialize the squad with profile=product and mode=autopilot. Use the current installed squad implementation. Set up the roster and routing, including BRD and PRD capability. Initialization only; no substantive business deliverables yet."
             requirements = "$Common Using the initialized squad, create both a BRD and a PRD for EXERCISE.txt. Use mapped requirements agents and the required methodology. Author at the roster roots and publish copies as docs/requirements/brd.md and docs/requirements/prd.md. Use BR-nnn and FR-nnn identifiers, explicit measurable acceptance criteria and traceability. All scenario facts are synthetic and the fixed brief is authoritative. Complete required reviews."
@@ -259,7 +260,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $StageStartLine = $StartLine; $PreviousMetrics = $Metrics
             $PriorRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests } else { 0 }
             $Attempts = [Collections.Generic.List[object]]::new()
-            $Recovery = @{ count = 0; status = 'not-needed'; reason = $null }
+            $Recovery = @{ count = 0; status = 'not-needed'; reason = $null; resolvedDiscoveryDenials = 0 }
             $SessionCreditCeiling += $RecoveryPolicy.initialCredits
             $UsagePath = Join-Path $Out "$Stage-usage.json"
             $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
@@ -278,8 +279,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             if (-not $StagePassed) {
                 $RemainingRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { 96 - ($Metrics.modelRequests - $PriorRequests) } else { 0 }
                 $RemainingSeconds = [Math]::Min(900 - $StageWatch.Elapsed.TotalSeconds, 2700 - $Watch.Elapsed.TotalSeconds)
-                $Decision = Get-EfficiencyRecoveryDecision -Path (Join-Path $Out "$Stage-stdout.jsonl") -Metrics $Metrics -Process $Result -Readiness $Readiness -RemainingRequests $RemainingRequests -RemainingSeconds $RemainingSeconds -AcpSupported ($HelpText.Contains('--acp')) -RecoveryUsed $false
+                $Decision = Get-EfficiencyRecoveryDecision -Path (Join-Path $Out "$Stage-stdout.jsonl") -Workspace $Workspace -Metrics $Metrics -Process $Result -Readiness $Readiness -RemainingRequests $RemainingRequests -RemainingSeconds $RemainingSeconds -AcpSupported ($HelpText.Contains('--acp')) -RecoveryUsed $false
                 $Recovery.status = 'not-eligible'; $Recovery.reason = $Decision.reason
+                $Recovery.resolvedDiscoveryDenials = $Decision.resolvedDiscoveryDenials
                 if ($Decision.allowed -and [Math]::Floor($RemainingSeconds) -ge 1) {
                     $Recovery.count = 1; $Recovery.status = 'attempted'
                     $SessionCreditCeiling += $RecoveryPolicy.compactionCredits

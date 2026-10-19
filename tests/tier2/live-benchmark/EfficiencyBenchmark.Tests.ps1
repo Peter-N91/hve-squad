@@ -185,6 +185,81 @@ Describe 'Efficiency bounded recovery policy' -Tag 'Unit' {
     }
 }
 
+Describe 'Efficiency resolved discovery evidence' -Tag 'Unit' {
+    BeforeAll {
+        function Add-DiscoveryOperation {
+            param([string]$Path,[string]$Tool,[hashtable]$Arguments,[bool]$Success,[string]$Actor='scribe-a',[string]$Content='reference text',[string]$Detailed='', [string]$ErrorMessage='Permission denied because no interactive user response was available. Retry in an interactive session.')
+            $CallId=[guid]::NewGuid().ToString()
+            foreach($Record in @(
+                @{type='tool.execution_start';data=@{toolCallId=$CallId;toolName=$Tool;arguments=$Arguments}},
+                @{type='tool.execution_complete';data=@{toolCallId=$CallId;success=$Success;result=@{content=$Content;detailedContent=$Detailed};error=if($Success){$null}else{@{message=$ErrorMessage}}}}
+            )) {
+                $Event=New-TestEvent $Record.type $Record.data|ConvertFrom-Json -AsHashtable
+                $Event['agentId']=$Actor
+                $Event|ConvertTo-Json -Depth 20 -Compress|Add-Content -LiteralPath $Path
+            }
+        }
+    }
+    BeforeEach {
+        $script:DiscoveryWorkspace=Join-Path $TestDrive 'discovery-workspace'
+        New-Item -ItemType Directory -Path $script:DiscoveryWorkspace -Force|Out-Null
+        $script:DiscoveryLog=Join-Path $TestDrive 'discovery.jsonl'
+        New-TestEvent 'session.error' @{message="Request exceeds the model's prompt budget (127366 tokens; limit 100000)."}|Set-Content $script:DiscoveryLog
+        $script:DiscoveryInput=@{Path=$script:DiscoveryLog;Workspace=$script:DiscoveryWorkspace;Metrics=@{complete=$true;modelRequests=5;counts=@{questions=0}};Process=@{exitCode=0;stopCause='none'};Readiness=@{passed=$false;checks=@{stateVerifier=$true}};RemainingRequests=20;RemainingSeconds=60;AcpSupported=$true;RecoveryUsed=$false}
+        $script:DeniedReference='/home/azureuser/.agents/skills/squad/references/entry-schemas.md'
+        $script:SafeReference=Join-Path $script:DiscoveryWorkspace '.agents/skills/squad/references/entry-schemas.md'
+    }
+    It 'resolves a later same-actor local read, deduplicates and preserves evidence' {
+        Add-DiscoveryOperation $script:DiscoveryLog view @{path=$script:DeniedReference} $false
+        $DeniedCompletion=Get-Content $script:DiscoveryLog -Tail 1
+        Add-DiscoveryOperation $script:DiscoveryLog view @{path=$script:SafeReference} $true
+        Add-Content $script:DiscoveryLog $DeniedCompletion
+        $Before=(Get-FileHash $script:DiscoveryLog).Hash
+        $Decision=Get-EfficiencyRecoveryDecision @script:DiscoveryInput
+        $Decision.allowed|Should -BeTrue
+        $Decision.resolvedDiscoveryDenials|Should -Be 1
+        ($Decision|ConvertTo-Json)|Should -Not -Match 'azureuser|discovery-workspace'
+        (Get-FileHash $script:DiscoveryLog).Hash|Should -Be $Before
+        $script:DiscoveryInput.Workspace=''
+        (Get-EfficiencyRecoveryDecision @script:DiscoveryInput).allowed|Should -BeFalse
+    }
+    It 'resolves known glob discovery only with all core text and anchored grep proof' {
+        Add-DiscoveryOperation $script:DiscoveryLog glob @{pattern='**/squad/references/*.md';paths=@('.agents/skills','/home/azureuser/.copilot')} $false
+        $IndexPath=(Join-Path $script:DiscoveryWorkspace '.agents/skills/squad/references/00-index.md').Replace('\','/')
+        Add-DiscoveryOperation $script:DiscoveryLog view @{path='.agents/skills/squad/references/00-index.md'} $true -Detailed "`ndiff --git a$IndexPath b$IndexPath`n"
+        foreach($Reference in @('entry-schemas.md','scribe-payload-template.md')){Add-DiscoveryOperation $script:DiscoveryLog view @{path=(Join-Path $script:DiscoveryWorkspace ".agents/skills/squad/references/$Reference")} $true}
+        Add-DiscoveryOperation $script:DiscoveryLog grep @{paths=@('.agents/skills/squad/references/scribe-procedure.md');output_mode='content';pattern='Consumption'} $true -Content '[grep content: 14 matches across 1 file(s)] procedure text'
+        $Decision=Get-EfficiencyRecoveryDecision @script:DiscoveryInput
+        $Decision.allowed|Should -BeTrue
+        $Decision.resolvedDiscoveryDenials|Should -Be 1
+        Set-Content $script:DiscoveryLog ((Get-Content $script:DiscoveryLog -Raw).Replace('14 matches','0 matches'))
+        (Get-EfficiencyRecoveryDecision @script:DiscoveryInput).allowed|Should -BeFalse
+    }
+    It 'keeps <Boundary> blocking despite a budget error' -ForEach @(
+        @{Boundary='unresolved'},@{Boundary='wrong actor'},@{Boundary='prior success'},@{Boundary='outside root'},@{Boundary='size notice'},
+        @{Boundary='unknown target'},@{Boundary='write denial'},@{Boundary='shell denial'},@{Boundary='explicit policy'},@{Boundary='missing root proof'}
+    ) {
+        $Tool='view';$Target=$script:DeniedReference
+        if($Boundary -eq 'unknown target'){$Target='/home/azureuser/private.md'}
+        if($Boundary -eq 'write denial'){$Tool='edit'}
+        if($Boundary -eq 'shell denial'){$Tool='bash'}
+        if($Boundary -eq 'prior success'){Add-DiscoveryOperation $script:DiscoveryLog view @{path=$script:SafeReference} $true}
+        if($Boundary -eq 'explicit policy'){Add-DiscoveryOperation $script:DiscoveryLog view @{path=$Target} $false -ErrorMessage 'Permission denied by policy.'}
+        else{Add-DiscoveryOperation $script:DiscoveryLog $Tool @{path=$Target} $false}
+        if($Boundary -notin @('unresolved','prior success')){
+            $Actor=if($Boundary -eq 'wrong actor'){'scribe-b'}else{'scribe-a'}
+            $Path=if($Boundary -eq 'outside root'){Join-Path ($script:DiscoveryWorkspace+'-other') '.agents/skills/squad/references/entry-schemas.md'}elseif($Boundary -eq 'missing root proof'){'.agents/skills/squad/references/entry-schemas.md'}else{$script:SafeReference}
+            $Text=if($Boundary -eq 'size notice'){'File too large to read at once. Use view_range.'}else{'reference text'}
+            Add-DiscoveryOperation $script:DiscoveryLog view @{path=$Path} $true -Actor $Actor -Content $Text
+        }
+        (Get-EfficiencyRecoveryDecision @script:DiscoveryInput).allowed|Should -BeFalse
+        if($Boundary -eq 'outside root'){
+            Add-DiscoveryOperation $script:DiscoveryLog view @{path=(Join-Path $script:DiscoveryWorkspace 'outside/../.agents/skills/squad/references/entry-schemas.md')} $true
+            (Get-EfficiencyRecoveryDecision @script:DiscoveryInput).allowed|Should -BeFalse
+        }
+    }
+}
+
 Describe 'Efficiency native compaction boundary' -Tag 'Unit' {
     BeforeAll {
         $script:FakeAcpText = Get-FakeEfficiencyAcpText
@@ -409,6 +484,40 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
 }
 
 Describe 'Efficiency quality and comparison gates' -Tag 'Unit' {
+    It 'uses CLI-compatible restrictions that leave the independent judge without tools' {
+        $Workspace = Join-Path $TestDrive 'judge-workspace'
+        $Output = Join-Path $TestDrive 'judge-output'
+        New-Item -ItemType Directory -Path (Join-Path $Workspace 'docs/requirements/reviews'), $Output -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $Workspace 'docs/requirements/brd.md') -Value 'Synthetic BRD.'
+        Set-Content -LiteralPath (Join-Path $Workspace 'docs/requirements/prd.md') -Value 'Synthetic PRD.'
+        Set-Content -LiteralPath (Join-Path $Workspace 'docs/requirements/reviews/closing.md') -Value 'Synthetic closing review.'
+        $Cli = Join-Path $TestDrive 'fake-judge-cli.ps1'
+        @'
+$ErrorActionPreference = 'Stop'
+$null = [Console]::In.ReadToEnd()
+@{ arguments = @($args) } | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath (Join-Path $PWD 'judge-argv.json') -Encoding utf8NoBOM
+exit 37
+'@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
+
+        $Result = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Output -CliPath $Cli -Model 'fake-model' -MaxCredits 1 -ReviewPath 'docs/requirements/reviews/closing.md'
+
+        $Result.valid | Should -BeFalse
+        $Result.process.exitCode | Should -Be 37
+        $Arguments = (Get-Content -LiteralPath (Join-Path $Output 'judge-argv.json') -Raw | ConvertFrom-Json -AsHashtable).arguments
+        $AllowedIndex = [array]::IndexOf($Arguments, '--available-tools')
+        $DeniedIndex = [array]::IndexOf($Arguments, '--deny-tool')
+        $AllowedIndex | Should -BeGreaterThan 0
+        $Arguments[$AllowedIndex + 1] | Should -Be 'view'
+        $DeniedIndex | Should -BeGreaterThan 0
+        $Arguments[$DeniedIndex + 1] | Should -Be 'view'
+        foreach ($BroadPermission in @('--allow-all', '--yolo', '--allow-all-tools', '--allow-all-paths', '--allow-all-urls')) {
+            $Arguments | Should -Not -Contain $BroadPermission
+        }
+        foreach ($PreservedOption in @('--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export')) {
+            $Arguments | Should -Contain $PreservedOption
+        }
+    }
+
     It 'requires three pairs and includes independently metered judge work' {
         $Report = Compare-EfficiencyRuns @(New-TestRuns)
         $Report.eligible | Should -BeTrue
@@ -575,6 +684,8 @@ exit 37
         $Captured.arguments | Should -Contain 'shell(git push)'
         $Captured.arguments[1] | Should -Match 'split large reference reads into explicit ranges'
         $Captured.arguments[1] | Should -Match 'one complete Scribe handoff per completed dispatch'
+        $Captured.arguments[1] | Should -Match 'every dispatched role and Scribe prompt, outside any schema payload'
+        $Captured.arguments[1] | Should -Match ([regex]::Escape("absolute workspace '$(Join-Path $Trial 'workspace')'; absolute skill root '$(Join-Path $Trial 'workspace')/.agents/skills'"))
         $Captured.repoHooks | Should -Be 'true'
         $Run = Get-Content -LiteralPath (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         $Run.stages[0].process.exitCode | Should -Be 37
