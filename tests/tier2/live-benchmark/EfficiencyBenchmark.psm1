@@ -182,6 +182,200 @@ function Measure-EfficiencyEvents {
     }
 }
 
+function Get-EfficiencyRecoveryPolicy {
+    <# .SYNOPSIS
+    Reserves one same-stage compact/continuation inside the original run ceiling.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][double]$MaxCredits)
+    if ([double]::IsNaN($MaxCredits) -or [double]::IsInfinity($MaxCredits) -or $MaxCredits -le 0) { throw 'A finite positive credit ceiling is required.' }
+    [pscustomobject]@{
+        id = 'same-session-acp-compact-v1'; maxCyclesPerStage = 1
+        initialCredits = $MaxCredits / 8; compactionCredits = $MaxCredits / 16
+        continuationCredits = $MaxCredits / 16; judgeCredits = $MaxCredits / 4
+    }
+}
+
+function Get-EfficiencyRecoveryDecision {
+    <# .SYNOPSIS
+    Admits only a healthy, metered prompt-budget failure with remaining stage limits.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Path, [AllowNull()]$Metrics, [AllowNull()]$Process, [AllowNull()]$Readiness,
+        [int]$RemainingRequests, [double]$RemainingSeconds, [bool]$AcpSupported, [bool]$RecoveryUsed
+    )
+    $Reason = if ($RecoveryUsed) { 'recovery-limit' }
+    elseif (-not $AcpSupported) { 'unsupported-host' }
+    elseif ($null -eq $Process -or $Process.exitCode -ne 0 -or $Process.stopCause -ne 'none') { 'process-stop' }
+    elseif ($null -eq $Metrics -or -not $Metrics.complete -or $null -eq $Metrics.modelRequests) { 'incomplete-metering' }
+    elseif ($Metrics.counts.questions -ne 0) { 'safety-stop' }
+    elseif ($null -eq $Readiness -or -not $Readiness.checks['stateVerifier']) { 'state-integrity' }
+    elseif ($RemainingRequests -lt 2 -or $RemainingSeconds -le 0) { 'stage-limit' }
+    elseif (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { 'missing-evidence' }
+    else { $null }
+    if ($Reason) { return [pscustomobject]@{ allowed = $false; reason = $Reason } }
+    $BudgetError = $false
+        $Reader = [IO.File]::OpenText($Path)
+        try {
+                while ($null -ne ($Line = $Reader.ReadLine())) {
+                        try { $Event = $Line | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop } catch { continue }
+                        $Data = $Event['data']
+                        if ($Data -isnot [Collections.IDictionary]) { continue }
+                        $Message = ''
+                        if ($Event['type'] -eq 'session.error') { $Message = [string]$Data['message'] }
+                        elseif ($Event['type'] -eq 'abort' -and $Data['reason'] -eq 'user_initiated') { return [pscustomobject]@{ allowed = $false; reason = 'safety-stop' } }
+                        elseif ($Event['type'] -eq 'tool.execution_complete' -and $Data['success'] -eq $false) {
+                                $Message = if ($Data['error'] -is [Collections.IDictionary]) { [string]$Data['error']['message'] } else { [string]$Data['error'] }
+                        }
+                        if ($Message -match '(?i)permission denied|not authorized|blocked by policy|credit limit') { return [pscustomobject]@{ allowed = $false; reason = 'safety-stop' } }
+                        if ($Event['type'] -eq 'session.error') {
+                            if ($Message -match "(?i)Request exceeds the model's prompt budget") { $BudgetError = $true }
+                            else { return [pscustomobject]@{ allowed = $false; reason = 'non-context-error' } }
+                        }
+        }
+    }
+        finally { $Reader.Dispose() }
+    [pscustomobject]@{ allowed = $BudgetError; reason = if ($BudgetError) { 'context-budget' } else { 'not-context-budget' } }
+}
+
+function Update-EfficiencyCompactionMonitor {
+    <# .SYNOPSIS
+    Tracks canonical stage requests and fresh compaction evidence without replay inflation.
+    #>
+    [CmdletBinding()]
+    param([hashtable]$Context, [int]$StartLine, [int]$MaxRequests)
+    $Context.pending += $Context.reader.ReadToEnd()
+    while (($Boundary = $Context.pending.IndexOf("`n")) -ge 0) {
+        $Line = $Context.pending.Substring(0, $Boundary)
+        $Context.pending = $Context.pending.Substring($Boundary + 1)
+        $Context.lines++
+        try { $Event = $Line | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop } catch { continue }
+        if ($Event['id'] -and -not $Context.eventIds.Add([string]$Event['id'])) { continue }
+        if ($Event['type'] -eq 'session.usage_record') {
+            $Accounting = $Event['data']['usage']['accounting']
+            if (-not $Accounting['sourceSessionId'] -or -not $Accounting['usageId']) { $Context.reason = 'incomplete-metering'; throw 'Missing usage identity.' }
+            if ($Context.usageIds.Add([string]$Accounting['sourceSessionId'] + ':' + [string]$Accounting['usageId'])) {
+                if ($Context.lines -gt $StartLine) { $Context.requests++ }
+                if ($Context.lines -gt $Context.proofLine) { $Context.freshUsage++ }
+            }
+        }
+        if ($Event['type'] -eq 'session.compaction_complete' -and $Context.lines -gt $Context.proofLine) { $Context.freshCompactions++ }
+        if ($Event['type'] -eq 'tool.execution_start' -and $Event['data']['toolName'] -in @('ask_user', 'vscode_askQuestions') -and $Context.lines -gt $StartLine) { $Context.reason = 'unexpected-question'; throw 'Unexpected question.' }
+        if ($Event['type'] -eq 'abort' -and $Event['data']['reason'] -eq 'user_initiated' -and $Context.lines -gt $Context.proofLine) { $Context.reason = 'user-abort'; throw 'Compaction interrupted by user.' }
+    }
+    if ($Context.requests -ge $MaxRequests) { $Context.reason = 'request-limit'; throw 'Stage request ceiling reached.' }
+}
+
+function Invoke-EfficiencyCompaction {
+    <# .SYNOPSIS
+    Compacts an existing session through advertised ACP control, requiring fresh metered proof.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$CliPath, [Parameter(Mandatory)][string]$SessionId,
+        [Parameter(Mandatory)][string]$Workspace, [Parameter(Mandatory)][string]$EventsPath,
+        [Parameter(Mandatory)][string]$OutputPath, [Parameter(Mandatory)][string]$UsagePath,
+        [Parameter(Mandatory)][double]$MaxCredits, [string]$Model,
+        [ValidateRange(1, 300)][int]$TimeoutSeconds = 120, [int]$StartLine = 0,
+        [ValidateRange(1, 300)][int]$MaxRequests = 96, [string[]]$DisabledServers = @(),
+        [hashtable]$EnvironmentVariables = @{}
+    )
+    $Info = [Diagnostics.ProcessStartInfo]::new()
+    $Arguments = @('--acp', '--model', $Model, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--available-tools', 'view,glob,grep', '--deny-tool', 'shell(*)', '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+    foreach ($Server in $DisabledServers) { $Arguments += @('--disable-mcp-server', $Server) }
+    $Info.FileName = $CliPath
+    if ($CliPath.EndsWith('.ps1')) { $Info.FileName = (Get-Command pwsh).Source; $Arguments = @('-NoProfile', '-File', $CliPath) + $Arguments }
+    foreach ($Argument in $Arguments) { $Info.ArgumentList.Add($Argument) }
+    $Info.WorkingDirectory = $Workspace; $Info.UseShellExecute = $false
+    $Info.RedirectStandardInput = $true; $Info.RedirectStandardOutput = $true; $Info.RedirectStandardError = $true
+    $Info.StandardInputEncoding = [Text.UTF8Encoding]::new($false); $Info.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+    foreach ($Name in @('COPILOT_AGENT', 'COPILOT_DEBUG_NONCE', 'COPILOT_ENTRA_AUTH_AUD')) { $Info.Environment.Remove($Name) | Out-Null }
+    foreach ($Name in $EnvironmentVariables.Keys) { $Info.Environment[$Name] = [string]$EnvironmentVariables[$Name] }
+    $Info.Environment['GIT_TERMINAL_PROMPT'] = '0'
+    $Process = [Diagnostics.Process]::new(); $Process.StartInfo = $Info
+    $Watch = [Diagnostics.Stopwatch]::StartNew(); $Started = $false; $Succeeded = $false; $ExitCode = $null
+    $Context = @{ pending = ''; lines = 0; proofLine = [int]::MaxValue; requests = 0; freshUsage = 0; freshCompactions = 0; reason = 'protocol-error'; usageIds = [Collections.Generic.HashSet[string]]::new(); eventIds = [Collections.Generic.HashSet[string]]::new(); commands = [Collections.Generic.HashSet[string]]::new() }
+    $Raw = $null; $Errors = $null
+    try {
+        $Context.reader = [IO.StreamReader]::new([IO.File]::Open($EventsPath, 'Open', 'Read', 'ReadWrite'))
+        $Raw = [IO.StreamWriter]::new([IO.File]::Open($OutputPath, 'CreateNew', 'Write', 'Read'), [Text.UTF8Encoding]::new($false)); $Raw.AutoFlush = $true
+        $Errors = [IO.File]::Open($OutputPath + '.stderr', 'CreateNew', 'Write', 'Read')
+        Update-EfficiencyCompactionMonitor -Context $Context -StartLine $StartLine -MaxRequests $MaxRequests
+        if (-not $Process.Start()) { throw 'ACP process did not start.' }
+        $Started = $true; $Process.StandardInput.AutoFlush = $true
+        $ErrorCopy = $Process.StandardError.BaseStream.CopyToAsync($Errors)
+        $Request = {
+            param([int]$Id, [string]$Method, [hashtable]$Parameters)
+            $Process.StandardInput.WriteLine((@{ jsonrpc = '2.0'; id = $Id; method = $Method; params = $Parameters } | ConvertTo-Json -Depth 20 -Compress))
+            $PendingRead = $null
+            while ($true) {
+                Update-EfficiencyCompactionMonitor -Context $Context -StartLine $StartLine -MaxRequests $MaxRequests
+                if ($Watch.Elapsed.TotalSeconds -ge $TimeoutSeconds) { $Context.reason = 'timeout'; throw 'Compaction deadline reached.' }
+                if ($null -eq $PendingRead) { $PendingRead = $Process.StandardOutput.ReadLineAsync() }
+                if (-not $PendingRead.Wait(100)) { continue }
+                $Line = $PendingRead.GetAwaiter().GetResult(); $PendingRead = $null
+                if ($null -eq $Line) { throw 'ACP process ended before response.' }
+                $Raw.WriteLine($Line)
+                $Reply = $Line | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop
+                if ($Reply['method'] -and $Reply.ContainsKey('id')) {
+                    $Response = if ($Reply['method'] -eq 'session/request_permission') { @{ jsonrpc = '2.0'; id = $Reply['id']; result = @{ outcome = @{ outcome = 'cancelled' } } } } else { @{ jsonrpc = '2.0'; id = $Reply['id']; error = @{ code = -32601; message = 'Compaction control does not provide client tools.' } } }
+                    $Process.StandardInput.WriteLine(($Response | ConvertTo-Json -Depth 10 -Compress))
+                    $Context.reason = 'client-request'; throw 'Unexpected client request.'
+                }
+                if ($Reply['method'] -eq 'session/update' -and $Reply['params']['sessionId'] -eq $SessionId -and $Reply['params']['update']['sessionUpdate'] -eq 'available_commands_update') {
+                    foreach ($Command in $Reply['params']['update']['availableCommands']) { $null = $Context.commands.Add([string]$Command['name']) }
+                }
+                if (-not $Reply['method'] -and $Reply['id'] -eq $Id) {
+                    if ($Reply['error']) { throw 'ACP request failed; diagnostic retained locally.' }
+                    return $Reply['result']
+                }
+            }
+        }
+        $Initialized = & $Request 1 'initialize' @{ protocolVersion = 1; clientCapabilities = @{ session = @{ compaction = @{} } }; clientInfo = @{ name = 'hve-efficiency-recovery'; version = '1' } }
+        if (-not $Initialized['agentCapabilities']['loadSession']) { $Context.reason = 'unsupported-load'; throw 'Session load unsupported.' }
+        $null = & $Request 2 'session/load' @{ sessionId = $SessionId; cwd = $Workspace; mcpServers = @() }
+        if (-not $Context.commands.Contains('compact')) { $Context.reason = 'unsupported-command'; throw 'Compact was not advertised.' }
+        Update-EfficiencyCompactionMonitor -Context $Context -StartLine $StartLine -MaxRequests $MaxRequests
+        $Context.proofLine = $Context.lines
+        $Compacted = & $Request 3 'session/prompt' @{ sessionId = $SessionId; prompt = @(@{ type = 'text'; text = '/compact Preserve EXERCISE.txt, the current stage, completed artifact paths, failed Scribe handoff, run identity and all safety/acceptance constraints. Omit repeated tool output; do not execute project work.' }) }
+        if ($Compacted['stopReason'] -ne 'end_turn') { $Context.reason = 'compact-stop'; throw 'Compaction did not end normally.' }
+        $Capabilities = $Initialized['agentCapabilities']['sessionCapabilities']
+        if ($Capabilities -is [Collections.IDictionary] -and $Capabilities.Contains('close')) { $null = & $Request 4 'session/close' @{ sessionId = $SessionId } }
+        $Process.StandardInput.Close()
+        $null = $Process.WaitForExit([Math]::Max(0, [Math]::Min(1000, [int](1000 * ($TimeoutSeconds - $Watch.Elapsed.TotalSeconds)))))
+        Update-EfficiencyCompactionMonitor -Context $Context -StartLine $StartLine -MaxRequests $MaxRequests
+        if ($Context.freshCompactions -eq 0 -or $Context.freshUsage -eq 0) { $Context.reason = 'unverified-compaction'; throw 'No fresh metered compaction proof.' }
+        $Succeeded = $true; $Context.reason = 'none'
+    }
+    catch { $Succeeded = $false }
+    finally {
+        if ($Started) {
+            if (-not $Process.HasExited) { $Process.Kill($true); $Process.WaitForExit() }
+            $ExitCode = $Process.ExitCode
+            $null = $ErrorCopy.GetAwaiter().GetResult()
+        }
+        if ($Context.ContainsKey('reader')) { $Context.reader.Dispose() }
+        if ($Raw) { $Raw.Dispose() }; if ($Errors) { $Errors.Dispose() }
+        $Process.Dispose()
+    }
+    [pscustomobject]@{ succeeded = $Succeeded; stopCause = $Context.reason; exitCode = $ExitCode; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $Context.requests; freshCompactions = $Context.freshCompactions; freshUsage = $Context.freshUsage }
+}
+
+function Save-EfficiencyAttemptEvidence {
+    <# .SYNOPSIS
+    Freezes each invocation once and returns its cumulative metrics and line boundary.
+    #>
+    [CmdletBinding()]
+    param([string]$EventsPath, [string]$Out, [ValidatePattern('^[a-z]+(?:-[a-z]+)*$')][string]$Prefix)
+    if (-not (Test-Path -LiteralPath $EventsPath -PathType Leaf)) { return [pscustomobject]@{ metrics = $null; lineCount = 0 } }
+    $Snapshot = Join-Path $Out "$Prefix-events.jsonl"
+    Copy-EfficiencySnapshot $EventsPath $Snapshot | Out-Null
+    $Metrics = Measure-EfficiencyEvents $Snapshot
+    $Metrics | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $Out "$Prefix-metrics.json") -Encoding utf8NoBOM
+    [pscustomobject]@{ metrics = $Metrics; lineCount = (Get-Content -LiteralPath $Snapshot | Measure-Object -Line).Lines }
+}
+
 function Invoke-EfficiencyProcess {
     <# .SYNOPSIS
     Runs a subprocess with redirected streams and a watchdog; optionally watches CLI usage limits.
@@ -584,6 +778,7 @@ function Get-EfficiencyCompatibility {
         roleModelPolicy = (@($Policies.Keys | Sort-Object | ForEach-Object { $_ + ':' + $Policies[$_] }) -join ';')
         disabledMcpServers = (@(Get-ConfiguredMcpServerNames -CliPath $CliPath | Sort-Object) -join ',')
         maxCredits = $MaxCredits; continuations = $Scenario.maxContinuationsPerStage
+        recoveryPolicy = (Get-EfficiencyRecoveryPolicy -MaxCredits $MaxCredits).id
     }
 }
 
@@ -620,7 +815,7 @@ function ConvertTo-EfficiencyRunSummary {
     $Summary['metrics'] = $Run['metrics']
     $Summary['qualityScores'] = if ($Run['judge'] -and $Run['judge']['response']) { $Run['judge']['response']['scores'] } else { $null }
     $Summary['judgeMetrics'] = if ($Run['judge']) { $Run['judge']['metrics'] } else { $null }
-    $Summary['stages'] = @($Run['stages'] | ForEach-Object { @{ name = $_['name']; passed = $_['passed']; process = $_['process']; readiness = $_['readiness'] } })
+    $Summary['stages'] = @($Run['stages'] | ForEach-Object { @{ name = $_['name']; passed = $_['passed']; process = $_['process']; readiness = $_['readiness']; attempts = $_['attempts']; recovery = $_['recovery'] } })
     $Summary
 }
 
@@ -690,7 +885,7 @@ function Invoke-EfficiencySeries {
                 $Slot['failedStages'] = @($Run['stages'] | Where-Object { -not $_['passed'] -and $_['name'] -in @('init', 'requirements', 'build') } | ForEach-Object {
                     $Cause = [string]$_['process']['stopCause']
                     $ReadinessChecks = if ($_['readiness']) { $_['readiness']['checks'] } else { $null }
-                    @{ name = $_['name']; exitCode = [int]$_['process']['exitCode']; stopCause = if ($Cause -in @('none', 'timeout', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' }; failedChecks = @(if ($ReadinessChecks) { $ReadinessChecks.Keys | Where-Object { -not $ReadinessChecks[$_] } | Sort-Object }) }
+                    @{ name = $_['name']; exitCode = [int]$_['process']['exitCode']; stopCause = if ($Cause -in @('none', 'timeout', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' }; failedChecks = @(if ($ReadinessChecks) { $ReadinessChecks.Keys | Where-Object { -not $ReadinessChecks[$_] } | Sort-Object }); recovery = $_['recovery'] }
                 })
                 $Failed = $true
             }
@@ -734,4 +929,4 @@ function Invoke-EfficiencySeries {
     [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established')) { 0 } else { 2 } }
 }
 
-Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Invoke-EfficiencySeries
+Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Invoke-EfficiencySeries

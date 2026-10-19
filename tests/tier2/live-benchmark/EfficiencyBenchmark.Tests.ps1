@@ -5,6 +5,36 @@
 
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+    function Get-FakeEfficiencyAcpText {
+        @'
+$ErrorActionPreference='Stop'
+$Mode=$env:HVE_FAKE_ACP_MODE
+while($null -ne ($Line=[Console]::In.ReadLine())) {
+    Add-Content -LiteralPath $env:HVE_FAKE_ACP_TRACE -Value $Line
+    $Request=$Line|ConvertFrom-Json -AsHashtable
+    $Result=@{}
+    switch($Request.method) {
+        'initialize' { $Result=@{protocolVersion=1;agentCapabilities=@{loadSession=($Mode -ne 'unsupported-load');sessionCapabilities=@{close=@{}}}} }
+        'session/load' {
+            $Session=$Request.params.sessionId
+            @{jsonrpc='2.0';method='session/update';params=@{sessionId=$Session;update=@{sessionUpdate='available_commands_update';availableCommands=@(if($Mode -ne 'unsupported-command'){@{name='compact'}})}}}|ConvertTo-Json -Depth 12 -Compress
+        }
+        'session/prompt' {
+            if($Mode -eq 'timeout'){while($true){}}
+            if($Mode -eq 'permission'){@{jsonrpc='2.0';id=99;method='session/request_permission';params=@{sessionId=$Session}}|ConvertTo-Json -Compress;continue}
+            if($Mode -eq 'rpc-failure'){@{jsonrpc='2.0';id=$Request.id;error=@{code=-32603;message='PRIVATE PROTOCOL DIAGNOSTIC'}}|ConvertTo-Json -Compress;continue}
+            @{jsonrpc='2.0';method='session/update';params=@{sessionId=$Session;update=@{sessionUpdate='compaction_update';compactionId='old-replayed';status='completed';summary=@(@{type='text';text='PRIVATE REPLAY'})}}}|ConvertTo-Json -Depth 12 -Compress
+            if($Mode -ne 'no-proof') {@{id=[guid]::NewGuid().ToString();type='session.compaction_complete';data=@{}}|ConvertTo-Json -Compress|Add-Content -LiteralPath $env:HVE_FAKE_ACP_EVENTS}
+            if($Mode -ne 'unmetered') {@{id=[guid]::NewGuid().ToString();type='session.usage_record';data=@{usage=@{inputTokens=20;outputTokens=3;accounting=@{sourceSessionId=$Session;usageId='compact-usage'}}}}|ConvertTo-Json -Depth 10 -Compress|Add-Content -LiteralPath $env:HVE_FAKE_ACP_EVENTS}
+            $Result=@{stopReason='end_turn'}
+        }
+        'session/close' { }
+        default {continue}
+    }
+    @{jsonrpc='2.0';id=$Request.id;result=$Result}|ConvertTo-Json -Depth 12 -Compress
+}
+'@
+    }
     function New-TestEvent {
         param([string]$Type, [hashtable]$Data, [int]$Second = 0, [string]$Id = ([guid]::NewGuid().ToString()))
         @{ id = $Id; type = $Type; timestamp = "2026-10-18T00:00:$($Second.ToString('00'))Z"; data = $Data } | ConvertTo-Json -Depth 15 -Compress
@@ -101,6 +131,179 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
         Add-Content $Source 'later'
         (Get-FileHash $Destination).Hash.ToLowerInvariant() | Should -Be $Evidence.sha256
         { Copy-EfficiencySnapshot $Source $Destination } | Should -Throw
+    }
+}
+
+Describe 'Efficiency bounded recovery policy' -Tag 'Unit' {
+    BeforeEach {
+        $script:RecoveryLog = Join-Path $TestDrive 'recovery.jsonl'
+        New-TestEvent 'session.error' @{ message = "Request exceeds the model's prompt budget after reserving output (127666 tokens; limit 100000)." } | Set-Content $script:RecoveryLog
+        $script:RecoveryInput = @{
+            Path = $script:RecoveryLog
+            Metrics = @{ complete = $true; modelRequests = 2; counts = @{ questions = 0 } }
+            Process = @{ exitCode = 0; stopCause = 'none' }
+            Readiness = @{ passed = $false; checks = @{ stateVerifier = $true } }
+            RemainingRequests = 10; RemainingSeconds = 60; AcpSupported = $true; RecoveryUsed = $false
+        }
+    }
+    It 'reserves recovery without increasing the per-run credit sum' {
+        $Policy = Get-EfficiencyRecoveryPolicy -MaxCredits 1000
+        (3 * ($Policy.initialCredits + $Policy.compactionCredits + $Policy.continuationCredits) + $Policy.judgeCredits) | Should -Be 1000
+        $Policy.maxCyclesPerStage | Should -Be 1
+    }
+    It 'permits one healthy structured context-budget recovery' {
+        (Get-EfficiencyRecoveryDecision @script:RecoveryInput).allowed | Should -BeTrue
+        $script:RecoveryInput.AcpSupported = $false
+        (Get-EfficiencyRecoveryDecision @script:RecoveryInput).allowed | Should -BeFalse
+    }
+    It 'does not infer a context error from ordinary assistant text' {
+        New-TestEvent 'assistant.message' @{ message = "Request exceeds the model's prompt budget" } | Set-Content $script:RecoveryLog
+        (Get-EfficiencyRecoveryDecision @script:RecoveryInput).allowed | Should -BeFalse
+        Add-Content $script:RecoveryLog (New-TestEvent 'session.error' @{ message = "Request exceeds the model's prompt budget" })
+        Add-Content $script:RecoveryLog (New-TestEvent 'session.error' @{ message = 'Authentication failed.' })
+        (Get-EfficiencyRecoveryDecision @script:RecoveryInput).allowed | Should -BeFalse
+    }
+    It 'rejects <Failure> instead of retrying' -ForEach @(
+        @{ Failure = 'repeated attempt' }
+        @{ Failure = 'request exhaustion' }
+        @{ Failure = 'unmetered evidence' }
+        @{ Failure = 'state integrity' }
+        @{ Failure = 'safety stop' }
+    ) {
+        switch ($Failure) {
+            'repeated attempt' { $script:RecoveryInput.RecoveryUsed = $true }
+            'request exhaustion' {
+                $script:RecoveryInput.RemainingRequests = 1
+                (Get-EfficiencyRecoveryDecision @script:RecoveryInput).allowed | Should -BeFalse
+                $script:RecoveryInput.RemainingRequests = 10; $script:RecoveryInput.RemainingSeconds = 0
+            }
+            'unmetered evidence' { $script:RecoveryInput.Metrics.complete = $false }
+            'state integrity' { $script:RecoveryInput.Readiness.checks.stateVerifier = $false }
+            'safety stop' { Add-Content $script:RecoveryLog (New-TestEvent 'session.error' @{ message = 'Permission denied by policy.' }) }
+        }
+        (Get-EfficiencyRecoveryDecision @script:RecoveryInput).allowed | Should -BeFalse
+    }
+}
+
+Describe 'Efficiency native compaction boundary' -Tag 'Unit' {
+    BeforeAll {
+        $script:FakeAcpText = Get-FakeEfficiencyAcpText
+    }
+    It 'enforces native compaction outcome <Mode>' -ForEach @(
+        @{ Mode = 'success'; Expected = 'none' }
+        @{ Mode = 'unsupported-load'; Expected = 'unsupported-load' }
+        @{ Mode = 'unsupported-command'; Expected = 'unsupported-command' }
+        @{ Mode = 'no-proof'; Expected = 'unverified-compaction' }
+        @{ Mode = 'unmetered'; Expected = 'unverified-compaction' }
+        @{ Mode = 'permission'; Expected = 'client-request' }
+        @{ Mode = 'rpc-failure'; Expected = 'protocol-error' }
+        @{ Mode = 'timeout'; Expected = 'timeout' }
+    ) {
+        $Cli = Join-Path $TestDrive "$Mode-cli.ps1"
+        $Events = Join-Path $TestDrive "$Mode-events.jsonl"
+        $Trace = Join-Path $TestDrive "$Mode-trace.jsonl"
+        $Output = Join-Path $TestDrive "$Mode-output.jsonl"
+        Set-Content -LiteralPath $Cli -Value $script:FakeAcpText -Encoding utf8NoBOM
+        @(New-TestUsage; New-TestEvent 'session.compaction_complete' @{}) | Set-Content $Events
+        $Session = [guid]::NewGuid().ToString()
+        $Result = Invoke-EfficiencyCompaction -CliPath $Cli -SessionId $Session -Workspace $TestDrive -EventsPath $Events -OutputPath $Output -UsagePath (Join-Path $TestDrive "$Mode-usage.json") -MaxCredits 10 -Model fake -TimeoutSeconds $(if($Mode -eq 'timeout'){1}else{10}) -MaxRequests 10 -EnvironmentVariables @{HVE_FAKE_ACP_MODE=$Mode;HVE_FAKE_ACP_EVENTS=$Events;HVE_FAKE_ACP_TRACE=$Trace}
+        $Result.stopCause | Should -Be $Expected
+        $Result.succeeded | Should -Be ($Mode -eq 'success')
+        ($Result | ConvertTo-Json -Depth 10) | Should -Not -Match 'PRIVATE REPLAY|PRIVATE PROTOCOL DIAGNOSTIC'
+        if ($Mode -eq 'success') {
+            $Result.freshCompactions | Should -Be 1
+            $Result.freshUsage | Should -Be 1
+            $Requests = @(Get-Content $Trace | ForEach-Object { $_ | ConvertFrom-Json })
+            ($Requests | Where-Object method -EQ 'session/load').params.sessionId | Should -Be $Session
+            ($Requests | Where-Object method -EQ 'session/prompt').params.prompt[0].text | Should -Match '^/compact '
+            $Requests.method | Should -Not -Contain 'session/new'
+        }
+    }
+}
+
+Describe 'Efficiency recovery end to end' -Tag 'Unit' {
+    It 'preserves same-run evidence and stops correctly for <Outcome>' -ForEach @(
+        @{ Outcome = 'recovered' }
+        @{ Outcome = 'still-fails' }
+    ) {
+        $Install = Join-Path $TestDrive "$Outcome-install"; $Trial = Join-Path $TestDrive "$Outcome-run"
+        New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
+        foreach ($Name in @('squad-coordinator.agent.md','brd-builder.agent.md','prd-builder.agent.md')) { Set-Content (Join-Path $Install ".github/agents/$Name") 'offline fixture' }
+        $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+        $Fixture = (Join-Path $Source 'tests/fixtures/scribe-benchmark/applied').Replace("'", "''")
+        $Cli = Join-Path $TestDrive "$Outcome-cli.ps1"
+        $Acp = (Get-FakeEfficiencyAcpText).Replace('$Session=$Request.params.sessionId', '$Session=$Request.params.sessionId; $env:HVE_FAKE_ACP_EVENTS=Join-Path $HOME ".copilot/session-state/$Session/events.jsonl"')
+        $Fake = @'
+if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
+if ($args -contains '--version') { 'offline-recovery-cli'; exit 0 }
+if ($args -contains '--help') { '--acp --session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+if ($args -contains '--acp') {
+    $env:HVE_FAKE_ACP_MODE='success'
+    $env:HVE_FAKE_ACP_TRACE=Join-Path $PWD 'acp-trace.jsonl'
+__ACP__
+    exit 0
+}
+$ErrorActionPreference='Stop'
+$Session=$args[[array]::IndexOf($args,'--session-id')+1]
+$Prompt=$args[[array]::IndexOf($args,'-p')+1]
+$Kind=if($Prompt -match 'Initialization only;'){'init'}elseif($Prompt -match 'Implement docs/requirements/prd.md'){'build'}elseif($Prompt -match 'This is a continuation of this same stage'){'continuation'}else{'requirements'}
+@{kind=$Kind;session=$Session;ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1];resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
+$SessionRoot=Join-Path $HOME ".copilot/session-state/$Session"
+New-Item -ItemType Directory -Path $SessionRoot -Force|Out-Null
+$Events=Join-Path $SessionRoot 'events.jsonl'
+function Write-FakeEvent([string]$Type,[hashtable]$Data) {
+    $Line=@{id=[guid]::NewGuid().ToString();type=$Type;data=$Data}|ConvertTo-Json -Depth 20 -Compress
+    Add-Content -LiteralPath $Events -Value $Line
+    Write-Output $Line
+}
+Write-FakeEvent 'session.usage_record' @{usage=@{inputTokens=10;outputTokens=1;accounting=@{sourceSessionId=$Session;usageId="$Kind-usage"}}}
+if($Kind -eq 'init') {
+    New-Item -ItemType Directory -Path '.copilot-tracking' -Force|Out-Null
+    Copy-Item -LiteralPath '__FIXTURE__' -Destination '.copilot-tracking/squad' -Recurse
+    Write-FakeEvent 'subagent.started' @{agentName='Squad Scribe'}
+} elseif($Kind -eq 'requirements' -or ($Kind -eq 'continuation' -and '__OUTCOME__' -eq 'still-fails')) {
+    Write-FakeEvent 'session.error' @{message="Request exceeds the model's prompt budget after reserving output (127666 tokens; limit 100000)."}
+} elseif($Kind -eq 'continuation') {
+    New-Item -ItemType Directory -Path 'docs/requirements/reviews' -Force|Out-Null
+    foreach($Name in @('brd.md','prd.md')){Set-Content "docs/requirements/$Name" 'synthetic published requirement'}
+    foreach($Agent in @('BRD Builder','PRD Builder','BRD Quality Reviewer','PRD Quality Reviewer')) {
+        $Relative="docs/requirements/reviews/$Agent.md"
+        Set-Content -LiteralPath $Relative -Value 'synthetic reviewer or author artifact'
+        $Block=[ordered]@{model='Claude Haiku 4.5';model_source='agent-pinned';priced_as='Claude Haiku 4.5';model_tier='fast';internal_turns=0;input_tokens=0;cached_tokens=0;cache_write_tokens=0;output_tokens=0;basis='estimated'}|ConvertTo-Json
+        Set-Content -LiteralPath ".copilot-tracking/squad/history/$Agent.md" -Value ("# History: $Agent`n`n### $([datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')) Synthetic test dispatch`n* Deliverable: $Relative`n`n#### Consumption`n"+'```json'+"`n$Block`n"+'```')
+        Write-FakeEvent 'subagent.started' @{agentName=$Agent}
+    }
+} elseif($Kind -eq 'build') { exit 37 }
+exit 0
+'@
+        Set-Content -LiteralPath $Cli -Value ($Fake.Replace('__ACP__',$Acp).Replace('__FIXTURE__',$Fixture).Replace('__OUTCOME__',$Outcome)) -Encoding utf8NoBOM
+        $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'),'-Mode','Run','-SourceRoot',$Source,'-InstallRoot',$Install,'-CliPath',$Cli,'-TrialRoot',$Trial,'-MaxCredits','1000','-Live','-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 90 -InputText ''
+        $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
+        try {
+            $Execution.exitCode | Should -Be 2
+            $Run.stages[0].passed | Should -BeTrue
+            $Stage = $Run.stages[1]
+            $Stage.name | Should -Be requirements
+            $Stage.attempts.kind -join ',' | Should -Be 'stage,compaction,continuation'
+            $Stage.recovery.count | Should -Be 1
+            $Stage.passed | Should -Be ($Outcome -eq 'recovered')
+            $Stage.recovery.status | Should -Be $(if($Outcome -eq 'recovered'){'recovered'}else{'failed'})
+            $Stage.stageTokenDelta.inputTokens | Should -Be 40
+            $Stage.metrics.modelRequests | Should -Be 4
+            foreach($Prefix in @('requirements','requirements-compaction','requirements-continuation')) { Test-Path (Join-Path $Trial "out/$Prefix-events.jsonl") | Should -BeTrue }
+            Get-Content (Join-Path $Trial 'out/requirements-stdout.jsonl') -Raw | Should -Match '127666'
+            $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            @($Calls.session | Sort-Object -Unique).Count | Should -Be 1
+            ($Calls | Where-Object kind -EQ continuation).resumeOnly | Should -BeTrue
+            ($Calls | Where-Object kind -EQ continuation).ceiling | Should -Be 375
+            $AcpCalls = @(Get-Content (Join-Path $Trial 'workspace/acp-trace.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            @($AcpCalls | Where-Object method -EQ 'session/prompt').Count | Should -Be 1
+            ($AcpCalls | Where-Object method -EQ 'session/load').params.sessionId | Should -Be $Run.metadata.sessionId
+            @($Run.stages).Count | Should -Be $(if($Outcome -eq 'recovered'){3}else{2})
+            $Run.completed | Should -BeFalse
+            $Run.judge | Should -BeNullOrEmpty
+        }
+        finally { Remove-Item (Join-Path $HOME ".copilot/session-state/$($Run.metadata.sessionId)") -Recurse -Force }
     }
 }
 

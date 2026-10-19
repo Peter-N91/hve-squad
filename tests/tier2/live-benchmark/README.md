@@ -168,7 +168,40 @@ artifacts for both builders and both quality reviewers. Artifact presence does
 not replace workflow approval or final independent quality judging. Build retains
 the closing-review and role-evidence checks; functional acceptance and judging
 remain mandatory. A zero-exit blocked stage is not treated as successful merely
-because the CLI returned normally. Failures stop dependent work without retry.
+because the CLI returned normally. Eligible context-budget failures may use the
+bounded same-stage recovery below; other failures stop dependent work.
+
+### Bounded context recovery
+
+A stage with a structured prompt-budget error can receive one native context
+compaction and one continuation in the same session. The CLI must advertise ACP
+session loading and the `compact` command. Recovery requires normal process exit,
+complete metered evidence, no questions and a passing state verifier. Permission,
+policy, user-abort, integrity and ordinary missing-evidence failures do not qualify.
+
+The compaction controller uses ACP `initialize`, `session/load` and the advertised
+`/compact` command. Replayed history or a model claiming it compacted is not proof:
+a fresh canonical `session.compaction_complete` and fresh usage accounting must
+exist before continuation. Unsupported, unmetered, failed or no-op compaction
+stops. The continuation repairs the interrupted Scribe handoff first, without
+rerunning completed roles or duplicating history, then finishes pending stage work.
+A failed continuation stops; there is no second cycle or replacement trial.
+
+Each stage keeps its original quarter of the run's credit reservation: half goes
+to initial work, a quarter to compaction and a quarter to continuation. The judge
+keeps its quarter-run reservation. The shared session's CLI credit ceiling grows
+only by admitted reservations; it is not reset for each subprocess. These are
+bounded reservations and provider soft limits, not a billing guarantee. Recovery
+does not reset the 96-request/900-second stage or 2700-second trial limits.
+
+Original evidence files remain unchanged. Compaction and continuation write
+separate `*-compaction-*` and `*-continuation-*` files. Trial and series JSON retain
+`stages[].attempts` and `stages[].recovery`; Markdown reports summarize recovery
+call counts and aggregate stage time. Cumulative token/request totals include
+recovery and preserve accounting-id deduplication. The recovery policy is part of
+compatibility, so older controls cannot silently stand in for this workload.
+Offline protocol fakes verify recovery behavior; a real paid recovery is not
+implied by those tests. Series-level retries and automatic promotion remain off.
 
 `Establish` runs three controls. `Series` runs three baseline/candidate pairs in
 AB, BA, AB order and automatically scores, aggregates and compares. Both stop
@@ -181,6 +214,8 @@ series. A successful comparison never promotes an accepted report automatically.
 * PowerShell 7.4+, Git, and an authenticated Copilot CLI supporting `--add-dir`, `--session-id`,
 	`--max-ai-credits`, `--max-autopilot-continues`, `--no-ask-user`, `--no-remote`,
 	`--no-remote-export`, and `--usage-output-file`
+	ACP session loading and the advertised `compact` command are required only for
+	eligible context recovery; hosts without them stop with `unsupported-host`.
 * A clean, prepared full squad/hve-core installation containing deployed BRD
 	Builder, PRD Builder, Squad Coordinator and their dependencies, with no runtime
 	tracking state; a squad-only source overlay is insufficient

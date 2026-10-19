@@ -157,6 +157,17 @@ if ($MyInvocation.InvocationName -ne '.') {
             else { $Lines += 'No baseline/candidate deltas are available for this outcome.' }
             $Lines += @('', '## Trial Outcomes', '', '| Arm | Pair | Status |', '|---|---:|---|')
             foreach ($Slot in $Series.report.slots) { $Lines += "| $($Slot.arm) | $($Slot.pair) | $($Slot.status) |" }
+            $Recoveries = @(foreach ($Trial in $Series.report.trials) {
+                foreach ($TrialStage in $Trial.stages) {
+                    if ($TrialStage.recovery -and $TrialStage.recovery.count -gt 0) {
+                        [pscustomobject]@{ arm = $Trial.arm; pair = $Trial.pair; stage = $TrialStage.name; status = $TrialStage.recovery.status; reason = $TrialStage.recovery.reason; calls = @($TrialStage.attempts).Count; seconds = $TrialStage.process.seconds }
+                    }
+                }
+            })
+            if ($Recoveries.Count) {
+                $Lines += @('', '## Context Recovery', '', '| Arm | Pair | Stage | Calls Including Initial | Status | Reason | Stage Seconds |', '|---|---:|---|---:|---|---|---:|')
+                foreach ($RecoveryRow in $Recoveries) { $Lines += "| $($RecoveryRow.arm) | $($RecoveryRow.pair) | $($RecoveryRow.stage) | $($RecoveryRow.calls) | $($RecoveryRow.status) | $($RecoveryRow.reason) | $($RecoveryRow.seconds) |" }
+            }
             $FailedSlots = @($Series.report.slots | Where-Object status -EQ 'failed')
             if ($FailedSlots.Count) {
                 $Lines += @('', '## Failure Diagnostics', '', 'Raw diagnostics stay local and may contain sensitive content. Review before sharing.')
@@ -167,6 +178,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                         foreach ($FailedStage in $Slot.failedStages) {
                             $Lines += "Stage: $($FailedStage.name); exit: $($FailedStage.exitCode); stop cause: $($FailedStage.stopCause)."
                             if ($FailedStage.failedChecks.Count) { $Lines += "Failed readiness checks: $($FailedStage.failedChecks -join ', ')." }
+                            if ($FailedStage.recovery -and $FailedStage.recovery.count -gt 0) { $Lines += "Context recovery: $($FailedStage.recovery.status); reason: $($FailedStage.recovery.reason)." }
                         }
                     }
                     foreach ($Evidence in $Slot.evidence) { $Lines += "* $Evidence" }
@@ -184,6 +196,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                     foreach ($FailedStage in $Slot.failedStages) {
                         Write-Host "Stage: $($FailedStage.name); exit: $($FailedStage.exitCode); stop cause: $($FailedStage.stopCause)"
                         if ($FailedStage.failedChecks.Count) { Write-Host "Failed readiness checks: $($FailedStage.failedChecks -join ', ')" }
+                        if ($FailedStage.recovery -and $FailedStage.recovery.count -gt 0) { Write-Host "Context recovery: $($FailedStage.recovery.status); reason: $($FailedStage.recovery.reason)" }
                     }
                 }
                 foreach ($Evidence in $Slot.evidence) { Write-Host "Diagnostic: $(Join-Path $TrialRoot $Evidence)" }
@@ -238,27 +251,63 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Metadata | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath (Join-Path $Out 'metadata.json') -Encoding utf8NoBOM
         $Stages = [Collections.Generic.List[object]]::new()
         $AllPassed = $true; $StartLine = 0; $Metrics = $null
+        $RecoveryPolicy = Get-EfficiencyRecoveryPolicy -MaxCredits $MaxCredits
+        $SessionCreditCeiling = 0.0
         $Watch = [Diagnostics.Stopwatch]::StartNew()
         foreach ($Stage in $Prompts.Keys) {
+            $StageWatch = [Diagnostics.Stopwatch]::StartNew()
+            $StageStartLine = $StartLine; $PreviousMetrics = $Metrics
+            $PriorRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests } else { 0 }
+            $Attempts = [Collections.Generic.List[object]]::new()
+            $Recovery = @{ count = 0; status = 'not-needed'; reason = $null }
+            $SessionCreditCeiling += $RecoveryPolicy.initialCredits
             $UsagePath = Join-Path $Out "$Stage-usage.json"
-            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', ($MaxCredits / 4).ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
             foreach ($Server in $DisabledServers) { $CliArgs += @('--disable-mcp-server', $Server) }
             foreach ($Denied in @('shell(git push)', 'shell(gh)', 'shell(az)', 'shell(curl)', 'shell(wget)', 'shell(Invoke-WebRequest)', 'shell(Invoke-RestMethod)', 'shell(Start-Process)')) { $CliArgs += @('--deny-tool', $Denied) }
             $Executable = $CliPath
             if ($CliPath.EndsWith('.ps1')) { $Executable = (Get-Command pwsh).Source; $CliArgs = @('-NoProfile', '-File', $CliPath) + $CliArgs }
-            $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $CliArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-stdout.jsonl") -TimeoutSeconds ([Math]::Max(1, [Math]::Min(900, 2700 - $Watch.Elapsed.TotalSeconds))) -EventsPath $SessionEvents -StartLine $StartLine -MaxRequests 96 -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
-            $PreviousMetrics = $Metrics
-            $Metrics = $null
-            if (Test-Path -LiteralPath $SessionEvents) {
-                $Snapshot = Join-Path $Out "$Stage-events.jsonl"
-                Copy-EfficiencySnapshot $SessionEvents $Snapshot | Out-Null
-                $Metrics = Measure-EfficiencyEvents $Snapshot
-                $StartLine = (Get-Content -LiteralPath $Snapshot | Measure-Object -Line).Lines
-                $Metrics | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $Out "$Stage-metrics.json") -Encoding utf8NoBOM
-            }
+            $InitialSeconds = [Math]::Floor([Math]::Min(900, 2700 - $Watch.Elapsed.TotalSeconds))
+            $Result = if ($InitialSeconds -ge 1) { Invoke-EfficiencyProcess -FilePath $Executable -Arguments $CliArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-stdout.jsonl") -TimeoutSeconds ([int]$InitialSeconds) -EventsPath $SessionEvents -StartLine $StageStartLine -MaxRequests 96 -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' } } else { [pscustomobject]@{ exitCode = -1; stopCause = 'timeout'; seconds = 0; observedRequests = 0 } }
+            $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix $Stage
+            $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
             $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $null -ne $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le 300 -and $Metrics.counts.questions -eq 0)
             $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
-            $StagePassed = $StagePassed -and $Readiness.passed
+            $StagePassed = $StagePassed -and $Readiness.passed -and $StageWatch.Elapsed.TotalSeconds -le 900 -and $Watch.Elapsed.TotalSeconds -le 2700
+            $Attempts.Add(@{ kind = 'stage'; process = $Result; readiness = $Readiness; passed = $StagePassed; reservedCredits = $RecoveryPolicy.initialCredits; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-stdout.jsonl", "out/$Stage-events.jsonl", "out/$Stage-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
+            if (-not $StagePassed) {
+                $RemainingRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { 96 - ($Metrics.modelRequests - $PriorRequests) } else { 0 }
+                $RemainingSeconds = [Math]::Min(900 - $StageWatch.Elapsed.TotalSeconds, 2700 - $Watch.Elapsed.TotalSeconds)
+                $Decision = Get-EfficiencyRecoveryDecision -Path (Join-Path $Out "$Stage-stdout.jsonl") -Metrics $Metrics -Process $Result -Readiness $Readiness -RemainingRequests $RemainingRequests -RemainingSeconds $RemainingSeconds -AcpSupported ($HelpText.Contains('--acp')) -RecoveryUsed $false
+                $Recovery.status = 'not-eligible'; $Recovery.reason = $Decision.reason
+                if ($Decision.allowed -and [Math]::Floor($RemainingSeconds) -ge 1) {
+                    $Recovery.count = 1; $Recovery.status = 'attempted'
+                    $SessionCreditCeiling += $RecoveryPolicy.compactionCredits
+                    $Compact = Invoke-EfficiencyCompaction -CliPath $CliPath -SessionId $Session -Workspace $Workspace -EventsPath $SessionEvents -OutputPath (Join-Path $Out "$Stage-compaction-stdout.jsonl") -UsagePath (Join-Path $Out "$Stage-compaction-usage.json") -MaxCredits $SessionCreditCeiling -Model $Model -TimeoutSeconds ([int][Math]::Min(300, [Math]::Floor($RemainingSeconds))) -StartLine $StageStartLine -MaxRequests 96 -DisabledServers $DisabledServers -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
+                    $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix "$Stage-compaction"
+                    $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
+                    $Attempts.Add(@{ kind = 'compaction'; process = $Compact; passed = $Compact.succeeded; reservedCredits = $RecoveryPolicy.compactionCredits; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-compaction-stdout.jsonl", "out/$Stage-compaction-events.jsonl", "out/$Stage-compaction-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
+                    $RemainingSeconds = [Math]::Min(900 - $StageWatch.Elapsed.TotalSeconds, 2700 - $Watch.Elapsed.TotalSeconds)
+                    $WithinRequests = $Metrics -and $null -ne $Metrics.modelRequests -and ($Metrics.modelRequests - $PriorRequests) -lt 96 -and $Metrics.modelRequests -le 300
+                    if ($Compact.succeeded -and $Metrics -and $Metrics.complete -and $Metrics.counts.questions -eq 0 -and $WithinRequests -and [Math]::Floor($RemainingSeconds) -ge 1) {
+                        $SessionCreditCeiling += $RecoveryPolicy.continuationCredits
+                        $ContinueArgs = @($CliArgs)
+                        $ContinueArgs[[array]::IndexOf($ContinueArgs, '-p') + 1] = $Prompts[$Stage] + ' This is a continuation of this same stage after verified context compaction, not a new run. Resume only the interrupted Scribe handoff first; inspect existing history and do not duplicate it or rerun completed specialist roles. After the handoff verifies, finish only the pending stage work. Preserve run identity, artifacts and safety gates. If still blocked, record the remaining blocker and stop; no further recovery is allowed.'
+                        $ContinueArgs[[array]::IndexOf($ContinueArgs, '--max-ai-credits') + 1] = $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
+                        $ContinueArgs[[array]::IndexOf($ContinueArgs, '--usage-output-file') + 1] = Join-Path $Out "$Stage-continuation-usage.json"
+                        $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $ContinueArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-continuation-stdout.jsonl") -TimeoutSeconds ([int][Math]::Floor($RemainingSeconds)) -EventsPath $SessionEvents -StartLine $StageStartLine -MaxRequests 96 -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
+                        $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix "$Stage-continuation"
+                        $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
+                        $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le 300 -and ($Metrics.modelRequests - $PriorRequests) -le 96 -and $Metrics.counts.questions -eq 0 -and $StageWatch.Elapsed.TotalSeconds -le 900 -and $Watch.Elapsed.TotalSeconds -le 2700)
+                        $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
+                        $StagePassed = $StagePassed -and $Readiness.passed -and $StageWatch.Elapsed.TotalSeconds -le 900 -and $Watch.Elapsed.TotalSeconds -le 2700
+                        $Attempts.Add(@{ kind = 'continuation'; process = $Result; readiness = $Readiness; passed = $StagePassed; reservedCredits = $RecoveryPolicy.continuationCredits; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-continuation-stdout.jsonl", "out/$Stage-continuation-events.jsonl", "out/$Stage-continuation-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
+                        $Recovery.status = if ($StagePassed) { 'recovered' } else { 'failed' }
+                        $Recovery.reason = if ($StagePassed) { 'context-compacted' } else { 'continuation-incomplete' }
+                    }
+                    else { $Recovery.status = 'failed'; $Recovery.reason = if (-not $Compact.succeeded) { $Compact.stopCause } elseif (-not $WithinRequests -or $RemainingSeconds -lt 1) { 'stage-limit' } else { 'incomplete-metering' } }
+                }
+            }
             $Delta = @{}
             if ($Metrics) {
                 foreach ($Field in @('inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'requestBodyBytes', 'toolTokenCount')) {
@@ -266,7 +315,8 @@ if ($MyInvocation.InvocationName -ne '.') {
                     $Delta[$Field] = if ($null -ne $Metrics.totals[$Field] -and $null -ne $Prior) { $Metrics.totals[$Field] - $Prior } else { $null }
                 }
             }
-            $Stages.Add(@{ name = $Stage; process = $Result; readiness = $Readiness; metrics = $Metrics; metricScope = 'cumulative-session'; stageTokenDelta = $Delta; passed = $StagePassed })
+            $StageProcess = @{ exitCode = $Result.exitCode; stopCause = $Result.stopCause; seconds = [Math]::Round($StageWatch.Elapsed.TotalSeconds, 3); observedRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests - $PriorRequests } else { $null } }
+            $Stages.Add(@{ name = $Stage; process = $StageProcess; readiness = $Readiness; attempts = @($Attempts); recovery = $Recovery; metrics = $Metrics; metricScope = 'cumulative-session'; stageTokenDelta = $Delta; passed = $StagePassed })
             if (-not $StagePassed) { $AllPassed = $false; break }
         }
         $Acceptance = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json -AsHashtable
