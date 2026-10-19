@@ -633,7 +633,7 @@ function Get-EfficiencyHistoryDeliverable {
     if (-not (Test-Path -LiteralPath $History -PathType Leaf)) { return }
     $Text = Get-Content -LiteralPath $History -Raw
     if ($Text -notmatch ('(?m)^# History: ' + [regex]::Escape($Agent) + '\s*$')) { return }
-    foreach ($Match in [regex]::Matches($Text, '(?m)^\s*[*-]\s*Deliverable:\s*`?(?<path>[^`\r\n]+)`?\s*$')) {
+    foreach ($Match in [regex]::Matches($Text, '(?m)^\s*[*-]\s*Deliverable:\s*(?:`(?<path>[^`\r\n]+)`(?:[ \t][^\r\n]*)?|(?<path>[^`\r\n]+))\s*$')) {
         $Relative = $Match.Groups['path'].Value.Trim()
         try { $Full = [IO.Path]::GetFullPath((Join-Path $Root $Relative)) }
         catch { continue }
@@ -925,8 +925,11 @@ function Get-EfficiencyCompatibility {
     }
     [ordered]@{
         schema = $Scenario.schemaVersion; rubric = $Scenario.rubricVersion
+        hostProfile = 'native-cli-references'
         scenarioHash = (Get-FileHash -LiteralPath $ScenarioPath).Hash
         parserHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')).Hash
+        exerciseHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1')).Hash
+        preparationHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot '../../lib/SquadInstall.psm1')).Hash
         graderHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1')).Hash
         installHash = Get-EfficiencyTreeHash $InstallRoot
         model = $Model; cli = (@(& $CliPath --version) -join ' ').Trim(); powershell = $PSVersionTable.PSVersion.ToString()

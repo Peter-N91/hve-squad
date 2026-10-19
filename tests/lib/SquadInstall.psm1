@@ -15,6 +15,9 @@ function Copy-SquadSource {
     <#
     .SYNOPSIS
         Overlays a working copy's squad-src/ onto an installed tree, matching APM's layout.
+    .PARAMETER NativeCli
+        Uses the plugin builder's lossless rule port for conditional squad instructions.
+        The unconditional floor and all other installed instructions remain active.
     #>
     [CmdletBinding()]
     param(
@@ -22,7 +25,9 @@ function Copy-SquadSource {
         [string]$From,
 
         [Parameter(Mandatory)]
-        [string]$To
+        [string]$To,
+
+        [switch]$NativeCli
     )
 
     # APM flattens agents, prompts, and instructions; skills keep their directory.
@@ -48,6 +53,47 @@ function Copy-SquadSource {
         New-Item -ItemType Directory -Path $skillDestination -Force | Out-Null
         Get-ChildItem -LiteralPath $skillSource -Directory |
             Copy-Item -Destination $skillDestination -Recurse -Force
+    }
+
+    if ($NativeCli) {
+        $sourceRoot = Split-Path -Path ([IO.Path]::GetFullPath($From)) -Parent
+        $builder = Join-Path $sourceRoot 'scripts/Build-SquadPlugin.ps1'
+        if (-not (Test-Path -LiteralPath $builder -PathType Leaf)) {
+            throw "Native CLI preparation requires the canonical plugin builder at '$builder'."
+        }
+        . $builder -SourceRoot $sourceRoot -RepoRoot $sourceRoot
+        $source = Resolve-BuildSource -RepoRoot $sourceRoot `
+            -RefSpecified $false -Ref $null -SourceRootSpecified $true -SourceRoot $sourceRoot
+        $script:OutputRootResolved = Join-Path $To '.agents'
+        $script:GeneratedPaths = [Collections.Generic.List[string]]::new()
+        $script:RuleCitationMap = [ordered]@{}
+        $null = Copy-InstructionRules -Source $source -RepoRoot $sourceRoot -OutputRoot $script:OutputRootResolved
+
+        $markdown = @(
+            Get-ChildItem -LiteralPath (Join-Path $To '.agents/skills/squad') -Recurse -File -Filter '*.md'
+            Get-Item -LiteralPath (Join-Path $To '.github/instructions/squad-floor.instructions.md')
+            Get-ChildItem -LiteralPath (Join-Path $From '.github/agents') -Recurse -File -Filter '*.md' |
+                ForEach-Object { Get-Item -LiteralPath (Join-Path $To ".github/agents/$($_.Name)") }
+        )
+        foreach ($file in $markdown) {
+            $content = Convert-AgentCitations -FileName $file.Name -Content (Get-Content -LiteralPath $file.FullName -Raw)
+            $content = $content -replace '(?<![A-Za-z0-9/._-])skills/squad/', '.agents/skills/squad/'
+            $content = $content.Replace(
+                'In this plugin distribution they do not auto-apply at all — there is no instructions channel to apply them — so read the rule file that owns a decision before making it, and treat `rules/squad-floor.md` as unconditional.',
+                'In this native CLI workspace, conditional squad rules are read on demand; the unconditional floor still auto-applies. Read the rule file that owns a decision before making it.'
+            ).Replace(
+                'the eleven companion instruction files that auto-apply when squad state is touched are catalogued in',
+                'the companion rule references, read before the decisions they govern, are catalogued in'
+            ).Replace(
+                'The `squad` skill complements eleven instruction files that auto-apply when squad state is touched. Their `applyTo` globs only fire in a host that loads modular instructions, so a rule that must hold unconditionally belongs in a reference file above, not only here.',
+                'Conditional squad rules are available in full as references below; read the rule that owns a decision before making it. The unconditional floor still auto-applies, and mandatory gates remain in the floor and the core references.'
+            )
+            Set-Content -LiteralPath $file.FullName -Value $content -Encoding utf8NoBOM -NoNewline
+        }
+        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $From '.github/instructions/squad') -File -Filter '*.instructions.md') {
+            if ($file.Name -eq 'squad-floor.instructions.md') { continue }
+            Remove-Item -LiteralPath (Join-Path $To ".github/instructions/$($file.Name)") -Force
+        }
     }
 }
 

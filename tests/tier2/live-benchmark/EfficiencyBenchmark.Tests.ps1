@@ -544,9 +544,14 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
     }
     It 'accepts requirements with both author and reviewer evidence' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeTrue
+        foreach ($Agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
+            Set-Content (Join-Path $script:StageSquad "history/$Agent.md") "# History: $Agent`n* Deliverable: ``docs/requirements/reviews/$Agent.md`` (25 bytes); publication copy ``docs/requirements/prd.md``"
+        }
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeTrue
     }
     It 'rejects a missing reviewer artifact despite existing dispatch and history' {
         Remove-Item (Join-Path $script:StageWorkspace 'docs/requirements/reviews/PRD Quality Reviewer.md')
+        Set-Content (Join-Path $script:StageSquad 'history/PRD Quality Reviewer.md') "# History: PRD Quality Reviewer`n* Deliverable: ``docs/requirements/reviews/PRD Quality Reviewer.md`` (25 bytes)"
         $Result = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements
         $Result.passed | Should -BeFalse
         $Result.checks['PRD Quality Reviewer'] | Should -BeFalse
@@ -562,6 +567,8 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
     It 'does not accept a history deliverable outside the workspace' {
         Set-Content (Join-Path $TestDrive 'outside.md') 'outside evidence'
         Set-Content (Join-Path $script:StageSquad 'history/BRD Quality Reviewer.md') "# History: BRD Quality Reviewer`n* Deliverable: ../outside.md"
+        (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
+        Set-Content (Join-Path $script:StageSquad 'history/BRD Quality Reviewer.md') "# History: BRD Quality Reviewer`n* Deliverable: ``../outside.md`` (16 bytes)"
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeFalse
     }
     It 'rejects empty initialization state even if the external verifier passes' {
@@ -626,6 +633,12 @@ exit 37
     It 'rejects incompatible runs and duplicate pair identities' {
         $Runs = @(New-TestRuns); $Runs[3].metadata.compatibility.cli = 'different'
         { Compare-EfficiencyRuns $Runs } | Should -Throw '*Incompatible*'
+        foreach ($Key in @('hostProfile', 'preparationHash', 'exerciseHash')) {
+            $Runs = @(New-TestRuns)
+            foreach ($Run in $Runs) { $Run.metadata.compatibility[$Key] = 'same' }
+            $Runs[3].metadata.compatibility[$Key] = 'different'
+            { Compare-EfficiencyRuns $Runs } | Should -Throw '*Incompatible*'
+        }
         $Runs = @(New-TestRuns); $Runs[3].metadata.pair = 2
         { Compare-EfficiencyRuns $Runs } | Should -Throw '*Duplicate*'
     }
@@ -729,7 +742,7 @@ Add-Content 'stage-launches.txt' 'one invocation'
 $Session = $args[[array]::IndexOf($args, '--session-id') + 1]
 $SessionRoot = Join-Path $HOME ".copilot/session-state/$Session"
 New-Item -ItemType Directory -Path $SessionRoot -Force | Out-Null
-@{ type = 'session.usage_record'; data = @{ usage = @{ inputTokens = 10; outputTokens = 1; aiCreditsStatus = 'complete'; copilotUsage = @{ totalNanoAiu = 1000000 }; accounting = @{ sourceSessionId = $Session; usageId = 'fake-usage' } } } } | ConvertTo-Json -Depth 8 -Compress | Set-Content (Join-Path $SessionRoot 'events.jsonl')
+1..100 | ForEach-Object { @{ type = 'session.usage_record'; data = @{ usage = @{ inputTokens = 10; outputTokens = 1; aiCreditsStatus = 'complete'; copilotUsage = @{ totalNanoAiu = 1000000 }; accounting = @{ sourceSessionId = $Session; usageId = "fake-usage-$_" } } } } | ConvertTo-Json -Depth 8 -Compress } | Set-Content (Join-Path $SessionRoot 'events.jsonl')
 exit 0
 '@ | Set-Content $Cli -Encoding utf8NoBOM
         $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -739,6 +752,8 @@ exit 0
             $Result.exitCode | Should -Be 2
             @($Run.stages).Count | Should -Be 1
             $Run.stages[0].process.exitCode | Should -Be 0
+            $Run.stages[0].process.stopCause | Should -Be 'none'
+            $Run.stages[0].process.observedRequests | Should -Be 100
             $Run.stages[0].readiness.passed | Should -BeFalse
             $Run.stages[0].passed | Should -BeFalse
             @(Get-Content (Join-Path $Trial 'workspace/stage-launches.txt')).Count | Should -Be 1
@@ -748,8 +763,9 @@ exit 0
     }
     It 'passes the full init prompt and options as valid argv elements to the CLI process' {
         $Install = Join-Path $TestDrive 'argv-install'; $Trial = Join-Path $TestDrive 'argv-run'
-        New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents'), (Join-Path $Install '.github/instructions') -Force | Out-Null
         foreach ($Name in @('squad-coordinator.agent.md', 'brd-builder.agent.md', 'prd-builder.agent.md')) { Set-Content -LiteralPath (Join-Path $Install ".github/agents/$Name") -Value 'offline fixture' }
+        Set-Content -LiteralPath (Join-Path $Install '.github/instructions/retained.instructions.md') -Value 'retained dependency rule'
         $Cli = Join-Path $TestDrive 'argv-only-cli.ps1'
         @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
@@ -784,6 +800,27 @@ exit 37
         $Run = Get-Content -LiteralPath (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         $Run.stages[0].process.exitCode | Should -Be 37
         $Run.completed | Should -BeFalse
+        $Run.metadata.hostProfile | Should -Be 'native-cli-references'
+        $Run.metadata.compatibility.hostProfile | Should -Be $Run.metadata.hostProfile
+        $Run.metadata.compatibility.preparationHash | Should -Be (Get-FileHash -LiteralPath (Join-Path $Source 'tests/lib/SquadInstall.psm1')).Hash
+        $Run.metadata.compatibility.exerciseHash | Should -Be (Get-FileHash -LiteralPath (Join-Path $Source 'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1')).Hash
+        $Workspace = Join-Path $Trial 'workspace'
+        Get-Content -LiteralPath (Join-Path $Workspace '.github/instructions/retained.instructions.md') -Raw |
+            Should -Match 'retained dependency rule'
+        foreach ($Rule in Get-ChildItem -LiteralPath (Join-Path $Source 'squad-src/.github/instructions/squad') -File -Filter '*.instructions.md') {
+            $Name = $Rule.Name -replace '\.instructions\.md$', ''
+            $Ported = Join-Path $Workspace ".agents/skills/squad/references/rules/$Name.md"
+            Test-Path -LiteralPath $Ported -PathType Leaf | Should -BeTrue
+            $Body = (Get-Content -LiteralPath $Rule.FullName -Raw) -replace '(?s)^\uFEFF?---\r?\n.*?\r?\n---\r?\n', ''
+            $Heading = [regex]::Match($Body, '(?m)^# .+$').Value
+            Get-Content -LiteralPath $Ported -Raw | Should -Match ([regex]::Escape($Heading))
+            Test-Path -LiteralPath (Join-Path $Workspace ".github/instructions/$($Rule.Name)") |
+                Should -Be ($Rule.Name -eq 'squad-floor.instructions.md')
+        }
+        $Coordinator = Get-Content -LiteralPath (Join-Path $Workspace '.github/agents/squad-coordinator.agent.md') -Raw
+        $Coordinator | Should -Match '\.agents/skills/squad/references/rules/squad-roster\.md'
+        $Coordinator | Should -Match 'unconditional floor still auto-applies'
+        $Coordinator | Should -Not -Match '\.agents/\.agents/'
     }
 }
 
