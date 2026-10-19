@@ -329,19 +329,22 @@ Describe 'GATE-46 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSyncHveCore = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/sync-hve-core.yml') -Raw
     }
 
-    It 'provisions the squad package before running Copilot CLI and cleans up runtime paths before staging in squad-watch.yml' {
+    It 'provisions the squad package before running Copilot CLI and restores the owned runtime overlay before staging in squad-watch.yml' {
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('Provision squad package for headless CLI'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('Install-SquadPackage -Destination $staging -SourceRoot .'))
-        $script:RepoSquadWatch | Should -Match ([regex]::Escape('Clean up provisioned runtime files'))
-        $script:RepoSquadWatch | Should -Match ([regex]::Escape("'.github/agents', '.github/prompts', '.github/instructions', '.agents', 'apm_modules', 'install.log'"))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('Enable-SquadWatchRuntimeOverlay'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('Restore-SquadWatchRuntimeOverlay'))
+        $script:RepoSquadWatch | Should -Not -Match ([regex]::Escape("'.agents', 'apm_modules', 'install.log'"))
     }
 
-    It 'wires issues, pull_request, issue_comment, and workflow_dispatch with per-case/per-ask squad selection and full RPI in squad-watch.yml' {
+    It 'wires issues, pull_request, issue_comment, and workflow_dispatch with per-case/per-ask squad selection and a gated full RPI handoff in squad-watch.yml' {
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('SQUAD SELECTION PER CASE AND PER ASK (NON-NEGOTIABLE).'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('COMPLETE SQUAD LIFECYCLE (FULL RPI - NON-NEGOTIABLE).'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape("github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/squad')"))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape("contains(join(github.event.pull_request.labels.*.name, ','), 'squad/review')"))
-        $script:RepoSquadWatch | Should -Match ([regex]::Escape('for dir in research plans changes reviews history; do'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('New-SquadWatchHandoff'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('sourceSha: ${{ steps.source.outputs.sha }}'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('ref: ${{ needs.interpret.outputs.sourceSha }}'))
     }
 
     It 'requires per-case/per-ask squad composition and the full RPI lifecycle in sync-hve-core.yml adaptation briefs' {
@@ -353,5 +356,4 @@ Describe 'GATE-46 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSyncHveCore | Should -Match ([regex]::Escape('Full RPI stage artifacts (`research/<date>/*.md`, `plans/*.md`, `changes/*.md`, `reviews/*.md`) and `history/autopilot-run-*.md` are produced'))
     }
 }
-
 

@@ -174,6 +174,7 @@ jobs:
       target: ${{ steps.prep.outputs.target }}
       subSquad: ${{ steps.prep.outputs.subSquad }}
       branch: ${{ steps.prep.outputs.branch }}
+      sourceSha: ${{ steps.source.outputs.sha }}
       hasChanges: ${{ steps.stage.outputs.hasChanges }}
       hasReview: ${{ steps.review_check.outputs.hasReview }}
     steps:
@@ -276,6 +277,10 @@ jobs:
               '     history/autopilot-run-<id>.md, rewrite consumption.md, update decisions.md',
               '     and state.json, and update the federation root (federation.md,',
               '     meta-routing.md, decisions.md, state.json, history/<name>.md).',
+              '     The latest ## Stages table must carry Research, Plan, Council, Implement,',
+              '     and Review rows with each dispatched agent history path. When Council is',
+              '     not applicable, keep its row, set Dispatch Record to n/a, and record a',
+              '     concise skipped reason instead of inventing a council dispatch.',
               '   Numbered steps or checklists in an issue body (including Sync and Adapt',
               '   adaptation briefs) or request are input requirements to research, plan,',
               '   implement, and review - never a substitute for the Research or Plan stages.',
@@ -541,6 +546,13 @@ jobs:
           persist-credentials: false
           ref: ${{ steps.prep.outputs.checkoutRef }}
 
+      - name: Record source checkout
+        id: source
+        if: steps.prep.outputs.authorized == 'true'
+        shell: pwsh
+        run: |
+          "sha=$(git rev-parse HEAD)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
       - name: Install the APM CLI
         if: steps.prep.outputs.authorized == 'true'
         uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
@@ -550,6 +562,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Provision squad package for headless CLI
+        id: runtime
         if: steps.prep.outputs.authorized == 'true'
         shell: pwsh
         env:
@@ -562,18 +575,19 @@ jobs:
           # CLI loads Squad Federation Coordinator, Squad Coordinator, and the entire
           # hve-core + squad cast for runSubagent/task dispatches.
           Import-Module ./tests/lib/SquadInstall.psm1 -Force
+          Import-Module ./scripts/SquadWatch.psm1 -Force
           $staging = Join-Path $env:RUNNER_TEMP 'squad-watch-pkg'
+          $backup = Join-Path $env:RUNNER_TEMP 'squad-watch-runtime-backup'
           Install-SquadPackage -Destination $staging -SourceRoot . | Out-Null
-          foreach ($rel in @('.github/agents', '.github/prompts', '.github/instructions', '.agents')) {
-            $src = Join-Path $staging $rel
-            if (Test-Path -LiteralPath $src) {
-              $parent = Split-Path -Path $rel -Parent
-              if ($parent -and -not (Test-Path -LiteralPath $parent)) {
-                New-Item -ItemType Directory -Path $parent -Force | Out-Null
-              }
-              Copy-Item -LiteralPath $src -Destination $rel -Recurse -Force
-            }
-          }
+          $overlay = Enable-SquadWatchRuntimeOverlay `
+            -PackageRoot $staging `
+            -WorkspaceRoot (Resolve-Path .).Path `
+            -BackupRoot $backup
+          "manifestHash=$($overlay.ManifestHash)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          "watchModuleHash=$((Get-FileHash -LiteralPath ./scripts/SquadWatch.psm1 -Algorithm SHA256).Hash.ToLowerInvariant())" |
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          "stateModuleHash=$((Get-FileHash -LiteralPath ./tests/tier1/SquadState.psm1 -Algorithm SHA256).Hash.ToLowerInvariant())" |
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
       - name: Set up Node.js
         if: steps.prep.outputs.authorized == 'true'
@@ -632,36 +646,48 @@ jobs:
       - name: Clean up provisioned runtime files
         if: always() && steps.prep.outputs.authorized == 'true'
         shell: pwsh
+        env:
+          RUNTIME_MANIFEST_HASH: ${{ steps.runtime.outputs.manifestHash }}
+          WATCH_MODULE_HASH: ${{ steps.runtime.outputs.watchModuleHash }}
         run: |
-          foreach ($rel in @('.github/agents', '.github/prompts', '.github/instructions', '.agents', 'apm_modules', 'install.log')) {
-            if (Test-Path -LiteralPath $rel) {
-              Remove-Item -LiteralPath $rel -Recurse -Force
-            }
+          $watchModule = (Resolve-Path ./scripts/SquadWatch.psm1).Path
+          $actualHash = (Get-FileHash -LiteralPath $watchModule -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:WATCH_MODULE_HASH) {
+            throw 'Squad Watch runtime helper changed after provisioning; refusing cleanup.'
           }
+          Import-Module ./scripts/SquadWatch.psm1 -Force
+          Restore-SquadWatchRuntimeOverlay `
+            -WorkspaceRoot (Resolve-Path .).Path `
+            -BackupRoot (Join-Path $env:RUNNER_TEMP 'squad-watch-runtime-backup') `
+            -ExpectedManifestHash $env:RUNTIME_MANIFEST_HASH
 
       - name: Stage changes for handoff
         id: stage
         if: steps.prep.outputs.authorized == 'true' && steps.prep.outputs.kind != 'pull_request'
+        shell: pwsh
         env:
           SUB_SQUAD: ${{ steps.prep.outputs.subSquad }}
+          WATCH_MODULE_HASH: ${{ steps.runtime.outputs.watchModuleHash }}
+          STATE_MODULE_HASH: ${{ steps.runtime.outputs.stateModuleHash }}
         run: |
-          set -euo pipefail
-          MEMBER_ROOT=".copilot-tracking/squad/members/${SUB_SQUAD}"
-          if [[ -d "$MEMBER_ROOT" ]]; then
-            for dir in research plans changes reviews history; do
-              if [[ ! -d "${MEMBER_ROOT}/${dir}" ]] || [[ -z "$(ls -A "${MEMBER_ROOT}/${dir}" 2>/dev/null || true)" ]]; then
-                echo "::warning::Sub-squad '${SUB_SQUAD}' is missing artifacts in '${MEMBER_ROOT}/${dir}' - verify that the full RPI lifecycle executed."
-              fi
-            done
-          fi
-          git add -A
-          if git diff --cached --quiet; then
-            echo "::warning::The squad produced no changes - check the run log and members/${SUB_SQUAD}/history/."
-            echo "hasChanges=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "hasChanges=true" >> "$GITHUB_OUTPUT"
-            git diff --cached --binary > "$RUNNER_TEMP/squad-watch.patch"
-          fi
+          $watchModule = (Resolve-Path ./scripts/SquadWatch.psm1).Path
+          $actualHash = (Get-FileHash -LiteralPath $watchModule -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:WATCH_MODULE_HASH) {
+            throw 'Squad Watch handoff helper changed after provisioning; refusing to stage.'
+          }
+          Import-Module ./scripts/SquadWatch.psm1 -Force
+          $workspace = (Resolve-Path .).Path
+          $memberRoot = Join-Path $workspace ".copilot-tracking/squad/members/$env:SUB_SQUAD"
+          $result = New-SquadWatchHandoff `
+            -WorkspaceRoot $workspace `
+            -MemberRoot $memberRoot `
+            -PatchPath (Join-Path $env:RUNNER_TEMP 'squad-watch.patch') `
+            -ExpectedStateModuleHash $env:STATE_MODULE_HASH
+          "hasChanges=$($result.HasChanges.ToString().ToLowerInvariant())" |
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          if (-not $result.HasChanges) {
+            Write-Host "::warning::The squad produced no changes - check the run log and members/$env:SUB_SQUAD/history/."
+          }
 
       - name: Check review output
         id: review_check
@@ -720,6 +746,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ needs.interpret.outputs.sourceSha }}
 
       - name: Download change patch
         if: needs.interpret.outputs.hasChanges == 'true'
