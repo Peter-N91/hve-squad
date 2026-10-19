@@ -11,6 +11,43 @@ BeforeAll {
     }
 }
 
+Describe 'Wizard offline Python provisioning' -Tag 'Unit' {
+    BeforeEach {
+        Mock Get-WizardPython { 'python3.12' }
+        Mock Invoke-WizardCommand { 0 }
+        Push-Location $TestDrive
+        $script:OriginalWizardPath = $env:PATH
+    }
+    AfterEach {
+        $env:PATH = $script:OriginalWizardPath
+        Pop-Location
+    }
+    It 'uses isolated pinned pytest and restores PATH when tests return <ExitCode>' -ForEach @(
+        @{ ExitCode = 0 }, @{ ExitCode = 1 }
+    ) {
+        Mock Invoke-WizardCommand {
+            if ($Arguments -contains '-File') {
+                $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be (Join-Path $TestDrive ".offline-venv/$(if ($IsWindows) { 'Scripts' } else { 'bin' })")
+                return $ExitCode
+            }
+            0
+        }
+        Invoke-WizardOfflineTest -PesterPath 'pester.psd1' | Should -Be $ExitCode
+        $env:PATH | Should -BeExactly $script:OriginalWizardPath
+        Should -Invoke Invoke-WizardCommand -Times 1 -Exactly -ParameterFilter { $Command -eq 'python3.12' -and $Arguments[0] -eq '-m' -and $Arguments[1] -eq 'venv' }
+        Should -Invoke Invoke-WizardCommand -Times 1 -Exactly -ParameterFilter { $Arguments -contains 'pip' -and $Arguments -contains 'pytest==8.3.5' }
+        Should -Invoke Invoke-WizardCommand -Times 1 -Exactly -ParameterFilter { $Arguments -contains 'Invoke-LiveBenchmarkTests.ps1' -or ($Arguments -contains '-File' -and $Arguments -contains 'pester.psd1') }
+    }
+    It 'stops before tests when <FailedStep> fails' -ForEach @(
+        @{ FailedStep = 'venv' }, @{ FailedStep = 'pip' }
+    ) {
+        Mock Invoke-WizardCommand { if ($Arguments -contains $FailedStep) { return 1 }; 0 }
+        { Invoke-WizardOfflineTest -PesterPath 'pester.psd1' } | Should -Throw '*failed*exit 1*'
+        Should -Invoke Invoke-WizardCommand -Times 0 -Exactly -ParameterFilter { $Arguments -contains '-File' }
+        $env:PATH | Should -BeExactly $script:OriginalWizardPath
+    }
+}
+
 Describe 'Wizard decisions and guards' -Tag 'Unit' {
     It 'recommends Establish without a control and Series with a supplied control' {
         Mock Read-WizardChoice { $Default }

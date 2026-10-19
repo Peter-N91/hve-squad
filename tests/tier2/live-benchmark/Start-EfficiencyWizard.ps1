@@ -235,7 +235,7 @@ function Install-WizardTool {
             'gh' { 'https://github.com/cli/cli/blob/trunk/docs/install_linux.md' }
             'copilot' { 'https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli' }
             'apm' { 'https://microsoft.github.io/apm/getting-started/installation/' }
-            'uv' { 'https://docs.astral.sh/uv/getting-started/installation/' }
+            'python' { 'https://www.python.org/downloads/' }
             default { 'the tool publisher installation instructions' }
         }
         throw "$Name is missing. On Ubuntu/non-Windows, install it using $Reference, reopen the terminal and rerun. No sudo, downloaded script, or Windows installer was executed."
@@ -249,6 +249,20 @@ function Install-WizardTool {
     if (-not (Get-Command $Name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue)) { throw "$Name is still unavailable. Open a new PowerShell terminal and repair PATH before restarting." }
 }
 
+function Get-WizardPython {
+    <# .SYNOPSIS
+    Resolves Python 3.12 without relying on platform-specific command aliases.
+    #>
+    [CmdletBinding()]
+    param()
+    foreach ($Name in @('python3.12', 'python3', 'python')) {
+        $Python = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $Python) { continue }
+        & $Python.Source -c 'import sys; sys.exit(sys.version_info[:2] != (3, 12))'
+        if ($LASTEXITCODE -eq 0) { return $Python.Source }
+    }
+}
+
 function Install-WizardPrerequisite {
     <# .SYNOPSIS
     Repairs the tools needed by the chosen workload, without authenticating Offline mode.
@@ -256,7 +270,10 @@ function Install-WizardPrerequisite {
     [CmdletBinding()]
     param([switch]$LiveMode)
     Install-WizardTool -Name git -PackageId 'Git.Git'
-    Install-WizardTool -Name uv -PackageId 'astral-sh.uv'
+    if (-not (Get-WizardPython)) {
+        Install-WizardTool -Name python -PackageId 'Python.Python.3.12'
+        if (-not (Get-WizardPython)) { throw 'Python 3.12 is required. Install it and expose python3.12, python3 or python on PATH, then rerun.' }
+    }
     if ($LiveMode) {
         Install-WizardTool -Name gh -PackageId 'GitHub.cli'
         Install-WizardTool -Name copilot -PackageId 'GitHub.Copilot'
@@ -280,7 +297,7 @@ function Install-WizardPrerequisite {
             if (-not $HelpText.Contains($Flag)) { throw "Copilot CLI lacks $Flag. Upgrade through its owning package manager before benchmarking." }
         }
     }
-    Write-Host 'Offline tests use an isolated Python 3.12 environment and pytest 8.3.5 via uv; downloads may be required. No global Python packages are installed.'
+    Write-Host 'Offline tests use an isolated Python 3.12 venv and pytest 8.3.5 via pip; downloads may be required. No global Python packages are installed.'
     $Pester[0].Path
 }
 
@@ -458,7 +475,22 @@ function Invoke-WizardOfflineTest {
     [CmdletBinding()]
     param([string]$PesterPath)
     $Runner = Join-Path $PSScriptRoot 'Invoke-LiveBenchmarkTests.ps1'
-    Invoke-WizardCommand -Command uv -Arguments @('--native-tls', 'run', '--no-project', '--python', '3.12', '--with', 'pytest==8.3.5', '--', (Get-Command pwsh).Source, '-NoProfile', '-File', $Runner, '-PesterPath', $PesterPath, '-Output', 'Normal')
+    $Python = Get-WizardPython
+    if (-not $Python) { throw 'Python 3.12 is unavailable; repair the prerequisite before running offline tests.' }
+    $Environment = Join-Path (Get-Location).Path '.offline-venv'
+    if (Test-Path -LiteralPath $Environment) { throw "Offline environment already exists: $Environment. Use a fresh run directory." }
+    $Code = Invoke-WizardCommand -Command $Python -Arguments @('-m', 'venv', $Environment)
+    if ($Code -ne 0) { throw "Python venv creation failed (exit $Code). Install Python 3.12 venv/ensurepip support and rerun." }
+    $Bin = Join-Path $Environment $(if ($IsWindows) { 'Scripts' } else { 'bin' })
+    $EnvironmentPython = Join-Path $Bin $(if ($IsWindows) { 'python.exe' } else { 'python' })
+    $Code = Invoke-WizardCommand -Command $EnvironmentPython -Arguments @('-m', 'pip', 'install', '--disable-pip-version-check', '--quiet', 'pytest==8.3.5')
+    if ($Code -ne 0) { throw "Installing pinned pytest into the isolated environment failed (exit $Code). Repair pip connectivity/certificates and rerun." }
+    $OldPath = $env:PATH
+    try {
+        $env:PATH = $Bin + [IO.Path]::PathSeparator + $OldPath
+        Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Runner, '-PesterPath', $PesterPath, '-Output', 'Normal')
+    }
+    finally { $env:PATH = $OldPath }
 }
 
 function Invoke-WizardBenchmark {

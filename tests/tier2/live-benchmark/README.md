@@ -98,7 +98,7 @@ requires explicit disposable-isolation and spending confirmation, preserves the
 existing watchdog and continuation bounds, and never promotes an accepted baseline.
 Isolation is not created by the wizard or by a launcher flag.
 
-Missing Git, uv, GitHub CLI, Copilot CLI and APM can be installed with consent using
+Missing Git, Python 3.12, GitHub CLI, Copilot CLI and APM can be installed with consent using
 exact official WinGet packages in user scope. Pester 5.7.1 can be installed in
 CurrentUser scope. Existing tools are not silently upgraded; incompatible versions
 stop with guidance. No elevation, downloaded-script execution or TLS bypass is
@@ -109,8 +109,8 @@ If PowerShell is too old to run the script, bootstrap it first:
 winget install --id Microsoft.PowerShell --exact --source winget
 ```
 
-The full offline stage uses isolated Python 3.12 and pinned `pytest==8.3.5` through
-uv, with the system certificate store and installed Pester. Downloads may be needed;
+The full offline stage uses a run-local Python 3.12 virtual environment and pinned
+`pytest==8.3.5` installed through pip, with installed Pester. Downloads may be needed;
 no global Python packages are installed. Trusted feed/proxy/TLS failures stop
 before any paid trial; repair trust rather than disabling certificate checks.
 
@@ -199,12 +199,28 @@ stops. The continuation repairs the interrupted Scribe handoff first, without
 rerunning completed roles or duplicating history, then finishes pending stage work.
 A failed continuation stops; there is no second cycle or replacement trial.
 
-Each stage keeps its original quarter of the run's credit reservation: half goes
-to initial work, a quarter to compaction and a quarter to continuation. The judge
-keeps its quarter-run reservation. The shared session's CLI credit ceiling grows
-only by admitted reservations; it is not reset for each subprocess. These are
-bounded reservations and provider soft limits, not a billing guarantee. Recovery
-does not reset the 96-request/900-second stage or 2700-second trial limits.
+The shared workflow receives **75% of the complete run's credit ceiling from its
+first CLI invocation**; the independent judge keeps the other 25%. Initialization,
+requirements, build, compaction and continuation all use that same workflow cap.
+There are no smaller stage caps to retain on session resume. For example,
+`-MaxCredits 1000` gives the workflow 750 credits from the outset and the judge 250.
+Changing the credit policy requires a fresh run; it does not repair an already
+saved session with a lower native limit.
+
+The harness also monitors cumulative native currency usage across the shared
+session and its descendants, independently of CLI invocation counters. It counts
+unique usage accounting IDs and native compaction attempts, including earlier
+stages, and stops active work or prevents the next launch at the workflow ceiling.
+Missing or invalid credit evidence stops with `incomplete-credit-metering`;
+exhaustion stops with `credit-limit`. Final records are checked even on fast exits.
+Actual AI credits are recorded in `*-metrics.json` under `credits.used` and in
+attempt process results separately from the configured ceiling. The judge is
+metered against its own allowance, never borrowed by workflow recovery.
+
+These are soft limits, not a billing guarantee: asynchronously reported usage
+and in-flight requests can overshoot before a stop takes effect. Recovery does
+not reset the 96-request/900-second stage or 2700-second trial limits. The
+model's context-window limit is separate and is not raised by this credit policy.
 
 Original evidence files remain unchanged. Compaction and continuation write
 separate `*-compaction-*` and `*-continuation-*` files. Trial and series JSON retain
