@@ -257,6 +257,18 @@ function Assert-BenchmarkSeries {
     if ((@($Record.trials.slot | Sort-Object) -join ',') -ne '1,2,3') { Stop-BenchmarkData 'trial-slots' }
 }
 
+function Assert-BenchmarkHistoricalSeries {
+    param([string]$Repository, [Collections.IDictionary]$Record)
+    Assert-BenchmarkSeries $Record
+    $Revision = Resolve-BenchmarkCommit $Repository $Record.measuredRevision
+    if ((Get-BenchmarkSourceHash $Repository $Revision) -cne $Record.sourceHash) { Stop-BenchmarkData 'historical-source-fingerprint' }
+    foreach ($Key in $script:ProtocolPaths.Keys) {
+        if ((Get-BenchmarkDigest (Get-BenchmarkGitFile $Repository $Revision $script:ProtocolPaths[$Key] 8388608)) -cne $Record.protocol[$Key]) {
+            Stop-BenchmarkData "historical-protocol-$Key"
+        }
+    }
+}
+
 function Assert-BenchmarkSnapshot {
     param([string]$Repository, [string]$Commit, [Collections.IDictionary]$Record)
     Assert-BenchmarkSeries $Record
@@ -580,7 +592,7 @@ function Write-BenchmarkReport {
         Escape-Display $Reason
     }
     $ResourceNames = @{
-        measuredProcessWallSeconds = 'Execution time per trial'; credits = 'Consumption per trial'
+        measuredProcessWallSeconds = 'Measured benchmark time per trial'; credits = 'Consumption per trial'
         requests = 'Model requests per trial'; inputTokens = 'Input tokens per trial'
         outputTokens = 'Output tokens per trial'; toolCalls = 'Tool calls per trial'
     }
@@ -620,11 +632,19 @@ function Write-BenchmarkReport {
         }
         $Totals = @(foreach ($Index in 0..($Arms.Count - 1)) { $(if ($Arms.Count -gt 1) { "$($Columns[$Index]): " }) + "**$(Format-ReadableNumber $Report[$Arms[$Index] + 'Statistics'].resources.total.credits.sum 2)**" })
         $Lines.Add(''); $Lines.Add('Total consumption across all three trials: ' + ($Totals -join '; ') + '.')
-        $Lines.Add('Consumption is measured in credits, not currency. Execution time includes workflow stages and the independent judge, but excludes environment preparation and report generation. Every sample and the complete numeric data are retained in `report.json`; detailed tables appear below.')
-        $Lines.Add(''); $Lines.Add('## Quality and acceptance'); $Lines.Add('')
+        $Lines.Add('Consumption is measured in credits, not currency. Measured benchmark time combines workflow-stage wall time and the independent judge. Stage clocks include some harness checks, not just agent subprocess execution; preparation, report generation and some independent evaluation are excluded. Pure agent latency and whole-wizard duration are not measured. Every sample and the complete numeric data are retained in `report.json`; detailed tables appear below.')
+        $Lines.Add(''); $Lines.Add('| Timing boundary (median per trial) | ' + ($Columns -join ' | ') + ' |')
+        $Lines.Add('| --- | ' + ((@($Columns | ForEach-Object { '---' })) -join ' | ') + ' |')
+        foreach ($Part in @('workflow', 'judge')) {
+            $Label = if ($Part -eq 'workflow') { 'Workflow-stage wall time (includes harness checks)' } else { 'Independent-judge time' }
+            $Cells = @(foreach ($Arm in $Arms) { Format-Duration $Report[$Arm + 'Statistics'].resources[$Part].measuredProcessWallSeconds.median })
+            $Lines.Add("| $Label | " + ($Cells -join ' | ') + ' |')
+        }
+        $Lines.Add('Combined medians are reduced from per-trial stage-plus-judge sums, not added component medians.')
+        $Lines.Add(''); $Lines.Add('## Document quality and acceptance'); $Lines.Add('')
         $Lines.Add('| Measure | ' + ($Columns -join ' | ') + ' |'); $Lines.Add('| --- | ' + ((@($Columns | ForEach-Object { '---' })) -join ' | ') + ' |')
         foreach ($Field in @('quality', 'functional', 'completed', 'failedTools', 'criticalHighFindings')) {
-            $Label = switch ($Field) { 'quality' { 'Quality (median /100)' }; 'functional' { 'Functional acceptance' }; 'completed' { 'Full workflow acceptance' }; 'failedTools' { 'Failed tool calls (total)' }; 'criticalHighFindings' { 'Critical/high findings (total)' } }
+            $Label = switch ($Field) { 'quality' { 'Document quality (median /100)' }; 'functional' { 'Functional acceptance' }; 'completed' { 'Full workflow acceptance' }; 'failedTools' { 'Failed tool calls (total)' }; 'criticalHighFindings' { 'Critical/high findings (total)' } }
             $Cells = @(foreach ($Arm in $Arms) {
                 $Stats = $Report[$Arm + 'Statistics']
                 switch ($Field) {
@@ -638,6 +658,14 @@ function Write-BenchmarkReport {
             $Lines.Add("| $Label | " + ($Cells -join ' | ') + ' |')
         }
         $Lines.Add(''); $Lines.Add('Functional acceptance requires every functional probe to pass. **Full workflow acceptance** also requires every stage and the final workflow checks to pass. A successful process exit or final build alone is not full acceptance.')
+        $Cells = @(foreach ($Arm in $Arms) {
+            $Stats = $Report[$Arm + 'Statistics']
+            if ($Stats.outcomes.completed -eq 0) { 'Unavailable (0 accepted workflows)' }
+            elseif ($null -eq $Stats.resources.total.credits) { 'Unavailable (missing consumption)' }
+            else { Format-ReadableNumber ([decimal]$Stats.resources.total.credits.sum / $Stats.outcomes.completed) 2 }
+        })
+        $Lines.Add(''); $Lines.Add('Observed total consumption per accepted workflow: ' + ((@(for ($Index = 0; $Index -lt $Arms.Count; $Index++) { "$($Columns[$Index]): $($Cells[$Index])" })) -join '; ') + '.')
+        $Lines.Add('This descriptive ratio includes consumption from every recorded attempt, not just successful ones; it is not expected retry cost. Document quality scores assess BRD/PRD content, not delivered software quality. Expert calibration and statistical significance have not been established.')
     } else { $Lines.Add(''); $Lines.Add('No comparable measurements are available. See the diagnostic reasons and provenance below.') }
     if ($Report.reasons.Count) {
         $Lines.Add(''); $Lines.Add('## Comparison findings'); $Lines.Add('')
@@ -741,7 +769,7 @@ function Write-BenchmarkReport {
     $Title = 'benchmark unavailable'; $Color = '#6b7280'
     if ($After -and $Report.status -in @('recorded-observation', 'unchanged', 'no-regression', 'regression')) {
         $AverageSeconds = [decimal]$After.resources.total.measuredProcessWallSeconds.sum / $After.resources.total.measuredProcessWallSeconds.samples.Count
-        $Title = "quality $(Format-Number $After.quality.total.median)/100 | functional $($After.outcomes.functional)/3 | workflow $($After.outcomes.completed)/3 | avg time $(Format-Duration $AverageSeconds)"
+        $Title = "doc quality $(Format-Number $After.quality.total.median)/100 | functional $($After.outcomes.functional)/3 | workflow $($After.outcomes.completed)/3 | avg benchmark time $(Format-Duration $AverageSeconds)"
         $Color = if ($After.outcomes.completed -lt 3 -or $Report.status -eq 'regression') { '#b45309' } else { '#16723b' }
     }
     $EscapedTitle = [Security.SecurityElement]::Escape($Title)
@@ -764,4 +792,4 @@ function Write-BenchmarkSeriesReport {
     Write-BenchmarkReport $Report $OutputDirectory
 }
 
-Export-ModuleMember -Function Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit
+Export-ModuleMember -Function Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit

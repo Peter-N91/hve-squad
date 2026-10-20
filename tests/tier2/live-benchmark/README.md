@@ -508,3 +508,12 @@ See [repository benchmark evidence](../../../benchmarks/efficiency/README.md)
 for sanitized immutable records, explicit parent selection, offline comparison
 commands, numeric policy, Actions summaries and generated README SVG badges.
 This sidecar does not change the frozen producer or strict promotion gates.
+
+The document score grades BRD/PRD content, not software quality. Benchmark timing
+combines workflow-stage wall clocks (including some harness checks) and the
+independent judge; pure agent latency and full wizard duration are not measured.
+The average-time badge uses the arithmetic mean; comparison gates still use
+medians. Invalid-input and corrupt-storage probes must terminate naturally with
+a nonzero exit and preserve storage: watchdog termination is not correct rejection.
+Changing this oracle invalidates current-protocol comparisons with inherited
+observations; historical records remain immutable descriptive evidence.

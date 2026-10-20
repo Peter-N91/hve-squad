@@ -1,6 +1,6 @@
 # Repository benchmark evidence
 
-[![Observed quality and acceptance](badge.svg)](report.md)
+[![Observed document quality, acceptance and average benchmark time](badge.svg)](report.md)
 
 `current.json` selects one immutable `records/<series-id>.json` by SHA-256.
 This is **recorded observational evidence, not an approved quality baseline**.
@@ -55,9 +55,11 @@ matches reality.
 
 A change must not lower the quality total or any dimension median, and must not
 reduce any functional or workflow pass count. The badge shows all three measures
-plus **average execution time per trial**, and is not a claim that every gate
-passed. `avg time` is the arithmetic mean of the three workflow-plus-judge
-process wall times, excluding setup and report generation. The performance
+plus **average measured benchmark time per trial**, and is not a claim that every gate
+passed. `avg benchmark time` is the arithmetic mean of the three stage-plus-judge
+wall times. Stage clocks include some harness checks; setup, report generation
+and some independent evaluation are excluded. This is neither pure agent latency
+nor whole-wizard duration. The performance
 table and comparison gates still use medians; an outlier can make the badge's
 mean differ from the report's median.
 
@@ -128,12 +130,76 @@ trials within or across series.
 
 ## Report and screening policy
 
+### Offline study and external rating analysis
+
+The optional study reader does not run agents, change the three-trial collector
+or promote evidence. Supply a private local manifest and, optionally, external
+ratings:
+
+```powershell
+Import-Module ./tests/tier2/live-benchmark/BenchmarkStudy.psm1
+Get-BenchmarkStudyAnalysis -Repository . -ManifestPath /private/study.json `
+  -AnnotationPath /private/ratings.json | ConvertTo-Json -Depth 32
+```
+
+Omit `-AnnotationPath` when no ratings exist. The manifest uses
+`schemaVersion: benchmark-study-v1`, `studyId`, `strata`, `batches` and `slots`:
+
+* A stratum declares `stratumId`, `taskId`, `taskRole` (`development` or
+  `held-out`), `design` (`descriptive`, `aa` or `ab`) and `protocolFingerprint`.
+  The fingerprint is SHA-256 of the UTF-8 `ConvertTo-BenchmarkCanonicalJson`
+  representation of the record's complete `protocol`.
+* A batch declares `batchId`, `stratumId`, `arm`, `recordPath` (below
+  `benchmarks/efficiency/records/`) and `recordSha256` (exact file bytes).
+* A slot declares `slotId`, `stratumId`, `arm`, `state` and, for `recorded`,
+  `batchId`/`runId`. Every referenced batch's three trials must appear exactly
+  once. `planned` slots have no observation; `aborted` slots add a bounded
+  operator `reason`, not invented outcomes or resource values.
+
+The reader validates each record at its own measured Git revision, not against
+today's protocol. This permits historical description **without** bypassing the
+strict current-branch comparison. It rejects overlapping trial IDs, incomplete
+batches, invalid digests and path/symlink escapes. Strata and arms remain
+separate; statistics reduce all included trials, not medians of batches.
+An A/A stratum requires disjoint recorded arms with identical source/protocol;
+these declarations do not establish randomized execution or causal effects.
+
+Interrupted attempts remain visible. Recorded-only acceptance is conditional on
+exported evidence; when aborts exist, whole-study reliability and complete
+resource totals are unavailable. Planned slots are not attempts. Unknown optional
+metrics stay unknown, and zero accepted workflows cannot yield a zero-cost ratio.
+
+Optional `benchmark-human-annotations-v1` input contains an `annotations` array.
+Each annotation binds its `annotationId`, all three document hashes, record
+digest, source/revision/run ID, rubric, judge implementation (`protocol.parserHash`)
+and recorded model string to an included trial. `recordedModelHash` is null for
+v1, which has no model-artifact hash. It includes the five integer dimension
+ratings (0-20) and an external attestation with opaque `annotatorId`,
+`attestationRef` and status `externally-attested-human`. Keep documents, actual
+ratings, identities and attestation material private; do not commit them here.
+
+Attestation strings do not authenticate humans or expertise. Valid input produces
+only descriptive rating coverage/differences and `external-ratings-present`,
+never calibrated/approved status. With no annotations calibration is `unassessed`.
+Actual expert adjudication, repeated judging of frozen artifacts, representative
+task selection and an authorized live A/A pilot remain empirical work.
+
+### Fixed-series screening
+
 `policy.json` is loaded from the base. Version 1 permits at most 5% growth in
 combined per-trial median credits, usage-accounting requests, input/output
 tokens, tool calls and **measured process wall seconds**. Workflow counters are
 the final cumulative snapshot counted once; independently metered judge counters
 are added once. Time sums each stage's `process.seconds` and the judge's process
-seconds. It is not event-span time or whole-wizard duration.
+seconds. Stage clocks include snapshot, parsing and readiness work, not just
+native subprocess execution. It is not event-span time, pure agent latency or
+whole-wizard duration.
+
+The quality score assesses BRD/PRD documents, not delivered software. No expert
+calibration or statistical significance is established by these three trials.
+Observed total consumption per accepted workflow divides all recorded consumption
+(including unsuccessful trials) by full-workflow successes. Zero successes means
+unavailable, not zero consumption or an expected retry-cost estimate.
 
 Quality total and each of five dimension medians cannot decline. Critical/high
 findings and combined tool failures use three-trial sums with no increase

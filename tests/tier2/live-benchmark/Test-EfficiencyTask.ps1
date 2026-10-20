@@ -31,7 +31,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments (@('-NoProfile', '-File', $Script, '-Store', $Store) + $Options) -WorkingDirectory $Root -OutputPath $Output -TimeoutSeconds 10
             $Value = $null
             if ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none') { $Value = Get-Content -LiteralPath $Output -Raw | ConvertFrom-Json -AsHashtable -NoEnumerate }
-            @{ ok = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none'); value = $Value; exitCode = $Result.exitCode; stopCause = $Result.stopCause }
+            @{ ok = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none'); rejected = ($null -ne $Result.exitCode -and $Result.exitCode -ne 0 -and $Result.stopCause -eq 'none'); value = $Value; exitCode = $Result.exitCode; stopCause = $Result.stopCause }
         }
         $Record = { param([string]$Name, [bool]$Passed) $Checks.Add([pscustomobject]@{ name = $Name; passed = $Passed }) }
         $Empty = & $Invoke -Options @('-Action', 'list')
@@ -58,12 +58,12 @@ if ($MyInvocation.InvocationName -ne '.') {
         )) {
             $Before = (Get-FileHash -LiteralPath $Store).Hash
             $Bad = & $Invoke -Options $Case.args
-            & $Record $Case.name (-not $Bad.ok -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before)
+            & $Record $Case.name ($Bad.rejected -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before)
         }
         Set-Content -LiteralPath $Store -Value '{invalid-json' -NoNewline
         $Before = (Get-FileHash -LiteralPath $Store).Hash
         $Bad = & $Invoke -Options @('-Action', 'list')
-        & $Record 'corrupt-store-preserved' (-not $Bad.ok -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before)
+        & $Record 'corrupt-store-preserved' ($Bad.rejected -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before)
         Set-Content -LiteralPath $Store -Value '[{"id":2147483647,"title":"Boundary task","status":"open"}]' -NoNewline -Encoding utf8NoBOM
         $Before = (Get-FileHash -LiteralPath $Store).Hash
         $Boundary = & $Invoke -Options @('-Action', 'add', '-Title', 'After boundary')
@@ -72,7 +72,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $List = & $Invoke -Options @('-Action', 'list')
             $Done = & $Invoke -Options @('-Action', 'done', '-Id', [string]$Boundary.value['id'])
             $BoundaryPassed = ($List.ok -and $List.value -is [array] -and $List.value.Count -eq 2 -and $List.value[0]['id'] -eq [int]::MaxValue -and $List.value[0]['title'] -ceq 'Boundary task' -and $List.value[1]['id'] -eq $Boundary.value['id'] -and $Done.ok -and $Done.value['id'] -eq $Boundary.value['id'] -and $Done.value['title'] -ceq 'After boundary' -and $Done.value['status'] -eq 'done')
-        } elseif (-not $Boundary.ok -and $Boundary.stopCause -eq 'none' -and $Boundary.exitCode -ne 0) {
+        } elseif ($Boundary.rejected) {
             $BoundaryPassed = (Test-Path -LiteralPath $Store -PathType Leaf) -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before
         }
         & $Record 'id-boundary-preserves-store' $BoundaryPassed

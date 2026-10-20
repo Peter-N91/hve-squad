@@ -46,6 +46,10 @@ BeforeAll {
         $Compatibility = Copy-Value $Prototype.protocol
         $Compatibility.cli = 'GitHub Copilot CLI 1.0.101-0.'
         $Compatibility.roleModelPolicy = ''; $Compatibility.disabledMcpServers = ''
+        $ProtocolFields = @('scenarioHash', 'parserHash', 'exerciseHash', 'preparationHash', 'graderHash', 'verifierHash')
+        for ($Index = 0; $Index -lt $FrozenPaths.Count; $Index++) {
+            $Compatibility[$ProtocolFields[$Index]] = (Get-FileHash -LiteralPath (Join-Path $Repo $FrozenPaths[$Index])).Hash.ToLowerInvariant()
+        }
         $Record.protocol = Get-BenchmarkProtocol $Repo $Revision $Compatibility
         foreach ($Trial in $Record.trials) {
             $Trial.runId = [guid]::NewGuid().ToString()
@@ -308,7 +312,7 @@ Describe 'Portable benchmark history and reporting' {
         Write-BenchmarkReport $Report $Output
         $Markdown = [IO.File]::ReadAllText((Join-Path $Output 'report.md'))
         $Markdown | Should -Match '&lt;script&gt;&#124;bad'
-        $Markdown | Should -Match 'Execution time per trial.*3 min 20 s.*3 min 0 s.*10.00% faster'
+        $Markdown | Should -Match 'Measured benchmark time per trial.*3 min 20 s.*3 min 0 s.*10.00% faster'
         $Markdown | Should -Match 'Consumption per trial.*200.00.*205.00.*2.50% higher'
         $Markdown | Should -Match 'Input tokens per trial.*1,234,667'
         $Markdown | Should -Match 'Initialization: State verification passed in fewer trials'
@@ -318,15 +322,18 @@ Describe 'Portable benchmark history and reporting' {
         $Json = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'report.json')))
         (ConvertTo-BenchmarkCanonicalJson $Json) | Should -BeExactly (ConvertTo-BenchmarkCanonicalJson $Report)
         $Svg = [IO.File]::ReadAllText((Join-Path $Output 'badge.svg'))
-        ([xml]$Svg).svg.GetAttribute('aria-label') | Should -Match 'quality 99/100.*functional 3/3.*workflow 2/3'
-        ([xml]$Svg).svg.GetAttribute('aria-label') | Should -Match 'avg time 3 min 53.3 s'
+        ([xml]$Svg).svg.GetAttribute('aria-label') | Should -Match 'doc quality 99/100.*functional 3/3.*workflow 2/3'
+        ([xml]$Svg).svg.GetAttribute('aria-label') | Should -Match 'avg benchmark time 3 min 53.3 s'
+        $Markdown | Should -Match 'Observed total consumption per accepted workflow: Baseline: 200.00; Candidate: 307.50'
+        $Markdown | Should -Match 'not delivered software quality'
+        $Markdown | Should -Match 'Pure agent latency and whole-wizard duration are not measured'
         $Svg | Should -Match '#b45309'
         (Get-Item (Join-Path $Output 'report.json')).Length | Should -BeGreaterThan 0
         $Report.status = 'incompatible'; $Report.exitCode = 2
         Write-BenchmarkReport $Report $Output
         $Unavailable = [IO.File]::ReadAllText((Join-Path $Output 'badge.svg'))
         $Unavailable | Should -Match '#6b7280.*benchmark unavailable'
-        $Unavailable | Should -Not -Match 'avg time'
+        $Unavailable | Should -Not -Match 'avg benchmark time'
     }
     It 'summarizes recorded observations without implying a baseline comparison' {
         $Fixture = New-TestRepository
@@ -348,8 +355,28 @@ Describe 'Portable benchmark history and reporting' {
         $Summary | Should -Match 'ID boundary preserves stored data.*2 of 3'
         $Summary | Should -Match 'Full workflow acceptance.*0 of 3 trials'
         $Summary | Should -Match 'BRD reviewer deliverable acceptance.*0 of 3'
+        $Summary | Should -Match 'Unavailable \(0 accepted workflows\)'
         $Markdown | Should -Not -Match '&quot;cliVersion'
         $Markdown | Should -Match '\| cliVersion \|'
+    }
+    It 'reduces stage-plus-judge samples before taking the combined median' {
+        $Fixture = New-TestRepository
+        $StageSeconds = @(1, 2, 100); $JudgeSeconds = @(100, 2, 1)
+        for ($Index = 0; $Index -lt 3; $Index++) {
+            $Fixture.record.trials[$Index].workflow.measuredProcessWallSeconds = $StageSeconds[$Index]
+            $Fixture.record.trials[$Index].judge.measuredProcessWallSeconds = $JudgeSeconds[$Index]
+        }
+        $Output = Join-Path $TestDrive 'timing-boundaries'
+        Write-BenchmarkSeriesReport $Fixture.record $Output
+        $Report = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'report.json')))
+        $Report.headStatistics.resources.total.measuredProcessWallSeconds.median | Should -Be 101
+        $Report.headStatistics.resources.workflow.measuredProcessWallSeconds.median | Should -Be 2
+        $Report.headStatistics.resources.judge.measuredProcessWallSeconds.median | Should -Be 2
+        $Markdown = [IO.File]::ReadAllText((Join-Path $Output 'report.md'))
+        $Markdown | Should -Match 'Workflow-stage wall time \(includes harness checks\).*2 s'
+        $Markdown | Should -Match 'Independent-judge time.*2 s'
+        $Markdown | Should -Match 'Measured benchmark time per trial.*1 min 41 s'
+        ([xml][IO.File]::ReadAllText((Join-Path $Output 'badge.svg'))).svg.GetAttribute('aria-label') | Should -Match 'avg benchmark time 1 min 8.7 s'
     }
     It 'always emits reports before a nonzero CLI verdict and rejects unsafe refs' {
         $Fixture = New-TestRepository; $Base = Save-TestSelection $Fixture $Fixture.record

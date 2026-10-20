@@ -31,7 +31,7 @@
 
 ## Documentation
 
-[![Observed efficiency benchmark: quality, acceptance and average execution time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
+[![Observed efficiency benchmark: document quality, acceptance and average benchmark time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
 
 Full documentation lives on the project site:
 
