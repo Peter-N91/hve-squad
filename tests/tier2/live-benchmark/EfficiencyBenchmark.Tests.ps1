@@ -972,9 +972,8 @@ exit 37
 }
 
 Describe 'Independent functional acceptance contract' -Tag 'Unit' {
-    It 'passes all probes on a conformant reference CLI' {
-        $Workspace = Join-Path $TestDrive 'reference'; New-Item -ItemType Directory -Path (Join-Path $Workspace 'src') -Force | Out-Null
-        @'
+    BeforeAll {
+        $ReferenceSource = @'
 param([ValidateSet('add','list','done')][string]$Action,[string]$Store,[string]$Title,[int]$Id,[ValidateSet('all','open','done')][string]$Status='all')
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new()
@@ -996,7 +995,11 @@ try {
     ConvertTo-Json -InputObject $Tasks -Depth 8 | Set-Content -LiteralPath $Store -Encoding utf8NoBOM
     $Result | ConvertTo-Json -Compress
 } catch {exit 1}
-'@ | Set-Content -LiteralPath (Join-Path $Workspace 'src/task.ps1') -Encoding utf8NoBOM
+'@
+    }
+    It 'passes all probes on a conformant reference CLI' {
+        $Workspace = Join-Path $TestDrive 'reference'; New-Item -ItemType Directory -Path (Join-Path $Workspace 'src') -Force | Out-Null
+        $ReferenceSource | Set-Content -LiteralPath (Join-Path $Workspace 'src/task.ps1') -Encoding utf8NoBOM
         $Result = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
         $Result.checks.Count | Should -Be 13
         $Result.passed | Should -BeTrue -Because (@($Result.checks | Where-Object { -not $_.passed } | ForEach-Object name) -join ', ')
@@ -1010,6 +1013,19 @@ try {
         Set-Content -LiteralPath $Path -Value $Source.Replace($CapacityGuard, '$Maximum=[long]$Maximum').Replace('[int]$Id', '[long]$Id') -Encoding utf8NoBOM
         $Wider = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
         $Wider.passed | Should -BeTrue -Because (@($Wider.checks | Where-Object { -not $_.passed } | ForEach-Object name) -join ', ')
+    }
+    It 'rejects a hanging <Probe> instead of treating the watchdog as input rejection' -ForEach @(
+        @{ Probe = 'missing-title'; Needle = "if ([string]::IsNullOrWhiteSpace(`$Title))"; Replacement = "if (-not `$PSBoundParameters.ContainsKey('Title')) { while (`$true) { Start-Sleep -Milliseconds 200 } }; if ([string]::IsNullOrWhiteSpace(`$Title))" },
+        @{ Probe = 'corrupt-store-preserved'; Needle = 'try {'; Replacement = "try { if ((Test-Path -LiteralPath `$Store) -and (Get-Content -LiteralPath `$Store -Raw) -eq '{invalid-json') { while (`$true) { Start-Sleep -Milliseconds 200 } }" }
+    ) {
+        $Workspace = Join-Path $TestDrive $Probe
+        New-Item -ItemType Directory -Path (Join-Path $Workspace 'src') -Force | Out-Null
+        $ReferenceSource.Contains($Needle) | Should -BeTrue
+        $ReferenceSource.Replace($Needle, $Replacement) | Set-Content -LiteralPath (Join-Path $Workspace 'src/task.ps1') -Encoding utf8NoBOM
+        $Result = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
+        $Result.checks.Count | Should -Be 13
+        $Result.passed | Should -BeFalse
+        @($Result.checks | Where-Object { -not $_.passed }).name | Should -Be $Probe
     }
 }
 

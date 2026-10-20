@@ -8,7 +8,7 @@ Each series contains three trials. Per-trial figures below are **medians**; expl
 
 | Measure | Recorded result |
 | --- | --- |
-| Execution time per trial | 17 min 45.6 s |
+| Measured benchmark time per trial | 17 min 45.6 s |
 | Consumption per trial | 250.47 |
 | Model requests per trial | 170 |
 | Input tokens per trial | 12,177,554 |
@@ -16,19 +16,28 @@ Each series contains three trials. Per-trial figures below are **medians**; expl
 | Tool calls per trial | 280 |
 
 Total consumption across all three trials: **760.64**.
-Consumption is measured in credits, not currency. Execution time includes workflow stages and the independent judge, but excludes environment preparation and report generation. Every sample and the complete numeric data are retained in `report.json`; detailed tables appear below.
+Consumption is measured in credits, not currency. Measured benchmark time combines workflow-stage wall time and the independent judge. Stage clocks include some harness checks, not just agent subprocess execution; preparation, report generation and some independent evaluation are excluded. Pure agent latency and whole-wizard duration are not measured. Every sample and the complete numeric data are retained in `report.json`; detailed tables appear below.
 
-## Quality and acceptance
+| Timing boundary (median per trial) | Recorded result |
+| --- | --- |
+| Workflow-stage wall time (includes harness checks) | 17 min 32.3 s |
+| Independent-judge time | 0 min 13.2 s |
+Combined medians are reduced from per-trial stage-plus-judge sums, not added component medians.
+
+## Document quality and acceptance
 
 | Measure | Recorded result |
 | --- | --- |
-| Quality (median /100) | 86/100 |
+| Document quality (median /100) | 86/100 |
 | Functional acceptance | 2 of 3 trials |
 | Full workflow acceptance | 0 of 3 trials |
 | Failed tool calls (total) | 10 |
 | Critical/high findings (total) | 1 |
 
 Functional acceptance requires every functional probe to pass. **Full workflow acceptance** also requires every stage and the final workflow checks to pass. A successful process exit or final build alone is not full acceptance.
+
+Observed total consumption per accepted workflow: Recorded result: Unavailable (0 accepted workflows).
+This descriptive ratio includes consumption from every recorded attempt, not just successful ones; it is not expected retry cost. Document quality scores assess BRD/PRD content, not delivered software quality. Expert calibration and statistical significance have not been established.
 
 ## Comparison findings
 
