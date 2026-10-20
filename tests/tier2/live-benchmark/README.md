@@ -91,7 +91,7 @@ control file is supplied or discovered. Complete is not retry-until-success.
 Selecting the same source for both arms tests repeatability, not patch improvement.
 Select separate baseline/candidate checkouts to compare an actual patch.
 
-Defaults are `claude-sonnet-5.5`, 100 AI credits per complete run, 300 total for
+Wizard observational defaults are `claude-sonnet-5.5`, 100 AI credits per complete run, 300 total for
 three new runs or 600 for six. These are ceilings, not cost predictions. Paths,
 model and credit ceilings can be changed. The wizard verifies the whole reservation,
 requires explicit disposable-isolation and spending confirmation, preserves the
@@ -311,7 +311,7 @@ report state `baseline established; no previous comparison available`.
 pwsh -NoProfile -File $Harness -Mode Establish `
 	-SourceRoot $Source -InstallRoot $Install `
 	-TrialRoot "$Evidence\control-001" `
-	-MaxCredits 100 -MaxSeriesCredits 300 -Live -IsolatedEnvironment
+	-MaxCredits 120 -MaxSeriesCredits 360 -Live -IsolatedEnvironment
 $LASTEXITCODE
 ```
 
@@ -322,7 +322,8 @@ creates new evidence only; it does not overwrite an accepted optimization report
 
 After making a candidate change, reuse the three saved controls with this one
 command. The fixture, parser, grader, model/role policy, CLI, installed dependency
-identity and per-run limits must still match. Pair IDs and control source identity
+identity, selected-source native converter, executing state verifier and per-run limits
+must still match. Pair IDs and control source identity
 must be consistent; otherwise reuse is refused before any trial is launched.
 
 ```powershell
@@ -330,7 +331,7 @@ pwsh -NoProfile -File $Harness -Mode Series `
 	-CandidateSourceRoot $Source -InstallRoot $Install `
 	-BaselineEvidencePath "$Evidence\control-001\out\control-series.json" `
 	-TrialRoot "$Evidence\comparison-001" `
-	-MaxCredits 100 -MaxSeriesCredits 300 -Live -IsolatedEnvironment
+	-MaxCredits 120 -MaxSeriesCredits 360 -Live -IsolatedEnvironment
 $LASTEXITCODE
 ```
 
@@ -342,18 +343,31 @@ pwsh -NoProfile -File $Harness -Mode Series `
 	-BaselineSourceRoot 'C:\bench\control-source' `
 	-CandidateSourceRoot $Source -InstallRoot $Install `
 	-TrialRoot "$Evidence\comparison-002" `
-	-MaxCredits 100 -MaxSeriesCredits 600 -Live -IsolatedEnvironment
+	-MaxCredits 120 -MaxSeriesCredits 720 -Live -IsolatedEnvironment
 $LASTEXITCODE
 ```
 
 The complete scheduled reservation must fit `MaxSeriesCredits` before any model
-call. A run allocates a quarter of `MaxCredits` to each of its three coordinator
-invocations and the independent judge. Resumed-session CLI accounting may make
-this more conservative. No outer stage/trial retries are performed. Each stage
-has at most two host continuations and a 15-minute watchdog within a 45-minute
-run budget; the judge has at most five minutes within the remaining budget.
-Observed usage stops a stage at 96 records or an unexpected `ask_user` invocation;
-the judge has a ten-record bound, and >300 total metered requests fails eligibility.
+call. These commands use **strict execution**: all three coordinator invocations
+share one workflow allowance of 75% of `MaxCredits`; the independent judge
+receives the remaining 25%. Both allocations must meet the native 30-credit
+minimum before any launch, so strict execution requires at least **120 credits
+per trial** (360 for three reservations; 720 for six). The workflow shares a
+990-request allowance and a 45-minute watchdog across its stages and any
+same-session recovery. Each stage has at most two host continuations. The judge
+has a separate ten-request bound and at most five minutes **within the remaining
+45-minute budget**. More than 1000 combined metered workflow/judge requests fails
+strict eligibility. An unexpected `ask_user` invocation stops execution.
+No outer stage/trial retries are performed.
+
+With `-ObservationOnly` (used by the wizard), the judge reserves a fixed 30
+credits and the workflow receives `MaxCredits - 30`; the minimum is **60 credits
+per trial**. The workflow and judge share a 180-minute watchdog, with the judge
+still limited to five minutes within the remaining time. Observational collection
+uses up to 1000 host continuations, disables the workflow observed request-count
+ceiling and benchmark recovery, and retains failed checks instead of stopping for quality
+gates. It does not disable spending, timeout, isolation or unexpected-question guards.
+The judge retains its ten-request bound in both modes.
 Parallel in-flight requests can cross an observed-event threshold before
 termination; the CLI credit ceiling remains the spending control. Internal model
 repair rounds are not independently identifiable and are reported as unknown,
@@ -456,7 +470,7 @@ updating the affected files and inspecting any remaining diagnostic.
 # One complete trial, independently scored and judged.
 pwsh -NoProfile -File $Harness -Mode Run -SourceRoot $Source `
 	-InstallRoot $Install -TrialRoot "$Evidence\one-run" `
-	-Arm candidate -Pair 1 -MaxCredits 100 -Live -IsolatedEnvironment
+	-Arm candidate -Pair 1 -MaxCredits 120 -Live -IsolatedEnvironment
 
 # Analyze an immutable snapshot of an existing CLI event stream; no model calls.
 pwsh -NoProfile -File $Harness -Mode Analyze `
@@ -492,6 +506,13 @@ Python or model access:
 Invoke-Pester -Path ./tests/tier2/live-benchmark/EfficiencyBenchmark.Tests.ps1 -Output Detailed
 ```
 
+Portable record/study and installer self-tests have a separate PowerShell 7.5+
+entry point using pinned Pester 5.7.1:
+
+```powershell
+pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-BenchmarkEvidenceTests.ps1
+```
+
 The combined `Invoke-LiveBenchmarkTests.ps1` command above runs both the existing
 inventory self-tests and these tests; its existing Python/pytest prerequisite remains.
 Real autonomous document quality, installed CLI/session behavior, provider spending
@@ -517,3 +538,12 @@ medians. Invalid-input and corrupt-storage probes must terminate naturally with
 a nonzero exit and preserve storage: watchdog termination is not correct rejection.
 Changing this oracle invalidates current-protocol comparisons with inherited
 observations; historical records remain immutable descriptive evidence.
+
+Current portable exports use `benchmark-series-v2`: `converterHash` binds the
+builder actually loaded from the selected source checkout, while `verifierHash`
+binds the verifier actually executed from the harness checkout. Export requires
+both digests to match the measured Git revision; it cannot relabel mismatched
+execution as that revision. Old `benchmark-series-v1` records remain available
+for historical analysis, but are explicitly `stale-record:unbound-execution-protocol`
+for current snapshot validation. The existing selected baseline therefore needs
+new, separately authorized evidence; old records and pointers are not rewritten.

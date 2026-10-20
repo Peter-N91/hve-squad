@@ -196,6 +196,7 @@ function Get-EfficiencyRecoveryPolicy {
         if ($MaxCredits -lt 60) { throw 'Observation requires at least 60 credits to reserve the native minimum of 30 for workflow and judge.' }
         return [pscustomobject]@{ id = 'baseline-observation-v1'; maxCyclesPerStage = 0; workflowCredits = $MaxCredits - 30; judgeCredits = 30 }
     }
+    if ($MaxCredits * 0.75 -lt 30 -or $MaxCredits / 4 -lt 30) { throw 'Strict execution requires at least 120 credits: both the 75% workflow and 25% judge allocations must meet the native minimum of 30.' }
     [pscustomobject]@{
         id = 'same-session-acp-compact-v3-workflow-credits'; maxCyclesPerStage = 1
         workflowCredits = $MaxCredits * 0.75; judgeCredits = $MaxCredits / 4
@@ -973,6 +974,8 @@ function Get-EfficiencyCompatibility {
         exerciseHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1')).Hash
         preparationHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot '../../lib/SquadInstall.psm1')).Hash
         graderHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1')).Hash
+        verifierHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot '../../../scripts/Test-SquadScribeOutput.ps1')).Hash
+        converterHash = (Get-FileHash -LiteralPath (Join-Path $SourceRoot 'scripts/Build-SquadPlugin.ps1')).Hash
         installHash = Get-EfficiencyTreeHash $InstallRoot
         model = $Model; cli = (@(& $CliPath --version) -join ' ').Trim(); powershell = $PSVersionTable.PSVersion.ToString()
         roleModelPolicy = (@($Policies.Keys | Sort-Object | ForEach-Object { $_ + ':' + $Policies[$_] }) -join ';')

@@ -50,7 +50,8 @@ jobs:
           if ($env:RELEASE_TAG) {
             $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
             function Get-ReleaseApi([string]$Path) {
-              Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$baseRepo/$Path" -Headers $headers
+              $response = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$baseRepo/$Path" -Headers $headers
+              foreach ($item in $response) { $item }
             }
             function Resolve-ReleaseCommit([string]$Tag) {
               $object = (Get-ReleaseApi "git/ref/tags/$([Uri]::EscapeDataString($Tag))").object

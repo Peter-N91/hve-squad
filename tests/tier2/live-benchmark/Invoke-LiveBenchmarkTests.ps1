@@ -11,6 +11,8 @@
     every mutant killed, baseline fails), the scorer on synthetic workspaces, the judge
     anonymise/shuffle/de-anonymise round trip, and report generation. Needs Python with
     pytest on PATH. Deliberately not part of Tier 0 or the Tier 2 self-check.
+    Export/report/study suites run separately through Invoke-BenchmarkEvidenceTests.ps1
+    on PowerShell 7.5+ and in the Tier 2 comparator CI self-check.
 .PARAMETER PesterPath
     Optional path to a Pester 5 module manifest to import instead of the installed one.
 .EXAMPLE

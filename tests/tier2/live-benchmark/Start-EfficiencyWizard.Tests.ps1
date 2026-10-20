@@ -7,7 +7,7 @@ BeforeAll {
     . (Join-Path $PSScriptRoot 'Start-EfficiencyWizard.ps1')
     Mock Write-Host {}
     function New-WizardTestConfig {
-        @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 10.0; TotalCredits = 60.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = '' }
+        @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 60.0; TotalCredits = 360.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = '' }
     }
 }
 
@@ -128,11 +128,15 @@ Describe 'Wizard unattended plan' -Tag 'Unit' {
         $Steps[1].arguments.ObservationOnly | Should -BeTrue
         $Steps[2].arguments.ObservationOnly | Should -BeTrue
         $Steps[2].arguments.BaselineEvidencePath | Should -Be (Join-Path $TestDrive 'control/out/control-series.json')
-        $Steps[1].arguments.MaxSeriesCredits + $Steps[2].arguments.MaxSeriesCredits | Should -Be 60
+        $Steps[1].arguments.MaxSeriesCredits + $Steps[2].arguments.MaxSeriesCredits | Should -Be 360
     }
     It 'requires the full combined reservation before starting Complete' {
-        $Config = New-WizardTestConfig; $Config.TotalCredits = 59
+        $Config = New-WizardTestConfig; $Config.TotalCredits = 359
         { New-WizardRunPlan $Config } | Should -Throw '*reservations*'
+    }
+    It 'rejects an observational allocation below the native minimum before planning paid work' {
+        $Config = New-WizardTestConfig; $Config.PerRunCredits = 59
+        { New-WizardRunPlan $Config } | Should -Throw '*at least 60*'
     }
     It 'keeps Offline free of benchmark steps' {
         $Config = New-WizardTestConfig; $Config.Mode = 'Offline'

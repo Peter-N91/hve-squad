@@ -14,6 +14,7 @@ $script:ProtocolPaths = [ordered]@{
     preparationHash = 'tests/lib/SquadInstall.psm1'
     graderHash = 'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1'
     verifierHash = 'scripts/Test-SquadScribeOutput.ps1'
+    converterHash = 'scripts/Build-SquadPlugin.ps1'
 }
 $script:ProtocolLabels = @('schema', 'rubric', 'hostProfile', 'model', 'cliVersion', 'powershell', 'recoveryPolicy', 'evaluationPolicy')
 $script:ProtocolDigests = @('installHash', 'roleModelPolicyHash', 'disabledMcpServersHash') + @($script:ProtocolPaths.Keys)
@@ -171,7 +172,7 @@ function Get-BenchmarkProtocol {
     foreach ($Key in @('roleModelPolicy', 'disabledMcpServers')) { $Protocol[$Key + 'Hash'] = Get-BenchmarkDigest ([Text.Encoding]::UTF8.GetBytes([string]$Compatibility[$Key])) }
     foreach ($Key in $script:ProtocolPaths.Keys) {
         $Hash = Get-BenchmarkDigest (Get-BenchmarkGitFile $Repository $Revision $script:ProtocolPaths[$Key] 8388608)
-        if ($Key -ne 'verifierHash' -and $Hash -cne ([string]$Compatibility[$Key]).ToLowerInvariant()) { Stop-BenchmarkData 'measured-protocol-mismatch' }
+        if ($Hash -cne ([string]$Compatibility[$Key]).ToLowerInvariant()) { Stop-BenchmarkData 'measured-protocol-mismatch' }
         $Protocol[$Key] = $Hash
     }
     $Protocol
@@ -199,17 +200,21 @@ function Get-BenchmarkRawMetrics {
 function Assert-BenchmarkSeries {
     param([Collections.IDictionary]$Record)
     Assert-BenchmarkKeys $Record @('schemaVersion', 'seriesId', 'measuredRevision', 'sourceHash', 'protocol', 'provenance', 'trials')
-    if ($Record.schemaVersion -cne 'benchmark-series-v1' -or $Record.seriesId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$') { Stop-BenchmarkData 'series-identity' }
+    if ($Record.schemaVersion -cnotin @('benchmark-series-v1', 'benchmark-series-v2') -or $Record.seriesId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$') { Stop-BenchmarkData 'series-identity' }
     Assert-BenchmarkHash $Record.measuredRevision 40
     Assert-BenchmarkHash $Record.sourceHash
-    Assert-BenchmarkKeys $Record.protocol ($script:ProtocolLabels + $script:ProtocolDigests + @('maxCredits', 'continuations'))
+    # V1 remains readable for historical description, but cannot bind a current snapshot.
+    $Digests = @($script:ProtocolDigests | Where-Object { $Record.schemaVersion -ceq 'benchmark-series-v2' -or $_ -cne 'converterHash' })
+    Assert-BenchmarkKeys $Record.protocol ($script:ProtocolLabels + $Digests + @('maxCredits', 'continuations'))
     foreach ($Key in $script:ProtocolLabels) { if ($Record.protocol[$Key] -isnot [string] -or $Record.protocol[$Key] -cnotmatch '^[A-Za-z0-9][A-Za-z0-9.+-]{0,95}$') { Stop-BenchmarkData 'protocol-label' } }
-    foreach ($Key in $script:ProtocolDigests) { Assert-BenchmarkHash $Record.protocol[$Key] }
+    foreach ($Key in $Digests) { Assert-BenchmarkHash $Record.protocol[$Key] }
     Assert-BenchmarkNumber $Record.protocol.maxCredits
     Assert-BenchmarkNumber $Record.protocol.continuations -Integer
     if ($Record.protocol.evaluationPolicy -cne 'baseline-observation-v1') { Stop-BenchmarkData 'evaluation-policy' }
     Assert-BenchmarkKeys $Record.provenance @('collector', 'verifierHashBasis', 'hostAttestation', 'rawSeriesHash')
-    if ($Record.provenance.collector -cne 'benchmark-export-v1' -or $Record.provenance.verifierHashBasis -cne 'measured-git-revision' -or $Record.provenance.hostAttestation -cne 'unavailable') { Stop-BenchmarkData 'provenance-label' }
+    $Collector = if ($Record.schemaVersion -ceq 'benchmark-series-v2') { 'benchmark-export-v2' } else { 'benchmark-export-v1' }
+    $VerifierBasis = if ($Record.schemaVersion -ceq 'benchmark-series-v2') { 'executing-file-verified-against-measured-git' } else { 'measured-git-revision' }
+    if ($Record.provenance.collector -cne $Collector -or $Record.provenance.verifierHashBasis -cne $VerifierBasis -or $Record.provenance.hostAttestation -cne 'unavailable') { Stop-BenchmarkData 'provenance-label' }
     Assert-BenchmarkHash $Record.provenance.rawSeriesHash
     if ($Record.trials -isnot [array] -or $Record.trials.Count -ne 3) { Stop-BenchmarkData 'trial-count' }
     $Ids = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -263,6 +268,7 @@ function Assert-BenchmarkHistoricalSeries {
     $Revision = Resolve-BenchmarkCommit $Repository $Record.measuredRevision
     if ((Get-BenchmarkSourceHash $Repository $Revision) -cne $Record.sourceHash) { Stop-BenchmarkData 'historical-source-fingerprint' }
     foreach ($Key in $script:ProtocolPaths.Keys) {
+        if ($Record.schemaVersion -ceq 'benchmark-series-v1' -and $Key -ceq 'converterHash') { continue }
         if ((Get-BenchmarkDigest (Get-BenchmarkGitFile $Repository $Revision $script:ProtocolPaths[$Key] 8388608)) -cne $Record.protocol[$Key]) {
             Stop-BenchmarkData "historical-protocol-$Key"
         }
@@ -272,6 +278,7 @@ function Assert-BenchmarkHistoricalSeries {
 function Assert-BenchmarkSnapshot {
     param([string]$Repository, [string]$Commit, [Collections.IDictionary]$Record)
     Assert-BenchmarkSeries $Record
+    if ($Record.schemaVersion -cne 'benchmark-series-v2') { Stop-BenchmarkData 'unbound-execution-protocol' 'stale-record' }
     $Ancestor = Invoke-BenchmarkGit $Repository @('merge-base', '--is-ancestor', $Record.measuredRevision, $Commit) -AllowFailure
     if ($null -eq $Ancestor) { Stop-BenchmarkData 'measured-revision-not-ancestor' 'stale-record' }
     if ((Get-BenchmarkSourceHash $Repository $Commit) -cne $Record.sourceHash -or (Get-BenchmarkSourceHash $Repository $Record.measuredRevision) -cne $Record.sourceHash) { Stop-BenchmarkData 'source-fingerprint' 'stale-record' }
@@ -363,9 +370,9 @@ function Export-BenchmarkSeries {
         }
     }
     $Record = [ordered]@{
-        schemaVersion = 'benchmark-series-v1'; seriesId = $SeriesId; measuredRevision = $Revision; sourceHash = $SourceHash
+        schemaVersion = 'benchmark-series-v2'; seriesId = $SeriesId; measuredRevision = $Revision; sourceHash = $SourceHash
         protocol = $Protocol
-        provenance = @{ collector = 'benchmark-export-v1'; verifierHashBasis = 'measured-git-revision'; hostAttestation = 'unavailable'; rawSeriesHash = Get-BenchmarkDigest $Raw }
+        provenance = @{ collector = 'benchmark-export-v2'; verifierHashBasis = 'executing-file-verified-against-measured-git'; hostAttestation = 'unavailable'; rawSeriesHash = Get-BenchmarkDigest $Raw }
         trials = @($Trials | Sort-Object slot)
     }
     $Head = Resolve-BenchmarkCommit $Repository 'HEAD'

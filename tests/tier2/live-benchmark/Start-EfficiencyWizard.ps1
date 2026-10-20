@@ -135,6 +135,8 @@ function New-WizardRunPlan {
     $Steps.Add(@{ name = 'Offline self-tests'; kind = 'Offline'; arguments = @{} })
     if ($Config.Mode -eq 'Offline') { return ,@($Steps) }
     foreach ($Limit in @($Config.PerRunCredits, $Config.TotalCredits)) { if ([double]$Limit -le 0 -or [double]::IsNaN([double]$Limit) -or [double]::IsInfinity([double]$Limit)) { throw 'Finite positive credit ceilings are required.' } }
+    Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+    $null = Get-EfficiencyRecoveryPolicy -MaxCredits $Config.PerRunCredits -ObservationOnly
     $NeededRuns = if ($Config.Mode -eq 'Establish' -or ($Config.Mode -eq 'Series' -and $Config.BaselineEvidencePath)) { 3 } else { 6 }
     if ($Config.TotalCredits -lt $NeededRuns * $Config.PerRunCredits) { throw 'Total credit ceiling is smaller than the scheduled run reservations.' }
     $Common = @{ InstallRoot = $Config.InstallRoot; Model = $Config.Model; MaxCredits = $Config.PerRunCredits; Live = $true; IsolatedEnvironment = $true; ObservationOnly = $true }

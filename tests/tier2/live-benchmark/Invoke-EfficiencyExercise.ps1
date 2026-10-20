@@ -84,6 +84,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (-not $Live -or -not $IsolatedEnvironment -or $MaxCredits -le 0 -or [double]::IsNaN($MaxCredits) -or [double]::IsInfinity($MaxCredits)) {
             throw 'Run requires -Live -IsolatedEnvironment and a finite positive -MaxCredits. Tool filters are not an OS sandbox.'
         }
+        $RecoveryPolicy = Get-EfficiencyRecoveryPolicy -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
         if ($Mode -in @('Establish', 'Series')) {
             if (-not $TrialRoot -or -not $InstallRoot -or $MaxSeriesCredits -le 0 -or [double]::IsNaN($MaxSeriesCredits) -or [double]::IsInfinity($MaxSeriesCredits)) { throw 'Establish/Series requires a new TrialRoot, InstallRoot and finite positive MaxSeriesCredits.' }
             if (Test-Path -LiteralPath $TrialRoot) { throw 'TrialRoot must not exist; saved evidence is never overwritten.' }
@@ -265,7 +266,6 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Metadata | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath (Join-Path $Out 'metadata.json') -Encoding utf8NoBOM
         $Stages = [Collections.Generic.List[object]]::new()
         $AllPassed = $true; $StartLine = 0; $Metrics = $null
-        $RecoveryPolicy = Get-EfficiencyRecoveryPolicy -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
         $SessionCreditCeiling = $RecoveryPolicy.workflowCredits
         # Reserve the independent judge's existing ten-request allowance.
         $WorkflowRequestCeiling = if ($ObservationOnly) { [int]::MaxValue } else { [int]$Scenario.maxModelRequests - 10 }

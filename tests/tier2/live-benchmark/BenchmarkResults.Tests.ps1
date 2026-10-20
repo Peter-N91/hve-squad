@@ -9,7 +9,7 @@ BeforeAll {
     $TemplatePath = Join-Path $SourceRoot 'benchmarks/efficiency/records/run-20261019-222802-3624af24.json'
     $Prototype = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($TemplatePath))
     $Policy = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $SourceRoot 'benchmarks/efficiency/policy.json')))
-    $FrozenPaths = @('tests/tier2/live-benchmark/efficiency-scenario.json', 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1', 'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1', 'tests/lib/SquadInstall.psm1', 'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1', 'scripts/Test-SquadScribeOutput.ps1')
+    $FrozenPaths = @('tests/tier2/live-benchmark/efficiency-scenario.json', 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1', 'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1', 'tests/lib/SquadInstall.psm1', 'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1', 'scripts/Test-SquadScribeOutput.ps1', 'scripts/Build-SquadPlugin.ps1')
 
     function Copy-Value($Value) { ConvertFrom-BenchmarkJson ([Text.Encoding]::UTF8.GetBytes((ConvertTo-BenchmarkCanonicalJson $Value))) }
     function Invoke-TestGit([string]$Repo, [string[]]$GitArguments) {
@@ -40,13 +40,16 @@ BeforeAll {
         [IO.File]::WriteAllText((Join-Path $Repo 'squad-src/charter.md'), 'original')
         $Revision = Save-TestCommit $Repo
         $Record = Copy-Value $Prototype
+        $Record.schemaVersion = 'benchmark-series-v2'
+        $Record.provenance.collector = 'benchmark-export-v2'
+        $Record.provenance.verifierHashBasis = 'executing-file-verified-against-measured-git'
         $Record.seriesId = 'fixture-baseline'
         $Record.measuredRevision = $Revision
         $Record.sourceHash = Get-BenchmarkSourceHash $Repo $Revision
         $Compatibility = Copy-Value $Prototype.protocol
         $Compatibility.cli = 'GitHub Copilot CLI 1.0.101-0.'
         $Compatibility.roleModelPolicy = ''; $Compatibility.disabledMcpServers = ''
-        $ProtocolFields = @('scenarioHash', 'parserHash', 'exerciseHash', 'preparationHash', 'graderHash', 'verifierHash')
+        $ProtocolFields = @('scenarioHash', 'parserHash', 'exerciseHash', 'preparationHash', 'graderHash', 'verifierHash', 'converterHash')
         for ($Index = 0; $Index -lt $FrozenPaths.Count; $Index++) {
             $Compatibility[$ProtocolFields[$Index]] = (Get-FileHash -LiteralPath (Join-Path $Repo $FrozenPaths[$Index])).Hash.ToLowerInvariant()
         }
@@ -215,6 +218,38 @@ Describe 'Portable benchmark history and reporting' {
         $Bad = Copy-Value $Fixture.record; $Bad.measuredRevision = ('1' * 40)
         $Head = Save-TestSelection $Fixture $Bad
         (Compare-BranchBenchmark $Fixture.repository $Base $Head).status | Should -Be 'stale-record'
+    }
+    It 'rejects converter-only drift with inherited evidence and unchanged squad source' {
+        $Fixture = New-TestRepository; $Base = Save-TestSelection $Fixture $Fixture.record
+        [IO.File]::AppendAllText((Join-Path $Fixture.repository 'scripts/Build-SquadPlugin.ps1'), "`n# converter drift")
+        $Head = Save-TestCommit $Fixture.repository
+        (Get-BenchmarkSourceHash $Fixture.repository $Head) | Should -Be $Fixture.record.sourceHash
+        $Report = Compare-BranchBenchmark $Fixture.repository $Base $Head
+        $Report.status | Should -Be 'stale-record'
+        $Report.reasons | Should -Contain 'protocol-converterHash'
+    }
+    It 'requires measured digests for both the executing verifier and selected converter during export' -ForEach @(
+        @{ Digest = 'verifierHash' }, @{ Digest = 'converterHash' }
+    ) {
+        $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
+        foreach ($Run in $Raw.runs) { $Run.metadata.compatibility[$Digest] = '0' * 64 }
+        foreach ($Index in 0..2) { Write-TestJson (Join-Path $Raw.directories[$Index] 'out/run.json') $Raw.runs[$Index] }
+        Write-TestJson $Raw.control @{ schemaVersion = 'efficiency-control-v1'; runs = $Raw.runs }
+        { Export-BenchmarkSeries -Repository $Fixture.repository -ControlPath $Raw.control -TrialDirectories $Raw.directories -SeriesId bad-execution } |
+            Should -Throw '*measured-protocol-mismatch*'
+    }
+    It 'reads legacy records historically but explicitly refuses them as current snapshot evidence' {
+        $Fixture = New-TestRepository
+        $Legacy = Copy-Value $Fixture.record
+        $Legacy.schemaVersion = 'benchmark-series-v1'
+        $Legacy.provenance.collector = 'benchmark-export-v1'
+        $Legacy.provenance.verifierHashBasis = 'measured-git-revision'
+        [void]$Legacy.protocol.Remove('converterHash')
+        { Assert-BenchmarkHistoricalSeries $Fixture.repository $Legacy } | Should -Not -Throw
+        $Head = Save-TestSelection $Fixture $Legacy
+        $Report = Compare-BranchBenchmark $Fixture.repository $Head $Head
+        $Report.status | Should -Be 'stale-record'
+        $Report.reasons | Should -Contain 'unbound-execution-protocol'
     }
     It 'rejects historical edits even when a head pointer has a matching new hash' {
         $Fixture = New-TestRepository; $Base = Save-TestSelection $Fixture $Fixture.record
@@ -461,7 +496,11 @@ Describe 'Release benchmark event identities' {
             $Path = ([string]$Uri).Substring($Prefix.Length)
             $script:ReleaseCalls.Add($Path)
             if (-not $script:ReleaseApi.ContainsKey($Path)) { throw "Unexpected API request: $Path" }
-            $script:ReleaseApi[$Path]
+            if ($script:ReleaseApi[$Path] -is [array]) {
+                Write-Output -NoEnumerate $script:ReleaseApi[$Path]
+            } else {
+                $script:ReleaseApi[$Path]
+            }
         }
     }
     AfterEach {
