@@ -17,6 +17,7 @@ BeforeAll {
         if ($LASTEXITCODE -ne 0) { throw "Fixture Git failure: $($Result -join ' ')" }
         $Result -join "`n"
     }
+
     function Write-TestJson([string]$Path, $Value) {
         [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Path))
         [IO.File]::WriteAllText($Path, (ConvertTo-BenchmarkCanonicalJson $Value), [Text.UTF8Encoding]::new($false))
@@ -358,7 +359,7 @@ Describe 'Portable benchmark history and reporting' {
         { Resolve-BenchmarkCommit $Fixture.repository '--help' } | Should -Throw '*unsafe-ref*'
     }
     It 'keeps the report workflow read-only with verified base execution and bootstrap failure' {
-        $Workflow = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/efficiency-comparison.yml'))
+        $Workflow = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/tier2-benchmark.yml'))
         $Workflow | Should -Match 'contents: read'
         $Workflow | Should -Not -Match 'pull_request_target|secrets\.|contents: write|COPILOT_'
         $Workflow | Should -Match 'ref: \$\{\{ steps.refs.outputs.base \}\}'
@@ -366,7 +367,128 @@ Describe 'Portable benchmark history and reporting' {
         $Workflow | Should -Match 'base-comparison-tooling-unavailable'
         $Workflow | Should -Match 'FETCH_HEAD'
         $Workflow | Should -Match 'if: always\(\)'
+        $Workflow | Should -Not -Match 'pull_request|(?m)^  (push|schedule):'
+        $Workflow | Should -Match 'release:\s+types: \[published\]'
+        $Workflow | Should -Match 'workflow_dispatch:'
+        $Workflow | Should -Match 'workflow_call:'
+        $Workflow | Should -Match '!github.event.release.prerelease'
+        $Release = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/release.yml'))
+        $Release | Should -Match "if: needs.release.outputs.benchmark_tag != ''"
+        $Release | Should -Match 'uses: ./\.github/workflows/tier2-benchmark.yml'
         $Readme = [IO.File]::ReadAllText((Join-Path $SourceRoot 'README.md'))
         $Readme | Should -Match '\]\(benchmarks/efficiency/badge.svg\)\]\(benchmarks/efficiency/report.md\)'
+    }
+}
+
+Describe 'Release benchmark event identities' {
+    BeforeAll {
+        $WorkflowText = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/tier2-benchmark.yml'))
+        function Get-WorkflowRun([string]$Name) {
+            $Step = [regex]::Match($WorkflowText, '(?ms)^      - name: ' + [regex]::Escape($Name) + '\r?\n(.*?)(?=^      - name:|\z)').Groups[1].Value
+            $Body = [regex]::Match($Step, '(?ms)^        run: \|\r?\n(.*)').Groups[1].Value
+            if (-not $Body) { throw "Missing workflow script: $Name" }
+            [scriptblock]::Create(($Body -replace '(?m)^          ', ''))
+        }
+        $ResolveRelease = Get-WorkflowRun 'Validate immutable event identities'
+        $MissingBaseline = Get-WorkflowRun 'Compare or report missing baseline tooling'
+    }
+    BeforeEach {
+        $SavedEnvironment = @{}
+        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA')) {
+            $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
+        }
+        $env:GITHUB_REPOSITORY = 'fixture/benchmark'
+        $env:GITHUB_API_URL = 'https://api.github.invalid'
+        $env:GITHUB_OUTPUT = Join-Path $TestDrive 'release-outputs'
+        $env:GITHUB_EVENT_PATH = Join-Path $TestDrive 'release-event.json'
+        $env:GH_TOKEN = 'fixture-only'
+        $env:RELEASE_TAG = 'v2'
+        [IO.File]::WriteAllText($env:GITHUB_OUTPUT, '')
+        $CurrentRelease = @{ id = 20; tag_name = 'v2'; draft = $false; prerelease = $false; published_at = '2026-10-20T00:00:00Z' }
+        $PriorRelease = @{ id = 10; tag_name = 'v1'; draft = $false; prerelease = $false; published_at = '2026-10-18T00:00:00Z' }
+        $script:ReleaseApi = @{
+            'releases/tags/v2' = $CurrentRelease
+            'git/ref/tags/v2' = @{ object = @{ type = 'tag'; sha = ('c' * 40) } }
+            "git/tags/$('c' * 40)" = @{ object = @{ type = 'commit'; sha = ('2' * 40) } }
+            'releases?per_page=100&page=1' = @(
+                $CurrentRelease, $PriorRelease
+                @{ id = 15; tag_name = 'unrelated-hotfix'; draft = $false; prerelease = $false; published_at = '2026-10-19T00:00:00Z' }
+                @{ id = 19; tag_name = 'rolling-preview'; draft = $false; prerelease = $true; published_at = '2026-10-19T00:00:00Z' }
+                @{ id = 18; tag_name = 'draft'; draft = $true; prerelease = $false; published_at = '2026-10-19T00:00:00Z' }
+                @{ id = 30; tag_name = 'future-release'; draft = $false; prerelease = $false; published_at = '2026-10-21T00:00:00Z' }
+            )
+            'git/ref/tags/unrelated-hotfix' = @{ object = @{ type = 'commit'; sha = ('9' * 40) } }
+            'git/ref/tags/v1' = @{ object = @{ type = 'commit'; sha = ('1' * 40) } }
+            "compare/$('9' * 40)...$('2' * 40)" = @{ status = 'diverged' }
+            "compare/$('1' * 40)...$('2' * 40)" = @{ status = 'ahead' }
+        }
+        $script:ReleaseCalls = [Collections.Generic.List[string]]::new()
+        Mock Invoke-RestMethod {
+            param($Uri)
+            $Prefix = 'https://api.github.invalid/repos/fixture/benchmark/'
+            if (-not ([string]$Uri).StartsWith($Prefix, [StringComparison]::Ordinal)) { throw 'Unexpected API host.' }
+            $Path = ([string]$Uri).Substring($Prefix.Length)
+            $script:ReleaseCalls.Add($Path)
+            if (-not $script:ReleaseApi.ContainsKey($Path)) { throw "Unexpected API request: $Path" }
+            $script:ReleaseApi[$Path]
+        }
+    }
+    AfterEach {
+        foreach ($Name in $SavedEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($Name, $SavedEnvironment[$Name])
+        }
+    }
+    It 'peels annotated tags and selects an earlier stable ancestor rather than a newer unrelated hotfix' {
+        & $ResolveRelease
+        $Output = [IO.File]::ReadAllText($env:GITHUB_OUTPUT)
+        $Output | Should -Match "(?m)^base=$('1' * 40)\r?$"
+        $Output | Should -Match "(?m)^head=$('2' * 40)\r?$"
+        $script:ReleaseCalls | Should -Contain "git/tags/$('c' * 40)"
+        $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/rolling-preview'
+        $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/draft'
+        $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/future-release'
+    }
+    It 'keeps manual full-SHA comparisons independent of release API lookups and rejects unsafe refs' {
+        $env:RELEASE_TAG = ''
+        Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = ('a' * 40); head_sha = ('b' * 40) } }
+        & $ResolveRelease
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^base=$('a' * 40)\r?$"
+        $script:ReleaseCalls.Count | Should -Be 0
+        Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = '--help'; head_sha = ('b' * 40) } }
+        { & $ResolveRelease } | Should -Throw '*Full commit SHA required*'
+    }
+    It 'emits missing-baseline exit 2 for a first release without running candidate helpers' {
+        $script:ReleaseApi['releases?per_page=100&page=1'] = @($CurrentRelease)
+        & $ResolveRelease
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match '(?m)^base=\r?$'
+        $env:RUNNER_TEMP = Join-Path $TestDrive 'release-no-baseline'
+        $env:BASE_SHA = ''
+        $env:HEAD_SHA = '2' * 40
+        Mock pwsh { throw 'Candidate helper must not run.' }
+        & $MissingBaseline
+        $Result = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $env:RUNNER_TEMP 'efficiency-report/report.json')))
+        $Result.status | Should -Be 'missing-baseline'
+        $Result.exitCode | Should -Be 2
+        $Result.reasons | Should -Contain 'previous-stable-release-unavailable'
+        Should -Invoke pwsh -Times 0
+    }
+    It 'paginates published releases instead of silently missing an older baseline' {
+        $script:ReleaseApi['releases?per_page=100&page=1'] = @(1..100 | ForEach-Object {
+            @{ id = (100 + $_); tag_name = "preview-$_"; draft = $false; prerelease = $true; published_at = '2026-10-19T00:00:00Z' }
+        })
+        $script:ReleaseApi['releases?per_page=100&page=2'] = @($PriorRelease)
+        & $ResolveRelease
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^base=$('1' * 40)\r?$"
+        $script:ReleaseCalls | Should -Contain 'releases?per_page=100&page=2'
+    }
+    It 'rejects nonstable releases, malformed object identities and cyclic annotated tags' {
+        $CurrentRelease.prerelease = $true
+        { & $ResolveRelease } | Should -Throw '*published stable release is required*'
+        $CurrentRelease.prerelease = $false
+        $script:ReleaseApi['git/ref/tags/v2'].object.sha = '--help'
+        { & $ResolveRelease } | Should -Throw '*Invalid release object identity*'
+        $script:ReleaseApi['git/ref/tags/v2'].object.sha = 'c' * 40
+        $script:ReleaseApi["git/tags/$('c' * 40)"].object = @{ type = 'tag'; sha = ('c' * 40) }
+        { & $ResolveRelease } | Should -Throw '*Invalid release tag chain*'
     }
 }

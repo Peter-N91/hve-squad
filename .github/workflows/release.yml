@@ -42,6 +42,8 @@ permissions:
 jobs:
   release:
     name: Create Release
+    outputs:
+      benchmark_tag: ${{ steps.publish.outputs.benchmark_tag }}
     runs-on: ubuntu-latest
     # Skip commits that were authored by this workflow to prevent push-loop.
     if: >
@@ -215,6 +217,7 @@ jobs:
 
       # ── Create GitHub Release (the tag already exists) ────────────
       - name: Create GitHub Release
+        id: publish
         if: steps.tag_check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -242,3 +245,16 @@ jobs:
           fi
 
           gh release create "${ARGS[@]}"
+          if [[ "$DRAFT" != "true" ]]; then
+            echo "benchmark_tag=$TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+  benchmark:
+    name: Benchmark published release
+    needs: release
+    if: needs.release.outputs.benchmark_tag != ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/tier2-benchmark.yml
+    with:
+      release_tag: ${{ needs.release.outputs.benchmark_tag }}
