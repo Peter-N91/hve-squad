@@ -106,7 +106,7 @@ BeforeAll {
             $Evidence = @{}; foreach ($Dimension in $Trial.quality.Keys) { $Evidence[$Dimension] = 'PRIVATE JUDGE EXPLANATION' }
             $Run = @{
                 schemaVersion = 'squad-efficiency-v1'
-                metadata = @{ runId = $Trial.runId; pair = $Trial.slot; revision = $Fixture.revision; sourceHash = $Fixture.record.sourceHash; compatibility = $Fixture.compatibility; started = $Trial.started; sessionId = 'PRIVATE SESSION' }
+                metadata = @{ runId = $Trial.runId; arm = 'baseline'; pair = $Trial.slot; revision = $Fixture.revision; sourceHash = $Fixture.record.sourceHash; compatibility = $Fixture.compatibility; started = $Trial.started; sessionId = 'PRIVATE SESSION' }
                 collection = @{ recorded = $true; policy = 'baseline-observation-v1' }
                 metrics = $Metrics; stages = $Stages; completed = $true
                 acceptance = @{ passed = $true; checks = $Checks }
@@ -131,6 +131,19 @@ Describe 'Portable benchmark history and reporting' {
         $Text = ConvertTo-BenchmarkCanonicalJson $Record
         $Text | Should -Not -Match 'PRIVATE|sessionId|reviewPath|evidence.*EXPLANATION'
         { Export-BenchmarkSeries -Repository $Fixture.repository -ControlPath $Raw.control -TrialDirectories $Raw.directories -SeriesId safe-series } | Should -Throw
+        $Original = @($Raw.runs | ForEach-Object { Copy-Value $_ })
+        for ($Index = 0; $Index -lt 3; $Index++) {
+            $Raw.runs[$Index].metadata.arm = 'candidate'
+            $Raw.runs[$Index].metadata.runId = [guid]::NewGuid().ToString()
+            Write-TestJson (Join-Path $Raw.directories[$Index] 'out/run.json') $Raw.runs[$Index]
+        }
+        Write-TestJson $Raw.control @{ runs = @($Original) + @($Raw.runs) }
+        $Candidate = Export-BenchmarkSeries -Repository $Fixture.repository -ControlPath $Raw.control -TrialDirectories $Raw.directories -SeriesId native-candidate
+        $Candidate.trials.Count | Should -Be 3
+        $Candidate.trials.runId | Should -Be $Raw.runs.metadata.runId
+        $Raw.runs[1].metadata.arm = 'baseline'
+        Write-TestJson $Raw.control @{ runs = @($Original) + @($Raw.runs) }
+        { Export-BenchmarkSeries -Repository $Fixture.repository -ControlPath $Raw.control -TrialDirectories $Raw.directories -SeriesId mixed-candidate } | Should -Throw '*native-series-slots*'
     }
     It 'rejects original document changes and conflicting saved raw controls' {
         $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
