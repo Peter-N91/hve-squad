@@ -31,11 +31,12 @@
 
 ## Documentation
 
-[![Observed efficiency benchmark: quality and acceptance](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
+[![Observed efficiency benchmark: quality, acceptance and average execution time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
 
 The [benchmark report](benchmarks/efficiency/report.md) records observed quality,
-functional checks and full-workflow acceptance separately. The badge follows the
-current branch; it is not a claim that all quality or workflow gates passed.
+functional checks and full-workflow acceptance separately. The badge also shows
+average execution time per trial and follows the current branch; it is not a
+claim that all quality or workflow gates passed.
 
 Full documentation lives on the project site:
 
