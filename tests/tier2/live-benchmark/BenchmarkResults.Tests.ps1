@@ -169,6 +169,11 @@ Describe 'Portable benchmark history and reporting' {
         { Assert-BenchmarkSeries $Bad } | Should -Throw
         $Bad = Copy-Value $Fixture.record; $Bad.trials[1].runId = $Bad.trials[0].runId
         { Assert-BenchmarkSeries $Bad } | Should -Throw '*trial-id*'
+        $Bad = Copy-Value $Fixture.record; $Bad.trials[0].runId = 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA'
+        { Assert-BenchmarkSeries $Bad } | Should -Throw '*trial-id*'
+        $Bad = Copy-Value $Fixture.record; $Bad.trials[0].runId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        $Bad.trials[1].runId = $Bad.trials[0].runId.ToUpperInvariant()
+        { Assert-BenchmarkSeries $Bad } | Should -Throw '*trial-id*'
         { ConvertFrom-BenchmarkJson ([Text.Encoding]::UTF8.GetBytes('{"a":1,"a":2}')) } | Should -Throw '*duplicate-json-key*'
         { ConvertFrom-BenchmarkJson ([byte[]]::new(262145)) } | Should -Throw '*json-size*'
     }
@@ -228,11 +233,22 @@ Describe 'Portable benchmark history and reporting' {
         }
     }
     It 'rejects overlapping independently claimed series and reports protocol differences' {
-        $Fixture = New-TestRepository; $Candidate = New-TestCandidate $Fixture.record
+        $Fixture = New-TestRepository
+        $Fixture.record.trials[0].runId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        $Candidate = New-TestCandidate $Fixture.record
         $Candidate.trials[1].runId = $Fixture.record.trials[1].runId
         { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy } | Should -Throw '*overlapping-independent-evidence*'
         $Candidate = New-TestCandidate $Fixture.record; $Candidate.protocol.model = 'different-model'
         { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy } | Should -Throw '*incompatible:compatibility-model*'
+        $Candidate = New-TestCandidate $Fixture.record
+        $Candidate.trials[0].runId = $Fixture.record.trials[0].runId.ToUpperInvariant()
+        { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy } | Should -Throw '*trial-id*'
+        $Base = Save-TestSelection $Fixture $Fixture.record
+        $Head = Save-TestSelection $Fixture $Candidate
+        $Result = Compare-BranchBenchmark $Fixture.repository $Base $Head
+        $Result.status | Should -Be 'invalid-record'
+        $Result.exitCode | Should -Be 2
+        $Result.reasons | Should -Contain 'trial-id'
     }
     It 'uses combined medians and base policy without requiring improvement' {
         $Fixture = New-TestRepository; $Base = Save-TestSelection $Fixture $Fixture.record

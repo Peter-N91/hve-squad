@@ -216,7 +216,7 @@ function Assert-BenchmarkSeries {
     foreach ($Trial in $Record.trials) {
         Assert-BenchmarkKeys $Trial @('runId', 'slot', 'started', 'workflow', 'judge', 'quality', 'criticalHighFindings', 'documents', 'evidence', 'outcomes', 'processes', 'reviewerDispatch')
         $Guid = [guid]::Empty
-        if ($Trial.runId -isnot [string] -or -not [guid]::TryParseExact($Trial.runId, 'D', [ref]$Guid) -or -not $Ids.Add($Trial.runId)) { Stop-BenchmarkData 'trial-id' }
+        if ($Trial.runId -isnot [string] -or -not [guid]::TryParseExact($Trial.runId, 'D', [ref]$Guid) -or $Trial.runId -cne $Guid.ToString('D') -or -not $Ids.Add($Trial.runId)) { Stop-BenchmarkData 'trial-id' }
         Assert-BenchmarkNumber $Trial.slot -Integer -Maximum 3
         if ($Trial.slot -lt 1 -or $Trial.started -cnotmatch '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,7})?Z$') { Stop-BenchmarkData 'trial-time-slot' }
         foreach ($Part in @('workflow', 'judge')) {

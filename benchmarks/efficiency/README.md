@@ -70,6 +70,10 @@ independent series must have disjoint IDs. Historical records cannot be edited
 or removed in a comparison. Selecting a new current record requires review and
 does not invoke the harness's strict baseline-promotion function.
 
+Trial UUIDs must use canonical lowercase, hyphenated `D` format. Alternate casing
+is rejected as invalid evidence, not normalized, so it cannot disguise reused
+trials within or across series.
+
 ## Report and screening policy
 
 `policy.json` is loaded from the base. Version 1 permits at most 5% growth in
