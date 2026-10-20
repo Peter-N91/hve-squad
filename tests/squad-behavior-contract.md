@@ -51,6 +51,16 @@ Scribe hand-off pipelining (GATE-22 through GATE-28 below) is one more case this
 
 The live harness needs `COPILOT_GITHUB_TOKEN`, the `apm` CLI, and a pinned `@github/copilot`. Everything else needs only Pester 5.7.1.
 
+### Repository benchmark evidence
+
+| ID | Contract | Source |
+|---|---|---|
+| EFF-12 | Export selects exactly three valid raw observations, checks original documents/grade/coverage/protocol, whitelists portable fields and creates immutable records without accepting product failures | `tests/tier2/live-benchmark/BenchmarkResults.psm1`, `Export-BenchmarkSeries` |
+| EFF-13 | Base/head resolve once; actual parent snapshots and base policy are authoritative. Missing, overlapping, stale, incompatible or altered historical evidence fails explicitly; identical validated evidence is unchanged, not improvement | `tests/tier2/live-benchmark/BenchmarkResults.psm1`, `Compare-BranchBenchmark` |
+| EFF-14 | Numeric reducers count final workflow and independent judge once, use process wall time, expose outlying failures and per-check regressions, and never invent missing coverage or percentage denominators | `tests/tier2/live-benchmark/BenchmarkResults.psm1`, `Get-BenchmarkRawMetrics`, `Compare-BenchmarkSeries` |
+| EFF-15 | Markdown/JSON/static SVG report observed quality and acceptance separately, escape untrusted display data and exist before nonzero verdicts; README image/report links follow the branch | `tests/tier2/live-benchmark/BenchmarkResults.psm1`, `Write-BenchmarkReport`; `README.md` |
+| EFF-16 | Read-only report Actions execute reviewed base tooling, treat fork/head objects as data, publish on nonzero and never fall back to candidate helpers or paid calls when base evidence/tooling is missing | `.github/workflows/efficiency-comparison.yml`; `benchmarks/efficiency/README.md` |
+
 ### Efficiency benchmark credit bounds
 
 These offline cases exercise the benchmark driver, not model behavior.
