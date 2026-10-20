@@ -93,6 +93,10 @@ That parity is evidence, not proof. The cases below are what turn it into proof.
 
 ## Tier 0 — Static conformance
 
+| ID | Assertion | Source |
+|---|---|---|
+| CI-01 | PR release-state checks use the tested merge commit's first parent: upstream pin changes are not attributed to the PR, while actual PR pin changes still fail | `.github/workflows/pr-validation.yml`, `Compute diff against base` and `Reject an unreviewed hve-core pin move` |
+
 No Copilot invocation. Install the ref into a scratch directory, then inspect the delivered tree.
 
 | ID | Assertion | Rationale |
