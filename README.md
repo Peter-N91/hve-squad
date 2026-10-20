@@ -49,6 +49,30 @@ The site source is in [docs/](docs/) and is published to GitHub Pages by
 [.github/workflows/docs.yml](.github/workflows/docs.yml) on every push to `main` that touches
 `docs/`.
 
+## Benchmark methodology and sources
+
+The [efficiency benchmark](benchmarks/efficiency/README.md) records document quality,
+functional acceptance, workflow compliance, measured time and consumption separately.
+Its methodology review and measurement hardening drew on these primary sources
+(consulted 20 October 2026):
+
+| Source | How it informed the benchmark |
+|---|---|
+| Anthropic, [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) | Separate outcomes from execution trajectories; combine deterministic checks with model grading and retain failed attempts. |
+| Kapoor et al., [AI Agents That Matter](https://arxiv.org/abs/2407.01502) | Report resource consumption alongside quality, preserve reproducibility metadata and distinguish development tasks from held-out evaluation. |
+| Yao et al., [tau-bench](https://arxiv.org/abs/2406.12045) | Distinguish task success from repeated-run reliability and policy compliance; a successful final artifact alone does not establish a compliant workflow. |
+| OpenAI, [Evaluation best practices](https://developers.openai.com/api/docs/guides/evaluation-best-practices) | Use task-specific criteria, representative cases and human evidence to assess grader quality rather than trusting a scalar score alone. |
+| Zheng et al., [Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena](https://arxiv.org/abs/2306.05685) | Treat model-judge scores as measurements requiring bias and agreement checks, not authenticated expert judgments. |
+| OpenTelemetry, [GenAI metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/547934afa90a34298441caf80c43b27255c3a292/docs/gen-ai/gen-ai-metrics.md) and [token metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/547934afa90a34298441caf80c43b27255c3a292/docs/gen-ai/gen-ai-token-metrics.md) | Define timing boundaries and token-accounting semantics explicitly. These are pinned Development-stage references, not a claim of OpenTelemetry instrumentation or conformance. |
+| NIST/SEMATECH, [Confidence intervals](https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm) | Keep three-trial results descriptive; observed pass counts and resource differences do not establish statistical significance. |
+
+These sources informed the design; they do not certify it. The current three-trial,
+single-scenario baseline is a regression-screening reference, not a representative
+agent leaderboard. Human calibration, repeated-judge agreement and broader held-out
+task studies remain future empirical work. See the [generated report](benchmarks/efficiency/report.md)
+for actual results and the [collection guide](tests/tier2/live-benchmark/README.md)
+for execution details.
+
 ## Related repositories
 
 This repository is the source of truth. The squad also ships through two sibling repositories,
