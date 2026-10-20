@@ -15,6 +15,7 @@ BeforeAll {
         preparationHash = 'tests/lib/SquadInstall.psm1'
         graderHash = 'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1'
         verifierHash = 'scripts/Test-SquadScribeOutput.ps1'
+        converterHash = 'scripts/Build-SquadPlugin.ps1'
     }
     function Copy-StudyValue($Value) {
         ConvertFrom-BenchmarkJson ([Text.Encoding]::UTF8.GetBytes((ConvertTo-BenchmarkCanonicalJson $Value)))
@@ -75,6 +76,9 @@ BeforeAll {
         $Fixture = @{ repository = $Repository; records = @(); manifestPath = Join-Path $Repository 'study.json' }
         $Revision = Save-StudyCommit $Fixture
         $Record = Copy-StudyValue $Prototype
+        $Record.schemaVersion = 'benchmark-series-v2'
+        $Record.provenance.collector = 'benchmark-export-v2'
+        $Record.provenance.verifierHashBasis = 'executing-file-verified-against-measured-git'
         $Record.measuredRevision = $Revision
         $Record.sourceHash = Get-BenchmarkSourceHash $Repository $Revision
         foreach ($Key in $ProtocolPaths.Keys) {

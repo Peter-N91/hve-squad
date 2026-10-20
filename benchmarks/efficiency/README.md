@@ -257,10 +257,22 @@ available. Use the local report in the meantime, not a fabricated Actions run.
 
 ## Reproduce the original environment
 
-The record preserves the original actual revision and source hash plus protocol
-and dependency-install identities. The verifier hash is derived from the
-measured Git revision, not retrospectively claimed native telemetry. Full
-machine attestation is unavailable. For compatible new observations, pin both:
+Historical `benchmark-series-v1` records preserve their original actual revision,
+source hash, protocol and dependency-install identities. Their verifier hash was
+derived from the measured Git revision, not observed executing-file telemetry;
+they also lack a native converter digest. They remain readable for descriptive
+historical analysis, but current snapshot validation explicitly rejects them as
+`stale-record:unbound-execution-protocol`. The currently selected v1 baseline is
+therefore stale under this protocol; neither it nor its pointer is rewritten.
+
+New exports use `benchmark-series-v2`. Live compatibility binds the native
+converter actually loaded from the selected source checkout
+(`scripts/Build-SquadPlugin.ps1`) and the state verifier actually executed from
+the harness checkout (`scripts/Test-SquadScribeOutput.ps1`). Export requires both
+digests to agree with the measured Git revision; mismatched or unbound raw
+controls are refused, never retrospectively relabeled. Converter-only changes
+invalidate inherited snapshot evidence even when `squad-src` is unchanged.
+Full machine attestation remains unavailable. For new observations, pin both:
 
 ```powershell
 $env:COPILOT_CLI_DIST_DIR = '/local/cache/copilot/pkg/linux-x64/1.0.101-0'
@@ -268,7 +280,14 @@ $env:COPILOT_AUTO_UPDATE = 'false'
 ```
 
 Validate the actual CLI, model, PowerShell, prepared installation and frozen
-scenario/parser/exercise/preparation/grader/verifier before any paid execution.
+scenario/parser/exercise/preparation/grader/verifier/converter before any paid execution.
 Use fresh workspaces. A mismatch blocks the historical comparison: do not
 waive it or automatically buy replacement controls. A different reference
 campaign needs separate authorization. Never retry until the result looks good.
+
+Run the portable record, study and installer regressions without paid execution
+using PowerShell 7.5+ and pinned Pester 5.7.1:
+
+```powershell
+pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-BenchmarkEvidenceTests.ps1
+```

@@ -859,7 +859,9 @@ elseif ($args -contains '--version') { 'offline-cli-1.0' }
 else { throw 'A model-backed invocation is forbidden in this test.' }
 exit 0
 '@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Establish', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '1', '-MaxSeriesCredits', '3', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'establish-command.txt') -TimeoutSeconds 30 -InputText ''
+        New-Item -ItemType Directory -Path (Join-Path $Source 'scripts') -Force | Out-Null
+        Set-Content (Join-Path $Source 'scripts/Build-SquadPlugin.ps1') '# offline converter fixture'
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Establish', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '120', '-MaxSeriesCredits', '360', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'establish-command.txt') -TimeoutSeconds 30 -InputText ''
         $Result.exitCode | Should -Be 2
         $LaunchError = Join-Path $Trial 'out/baseline-1-launch.jsonl.stderr'
         Test-Path -LiteralPath $LaunchError | Should -BeTrue
@@ -891,7 +893,7 @@ New-Item -ItemType Directory -Path $SessionRoot -Force | Out-Null
 exit 0
 '@ | Set-Content $Cli -Encoding utf8NoBOM
         $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '1', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'incomplete-command.txt') -TimeoutSeconds 60 -InputText ''
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '120', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'incomplete-command.txt') -TimeoutSeconds 60 -InputText ''
         $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         try {
             $Result.exitCode | Should -Be 2
@@ -920,7 +922,7 @@ if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --m
 exit 37
 '@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
         $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '1', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'argv-command.txt') -TimeoutSeconds 60 -InputText ''
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '120', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'argv-command.txt') -TimeoutSeconds 60 -InputText ''
         $Result.exitCode | Should -Be 2
         $Captured = Get-Content -LiteralPath (Join-Path $Trial 'out/init-stdout.jsonl') -Raw | ConvertFrom-Json
         $Captured.arguments[0] | Should -Be '-p'
@@ -951,6 +953,8 @@ exit 37
         $Run.metadata.compatibility.hostProfile | Should -Be $Run.metadata.hostProfile
         $Run.metadata.compatibility.preparationHash | Should -Be (Get-FileHash -LiteralPath (Join-Path $Source 'tests/lib/SquadInstall.psm1')).Hash
         $Run.metadata.compatibility.exerciseHash | Should -Be (Get-FileHash -LiteralPath (Join-Path $Source 'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1')).Hash
+        $Run.metadata.compatibility.converterHash | Should -Be (Get-FileHash -LiteralPath (Join-Path $Source 'scripts/Build-SquadPlugin.ps1')).Hash
+        $Run.metadata.compatibility.verifierHash | Should -Be (Get-FileHash -LiteralPath (Join-Path $Source 'scripts/Test-SquadScribeOutput.ps1')).Hash
         $Workspace = Join-Path $Trial 'workspace'
         Get-Content -LiteralPath (Join-Path $Workspace '.github/instructions/retained.instructions.md') -Raw |
             Should -Match 'retained dependency rule'
@@ -968,6 +972,79 @@ exit 37
         $Coordinator | Should -Match '\.agents/skills/squad/references/rules/squad-roster\.md'
         $Coordinator | Should -Match 'unconditional floor still auto-applies'
         $Coordinator | Should -Not -Match '\.agents/\.agents/'
+    }
+}
+
+Describe 'Live execution allocation preflight' -Tag 'Unit' {
+    It 'reserves both native minima at the exact strict and observation boundaries' {
+        $Strict = Get-EfficiencyRecoveryPolicy -MaxCredits 120
+        $Strict.workflowCredits | Should -Be 90
+        $Strict.judgeCredits | Should -Be 30
+        { Get-EfficiencyRecoveryPolicy -MaxCredits 119.99 } | Should -Throw '*at least 120*'
+        { Get-EfficiencyRecoveryPolicy -MaxCredits 100 } | Should -Throw '*at least 120*'
+        $Observed = Get-EfficiencyRecoveryPolicy -MaxCredits 60 -ObservationOnly
+        $Observed.workflowCredits | Should -Be 30
+        $Observed.judgeCredits | Should -Be 30
+        { Get-EfficiencyRecoveryPolicy -MaxCredits 59.99 -ObservationOnly } | Should -Throw '*at least 60*'
+    }
+    It 'rejects undersized <RunMode> before invoking even a CLI preflight' -ForEach @(
+        @{ RunMode = 'Run' }, @{ RunMode = 'Establish' }, @{ RunMode = 'Series' }
+    ) {
+        $Cli = Join-Path $TestDrive "$RunMode-forbidden-cli.ps1"
+        $Marker = Join-Path $TestDrive "$RunMode-launched"
+        Set-Content $Cli "Set-Content '$Marker' 'unexpected invocation'; exit 39"
+        $Trial = Join-Path $TestDrive "$RunMode-undersized"
+        $Output = Join-Path $TestDrive "$RunMode-preflight.txt"
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', $RunMode, '-SourceRoot', $TestDrive, '-InstallRoot', $TestDrive, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '100', '-MaxSeriesCredits', '600', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 20
+        $Result.exitCode | Should -Be 1
+        Get-Content ($Output + '.stderr') -Raw | Should -Match 'at least 120'
+        Test-Path $Marker | Should -BeFalse
+        Test-Path $Trial | Should -BeFalse
+    }
+}
+
+Describe 'Executing compatibility inputs' -Tag 'Unit' {
+    It 'invalidates saved controls when only the <ChangedInput> actually used changes' -ForEach @(
+        @{ ChangedInput = 'converterHash' }, @{ ChangedInput = 'verifierHash' }
+    ) {
+        $Repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+        $Executing = Join-Path $TestDrive "executing-$ChangedInput"
+        $Selected = Join-Path $TestDrive "selected-$ChangedInput"
+        $Install = Join-Path $TestDrive "install-$ChangedInput"
+        New-Item -ItemType Directory -Path (Join-Path $Selected 'squad-src'), (Join-Path $Selected 'scripts'), $Install -Force | Out-Null
+        Set-Content (Join-Path $Selected 'squad-src/fixture.md') 'unchanged source'
+        Set-Content (Join-Path $Selected 'scripts/Build-SquadPlugin.ps1') '# selected converter'
+        Set-Content (Join-Path $Selected 'scripts/Test-SquadScribeOutput.ps1') '# decoy selected verifier; never executed'
+        foreach ($Path in @('tests/tier2/live-benchmark/EfficiencyBenchmark.psm1', 'tests/tier2/live-benchmark/LiveBenchmark.psm1', 'tests/tier2/live-benchmark/efficiency-scenario.json', 'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1', 'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1', 'tests/lib/SquadInstall.psm1', 'scripts/Test-SquadScribeOutput.ps1')) {
+            $Destination = Join-Path $Executing $Path
+            New-Item -ItemType Directory -Path (Split-Path $Destination -Parent) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $Repository $Path) -Destination $Destination
+        }
+        $Cli = Join-Path $TestDrive "compatibility-$ChangedInput.ps1"
+        Set-Content $Cli 'if ($args -contains "mcp") { ''{"mcpServers":{}}'' } else { "offline-cli" }; exit 0'
+        try {
+            Remove-Module EfficiencyBenchmark -Force
+            Import-Module (Join-Path $Executing 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1') -Force
+            $Arguments = @{ SourceRoot = $Selected; InstallRoot = $Install; CliPath = $Cli; Model = 'fake'; MaxCredits = 120 }
+            $Before = Get-EfficiencyCompatibility @Arguments
+            $Before.converterHash | Should -Be (Get-FileHash (Join-Path $Selected 'scripts/Build-SquadPlugin.ps1')).Hash
+            $Before.verifierHash | Should -Be (Get-FileHash (Join-Path $Executing 'scripts/Test-SquadScribeOutput.ps1')).Hash
+            $SourceHash = Get-EfficiencyTreeHash (Join-Path $Selected 'squad-src')
+            $ChangedPath = if ($ChangedInput -eq 'converterHash') { Join-Path $Selected 'scripts/Build-SquadPlugin.ps1' } else { Join-Path $Executing 'scripts/Test-SquadScribeOutput.ps1' }
+            Add-Content $ChangedPath '# mutation outside squad-src'
+            $After = Get-EfficiencyCompatibility @Arguments
+            $After[$ChangedInput] | Should -Not -Be $Before[$ChangedInput]
+            Get-EfficiencyTreeHash (Join-Path $Selected 'squad-src') | Should -Be $SourceHash
+            $Controls = @{ schemaVersion = 'efficiency-control-v1'; runs = @(New-TestRuns | Where-Object { $_.metadata.arm -eq 'baseline' }) }
+            foreach ($Run in $Controls.runs) { $Run.metadata.compatibility = $Before }
+            { Invoke-EfficiencySeries -Kind Series -RunTrial { throw 'must not launch' } -PerRunCredits 120 -SeriesCredits 360 -BaselineEvidence $Controls -ExpectedCompatibility $After } | Should -Throw '*compatibility*'
+        }
+        finally {
+            Remove-Module EfficiencyBenchmark -Force
+            Get-Module LiveBenchmark | Remove-Module -Force
+            Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+            Import-Module (Join-Path $PSScriptRoot 'LiveBenchmark.psm1') -Force
+        }
     }
 }
 

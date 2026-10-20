@@ -14,7 +14,7 @@ Set-StrictMode -Version Latest
 function Copy-SquadSource {
     <#
     .SYNOPSIS
-        Overlays a working copy's squad-src/ onto an installed tree, matching APM's layout.
+        Replaces squad-owned content with a working copy's squad-src/, matching APM's layout.
     .PARAMETER NativeCli
         Uses the plugin builder's lossless rule port for conditional squad instructions.
         The unconditional floor and all other installed instructions remain active.
@@ -37,23 +37,61 @@ function Copy-SquadSource {
         'instructions' = '.github/instructions'
     }
 
+    $ownershipPath = Join-Path $To '.github/squad-source-ownership.json'
+    $owned = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    if (Test-Path -LiteralPath $ownershipPath) {
+        foreach ($path in (Get-Content -LiteralPath $ownershipPath -Raw | ConvertFrom-Json)) {
+            if ($path -notmatch '^(?:\.github/(?:agents|prompts|instructions)/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.md|\.agents/skills/[A-Za-z0-9_-]+)$') {
+                throw 'Invalid squad source ownership path.'
+            }
+            [void]$owned.Add($path)
+        }
+    }
+    # Pre-manifest APM installs flatten these reserved squad names. The three
+    # non-squad skills and brand instruction also belong to this package, not hve-core.
+    foreach ($kind in $flat.Keys) {
+        $destination = Join-Path $To $flat[$kind]
+        if (Test-Path -LiteralPath $destination) {
+            foreach ($file in Get-ChildItem -LiteralPath $destination -File -Filter '*.md' |
+                    Where-Object { $_.Name -like 'squad-*.md' -or $_.Name -ceq 'squad.prompt.md' }) {
+                [void]$owned.Add("$($flat[$kind])/$($file.Name)")
+            }
+        }
+    }
+    [void]$owned.Add('.github/instructions/pptx-brand-template.instructions.md')
+    foreach ($name in @('squad', 'azure-scaffold', 'python-diagrams', 'sql-migration-advisor')) {
+        [void]$owned.Add(".agents/skills/$name")
+    }
+    foreach ($path in $owned) {
+        $installed = Join-Path $To $path
+        if (Test-Path -LiteralPath $installed) { Remove-Item -LiteralPath $installed -Recurse -Force }
+    }
+    $selected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($kind in $flat.Keys) {
         $source = Join-Path $From ".github/$kind"
         if (-not (Test-Path -LiteralPath $source)) { continue }
 
         $destination = Join-Path $To $flat[$kind]
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
-        Get-ChildItem -LiteralPath $source -Recurse -File -Filter '*.md' |
-            Copy-Item -Destination $destination -Force
+        foreach ($file in Get-ChildItem -LiteralPath $source -Recurse -File -Filter '*.md') {
+            Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+            [void]$selected.Add("$($flat[$kind])/$($file.Name)")
+        }
     }
 
     $skillSource = Join-Path $From '.github/skills'
     if (Test-Path -LiteralPath $skillSource) {
         $skillDestination = Join-Path $To '.agents/skills'
         New-Item -ItemType Directory -Path $skillDestination -Force | Out-Null
-        Get-ChildItem -LiteralPath $skillSource -Directory |
-            Copy-Item -Destination $skillDestination -Recurse -Force
+        foreach ($directory in Get-ChildItem -LiteralPath $skillSource -Directory) {
+            $destination = Join-Path $skillDestination $directory.Name
+            if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
+            Copy-Item -LiteralPath $directory.FullName -Destination $skillDestination -Recurse -Force
+            [void]$selected.Add(".agents/skills/$($directory.Name)")
+        }
     }
+    New-Item -ItemType Directory -Path (Split-Path $ownershipPath -Parent) -Force | Out-Null
+    ConvertTo-Json -InputObject @($selected | Sort-Object) | Set-Content -LiteralPath $ownershipPath -Encoding utf8NoBOM
 
     if ($NativeCli) {
         $sourceRoot = Split-Path -Path ([IO.Path]::GetFullPath($From)) -Parent

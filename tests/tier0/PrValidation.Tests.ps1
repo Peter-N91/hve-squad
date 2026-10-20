@@ -24,7 +24,7 @@ BeforeAll {
 }
 
 Describe 'CI-01 Release-state checks compare the tested merge parent' {
-    It '<Case>' -ForEach @(
+    It '<Case>' -Skip:($IsWindows -or -not (Get-Command bash -ErrorAction SilentlyContinue)) -ForEach @(
         @{ Case = 'accepts an upstream-only pin update despite a stale event base'; ChangePin = $false; ExpectedExit = 0 }
         @{ Case = 'still rejects a real PR pin update'; ChangePin = $true; ExpectedExit = 1 }
     ) {
