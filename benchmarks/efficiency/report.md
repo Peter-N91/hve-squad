@@ -1,22 +1,66 @@
 # Efficiency benchmark
 
-**Status: recorded-observation** (exit 0). Observations, not quality approval.
+**Recorded observations; no comparison yet.** These results are not quality approval.
 
-Independent three-sample series; no pairing or statistical-significance claim. Process wall time excludes offline setup and report generation.
-Integrity and reviewed workflow/controller provenance are not authenticated model-execution attestation.
-- baseCommit: n/a
-- headCommit: e42002bfd51f79bb2e17d974d13b1fb66bc4099b
-- mergeBase: n/a
-- policyHash: n/a
-- head seriesId: run-20261019-222802-3624af24
-- head sha256: 7cad1c77998fe3cf22b723742485eade434b587eafe3153fde963e48a1bbc4ed
-- head sourceHash: c69a057c35921bd53843bf407f9e135c30f655b6d301c69b9d5fa939b05a3e98
-- head measuredRevision: e42002bfd51f79bb2e17d974d13b1fb66bc4099b
-- head protocol: {&quot;cliVersion&quot;:&quot;1.0.101-0&quot;,&quot;continuations&quot;:1000,&quot;disabledMcpServersHash&quot;:&quot;e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855&quot;,&quot;evaluationPolicy&quot;:&quot;baseline-observation-v1&quot;,&quot;exerciseHash&quot;:&quot;3b16c298fa8cad268555b087aadd409031e2adf9cf174b0e9f89ea38e9aefc20&quot;,&quot;graderHash&quot;:&quot;bd92e8ab81dcc667bc5eacdf1b3e4b6a83a404f6be9e418cb529fdba5dafa8f7&quot;,&quot;hostProfile&quot;:&quot;native-cli-references&quot;,&quot;installHash&quot;:&quot;ad2de4db2641d40c9baa51ae0d5e9c6f9fcb63ee5bf84b4aa644ee683a265e63&quot;,&quot;maxCredits&quot;:1000.0,&quot;model&quot;:&quot;claude-sonnet-5.5&quot;,&quot;parserHash&quot;:&quot;fa3aa1d09976a5a8c68862b439d3d5bf633b2d0024ec5594525bdc05cab4314c&quot;,&quot;powershell&quot;:&quot;7.6.7&quot;,&quot;preparationHash&quot;:&quot;d83bd90ffab57be4b79c8fa904c6a88588210423d11d9854fa01616ac9f5848c&quot;,&quot;recoveryPolicy&quot;:&quot;baseline-observation-v1&quot;,&quot;roleModelPolicyHash&quot;:&quot;2e4a47e7cbed5326653750e88eba035d9b2a7b8c9f09b47a15a9a3818bb3f76c&quot;,&quot;rubric&quot;:&quot;requirements-quality-v1&quot;,&quot;scenarioHash&quot;:&quot;4946fca0eeab4ca66c030a378cda3dcbbc9b720dbaeb729546480e92e4c7787d&quot;,&quot;schema&quot;:&quot;squad-efficiency-v1&quot;,&quot;verifierHash&quot;:&quot;4cd521dced1ebd72a14148800cc8841488dfeec1f21b9b66a655363a10e46834&quot;}
+Each series contains three trials. Per-trial figures below are **medians**; explicitly labelled totals cover all three trials. These are independent screening observations, not proof of statistical significance or causality.
 
-Reasons: no-comparison-claimed
+## Performance and consumption
 
-10% request/input-token improvement screen: False. This is separate from non-regression and strict promotion.
+| Measure | Recorded result |
+| --- | --- |
+| Execution time per trial | 17 min 45.6 s |
+| Consumption per trial | 250.47 |
+| Model requests per trial | 170 |
+| Input tokens per trial | 12,177,554 |
+| Output tokens per trial | 219,267 |
+| Tool calls per trial | 280 |
+
+Total consumption across all three trials: **760.64**.
+Consumption is measured in credits, not currency. Execution time includes workflow stages and the independent judge, but excludes environment preparation and report generation. Every sample and the complete numeric data are retained in `report.json`; detailed tables appear below.
+
+## Quality and acceptance
+
+| Measure | Recorded result |
+| --- | --- |
+| Quality (median /100) | 86/100 |
+| Functional acceptance | 2 of 3 trials |
+| Full workflow acceptance | 0 of 3 trials |
+| Failed tool calls (total) | 10 |
+| Critical/high findings (total) | 1 |
+
+Functional acceptance requires every functional probe to pass. **Full workflow acceptance** also requires every stage and the final workflow checks to pass. A successful process exit or final build alone is not full acceptance.
+
+## Comparison findings
+
+- No baseline comparison was requested.
+
+## Checks needing attention
+
+Only checks that did not pass in all three trials are shown here. The complete check list, including passing checks, is available in the details below.
+
+| Check | Recorded result |
+| --- | --- |
+| Build: State verification | 2 of 3 |
+| Full workflow acceptance | 0 of 3 |
+| All functional checks | 2 of 3 |
+| All functional checks: ID boundary preserves stored data | 2 of 3 |
+| Initialization: State verification | 2 of 3 |
+| Requirements: BRD reviewer deliverable acceptance | 0 of 3 |
+| Requirements: PRD reviewer deliverable acceptance | 0 of 3 |
+| Requirements: Review outcome | 2 of 3 |
+| Requirements: State verification | 2 of 3 |
+| Stage readiness: Build | 2 of 3 |
+| Stage readiness: Initialization | 2 of 3 |
+| Stage readiness: Requirements | 0 of 3 |
+| Final workflow readiness | 2 of 3 |
+| Final workflow readiness: State verification | 2 of 3 |
+
+Reviewer dispatch and reviewer file-deliverable acceptance are different checks. A reviewer may have been dispatched even when its required deliverable check fails.
+
+<details>
+<summary>All measurements, samples and checks</summary>
+
+Resource tables use exact values: median [minimum, maximum]; individual samples; series total. Time is in seconds unless explicitly labelled as an event interval in milliseconds; event intervals are diagnostic, not end-to-end timing.
 
 ## workflow resources
 
@@ -147,3 +191,50 @@ Reasons: no-comparison-claimed
 | workflow/tester | n/a | 3/3 |
 | observed brd reviewer dispatch (not file-deliverable acceptance) | n/a | 3/3 |
 | observed prd reviewer dispatch (not file-deliverable acceptance) | n/a | 3/3 |
+
+</details>
+
+<details>
+<summary>Provenance, compatibility and machine status</summary>
+
+Machine status: **recorded-observation**; exit code **0**.
+Integrity hashes and a reviewed workflow/controller do not authenticate model execution.
+
+| Reference | Value |
+|---|---|
+| baseCommit | n/a |
+| headCommit | e42002bfd51f79bb2e17d974d13b1fb66bc4099b |
+| mergeBase | n/a |
+| policyHash | n/a |
+| Recorded / candidate seriesId | run-20261019-222802-3624af24 |
+| Recorded / candidate sha256 | 7cad1c77998fe3cf22b723742485eade434b587eafe3153fde963e48a1bbc4ed |
+| Recorded / candidate sourceHash | c69a057c35921bd53843bf407f9e135c30f655b6d301c69b9d5fa939b05a3e98 |
+| Recorded / candidate measuredRevision | e42002bfd51f79bb2e17d974d13b1fb66bc4099b |
+
+### Recorded / candidate protocol
+
+| Field | Value |
+|---|---|
+| cliVersion | 1.0.101-0 |
+| continuations | 1000 |
+| disabledMcpServersHash | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| evaluationPolicy | baseline-observation-v1 |
+| exerciseHash | 3b16c298fa8cad268555b087aadd409031e2adf9cf174b0e9f89ea38e9aefc20 |
+| graderHash | bd92e8ab81dcc667bc5eacdf1b3e4b6a83a404f6be9e418cb529fdba5dafa8f7 |
+| hostProfile | native-cli-references |
+| installHash | ad2de4db2641d40c9baa51ae0d5e9c6f9fcb63ee5bf84b4aa644ee683a265e63 |
+| maxCredits | 1000 |
+| model | claude-sonnet-5.5 |
+| parserHash | fa3aa1d09976a5a8c68862b439d3d5bf633b2d0024ec5594525bdc05cab4314c |
+| powershell | 7.6.7 |
+| preparationHash | d83bd90ffab57be4b79c8fa904c6a88588210423d11d9854fa01616ac9f5848c |
+| recoveryPolicy | baseline-observation-v1 |
+| roleModelPolicyHash | 2e4a47e7cbed5326653750e88eba035d9b2a7b8c9f09b47a15a9a3818bb3f76c |
+| rubric | requirements-quality-v1 |
+| scenarioHash | 4946fca0eeab4ca66c030a378cda3dcbbc9b720dbaeb729546480e92e4c7787d |
+| schema | squad-efficiency-v1 |
+| verifierHash | 4cd521dced1ebd72a14148800cc8841488dfeec1f21b9b66a655363a10e46834 |
+
+Machine reasons: no-comparison-claimed
+
+</details>
