@@ -211,10 +211,10 @@ targets:
       <p>After confirmation, send a separate work request. Use <code>mode=autopilot</code> to sequence the work while keeping required human approvals, or omit it to approve each step:</p>
       <pre><code>/squad request="add input validation to the login form" mode=autopilot</code></pre>
       <p>
-        In VS Code, the <code>/</code> picker shows two entries named <code>squad</code>: the <strong>prompt</strong>
-        (<em>"Hands a request to the Squad Coordinator…"</em>), which runs the squad, and the
-        <strong>skill</strong> (<em>"Operating procedure for…"</em>), which only loads the procedure as
-        context. Pick the prompt.
+        In VS Code Copilot Harness, open the agents dropdown and select <strong>Squad Coordinator</strong>
+        before sending each request. Send the request text shown above without the <code>/squad</code>
+        prefix. The <code>@squad.prompt.md</code> route remains available, but it adds intermediary agent
+        calls and is slower.
       </p>
       <p>
         On a fresh project the coordinator inspects your repo and proposes a profile before creating

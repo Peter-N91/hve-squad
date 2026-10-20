@@ -43,9 +43,9 @@ Appearance
 Reader behavior
 System/Light/Dark persists using hve-docs-theme, shared with sibling sites.
 Existing scoutTheme and host query overrides are retained. The host selection is
-synchronized across local tabs and persisted with hve-docs-host. VS Code examples
-retain exact original slash commands; CLI and App show agent-selection guidance
-outside copyable request arguments. Language changes keep page, section and query.
+synchronized across local tabs and persisted with hve-docs-host. Every host shows
+agent-selection guidance outside prefix-free copyable request arguments; VS Code
+uses the agents dropdown and CLI uses /agent. Language changes keep page, section and query.
 Without JavaScript all static content and manual host panels remain readable.
 Diagrams show their source if rendering is unavailable, and can zoom to full size.
 

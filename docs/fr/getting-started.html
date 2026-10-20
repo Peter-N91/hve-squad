@@ -210,10 +210,10 @@ targets:
       <p>Après confirmation, envoyez une demande de travail distincte. Utilisez <code>mode=autopilot</code> pour enchaîner le travail tout en conservant les approbations humaines obligatoires, ou omettez ce paramètre pour approuver chaque étape :</p>
       <pre><code>/squad request="add input validation to the login form" mode=autopilot</code></pre>
       <p>
-        Dans VS Code, le sélecteur <code>/</code> affiche deux entrées nommées <code>squad</code> : le <strong>prompt</strong>
-        (<em>"Hands a request to the Squad Coordinator…"</em>), qui lance la squad, et le
-        <strong>skill</strong> (<em>"Operating procedure for…"</em>), qui charge uniquement la procédure comme
-        contexte. Choisissez le prompt.
+        Dans Copilot Harness pour VS Code, ouvrez le sélecteur d'agents et choisissez <strong>Squad Coordinator</strong>
+        avant d'envoyer chaque demande. Envoyez le texte de la demande affiché ci-dessus sans le préfixe
+        <code>/squad</code>. La voie <code>@squad.prompt.md</code> reste disponible, mais elle ajoute des appels
+        d'agents intermédiaires et est plus lente.
       </p>
       <p>
         Dans un nouveau projet, le coordinateur examine votre dépôt et propose un profil avant de créer

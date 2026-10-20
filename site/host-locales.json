@@ -16,7 +16,7 @@
     "instructions": {
       "cli": "In Copilot CLI, enter /agent and choose {agent}. Send in its conversation:",
       "app": "In Copilot App, select {agent}. Send in its conversation:",
-      "vscode": "In Copilot Chat, choose the prompt (not the skill). Send each request separately."
+      "vscode": "In VS Code Copilot Chat, select {agent} from the agents dropdown. Send in its conversation:"
     },
     "defaultRequests": {
       "/squad": "Initialize the squad.",
@@ -42,7 +42,7 @@
     "instructions": {
       "cli": "Dans Copilot CLI, saisissez /agent et choisissez {agent}. Envoyez dans sa conversation :",
       "app": "Dans Copilot App, choisissez {agent}. Envoyez dans sa conversation :",
-      "vscode": "Dans Copilot Chat, choisissez le prompt (pas le skill). Envoyez chaque demande séparément."
+      "vscode": "Dans Copilot Chat pour VS Code, sélectionnez {agent} dans le sélecteur d'agents. Envoyez dans sa conversation :"
     },
     "defaultRequests": {
       "/squad": "Initialise la squad.",
