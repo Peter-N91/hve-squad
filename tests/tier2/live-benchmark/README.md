@@ -502,3 +502,9 @@ Hook sums and overlap-corrected unions are measured event intervals, not blocked
 agent time or critical-path savings. Those fields remain null without actual await
 instrumentation. Request-body bytes are not exact prompt tokens; input usage and
 tool-schema counts are separate observations and must not be double-added.
+# Branch-relative repository results
+
+See [repository benchmark evidence](../../../benchmarks/efficiency/README.md)
+for sanitized immutable records, explicit parent selection, offline comparison
+commands, numeric policy, Actions summaries and generated README SVG badges.
+This sidecar does not change the frozen producer or strict promotion gates.
