@@ -1,13 +1,15 @@
 name: Tier 2 Benchmark
 
 on:
-  release:
-    types: [published]
   workflow_call:
     inputs:
+      candidate_sha:
+        description: Immutable candidate commit to gate before release publication
+        required: false
+        type: string
       release_tag:
         description: Published stable release to compare against an earlier stable ancestor
-        required: true
+        required: false
         type: string
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Read-only report; operators supply reviewed immutable commits, validated before checkout.
@@ -25,13 +27,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: tier2-benchmark-${{ inputs.release_tag || github.event.release.tag_name || github.run_id }}
+  group: tier2-benchmark-${{ inputs.candidate_sha || inputs.release_tag || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   compare:
     name: Branch-relative benchmark report
-    if: github.event_name != 'release' || (!github.event.release.draft && !github.event.release.prerelease)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -40,14 +41,15 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: |
           $ErrorActionPreference = 'Stop'
           $baseRepo = $env:GITHUB_REPOSITORY
           $headRepo = $env:GITHUB_REPOSITORY
           if ($baseRepo -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid repository identity.' }
           $baseSha = $null
-          if ($env:RELEASE_TAG) {
+          if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA) {
             $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
             function Get-ReleaseApi([string]$Path) {
               $response = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$baseRepo/$Path" -Headers $headers
@@ -63,9 +65,15 @@ jobs:
                 $object = (Get-ReleaseApi "git/tags/$($object.sha)").object
               }
             }
-            $release = Get-ReleaseApi "releases/tags/$([Uri]::EscapeDataString($env:RELEASE_TAG))"
-            if ($release.draft -or $release.prerelease -or -not $release.published_at) { throw 'A published stable release is required.' }
-            $headSha = Resolve-ReleaseCommit $env:RELEASE_TAG
+            if ($env:CANDIDATE_SHA) {
+              if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA -cnotmatch '^[0-9a-f]{40}$') { throw 'One immutable candidate SHA required.' }
+              $headSha = $env:CANDIDATE_SHA
+              $release = @{ id = $null; published_at = [DateTimeOffset]::UtcNow }
+            } else {
+              $release = Get-ReleaseApi "releases/tags/$([Uri]::EscapeDataString($env:RELEASE_TAG))"
+              if ($release.draft -or $release.prerelease -or -not $release.published_at) { throw 'A published stable release is required.' }
+              $headSha = Resolve-ReleaseCommit $env:RELEASE_TAG
+            }
             $releases = [Collections.Generic.List[object]]::new()
             $page = 1
             do {

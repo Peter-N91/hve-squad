@@ -25,6 +25,8 @@ on:
       - 'tests/tier2/**'
       - '.github/workflows/tier2-semantic.yml'
       - '.github/workflows/tier2-benchmark.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-prep.yml'
   workflow_call:
     inputs:
       artifact-pattern:
