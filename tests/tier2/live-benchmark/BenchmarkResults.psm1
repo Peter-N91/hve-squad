@@ -740,11 +740,12 @@ function Write-BenchmarkReport {
     $Lines.Add(''); $Lines.Add('</details>')
     $Title = 'benchmark unavailable'; $Color = '#6b7280'
     if ($After -and $Report.status -in @('recorded-observation', 'unchanged', 'no-regression', 'regression')) {
-        $Title = "quality $(Format-Number $After.quality.total.median)/100 | functional $($After.outcomes.functional)/3 | workflow $($After.outcomes.completed)/3"
+        $AverageSeconds = [decimal]$After.resources.total.measuredProcessWallSeconds.sum / $After.resources.total.measuredProcessWallSeconds.samples.Count
+        $Title = "quality $(Format-Number $After.quality.total.median)/100 | functional $($After.outcomes.functional)/3 | workflow $($After.outcomes.completed)/3 | avg time $(Format-Duration $AverageSeconds)"
         $Color = if ($After.outcomes.completed -lt 3 -or $Report.status -eq 'regression') { '#b45309' } else { '#16723b' }
     }
     $EscapedTitle = [Security.SecurityElement]::Escape($Title)
-    $Svg = "<svg xmlns=`"http://www.w3.org/2000/svg`" width=`"550`" height=`"28`" viewBox=`"0 0 550 28`" role=`"img`" aria-label=`"$EscapedTitle`"><title>$EscapedTitle</title><rect width=`"550`" height=`"28`" rx=`"4`" fill=`"$Color`"/><text x=`"275`" y=`"18`" text-anchor=`"middle`" fill=`"#fff`" font-family=`"Verdana,Arial,sans-serif`" font-size=`"12`">$EscapedTitle</text></svg>`n"
+    $Svg = "<svg xmlns=`"http://www.w3.org/2000/svg`" width=`"720`" height=`"28`" viewBox=`"0 0 720 28`" role=`"img`" aria-label=`"$EscapedTitle`"><title>$EscapedTitle</title><rect width=`"720`" height=`"28`" rx=`"4`" fill=`"$Color`"/><text x=`"360`" y=`"18`" text-anchor=`"middle`" fill=`"#fff`" font-family=`"Verdana,Arial,sans-serif`" font-size=`"12`">$EscapedTitle</text></svg>`n"
     Write-BenchmarkFile (Join-Path $OutputDirectory 'report.json') (ConvertTo-BenchmarkCanonicalJson $Report)
     Write-BenchmarkFile (Join-Path $OutputDirectory 'report.md') (($Lines -join "`n") + "`n")
     Write-BenchmarkFile (Join-Path $OutputDirectory 'badge.svg') $Svg

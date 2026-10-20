@@ -301,6 +301,7 @@ Describe 'Portable benchmark history and reporting' {
             $Trial.workflow.inputTokens = 1234567
             $Trial.quality.businessClarity = 19
         }
+        $Candidate.trials[2].workflow.measuredProcessWallSeconds = 240
         $Comparison = Compare-BenchmarkSeries $Fixture.record $Candidate $Policy
         $Report = @{ status = 'regression'; exitCode = 3; baseCommit = $Fixture.revision; headCommit = $Fixture.revision; mergeBase = $Fixture.revision; policyHash = ('a' * 64); baseRecord = $null; headRecord = $null; reasons = @($Comparison.reasons) + @('<script>|bad'); deltas = $Comparison.deltas; improvementScreen = $false; baseStatistics = $Comparison.baseStatistics; headStatistics = $Comparison.headStatistics }
         $Output = Join-Path $TestDrive 'render'
@@ -318,11 +319,14 @@ Describe 'Portable benchmark history and reporting' {
         (ConvertTo-BenchmarkCanonicalJson $Json) | Should -BeExactly (ConvertTo-BenchmarkCanonicalJson $Report)
         $Svg = [IO.File]::ReadAllText((Join-Path $Output 'badge.svg'))
         ([xml]$Svg).svg.GetAttribute('aria-label') | Should -Match 'quality 99/100.*functional 3/3.*workflow 2/3'
+        ([xml]$Svg).svg.GetAttribute('aria-label') | Should -Match 'avg time 3 min 53.3 s'
         $Svg | Should -Match '#b45309'
         (Get-Item (Join-Path $Output 'report.json')).Length | Should -BeGreaterThan 0
         $Report.status = 'incompatible'; $Report.exitCode = 2
         Write-BenchmarkReport $Report $Output
-        [IO.File]::ReadAllText((Join-Path $Output 'badge.svg')) | Should -Match '#6b7280.*benchmark unavailable'
+        $Unavailable = [IO.File]::ReadAllText((Join-Path $Output 'badge.svg'))
+        $Unavailable | Should -Match '#6b7280.*benchmark unavailable'
+        $Unavailable | Should -Not -Match 'avg time'
     }
     It 'summarizes recorded observations without implying a baseline comparison' {
         $Fixture = New-TestRepository

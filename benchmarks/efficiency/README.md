@@ -55,7 +55,11 @@ matches reality.
 
 A change must not lower the quality total or any dimension median, and must not
 reduce any functional or workflow pass count. The badge shows all three measures
-and is not a claim that every gate passed.
+plus **average execution time per trial**, and is not a claim that every gate
+passed. `avg time` is the arithmetic mean of the three workflow-plus-judge
+process wall times, excluding setup and report generation. The performance
+table and comparison gates still use medians; an outlier can make the badge's
+mean differ from the report's median.
 
 ## Record and regenerate
 
