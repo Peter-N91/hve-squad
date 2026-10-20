@@ -151,7 +151,22 @@ statistical significance or a guarantee of causality.
 
 ## GitHub Actions and bootstrap
 
-The read-only **Efficiency comparison** workflow publishes the full report in
+The read-only **Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) runs
+manually or automatically after a **stable release is published**, never on PRs,
+ordinary pushes, drafts or rolling previews. Manual runs retain explicit base
+and head commit SHAs. Release runs resolve the published tag to its immutable
+commit and select the most recently published earlier stable release that is
+an ancestor of that commit, not a hardcoded branch or a newer unrelated hotfix.
+Annotated tags are peeled to commits. No earlier stable ancestor means an
+explicit missing-baseline result (exit 2), not a passing self-comparison.
+
+The release workflow calls the benchmark after publishing a non-draft release:
+GitHub does not emit downstream release events for publications made with
+`GITHUB_TOKEN`. Human-published stable releases use the `release: published`
+trigger. This is a post-publication comparison, not a new paid measurement or
+a change to the release's existing pre-publication gates.
+
+The workflow publishes the full report in
 the run Summary and uploads Markdown, JSON and SVG even when comparison fails.
 It calls no paid model, uses no model secrets and executes the selected **base**
 comparator/dependencies; head contents are Git blobs/JSON, not executable code.
@@ -165,11 +180,10 @@ base merely because it is called base. Fork identity does not grant code trust.
 
 When the base lacks the helper or selected record, the bootstrap explicitly
 reports missing baseline/tooling and fails; it never runs a head helper.
-The initial infrastructure/seed PR therefore has an expected nonzero comparison.
-Do not make this new check required until the parent is seeded, and never bypass
-existing required checks. Dispatch for a workflow introduced only on a
-nondefault branch may remain unavailable until default-branch registration;
-use the PR Summary or the same local report, and do not invent an Actions run.
+Never bypass existing required checks. Workflow registration and automatic
+release events require the workflow on the default branch; a change delivered
+only on an integration branch may need that merge before manual dispatch is
+available. Use the local report in the meantime, not a fabricated Actions run.
 
 ## Reproduce the original environment
 
