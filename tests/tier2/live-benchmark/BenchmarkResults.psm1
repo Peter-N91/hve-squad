@@ -276,12 +276,27 @@ function Export-BenchmarkSeries {
     if ($SeriesId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$' -or $TrialDirectories.Count -ne 3) { Stop-BenchmarkData 'export-selection' }
     $Raw = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $ControlPath))
     $Controls = ConvertFrom-BenchmarkJson $Raw 33554432
-    if ($Controls.schemaVersion -cne 'efficiency-control-v1' -or $Controls.runs.Count -ne 3) { Stop-BenchmarkData 'control-series-schema' }
+    if ($Controls.Contains('schemaVersion')) {
+        if ($Controls.schemaVersion -cne 'efficiency-control-v1' -or $Controls.runs.Count -ne 3) { Stop-BenchmarkData 'control-series-schema' }
+    }
+    else {
+        Assert-BenchmarkKeys $Controls @('runs')
+        if ($Controls.runs.Count -ne 6) { Stop-BenchmarkData 'native-series-count' }
+        $NativeIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($Arm in @('baseline', 'candidate')) {
+            $Group = @($Controls.runs | Where-Object { $_.metadata.arm -ceq $Arm })
+            if ($Group.Count -ne 3 -or (@($Group.metadata.pair | Sort-Object) -join ',') -ne '1,2,3') { Stop-BenchmarkData 'native-series-slots' }
+            foreach ($Run in $Group) { if (-not $NativeIds.Add([string]$Run.metadata.runId)) { Stop-BenchmarkData 'native-series-duplicate' } }
+        }
+    }
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
-    $Trials = @(); $Protocol = $null; $Revision = $null; $SourceHash = $null
+    $Trials = @(); $Protocol = $null; $Revision = $null; $SourceHash = $null; $SelectedArm = $null
     foreach ($Directory in $TrialDirectories) {
         $RunBytes = [IO.File]::ReadAllBytes((Join-Path $Directory 'out/run.json'))
         $Run = ConvertFrom-BenchmarkJson $RunBytes 16777216
+        if ($Run.metadata.arm -cnotin @('baseline', 'candidate')) { Stop-BenchmarkData 'raw-arm' }
+        if ($null -eq $SelectedArm) { $SelectedArm = $Run.metadata.arm }
+        if ($SelectedArm -cne $Run.metadata.arm) { Stop-BenchmarkData 'mixed-selected-arms' }
         $Saved = @($Controls.runs | Where-Object { $_.metadata.runId -ceq $Run.metadata.runId })
         if ($Saved.Count -ne 1 -or (ConvertTo-BenchmarkCanonicalJson $Saved[0]) -cne (ConvertTo-BenchmarkCanonicalJson $Run)) { Stop-BenchmarkData 'raw-control-conflict' }
         if (-not (Test-EfficiencyObservation $Run) -or -not $Run.judge.valid -or -not (Test-EfficiencyJudge $Run.judge.response $Run.judge.documentHashes)) { Stop-BenchmarkData 'raw-observation-or-judge' }

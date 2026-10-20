@@ -21,6 +21,13 @@ $trials = 1..3 | ForEach-Object { "/private/control/trials/baseline-$_" }
   -TrialDirectories $trials -SeriesId run-YYYYMMDD-HHMMSS-identifier -SelectCurrent
 ```
 
+For a native `-Mode Series` run reusing saved controls, use its
+`out/series-evidence.json` as `-ControlPath` and the three `candidate-1` through
+`candidate-3` trial directories. That file contains six original raw runs:
+three saved controls and three new candidates. The importer validates those
+arm/slot identities and selects **all three** supplied candidate trials without
+rebuilding native Run objects or inventing a new control series.
+
 Import validates saved runs against the selected trial files, original judge and
 document hashes, complete numeric coverage, source/protocol fingerprints and
 measured revision ancestry. It creates a new record exclusively; never overwrite
