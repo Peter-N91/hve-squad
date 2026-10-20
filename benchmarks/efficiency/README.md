@@ -9,6 +9,54 @@ review-deliverable failures. A score must never conceal those failures.
 Private logs, generated documents, judge explanations and session identifiers
 are not committed. File hashes provide integrity, not authenticated execution.
 
+## How the benchmark measures a run
+
+The benchmark has the squad build a small offline task-list CLI (`src/task.ps1`)
+and write a BRD and PRD first. The exercise is repeated three times, and each
+run is checked in three separate ways. They are reported separately so a good
+score on one cannot hide a failure in another.
+
+### Quality: are the documents good?
+
+A blind AI judge reads the BRD and PRD and scores five dimensions from 0 to 20
+each, for a total out of 100. 18–20 means complete, specific and consistent;
+14–17 means material omissions; 0–13 means major gaps.
+
+| Dimension           | What the judge asks                                    |
+|---------------------|--------------------------------------------------------|
+| Business clarity    | Is the problem, sponsor and expected outcome clear?    |
+| Scope fidelity      | Does it stay within the brief, without extra features? |
+| Acceptance criteria | Are success conditions specific and testable?          |
+| Traceability        | Can requirements be followed through to decisions?     |
+| Risks and decisions | Are risks, assumptions and choices recorded?           |
+
+Critical or high-severity findings (missing mandatory requirements, unresolved
+production-safety claims) are counted separately.
+
+### Functional: does the product work?
+
+After each run the benchmark executes the delivered CLI and tries specific
+behaviours. Each is a pass/fail check, shown as passes out of 3 trials: Unicode
+titles round-trip, blank or missing titles are rejected, unknown IDs fail,
+marking done twice is safe, IDs are unique and increasing, empty and filtered
+lists work, data persists across separate runs, and a corrupt store is left
+untouched.
+
+### Workflow: did the squad follow its process?
+
+This ignores whether the code works. It checks that the squad completed its own
+process through the init, requirements and build stages and left evidence:
+state, team, routing and decision files, cost logs, proof that the expected
+roles (researcher, developer, tester, lead, BRD/PRD builders) were dispatched,
+a recorded review outcome, and a state verifier confirming the recorded state
+matches reality.
+
+### Regression rules
+
+A change must not lower the quality total or any dimension median, and must not
+reduce any functional or workflow pass count. The badge shows all three measures
+and is not a claim that every gate passed.
+
 ## Record and regenerate
 
 PowerShell **7.5+**, Git and the existing harness are required. Select exactly
