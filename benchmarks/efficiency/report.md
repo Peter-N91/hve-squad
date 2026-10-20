@@ -8,31 +8,31 @@ Each series contains three trials. Per-trial figures below are **medians**; expl
 
 | Measure | Recorded result |
 | --- | --- |
-| Measured benchmark time per trial | 17 min 45.6 s |
-| Consumption per trial | 250.47 |
-| Model requests per trial | 170 |
-| Input tokens per trial | 12,177,554 |
-| Output tokens per trial | 219,267 |
-| Tool calls per trial | 280 |
+| Measured benchmark time per trial | 17 min 36.2 s |
+| Consumption per trial | 229.96 |
+| Model requests per trial | 151 |
+| Input tokens per trial | 10,349,971 |
+| Output tokens per trial | 217,595 |
+| Tool calls per trial | 278 |
 
-Total consumption across all three trials: **760.64**.
+Total consumption across all three trials: **714.23**.
 Consumption is measured in credits, not currency. Measured benchmark time combines workflow-stage wall time and the independent judge. Stage clocks include some harness checks, not just agent subprocess execution; preparation, report generation and some independent evaluation are excluded. Pure agent latency and whole-wizard duration are not measured. Every sample and the complete numeric data are retained in `report.json`; detailed tables appear below.
 
 | Timing boundary (median per trial) | Recorded result |
 | --- | --- |
-| Workflow-stage wall time (includes harness checks) | 17 min 32.3 s |
-| Independent-judge time | 0 min 13.2 s |
+| Workflow-stage wall time (includes harness checks) | 17 min 21.7 s |
+| Independent-judge time | 0 min 12.8 s |
 Combined medians are reduced from per-trial stage-plus-judge sums, not added component medians.
 
 ## Document quality and acceptance
 
 | Measure | Recorded result |
 | --- | --- |
-| Document quality (median /100) | 86/100 |
+| Document quality (median /100) | 83/100 |
 | Functional acceptance | 2 of 3 trials |
 | Full workflow acceptance | 0 of 3 trials |
-| Failed tool calls (total) | 10 |
-| Critical/high findings (total) | 1 |
+| Failed tool calls (total) | 26 |
+| Critical/high findings (total) | 2 |
 
 Functional acceptance requires every functional probe to pass. **Full workflow acceptance** also requires every stage and the final workflow checks to pass. A successful process exit or final build alone is not full acceptance.
 
@@ -49,19 +49,22 @@ Only checks that did not pass in all three trials are shown here. The complete c
 
 | Check | Recorded result |
 | --- | --- |
+| Build: Review outcome | 2 of 3 |
 | Build: State verification | 2 of 3 |
 | Full workflow acceptance | 0 of 3 |
 | All functional checks | 2 of 3 |
 | All functional checks: ID boundary preserves stored data | 2 of 3 |
-| Initialization: State verification | 2 of 3 |
+| Initialization: Scribe history | 2 of 3 |
 | Requirements: BRD reviewer deliverable acceptance | 0 of 3 |
 | Requirements: PRD reviewer deliverable acceptance | 0 of 3 |
-| Requirements: Review outcome | 2 of 3 |
-| Requirements: State verification | 2 of 3 |
-| Stage readiness: Build | 2 of 3 |
+| Requirements: Review outcome | 1 of 3 |
+| Requirements: Scribe history | 2 of 3 |
+| Requirements: tester | 2 of 3 |
+| Stage readiness: Build | 1 of 3 |
 | Stage readiness: Initialization | 2 of 3 |
 | Stage readiness: Requirements | 0 of 3 |
-| Final workflow readiness | 2 of 3 |
+| Final workflow readiness | 1 of 3 |
+| Final workflow readiness: Review outcome | 2 of 3 |
 | Final workflow readiness: State verification | 2 of 3 |
 
 Reviewer dispatch and reviewer file-deliverable acceptance are different checks. A reviewer may have been dispatched even when its required deliverable check fails.
@@ -75,58 +78,58 @@ Resource tables use exact values: median [minimum, maximum]; individual samples;
 
 | Metric | Base median [min, max]; samples; sum | Head median [min, max]; samples; sum |
 |---|---|---|
-| credits | n/a (unavailable) | 246.3776325 [238.062016, 264.5186265]; 246.3776325, 238.062016, 264.5186265; 748.958275 |
-| requests | n/a (unavailable) | 169 [157, 174]; 169, 157, 174; 500 |
-| inputTokens | n/a (unavailable) | 12162359 [10832024, 12538300]; 12162359, 10832024, 12538300; 35532683 |
-| outputTokens | n/a (unavailable) | 218485 [196121, 226181]; 218485, 196121, 226181; 640787 |
-| toolCalls | n/a (unavailable) | 280 [250, 290]; 280, 250, 290; 820 |
-| failedTools | n/a (unavailable) | 4 [2, 4]; 4, 2, 4; 10 |
-| measuredProcessWallSeconds | n/a (unavailable) | 1052.312 [1022.545, 1104.376]; 1104.376, 1022.545, 1052.312; 3179.233 |
-| cacheReadTokens | n/a (unavailable) | 11070529 [9917117, 11391609]; 11070529, 9917117, 11391609; 32379255 |
-| cacheWriteTokens | n/a (unavailable) | 1077421 [901508, 1131865]; 1077421, 901508, 1131865; 3110794 |
-| eventElapsedMs | n/a (unavailable) | 1048733 [1019216, 1100228]; 1100228, 1019216, 1048733; 3168177 |
+| credits | n/a (unavailable) | 226.4625795 [223.9845755, 253.3484105]; 223.9845755, 226.4625795, 253.3484105; 703.7955655 |
+| requests | n/a (unavailable) | 150 [144, 195]; 144, 150, 195; 489 |
+| inputTokens | n/a (unavailable) | 10337366 [10270930, 14163099]; 10337366, 10270930, 14163099; 34771395 |
+| outputTokens | n/a (unavailable) | 216737 [196929, 232301]; 196929, 216737, 232301; 645967 |
+| toolCalls | n/a (unavailable) | 278 [243, 342]; 243, 278, 342; 863 |
+| failedTools | n/a (unavailable) | 8 [7, 11]; 8, 7, 11; 26 |
+| measuredProcessWallSeconds | n/a (unavailable) | 1041.709 [1041.238, 1180.951]; 1041.238, 1041.709, 1180.951; 3263.898 |
+| cacheReadTokens | n/a (unavailable) | 9363453 [9237323, 12955928]; 9363453, 9237323, 12955928; 31556704 |
+| cacheWriteTokens | n/a (unavailable) | 1020823 [961629, 1190537]; 961629, 1020823, 1190537; 3172989 |
+| eventElapsedMs | n/a (unavailable) | 1037985 [1037718, 1174415]; 1037718, 1037985, 1174415; 3250118 |
 
 ## judge resources
 
 | Metric | Base median [min, max]; samples; sum | Head median [min, max]; samples; sum |
 |---|---|---|
-| credits | n/a (unavailable) | 3.88293 [3.70718, 4.08993]; 4.08993, 3.88293, 3.70718; 11.68004 |
+| credits | n/a (unavailable) | 3.49643 [3.43418, 3.50343]; 3.50343, 3.49643, 3.43418; 10.43404 |
 | requests | n/a (unavailable) | 1 [1, 1]; 1, 1, 1; 3 |
-| inputTokens | n/a (unavailable) | 13931 [13404, 15195]; 15195, 13931, 13404; 42530 |
-| outputTokens | n/a (unavailable) | 847 [782, 891]; 782, 891, 847; 2520 |
+| inputTokens | n/a (unavailable) | 12517 [12228, 12605]; 12605, 12517, 12228; 37350 |
+| outputTokens | n/a (unavailable) | 858 [843, 868]; 843, 858, 868; 2569 |
 | toolCalls | n/a (unavailable) | 0 [0, 0]; 0, 0, 0; 0 |
 | failedTools | n/a (unavailable) | 0 [0, 0]; 0, 0, 0; 0 |
-| measuredProcessWallSeconds | n/a (unavailable) | 13.195 [12.575, 13.258]; 12.575, 13.195, 13.258; 39.028 |
+| measuredProcessWallSeconds | n/a (unavailable) | 12.789 [12.587, 14.479]; 12.789, 14.479, 12.587; 39.855 |
 | cacheReadTokens | n/a (unavailable) | 2028 [2028, 2028]; 2028, 2028, 2028; 6084 |
-| cacheWriteTokens | n/a (unavailable) | 11821 [11294, 13085]; 13085, 11821, 11294; 36200 |
-| eventElapsedMs | n/a (unavailable) | 10238 [9343, 10343]; 9343, 10238, 10343; 29924 |
+| cacheWriteTokens | n/a (unavailable) | 10407 [10118, 10495]; 10495, 10407, 10118; 31020 |
+| eventElapsedMs | n/a (unavailable) | 9912 [9861, 10901]; 9861, 10901, 9912; 30674 |
 
 ## total resources
 
 | Metric | Base median [min, max]; samples; sum | Head median [min, max]; samples; sum |
 |---|---|---|
-| credits | n/a (unavailable) | 250.4675625 [241.944946, 268.2258065]; 250.4675625, 241.944946, 268.2258065; 760.638315 |
-| requests | n/a (unavailable) | 170 [158, 175]; 170, 158, 175; 503 |
-| inputTokens | n/a (unavailable) | 12177554 [10845955, 12551704]; 12177554, 10845955, 12551704; 35575213 |
-| outputTokens | n/a (unavailable) | 219267 [197012, 227028]; 219267, 197012, 227028; 643307 |
-| toolCalls | n/a (unavailable) | 280 [250, 290]; 280, 250, 290; 820 |
-| failedTools | n/a (unavailable) | 4 [2, 4]; 4, 2, 4; 10 |
-| measuredProcessWallSeconds | n/a (unavailable) | 1065.57 [1035.74, 1116.951]; 1116.951, 1035.74, 1065.57; 3218.261 |
-| cacheReadTokens | n/a (unavailable) | 11072557 [9919145, 11393637]; 11072557, 9919145, 11393637; 32385339 |
-| cacheWriteTokens | n/a (unavailable) | 1090506 [913329, 1143159]; 1090506, 913329, 1143159; 3146994 |
-| eventElapsedMs | n/a (unavailable) | 1059076 [1029454, 1109571]; 1109571, 1029454, 1059076; 3198101 |
+| credits | n/a (unavailable) | 229.9590095 [227.4880055, 256.7825905]; 227.4880055, 229.9590095, 256.7825905; 714.2296055 |
+| requests | n/a (unavailable) | 151 [145, 196]; 145, 151, 196; 492 |
+| inputTokens | n/a (unavailable) | 10349971 [10283447, 14175327]; 10349971, 10283447, 14175327; 34808745 |
+| outputTokens | n/a (unavailable) | 217595 [197772, 233169]; 197772, 217595, 233169; 648536 |
+| toolCalls | n/a (unavailable) | 278 [243, 342]; 243, 278, 342; 863 |
+| failedTools | n/a (unavailable) | 8 [7, 11]; 8, 7, 11; 26 |
+| measuredProcessWallSeconds | n/a (unavailable) | 1056.188 [1054.027, 1193.538]; 1054.027, 1056.188, 1193.538; 3303.753 |
+| cacheReadTokens | n/a (unavailable) | 9365481 [9239351, 12957956]; 9365481, 9239351, 12957956; 31562788 |
+| cacheWriteTokens | n/a (unavailable) | 1031230 [972124, 1200655]; 972124, 1031230, 1200655; 3204009 |
+| eventElapsedMs | n/a (unavailable) | 1048886 [1047579, 1184327]; 1047579, 1048886, 1184327; 3280792 |
 
 ## Quality and reliability
 
 | Metric | Base | Head |
 |---|---|---|
-| quality/businessClarity | n/a | 18 [17, 18]; 17, 18, 18 |
-| quality/scopeFidelity | n/a | 17 [17, 18]; 17, 18, 17 |
-| quality/acceptanceCriteria | n/a | 17 [15, 18]; 15, 17, 18 |
-| quality/traceability | n/a | 17 [15, 18]; 15, 18, 17 |
-| quality/risksAndDecisions | n/a | 16 [14, 17]; 14, 17, 16 |
-| quality/total | n/a | 86 [78, 88]; 78, 88, 86 |
-| criticalHighFindings | n/a | 1 |
+| quality/businessClarity | n/a | 17 [17, 18]; 17, 17, 18 |
+| quality/scopeFidelity | n/a | 17 [17, 18]; 18, 17, 17 |
+| quality/acceptanceCriteria | n/a | 16 [16, 17]; 17, 16, 16 |
+| quality/traceability | n/a | 17 [15, 17]; 17, 15, 17 |
+| quality/risksAndDecisions | n/a | 15 [14, 16]; 14, 15, 16 |
+| quality/total | n/a | 83 [80, 84]; 83, 80, 84 |
+| criticalHighFindings | n/a | 2 |
 | build/consumption-rates.md | n/a | 3/3 |
 | build/consumption.md | n/a | 3/3 |
 | build/decisions.md | n/a | 3/3 |
@@ -134,7 +137,7 @@ Resource tables use exact values: median [minimum, maximum]; individual samples;
 | build/dispatchEvidence | n/a | 3/3 |
 | build/lead | n/a | 3/3 |
 | build/researcher | n/a | 3/3 |
-| build/reviewOutcome | n/a | 3/3 |
+| build/reviewOutcome | n/a | 2/3 |
 | build/routing.md | n/a | 3/3 |
 | build/state.json | n/a | 3/3 |
 | build/stateVerifier | n/a | 2/3 |
@@ -160,9 +163,9 @@ Resource tables use exact values: median [minimum, maximum]; individual samples;
 | init/decisions.md | n/a | 3/3 |
 | init/dispatchEvidence | n/a | 3/3 |
 | init/routing.md | n/a | 3/3 |
-| init/scribeHistory | n/a | 3/3 |
+| init/scribeHistory | n/a | 2/3 |
 | init/state.json | n/a | 3/3 |
-| init/stateVerifier | n/a | 2/3 |
+| init/stateVerifier | n/a | 3/3 |
 | init/team.md | n/a | 3/3 |
 | requirements/BRD Builder | n/a | 3/3 |
 | requirements/BRD Quality Reviewer | n/a | 0/3 |
@@ -174,17 +177,17 @@ Resource tables use exact values: median [minimum, maximum]; individual samples;
 | requirements/PRD Builder | n/a | 3/3 |
 | requirements/PRD Quality Reviewer | n/a | 0/3 |
 | requirements/prd.md | n/a | 3/3 |
-| requirements/reviewOutcome | n/a | 2/3 |
+| requirements/reviewOutcome | n/a | 1/3 |
 | requirements/routing.md | n/a | 3/3 |
-| requirements/scribeHistory | n/a | 3/3 |
+| requirements/scribeHistory | n/a | 2/3 |
 | requirements/state.json | n/a | 3/3 |
-| requirements/stateVerifier | n/a | 2/3 |
+| requirements/stateVerifier | n/a | 3/3 |
 | requirements/team.md | n/a | 3/3 |
-| requirements/tester | n/a | 3/3 |
-| stage/build | n/a | 2/3 |
+| requirements/tester | n/a | 2/3 |
+| stage/build | n/a | 1/3 |
 | stage/init | n/a | 2/3 |
 | stage/requirements | n/a | 0/3 |
-| workflow | n/a | 2/3 |
+| workflow | n/a | 1/3 |
 | workflow/consumption-rates.md | n/a | 3/3 |
 | workflow/consumption.md | n/a | 3/3 |
 | workflow/decisions.md | n/a | 3/3 |
@@ -192,7 +195,7 @@ Resource tables use exact values: median [minimum, maximum]; individual samples;
 | workflow/dispatchEvidence | n/a | 3/3 |
 | workflow/lead | n/a | 3/3 |
 | workflow/researcher | n/a | 3/3 |
-| workflow/reviewOutcome | n/a | 3/3 |
+| workflow/reviewOutcome | n/a | 2/3 |
 | workflow/routing.md | n/a | 3/3 |
 | workflow/state.json | n/a | 3/3 |
 | workflow/stateVerifier | n/a | 2/3 |
@@ -212,13 +215,13 @@ Integrity hashes and a reviewed workflow/controller do not authenticate model ex
 | Reference | Value |
 |---|---|
 | baseCommit | n/a |
-| headCommit | e42002bfd51f79bb2e17d974d13b1fb66bc4099b |
+| headCommit | 450dced9e2ffa9bc43fc99c4e115d21124bfb86b |
 | mergeBase | n/a |
 | policyHash | n/a |
-| Recorded / candidate seriesId | run-20261019-222802-3624af24 |
-| Recorded / candidate sha256 | 7cad1c77998fe3cf22b723742485eade434b587eafe3153fde963e48a1bbc4ed |
+| Recorded / candidate seriesId | run-20261020-132749-1631c251 |
+| Recorded / candidate sha256 | d48343d8b1f0a4517cfb3f60dfef44ca2dcceecb5fa918c5b6fb992d93daca3a |
 | Recorded / candidate sourceHash | c69a057c35921bd53843bf407f9e135c30f655b6d301c69b9d5fa939b05a3e98 |
-| Recorded / candidate measuredRevision | e42002bfd51f79bb2e17d974d13b1fb66bc4099b |
+| Recorded / candidate measuredRevision | 450dced9e2ffa9bc43fc99c4e115d21124bfb86b |
 
 ### Recorded / candidate protocol
 
@@ -229,9 +232,9 @@ Integrity hashes and a reviewed workflow/controller do not authenticate model ex
 | disabledMcpServersHash | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
 | evaluationPolicy | baseline-observation-v1 |
 | exerciseHash | 3b16c298fa8cad268555b087aadd409031e2adf9cf174b0e9f89ea38e9aefc20 |
-| graderHash | bd92e8ab81dcc667bc5eacdf1b3e4b6a83a404f6be9e418cb529fdba5dafa8f7 |
+| graderHash | 4742c58915327e9f8ee74c137161a29a886dca304d2ea15ff9e92cd60ab84139 |
 | hostProfile | native-cli-references |
-| installHash | ad2de4db2641d40c9baa51ae0d5e9c6f9fcb63ee5bf84b4aa644ee683a265e63 |
+| installHash | 92fc784ec2592142156d9bc1704f00d27231410e7a62742aed14fb8b3805fa67 |
 | maxCredits | 1000 |
 | model | claude-sonnet-5.5 |
 | parserHash | fa3aa1d09976a5a8c68862b439d3d5bf633b2d0024ec5594525bdc05cab4314c |
