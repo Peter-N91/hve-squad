@@ -57,7 +57,7 @@ State layout and the single-writer rule are additionally defined in `.github/ins
 * (Optional) A consumption payload: the resolved model and the rung it came from (`model_source`), the model each dispatch self-reported, the session model and any overrides in force, the tier, the dispatch-size signals the estimator needs, and the dispatch the block attaches to. It may carry an `observed_credits` delta, which triggers calibration. **The payload is optional; the consumption write is not** — when it is absent the Scribe resolves the model itself and records `unknown` rather than guessing.
 * (Optional) A federation autopilot-run summary payload: the meta-run topic id, the ordered sub-squads and their inner-run ids, the gates raised and by whom, the aggregate cost, and the consolidated outcome.
 * (Optional) A federation initialization payload: the confirmed registry and meta-routes, federation `notify` object, initial history names, and the current complete root rate-table template.
-* (Optional) A promotion payload: the chosen sub-squad name, the profile inferred from the existing `team.md`, the federation-wide `notify` object, and the confirmed **deliverable relocation list**. May carry Watch Mode provenance (`source`, `ref`, `eventId`, `actor`).
+* (Optional) A promotion payload: the chosen sub-squad name, the profile inferred from the existing `team.md`, the federation-wide `notify` object, and the confirmed **deliverable relocation list**. May carry Watch Mode provenance (`source`, `ref`, `eventId`, `actor`, `receivedAt`).
 * (Optional) An expansion payload: the new sub-squad name, its profile, a one-line description, and the meta-routing pattern. May carry Watch Mode provenance and an `Owner=watch-mode` marker.
 
 ## Required Steps
@@ -103,4 +103,3 @@ Return a concise confirmation including:
 * The consumption files written this turn, always: the per-dispatch block, the rewritten `consumption.md` ledger, the seeded or reseeded `consumption-rates.md`, and the updated `state.json` `currentRun`. Name any dispatch whose model resolved to `unknown` so the coordinator can supply it next turn. When `ledgerCommand` ran, quote its final output line.
 * The Cost Preflight Decision Ref, round id, and slot recorded for each admitted dispatch, or `not-requested` when no ceiling was configured.
 * Any payload field that was missing or could not be written, or "None" when all writes succeeded.
-

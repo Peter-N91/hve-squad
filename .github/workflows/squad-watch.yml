@@ -92,13 +92,18 @@ on:
   issues:
     types: [labeled]
   pull_request:
-    types: [labeled]
+    types: [opened, synchronize, labeled]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Manual test trigger (write access required); inputs are used only in the concurrency key and passed via env.
     inputs:
       issue_number:
         description: 'Issue number to run autopilot against (for testing the loop by hand)'
-        required: true
+        required: false
+      request:
+        description: 'Free-form request for the squad when issue_number is blank'
+        required: false
       model:
         description: 'Override the pinned model for this run (blank = use the workflow default)'
         required: false
@@ -132,6 +137,7 @@ env:
   # interactively and typing `/model`; IDs are lowercase slugs (for example
   # `claude-sonnet-5`, `gpt-5.4`), not the display names used in VS Code frontmatter.
   SQUAD_MODEL: claude-sonnet-5
+  APM_VERSION: '0.18.0'
 
 concurrency:
   # One active run per target. Never cancel an in-flight run: it may be mid-commit.
@@ -139,7 +145,8 @@ concurrency:
     squad-watch-${{ github.event_name }}-${{
     github.event.issue.number ||
     github.event.pull_request.number ||
-    github.event.inputs.issue_number }}
+    github.event.inputs.issue_number ||
+    github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -153,7 +160,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issues' && github.event.label.name == 'squad/auto') ||
-      (github.event_name == 'pull_request' && github.event.label.name == 'squad/review')
+      (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/squad')) ||
+      (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ','), 'squad/review'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -166,7 +174,14 @@ jobs:
       target: ${{ steps.prep.outputs.target }}
       subSquad: ${{ steps.prep.outputs.subSquad }}
       branch: ${{ steps.prep.outputs.branch }}
+      sourceSha: ${{ steps.source.outputs.sha }}
+      triggerSource: ${{ steps.prep.outputs.triggerSource }}
+      triggerRef: ${{ steps.prep.outputs.triggerRef }}
+      triggerEventId: ${{ steps.prep.outputs.triggerEventId }}
+      triggerActor: ${{ steps.prep.outputs.triggerActor }}
+      triggerReceivedAt: ${{ steps.prep.outputs.triggerReceivedAt }}
       hasChanges: ${{ steps.stage.outputs.hasChanges }}
+      hasReview: ${{ steps.review_check.outputs.hasReview }}
     steps:
       - name: Prepare run (authorize, fork-safety, routed prompt)
         id: prep
@@ -177,6 +192,7 @@ jobs:
             const path = require('path');
             const { owner, repo } = context.repo;
             const evt = context.eventName;
+            const receivedAt = new Date().toISOString();
 
             async function isCollaborator(username) {
               if (!username) return false;
@@ -207,13 +223,100 @@ jobs:
               'provenance matches; escalate and stop rather than writing into a sub-squad',
               'you did not create.',
               '',
+              'SQUAD SELECTION PER CASE AND PER ASK (NON-NEGOTIABLE).',
+              'Every Watch Mode trigger executes inside its dedicated sub-squad',
+              '(.copilot-tracking/squad/members/<name>/) with a squad profile and optional',
+              'packs chosen specifically for this event\'s case and ask (explicit profile=/pack=',
+              'hint -> matching durable sub-squad profile -> content, diff, and domain',
+              'inference from the event\'s ask and affected files -> default). Seed team.md',
+              'and routing.md from the canonical squad skill templates',
+              '(references/seed-templates.md and references/roster-catalog.md) through Squad',
+              'Scribe, always including the full methodology spine (researcher, lead,',
+              'developer, tester, scribe) plus any domain specialists the ask warrants',
+              '(for example prompt-engineer, supply-chain, security, architect,',
+              'technical-writer). Never copy a team.md, routing.md, or history/ layout from',
+              'an earlier members/* directory, and when .copilot-tracking/squad/federation.md',
+              'is absent, seed the full federation-root meta layer (federation.md,',
+              'meta-routing.md, decisions.md, state.json, consumption-rates.md, and history/).',
+              '',
+              'COMPLETE SQUAD LIFECYCLE (FULL RPI - NON-NEGOTIABLE).',
+              'Never collapse a Watch Mode run to implementation-only,',
+              'implementation-and-review-only, or inline coordinator work. Dispatch every',
+              'stage\'s mapped cast agent through runSubagent / task, gated on the prior',
+              'stage\'s artifact on disk under .copilot-tracking/squad/members/<name>/ and',
+              'backed by a members/<name>/history/<agent>.md entry (with its consumption',
+              'block) written by Squad Scribe:',
+              '',
+              'IMMEDIATE SCRIBE CHECKPOINTS (NON-NEGOTIABLE).',
+              'After each role returns, and after the Council batch returns, dispatch Squad',
+              'Scribe immediately before starting the next stage. Read back the written',
+              'history entry, consumption ledger, and state.json advance before proceeding.',
+              'Never defer per-role history or state writes to the final summary. On resume,',
+              'repair any missing checkpoint before dispatching another work role.',
+              '1. For any autopilot or substantive work trigger (issues, workflow_dispatch,',
+              '   or an issue_comment requesting changes or deliverables), execute the full',
+              '   pipeline in order:',
+              '   - Stage 0b (Intake Gate, conditional): when intake-validator is on the',
+              '     roster and inputs ground the run, dispatch intake-validator and record',
+              '     ## Intake Readiness Verdict in decisions.md via Squad Scribe.',
+              '   - Stage 1 (Research): dispatch researcher (Squad Researcher or cue-matched',
+              '     Alternate) to investigate the codebase, event context, and affected files;',
+              '     write the research artifact under',
+              '     .copilot-tracking/squad/members/<name>/research/<date>/; and record',
+              '     history/Squad Researcher.md via Squad Scribe.',
+              '   - Stage 2 (Plan): gated on the research artifact existing on disk, dispatch',
+              '     lead (Squad Lead) to author the implementation plan and deliverable list',
+              '     (with owning roles) under .copilot-tracking/squad/members/<name>/plans/;',
+              '     and record history/Squad Lead.md via Squad Scribe.',
+              '   - Stage 3 (Pre-Implementation Council, when applicable): gated on the plan',
+              '     artifact existing on disk, when the work crosses two or more council',
+              '     domains (architect, security, cost-manager, product-owner, rai) or raises',
+              '     a risk/RAI concern, dispatch the task-fit council roles from the roster',
+              '     in parallel and record ## Council Verdict in decisions.md via Squad Scribe.',
+              '   - Stage 4 (Implement): gated on the plan artifact (and any required Council',
+              '     Verdict) existing on disk, dispatch developer (Squad Implementor) or fan',
+              '     out across the plan\'s artifact-owning specialists in dependency order;',
+              '     write the change record under',
+              '     .copilot-tracking/squad/members/<name>/changes/ (and specialist roots);',
+              '     and record history/Squad Implementor.md (and specialist history files) via',
+              '     Squad Scribe.',
+              '   - Stage 5 (Review): gated on the implementation artifacts existing on disk,',
+              '     dispatch tester (Squad Reviewer or cue-matched Code Review * Alternate)',
+              '     to verify the changes, acceptance criteria, tests, and artifact/history',
+              '     completeness; write a review artifact under',
+              '     .copilot-tracking/squad/members/<name>/reviews/; and record',
+              '     history/Squad Reviewer.md via Squad Scribe.',
+              '   - Stage 6 (Final-Outcome & Two-Level Verification): have Squad Scribe write',
+              '     history/autopilot-run-<id>.md, rewrite consumption.md, update decisions.md',
+              '     and state.json, and update the federation root (federation.md,',
+              '     meta-routing.md, decisions.md, state.json, history/<name>.md).',
+              '     The latest ## Stages table must carry Research, Plan, Council, Implement,',
+              '     and Review rows with each dispatched agent history path. When Council is',
+              '     not applicable, keep its row, set Dispatch Record to n/a, and record a',
+              '     concise skipped reason instead of inventing a council dispatch.',
+              '     Copy the exact watch source, ref, eventId, actor, and receivedAt into',
+              '     state.json trigger, set trigger.runId to this autopilot summary basename,',
+              '     and record the same values as Trigger Source, Trigger Ref, Trigger Event ID,',
+              '     Trigger Actor, and Trigger Received At bullets in the run summary.',
+              '   Numbered steps or checklists in an issue body (including Sync and Adapt',
+              '   adaptation briefs) or request are input requirements to research, plan,',
+              '   implement, and review - never a substitute for the Research or Plan stages.',
+              '2. For pull_request review (squad/review) or review-only issue_comment',
+              '   triggers, select the sub-squad profile and packs per case and per ask from',
+              '   the diff and description, dispatch researcher (when codebase or diff context',
+              '   investigation is needed), task-fit council roles, and tester (Squad Reviewer',
+              '   and/or cue-matched Code Review * Alternates), and record the review artifact',
+              '   under .copilot-tracking/squad/members/<name>/reviews/ and per-role history',
+              '   under members/<name>/history/ through Squad Scribe.',
+              '',
               'CREDENTIAL BOUNDARY. This stage runs read-only: your GH token cannot push,',
               'commit via the API, open a pull request, or post a comment, even though',
               '--allow-all-tools is set - a separate, minimally-scoped job performs those',
               'actions from what you leave behind. Never attempt `git push`, `gh pr create`,',
               '`gh pr comment`, or `gh issue comment` - they will fail with a permission',
-              'error. On an issue or dispatch run, leave your file changes uncommitted in the',
-              `working tree. On a pull-request run, write your review to ${reviewFile} instead`,
+              'error. On an issue, dispatch, or change-producing comment run, leave your file',
+              'changes uncommitted in the working tree. On a pull-request review or',
+              `review-only comment run, write your review to ${reviewFile} instead`,
               'of posting it.',
               '',
               'UNATTENDED GATE DISPOSITION (see the Watch Mode instructions).',
@@ -237,6 +340,10 @@ jobs:
               '-Title "<short>" -Body "- **<lead>** <what changed and where>"`, which writes one',
               'uniquely named file under .changes/unreleased/. Use -Bump minor only when the',
               'brief calls for it; otherwise patch. Editing apm.yml `dependencies:` is fine.',
+              'Note: the runner has provisioned `.github/agents`, `.github/prompts`,',
+              '`.github/instructions`, and `.agents/skills` for this session and cleans those',
+              'directories up automatically before staging; always edit `squad-src/` rather',
+              'than those provisioned runtime paths.',
             ].join('\n');
 
             function dataBlock(obj) {
@@ -260,10 +367,11 @@ jobs:
             }
 
             function watchArg({ source, ref, eventId, sub }) {
-              return `watch="source=${source} ref=${ref} eventId=${eventId} actor=${context.actor} sub=${sub}"`;
+              return `watch="source=${source} ref=${ref} eventId=${eventId} actor=${context.actor} receivedAt=${receivedAt} sub=${sub}"`;
             }
 
-            let authorized = false, notify = false, target = '', kind = 'skip', prompt = '', sub = '';
+            let authorized = false, notify = false, target = '', kind = 'skip', prompt = '', sub = '', checkoutRef = '';
+            let triggerSource = '', triggerRef = '', triggerEventId = '';
 
             if (evt === 'issues' && context.payload.label && context.payload.label.name === 'squad/auto') {
               kind = 'issue';
@@ -274,63 +382,161 @@ jobs:
               notify = !authorized;
               if (authorized) {
                 const ref = `${owner}/${repo}#${issue.number}`;
+                triggerSource = 'issue';
+                triggerRef = ref;
+                triggerEventId = `issues:${issue.id}`;
                 prompt = [
                   SPINE, '',
-                  `Run /squad-federation mode=autopilot ${watchArg({ source: 'issue', ref, eventId: `issues:${issue.id}`, sub })}`,
-                  `for this issue, inside the sub-squad "${sub}". The issue body is the brief:`,
-                  'follow its numbered steps and satisfy its acceptance criteria. Infer the',
-                  'profile from the content; fall back to the default profile when ambiguous.',
+                  `Run /squad-federation mode=autopilot ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
+                  `for this issue, inside the sub-squad "${sub}". Select the squad profile and`,
+                  'any optional packs per case and per ask from the issue content and affected',
+                  'domain; fall back to the default profile when ambiguous, always seeding the',
+                  'full methodology spine (researcher, lead, developer, tester, scribe) plus',
+                  'any warranted specialists. Execute the complete autopilot RPI lifecycle',
+                  '(conditional Intake -> Research -> Plan -> Council when applicable ->',
+                  'Implement -> Review -> Scribe autopilot summary and ledger) through',
+                  'dispatched cast agents. Treat the issue body (including any numbered steps',
+                  'or checklist) as the requirements to research, plan, implement, and verify -',
+                  'never as a substitute for the Research or Plan stages.',
                   'Do the work on the current branch (already created for you). Do not commit,',
                   'push, or open the pull request yourself - a separate automated step stages,',
                   'commits, pushes, and opens the DRAFT pull request that closes the issue from',
                   'your working-tree changes once this run ends. Put the outcome, the',
-                  'acceptance-criteria status, and the path of every per-role history file you',
-                  'produced into decisions.md.', '',
+                  'acceptance-criteria status, and the path of every stage artifact and per-role',
+                  'history file you produced into decisions.md.', '',
                   dataBlock({ Kind: 'issue', Number: `#${issue.number}`, Ref: ref, SubSquad: sub, Title: issue.title, Body: `\n${issue.body || ''}` }),
                 ].join('\n');
               }
-            } else if (evt === 'pull_request' && context.payload.label && context.payload.label.name === 'squad/review') {
+            } else if (evt === 'pull_request') {
               const pr = context.payload.pull_request;
               const sameRepo = pr.head.repo && pr.base.repo && pr.head.repo.full_name === pr.base.repo.full_name;
-              if (sameRepo) {
+              const hasLabel = (pr.labels || []).some(l => l.name === 'squad/review');
+              if (hasLabel && sameRepo) {
                 // Only write collaborators can apply labels, so the label implies authorization.
                 kind = 'pull_request';
                 target = String(pr.number);
                 sub = subSquadName(`pr-${pr.number}`);
                 authorized = true;
+                checkoutRef = pr.head.sha;
                 const ref = `${owner}/${repo}#${pr.number}`;
+                triggerSource = 'pull_request';
+                triggerRef = ref;
+                triggerEventId = `pull_request:${pr.id}`;
                 prompt = [
                   SPINE, '',
-                  `Run /squad-federation ${watchArg({ source: 'pull_request', ref, eventId: `pull_request:${pr.id}`, sub })}`,
-                  `to review this pull request inside the sub-squad "${sub}". Route to the tester`,
-                  'role. Check the change against the linked issue\'s acceptance criteria, and',
-                  'verify the claim of dispatch: the producing run\'s history folder must hold one',
-                  `entry per role it says it dispatched. Write your review as Markdown to`,
+                  `Run /squad-federation ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
+                  `to review this pull request inside the sub-squad "${sub}". Select the squad`,
+                  'profile and any optional packs per case and per ask from the PR diff and',
+                  'description. Dispatch researcher (when codebase/diff context investigation is',
+                  'needed), any task-fit council/domain reviewers warranted by the ask, and',
+                  'tester (Squad Reviewer and/or cue-matched Code Review * Alternates). Check',
+                  'the change against the linked issue\'s acceptance criteria, and verify the',
+                  'claim of dispatch: the producing run\'s sub-squad folder must hold its full',
+                  'RPI stage artifacts (research, plans, changes, reviews) and one history entry',
+                  'per role it says it dispatched. Record your review artifact under',
+                  `.copilot-tracking/squad/members/${sub}/reviews/ and per-role history under`,
+                  `members/${sub}/history/ via Squad Scribe, and write your review as Markdown to`,
                   `${reviewFile} - do NOT post it, merge, approve, or push yourself; a separate`,
                   'automated step posts that file as the PR comment.', '',
                   dataBlock({ Kind: 'pull_request', Number: `#${pr.number}`, Ref: ref, SubSquad: sub, Title: pr.title, Base: pr.base.ref, Head: pr.head.ref, Body: `\n${pr.body || ''}` }),
                 ].join('\n');
-              } else {
+              } else if (!sameRepo) {
                 core.info('Watch Mode: fork pull requests are not eligible for a privileged run.');
+              }
+            } else if (evt === 'issue_comment' && context.payload.comment) {
+              const body = (context.payload.comment.body || '').trim();
+              if (/^\/squad\b/.test(body)) {
+                kind = 'comment';
+                target = String(context.payload.issue.number);
+                authorized = await isCollaborator(context.actor);
+                notify = !authorized;
+                if (authorized) {
+                  const args = body.replace(/^\/squad\b/, '').trim();
+                  const onPr = !!context.payload.issue.pull_request;
+                  if (onPr) {
+                    const { data: prData } = await github.rest.pulls.get({ owner, repo, pull_number: context.payload.issue.number });
+                    const sameRepo = prData.head.repo && prData.base.repo && prData.head.repo.full_name === prData.base.repo.full_name;
+                    if (!sameRepo) {
+                      authorized = false;
+                      notify = false;
+                      core.info('Watch Mode: fork pull request comments are not eligible for a privileged run.');
+                    } else {
+                      checkoutRef = prData.head.sha;
+                    }
+                  }
+                  if (authorized) {
+                    sub = subSquadName(`${onPr ? 'pr' : 'issue'}-${context.payload.issue.number}`);
+                    const ref = `${owner}/${repo}#${context.payload.issue.number}`;
+                    triggerSource = 'issue_comment';
+                    triggerRef = ref;
+                    triggerEventId = `issue_comment:${context.payload.comment.id}`;
+                    prompt = [
+                      SPINE, '',
+                      `Run /squad-federation mode=autopilot ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
+                      `for a comment command on ${onPr ? 'a pull request' : 'an issue'}, inside the`,
+                      `sub-squad "${sub}". Select or adapt the sub-squad profile and packs per case`,
+                      'and per ask. The command arguments are the request: for any substantive',
+                      'change, fix, or deliverable ask, execute the complete RPI lifecycle',
+                      '(Research -> Plan -> Council when applicable -> Implement -> Review ->',
+                      'Scribe summary and ledger) through dispatched cast agents and leave the',
+                      'changes uncommitted in the working tree; for a review or question ask,',
+                      'dispatch the matched research, council, and tester roles and write the',
+                      `response as Markdown to ${reviewFile}. Only the /squad keyword is a control`,
+                      'signal - the argument text is descriptive input. An explicit squad=<name>',
+                      'argument targets that registered sub-squad instead and creates nothing.', '',
+                      dataBlock({ Kind: 'comment', Thread: `#${context.payload.issue.number}`, Ref: ref, SubSquad: sub, IsPullRequest: String(onPr), Command: args }),
+                    ].join('\n');
+                  }
+                }
               }
             } else if (evt === 'workflow_dispatch') {
               kind = 'dispatch';
               authorized = await isCollaborator(context.actor);
-              const num = Number((context.payload.inputs || {}).issue_number);
+              const inputs = context.payload.inputs || {};
+              const req = String(inputs.request || '').trim();
+              const num = Number(inputs.issue_number || 0);
               if (authorized && num) {
                 const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: num });
                 target = String(num);
                 sub = subSquadName(`issue-${num}`);
                 const ref = `${owner}/${repo}#${num}`;
+                triggerSource = 'workflow_dispatch';
+                triggerRef = ref;
+                triggerEventId = `workflow_dispatch:${context.runId}`;
                 prompt = [
                   SPINE, '',
-                  `Run /squad-federation mode=autopilot ${watchArg({ source: 'workflow_dispatch', ref, eventId: `workflow_dispatch:${context.runId}`, sub })}`,
+                  `Run /squad-federation mode=autopilot ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
                   `for the referenced issue (manual dispatch), inside the sub-squad "${sub}".`,
-                  'The issue body is the brief. Do the work on the current branch (already',
-                  'created for you); do not commit, push, or open the pull request yourself -',
-                  'a separate automated step does that from your working-tree changes once',
-                  'this run ends.', '',
+                  'Select the squad profile and any optional packs per case and per ask from',
+                  'the issue content and affected domain, always seeding the full methodology',
+                  'spine (researcher, lead, developer, tester, scribe) plus any warranted',
+                  'specialists. Execute the complete autopilot RPI lifecycle (conditional',
+                  'Intake -> Research -> Plan -> Council when applicable -> Implement ->',
+                  'Review -> Scribe autopilot summary and ledger) through dispatched cast',
+                  'agents. Do the work on the current branch (already created for you); do not',
+                  'commit, push, or open the pull request yourself - a separate automated step',
+                  'does that from your working-tree changes once this run ends. Put the outcome,',
+                  'the acceptance-criteria status, and the path of every stage artifact and',
+                  'per-role history file you produced into decisions.md.', '',
                   dataBlock({ Kind: 'issue', Number: `#${num}`, Ref: ref, SubSquad: sub, Title: issue.title, Body: `\n${issue.body || ''}` }),
+                ].join('\n');
+              } else if (authorized && req) {
+                sub = subSquadName(`dispatch-${context.runId}`);
+                const ref = `${owner}/${repo}@dispatch-${context.runId}`;
+                triggerSource = 'workflow_dispatch';
+                triggerRef = ref;
+                triggerEventId = `workflow_dispatch:${context.runId}`;
+                prompt = [
+                  SPINE, '',
+                  `Run /squad-federation mode=autopilot ${watchArg({ source: triggerSource, ref: triggerRef, eventId: triggerEventId, sub })}`,
+                  `for a manual request (dispatch), inside the sub-squad "${sub}". Select the`,
+                  'squad profile and any optional packs per case and per ask from the request,',
+                  'execute the complete autopilot RPI lifecycle (Research -> Plan -> Council',
+                  'when applicable -> Implement -> Review -> Scribe autopilot summary and',
+                  'ledger) through dispatched cast agents, and leave your changes uncommitted',
+                  'in the working tree for the separate automated step to commit and open a',
+                  'DRAFT pull request.', '',
+                  dataBlock({ Kind: 'dispatch', Request: req, Ref: ref, SubSquad: sub }),
                 ].join('\n');
               }
             }
@@ -340,12 +546,22 @@ jobs:
               core.warning('Derived sub-squad name is not a valid path segment; refusing to run.');
             }
 
+            const branchName = kind === 'pull_request'
+              ? ''
+              : (target ? `squad/issue-${target}` : `squad/${sub}`);
+
             core.setOutput('authorized', authorized ? 'true' : 'false');
             core.setOutput('notify', notify ? 'true' : 'false');
             core.setOutput('kind', kind);
             core.setOutput('target', target);
             core.setOutput('subSquad', sub);
-            core.setOutput('branch', kind === 'pull_request' ? '' : `squad/issue-${target}`);
+            core.setOutput('branch', branchName);
+            core.setOutput('checkoutRef', checkoutRef);
+            core.setOutput('triggerSource', triggerSource);
+            core.setOutput('triggerRef', triggerRef);
+            core.setOutput('triggerEventId', triggerEventId);
+            core.setOutput('triggerActor', context.actor);
+            core.setOutput('triggerReceivedAt', receivedAt);
 
             if (authorized && prompt) {
               const file = path.join(process.env.RUNNER_TEMP, 'squad-prompt.txt');
@@ -366,7 +582,67 @@ jobs:
           # The squad runs with --allow-all-tools on attacker-authored issue content;
           # keep the token out of .git/config so a prompt-injected run can't read it.
           persist-credentials: false
-          ref: ${{ steps.prep.outputs.kind == 'pull_request' && github.event.pull_request.head.sha || '' }}
+          ref: ${{ steps.prep.outputs.checkoutRef }}
+
+      - name: Record source checkout
+        id: source
+        if: steps.prep.outputs.authorized == 'true'
+        shell: pwsh
+        run: |
+          "sha=$(git rev-parse HEAD)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Install the APM CLI
+        if: steps.prep.outputs.authorized == 'true'
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: 'true'
+          apm-version: ${{ env.APM_VERSION }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Provision squad package for headless CLI
+        id: runtime
+        if: steps.prep.outputs.authorized == 'true'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUB_SQUAD: ${{ steps.prep.outputs.subSquad }}
+          TRIGGER_SOURCE: ${{ steps.prep.outputs.triggerSource }}
+          TRIGGER_REF: ${{ steps.prep.outputs.triggerRef }}
+          TRIGGER_EVENT_ID: ${{ steps.prep.outputs.triggerEventId }}
+          TRIGGER_ACTOR: ${{ steps.prep.outputs.triggerActor }}
+          TRIGGER_RECEIVED_AT: ${{ steps.prep.outputs.triggerReceivedAt }}
+        run: |
+          # In this source repository, squad agents/prompts/instructions/skills live under
+          # squad-src/ and upstream hve-core dependencies are declared in apm.yml rather
+          # than committed at the repository root. Provision the full installed package into
+          # a scratch folder and copy the runtime directories into the workspace so Copilot
+          # CLI loads Squad Federation Coordinator, Squad Coordinator, and the entire
+          # hve-core + squad cast for runSubagent/task dispatches.
+          Import-Module ./tests/lib/SquadInstall.psm1 -Force
+          $watchModule = (Resolve-Path ./squad-src/.github/skills/squad/scripts/SquadWatch.psm1).Path
+          $watchModuleHash = (Get-FileHash -LiteralPath $watchModule -Algorithm SHA256).Hash.ToLowerInvariant()
+          "watchModuleHash=$watchModuleHash" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          Import-Module $watchModule -Force
+          $workspace = (Resolve-Path .).Path
+          $memberRoot = Join-Path $workspace ".copilot-tracking/squad/members/$env:SUB_SQUAD"
+          $baseline = New-SquadWatchBaseline `
+            -WorkspaceRoot $workspace `
+            -MemberRoot $memberRoot `
+            -Path (Join-Path $env:RUNNER_TEMP 'squad-watch-baseline.json') `
+            -Source $env:TRIGGER_SOURCE `
+            -EventRef $env:TRIGGER_REF `
+            -EventId $env:TRIGGER_EVENT_ID `
+            -Actor $env:TRIGGER_ACTOR `
+            -ReceivedAt $env:TRIGGER_RECEIVED_AT
+          "baselineHash=$($baseline.Hash)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          $staging = Join-Path $env:RUNNER_TEMP 'squad-watch-pkg'
+          $backup = Join-Path $env:RUNNER_TEMP 'squad-watch-runtime-backup'
+          Install-SquadPackage -Destination $staging -SourceRoot . | Out-Null
+          $overlay = Enable-SquadWatchRuntimeOverlay `
+            -PackageRoot $staging `
+            -WorkspaceRoot $workspace `
+            -BackupRoot $backup
+          "manifestHash=$($overlay.ManifestHash)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
       - name: Set up Node.js
         if: steps.prep.outputs.authorized == 'true'
@@ -422,20 +698,74 @@ jobs:
             --allow-all-tools \
             --deny-tool='shell(rm)'
 
+      - name: Clean up provisioned runtime files
+        if: always() && steps.prep.outputs.authorized == 'true'
+        shell: pwsh
+        env:
+          RUNTIME_MANIFEST_HASH: ${{ steps.runtime.outputs.manifestHash }}
+          WATCH_MODULE_HASH: ${{ steps.runtime.outputs.watchModuleHash }}
+          RUNTIME_OUTCOME: ${{ steps.runtime.outcome }}
+        run: |
+          $watchModule = (Resolve-Path ./squad-src/.github/skills/squad/scripts/SquadWatch.psm1).Path
+          $backup = Join-Path $env:RUNNER_TEMP 'squad-watch-runtime-backup'
+          if ($env:RUNTIME_OUTCOME -ne 'success') {
+            if (-not (Test-Path -LiteralPath $backup)) {
+              Write-Host 'Squad Watch runtime provisioning failed before leaving an overlay; no cleanup is required.'
+              return
+            }
+            Import-Module $watchModule -Force
+            Restore-SquadWatchRuntimeOverlay `
+              -WorkspaceRoot (Resolve-Path .).Path `
+              -BackupRoot $backup
+            return
+          }
+          $actualHash = (Get-FileHash -LiteralPath $watchModule -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:WATCH_MODULE_HASH) {
+            throw 'Squad Watch runtime helper changed after provisioning; refusing cleanup.'
+          }
+          Import-Module $watchModule -Force
+          Restore-SquadWatchRuntimeOverlay `
+            -WorkspaceRoot (Resolve-Path .).Path `
+            -BackupRoot $backup `
+            -ExpectedManifestHash $env:RUNTIME_MANIFEST_HASH
+
       - name: Stage changes for handoff
         id: stage
         if: steps.prep.outputs.authorized == 'true' && steps.prep.outputs.kind != 'pull_request'
+        shell: pwsh
         env:
           SUB_SQUAD: ${{ steps.prep.outputs.subSquad }}
+          WATCH_MODULE_HASH: ${{ steps.runtime.outputs.watchModuleHash }}
+          BASELINE_HASH: ${{ steps.runtime.outputs.baselineHash }}
         run: |
-          set -euo pipefail
-          git add -A
-          if git diff --cached --quiet; then
-            echo "::warning::The squad produced no changes - check the run log and members/${SUB_SQUAD}/history/."
-            echo "hasChanges=false" >> "$GITHUB_OUTPUT"
+          $watchModule = (Resolve-Path ./squad-src/.github/skills/squad/scripts/SquadWatch.psm1).Path
+          $actualHash = (Get-FileHash -LiteralPath $watchModule -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:WATCH_MODULE_HASH) {
+            throw 'Squad Watch handoff helper changed after provisioning; refusing to stage.'
+          }
+          Import-Module $watchModule -Force
+          $workspace = (Resolve-Path .).Path
+          $memberRoot = Join-Path $workspace ".copilot-tracking/squad/members/$env:SUB_SQUAD"
+          $result = New-SquadWatchHandoff `
+            -WorkspaceRoot $workspace `
+            -MemberRoot $memberRoot `
+            -PatchPath (Join-Path $env:RUNNER_TEMP 'squad-watch.patch') `
+            -BaselinePath (Join-Path $env:RUNNER_TEMP 'squad-watch-baseline.json') `
+            -ExpectedBaselineHash $env:BASELINE_HASH
+          "hasChanges=$($result.HasChanges.ToString().ToLowerInvariant())" |
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          if (-not $result.HasChanges) {
+            Write-Host "::warning::The squad produced no changes - check the run log and members/$env:SUB_SQUAD/history/."
+          }
+
+      - name: Check review output
+        id: review_check
+        if: steps.prep.outputs.authorized == 'true' && (steps.prep.outputs.kind == 'pull_request' || steps.prep.outputs.kind == 'comment')
+        run: |
+          if [[ -s "$RUNNER_TEMP/squad-review.md" ]]; then
+            echo "hasReview=true" >> "$GITHUB_OUTPUT"
           else
-            echo "hasChanges=true" >> "$GITHUB_OUTPUT"
-            git diff --cached --binary > "$RUNNER_TEMP/squad-watch.patch"
+            echo "hasReview=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload change patch
@@ -447,7 +777,7 @@ jobs:
           retention-days: 1
 
       - name: Upload review
-        if: steps.prep.outputs.authorized == 'true' && steps.prep.outputs.kind == 'pull_request'
+        if: steps.prep.outputs.authorized == 'true' && (steps.prep.outputs.kind == 'pull_request' || steps.review_check.outputs.hasReview == 'true')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: squad-watch-review-${{ github.run_id }}
@@ -460,7 +790,7 @@ jobs:
   # produced and assembles the PR body from a fixed template (CICD-SEC-5/6).
   apply:
     needs: interpret
-    if: needs.interpret.outputs.authorized == 'true' && needs.interpret.outputs.kind != 'pull_request'
+    if: needs.interpret.outputs.authorized == 'true' && needs.interpret.outputs.kind != 'pull_request' && (needs.interpret.outputs.hasChanges == 'true' || needs.interpret.outputs.hasReview != 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -468,7 +798,7 @@ jobs:
       issues: write
     steps:
       - name: No changes notice
-        if: needs.interpret.outputs.hasChanges != 'true'
+        if: needs.interpret.outputs.hasChanges != 'true' && needs.interpret.outputs.target != ''
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ needs.interpret.outputs.target }}
@@ -485,6 +815,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ needs.interpret.outputs.sourceSha }}
 
       - name: Download change patch
         if: needs.interpret.outputs.hasChanges == 'true'
@@ -509,32 +840,46 @@ jobs:
           git checkout -b "$BRANCH"
           git apply --binary --index "$PATCH"
 
+          TARGET_LABEL="${ISSUE:+issue #${ISSUE}}"
+          TARGET_LABEL="${TARGET_LABEL:-${SUB_SQUAD}}"
+
           # PR validation requires a change fragment. A run that forgot to write one would
           # open a PR that can never go green, so fall back to a patch the reviewer rewrites.
           if ! git diff --cached --name-only | grep -qE '^\.changes/unreleased/.+\.md$'; then
             echo "::warning::The run wrote no change fragment; generating a placeholder patch fragment."
             pwsh -NoProfile -File scripts/New-ChangeFragment.ps1 \
               -Type Changed -Bump patch \
-              -Title "watch mode issue ${ISSUE}" \
-              -Body "- **PLACEHOLDER, rewrite before merging.** Watch Mode resolved issue #${ISSUE} but did not record a changelog entry."
+              -Title "watch mode ${SUB_SQUAD}" \
+              -Body "- **PLACEHOLDER, rewrite before merging.** Watch Mode resolved ${TARGET_LABEL} but did not record a changelog entry."
             git add .changes/unreleased
           fi
 
-          git commit -m "chore: address #${ISSUE} via squad watch mode"
+          git commit -m "chore: address ${TARGET_LABEL} via squad watch mode"
           # Checkout no longer persists credentials, so authenticate the push explicitly.
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           git push origin "$BRANCH"
 
           BODY="$RUNNER_TEMP/pr-body.md"
           {
-            printf 'Closes #%s\n\n' "$ISSUE"
+            if [[ -n "$ISSUE" ]]; then
+              printf 'Closes #%s\n\n' "$ISSUE"
+            fi
             printf 'Opened unattended by **Squad Watch**. This is a DRAFT: it is the approval surface for the run, so review it before merging.\n\n'
             printf 'Run state: `.copilot-tracking/squad/members/%s/`\n\n' "$SUB_SQUAD"
+            printf -- '- roster (per case / per ask): `.copilot-tracking/squad/members/%s/team.md`\n' "$SUB_SQUAD"
+            printf -- '- research: `.copilot-tracking/squad/members/%s/research/`\n' "$SUB_SQUAD"
+            printf -- '- plans: `.copilot-tracking/squad/members/%s/plans/`\n' "$SUB_SQUAD"
+            printf -- '- changes: `.copilot-tracking/squad/members/%s/changes/`\n' "$SUB_SQUAD"
+            printf -- '- reviews: `.copilot-tracking/squad/members/%s/reviews/`\n' "$SUB_SQUAD"
             printf -- '- decisions: `.copilot-tracking/squad/members/%s/decisions.md`\n' "$SUB_SQUAD"
             printf -- '- per-role history: `.copilot-tracking/squad/members/%s/history/`\n' "$SUB_SQUAD"
             printf -- '- consumption: `.copilot-tracking/squad/members/%s/consumption.md`\n\n' "$SUB_SQUAD"
             printf '## Reviewer checklist\n\n'
-            printf -- '- [ ] The acceptance criteria on #%s are all met\n' "$ISSUE"
+            if [[ -n "$ISSUE" ]]; then
+              printf -- '- [ ] The acceptance criteria on #%s are all met\n' "$ISSUE"
+            fi
+            printf -- '- [ ] The sub-squad `team.md` was selected per case and per ask and includes the full RPI spine (`researcher`, `lead`, `developer`, `tester`, `scribe`)\n'
+            printf -- '- [ ] Full RPI stage artifacts (`research/`, `plans/`, `changes/`, `reviews/`) and `history/autopilot-run-*.md` are present\n'
             printf -- '- [ ] The `.changes/unreleased/` fragment reads as final release notes and its `bump` is right\n'
             printf -- '- [ ] `history/` holds one entry per role the run claims to have dispatched\n'
             printf -- '- [ ] No cited artifact path is missing from the branch\n'
@@ -542,22 +887,28 @@ jobs:
             printf 'To have the squad review this itself, add the `squad/review` label.\n'
           } > "$BODY"
 
+          PR_TITLE="Squad Watch: resolve ${TARGET_LABEL}"
+          if [[ -n "$ISSUE" ]]; then
+            PR_TITLE="Squad Watch: resolve #${ISSUE}"
+          fi
+
           gh pr create \
             --draft \
             --base main \
             --head "$BRANCH" \
-            --title "Squad Watch: resolve #${ISSUE}" \
+            --title "$PR_TITLE" \
             --body-file "$BODY"
 
-  # Trusted posting for the pull_request (tester review) path. It never runs
+  # Trusted posting for the pull_request / comment review path. It never runs
   # untrusted content itself - it only posts the review file `interpret` wrote,
-  # verbatim, as a single PR comment (CICD-SEC-5).
+  # verbatim, as a single PR/issue comment (CICD-SEC-5).
   post-review:
     needs: interpret
-    if: needs.interpret.outputs.authorized == 'true' && needs.interpret.outputs.kind == 'pull_request'
+    if: needs.interpret.outputs.authorized == 'true' && (needs.interpret.outputs.kind == 'pull_request' || needs.interpret.outputs.hasReview == 'true')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      issues: write
     steps:
       - name: Download review
         id: download
@@ -567,24 +918,26 @@ jobs:
           name: squad-watch-review-${{ github.run_id }}
           path: ${{ runner.temp }}
 
-      - name: Post review as PR comment
+      - name: Post review as PR or issue comment
         if: steps.download.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ needs.interpret.outputs.target }}
+          TARGET: ${{ needs.interpret.outputs.target }}
           REPO: ${{ github.repository }}
           REVIEW: ${{ runner.temp }}/squad-review.md
         run: |
           set -euo pipefail
           if [ -s "$REVIEW" ]; then
-            gh pr comment "$PR" --repo "$REPO" --body-file "$REVIEW"
+            gh issue comment "$TARGET" --repo "$REPO" --body-file "$REVIEW"
           else
             echo "::warning::The squad wrote an empty review file; nothing to post."
           fi
 
       - name: No review produced
         if: steps.download.outcome != 'success'
-        run: echo "::warning::The squad produced no review file for PR #${{ needs.interpret.outputs.target }}."
+        env:
+          TARGET: ${{ needs.interpret.outputs.target }}
+        run: echo "::warning::The squad produced no review file for #${TARGET}."
 
   escalate-unauthorized:
     needs: interpret

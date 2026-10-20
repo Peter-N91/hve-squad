@@ -157,6 +157,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Source') {
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Packaging.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'WatchMode.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'HotFileBudget.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
