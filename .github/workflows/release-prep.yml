@@ -61,6 +61,11 @@ on:
         required: false
         default: main
         type: string
+      run_benchmark:
+        description: 'Require recorded benchmark non-regression before publication. Uncheck only for an intentional manual bypass.'
+        required: false
+        default: true
+        type: boolean
 
 # Shared with sync-hve-core.yml: both push a release commit to main, and two of
 # them racing means one loses to a non-fast-forward.
@@ -133,8 +138,9 @@ jobs:
           GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
           NEW_VERSION: ${{ steps.prep.outputs.version }}
           REF: ${{ inputs.ref }}
+          RUN_BENCHMARK: ${{ inputs.run_benchmark }}
         run: |
-          gh workflow run release.yml --ref main -f ref="$REF"
+          gh workflow run release.yml --ref main -f ref="$REF" -f run_benchmark="$RUN_BENCHMARK"
           echo "::notice::Triggered release.yml for v${NEW_VERSION} on ${REF}"
 
       # The fragments this run consumed are what the pre-release was rendering,

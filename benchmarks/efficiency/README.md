@@ -222,19 +222,32 @@ statistical significance or a guarantee of causality.
 ## GitHub Actions and bootstrap
 
 The read-only **Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) runs
-manually or automatically after a **stable release is published**, never on PRs,
-ordinary pushes, drafts or rolling previews. Manual runs retain explicit base
-and head commit SHAs. Release runs resolve the published tag to its immutable
-commit and select the most recently published earlier stable release that is
-an ancestor of that commit, not a hardcoded branch or a newer unrelated hotfix.
+manually or as a **pre-publication gate in the Release workflow**, never on PRs
+or rolling previews. Standalone manual comparisons retain explicit base
+and head commit SHAs. Release runs freeze the candidate commit and select the
+most recently published stable release that is an ancestor of that commit,
+not a hardcoded branch or a newer unrelated hotfix.
 Annotated tags are peeled to commits. No earlier stable ancestor means an
 explicit missing-baseline result (exit 2), not a passing self-comparison.
 
-The release workflow calls the benchmark after publishing a non-draft release:
-GitHub does not emit downstream release events for publications made with
-`GITHUB_TOKEN`. Human-published stable releases use the `release: published`
-trigger. This is a post-publication comparison, not a new paid measurement or
-a change to the release's existing pre-publication gates.
+The Release workflow requires comparison success **before any version bump,
+tag push or GitHub Release creation**, including draft creation. Regressions,
+missing/stale/incompatible evidence and operational errors block publication;
+Tier 0 still applies. The release uses the same frozen candidate that was compared,
+not a moving branch. Version and self-reference manifest edits do not change the
+measured Squad source or benchmark protocol.
+
+Manual Release and Release Prep runs expose a boolean **`run_benchmark`**, default **true**;
+Release Prep forwards the selection to Release.
+A human with release-dispatch permission can uncheck it to intentionally bypass
+only this gate. The skipped gate and warning are recorded in the run summary;
+other release checks remain mandatory. Push-triggered releases cannot bypass it.
+No post-publication benchmark trigger remains. Direct publication outside the
+Release workflow is not controlled by this gate.
+
+This compares existing immutable records; it does **not** run agents or spend
+model requests. Fresh compatible records must be collected separately. In
+particular, historical v1 records cannot satisfy the current v2 protocol gate.
 
 The workflow publishes the full report in
 the run Summary and uploads Markdown, JSON and SVG even when comparison fails.
@@ -251,7 +264,7 @@ base merely because it is called base. Fork identity does not grant code trust.
 When the base lacks the helper or selected record, the bootstrap explicitly
 reports missing baseline/tooling and fails; it never runs a head helper.
 Never bypass existing required checks. Workflow registration and automatic
-release events require the workflow on the default branch; a change delivered
+release orchestration requires the workflow on the default branch; a change delivered
 only on an integration branch may need that merge before manual dispatch is
 available. Use the local report in the meantime, not a fabricated Actions run.
 

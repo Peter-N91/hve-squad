@@ -434,15 +434,50 @@ Describe 'Portable benchmark history and reporting' {
         $Workflow | Should -Match 'FETCH_HEAD'
         $Workflow | Should -Match 'if: always\(\)'
         $Workflow | Should -Not -Match 'pull_request|(?m)^  (push|schedule):'
-        $Workflow | Should -Match 'release:\s+types: \[published\]'
+        $Workflow | Should -Not -Match '(?m)^  release:'
         $Workflow | Should -Match 'workflow_dispatch:'
         $Workflow | Should -Match 'workflow_call:'
-        $Workflow | Should -Match '!github.event.release.prerelease'
         $Release = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/release.yml'))
-        $Release | Should -Match "if: needs.release.outputs.benchmark_tag != ''"
+        $Release | Should -Match 'needs: \[candidate, benchmark\]'
         $Release | Should -Match 'uses: ./\.github/workflows/tier2-benchmark.yml'
         $Readme = [IO.File]::ReadAllText((Join-Path $SourceRoot 'README.md'))
         $Readme | Should -Match '\]\(benchmarks/efficiency/badge.svg\)\]\(benchmarks/efficiency/report.md\)'
+    }
+}
+
+Describe 'Pre-release benchmark gate' {
+    BeforeAll {
+        $Release = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/release.yml'))
+        $Expression = [regex]::Match($Release, '(?s)  release:\s+name: Create Release.*?if: >\r?\n(?<condition>.*?)    permissions:').Groups['condition'].Value.Trim()
+        $Expression = $Expression.Replace('always()', '$true').Replace('!cancelled()', '$true').
+            Replace('needs.candidate.result', '$Candidate').Replace('needs.benchmark.result', '$Benchmark').
+            Replace('github.event_name', '$Event').Replace('inputs.run_benchmark', '$Enabled').
+            Replace('==', '-eq').Replace('&&', '-and').Replace('||', '-or').Replace('false', '$false')
+        $Gate = [scriptblock]::Create($Expression)
+    }
+    It 'permits publication only for a passed gate or an explicitly skipped manual gate: <Event>/<Benchmark>/<Enabled>' -ForEach @(
+        @{ Event='push'; Candidate='success'; Benchmark='success'; Enabled=$false; Expected=$true }
+        @{ Event='push'; Candidate='success'; Benchmark='failure'; Enabled=$false; Expected=$false }
+        @{ Event='push'; Candidate='success'; Benchmark='skipped'; Enabled=$false; Expected=$false }
+        @{ Event='workflow_dispatch'; Candidate='success'; Benchmark='success'; Enabled=$true; Expected=$true }
+        @{ Event='workflow_dispatch'; Candidate='success'; Benchmark='failure'; Enabled=$true; Expected=$false }
+        @{ Event='workflow_dispatch'; Candidate='success'; Benchmark='cancelled'; Enabled=$true; Expected=$false }
+        @{ Event='workflow_dispatch'; Candidate='success'; Benchmark='skipped'; Enabled=$true; Expected=$false }
+        @{ Event='workflow_dispatch'; Candidate='success'; Benchmark='skipped'; Enabled=$false; Expected=$true }
+        @{ Event='workflow_dispatch'; Candidate='failure'; Benchmark='skipped'; Enabled=$false; Expected=$false }
+    ) {
+        (& $Gate) | Should -Be $Expected
+    }
+    It 'defaults to benchmarking and freezes the same candidate before any release writes' {
+        $Release | Should -Match '(?s)run_benchmark:.*?default: true\s+type: boolean'
+        $Release | Should -Match "if: github.event_name != 'workflow_dispatch' \|\| inputs.run_benchmark != false"
+        $Release | Should -Match 'candidate_sha: \$\{\{ needs.candidate.outputs.sha \}\}'
+        $Release | Should -Match 'ref: \$\{\{ needs.candidate.outputs.sha \}\}'
+        $Release | Should -Match 'Benchmark gate explicitly disabled'
+        $Release | Should -Not -Match 'benchmark_tag|Benchmark published release'
+        $Prep = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/release-prep.yml'))
+        $Prep | Should -Match '(?s)run_benchmark:.*?default: true\s+type: boolean'
+        $Prep | Should -Match ([regex]::Escape('-f run_benchmark="$RUN_BENCHMARK"'))
     }
 }
 
@@ -460,7 +495,7 @@ Describe 'Release benchmark event identities' {
     }
     BeforeEach {
         $SavedEnvironment = @{}
-        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA')) {
+        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA')) {
             $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
         }
         $env:GITHUB_REPOSITORY = 'fixture/benchmark'
@@ -469,6 +504,7 @@ Describe 'Release benchmark event identities' {
         $env:GITHUB_EVENT_PATH = Join-Path $TestDrive 'release-event.json'
         $env:GH_TOKEN = 'fixture-only'
         $env:RELEASE_TAG = 'v2'
+        $env:CANDIDATE_SHA = ''
         [IO.File]::WriteAllText($env:GITHUB_OUTPUT, '')
         $CurrentRelease = @{ id = 20; tag_name = 'v2'; draft = $false; prerelease = $false; published_at = '2026-10-20T00:00:00Z' }
         $PriorRelease = @{ id = 10; tag_name = 'v1'; draft = $false; prerelease = $false; published_at = '2026-10-18T00:00:00Z' }
@@ -517,6 +553,17 @@ Describe 'Release benchmark event identities' {
         $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/rolling-preview'
         $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/draft'
         $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/future-release'
+    }
+    It 'selects a stable ancestor for an unpublished immutable candidate without looking up its release' {
+        $env:RELEASE_TAG = ''
+        $env:CANDIDATE_SHA = '2' * 40
+        $script:ReleaseApi['releases?per_page=100&page=1'] = @($PriorRelease)
+        & $ResolveRelease
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^base=$('1' * 40)\r?$"
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^head=$('2' * 40)\r?$"
+        $script:ReleaseCalls | Should -Not -Contain 'releases/tags/v2'
+        $env:CANDIDATE_SHA = '--help'
+        { & $ResolveRelease } | Should -Throw '*immutable candidate SHA required*'
     }
     It 'keeps manual full-SHA comparisons independent of release API lookups and rejects unsafe refs' {
         $env:RELEASE_TAG = ''
