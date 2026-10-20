@@ -294,25 +294,65 @@ Describe 'Portable benchmark history and reporting' {
     It 'writes safe report and amber SVG with acceptance counts rather than a green composite' {
         $Fixture = New-TestRepository; $Candidate = New-TestCandidate $Fixture.record
         $Candidate.trials[0].outcomes['init/stateVerifier'] = $false; $Candidate.trials[0].outcomes['stage/init'] = $false; $Candidate.trials[0].outcomes.completed = $false
+        foreach ($Trial in $Candidate.trials) {
+            $Trial.workflow.measuredProcessWallSeconds = 80
+            $Trial.workflow.credits = 105
+            $Trial.workflow.inputTokens = 1234567
+            $Trial.quality.businessClarity = 19
+        }
         $Comparison = Compare-BenchmarkSeries $Fixture.record $Candidate $Policy
-        $Report = @{ status = 'regression'; exitCode = 3; baseCommit = $Fixture.revision; headCommit = $Fixture.revision; mergeBase = $Fixture.revision; policyHash = ('a' * 64); baseRecord = $null; headRecord = $null; reasons = @('<script>|bad'); improvementScreen = $false; baseStatistics = $Comparison.baseStatistics; headStatistics = $Comparison.headStatistics }
+        $Report = @{ status = 'regression'; exitCode = 3; baseCommit = $Fixture.revision; headCommit = $Fixture.revision; mergeBase = $Fixture.revision; policyHash = ('a' * 64); baseRecord = $null; headRecord = $null; reasons = @($Comparison.reasons) + @('<script>|bad'); deltas = $Comparison.deltas; improvementScreen = $false; baseStatistics = $Comparison.baseStatistics; headStatistics = $Comparison.headStatistics }
         $Output = Join-Path $TestDrive 'render'
         Write-BenchmarkReport $Report $Output
         $Markdown = [IO.File]::ReadAllText((Join-Path $Output 'report.md'))
         $Markdown | Should -Match '&lt;script&gt;&#124;bad'
+        $Markdown | Should -Match 'Execution time per trial.*3 min 20 s.*3 min 0 s.*10.00% faster'
+        $Markdown | Should -Match 'Consumption per trial.*200.00.*205.00.*2.50% higher'
+        $Markdown | Should -Match 'Input tokens per trial.*1,234,667'
+        $Markdown | Should -Match 'Initialization: State verification passed in fewer trials'
+        $Markdown | Should -Match 'Business clarity scored lower'
+        $Markdown.IndexOf('## Performance and consumption') | Should -BeLessThan $Markdown.IndexOf('<summary>All measurements, samples and checks</summary>')
+        $Markdown | Should -Match '<summary>Provenance, compatibility and machine status</summary>'
+        $Json = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'report.json')))
+        (ConvertTo-BenchmarkCanonicalJson $Json) | Should -BeExactly (ConvertTo-BenchmarkCanonicalJson $Report)
         $Svg = [IO.File]::ReadAllText((Join-Path $Output 'badge.svg'))
-        ([xml]$Svg).svg.GetAttribute('aria-label') | Should -Match 'quality 100/100.*functional 3/3.*workflow 2/3'
+        ([xml]$Svg).svg.GetAttribute('aria-label') | Should -Match 'quality 99/100.*functional 3/3.*workflow 2/3'
         $Svg | Should -Match '#b45309'
         (Get-Item (Join-Path $Output 'report.json')).Length | Should -BeGreaterThan 0
         $Report.status = 'incompatible'; $Report.exitCode = 2
         Write-BenchmarkReport $Report $Output
         [IO.File]::ReadAllText((Join-Path $Output 'badge.svg')) | Should -Match '#6b7280.*benchmark unavailable'
     }
+    It 'summarizes recorded observations without implying a baseline comparison' {
+        $Fixture = New-TestRepository
+        $Fixture.record.trials[0].outcomes['functional/id-boundary-preserves-store'] = $false
+        $Fixture.record.trials[0].outcomes.functional = $false
+        foreach ($Trial in $Fixture.record.trials) {
+            $Trial.outcomes['requirements/BRD Quality Reviewer'] = $false
+            $Trial.outcomes['stage/requirements'] = $false
+            $Trial.outcomes.completed = $false
+        }
+        $Output = Join-Path $TestDrive 'recorded-summary'
+        Write-BenchmarkSeriesReport $Fixture.record $Output
+        $Markdown = [IO.File]::ReadAllText((Join-Path $Output 'report.md'))
+        $Summary = ($Markdown -split '<details>', 2)[0]
+        $Summary | Should -Match 'Recorded observations; no comparison yet'
+        $Summary | Should -Match '\| Measure \| Recorded result \|'
+        $Summary | Should -Not -Match '\| Baseline \||\| Candidate \||n/a|10% resource-improvement screen'
+        $Summary | Should -Match 'Functional acceptance.*2 of 3 trials'
+        $Summary | Should -Match 'ID boundary preserves stored data.*2 of 3'
+        $Summary | Should -Match 'Full workflow acceptance.*0 of 3 trials'
+        $Summary | Should -Match 'BRD reviewer deliverable acceptance.*0 of 3'
+        $Markdown | Should -Not -Match '&quot;cliVersion'
+        $Markdown | Should -Match '\| cliVersion \|'
+    }
     It 'always emits reports before a nonzero CLI verdict and rejects unsafe refs' {
         $Fixture = New-TestRepository; $Base = Save-TestSelection $Fixture $Fixture.record
         $Output = Join-Path $TestDrive 'missing-report'
         & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Compare-BranchBenchmark.ps1') -Repository $Fixture.repository -BaseRef $Fixture.revision -HeadRef $Base -OutputDirectory $Output
         $LASTEXITCODE | Should -Be 2
+        [IO.File]::ReadAllText((Join-Path $Output 'report.md')) | Should -Match 'Comparison unavailable.*[\s\S]*No comparable measurements are available'
+        [IO.File]::ReadAllText((Join-Path $Output 'report.md')) | Should -Match 'The baseline branch has no selected benchmark record'
         (ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'report.json')))).status | Should -Be 'missing-baseline'
         (Get-Item (Join-Path $Output 'badge.svg')).Length | Should -BeGreaterThan 0
         { Resolve-BenchmarkCommit $Fixture.repository '--help' } | Should -Throw '*unsafe-ref*'

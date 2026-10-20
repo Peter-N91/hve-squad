@@ -92,8 +92,11 @@ event intervals are diagnostic, not extra gates. Missing required token coverage
 cannot become zero even if general metering says complete. From zero, positive
 growth has an undefined percentage and explicit absolute worsening.
 
-Reports include all samples, medians/ranges, sums, per-check pass counts,
-fingerprints and failure reasons. A 10% request/input-token improvement screen
+Reports lead with a plain-language verdict, readable performance/consumption
+and quality/acceptance summaries, and checks needing attention. Expandable
+sections retain all exact samples, medians/ranges, sums, per-check pass counts,
+fingerprints, compatibility fields and machine reasons. `report.json` preserves
+the full machine-readable data; presentation rounding does not change gates. A 10% request/input-token improvement screen
 is separate from non-regression, product acceptance and strict promotion.
 Three independent series samples are unpaired screening evidence, not
 statistical significance or a guarantee of causality.

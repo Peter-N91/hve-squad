@@ -519,22 +519,151 @@ function Write-BenchmarkReport {
     param([Parameter(Mandatory)][Collections.IDictionary]$Report, [Parameter(Mandatory)][string]$OutputDirectory)
     function Format-Number($Value) { if ($null -eq $Value) { return 'n/a' }; ([decimal]$Value).ToString('0.#########', [Globalization.CultureInfo]::InvariantCulture) }
     function Escape-Display($Value) { if ($null -eq $Value) { return 'n/a' }; [Net.WebUtility]::HtmlEncode([string]$Value).Replace('|', '&#124;').Replace("`r", '').Replace("`n", ' ').Trim() }
+    function Format-ReadableNumber($Value, [int]$Places = 0) {
+        if ($null -eq $Value) { return 'Not available' }
+        ([decimal]$Value).ToString("N$Places", [Globalization.CultureInfo]::InvariantCulture)
+    }
+    function Format-Duration($Seconds) {
+        if ($null -eq $Seconds) { return 'Not available' }
+        $Rounded = [decimal]::Round([decimal]$Seconds, 1)
+        $Minutes = [decimal]::Floor($Rounded / 60)
+        "$(Format-ReadableNumber $Minutes) min $(Format-Number ($Rounded - 60 * $Minutes)) s"
+    }
+    function Format-CheckName([string]$Key) {
+        $Names = @{
+            completed = 'Full workflow acceptance'; functional = 'All functional checks'; workflow = 'Final workflow readiness'
+            init = 'Initialization'; requirements = 'Requirements'; build = 'Build'; stage = 'Stage readiness'
+            stateVerifier = 'State verification'; reviewOutcome = 'Review outcome'; dispatchEvidence = 'Dispatch evidence'
+            scribeHistory = 'Scribe history'; 'id-boundary-preserves-store' = 'ID boundary preserves stored data'
+            'BRD Quality Reviewer' = 'BRD reviewer deliverable acceptance'; 'PRD Quality Reviewer' = 'PRD reviewer deliverable acceptance'
+        }
+        (@($Key.Split('/') | ForEach-Object { if ($Names.ContainsKey($_)) { $Names[$_] } else { $_.Replace('-', ' ') } })) -join ': '
+    }
+    function Format-Change($Delta, [string]$Field) {
+        if ($null -eq $Delta) { return 'Not compared' }
+        if ($Delta.absolute -eq 0) { return 'No change' }
+        if ($null -eq $Delta.percent) { return 'New usage (baseline was zero)' }
+        $Amount = if ([decimal]::Abs($Delta.percent) -lt 0.01) { '<0.01' } else { Format-ReadableNumber ([decimal]::Abs($Delta.percent)) 2 }
+        $Direction = if ($Field -eq 'measuredProcessWallSeconds') {
+            if ($Delta.absolute -gt 0) { 'slower' } else { 'faster' }
+        } elseif ($Field -eq 'credits') {
+            if ($Delta.absolute -gt 0) { 'higher' } else { 'lower' }
+        } else { if ($Delta.absolute -gt 0) { 'more' } else { 'fewer' } }
+        "$(Escape-Display $Amount)% $Direction"
+    }
+    function Format-Reason([string]$Reason) {
+        switch -CaseSensitive ($Reason) {
+            'no-comparison-claimed' { return 'No baseline comparison was requested.' }
+            'no-selected-record' {
+                $Side = if ($Report.status -eq 'missing-baseline') { 'baseline' } else { 'candidate' }
+                return "The $Side branch has no selected benchmark record. Record and commit its benchmark before comparing."
+            }
+            'failed-tools-sum' { return 'The total number of failed tool calls increased.' }
+            'critical-high-sum' { return 'The total number of critical/high findings increased.' }
+        }
+        if ($Reason.StartsWith('quality-')) {
+            $Dimension = $Reason.Substring(8)
+            $Name = switch -CaseSensitive ($Dimension) {
+                'businessClarity' { 'Business clarity' }; 'scopeFidelity' { 'Scope fidelity' }
+                'acceptanceCriteria' { 'Acceptance criteria' }; 'traceability' { 'Traceability' }
+                'risksAndDecisions' { 'Risks and decisions' }; 'total' { 'Overall quality' }
+                default { $Dimension }
+            }
+            return "$(Escape-Display $Name) scored lower."
+        }
+        if ($Reason.StartsWith('outcome-')) { return "$(Escape-Display (Format-CheckName $Reason.Substring(8))) passed in fewer trials." }
+        if ($Reason.StartsWith('efficiency-')) {
+            $Field = $Reason.Substring(11)
+            $Name = if ($ResourceNames.ContainsKey($Field)) { $ResourceNames[$Field] } else { $Field }
+            return "$(Escape-Display $Name) exceeded the allowed increase."
+        }
+        Escape-Display $Reason
+    }
+    $ResourceNames = @{
+        measuredProcessWallSeconds = 'Execution time per trial'; credits = 'Consumption per trial'
+        requests = 'Model requests per trial'; inputTokens = 'Input tokens per trial'
+        outputTokens = 'Output tokens per trial'; toolCalls = 'Tool calls per trial'
+    }
+    $Before = $Report.baseStatistics; $After = $Report.headStatistics
+    $Arms = @(if ($Before) { 'base' }; if ($After) { 'head' })
+    $CanCompare = $Before -and $After -and $Report.status -in @('unchanged', 'no-regression', 'regression')
+    $Columns = @($Arms | ForEach-Object { if ($Arms.Count -eq 1 -and $Report.status -eq 'recorded-observation') { 'Recorded result' } elseif ($_ -eq 'base') { 'Baseline' } else { 'Candidate' } })
+    $SummaryColumns = @('Measure') + $Columns
+    if ($CanCompare) { $SummaryColumns += 'Change' }
+    $Header = '| ' + ($SummaryColumns -join ' | ') + ' |'
+    $Separator = '| ' + ((@($SummaryColumns | ForEach-Object { '---' })) -join ' | ') + ' |'
     $Lines = [Collections.Generic.List[string]]::new()
     $Lines.Add('# Efficiency benchmark')
     $Lines.Add('')
-    $Lines.Add("**Status: $(Escape-Display $Report.status)** (exit $($Report.exitCode)). Observations, not quality approval.")
-    $Lines.Add('')
-    $Lines.Add('Independent three-sample series; no pairing or statistical-significance claim. Process wall time excludes offline setup and report generation.')
-    $Lines.Add('Integrity and reviewed workflow/controller provenance are not authenticated model-execution attestation.')
-    foreach ($Key in @('baseCommit', 'headCommit', 'mergeBase', 'policyHash')) { $Lines.Add("- $Key`: $(Escape-Display $Report[$Key])") }
-    foreach ($Arm in @('base', 'head')) {
-        $Record = $Report[$Arm + 'Record']
-        if ($Record) { foreach ($Key in @('seriesId', 'sha256', 'sourceHash', 'measuredRevision')) { $Lines.Add("- $Arm $Key`: $(Escape-Display $Record[$Key])") }; $Lines.Add("- $Arm protocol: $(Escape-Display (ConvertTo-BenchmarkCanonicalJson $Record.protocol))") }
+    $Verdict = switch -CaseSensitive ($Report.status) {
+        'recorded-observation' { '**Recorded observations; no comparison yet.** These results are not quality approval.' }
+        'unchanged' { '**No measurement change.** Both snapshots select the same validated evidence; no new trial or improvement is claimed.' }
+        'no-regression' { '**No measured regression.** The candidate meets the comparison policy; this does not mean all product checks passed.' }
+        'regression' { '**Regression detected.** The candidate fails one or more comparison checks; resource savings do not override quality or reliability failures.' }
+        default { '**Comparison unavailable.** Missing, invalid or incompatible evidence must not be treated as a passing result.' }
     }
-    if ($Report.status -eq 'unchanged') { $Lines.Add('Same validated evidence; no independent candidate measurement or improvement claim.') }
-    if ($Report.reasons.Count) { $Lines.Add(''); $Lines.Add('Reasons: ' + (($Report.reasons | ForEach-Object { Escape-Display $_ }) -join ', ')) }
-    $Lines.Add(''); $Lines.Add("10% request/input-token improvement screen: $($Report.improvementScreen). This is separate from non-regression and strict promotion.")
-    $After = $Report.headStatistics
+    $Lines.Add($Verdict)
+    $Lines.Add('')
+    $Lines.Add('Each series contains three trials. Per-trial figures below are **medians**; explicitly labelled totals cover all three trials. These are independent screening observations, not proof of statistical significance or causality.')
+    if ($Arms.Count) {
+        $Lines.Add(''); $Lines.Add('## Performance and consumption'); $Lines.Add('')
+        $Lines.Add($Header); $Lines.Add($Separator)
+        foreach ($Field in @('measuredProcessWallSeconds', 'credits', 'requests', 'inputTokens', 'outputTokens', 'toolCalls')) {
+            $Cells = @($ResourceNames[$Field]) + @(foreach ($Arm in $Arms) {
+                $Value = $Report[$Arm + 'Statistics'].resources.total[$Field].median
+                if ($Field -eq 'measuredProcessWallSeconds') { Format-Duration $Value }
+                elseif ($Field -eq 'credits') { Format-ReadableNumber $Value 2 }
+                else { Format-ReadableNumber $Value }
+            })
+            if ($CanCompare) { $Cells += Format-Change $(if ($Report.Contains('deltas')) { $Report.deltas[$Field] } else { $null }) $Field }
+            $Lines.Add('| ' + ($Cells -join ' | ') + ' |')
+        }
+        $Totals = @(foreach ($Index in 0..($Arms.Count - 1)) { $(if ($Arms.Count -gt 1) { "$($Columns[$Index]): " }) + "**$(Format-ReadableNumber $Report[$Arms[$Index] + 'Statistics'].resources.total.credits.sum 2)**" })
+        $Lines.Add(''); $Lines.Add('Total consumption across all three trials: ' + ($Totals -join '; ') + '.')
+        $Lines.Add('Consumption is measured in credits, not currency. Execution time includes workflow stages and the independent judge, but excludes environment preparation and report generation. Every sample and the complete numeric data are retained in `report.json`; detailed tables appear below.')
+        $Lines.Add(''); $Lines.Add('## Quality and acceptance'); $Lines.Add('')
+        $Lines.Add('| Measure | ' + ($Columns -join ' | ') + ' |'); $Lines.Add('| --- | ' + ((@($Columns | ForEach-Object { '---' })) -join ' | ') + ' |')
+        foreach ($Field in @('quality', 'functional', 'completed', 'failedTools', 'criticalHighFindings')) {
+            $Label = switch ($Field) { 'quality' { 'Quality (median /100)' }; 'functional' { 'Functional acceptance' }; 'completed' { 'Full workflow acceptance' }; 'failedTools' { 'Failed tool calls (total)' }; 'criticalHighFindings' { 'Critical/high findings (total)' } }
+            $Cells = @(foreach ($Arm in $Arms) {
+                $Stats = $Report[$Arm + 'Statistics']
+                switch ($Field) {
+                    'quality' { "$(Format-ReadableNumber $Stats.quality.total.median)/100" }
+                    'functional' { "$($Stats.outcomes.functional) of 3 trials" }
+                    'completed' { "$($Stats.outcomes.completed) of 3 trials" }
+                    'failedTools' { Format-ReadableNumber $Stats.resources.total.failedTools.sum }
+                    'criticalHighFindings' { Format-ReadableNumber $Stats.criticalHighFindings }
+                }
+            })
+            $Lines.Add("| $Label | " + ($Cells -join ' | ') + ' |')
+        }
+        $Lines.Add(''); $Lines.Add('Functional acceptance requires every functional probe to pass. **Full workflow acceptance** also requires every stage and the final workflow checks to pass. A successful process exit or final build alone is not full acceptance.')
+    } else { $Lines.Add(''); $Lines.Add('No comparable measurements are available. See the diagnostic reasons and provenance below.') }
+    if ($Report.reasons.Count) {
+        $Lines.Add(''); $Lines.Add('## Comparison findings'); $Lines.Add('')
+        foreach ($Reason in $Report.reasons) { $Lines.Add('- ' + (Format-Reason $Reason)) }
+    }
+    if ($CanCompare -and $Report.status -ne 'unchanged') {
+        $Screen = if ($Report.improvementScreen) { '**Met.**' } else { '**Not met.**' }
+        $Lines.Add(''); $Lines.Add("10% resource-improvement screen: $Screen This requires at least 10% fewer median model requests or input tokens. It is separate from non-regression, product acceptance and strict baseline promotion.")
+    }
+    $Keys = if ($After) { $After.outcomes.Keys } elseif ($Before) { $Before.outcomes.Keys } else { @() }
+    $Attention = @($Keys | Sort-Object | Where-Object {
+        $Key = $_
+        @($Arms | Where-Object { $Report[$_ + 'Statistics'].outcomes[$Key] -lt 3 }).Count -gt 0
+    })
+    if ($Attention.Count) {
+        $Lines.Add(''); $Lines.Add('## Checks needing attention'); $Lines.Add('')
+        $Lines.Add('Only checks that did not pass in all three trials are shown here. The complete check list, including passing checks, is available in the details below.')
+        $Lines.Add(''); $Lines.Add('| Check | ' + ($Columns -join ' | ') + ' |'); $Lines.Add('| --- | ' + ((@($Columns | ForEach-Object { '---' })) -join ' | ') + ' |')
+        foreach ($Key in $Attention) {
+            $Cells = @($Arms | ForEach-Object { "$($Report[$_ + 'Statistics'].outcomes[$Key]) of 3" })
+            $Lines.Add("| $(Escape-Display (Format-CheckName $Key)) | " + ($Cells -join ' | ') + ' |')
+        }
+        $Lines.Add(''); $Lines.Add('Reviewer dispatch and reviewer file-deliverable acceptance are different checks. A reviewer may have been dispatched even when its required deliverable check fails.')
+    }
+    $Lines.Add(''); $Lines.Add('<details>'); $Lines.Add('<summary>All measurements, samples and checks</summary>'); $Lines.Add('')
+    $Lines.Add('Resource tables use exact values: median [minimum, maximum]; individual samples; series total. Time is in seconds unless explicitly labelled as an event interval in milliseconds; event intervals are diagnostic, not end-to-end timing.')
     if ($Report.Contains('deltas') -and $Report.deltas.Count) {
         $Lines.Add(''); $Lines.Add('## Combined-resource screening deltas'); $Lines.Add('')
         $Lines.Add('| Metric | Median absolute change | Change % (positive is worse) |')
@@ -585,6 +714,30 @@ function Write-BenchmarkReport {
         })
         $Lines.Add("| observed $Role reviewer dispatch (not file-deliverable acceptance) | $($Cells[0]) | $($Cells[1]) |")
     }
+    $Lines.Add(''); $Lines.Add('</details>')
+    $Lines.Add(''); $Lines.Add('<details>'); $Lines.Add('<summary>Provenance, compatibility and machine status</summary>'); $Lines.Add('')
+    $Lines.Add("Machine status: **$(Escape-Display $Report.status)**; exit code **$($Report.exitCode)**.")
+    $Lines.Add('Integrity hashes and a reviewed workflow/controller do not authenticate model execution.')
+    $Lines.Add(''); $Lines.Add('| Reference | Value |'); $Lines.Add('|---|---|')
+    foreach ($Key in @('baseCommit', 'headCommit', 'mergeBase', 'policyHash')) { $Lines.Add("| $Key | $(Escape-Display $Report[$Key]) |") }
+    foreach ($Arm in @('base', 'head')) {
+        $Record = $Report[$Arm + 'Record']
+        if ($Record) {
+            $Label = if ($Arm -eq 'base') { 'Baseline' } else { 'Recorded / candidate' }
+            foreach ($Key in @('seriesId', 'sha256', 'sourceHash', 'measuredRevision')) { $Lines.Add("| $Label $Key | $(Escape-Display $Record[$Key]) |") }
+        }
+    }
+    foreach ($Arm in @('base', 'head')) {
+        $Record = $Report[$Arm + 'Record']
+        if ($Record) {
+            $Label = if ($Arm -eq 'base') { 'Baseline' } else { 'Recorded / candidate' }
+            $Lines.Add(''); $Lines.Add("### $Label protocol"); $Lines.Add('')
+            $Lines.Add('| Field | Value |'); $Lines.Add('|---|---|')
+            foreach ($Key in @($Record.protocol.Keys | Sort-Object)) { $Lines.Add("| $(Escape-Display $Key) | $(Escape-Display $Record.protocol[$Key]) |") }
+        }
+    }
+    if ($Report.reasons.Count) { $Lines.Add(''); $Lines.Add('Machine reasons: ' + (($Report.reasons | ForEach-Object { Escape-Display $_ }) -join ', ')) }
+    $Lines.Add(''); $Lines.Add('</details>')
     $Title = 'benchmark unavailable'; $Color = '#6b7280'
     if ($After -and $Report.status -in @('recorded-observation', 'unchanged', 'no-regression', 'regression')) {
         $Title = "quality $(Format-Number $After.quality.total.median)/100 | functional $($After.outcomes.functional)/3 | workflow $($After.outcomes.completed)/3"
