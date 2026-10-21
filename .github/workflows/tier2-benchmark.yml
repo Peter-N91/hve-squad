@@ -12,19 +12,20 @@ on:
         required: false
         type: string
   workflow_dispatch:
-    # checkov:skip=CKV_GHA_7:Read-only report; operators supply reviewed immutable commits, validated before checkout.
+    # checkov:skip=CKV_GHA_7:Read-only report; optional overrides and branch defaults resolve to immutable commits before checkout.
     inputs:
       base_sha:
-        description: Authorized reviewed base commit (full SHA; not a branch name)
-        required: true
+        description: 'Optional reviewed base SHA; blank uses the PR parent branch, or repository default branch'
+        required: false
         type: string
       head_sha:
-        description: Candidate commit in this repository (full SHA)
-        required: true
+        description: 'Optional candidate SHA; blank uses the latest commit of the selected branch'
+        required: false
         type: string
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: tier2-benchmark-${{ inputs.candidate_sha || inputs.release_tag || github.run_id }}
@@ -43,12 +44,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          SELECTED_BRANCH: ${{ github.ref_name }}
         run: |
           $ErrorActionPreference = 'Stop'
           $baseRepo = $env:GITHUB_REPOSITORY
           $headRepo = $env:GITHUB_REPOSITORY
           if ($baseRepo -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid repository identity.' }
           $baseSha = $null
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
+          function Get-BranchApi([string]$Repository, [string]$Path) {
+            $response = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$Repository/$Path" -Headers $headers
+            foreach ($item in $response) { $item }
+          }
           if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA) {
             $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
             function Get-ReleaseApi([string]$Path) {
@@ -97,7 +104,32 @@ jobs:
             $eventData = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
             $baseSha = $eventData.inputs.base_sha
             $headSha = $eventData.inputs.head_sha
-            if (-not $baseSha) { throw 'Full base commit SHA required.' }
+            if (-not $headSha) {
+              if (-not $env:SELECTED_BRANCH) { throw 'Selected branch is required for the default candidate.' }
+              $headSha = (Get-BranchApi $headRepo "branches/$([Uri]::EscapeDataString($env:SELECTED_BRANCH))").commit.sha
+            }
+            if (-not $baseSha) {
+              if (-not $env:SELECTED_BRANCH) { throw 'Selected branch is required to discover its parent.' }
+              $repository = Get-BranchApi $headRepo ''
+              $owner = $headRepo.Split('/')[0]
+              $query = [Uri]::EscapeDataString("${owner}:$env:SELECTED_BRANCH")
+              $parents = @(Get-BranchApi $headRepo "pulls?state=open&head=$query&per_page=100")
+              if ($parents.Count -eq 0 -and $repository.fork) {
+                $upstream = $repository.parent.full_name
+                if ($upstream -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid upstream repository identity.' }
+                $parents = @(Get-BranchApi $upstream "pulls?state=open&head=$query&per_page=100")
+              }
+              if ($parents.Count -gt 1) { throw 'Multiple open PR parents; supply base_sha explicitly.' }
+              if ($parents.Count -eq 1) {
+                $baseRepo = $parents[0].base.repo.full_name
+                $baseBranch = $parents[0].base.ref
+              } else {
+                $baseBranch = $repository.default_branch
+                if ($baseBranch -ceq $env:SELECTED_BRANCH) { throw 'Selected branch has no distinct parent; supply base_sha explicitly.' }
+              }
+              if ($baseRepo -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or -not $baseBranch) { throw 'Invalid parent branch identity.' }
+              $baseSha = (Get-BranchApi $baseRepo "branches/$([Uri]::EscapeDataString($baseBranch))").commit.sha
+            }
           }
           if ($headSha -cnotmatch '^[0-9a-f]{40}$') { throw 'Full commit SHA required.' }
           if ($baseSha -and $baseSha -cnotmatch '^[0-9a-f]{40}$') { throw 'Full commit SHA required.' }

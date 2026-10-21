@@ -519,7 +519,7 @@ Describe 'Release benchmark event identities' {
     }
     BeforeEach {
         $SavedEnvironment = @{}
-        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA')) {
+        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'SELECTED_BRANCH', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA')) {
             $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
         }
         $env:GITHUB_REPOSITORY = 'fixture/benchmark'
@@ -529,6 +529,7 @@ Describe 'Release benchmark event identities' {
         $env:GH_TOKEN = 'fixture-only'
         $env:RELEASE_TAG = 'v2'
         $env:CANDIDATE_SHA = ''
+        $env:SELECTED_BRANCH = 'feature/test'
         [IO.File]::WriteAllText($env:GITHUB_OUTPUT, '')
         $CurrentRelease = @{ id = 20; tag_name = 'v2'; draft = $false; prerelease = $false; published_at = '2026-10-20T00:00:00Z' }
         $PriorRelease = @{ id = 10; tag_name = 'v1'; draft = $false; prerelease = $false; published_at = '2026-10-18T00:00:00Z' }
@@ -597,6 +598,72 @@ Describe 'Release benchmark event identities' {
         $script:ReleaseCalls.Count | Should -Be 0
         Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = '--help'; head_sha = ('b' * 40) } }
         { & $ResolveRelease } | Should -Throw '*Full commit SHA required*'
+    }
+    It 'defaults to the latest selected branch and its cross-repository PR parent' {
+        $env:RELEASE_TAG = ''
+        Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = ''; head_sha = '' } }
+        $script:ReleaseApi['branches/feature%2Ftest'] = @{ commit = @{ sha = 'a' * 40 } }
+        $script:ReleaseApi[''] = @{ fork = $false; default_branch = 'main' }
+        $script:ReleaseApi['pulls?state=open&head=fixture%3Afeature%2Ftest&per_page=100'] = @(
+            @{ base = @{ ref = 'integration/parent'; repo = @{ full_name = 'upstream/project' } } }
+        )
+        Mock Invoke-RestMethod {
+            param($Uri)
+            $text = [string]$Uri
+            if ($text -eq 'https://api.github.invalid/repos/upstream/project/branches/integration%2Fparent') {
+                return @{ commit = @{ sha = 'b' * 40 } }
+            }
+            $path = $text.Substring('https://api.github.invalid/repos/fixture/benchmark/'.Length)
+            if (-not $script:ReleaseApi.ContainsKey($path)) { throw "Unexpected API request: $path" }
+            Write-Output -NoEnumerate $script:ReleaseApi[$path]
+        }
+        & $ResolveRelease
+        $output = [IO.File]::ReadAllText($env:GITHUB_OUTPUT)
+        $output | Should -Match "(?m)^head=$('a' * 40)\r?$"
+        $output | Should -Match "(?m)^base=$('b' * 40)\r?$"
+        $output | Should -Match '(?m)^base_repository=upstream/project\r?$'
+    }
+    It 'uses the default branch only without a PR and preserves individual overrides' {
+        $env:RELEASE_TAG = ''
+        $script:ReleaseApi[''] = @{ fork = $false; default_branch = 'main' }
+        $script:ReleaseApi['pulls?state=open&head=fixture%3Afeature%2Ftest&per_page=100'] = @()
+        $script:ReleaseApi['branches/main'] = @{ commit = @{ sha = 'b' * 40 } }
+        $script:ReleaseApi['branches/feature%2Ftest'] = @{ commit = @{ sha = 'a' * 40 } }
+        Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = ''; head_sha = 'c' * 40 } }
+        & $ResolveRelease
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^head=$('c' * 40)\r?$"
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^base=$('b' * 40)\r?$"
+        [IO.File]::WriteAllText($env:GITHUB_OUTPUT, '')
+        Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = 'd' * 40; head_sha = '' } }
+        & $ResolveRelease
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^base=$('d' * 40)\r?$"
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^head=$('a' * 40)\r?$"
+    }
+    It 'discovers fork PRs upstream and rejects ambiguous or self-parent defaults' {
+        $env:RELEASE_TAG = ''
+        Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = ''; head_sha = 'a' * 40 } }
+        $script:ReleaseApi[''] = @{ fork = $true; parent = @{ full_name = 'upstream/project' }; default_branch = 'main' }
+        $script:ReleaseApi['pulls?state=open&head=fixture%3Afeature%2Ftest&per_page=100'] = @()
+        Mock Invoke-RestMethod {
+            param($Uri)
+            $text = [string]$Uri
+            if ($text.StartsWith('https://api.github.invalid/repos/upstream/project/pulls?')) {
+                Write-Output -NoEnumerate @(@{ base = @{ ref = 'main'; repo = @{ full_name = 'upstream/project' } } })
+                return
+            }
+            if ($text -eq 'https://api.github.invalid/repos/upstream/project/branches/main') {
+                return @{ commit = @{ sha = 'b' * 40 } }
+            }
+            $path = $text.Substring('https://api.github.invalid/repos/fixture/benchmark/'.Length)
+            Write-Output -NoEnumerate $script:ReleaseApi[$path]
+        }
+        & $ResolveRelease
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match '(?m)^base_repository=upstream/project\r?$'
+        $script:ReleaseApi['pulls?state=open&head=fixture%3Afeature%2Ftest&per_page=100'] = @(@{}, @{})
+        { & $ResolveRelease } | Should -Throw '*Multiple open PR parents*'
+        $script:ReleaseApi['pulls?state=open&head=fixture%3Afeature%2Ftest&per_page=100'] = @()
+        $script:ReleaseApi[''] = @{ fork = $false; default_branch = 'feature/test' }
+        { & $ResolveRelease } | Should -Throw '*no distinct parent*'
     }
     It 'emits missing-baseline exit 2 for a first release without running candidate helpers' {
         $script:ReleaseApi['releases?per_page=100&page=1'] = @($CurrentRelease)
