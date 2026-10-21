@@ -107,6 +107,16 @@ That parity is evidence, not proof. The cases below are what turn it into proof.
 
 No Copilot invocation. Install the ref into a scratch directory, then inspect the delivered tree.
 
+### Conditional requirements document quality
+
+These are installed-package source contracts, not runtime-model or benchmark claims.
+
+| ID | Assertion | Source |
+|---|---|---|
+| RQ-01 | BRD/PRD or requirements authoring/review conditionally reaches the delivered guide through both coordinator allowlist and index; startup and code-only review do not load it | `squad-coordinator.agent.md`, Skill Reference Contract; `references/00-index.md`; `references/requirements-quality.md` |
+| RQ-02 | Owning authors activate canonical requirements-author with actual template/taxonomy/phase, authoritative inputs and final paths; the existing self-check reconciles configured IDs, per-item links, family denominators and testable evidence, preserving supplied business facts and explicit unknowns | `references/requirements-quality.md`, Author dispatch |
+| RQ-03 | Read-only reviewers return both complete canonical payloads; coordinator transport preserves the actual response with separate attribution under the trusted reviewer root, verifies capture and actual history/consumption before tester dispatch, and refuses missing evidence; tester owns only its independent closing review | `squad-coordinator.agent.md`, Dispatch Discipline; `references/requirements-quality.md`, Review evidence barrier |
+
 ### Universal deterministic handoffs
 
 Ordinary persistence uses `Write-SquadHandoff.ps1` in every routing mode. Existing

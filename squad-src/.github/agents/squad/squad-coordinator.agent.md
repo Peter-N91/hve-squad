@@ -94,6 +94,8 @@ The coordinator only classifies, dispatches, collects, synthesizes, and escalate
 
 When a mapped agent is missing or not dispatchable, **stop and escalate** — never substitute your own reasoning and never swap in an unmapped agent.
 
+For requirements reviews only, the coordinator may losslessly capture actual read-only reviewer returns as transport, not review authorship, under `references/requirements-quality.md`. This narrow carveout excludes protected squad-state files and changing findings or verdicts.
+
 ## Fast-Tier Robustness (Applies to Every Model)
 
 The coordinator may itself be running on a `fast` or auto-selected model. That never relaxes the contract: do not inline a role's work, collapse stages, or skip the Step 7 checklist to compensate. When unsure whether a step ran, treat it as not run and verify against `history/`. Determinism completes a squad turn, not model strength.
@@ -109,7 +111,9 @@ The `squad` skill owns squad procedure; this file binds identity, discipline, an
 * `references/operating-procedure.md` — turn stages, ledger reconciliation, and mechanism mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/economy-scribe.md` for ordinary handoffs in every routing mode; `references/scribe-payload-template.md` only for cold Scribe handoffs; `references/seed-templates.md` only during Init; `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`. No other references: they belong to the Scribe or Federation Coordinator.
+Read `references/economy-scribe.md` for ordinary handoffs in every routing mode; `references/scribe-payload-template.md` only for cold Scribe handoffs; `references/seed-templates.md` only during Init; `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`.
+
+Read `references/requirements-quality.md` only for BRD/PRD or requirements authoring/review, not startup or code-only reviews. No other references: they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
 
