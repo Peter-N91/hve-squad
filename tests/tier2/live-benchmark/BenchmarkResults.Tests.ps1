@@ -553,6 +553,10 @@ Describe 'Release benchmark event identities' {
         Mock Invoke-RestMethod {
             param($Uri)
             $Prefix = 'https://api.github.invalid/repos/fixture/benchmark/'
+            if ([string]$Uri -ceq $Prefix.TrimEnd('/')) {
+                $script:ReleaseCalls.Add('')
+                return $script:ReleaseApi['']
+            }
             if (-not ([string]$Uri).StartsWith($Prefix, [StringComparison]::Ordinal)) { throw 'Unexpected API host.' }
             $Path = ([string]$Uri).Substring($Prefix.Length)
             $script:ReleaseCalls.Add($Path)
@@ -613,6 +617,7 @@ Describe 'Release benchmark event identities' {
             if ($text -eq 'https://api.github.invalid/repos/upstream/project/branches/integration%2Fparent') {
                 return @{ commit = @{ sha = 'b' * 40 } }
             }
+            if ($text -ceq 'https://api.github.invalid/repos/fixture/benchmark') { return $script:ReleaseApi[''] }
             $path = $text.Substring('https://api.github.invalid/repos/fixture/benchmark/'.Length)
             if (-not $script:ReleaseApi.ContainsKey($path)) { throw "Unexpected API request: $path" }
             Write-Output -NoEnumerate $script:ReleaseApi[$path]
@@ -654,6 +659,7 @@ Describe 'Release benchmark event identities' {
             if ($text -eq 'https://api.github.invalid/repos/upstream/project/branches/main') {
                 return @{ commit = @{ sha = 'b' * 40 } }
             }
+            if ($text -ceq 'https://api.github.invalid/repos/fixture/benchmark') { return $script:ReleaseApi[''] }
             $path = $text.Substring('https://api.github.invalid/repos/fixture/benchmark/'.Length)
             Write-Output -NoEnumerate $script:ReleaseApi[$path]
         }
