@@ -347,7 +347,58 @@ function Get-SquadDispatchEvidence {
     $evidence.ToArray()
 }
 
+function Get-ConnectorWrapperCommandCount {
+    param([AllowEmptyString()][string]$Command)
+
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($Command, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        Write-Warning 'Connector execution evidence cannot parse this shell command; no wrapper invocation is established.'
+        return 0
+    }
+    $count = 0
+    foreach ($node in $ast.FindAll({ param($candidate) $candidate -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+        $deferred = $false
+        for ($parent = $node.Parent; $null -ne $parent; $parent = $parent.Parent) {
+            if ($parent -is [System.Management.Automation.Language.FunctionDefinitionAst]) { $deferred = $true; break }
+            if ($parent -is [System.Management.Automation.Language.ScriptBlockExpressionAst] -and
+                ($parent.Parent -isnot [System.Management.Automation.Language.CommandAst] -or
+                -not [object]::ReferenceEquals($parent.Parent.CommandElements[0], $parent) -or
+                $parent.Parent.InvocationOperator -notin @(
+                    [System.Management.Automation.Language.TokenKind]::Ampersand,
+                    [System.Management.Automation.Language.TokenKind]::Dot
+                ))) { $deferred = $true; break }
+        }
+        if ($deferred) { continue }
+        $elements = @($node.CommandElements)
+        $name = ([string]$node.GetCommandName()).Replace('\', '/').Split('/')[-1]
+        if ($name -ieq 'Invoke-SquadConnectorDispatch.ps1') { $count++; continue }
+        if ($name -notin @('pwsh', 'pwsh.exe', 'powershell', 'powershell.exe')) { continue }
+        for ($i = 1; $i -lt $elements.Count; $i++) {
+            $parameter = $elements[$i]
+            if ($parameter -isnot [System.Management.Automation.Language.CommandParameterAst] -or $parameter.ParameterName -notin @('File', 'Command')) { continue }
+            $argument = $parameter.Argument
+            if ($null -eq $argument -and $i + 1 -lt $elements.Count) { $argument = $elements[$i + 1] }
+            if ($argument -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                if ($parameter.ParameterName -ieq 'Command') { $count += Get-ConnectorWrapperCommandCount -Command $argument.Value }
+                elseif ($argument.Value.Replace('\', '/').Split('/')[-1] -ieq 'Invoke-SquadConnectorDispatch.ps1') { $count++ }
+            }
+            break
+        }
+    }
+    return $count
+}
+
 function Get-SquadConnectorExecutionEvidence {
+    <#
+    .SYNOPSIS
+        Joins native Connector children to explicit wrapper commands in their shell calls.
+    .DESCRIPTION
+        Counts literal command positions, including rejected calls without input arguments.
+        Comments and printed strings are not commands. This is not a shell interpreter:
+        dynamic command construction, runtime branches and completion require other evidence.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$TranscriptPath,
@@ -383,7 +434,7 @@ function Get-SquadConnectorExecutionEvidence {
             }
             if ($null -eq $arguments) { continue }
             $command = [string]$arguments.PSObject.Properties['command']?.Value
-            $invocations = [regex]::Matches($command, '(?i)(?:^|[\\/\s"''])Invoke-SquadConnectorDispatch\.ps1["'']?\s+-Input(?:Path|Json)\b').Count
+            $invocations = Get-ConnectorWrapperCommandCount -Command $command
             if ($invocations -eq 0) { continue }
             $callId = [string]$data.PSObject.Properties['toolCallId']?.Value
             if ($callId -and -not $calls.ContainsKey($callId)) { $calls.Add($callId, $invocations) }

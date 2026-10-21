@@ -50,7 +50,7 @@ State what the Scribe should find after writing: the number of history entries t
 
 ### 1.8 Ledger Command (Every Payload That Appends to `history/`)
 
-When the coordinator has a shell with `pwsh` 7+, supply `ledgerCommand`: the exact `-Write` command with the installed squad skill's absolute script path, as in the YAML below — on initialization and roster refresh too, which append the Scribe's orchestration block. The Scribe runs it verbatim as its last write and never hand-writes `consumption.md` rows or the two `currentRun` totals while it is supplied.
+When the coordinator has a shell with `pwsh` 7+, supply `ledgerCommand`: the exact `-Write` command with the installed squad skill's absolute script path, as in the YAML below — on initialization and roster refresh too, which append the Scribe's orchestration block. The Scribe runs it verbatim as its last write and never hand-writes `consumption.md` rows or the two `currentRun` totals while it is supplied. Resolve Scribe write model evidence separately from coordinator overhead.
 
 ## 2. Per-Dispatch Data (Volatile — Fill Every Turn)
 

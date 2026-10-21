@@ -881,9 +881,22 @@ description: "Append-only dispatch history for a single squad agent"
 }
 
 Describe 'Connector member-aware attribution and legacy missing-member behavior' {
+    BeforeAll {
+        function Initialize-ConnectorAttributionManifest {
+            param([string]$Root, [string[]]$Roles)
+            $example = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath '..', 'docs', 'templates', 'connector-example', 'manifest.1.1.json'
+            $manifest = Get-Content -LiteralPath $example -Raw | ConvertFrom-Json -AsHashtable
+            $manifest.roles = $Roles
+            $path = Join-Path $Root 'docs/templates/connector-example/manifest.1.1.json'
+            [void][System.IO.Directory]::CreateDirectory((Split-Path $path -Parent))
+            $manifest | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $path
+        }
+    }
+
     It 'keeps two Squad Connector members distinct in Attribution by (agent, Member Name)' {
         $root = Join-Path $TestDrive 'connector-distinct-members'
         Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Initialize-ConnectorAttributionManifest -Root $root -Roles @('gcp')
         Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
 | gcp | GCP Assessor | Squad Connector | — | — | runSubagent / task | default | gcp/assessments/ |
 | gcp | GCP Reviewer | Squad Connector | — | — | runSubagent / task | default | gcp/reviews/ |
@@ -909,6 +922,9 @@ description: "Append-only dispatch history for a single squad agent"
 * Deliverable: `research/2026-09-27-fixture-topic.md`
 * Outcome: Assessed architecture.
 * Member Name: GCP Assessor
+* External provenance: connector=acme-delivery-orchestrator-v3; binding=gcp-assessor; endpoint=orchestrator; mode=add; target=role:gcp/GCP Assessor
+* Verification: external, unverified
+* External-unmetered: connector=acme-delivery-orchestrator-v3
 
 #### Consumption
 
@@ -934,6 +950,9 @@ description: "Append-only dispatch history for a single squad agent"
 * Deliverable: `research/2026-09-27-fixture-topic.md`
 * Outcome: Reviewed architecture.
 * Member Name: GCP Reviewer
+* External provenance: connector=acme-delivery-orchestrator-v3; binding=gcp-reviewer; endpoint=orchestrator; mode=add; target=role:gcp/GCP Reviewer
+* Verification: external, unverified
+* External-unmetered: connector=acme-delivery-orchestrator-v3
 
 #### Consumption
 
@@ -987,6 +1006,9 @@ description: "Append-only dispatch history for a single squad agent"
 * Request: Produce a connector note.
 * Deliverable: `research/2026-09-27-fixture-topic.md`
 * Outcome: Produced a connector note.
+* External provenance: connector=legacy-agent; binding=legacy-1.0; endpoint=agent; mode=replace; target=role:gcp
+* Verification: external, unverified
+* External-unmetered: connector=legacy-agent
 
 #### Consumption
 
@@ -1066,6 +1088,7 @@ description: "Append-only dispatch history for a single squad agent"
         foreach ($variant in @('gamma-first', 'delta-first')) {
             $root = Join-Path $TestDrive "connector-deterministic-tier-$variant"
             Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+            Initialize-ConnectorAttributionManifest -Root $root -Roles @('developer')
             $teamPath = Join-Path $root 'team.md'
             $team = Get-Content -LiteralPath $teamPath -Raw
             $developerRows = if ($variant -eq 'gamma-first') {
@@ -1103,6 +1126,9 @@ description: "Append-only dispatch history for a single squad agent"
 * Deliverable: `changes/delta-note.md`
 * Outcome: Delivered a bounded developer note.
 * Member Name: Partner Developer
+* External provenance: connector=acme-delivery-orchestrator-v3; binding=developer-replace-delta; endpoint=orchestrator; mode=replace; target=role:developer/Delta
+* Verification: external, unverified
+* External-unmetered: connector=acme-delivery-orchestrator-v3
 
 #### Consumption
 
@@ -1417,6 +1443,101 @@ Describe 'CONN-32 production connector ledger regeneration after confirmed bindi
             (Invoke-Ledger -SquadRoot $fixture.Root @options).ExitCode | Should -Be 1
         }
         @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-36 rejects missing <Marker> for <RoleMode> history without changing persisted files' -ForEach @(
+        @{ Marker = 'External provenance'; RoleMode = 'replace' },
+        @{ Marker = 'Verification'; RoleMode = 'replace' },
+        @{ Marker = 'External-unmetered'; RoleMode = 'replace' },
+        @{ Marker = 'External provenance'; RoleMode = 'add' },
+        @{ Marker = 'Verification'; RoleMode = 'add' },
+        @{ Marker = 'External-unmetered'; RoleMode = 'add' },
+        @{ Marker = 'External provenance'; RoleMode = 'legacy' },
+        @{ Marker = 'Verification'; RoleMode = 'legacy' },
+        @{ Marker = 'External-unmetered'; RoleMode = 'legacy' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot -RoleMode $(if ($RoleMode -eq 'add') { 'add' } else { 'replace' })
+        if ($RoleMode -eq 'legacy') {
+            Change-LedgerBinding $fixture
+            $legacy = [System.IO.File]::ReadAllText($fixture.HistoryPath).Replace('binding=external-research', 'binding=legacy-1.0')
+            [System.IO.File]::WriteAllText($fixture.HistoryPath, $legacy)
+        }
+        $positive = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $positive.ExitCode | Should -Be 0 -Because $positive.Output
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath) -replace "(?m)^\* ${Marker}:[^\r\n]*\r?\n", ''
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $history)
+        (Get-SquadStateModel -SquadRoot $fixture.Root).ConnectorHistoryIssues.Count | Should -BeGreaterThan 0
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match ([regex]::Escape($Marker))
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-36 rejects an empty <Marker> value rather than falling back to the roster' -ForEach @(
+        @{ Marker = 'External provenance' }, @{ Marker = 'Verification' }, @{ Marker = 'External-unmetered' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath) -replace "(?m)^(\* ${Marker}:)[^\r\n]*", '$1   '
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $history)
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+        }
+    }
+
+    It 'CONN-36 rejects missing provenance after <RoleMode> <Change> without losing valid retired identity' -ForEach @(
+        @{ RoleMode = 'replace'; Change = 'unbind' }, @{ RoleMode = 'replace'; Change = 'rebind' },
+        @{ RoleMode = 'add'; Change = 'unbind' }, @{ RoleMode = 'add'; Change = 'rebind' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot -RoleMode $RoleMode
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        Save-LedgerRetirement $fixture
+        Change-LedgerBinding $fixture $Change
+        $positive = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $positive.ExitCode | Should -Be 0 -Because $positive.Output
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath) -replace '(?m)^\* External provenance:[^\r\n]*\r?\n', ''
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $history)
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'External provenance'
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-36 validates required metadata even when its consumption block is missing' {
+        $fixture = New-ConnectorLedgerRoot
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath) -replace '(?m)^\* External provenance:[^\r\n]*\r?\n', ''
+        $history = $history -replace '(?s)\r?\n#### Consumption.*', ''
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $history)
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'External provenance'
+        }
+    }
+
+    It 'CONN-36 never treats an appended valid entry as authority to ignore earlier missing provenance' {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        $original = [System.IO.File]::ReadAllText($fixture.HistoryPath)
+        $bad = $original -replace '(?m)^\* External provenance:[^\r\n]*\r?\n', ''
+        $newEntry = ($original -split '(?m)(?=^### )', 2)[1].Replace('2026-09-27T10:00:00Z', '2026-10-21T21:00:00Z')
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $bad + "`n" + $newEntry)
+        $before = (Get-FileHash -LiteralPath $fixture.HistoryPath).Hash
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'External provenance'
+        }
+        (Get-FileHash -LiteralPath $fixture.HistoryPath).Hash | Should -Be $before
     }
 
     It 'refuses <Mutation> retirement evidence without rewriting ledger or state' -ForEach @(

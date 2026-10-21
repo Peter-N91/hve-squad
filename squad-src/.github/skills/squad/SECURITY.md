@@ -220,6 +220,12 @@ a local principal able to rewrite or delete it can defeat those checks.
 Confirmed binding changes retain prior identities through Scribe-owned retirement
 decisions scoped to exact completed history entries. These decisions do not grant
 dispatch authority and, like the roster, rely on trusted local state writers.
+Every Connector entry requires nonempty provenance, verification and unmetered
+metadata, even when a synthetic roster member matches; every calculator mode
+rejects incomplete records without rewriting history, ledger or state. Appending
+a correction note does not supersede an invalid record. Scribe append-only and
+native-model attribution rules are procedural controls, not host-enforced
+immutability or proof of which model executed.
 
 ### Information Disclosure
 

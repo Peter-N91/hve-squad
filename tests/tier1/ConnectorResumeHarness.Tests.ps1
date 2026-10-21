@@ -154,4 +154,35 @@ Describe 'CONN-28 connector resume live harness' {
         $evidence.Count | Should -Be 1
         $evidence[0].WrapperCallCount | Should -Be 2
     }
+
+    It 'CONN-38 counts <Count> executable wrapper commands for <Case>' -ForEach @(
+        @{ Case = 'a printed single-quoted command'; Command = "Write-Output 'Invoke-SquadConnectorDispatch.ps1 -InputJson example'"; Count = 0 },
+        @{ Case = 'a printed double-quoted command'; Command = 'Write-Output "Invoke-SquadConnectorDispatch.ps1 -InputPath example"'; Count = 0 },
+        @{ Case = 'a line comment'; Command = '# Invoke-SquadConnectorDispatch.ps1 -InputPath input.json'; Count = 0 },
+        @{ Case = 'a block comment'; Command = '<# & Invoke-SquadConnectorDispatch.ps1 -InputJson example #>'; Count = 0 },
+        @{ Case = 'a script read carrying an input-like argument'; Command = 'Get-Content scripts\Invoke-SquadConnectorDispatch.ps1 -InputPath input.json'; Count = 0 },
+        @{ Case = 'an uninvoked script block'; Command = '$unused = { & scripts\Invoke-SquadConnectorDispatch.ps1 -InputPath input.json }'; Count = 0 },
+        @{ Case = 'a script block passed as data to an invoked printer'; Command = '& Write-Output { & scripts\Invoke-SquadConnectorDispatch.ps1 -InputPath input.json }'; Count = 0 },
+        @{ Case = 'an uninvoked function'; Command = 'function Unused { & scripts\Invoke-SquadConnectorDispatch.ps1 -InputPath input.json }'; Count = 0 },
+        @{ Case = 'a quoted direct invocation'; Command = '& "scripts\Invoke-SquadConnectorDispatch.ps1" -InputJson $j'; Count = 1 },
+        @{ Case = 'a bare direct invocation'; Command = '.\scripts\Invoke-SquadConnectorDispatch.ps1 -InputJson $j'; Count = 1 },
+        @{ Case = 'a rejected direct invocation without inputs'; Command = '& scripts\Invoke-SquadConnectorDispatch.ps1'; Count = 1 },
+        @{ Case = 'a PowerShell file invocation'; Command = 'pwsh -NoProfile -File "scripts\Invoke-SquadConnectorDispatch.ps1" -InputPath input.json'; Count = 1 },
+        @{ Case = 'a rejected PowerShell file invocation without inputs'; Command = 'pwsh -File scripts\Invoke-SquadConnectorDispatch.ps1'; Count = 1 },
+        @{ Case = 'a PowerShell command invocation'; Command = 'pwsh -Command "& scripts\Invoke-SquadConnectorDispatch.ps1 -InputPath input.json"'; Count = 1 },
+        @{ Case = 'a PowerShell command printing an example'; Command = 'pwsh -Command "Write-Output ''Invoke-SquadConnectorDispatch.ps1 -InputPath input.json''"'; Count = 0 },
+        @{ Case = 'an immediately invoked script block'; Command = '& { & scripts\Invoke-SquadConnectorDispatch.ps1 -InputPath input.json }'; Count = 1 },
+        @{ Case = 'a different script receiving the wrapper name'; Command = 'pwsh -File Other.ps1 "Invoke-SquadConnectorDispatch.ps1" -InputPath input.json'; Count = 0 },
+        @{ Case = 'a comment after a real invocation'; Command = '& scripts\Invoke-SquadConnectorDispatch.ps1 -InputPath input.json # Invoke-SquadConnectorDispatch.ps1 -InputPath example'; Count = 1 },
+        @{ Case = 'a printed command beside two real calls'; Command = 'Write-Output "Invoke-SquadConnectorDispatch.ps1 -InputJson example"; & scripts\Invoke-SquadConnectorDispatch.ps1 -InputJson $a; pwsh -File scripts\Invoke-SquadConnectorDispatch.ps1 -InputJson $b'; Count = 2 }
+    ) {
+        $transcript = Join-Path $script:Scratch ("syntax-" + [guid]::NewGuid().ToString('N') + '.jsonl')
+        @(
+            @{ type = 'subagent.started'; agentId = 'connector-child'; data = @{ agentName = 'Squad Connector'; toolCallId = 'dispatch-1' } }
+            @{ type = 'tool.execution_start'; agentId = 'connector-child'; data = @{ toolName = 'powershell'; toolCallId = 'command-1'; arguments = @{ command = $Command } } }
+        ) | ForEach-Object { $_ | ConvertTo-Json -Depth 8 -Compress } | Set-Content -LiteralPath $transcript
+        $evidence = @(Get-SquadConnectorExecutionEvidence -TranscriptPath $transcript)
+        $evidence.Count | Should -Be 1
+        $evidence[0].WrapperCallCount | Should -Be $Count
+    }
 }

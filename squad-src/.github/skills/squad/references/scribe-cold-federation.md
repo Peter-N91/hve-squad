@@ -12,6 +12,15 @@ metadata:
 
 Read this file only when the turn's payload is one of: **promotion** (Payload-to-Step Map Step 10), **expansion** (Step 11), a confirmed **federation-initialization** payload, or a **federation autopilot-run summary** payload written at the federation root. An ordinary single-squad turn, including one running inside an already-federated sub-squad, never needs this file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
 
+For promotion and expansion, including the new sub-squad's scoped Init, apply
+Consumption Accounting to the Scribe's own state-write dispatch: prefer its
+reported model, otherwise read its agent pin; never substitute the coordinator's session model.
+Reject a payload that prescribes a lower attribution rung contrary to that evidence,
+before any state write. Coordinator overhead may use a different model:
+record separate dated orchestration entries with one block each, aggregated in the
+existing ledger row. Relocation preserves every old block; it is not permission to
+reprice historical work using today's model.
+
 ### Federation Promotion
 
 Adopt an existing single squad into a federation as its first sub-squad, per *Promotion: Single Squad → Federation* (`squad-federation.instructions.md`). This is the only write that relocates existing state. Perform it as a relocation, never a rebuild, and never before the coordinator confirms the user's go-ahead — or, for an unattended Watch Mode bootstrap, before it confirms the event passed its opt-in and authorization gates.

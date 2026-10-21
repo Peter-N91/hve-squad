@@ -736,6 +736,13 @@ function Resolve-RoleForAgentLocal {
     )
 
     $member = ([string]$MemberName).Trim()
+    if ($AgentName -ceq 'Squad Connector' -and [string]::IsNullOrWhiteSpace($ExternalProvenance)) {
+        return [pscustomobject]@{
+            Index = $null; Role = $AgentName; ClassificationRole = $AgentName
+            MemberName = $member; Tier = ''; AggregateKey = "$AgentName`n$member"
+            Status = 'connector-missing-provenance'
+        }
+    }
     $matches = [System.Collections.Generic.List[pscustomobject]]::new()
     for ($i = 0; $i -lt $Roster.Count; $i++) {
         if ($AgentName -in $Roster[$i].AgentNames) { $matches.Add([pscustomobject]@{ Index = $i; Row = $Roster[$i] }) }
@@ -2615,13 +2622,13 @@ $retirementModel = [pscustomobject]@{ Retirements = @(); Issues = @() }
 $connectorIdentityIssues = @()
 $activeConnectorBindings = @()
 $connectorHistory = @($historyFiles | Where-Object BaseName -CEQ 'Squad Connector')
-$hasConnectorProvenance = $connectorHistory.Count -gt 0 -and
-    [System.IO.File]::ReadAllText($connectorHistory[0].FullName) -match '(?m)^[ \t]*\*[ \t]+External provenance:'
-if ($hasConnectorProvenance -or $decisionsContent -match '(?m)^## Connector Binding Retirement') {
+$hasConnectorHistory = $connectorHistory.Count -gt 0 -and
+    [System.IO.File]::ReadAllText($connectorHistory[0].FullName) -match '(?m)^###[ \t]+\S'
+if ($hasConnectorHistory -or $decisionsContent -match '(?m)^## Connector Binding Retirement') {
     . (Join-Path $PSScriptRoot 'Resolve-SquadConnectorHistory.ps1')
     $retirementModel = Get-SquadConnectorRetirementModel -Content $decisionsContent -TeamPath $teamPath -ProjectRoot $projectRoot
     $connectorIdentityIssues = @($retirementModel.Issues)
-    if ($hasConnectorProvenance) {
+    if ($hasConnectorHistory) {
         $activeModel = Get-SquadConnectorBindingIdentityModel -TeamContent $teamContent -TeamPath $teamPath -ProjectRoot $projectRoot
         $activeConnectorBindings = @($activeModel.Bindings)
         $connectorIdentityIssues += @($activeModel.Issues)
@@ -2685,8 +2692,20 @@ foreach ($file in $historyFiles) {
     $blocks = @(Get-ConsumptionBlockLocal -Content $content -SourceName $file.Name)
     $fileEntries = if ($agentName -eq 'Squad Scribe') { @() } else { @(Get-HistoryEntryRecordsLocal -Content $content -AgentName $agentName) }
     if ($agentName -ceq 'Squad Connector') {
-        foreach ($entry in @($fileEntries | Where-Object MalformedExternalMarkers)) {
-            $attributionIssues.Add("history/$($file.Name) entry '$($entry.Title)' has malformed connector metadata; External provenance, Verification, and External-unmetered must use the literal '* ' bullet prefix.")
+        foreach ($entry in $fileEntries) {
+            $requiredMetadata = [ordered]@{
+                ExternalProvenance = 'External provenance'
+                Verification = 'Verification'
+                ExternalUnmeteredConnector = 'External-unmetered'
+            }
+            foreach ($field in $requiredMetadata.GetEnumerator()) {
+                if ([string]::IsNullOrWhiteSpace([string]$entry.($field.Key))) {
+                    $attributionIssues.Add("history/$($file.Name) entry '$($entry.Title)' is missing required connector metadata: $($field.Value).")
+                }
+            }
+            if ($entry.MalformedExternalMarkers) {
+                $attributionIssues.Add("history/$($file.Name) entry '$($entry.Title)' has malformed connector metadata; External provenance, Verification, and External-unmetered must use the literal '* ' bullet prefix.")
+            }
         }
     }
     $enumerationLines.Add("$($file.Name) — $($blocks.Count) block(s) — identities: $identityLabel")

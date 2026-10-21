@@ -139,6 +139,9 @@ fields and `taskId`, omitting optional `task`, `allowedOutputs`, `deadline`,
 and `retryCap`; the wrapper reloads those from the hash-pinned request.
 Never paraphrase pending task text, reconstruct output objects, or reserialize
 dates. Explicitly supplied optional fields must still match exactly.
+For first publication, `allowedOutputs` is always an array, even for one slot;
+a singleton object is invalid. Preserve it with `@(...)` when building PowerShell
+JSON, rather than enumerating its only element through the pipeline.
 
 Automatic selection is not synchronous transport. An external `awaiting`
 result holds the current stage; it is not completion, permission to advance,
@@ -236,6 +239,17 @@ Only wrapper-validated `artifacts` and `outputs[].artifacts` become
 `* Deliverable:` paths. Authorized source changes remain separate outcome or
 `* Source changes:` references; source files, plans, and mailbox paths do not
 become report-root deliverables. The Scribe writes these fields, not the endpoint.
+
+Every entry needs all three nonempty metadata bullets, including legacy and
+retired entries; a matching roster member cannot replace missing provenance.
+Validate the complete entry before its first append: Member Name, literal
+metadata values, report paths and consumption belong in the same write.
+Once persisted, even earlier in the same hand-off, the entry is immutable.
+The coordinator may request an appended correction note referencing that entry,
+never an in-place repair, a repeated Connector execution, or duplicated consumption.
+Malformed Connector metadata remains a blocker: a note does not supersede the malformed record
+or make the calculator accept it. Report the unresolved audit error for an
+operator-approved recovery; this contract defines no history-supersession format.
 
 Consumption describes the native Connector dispatch, never the external endpoint
 or replaced internal role. Apply the normal Model Attribution ladder: an actual

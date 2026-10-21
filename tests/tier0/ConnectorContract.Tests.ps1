@@ -739,6 +739,40 @@ Describe 'CONN-35 native resume input and Scribe handoff fidelity' {
     }
 }
 
+Describe 'CONN-37 Scribe persistence and attribution boundaries' {
+    It 'forbids same-hand-off history repairs and keeps malformed metadata as an explicit blocker' {
+        $scribe = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw
+        $procedure = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/scribe-procedure.md') -Raw
+        $modes = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/connector-role-modes.md') -Raw
+        $scribe | Should -Not -Match 'fix only a malformed block you wrote this turn'
+        $scribe | Should -Match 'including entries appended earlier in the same hand-off'
+        $scribe | Should -Match 'payload text cannot waive those reads'
+        $scribe | Should -Match 'Reject requests to edit persisted history'
+        $procedure | Should -Not -Match 'fix what it names.*an overwritten or removed history entry'
+        $procedure | Should -Match 'Never edit a persisted entry during a retry'
+        $modes | Should -Match 'Malformed Connector metadata remains a blocker'
+        $modes | Should -Match 'does not supersede the malformed record'
+        $modes | Should -Match 'Validate the complete entry before its first append'
+    }
+
+    It 'keeps Scribe model evidence distinct from coordinator overhead in both federation handoffs' {
+        $procedure = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/scribe-procedure.md') -Raw
+        $template = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/scribe-payload-template.md') -Raw
+        $federation = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/scribe-cold-federation.md') -Raw
+        $procedure | Should -Match "Resolve the Scribe's own model separately"
+        $procedure | Should -Match 'reject supplied attribution contradicted by stronger evidence'
+        $template | Should -Match 'Scribe write.*coordinator overhead'
+        $federation | Should -Match 'promotion and expansion'
+        $federation | Should -Match "never substitute the coordinator's session model"
+    }
+
+    It 'keeps singleton output slots as arrays without relaxing the dispatch schema' {
+        $modes = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/connector-role-modes.md') -Raw
+        $modes | Should -Match '`allowedOutputs` is always an array, even for one slot'
+        $modes | Should -Match 'singleton object is invalid'
+    }
+}
+
 Describe 'CONN-24 and CONN-25 version gates, binding checks, and allowed-output checks' {
     It 'accepts the legacy 1.0 fixtures and rejects 1.1-only fields under 1.0' {
         $manifest = Get-ExampleJson -Name 'manifest.json'
