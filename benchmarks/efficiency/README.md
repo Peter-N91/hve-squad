@@ -4,8 +4,8 @@
 
 `current.json` selects one immutable `records/<series-id>.json` by SHA-256.
 This is **recorded observational evidence, not an approved quality baseline**.
-The three original pristine observations include real functional, state and
-review-deliverable failures. A score must never conceal those failures.
+The selected v2 main observations pass all functional probes but include real
+state and review-deliverable failures. A score must never conceal those failures.
 Private logs, generated documents, judge explanations and session identifiers
 are not committed. File hashes provide integrity, not authenticated execution.
 
@@ -277,8 +277,10 @@ source hash, protocol and dependency-install identities. Their verifier hash was
 derived from the measured Git revision, not observed executing-file telemetry;
 they also lack a native converter digest. They remain readable for descriptive
 historical analysis, but current snapshot validation explicitly rejects them as
-`stale-record:unbound-execution-protocol`. The currently selected v1 baseline is
-therefore stale under this protocol; neither it nor its pointer is rewritten.
+`stale-record:unbound-execution-protocol`. The selected baseline now uses fresh v2
+observations from main revision `59880d5c0417e99a7fe6ab5f12670f8bd9b7401b`.
+Historical v1 records remain unchanged; their pointer was replaced by an explicit
+selection of the new observations, not by relabeling old evidence.
 
 New exports use `benchmark-series-v2`. Live compatibility binds the native
 converter actually loaded from the selected source checkout
