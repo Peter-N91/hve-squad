@@ -87,24 +87,13 @@ copilot</code></pre>
       <h2>VS Code</h2>
       <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. Choisissez ci-dessous l'installation via le plugin ou l'installation du package dans le dépôt.</p>
 
-      <h3>Option 1 — Installer via le plugin</h3>
-      <h4>Depuis l'interface de VS Code</h4>
-      <p>Ouvrez Copilot Chat, sélectionnez <strong>Add Customizations</strong> dans le menu de saisie du chat, puis choisissez <strong>Plugins</strong> dans Browse customizations. Recherchez avec <code>@type:plugin</code>, trouvez <strong>hve-core — hve-squad-plugin</strong> et <strong>hve-squad — hve-squad-plugin</strong>, puis installez les deux entrées.</p>
-      <figure class="image-figure">
-        <img src="../assets/vscode-plugin-install.png" alt="Vue Browse customizations de VS Code affichant les entrées de plugin hve-core et hve-squad" />
-        <figcaption>Installez à la fois <strong>hve-core — hve-squad-plugin</strong> et <strong>hve-squad — hve-squad-plugin</strong> depuis la vue Plugins de VS Code.</figcaption>
-      </figure>
-
-      <h4>Depuis le terminal intégré</h4>
+      <h3>Option 1 — Installer via le plugin depuis le terminal intégré</h3>
       <p>Ouvrez le terminal intégré de VS Code avec <strong>Terminal → Nouveau terminal</strong>, placez-vous à la racine du dépôt de votre projet, puis collez :</p>
       <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
 copilot plugin install hve-squad@hve-squad-plugin
 copilot plugin install hve-squad-hve-core@hve-squad-plugin
 copilot</code></pre>
       <p>Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>. Après avoir vérifié l'installation, passez à l'initialisation ci-dessous.</p>
-      <h4>Vérifier la disponibilité des agents</h4>
-      <p>Demandez au coordinateur d'exécuter <code>squad-doctor</code> avant de déléguer le travail. Certains domaines HVE Core peuvent manquer dans la distribution plugin. Si le rapport signale des domaines absents, appliquez la solution documentée en installant le package complet dans votre dépôt :</p>
-      <pre><code>apm install github/microsoft/hve-core --target copilot</code></pre>
       <p>N'installez pas le plugin officiel <code>hve-core</code> à côté de <code>hve-squad-hve-core</code>. Pour les mises à jour, réinstallez l'entrée compagnon au lieu d'utiliser la commande de mise à jour du plugin. Suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">guide d'installation et de mise à jour pour CLI</a>.</p>
 
       <h3>Option 2 — Installer le package dans le dépôt avec APM</h3>
