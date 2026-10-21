@@ -116,6 +116,7 @@ These are installed-package source contracts, not runtime-model or benchmark cla
 | RQ-01 | BRD/PRD or requirements authoring/review conditionally reaches the delivered guide through both coordinator allowlist and index; startup and code-only review do not load it | `squad-coordinator.agent.md`, Skill Reference Contract; `references/00-index.md`; `references/requirements-quality.md` |
 | RQ-02 | Owning authors activate canonical requirements-author with actual template/taxonomy/phase, authoritative inputs and final paths; the existing self-check reconciles configured IDs, per-item links, family denominators and testable evidence, preserving supplied business facts and explicit unknowns | `references/requirements-quality.md`, Author dispatch |
 | RQ-03 | Read-only reviewers return both complete canonical payloads; coordinator transport preserves the actual response with separate attribution under the trusted reviewer root, verifies capture and actual history/consumption before tester dispatch, and refuses missing evidence; tester owns only its independent closing review | `squad-coordinator.agent.md`, Dispatch Discipline; `references/requirements-quality.md`, Review evidence barrier |
+| RQ-04 | The seeded intake-validator capture root is `.copilot-tracking/reviews/`; before dispatch, empty, no-root and protected-state destinations stop with escalation, never fallback or silent roster editing | `references/seed-templates.md`; `references/requirements-quality.md`, Review evidence barrier |
 
 ### Universal deterministic handoffs
 
@@ -132,6 +133,8 @@ Markdown histories, decisions, ledger, and state remain the compatibility contra
 | WRT-06 | Rate seeding, checking, and reseeding work in all routing modes and retain operator rows and calibration rules | `Initialize-SquadConsumptionRates.ps1` |
 | WRT-07 | Coordinators execute ordinary handoffs directly and serialize them with cold Scribe operations; unsupported operations retain the legacy contract and completion barriers | Coordinator agents; `economy-scribe.md` |
 | WRT-08 | The Scribe definition is less than 3,000 UTF-8 bytes and does not eagerly load the legacy procedure, schemas, or payload template | `squad-scribe.agent.md` |
+| WRT-09 | Consumption rejects auto and tier labels as actual models, without writes; label-valued session preferences remain legal metadata and derive unknown/unresolved usage when no concrete pin is available | `Write-SquadHandoff.ps1`, Test-Consumption and Get-DerivedConsumption |
+| WRT-10 | Fresh initialization accepts only absent or empty-directory-only roots, refuses file/link content, defers nonrecursive scaffold removal until publication, and preserves member no-root sentinels | `Initialize-Squad.ps1`; `references/scribe-init.md`, Run and stop |
 
 | ID | Assertion | Rationale |
 |---|---|---|

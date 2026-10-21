@@ -453,6 +453,7 @@ function Test-Consumption {
         }
     }
     if ($problems.Count -gt $before) { return $null }
+    if (Test-ModelLabel $map['model']) { $problems.Add("$Where.model '$($map['model'])' is a routing label, not an actual model; use unknown with model_source unresolved when unreported.") }
     if ($map['model_source'] -notin $ModelSources) { $problems.Add("$Where.model_source '$($map['model_source'])' is not one of: $($ModelSources -join ', ').") }
     if ($map['model_tier'] -notin $ModelTiers) { $problems.Add("$Where.model_tier must be one of: $($ModelTiers -join ', ').") }
     if ($map['basis'] -notin $Bases) { $problems.Add("$Where.basis must be exactly one of: $($Bases -join ', ').") }
@@ -562,6 +563,12 @@ function ConvertFrom-ModelPin {
     # 'Claude Haiku 4.5 (copilot)' and 'claude-haiku-4.5' both -> 'claude-haiku-4.5'; only a trailing vendor suffix is dropped, so '(fast mode)' stays part of the name.
     param([string]$Text)
     return (($Text.Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() -replace '\s+', '-').ToLowerInvariant()
+}
+
+function Test-ModelLabel {
+    # auto and the tier names are routing labels, never actual models; '(fast mode)' style names do not normalize to them.
+    param([string]$Text)
+    return (ConvertFrom-ModelPin $Text) -in @('auto', 'fast', 'default', 'extended')
 }
 
 function Find-AgentPin {
@@ -720,6 +727,8 @@ function Get-DerivedConsumption {
     }
     $floors = Get-EstimatorFloors $class
     if ($null -eq $floors) { $needsScribe.Add("$Where was omitted and the $class dispatch-size estimator row cannot be read from consumption-rates.md or its template; the Scribe composes the block."); return $null }
+    if ($SessionModel -and (Test-ModelLabel $SessionModel)) { $SessionModel = '' }
+    if ($PassedModel -and (Test-ModelLabel $PassedModel)) { $problems.Add("$Where passedModel '$PassedModel' is a routing label, not an actual model."); return $null }
     if ($Orchestration) {
         if ($SessionModel) { $model = $SessionModel; $source = 'session-inherited' } else { $model = 'unknown'; $source = 'unresolved' }
     }
@@ -727,7 +736,10 @@ function Get-DerivedConsumption {
     else {
         $pin = Find-AgentPin $Agent
         if (-not $pin.Found) { $needsScribe.Add("$Where was omitted and no agent file named '$Agent' was found to read its model pin; the Scribe composes the block."); return $null }
-        if ($pin.Models.Count -gt 0) { $model = $pin.Models[0]; $source = 'agent-pinned' }
+        if ($pin.Models.Count -gt 0) {
+            if (Test-ModelLabel $pin.Models[0]) { $problems.Add("$Where pin '$($pin.Models[0])' of '$Agent' is a routing label, not an actual model."); return $null }
+            $model = $pin.Models[0]; $source = 'agent-pinned'
+        }
         elseif ($SessionModel) { $model = $SessionModel; $source = 'session-inherited' }
         else { $model = 'unknown'; $source = 'unresolved' }
     }

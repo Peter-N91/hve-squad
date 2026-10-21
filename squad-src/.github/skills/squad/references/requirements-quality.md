@@ -24,6 +24,8 @@ Preserve draft status and failed findings. Apply existing gates and bounded reme
 
 ## Review evidence barrier
 
+Before dispatching a read-only reviewer, resolve its roster Deliverable Root and stop with an escalation, before any spend, if it is empty, `—`, `(squad state)` or a protected squad-state destination; never fall back to another root or edit the roster silently.
+
 Dispatch the existing read-only domain reviewers with authoritative sources, actual final draft paths, active template/taxonomy and the appropriate document-specific review phase. Forward the floor's read-only BRD/PRD exception in each brief: return complete payloads without writing; the verified, attributed coordinator capture plus history/consumption satisfies that dispatch's artifact gate. Require their whole actual response, including both complete canonical payloads (`BRD_STANDARD_FINDINGS_V1` and `BRD_QUALITY_REPORT_V1` for BRD, or `PRD_STANDARD_FINDINGS_V1` and `PRD_QUALITY_REPORT_V1` for PRD). These are canonical response identifiers, not a replacement schema. Reviewers return findings; do not ask them to write reports or squad state.
 
 For each actual return, perform this sequence before the dependent closing tester dispatch:
