@@ -9,6 +9,7 @@ export default function (config) {
   config.addPassthroughCopy({ "docs/assets/fonts": "fonts" });
   config.addPassthroughCopy({ "docs/assets/logo.svg": "assets/logo.svg" });
   config.addPassthroughCopy({ "docs/assets/favicon.svg": "assets/favicon.svg" });
+  config.addPassthroughCopy({ "docs/assets/vscode-plugin-install.png": "assets/vscode-plugin-install.png" });
   config.addPassthroughCopy({ "docs/.nojekyll": ".nojekyll" });
   config.addPassthroughCopy({ "docs/assets/hve-squad-single-squad.mp4": "assets/hve-squad-single-squad.mp4" });
   config.addPassthroughCopy({ "docs/assets/hve-squad-federation.mp4": "assets/hve-squad-federation.mp4" });

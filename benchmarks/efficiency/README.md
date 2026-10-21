@@ -295,7 +295,18 @@ A human with release-dispatch permission can uncheck it to bypass only this
 gate. **Release Prep** explicitly passes `run_benchmark=true` and preserves
 candidate-only collection by not requesting refresh.
 The skipped gate and warning are recorded in the run summary;
-other release checks remain mandatory. Push-triggered releases cannot bypass it.
+other release checks remain mandatory. Push-triggered releases cannot use that
+manual bypass.
+
+The legacy stored-comparison bootstrap was bounded through **v0.18.1 inclusive**:
+when the frozen candidate's `apm.yml` declares a stable version no higher than
+0.18.1, a missing previous stable release or missing trusted base comparator
+could emit a warning and permit the legacy release gate. The original missing-baseline
+report remains unchanged; no benchmark approval is claimed. This exception
+never applies to standalone recorded comparisons or the current fresh collector:
+`COLLECTION_REQUIRED=true` disables it even for v0.18.1. It expires entirely
+from v0.18.2. Missing/incompatible evidence, candidate gaps, regressions and
+operational failures still block current collection.
 No post-publication benchmark trigger remains. Direct publication outside the
 Release workflow is not controlled by this gate.
 

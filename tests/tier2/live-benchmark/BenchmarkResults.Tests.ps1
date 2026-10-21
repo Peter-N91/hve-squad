@@ -569,18 +569,19 @@ Describe 'Pre-release benchmark gate' {
 Describe 'Release benchmark event identities' {
     BeforeAll {
         $WorkflowText = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/tier2-recorded-benchmark.yml'))
-        function Get-WorkflowRun([string]$Name) {
-            $Step = [regex]::Match($WorkflowText, '(?ms)^      - name: ' + [regex]::Escape($Name) + '\r?\n(.*?)(?=^      - name:|\z)').Groups[1].Value
+        function Get-WorkflowRun([string]$Name, [string]$Text = $WorkflowText) {
+            $Step = [regex]::Match($Text, '(?ms)^      - name: ' + [regex]::Escape($Name) + '\r?\n(.*?)(?=^      - name:|\z)').Groups[1].Value
             $Body = [regex]::Match($Step, '(?ms)^        run: \|\r?\n(.*)').Groups[1].Value
             if (-not $Body) { throw "Missing workflow script: $Name" }
             [scriptblock]::Create(($Body -replace '(?m)^          ', ''))
         }
         $ResolveRelease = Get-WorkflowRun 'Validate immutable event identities'
         $MissingBaseline = Get-WorkflowRun 'Compare or report missing baseline tooling'
+        $Bootstrap = Get-WorkflowRun 'Apply temporary release baseline bootstrap' ([IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/tier2-benchmark.yml')))
     }
     BeforeEach {
         $SavedEnvironment = @{}
-        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'SELECTED_BRANCH', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA')) {
+        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'SELECTED_BRANCH', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA', 'VERDICT', 'GITHUB_STEP_SUMMARY', 'COLLECTION_REQUIRED')) {
             $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
         }
         $env:GITHUB_REPOSITORY = 'fixture/benchmark'
@@ -590,6 +591,7 @@ Describe 'Release benchmark event identities' {
         $env:GH_TOKEN = 'fixture-only'
         $env:RELEASE_TAG = 'v2'
         $env:CANDIDATE_SHA = ''
+        $env:COLLECTION_REQUIRED = ''
         $env:SELECTED_BRANCH = 'feature/test'
         [IO.File]::WriteAllText($env:GITHUB_OUTPUT, '')
         $CurrentRelease = @{ id = 20; tag_name = 'v2'; draft = $false; prerelease = $false; published_at = '2026-10-20T00:00:00Z' }
@@ -748,6 +750,35 @@ Describe 'Release benchmark event identities' {
         $Result.exitCode | Should -Be 2
         $Result.reasons | Should -Contain 'previous-stable-release-unavailable'
         Should -Invoke pwsh -Times 0
+    }
+    It 'limits legacy bootstrap to missing release tooling through 0.18.1 and never waives fresh collection' -ForEach @(
+        @{ Version = '0.18.1'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; CollectionRequired = $true; Expected = '2' }
+        @{ Version = '0.18.0'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '0' }
+        @{ Version = '0.18.1'; Status = 'missing-baseline'; Reason = 'previous-stable-release-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '0' }
+        @{ Version = '0.18.2'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.19.0'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.18.1'; Status = 'stale-record'; Reason = 'unbound-execution-protocol'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.18.1'; Status = 'incompatible'; Reason = 'protocol'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.18.1'; Status = 'missing-candidate'; Reason = 'selection'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.18.1'; Status = 'regression'; Reason = 'quality'; InputVerdict = '3'; ReleaseCandidate = $true; Expected = '3' }
+        @{ Version = '0.18.1'; Status = 'operational-error'; Reason = 'failure'; InputVerdict = '1'; ReleaseCandidate = $true; Expected = '1' }
+        @{ Version = '0.18.1'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $false; Expected = '2' }
+    ) {
+        param([bool]$CollectionRequired = $false)
+        $env:RUNNER_TEMP = Join-Path $TestDrive ([guid]::NewGuid().ToString())
+        $directory = Join-Path $env:RUNNER_TEMP 'efficiency-report'
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        $path = Join-Path $directory 'report.json'
+        Write-TestJson $path @{ status = $Status; reasons = @($Reason); exitCode = [int]$InputVerdict }
+        $original = [IO.File]::ReadAllText($path)
+        $env:VERDICT = $InputVerdict
+        $env:COLLECTION_REQUIRED = if ($CollectionRequired) { 'true' } else { '' }
+        $env:CANDIDATE_SHA = if ($ReleaseCandidate) { 'a' * 40 } else { '' }
+        $env:GITHUB_STEP_SUMMARY = Join-Path $env:RUNNER_TEMP 'summary'
+        Mock git { $global:LASTEXITCODE = 0; "version: $Version" }
+        & $Bootstrap
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^verdict=$Expected\r?$"
+        [IO.File]::ReadAllText($path) | Should -BeExactly $original
     }
     It 'paginates published releases instead of silently missing an older baseline' {
         $script:ReleaseApi['releases?per_page=100&page=1'] = @(1..100 | ForEach-Object {
