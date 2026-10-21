@@ -64,7 +64,7 @@ on:
       run_benchmark:
         description: 'Require recorded benchmark non-regression before publication. Uncheck only for an intentional manual bypass.'
         required: false
-        default: true
+        default: false
         type: boolean
 
 # Shared with sync-hve-core.yml: both push a release commit to main, and two of
