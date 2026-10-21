@@ -10,6 +10,7 @@ param(
 )
 
 BeforeAll {
+    Set-StrictMode -Version Latest
     Import-Module (Join-Path $PSScriptRoot 'SquadPackage.psm1') -Force
     $model = Get-SquadPackageModel -PackageRoot $PackageRoot
     $script:CoachAgent = @($model.SquadAgents | Where-Object Name -eq 'squad-coach.agent.md')
@@ -182,10 +183,16 @@ Describe 'COACH-07 Deterministic source discovery' {
         $inventory = Get-CoachInventory -Fixture $fixture
         $inventory.schemaVersion | Should -Be 1
         $inventory.state.kind | Should -BeExactly 'none'
-        $inventory.entrypoints.metadata.name | Should -Contain 'Squad Future'
+        $agents = @($inventory.entrypoints | Where-Object kind -eq 'agent')
+        $agents | Should -HaveCount 1
+        $agents[0].metadata.name | Should -BeExactly 'Squad Future'
         @($inventory.sources | Where-Object kind -eq 'reference').Count | Should -BeGreaterThan 0
         $entrypointKind = if ($Layout -eq 'Plugin') { 'invocation' } else { 'prompt' }
-        @($inventory.entrypoints | Where-Object kind -eq $entrypointKind) | Should -HaveCount 1
+        $entrypoints = @($inventory.entrypoints | Where-Object kind -eq $entrypointKind)
+        $entrypoints | Should -HaveCount 1
+        if ($entrypointKind -eq 'prompt') {
+            $entrypoints[0].metadata.agent | Should -BeExactly 'Squad Future'
+        }
         if ($Layout -eq 'Apm') {
             Test-Path -LiteralPath (Join-Path $fixture.Repo '.github/prompts/squad') | Should -BeFalse
             $inventory.entrypoints.path | Should -Contain (Join-Path $fixture.Repo '.github/prompts/squad-future.prompt.md')
