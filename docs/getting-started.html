@@ -87,25 +87,13 @@ copilot</code></pre>
       <h2>VS Code</h2>
       <p>Open your project in VS Code with GitHub Copilot Chat enabled and authenticated. Choose either the plugin installation or the repository package route below.</p>
 
-      <h3>Option 1 — Install through the plugin</h3>
-      <h4>From the VS Code UI</h4>
-      <p>Open Copilot Chat, select <strong>Add Customizations</strong> from the chat input menu, then choose <strong>Plugins</strong> in Browse customizations. Search with <code>@type:plugin</code>, find <strong>hve-core — hve-squad-plugin</strong> and <strong>hve-squad — hve-squad-plugin</strong>, and install both entries.</p>
-      <figure class="image-figure">
-        <img src="assets/vscode-plugin-install.png" alt="VS Code Browse customizations view showing hve-core and hve-squad plugin entries" />
-        <figcaption>Install both <strong>hve-core — hve-squad-plugin</strong> and <strong>hve-squad — hve-squad-plugin</strong> from the VS Code Plugins view.</figcaption>
-      </figure>
-
-      <h4>From the integrated terminal</h4>
+      <h3>Option 1 — Install through the plugin from the integrated terminal</h3>
       <p>Open the VS Code integrated terminal with <strong>Terminal → New Terminal</strong>, change to the root of your project repository, and paste:</p>
       <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
 copilot plugin install hve-squad@hve-squad-plugin
 copilot plugin install hve-squad-hve-core@hve-squad-plugin
 copilot</code></pre>
       <p>In the agent picker, Squad Coordinator may be displayed as <code>hve-squad:squad-coordinator</code>. Continue with initialization below after checking the installation.</p>
-      <h4>Check agent availability</h4>
-      <p>Ask the coordinator to run <code>squad-doctor</code> before dispatching work. The plugin distribution can lack HVE Core domains. If the report identifies missing domains, use the documented full-package remedy in your repository:</p>
-      <pre><code>apm install github/microsoft/hve-core --target copilot</code></pre>
-      <p>Do not install the official <code>hve-core</code> plugin alongside <code>hve-squad-hve-core</code>. For updates, reinstall the companion entry rather than using plugin update on it. Follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">CLI installation and update guide</a>.</p>
 
       <h3>Option 2 — Install the package into the repository with APM</h3>
       <p>This route installs the full cast into the repository through APM.</p>
