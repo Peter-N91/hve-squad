@@ -4,7 +4,7 @@
 .SYNOPSIS
     Publishes a fresh squad tree from confirmed JSON, only after validation.
 .DESCRIPTION
-    Existing roots are refused, including partial initialization. Explicit roster
+    Roots containing files or links are refused, including partial initialization. Explicit roster
     refresh stays on the cold Scribe path. Payload strings are data, never commands.
 .PARAMETER PayloadPath
     JSON input described in references/scribe-init.md.
@@ -51,6 +51,21 @@ function Assert-UnlinkedPath {
     }
 }
 
+function Get-EmptyDirectoryTree {
+    param([string]$Path)
+    $Item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw "Linked path refused: $Path" }
+    if (-not $Item.PSIsContainer) { throw 'Squad root already exists; retry writes nothing. Use the cold path for explicit roster refresh.' }
+    $Directories = [System.Collections.Generic.List[string]]::new()
+    $Directories.Add($Item.FullName)
+    foreach ($Child in @(Get-ChildItem -LiteralPath $Path -Force)) {
+        if ($Child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw "Linked path refused: $($Child.FullName)" }
+        if (-not $Child.PSIsContainer) { throw 'Squad root already exists; retry writes nothing. Use the cold path for explicit roster refresh.' }
+        foreach ($Nested in (Get-EmptyDirectoryTree $Child.FullName)) { $Directories.Add($Nested) }
+    }
+    return $Directories
+}
+
 function Get-Seed {
     param([string]$Name, [string]$Heading, [string]$Language = 'markdown')
     $Text = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot "../references/$Name")) -replace '\r\n', "`n"
@@ -69,7 +84,7 @@ function Invoke-Helper {
 
 function Resolve-InitDeliverable {
     param([string]$Value, [string]$Relative, [string]$Repository)
-    if ($Value -eq '(squad state)') { return $Value }
+    if ($Value -ceq '(squad state)' -or $Value -ceq [string][char]0x2014) { return $Value }
     $Resolved = foreach ($Alternative in ($Value -split '\s+or\s+')) {
         $Label = [regex]::Match($Alternative, ' \((?:ADO|Jira)\)$').Value
         $Path = $Alternative.Substring(0, $Alternative.Length - $Label.Length).Trim().Trim('`') -replace '\\', '/'
@@ -179,7 +194,11 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Relative = [System.IO.Path]::GetRelativePath($Repository, $Root) -replace '\\', '/'
         if ($Relative -notmatch '^\.copilot-tracking/squad(?:/members/[A-Za-z0-9][A-Za-z0-9_-]*)?$') { throw 'squadRoot must be the single-squad root or one member root inside RepoRoot.' }
         Assert-UnlinkedPath $Root
-        if (Test-Path -LiteralPath $Root) { throw 'Squad root already exists; retry writes nothing. Use the cold path for explicit roster refresh.' }
+        $EmptyRoot = $false
+        if (Get-Item -LiteralPath $Root -Force -ErrorAction SilentlyContinue) {
+            $null = Get-EmptyDirectoryTree $Root
+            $EmptyRoot = $true
+        }
         $Mode = if ($Payload.Contains('mode')) { $Payload.mode } else { 'interactive' }
         if ($Mode -notin @('interactive', 'autonomous', 'autopilot')) { throw 'Invalid mode.' }
         $Routing = if ($Payload.Contains('modelRouting')) { $Payload.modelRouting } else { 'off' }
@@ -313,6 +332,12 @@ if ($MyInvocation.InvocationName -ne '.') {
         $WrittenTeam = [System.IO.File]::ReadAllText((Join-Path $Stage 'team.md'))
         if ($WrittenTeam -ne $Team -or @((Get-ChildItem -LiteralPath (Join-Path $Stage 'history') -File)).Count -ne 1) { throw 'Roster/history verification failed.' }
         Assert-UnlinkedPath $Root
+        if ($EmptyRoot) {
+            # Nonrecursive deletes make any file that arrives after validation block publication.
+            $Empty = @(Get-EmptyDirectoryTree $Root)
+            [array]::Reverse($Empty)
+            foreach ($Directory in $Empty) { [System.IO.Directory]::Delete($Directory, $false) }
+        }
         [System.IO.Directory]::Move($Stage, $Root)
         $Stage = $null
         [ordered]@{ status = 'PASS'; squadRoot = $Root; rosterCheck = 'PASS'; ledgerCheck = 'PASS'; historyEntries = $Payload.usage.Count; notificationsDefaulted = $NotifyDefaulted; warnings = $Warnings } | ConvertTo-Json -Compress

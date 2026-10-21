@@ -1256,6 +1256,65 @@ Describe 'Write-SquadHandoff.ps1 derives omitted payload fields' {
         $orch.priced_as | Should -Be 'Claude Haiku 4.5'
     }
 
+    It 'rejects the routing label <Label> as an actual model for <Where> without writing' -ForEach @(
+        @{ Label = 'auto'; Where = 'dispatch' }
+        @{ Label = 'Auto (copilot)'; Where = 'orchestration' }
+        @{ Label = 'FAST'; Where = 'dispatch' }
+        @{ Label = 'default'; Where = 'orchestration' }
+        @{ Label = 'extended'; Where = 'dispatch' }
+    ) {
+        $root = New-Root
+        $payload = New-Payload
+        if ($Where -eq 'dispatch') { $payload.historyRecords[0].consumption.model = $Label } else { $payload.orchestration.consumption.model = $Label }
+        $before = Get-TreeHash $root
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match 'routing label'
+        Get-TreeHash $root | Should -Be $before
+    }
+
+    It 'derives unknown/unresolved orchestration from a label session model and rejects a label passedModel' {
+        foreach ($session in 'auto', 'Default') {
+            $root = New-Root
+            $repo = (Resolve-Path (Join-Path $root '../..')).Path
+            Set-Content -LiteralPath (Join-Path $repo '.github/agents/squad/squad-researcher.agent.md') -Value "---`nname: Squad Researcher`n---`n# Researcher`n"
+            $payload = New-MinimalPayload
+            $payload.stateAdvance.sessionModel = $session
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $orch = Get-Block -Root $root -Agent 'Squad Scribe'
+            $orch.model | Should -Be 'unknown'
+            $orch.model_source | Should -Be 'unresolved'
+            $dispatch = Get-Block -Root $root -Agent 'Squad Researcher'
+            $dispatch.model | Should -Be 'unknown'
+            $dispatch.model_source | Should -Be 'unresolved'
+            (Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json).currentRun.sessionModel | Should -Be $session
+        }
+        $root = New-Root
+        $payload = New-MinimalPayload
+        $payload.historyRecords[0].passedModel = 'auto'
+        $before = Get-TreeHash $root
+        (Invoke-Writer -Root $root -Payload $payload).ExitCode | Should -Be 1
+        Get-TreeHash $root | Should -Be $before
+        $root = New-Root
+        $repo = (Resolve-Path (Join-Path $root '../..')).Path
+        Set-Content -LiteralPath (Join-Path $repo '.github/agents/squad/squad-researcher.agent.md') -Value "---`nname: Squad Researcher`nmodel: auto`n---`n# Researcher`n"
+        $before = Get-TreeHash $root
+        (Invoke-Writer -Root $root -Payload (New-MinimalPayload)).ExitCode | Should -Be 1
+        Get-TreeHash $root | Should -Be $before
+    }
+
+    It 'still accepts a concrete session model whose name contains fast-mode wording' {
+        $root = New-Root
+        $payload = New-MinimalPayload
+        $payload.stateAdvance.sessionModel = 'Claude Haiku 4.5 (fast mode)'
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $orch = Get-Block -Root $root -Agent 'Squad Scribe'
+        $orch.model | Should -Be 'Claude Haiku 4.5 (fast mode)'
+        $orch.model_source | Should -Be 'session-inherited'
+    }
+
     It 'derives from the record role class: a closing review uses the review floors' {
         $root = New-Root
         $repo = (Resolve-Path (Join-Path $root '../..')).Path

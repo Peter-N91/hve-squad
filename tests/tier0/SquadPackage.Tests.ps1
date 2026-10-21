@@ -180,6 +180,13 @@ Describe 'Requirements document quality source contracts (RQ-01..03)' -Tag 'Requ
         $guide | Should -Match 'Never overwrite an existing file or protected squad-state files: team, routing, decisions, state, consumption, rates, history or memory'
     }
 
+    It 'RQ-04 seeds a trusted reviewer root and stops before dispatch on an unusable one' {
+        $seed = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/seed-templates.md') -Raw
+        $seed | Should -Match '\| intake-validator \|[^\n]+\| default\s+\| \.copilot-tracking/reviews/\s+\|'
+        $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
+        $guide | Should -Match 'Before dispatching a read-only reviewer, resolve its roster Deliverable Root and stop with an escalation, before any spend, if it is empty, `—`, `\(squad state\)` or a protected squad-state destination; never fall back to another root or edit the roster silently'
+    }
+
     It 'RQ-03 gates the tester on verified capture and actual history, refusing missing evidence' {
         $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
         $guide | Should -Match '(?s)1\. \*\*Capture\.\*\*.+2\. \*\*Verify capture\.\*\*.+3\. \*\*Persist proof\.\*\*.+4\. \*\*Dispatch tester\.\*\*'

@@ -86,7 +86,7 @@ its payload. Legacy prose/YAML is adapted to this JSON, never executed:
 The helper preserves cells and names. For member roots it rebases repository
 tracking and relative deliverable roots under that member; sibling-member paths
 are rejected. Each path in an ADO/Jira alternative is confined independently;
-`docs/` and `outputs/` remain unprefixed, and `(squad state)` stays literal.
+`docs/` and `outputs/` remain unprefixed, and `—` and `(squad state)` stay literal.
 It writes only `team.md`, filtered `routing.md` (council always
 retained), `decisions.md` with provenance, `notifications.md`, `state.json`,
 `consumption.md`, `consumption-rates.md`, and `history/Squad Scribe.md`. No other
@@ -100,11 +100,12 @@ Run the installed helper once, substituting trusted literal paths as arguments:
 pwsh -NoProfile -File "<skill>/scripts/Initialize-Squad.ps1" -RepoRoot "<repository>" -PayloadPath "<payload.json>"
 ```
 
-The helper stages a new tree in a temporary sibling, invokes the deterministic
-rate seeder, runs ledger `-Write` and `-Check -ExpectedHistoryCounts`, verifies the
-roster/history, and publishes by directory rename only on success. Failure cleans
-the stage, returns nonzero, and leaves any existing root unchanged. Traversal,
-linked ancestor paths, collisions, partial roots, and re-init are refused.
+The helper stages a sibling tree, seeds rates, runs ledger `-Write` and
+`-Check -ExpectedHistoryCounts`, verifies roster/history, then publishes by rename.
+Empty-directory-only scaffolds are rechecked and removed only after validation.
+Failure cleans the stage and returns nonzero; no existing files are removed,
+though publication collisions may remove empty scaffold directories. Traversal,
+links, roots with files, partial state, and re-init are refused.
 
 Return the compact JSON status and warnings, then stop. Do not reread files,
 recount blocks, audit arithmetic manually, or manufacture a Cost Comparison.

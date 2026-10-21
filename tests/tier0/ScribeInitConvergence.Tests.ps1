@@ -362,6 +362,62 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         @(Get-ChildItem -LiteralPath $Repository -Filter state.json -File -Recurse).Count | Should -Be 0
     }
 
+    It 'preserves member sentinel <Root> verbatim while still rebasing ordinary and reviewer roots' -ForEach @(
+        @{ Root = [string][char]0x2014 }
+        @{ Root = '(squad state)' }
+    ) {
+        $Payload = Get-InitPayload '.copilot-tracking/squad/members/product'
+        $Payload.roster[0]['Deliverable Root'] = $Root
+        $Payload.roster[1]['Deliverable Root'] = '.copilot-tracking/reviews/'
+        $Repository = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Team = Get-Content -LiteralPath (Join-Path $Repository "$($Payload.squadRoot)/team.md") -Raw
+        $Team | Should -Match ([regex]::Escape("| $Root |"))
+        $Team | Should -Match '\| \.copilot-tracking/squad/members/product/reviews/ \|'
+    }
+
+    It 'accepts an absent or empty-directory-only root: <Case>' -ForEach @(
+        @{ Case = 'empty root'; Dirs = @('.') }
+        @{ Case = 'nested empty scaffold'; Dirs = @('history', 'a/b/c') }
+    ) {
+        $Repository = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        foreach ($Dir in $Dirs) { New-Item -ItemType Directory -Path (Join-Path (Join-Path $Repository '.copilot-tracking/squad') $Dir) -Force | Out-Null }
+        $Result = Invoke-InitPayload (Get-InitPayload) $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        Test-Path -LiteralPath (Join-Path $Repository '.copilot-tracking/squad/state.json') | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $Repository -Force -Filter '.squad-init-*' -Recurse).Count | Should -Be 0
+    }
+
+    It 'refuses an unsafe existing root <Case> and leaves it unchanged' -ForEach @(
+        @{ Case = 'hidden file'; Kind = 'hidden' }
+        @{ Case = 'linked subtree'; Kind = 'link' }
+        @{ Case = 'dangling link'; Kind = 'dangling' }
+        @{ Case = 'populated state'; Kind = 'file' }
+        @{ Case = 'invalid payload over empty scaffold'; Kind = 'invalid' }
+    ) {
+        $Repository = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $Root = Join-Path $Repository '.copilot-tracking/squad'
+        New-Item -ItemType Directory -Path (Join-Path $Root 'sub') -Force | Out-Null
+        switch ($Kind) {
+            'hidden' { Set-Content -LiteralPath (Join-Path $Root 'sub/.keep') -Value 'x' }
+            'file' { Set-Content -LiteralPath (Join-Path $Root 'state.json') -Value '{}' }
+            'link' {
+                New-Item -ItemType Directory -Path (Join-Path $Repository 'target') -Force | Out-Null
+                New-Item -ItemType SymbolicLink -Path (Join-Path $Root 'sub/link') -Target (Join-Path $Repository 'target') | Out-Null
+            }
+            'dangling' { New-Item -ItemType SymbolicLink -Path (Join-Path $Root 'sub/link') -Target (Join-Path $Repository 'missing') | Out-Null }
+        }
+        $Payload = Get-InitPayload
+        if ($Kind -eq 'invalid') { $Payload.roster[0]['Model Tier'] = 'bogus' }
+        $Before = @(Get-ChildItem -LiteralPath $Root -Force -Recurse | ForEach-Object { $_.FullName.Substring($Root.Length) }) -join ','
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Not -Be 0
+        $After = @(Get-ChildItem -LiteralPath $Root -Force -Recurse | ForEach-Object { $_.FullName.Substring($Root.Length) }) -join ','
+        $After | Should -BeExactly $Before
+        Test-Path -LiteralPath (Join-Path $Root 'team.md') | Should -BeFalse
+    }
+
     It 'accepts coherent pricing for <ModelName> without changing actual attribution' -ForEach @(
         @{ ModelName = 'Claude Opus 5'; Price = 'Claude Opus 5'; Tier = 'fast'; Source = 'dispatch-reported'; Basis = 'estimated' }
         @{ ModelName = 'claude-haiku-4.5'; Price = 'Claude Haiku 4.5'; Tier = 'fast'; Source = 'dispatch-reported'; Basis = 'estimated' }
