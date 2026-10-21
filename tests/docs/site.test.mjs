@@ -117,20 +117,17 @@ for (const name of pages) {
           const examples = [...document.querySelectorAll('.command-example')];
           assert.equal(examples.length, commands.length, 'Every runnable block gets local tabs');
           examples.forEach((example, index) => {
-            const canonical = example.querySelector('[data-host="vscode"] pre code').textContent;
-            assert.equal(canonical, commands[index], 'VS Code keeps the exact original example');
+            const canonical = commands[index];
             const selected = example.querySelector('[role="tabpanel"]:not([hidden])');
             assert.equal(selected.dataset.host, host);
-            if (host !== 'vscode') {
-              const inputs = [...selected.querySelectorAll('pre code')].map(code => code.textContent);
-              for (const input of inputs) {
-                assert.ok(input.trim() && input !== 'undefined');
-                assert.doesNotMatch(input, invocation, 'App and CLI inputs have no VS Code invocation prefix');
-                assert.doesNotMatch(input, /^#|^\/agent/m, 'Selection instructions stay outside copyable inputs');
-              }
-              const argumentLines = canonical.split('\n').filter(line => !line.trimStart().startsWith('#')).map(line => line.replace(/^[ \t]*\/squad(?:-federation|-document|-governance-report|-learn)?(?=\s|$)[ \t]?/, '')).filter(line => line.trim());
-              for (const line of argumentLines) assert.ok(inputs.join('\n').includes(line), `Preserve arguments: ${line}`);
+            const inputs = [...selected.querySelectorAll('pre code')].map(code => code.textContent);
+            for (const input of inputs) {
+              assert.ok(input.trim() && input !== 'undefined');
+              assert.doesNotMatch(input, invocation, 'Agent inputs have no slash-command prefix');
+              assert.doesNotMatch(input, /^#|^\/agent/m, 'Selection instructions stay outside copyable inputs');
             }
+            const argumentLines = canonical.split('\n').filter(line => !line.trimStart().startsWith('#')).map(line => line.replace(/^[ \t]*\/squad(?:-federation|-document|-governance-report|-learn)?(?=\s|$)[ \t]?/, '')).filter(line => line.trim());
+            for (const line of argumentLines) assert.ok(inputs.join('\n').includes(line), `Preserve arguments: ${line}`);
           });
           const unchanged = [...document.querySelectorAll('pre > code')].filter(code => !code.closest('.command-example')).map(code => code.textContent);
           assert.deepEqual(unchanged, otherExamples, 'Shell commands, config and paths stay unchanged');
@@ -158,7 +155,7 @@ test('each workflow selects its own agent, including requests with no arguments'
   ];
   const dom = renderExample(workflows.map(([command]) => command).join('\n'));
   try {
-    for (const host of ['cli', 'app']) {
+    for (const host of ['cli', 'app', 'vscode']) {
       const panel = dom.window.document.querySelector(`[data-host="${host}"]`);
       assert.deepEqual([...panel.querySelectorAll('strong')].map(agent => agent.textContent), workflows.map(([, agent]) => agent));
       assert.deepEqual([...panel.querySelectorAll('pre code')].map(code => code.textContent), workflows.map(([, , input]) => input));
@@ -171,7 +168,7 @@ test('multiline quoted content, embedded slash commands and escaped quotes remai
   const argumentsText = 'request="Keep this exact text:\n\n/squad-learn is a literal example\n# not a comment here\nUse \\"quoted\\" text and .copilot-tracking/squad/." mode=autopilot cost-ceiling=20';
   const dom = renderExample(`/squad ${argumentsText}`);
   try {
-    for (const host of ['cli', 'app']) {
+    for (const host of ['cli', 'app', 'vscode']) {
       const inputs = dom.window.document.querySelectorAll(`[data-host="${host}"] pre code`);
       assert.equal(inputs.length, 1);
       assert.equal(inputs[0].textContent, argumentsText);
@@ -271,26 +268,26 @@ test('non-command snippets and explicit host references are not converted', () =
   finally { dom.window.close(); }
 });
 
-test('local command examples select the correct agent and preserve request arguments', () => {
-  const dom = openPage('fr/usage.html', { query: '?host=app' });
+test('VS Code command examples select the correct agent and preserve request arguments', () => {
+  const dom = openPage('fr/usage.html', { query: '?host=vscode' });
   try {
     const document = dom.window.document;
     assert.equal(document.querySelector('.hero [role="tablist"]'), null);
     const examples = [...document.querySelectorAll('.command-example')];
     assert.ok(examples.length > 1);
-    const documentExample = examples.find(example => example.querySelector('[data-host="vscode"]').textContent.includes('/squad-document request='));
-    const governanceExample = examples.find(example => example.querySelector('[data-host="vscode"]').textContent.includes('/squad-governance-report'));
-    const app = documentExample.querySelector('[data-host="app"]');
-    const governanceApp = governanceExample.querySelector('[data-host="app"]');
-    assert.equal(app.hidden, false);
-    assert.equal(governanceApp.hidden, false);
-    assert.match(app.textContent, /Squad Document/);
-    assert.match(governanceApp.textContent, /Squad Governance Report/);
-    for (const panel of [app, governanceApp]) {
+    const documentExample = examples.find(example => example.querySelector('[data-host="vscode"] strong')?.textContent === 'Squad Document');
+    const governanceExample = examples.find(example => example.querySelector('[data-host="vscode"] strong')?.textContent === 'Squad Governance Report');
+    const documentPanel = documentExample.querySelector('[data-host="vscode"]');
+    const governancePanel = governanceExample.querySelector('[data-host="vscode"]');
+    assert.equal(documentPanel.hidden, false);
+    assert.equal(governancePanel.hidden, false);
+    assert.match(documentPanel.textContent, /Squad Document/);
+    assert.match(governancePanel.textContent, /Squad Governance Report/);
+    for (const panel of [documentPanel, governancePanel]) {
       for (const code of panel.querySelectorAll('pre code')) assert.doesNotMatch(code.textContent, /^\/squad/m);
     }
-    assert.match(app.textContent, /format=docx outputPath=docs\/briefing.docx/);
-    assert.match(governanceApp.textContent, /output=docs\/governance.html period=30d/);
+    assert.match(documentPanel.textContent, /format=docx outputPath=docs\/briefing.docx/);
+    assert.match(governancePanel.textContent, /output=docs\/governance.html period=30d/);
   } finally { dom.window.close(); }
 });
 

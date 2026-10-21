@@ -31,6 +31,8 @@
 
 ## Documentation
 
+[![Observed efficiency benchmark: document quality, acceptance and average benchmark time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
+
 Full documentation lives on the project site:
 
 **[peter-n91.github.io/hve-squad](https://peter-n91.github.io/hve-squad/)**
@@ -47,6 +49,30 @@ The site source is in [docs/](docs/) and is published to GitHub Pages by
 [.github/workflows/docs.yml](.github/workflows/docs.yml) on every push to `main` that touches
 `docs/`.
 
+## Benchmark methodology and sources
+
+The [efficiency benchmark](benchmarks/efficiency/README.md) records document quality,
+functional acceptance, workflow compliance, measured time and consumption separately.
+Its methodology review and measurement hardening drew on these primary sources
+(consulted 20 October 2026):
+
+| Source | How it informed the benchmark |
+|---|---|
+| Anthropic, [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) | Separate outcomes from execution trajectories; combine deterministic checks with model grading and retain failed attempts. |
+| Kapoor et al., [AI Agents That Matter](https://arxiv.org/abs/2407.01502) | Report resource consumption alongside quality, preserve reproducibility metadata and distinguish development tasks from held-out evaluation. |
+| Yao et al., [tau-bench](https://arxiv.org/abs/2406.12045) | Distinguish task success from repeated-run reliability and policy compliance; a successful final artifact alone does not establish a compliant workflow. |
+| OpenAI, [Evaluation best practices](https://developers.openai.com/api/docs/guides/evaluation-best-practices) | Use task-specific criteria, representative cases and human evidence to assess grader quality rather than trusting a scalar score alone. |
+| Zheng et al., [Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena](https://arxiv.org/abs/2306.05685) | Treat model-judge scores as measurements requiring bias and agreement checks, not authenticated expert judgments. |
+| OpenTelemetry, [GenAI metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/547934afa90a34298441caf80c43b27255c3a292/docs/gen-ai/gen-ai-metrics.md) and [token metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/547934afa90a34298441caf80c43b27255c3a292/docs/gen-ai/gen-ai-token-metrics.md) | Define timing boundaries and token-accounting semantics explicitly. These are pinned Development-stage references, not a claim of OpenTelemetry instrumentation or conformance. |
+| NIST/SEMATECH, [Confidence intervals](https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm) | Keep three-trial results descriptive; observed pass counts and resource differences do not establish statistical significance. |
+
+These sources informed the design; they do not certify it. The current three-trial,
+single-scenario baseline is a regression-screening reference, not a representative
+agent leaderboard. Human calibration, repeated-judge agreement and broader held-out
+task studies remain future empirical work. See the [generated report](benchmarks/efficiency/report.md)
+for actual results and the [collection guide](tests/tier2/live-benchmark/README.md)
+for execution details.
+
 ## Related repositories
 
 This repository is the source of truth. The squad also ships through two sibling repositories,
@@ -59,7 +85,7 @@ each generated from a tagged `hve-squad` release rather than maintained as a for
   release-gated mirror of the squad's GitHub Copilot CLI plugin tree, published as a plugin
   marketplace. Docs: [peter-n91.github.io/hve-squad-plugin](https://peter-n91.github.io/hve-squad-plugin/)
 
-Use this package when you want `/squad` in VS Code Copilot Chat with the full cast installed in your
+Use this package when you want the Squad agents in VS Code Copilot Chat with the full cast installed in your
 repository, the plugin when you want the squad in the Copilot CLI or desktop app with no `apm install`,
 and the MCP server when another host should call the squad as tools. See
 [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html) for the full comparison.
@@ -87,16 +113,22 @@ APM installation commands for Windows and macOS, and
 [Troubleshooting](https://peter-n91.github.io/hve-squad/troubleshooting.html) if an earlier
 attempt left a partial installation.
 
-Then invoke `/squad` in Copilot Chat:
+Then open the agents dropdown in VS Code Copilot Chat, select **Squad Coordinator**, and initialize the squad:
 
 ```text
-/squad request="add input validation to the login form"
+init
+```
+
+After confirming the proposed team, send the work request separately in the same conversation:
+
+```text
+request="add input validation to the login form"
 ```
 
 Add an optional model-spend ceiling when you want a conservative forecast before work starts:
 
 ```text
-/squad request="add input validation to the login form" cost-ceiling=10
+request="add input validation to the login form" cost-ceiling=10
 ```
 
 Within the same run, omitting the argument preserves an active ceiling. Use
@@ -141,25 +173,27 @@ Every question lists only models **your host can run** and that meet the role's 
 
 **Which model to start the session on.** The model you pick in the chat, or pass with `--model`, runs the coordinator: it reads the roster, plans the stages, and dispatches every role. `routing=` never changes it. Start on a fixed model from the catalog's `balanced` class (the vendor's mid tier), as capable as `claude-sonnet-5.5`. Pick any model of that class your host offers, for example `claude-sonnet-5.5`, `gpt-6-sol`, `gpt-5.6-terra`, `gemini-3.8-flash`, or `grok-4.7`; the squad skill's `references/model-catalog.md` holds the current list. A `frontier-reasoning` model adds cost to every coordinator turn without improving the work, which `ranked` already sends to frontier models where it pays off. A `fast-lightweight` model is more likely to miss required steps, such as copying the `Model` cell or sending the Scribe hand-off together with the next stage. Under `auto`, the host can switch the coordinator's model mid-run, and the ledger cannot price its share.
 
-**Examples:**
+**Examples (in the Squad Coordinator conversation):**
 
 ```text
-/squad request="..." routing=ranked
+request="..." routing=ranked
 ```
 Switch to ranked selection; `team.md` gains a `Model` column showing each role's pick.
 
 ```text
-/squad request="..." routing=manual
+request="..." routing=manual
 ```
 Switch to manual selection; you are asked for the models before the request runs, and later requests reuse your picks.
 
 ```text
-/squad request="..." routing=off
+request="..." routing=off
 ```
 Return to the default; the `Model` column is removed, and the decision log keeps your previous picks so switching back to `manual` can offer them again.
 
+For a federation request, select **Squad Federation Coordinator** instead:
+
 ```text
-/squad-federation squad=product routing=manual
+squad=product routing=manual
 ```
 Switch the `product` sub-squad to manual selection; each sub-squad keeps its own picks.
 
@@ -212,9 +246,8 @@ Existing Markdown and JSON artifact formats are unchanged; no migration is neede
 The historical Scribe orchestration file records actual coordinator overhead and
 Scribe usage only when the Scribe ran, not a fictional model call for script execution.
 
-The `/` picker lists two entries named `squad`: pick the **prompt** ("Hands a request to the Squad
-Coordinator...") to run the squad. The **skill** ("Operating procedure for...") only loads the squad
-procedure as context and is normally loaded by the coordinator itself.
+In VS Code Copilot Harness, use the agents dropdown to select the matching Squad agent. Send only
+the request text and arguments shown above; do not add a slash-command prefix.
 
 See [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) for the full flow.
 

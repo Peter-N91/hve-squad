@@ -101,7 +101,7 @@ for (const lang of ['en', 'fr']) {
     const canonical = workflows.map(([command]) => command).join('\n');
     const { window, document } = openPage({ lang, examples: [canonical] });
     try {
-      for (const host of ['cli', 'app']) {
+      for (const host of hosts) {
         const panel = panelFor(document, host);
         assert.deepEqual(codes(panel), workflows.map(([, , input]) => input));
         assert.deepEqual([...panel.querySelectorAll('strong')].map(agent => agent.textContent), workflows.map(([, agent]) => agent));
@@ -112,7 +112,6 @@ for (const lang of ['en', 'fr']) {
           assert.doesNotMatch(input, /^\/squad(?:\s|-)/);
         }
       }
-      assert.deepEqual(codes(panelFor(document, 'vscode')), [canonical]);
       assert.equal(document.querySelector('[role="tablist"]').getAttribute('aria-label'), locales[lang].tablistLabel);
       for (const host of hosts) {
         const instruction = panelFor(document, host).querySelector('.command-instruction').textContent;
@@ -142,11 +141,10 @@ test('multiline requests retain blank lines, embedded commands, comments and esc
   const canonical = `/squad ${input}\n/squad-federation promote`;
   const { window, document } = openPage({ examples: [canonical] });
   try {
-    for (const host of ['cli', 'app']) {
+    for (const host of hosts) {
       assert.deepEqual(codes(panelFor(document, host)), [input, 'promote']);
       assert.equal(panelFor(document, host).querySelector('.command-note'), null);
     }
-    assert.deepEqual(codes(panelFor(document, 'vscode')), [canonical]);
   } finally { window.close(); }
 });
 
@@ -154,12 +152,11 @@ test('indented comments attach to the next request and stay outside copyable inp
   const canonical = '# First request\n  # More context\n    /squad init\n\n\t# A federation request\n\t/squad-federation promote';
   const { window, document } = openPage({ examples: [canonical] });
   try {
-    for (const host of ['cli', 'app']) {
+    for (const host of hosts) {
       const panel = panelFor(document, host);
       assert.deepEqual(codes(panel), ['init', 'promote']);
       assert.deepEqual([...panel.querySelectorAll('.command-note')].map(note => note.textContent), ['First request\nMore context', 'A federation request']);
     }
-    assert.deepEqual(codes(panelFor(document, 'vscode')), [canonical]);
   } finally { window.close(); }
 });
 
@@ -167,7 +164,7 @@ test('argument whitespace, tabs and escaped backslashes remain literal', () => {
   const input = '  request="C:\\\\work\\\\\nContinue here" mode=manual  ';
   const { window, document } = openPage({ examples: [`\t/squad ${input}`] });
   try {
-    for (const host of ['cli', 'app']) assert.deepEqual(codes(panelFor(document, host)), [input]);
+    for (const host of hosts) assert.deepEqual(codes(panelFor(document, host)), [input]);
   } finally { window.close(); }
 });
 
@@ -352,7 +349,7 @@ test('build-time wrappers and stale copy targets are removed and all generated I
     }
     assert.equal(panelFor(document, 'vscode').querySelector('pre').className, 'source');
     assert.equal(panelFor(document, 'vscode').querySelector('code').className, 'language-text');
-    assert.deepEqual(codes(panelFor(document, 'vscode')), ['/squad init']);
+    assert.deepEqual(codes(panelFor(document, 'vscode')), ['init']);
     const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
     assert.equal(new Set(ids).size, ids.length);
     for (const code of document.querySelectorAll('.command-example pre > code')) {
@@ -420,6 +417,7 @@ test('request text, notes and locale strings are rendered as text rather than HT
     assert.deepEqual(codes(panelFor(document, 'app')), [input]);
     assert.equal(panelFor(document, 'app').querySelector('strong').textContent, custom.agents['/squad']);
     assert.equal(panelFor(document, 'app').querySelector('.command-note').textContent, '<iframe src=x></iframe>');
-    assert.deepEqual(codes(panelFor(document, 'vscode')), [canonical]);
+    assert.deepEqual(codes(panelFor(document, 'vscode')), [input]);
+    assert.equal(panelFor(document, 'vscode').querySelector('.command-note').textContent, '<iframe src=x></iframe>');
   } finally { window.close(); }
 });

@@ -45,18 +45,15 @@
   <main class="content">
     <div class="container">
       <h2>Invoke the coordinator</h2>
-      <p>Use the coordinator's conversation for Squad requests, not your system shell. VS Code invokes prompts; CLI and App use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
+      <p>Use the matching Squad agent's conversation for requests, not your system shell. In VS Code Copilot Harness, choose the agent from the agents dropdown; CLI and App also use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
         <p>
-          <strong>Two entries named <code>squad</code> in VS Code?</strong> The VS Code <code>/</code> picker lists
-          both prompts and skills, and the package ships one of each. Pick the
-          <strong>prompt</strong> — described as <em>"Hands a request to the Squad Coordinator…"</em> —
-          to actually run the squad. The <strong>skill</strong> — <em>"Operating procedure for the HVE
-          Core Squad Coordinator…"</em> — only loads the squad procedure into whatever agent you are
-          already talking to; the coordinator and its subagents load it on their own, so you rarely
-          need to select it yourself.
+          <strong>Using VS Code Copilot Harness?</strong> Select <strong>Squad Coordinator</strong> from the
+          agents dropdown and send the request text shown in the selected VS Code tab without the
+          <code>/squad</code> prefix. Each host tab names the matching agent for federation, document,
+          governance-report, and learning workflows.
         </p>
       </div>
 
@@ -1702,40 +1699,40 @@ layouts:
 
       <h2>Running on other hosts</h2>
       <p>
-        The squad ships both prompts and agents. <strong>Prompt files are a VS Code feature</strong> —
-        GitHub Copilot CLI and the GitHub Copilot app never read them. Every squad entry point
-        therefore also exists as an <strong>agent</strong>, and selecting the agent is the one
-        invocation model that works everywhere.
+        The squad ships both prompts and agents. <strong>VS Code Copilot Harness, GitHub Copilot CLI,
+        and the GitHub Copilot app all run Squad workflows through user-invocable agents.</strong>
+        Prompt files remain an alternative in VS Code, but selecting the mapped agent avoids an
+        intermediary call and is the invocation model that works everywhere.
       </p>
 
       <table data-host-reference>
         <thead>
-          <tr><th>Entry point</th><th>VS Code</th><th>Copilot CLI and Copilot app</th></tr>
+          <tr><th>Entry point</th><th>VS Code Copilot Harness</th><th>Copilot CLI and Copilot app</th></tr>
         </thead>
         <tbody>
           <tr>
             <td>Run a squad</td>
-            <td><code>/squad request="…"</code></td>
+            <td>select the <strong>Squad Coordinator</strong> agent</td>
             <td>select the <strong>Squad Coordinator</strong> agent</td>
           </tr>
           <tr>
             <td>Run a federation</td>
-            <td><code>/squad-federation request="…"</code></td>
+            <td>select the <strong>Squad Federation Coordinator</strong> agent</td>
             <td>select the <strong>Squad Federation Coordinator</strong> agent</td>
           </tr>
           <tr>
             <td>Search and export</td>
-            <td><code>/squad-document request="…"</code></td>
+            <td>select the <strong>Squad Document</strong> agent</td>
             <td>select the <strong>Squad Document</strong> agent</td>
           </tr>
           <tr>
             <td>Governance dashboard</td>
-            <td><code>/squad-governance-report</code></td>
+            <td>select the <strong>Squad Governance Report</strong> agent</td>
             <td>select the <strong>Squad Governance Report</strong> agent</td>
           </tr>
           <tr>
             <td>Promote a learning</td>
-            <td><code>/squad-learn</code></td>
+            <td>select the <strong>Squad Learn</strong> agent</td>
             <td>select the <strong>Squad Learn</strong> agent</td>
           </tr>
         </tbody>

@@ -423,6 +423,66 @@ Describe 'The verifier passes a correct write and fails a dropped-history-entry 
     }
 }
 
+Describe 'The verifier resolves known rate spellings without guessing costs' -Tag 'Unit' {
+    BeforeEach {
+        $script:RateFixture = Get-CorrectWriteFixture
+        $script:RateHistory = Join-Path $script:RateFixture 'history/Squad Scribe.md'
+    }
+
+    AfterEach {
+        Remove-Item -LiteralPath $script:RateFixture -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'accepts supported priced_as spelling <PricedAs>' -ForEach @(
+        @{ PricedAs = 'claude-haiku-4.5' }
+        @{ PricedAs = '  Claude Haiku 4.5  ' }
+        @{ PricedAs = 'Claude Haiku 4.5 (copilot)' }
+        @{ PricedAs = '`claude_haiku--4.5`' }
+    ) {
+        $History = Get-Content -LiteralPath $script:RateHistory -Raw
+        Set-Content -LiteralPath $script:RateHistory -Value ($History.Replace('"priced_as": "Claude Haiku 4.5"', '"priced_as": "' + $PricedAs + '"')) -Encoding utf8NoBOM
+        $Outcome = Invoke-Verifier -SquadRootPath $script:RateFixture -ExpectationPath $script:ExpectedPath
+        $Outcome.ExitCode | Should -Be 0 -Because ($Outcome.Result.failures -join ' | ')
+        $Outcome.Result.passed | Should -BeTrue
+    }
+
+    It 'does not invent a rate for an unknown model or guess from its tier' {
+        $History = Get-Content -LiteralPath $script:RateHistory -Raw
+        Set-Content -LiteralPath $script:RateHistory -Value ($History.Replace('"priced_as": "Claude Haiku 4.5"', '"priced_as": "unknown-provider-99.9"')) -Encoding utf8NoBOM
+        $Outcome = Invoke-Verifier -SquadRootPath $script:RateFixture
+        $Outcome.ExitCode | Should -Not -Be 0
+        ($Outcome.Result.failures -join ' | ') | Should -Match 'no rate row for:'
+    }
+
+    It 'uses exact precedence and rejects ambiguous fallback for <PricedAs>' -ForEach @(
+        @{ PricedAs = 'Claude Haiku 4.5'; ExpectedPass = $true }
+        @{ PricedAs = 'claude-haiku-4.5'; ExpectedPass = $false }
+    ) {
+        Add-Content -LiteralPath (Join-Path $script:RateFixture 'consumption-rates.md') -Value @'
+
+| Model | Input | Cached | Cache write | Output |
+| --- | --- | --- | --- | --- |
+| Claude--Haiku 4.5 | 1.00 | 0.10 | 1.25 | 5.00 |
+'@ -Encoding utf8NoBOM
+        $History = Get-Content -LiteralPath $script:RateHistory -Raw
+        Set-Content -LiteralPath $script:RateHistory -Value ($History.Replace('"priced_as": "Claude Haiku 4.5"', '"priced_as": "' + $PricedAs + '"')) -Encoding utf8NoBOM
+        $Outcome = Invoke-Verifier -SquadRootPath $script:RateFixture
+        $Outcome.Result.passed | Should -Be $ExpectedPass
+        if (-not $ExpectedPass) { ($Outcome.Result.failures -join ' | ') | Should -Match 'no rate row for:' }
+    }
+
+    It 'still rejects incorrect cost arithmetic after resolving an alias' {
+        $History = Get-Content -LiteralPath $script:RateHistory -Raw
+        Set-Content -LiteralPath $script:RateHistory -Value ($History.Replace('"priced_as": "Claude Haiku 4.5"', '"priced_as": "claude-haiku-4.5"')) -Encoding utf8NoBOM
+        $LedgerPath = Join-Path $script:RateFixture 'consumption.md'
+        Set-Content -LiteralPath $LedgerPath -Value ((Get-Content -LiteralPath $LedgerPath -Raw).Replace('**0.3171**', '**9.3171**')) -Encoding utf8NoBOM
+        $Outcome = Invoke-Verifier -SquadRootPath $script:RateFixture
+        $Outcome.ExitCode | Should -Not -Be 0
+        ($Outcome.Result.failures -join ' | ') | Should -Match 'ledger says 9.3171'
+        ($Outcome.Result.failures -join ' | ') | Should -Not -Match 'no rate row for:'
+    }
+}
+
 Describe 'The correctness inventory fails on content-level mutations (OBJ-02, CH5-04)' {
     # These tests exist because the checked-in-baseline regression Describe above
     # only proves the inventory catches wholesale deletions of a baseline snapshot.
