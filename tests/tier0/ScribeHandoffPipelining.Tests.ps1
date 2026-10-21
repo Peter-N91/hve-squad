@@ -141,13 +141,14 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $federationCoordinator.Body | Should -Match ([regex]::Escape('under autopilot, only cold Scribe dispatches pipeline per references/gates-and-modes.md'))
         }
 
-        It 'the coordinator hands the Scribe a ledgerCommand and the Scribe runs it instead of hand-writing the ledger' {
+        It 'the Scribe ignores legacy ledgerCommand text and invokes the trusted helper instead of hand-writing the ledger' {
             $payloadTemplate = Get-SquadReferenceBody -Name 'scribe-payload-template.md'
             $payloadTemplate | Should -Match ([regex]::Escape('### 1.8 Ledger Command'))
-            $payloadTemplate | Should -Match ([regex]::Escape('ledgerCommand: pwsh -NoProfile -File "<skill root>/scripts/Measure-SquadLedger.ps1" -SquadRoot "<squadRoot>" -Write -SessionLog auto'))
+            $payloadTemplate | Should -Match ([regex]::Escape('ledgerCommand: <optional legacy compatibility data; never interpreted or executed>'))
             $coldCharter = Get-SquadReferenceBody -Name 'scribe-cold-charter.md'
-            $coldCharter | Should -Match ([regex]::Escape('**When the payload carries `ledgerCommand`, run it verbatim with the shell tool immediately after Step 13.**'))
-            (Get-SquadReferenceBody -Name 'scribe-procedure.md') | Should -Match ([regex]::Escape('this entire step is that one command, run after Step 13'))
+            $coldCharter | Should -Match 'immediately after Step 13 invoke only the installed squad skill.s trusted'
+            $coldCharter | Should -Match 'fixed `-Write -SessionLog auto`'
+            (Get-SquadReferenceBody -Name 'scribe-procedure.md') | Should -Match 'cold charter.s trusted ledger invocation after Step 13'
         }
 
         It 'single-writer invariant: at most one Scribe hand-off in flight per squad root, queued in stage order' {

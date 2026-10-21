@@ -4,8 +4,18 @@
 
 `current.json` selects one immutable `records/<series-id>.json` by SHA-256.
 This is **recorded observational evidence, not an approved quality baseline**.
-The three original pristine observations include real functional, state and
-review-deliverable failures. A score must never conceal those failures.
+The selected v2 Scribe observations scored **81, 82, 81** (median **81/100**) at
+revision `5324132b72a5a2116ce0f7ecf7fc71ed811c8cfa`, after PR #33 merged.
+All functional probes passed, but no complete workflow passed. The approximate
+comparison against main's stored median 83 detected a regression; the report
+preserves that verdict. New consumption was **801.4277195 credits** across three
+candidate trials, with no fresh baseline trials.
+
+These observations predate the subsequent cold-Scribe safety fix and merge of
+main's dependency update. They describe the measured revision, not the current
+branch tip: strict current-source comparison must reject stale evidence until
+that changed source is measured. Recording this score does not approve or
+promote a baseline. A score must never conceal workflow or provenance failures.
 Private logs, generated documents, judge explanations and session identifiers
 are not committed. File hashes provide integrity, not authenticated execution.
 
@@ -338,8 +348,11 @@ source hash, protocol and dependency-install identities. Their verifier hash was
 derived from the measured Git revision, not observed executing-file telemetry;
 they also lack a native converter digest. They remain readable for descriptive
 historical analysis, but current snapshot validation explicitly rejects them as
-`stale-record:unbound-execution-protocol`. Existing records and their pointer
-are never rewritten by collection.
+`stale-record:unbound-execution-protocol`. Main's stored v2 observations measured
+revision `59880d5c0417e99a7fe6ab5f12670f8bd9b7401b`; this branch explicitly selects
+its later Scribe observations without replacing main's pointer. Historical v1
+and v2 records remain unchanged, not relabeled. Collection never rewrites
+existing records or selects a new pointer automatically.
 
 New exports use `benchmark-series-v2`. Live compatibility binds the native
 converter actually loaded from the selected source checkout

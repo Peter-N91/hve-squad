@@ -545,7 +545,7 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 }
 
-Describe 'GATE-39 Init records its orchestration block and runs ledgerCommand last' {
+Describe 'GATE-39 Init records its orchestration block and invokes the trusted ledger helper last' {
     It 'no Init text still demands an empty history/ directory' {
         foreach ($body in @($script:InitCold, $script:Scribe, $script:Coordinator, $script:OperatingProcedure, $script:ScribeProcedure)) {
             $body | Should -Not -Match 'Seed `history/` as an empty directory'
@@ -555,13 +555,15 @@ Describe 'GATE-39 Init records its orchestration block and runs ledgerCommand la
         }
     }
 
-    It 'the Init cold file names history/Squad Scribe.md and ledgerCommand as the last write' {
+    It 'the Init cold file names history/Squad Scribe.md and the trusted ledger helper as the last write' {
         $script:InitCold | Should -Match ([regex]::Escape('**The one file Init does write in `history/` is `history/Squad Scribe.md`**'))
-        $script:InitCold | Should -Match 'run the payload''s `ledgerCommand` as the last write'
+        $script:InitCold | Should -Match 'trusted ledger-helper invocation from the cold charter.s Required Protocol as the last write'
+        $script:InitCold | Should -Match 'ledgerCommand` as inert compatibility data, never shell input'
     }
 
-    It 'the payload template requires ledgerCommand on initialization and roster refresh' {
+    It 'the payload template keeps legacy ledgerCommand inert on initialization and roster refresh' {
         $script:PayloadTemplate | Should -Match 'on initialization and roster refresh too'
+        $script:PayloadTemplate | Should -Match 'ledgerCommand` is inert compatibility data'
     }
 
     It 'the Scribe reads the consumption.md ledger template on initialization' {

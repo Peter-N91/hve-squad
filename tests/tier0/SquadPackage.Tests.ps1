@@ -269,6 +269,29 @@ Describe 'Ordinary hand-offs use the validated writer; cold Scribe writes use th
         $scribeAgent.Body | Should -Match 'scribe-cold-charter\.md' `
             -Because 'cold Scribe dispatches load the charter that contains the file-tool rule'
     }
+
+    It 'treats payload ledgerCommand as inert and invokes only the trusted ledger helper' {
+        $coldCharter = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-cold-charter.md') -Raw
+        $procedure = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-procedure.md') -Raw
+        $payloadTemplate = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-payload-template.md') -Raw
+
+        $initCold = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-cold-init-and-seeding.md') -Raw
+        foreach ($body in @($coldCharter, $procedure, $payloadTemplate, $initCold)) {
+            $body | Should -Match 'ledgerCommand.*inert compatibility data' `
+                -Because 'payload command text must have no execution authority'
+            $body | Should -Not -Match 'ledgerCommand.{0,80}run it verbatim' `
+                -Because 'payload text must never be replayed as shell input'
+        }
+        $coldCharter | Should -Match 'never execute, inspect, parse, validate, transform, or replay'
+        $coldCharter | Should -Match 'trusted `scripts/Measure-SquadLedger\.ps1`'
+        $coldCharter | Should -Match 'independently resolved, repository-contained root as one literal `-SquadRoot` argument'
+        $coldCharter | Should -Match 'fixed `-Write -SessionLog auto`'
+        foreach ($body in @($procedure, $payloadTemplate, $initCold)) {
+            $body | Should -Match 'cold charter'
+            $body | Should -Match 'trusted' `
+                -Because 'dependent references must route to the same trusted invocation rule'
+        }
+    }
 }
 
 Describe 'Consumption Accounting keeps its literal contract after the worked-example trim (C1)' {
