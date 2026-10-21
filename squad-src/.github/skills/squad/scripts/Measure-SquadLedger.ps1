@@ -727,7 +727,12 @@ function Resolve-RoleForAgentLocal {
         # Not Mandatory -- see Resolve-RateForBlockLocal for why an empty
         # collection argument must not carry [Parameter(Mandatory)].
         [System.Collections.Generic.List[pscustomobject]]$Roster,
-        [AllowEmptyString()][string]$ExternalProvenance = ''
+        [AllowEmptyString()][string]$ExternalProvenance = '',
+        [AllowEmptyString()][string]$EntryTitle = '',
+        [AllowEmptyString()][string]$Verification = '',
+        [AllowEmptyString()][string]$ExternalUnmeteredConnector = '',
+        [AllowEmptyCollection()][object[]]$ActiveConnectorBindings = @(),
+        [AllowEmptyCollection()][object[]]$RetiredConnectorBindings = @()
     )
 
     $member = ([string]$MemberName).Trim()
@@ -737,6 +742,43 @@ function Resolve-RoleForAgentLocal {
     }
 
     $provMatch = [regex]::Match($ExternalProvenance, '^(?i)connector=[^;]+;\s*binding=(?:legacy-1\.0|none\s*\(legacy-1\.0\));\s*endpoint=agent;\s*mode=replace;\s*target=role:(?<role>[a-z0-9-]+)(?:/(?<targetMember>[^\r\n;]+))?\s*$')
+    if ($AgentName -ceq 'Squad Connector' -and $ExternalProvenance -and -not $provMatch.Success) {
+        $provenance = [regex]::Match($ExternalProvenance, '^connector=(?<connector>[^;]+);\s*binding=(?<binding>[^;]+);\s*endpoint=(?<endpoint>[^;]+);\s*mode=(?<mode>[^;]+);\s*target=(?<target>.+)$')
+        $identityMatches = @()
+        if ($provenance.Success) {
+            $retired = @($RetiredConnectorBindings | Where-Object {
+                    $_.BindingId -ceq $provenance.Groups['binding'].Value -and $_.HistoryEntries -ccontains $EntryTitle
+                })
+            $candidates = if ($retired.Count -gt 0) { $retired } else { $ActiveConnectorBindings }
+            $identityMatches = @($candidates | Where-Object {
+                    $_.BindingId -ceq $provenance.Groups['binding'].Value -and
+                    $_.ConnectorId -ceq $provenance.Groups['connector'].Value -and
+                    $_.EndpointKind -ceq $provenance.Groups['endpoint'].Value -and
+                    $_.RoleMode -ceq $provenance.Groups['mode'].Value -and
+                    $_.Target -ceq $provenance.Groups['target'].Value -and $_.MemberName -ceq $member
+                })
+        }
+        if ($identityMatches.Count -eq 1 -and $Verification -ceq 'external, unverified' -and
+            $ExternalUnmeteredConnector -ceq $identityMatches[0].ConnectorId) {
+            $identity = $identityMatches[0]
+            $index = $Roster.Count
+            for ($i = 0; $i -lt $Roster.Count; $i++) {
+                if ($Roster[$i].Role -eq $identity.Role -and $Roster[$i].MemberName -ceq $member -and
+                    $Roster[$i].PrimaryAgent -ceq 'Squad Connector') { $index = $i; break }
+            }
+            return [pscustomobject]@{
+                Index = $index; Role = $identity.Role
+                ClassificationRole = if ($identity.AlignedRole) { $identity.AlignedRole } else { $identity.Role }
+                MemberName = $member; Tier = $identity.Tier
+                AggregateKey = "$AgentName`n$($identity.Role)`n$member"; Status = 'ok'
+            }
+        }
+        return [pscustomobject]@{
+            Index = $null; Role = $AgentName; ClassificationRole = $AgentName
+            MemberName = $member; Tier = ''; AggregateKey = "$AgentName`n$member"
+            Status = 'connector-identity-mismatch'
+        }
+    }
     if ($AgentName -eq 'Squad Connector' -and $provMatch.Success) {
         $legacyRole = $provMatch.Groups['role'].Value.ToLowerInvariant()
         $legacyTargetMember = if ($provMatch.Groups['targetMember'].Success) { ([string]$provMatch.Groups['targetMember'].Value).Trim() } else { '' }
@@ -769,7 +811,7 @@ function Resolve-RoleForAgentLocal {
             MemberName         = ''
             Tier               = ''
             AggregateKey       = $AgentName
-            Status             = 'unmapped'
+            Status             = if ($AgentName -ceq 'Squad Connector') { 'connector-unregistered' } else { 'unmapped' }
         }
     }
 
@@ -2280,6 +2322,9 @@ function Get-HistoryEntryRecordsLocal {
             Workstream         = (& $field 'Workstream').ToLowerInvariant()
             MemberName         = (& $field 'Member Name')
             ExternalProvenance = (& $field 'External provenance')
+            Title              = $headings[$i].Groups['title'].Value.Trim()
+            Verification       = (& $field 'Verification')
+            ExternalUnmeteredConnector = ((& $field 'External-unmetered') -replace '^connector=', '')
             Deliverable        = $deliverable
             Request            = (& $field 'Request')
             Outcome            = (& $field 'Outcome')
@@ -2559,7 +2604,28 @@ $historyFiles = @(
 )
 
 $teamPath = Join-Path $SquadRoot 'team.md'
-$roster = Get-RosterLocal -Content $(if (Test-Path -LiteralPath $teamPath) { Get-Content -LiteralPath $teamPath -Raw } else { '' })
+$teamContent = if (Test-Path -LiteralPath $teamPath) { Get-Content -LiteralPath $teamPath -Raw } else { '' }
+$roster = Get-RosterLocal -Content $teamContent
+$projectRoot = [System.IO.Path]::GetFullPath($SquadRoot)
+if ($projectRoot.Replace('\', '/') -match '^(?<base>.*?)/\.copilot-tracking(?:/|$)') { $projectRoot = $Matches['base'] }
+$decisionsPath = Join-Path $SquadRoot 'decisions.md'
+$decisionsContent = if (Test-Path -LiteralPath $decisionsPath) { Get-Content -LiteralPath $decisionsPath -Raw } else { '' }
+$retirementModel = [pscustomobject]@{ Retirements = @(); Issues = @() }
+$connectorIdentityIssues = @()
+$activeConnectorBindings = @()
+$connectorHistory = @($historyFiles | Where-Object BaseName -CEQ 'Squad Connector')
+$hasConnectorProvenance = $connectorHistory.Count -gt 0 -and
+    [System.IO.File]::ReadAllText($connectorHistory[0].FullName) -match '(?m)^[ \t]*\*[ \t]+External provenance:'
+if ($hasConnectorProvenance -or $decisionsContent -match '(?m)^## Connector Binding Retirement') {
+    . (Join-Path $PSScriptRoot 'Resolve-SquadConnectorHistory.ps1')
+    $retirementModel = Get-SquadConnectorRetirementModel -Content $decisionsContent -TeamPath $teamPath -ProjectRoot $projectRoot
+    $connectorIdentityIssues = @($retirementModel.Issues)
+    if ($hasConnectorProvenance) {
+        $activeModel = Get-SquadConnectorBindingIdentityModel -TeamContent $teamContent -TeamPath $teamPath -ProjectRoot $projectRoot
+        $activeConnectorBindings = @($activeModel.Bindings)
+        $connectorIdentityIssues += @($activeModel.Issues)
+    }
+}
 
 $ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
 if (-not (Test-Path -LiteralPath $ratesPath -PathType Leaf)) {
@@ -2591,6 +2657,7 @@ if ($EmitBaseline) {
 $warnings = [System.Collections.Generic.List[string]]::new()
 $postBaselineBlockIssues = [System.Collections.Generic.List[string]]::new()
 $attributionIssues = [System.Collections.Generic.List[string]]::new()
+foreach ($issue in $connectorIdentityIssues) { $attributionIssues.Add("Connector identity: $issue") }
 $historyCounts = @{}
 $historyIdentitiesByFile = @{}
 $enumerationLines = [System.Collections.Generic.List[string]]::new()
@@ -2676,10 +2743,14 @@ foreach ($file in $historyFiles) {
         }
 
         $entryForBlock = @($fileEntries | Where-Object { $block.Offset -ge $_.Start -and $block.Offset -lt $_.End } | Select-Object -First 1)
-        $memberForBlock = if ($entryForBlock) { [string]$entryForBlock.MemberName } else { '' }
-        $extProvForBlock = if ($entryForBlock -and $entryForBlock.PSObject.Properties['ExternalProvenance']) { [string]$entryForBlock.ExternalProvenance } else { '' }
-        $resolved = Resolve-RoleForAgentLocal -AgentName $agentName -MemberName $memberForBlock -Roster $roster -ExternalProvenance $extProvForBlock
-        if ($resolved.Status -in @('ambiguous-missing-member', 'ambiguous-member', 'member-not-found', 'connector-missing-member')) {
+        $memberForBlock = if ($entryForBlock.Count -eq 1) { [string]$entryForBlock[0].MemberName } else { '' }
+        $extProvForBlock = if ($entryForBlock.Count -eq 1) { [string]$entryForBlock[0].ExternalProvenance } else { '' }
+        $resolved = Resolve-RoleForAgentLocal -AgentName $agentName -MemberName $memberForBlock -Roster $roster -ExternalProvenance $extProvForBlock `
+            -EntryTitle $(if ($entryForBlock) { $entryForBlock[0].Title } else { '' }) `
+            -Verification $(if ($entryForBlock) { $entryForBlock[0].Verification } else { '' }) `
+            -ExternalUnmeteredConnector $(if ($entryForBlock) { $entryForBlock[0].ExternalUnmeteredConnector } else { '' }) `
+            -ActiveConnectorBindings $activeConnectorBindings -RetiredConnectorBindings $retirementModel.Retirements
+        if ($resolved.Status -notin @('ok', 'unmapped')) {
             $problem = "history/$($file.Name) consumption block $($block.Ordinal) cannot be attributed for agent '$agentName'$(if ($memberForBlock) { ", member '$memberForBlock'" } else { '' }) (status: $($resolved.Status))."
             $warnings.Add("WARN: $problem")
             $attributionIssues.Add($problem)
@@ -2729,6 +2800,7 @@ if ($postBaselineBlockIssues.Count -gt 0 -and -not $Check) {
     throw "Measure-SquadLedger: $($postBaselineBlockIssues.Count) post-baseline consumption block(s) failed to parse or validate; see warnings above. Refusing to compute a ledger from unreadable blocks."
 }
 if ($attributionIssues.Count -gt 0 -and -not $Check) {
+    foreach ($issue in $attributionIssues) { Write-Warning $issue }
     throw "Measure-SquadLedger: $($attributionIssues.Count) history entry(ies) could not be attributed to a unique roster identity. Add Member Name to shared-agent entries (especially Squad Connector) and rerun."
 }
 

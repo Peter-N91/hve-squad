@@ -219,6 +219,13 @@ tampering with trusted private state. Pending exchanges without that state fail
 closed instead of being re-snapshotted. Only validated paths and provenance
 return to the coordinator, never raw `narrative` or artifact contents. Routing,
 admission, escalation, and Scribe persistence remain internal to HVE.
+HVE dispatches the native `Squad Connector` agent on both initial request and
+resume; the coordinator does not run the lifecycle script inline. An ordinary
+resume keeps the original `taskId`, publishes no additional request, and sends
+validated completion to the internal Scribe. Finish or explicitly abandon
+pending work before renaming its external member or moving its owning roster:
+the identity check refuses to attach the old result to a new name. Directory
+roots accept the trailing separator used in the shipped examples.
 
 ## Step 5: Add a .NET or GCP specialist
 
@@ -299,6 +306,11 @@ operator confirmation, and the exact completed history headings being retained.
 Completed history and its Attribution rows stay intact; this evidence cannot
 authorize a new dispatch or an unlisted entry. A default-only refresh does not
 retire an unchanged identity.
+The shipped `Measure-SquadLedger.ps1` regenerates the authorized historical
+entries using `Resolve-SquadConnectorHistory.ps1`, retaining the saved role,
+member, model tier, and cost even after the old manifest is removed. Invalid
+evidence or an unlisted old-identity entry blocks the rewrite; it never becomes
+a generic connector row.
 
 Bindings belong to this squad. Federation promotion carries them with its roster,
 not to federation-global authority. Tracking roots are rebased; mailbox/manifest

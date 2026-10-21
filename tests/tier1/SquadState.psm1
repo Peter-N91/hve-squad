@@ -19,7 +19,7 @@ $script:ConnectorBindingColumns = @(
     'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role',
     'Default Execution'
 )
-$connectorDispatchHelper = Join-Path $PSScriptRoot '..' '..' 'squad-src' '.github' 'skills' 'squad' 'scripts' 'Resolve-SquadConnectorDispatch.ps1'
+$connectorDispatchHelper = Join-Path $PSScriptRoot '..' '..' 'squad-src' '.github' 'skills' 'squad' 'scripts' 'Resolve-SquadConnectorHistory.ps1'
 if (-not (Test-Path -LiteralPath $connectorDispatchHelper -PathType Leaf)) {
     throw "The connector dispatch helper was not found at '$connectorDispatchHelper'."
 }
@@ -182,6 +182,7 @@ function Get-HistoryEntry {
             Source                    = Split-Path $Path -Leaf
             Agent                     = [System.IO.Path]::GetFileNameWithoutExtension($Path)
             Title                     = $headings[$index].Groups['title'].Value.Trim()
+            DeliverablePaths          = $declared
             NamesArtifact             = $declared.Count -gt 0
             PreflightRef              = if ($preflightRef.Success) { $preflightRef.Groups['value'].Value } else { $null }
             PreflightSlot             = if ($preflightSlot.Success) { $preflightSlot.Groups['value'].Value } else { $null }
@@ -243,12 +244,13 @@ function Get-DeliverableEntry {
         [string]$Path
     )
 
-    $raw = Get-Content -LiteralPath $Path -Raw
-    foreach ($line in [regex]::Matches($raw, '(?m)^\s*\*\s*Deliverable:\s*(?<value>.+)$')) {
-        foreach ($candidate in (Get-DeliverablePathToken $line.Groups['value'].Value)) {
+    foreach ($entry in (Get-HistoryEntry -Path $Path)) {
+        foreach ($candidate in $entry.DeliverablePaths) {
             [pscustomobject]@{
-                Source = Split-Path $Path -Leaf
-                Agent  = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+                Source = $entry.Source
+                Agent  = $entry.Agent
+                Title  = $entry.Title
+                MemberName = $entry.MemberName
                 Path   = $candidate -replace '\\', '/'
             }
         }
@@ -435,6 +437,8 @@ function Get-ConnectorRosterRows {
                 Role       = ([string]$row['Role']).Trim().ToLowerInvariant()
                 MemberName = if ('Member Name' -in $table.Header) { ([string]$row['Member Name']).Trim() } else { '' }
                 Agent      = ([string]$row['Agent Name (Primary)']).Trim()
+                Tier       = ([string]$row['Model Tier']).Trim()
+                DeliverableRoot = ([string]$row['Deliverable Root']).Trim()
             }
         }
     }
@@ -491,6 +495,8 @@ function Get-ConnectorBindingModel {
                 DefaultExecution = ([string]$row['Default Execution']).Trim().ToLowerInvariant()
                 Role             = ''
                 TargetMemberName = ''
+                Tier             = ''
+                DeliverableRoot  = ''
                 Issues           = [System.Collections.Generic.List[string]]::new()
             }
             $bindings.Add($binding)
@@ -530,6 +536,10 @@ function Get-ConnectorBindingModel {
                     elseif (-not $target.MemberName -and $targetRows.Count -gt 1) {
                         $binding.Issues.Add('ambiguous:replace-target-member-required')
                     }
+                    if ($targetRows.Count -eq 1) {
+                        $binding.Tier = $targetRows[0].Tier
+                        $binding.DeliverableRoot = $targetRows[0].DeliverableRoot
+                    }
                     if ($binding.MemberName -and @($targetRows | Where-Object { $_.MemberName -and $_.MemberName -ceq $binding.MemberName }).Count -gt 0) {
                         $binding.Issues.Add('invalid:memberName-collides-with-target')
                     }
@@ -555,6 +565,10 @@ function Get-ConnectorBindingModel {
                     }
                 )
                 if ($memberRows.Count -ne 1) { $binding.Issues.Add('add-member-row-missing-or-ambiguous') }
+                else {
+                    $binding.Tier = $memberRows[0].Tier
+                    $binding.DeliverableRoot = $memberRows[0].DeliverableRoot
+                }
                 if ($binding.AddedRole) { $binding.Role = $binding.AddedRole }
             }
 
@@ -619,81 +633,7 @@ function Get-ConnectorRetirementModel {
         [Parameter(Mandatory)][string]$ProjectRoot
     )
 
-    $issues = [System.Collections.Generic.List[string]]::new()
-    $retirements = [System.Collections.Generic.List[object]]::new()
-    $required = @('team', 'manifests', 'confirmed', 'confirmationRef', 'historyEntries')
-    foreach ($entry in [regex]::Matches([string]$Content, '(?ms)^## Connector Binding Retirement(?<heading>[^\r\n]*)\r?\n(?<body>.*?)(?=^##[ \t]|\z)')) {
-        $issueCount = $issues.Count
-        $heading = [regex]::Match($entry.Groups['heading'].Value.Trim(), '^(?<timestamp>\S+)\s+(?<bindingId>[a-z0-9]+(?:-[a-z0-9]+)*)$')
-        $label = "Connector Binding Retirement $($entry.Groups['heading'].Value.Trim())"
-        if (-not $heading.Success) {
-            $issues.Add("${label}:invalid-heading")
-            continue
-        }
-        $retiredAt = $null
-        try { $retiredAt = [DateTimeOffset]::Parse($heading.Groups['timestamp'].Value, [System.Globalization.CultureInfo]::InvariantCulture) }
-        catch { $issues.Add("${label}:invalid-timestamp") }
-
-        $blocks = @([regex]::Matches($entry.Groups['body'].Value, '(?ms)^```json[ \t]*\r?\n(?<json>.*?)\r?\n```[ \t]*(?:\r?\n|\z)'))
-        if ($blocks.Count -ne 1) {
-            $issues.Add("${label}:one-json-record-required")
-            continue
-        }
-        $record = $null
-        try { $record = $blocks[0].Groups['json'].Value | ConvertFrom-Json -AsHashtable -Depth 64 }
-        catch { $issues.Add("${label}:invalid-json") }
-        if ($record -isnot [System.Collections.IDictionary]) {
-            $issues.Add("${label}:object-required")
-            continue
-        }
-        foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $record -Required $required)) {
-            $issues.Add("${label}:$issue")
-        }
-        foreach ($field in @('team', 'confirmationRef')) {
-            if ($record[$field] -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$record[$field])) {
-                $issues.Add("${label}:invalid:$field")
-            }
-        }
-        if ($record['confirmed'] -isnot [bool] -or $record['confirmed'] -ne $true) { $issues.Add("${label}:operator-confirmation-required") }
-        if ($record['manifests'] -isnot [System.Collections.IDictionary]) { $issues.Add("${label}:manifest-snapshots-required") }
-
-        $titles = $record['historyEntries']
-        if ($titles -isnot [array] -or $titles.Count -eq 0) {
-            $issues.Add("${label}:completed-history-entries-required")
-        }
-        else {
-            $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-            foreach ($title in $titles) {
-                if ($title -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$title)) {
-                    $issues.Add("${label}:invalid:history-entry")
-                    continue
-                }
-                if (-not $seen.Add($title)) { $issues.Add("${label}:duplicate:history-entry") }
-                try {
-                    $completedAt = [DateTimeOffset]::Parse(($title -split '\s+', 2)[0], [System.Globalization.CultureInfo]::InvariantCulture)
-                    if ($null -ne $retiredAt -and $completedAt -gt $retiredAt) { $issues.Add("${label}:history-postdates-retirement") }
-                }
-                catch { $issues.Add("${label}:invalid:history-entry-timestamp") }
-            }
-        }
-        if ($issues.Count -ne $issueCount) { continue }
-
-        $priorRows = @(Get-ConnectorRosterRows -TeamContent $record['team'])
-        $prior = Get-ConnectorBindingModel -TeamContent $record['team'] -TeamPath $TeamPath -ProjectRoot $ProjectRoot `
-            -RosterRows $priorRows -ManifestSnapshots $record['manifests']
-        foreach ($issue in $prior.Issues) { $issues.Add("${label}:prior-binding:$issue") }
-        $priorBinding = @($prior.ValidBindings | Where-Object { $_.BindingId -ceq $heading.Groups['bindingId'].Value })
-        if ($priorBinding.Count -ne 1) { $issues.Add("${label}:one-valid-prior-binding-required") }
-        if ($issues.Count -ne $issueCount) { continue }
-
-        $binding = $priorBinding[0]
-        $binding | Add-Member -NotePropertyName HistoryEntries -NotePropertyValue @($titles)
-        $retirements.Add($binding)
-    }
-    [pscustomobject]@{
-        Retirements = $retirements.ToArray()
-        Issues      = $issues.ToArray()
-    }
+    Get-SquadConnectorRetirementModel -Content $Content -TeamPath $TeamPath -ProjectRoot $ProjectRoot
 }
 
 function Get-ConnectorHistoryModel {
@@ -727,6 +667,7 @@ function Get-ConnectorHistoryModel {
         if ($entry.ExternalUnmeteredConnector -cne $entry.ExternalConnectorId) { $issues.Add("$($entry.Source): connector history unmetered marker does not match provenance") }
 
         $role = ''
+        $deliverableRoot = ''
         if ($entry.ExternalBindingId -in @('legacy-1.0', 'none (legacy-1.0)')) {
             if ($entry.ExternalEndpointKind -ne 'agent') { $issues.Add("$($entry.Source): legacy connector endpoint must be agent") }
             if ($entry.ExternalRoleMode -ne 'replace') { $issues.Add("$($entry.Source): legacy connector mode must be replace") }
@@ -739,6 +680,7 @@ function Get-ConnectorHistoryModel {
                 $targetRows = @($RosterRows | Where-Object { $_.Role -eq $target.Role -and $_.Agent -cne 'Squad Connector' })
                 if ($target.MemberName) { $targetRows = @($targetRows | Where-Object { $_.MemberName -ceq $target.MemberName }) }
                 if ($targetRows.Count -eq 0) { $issues.Add("$($entry.Source): legacy connector target has no matching internal member") }
+                elseif ($targetRows.Count -eq 1) { $deliverableRoot = $targetRows[0].DeliverableRoot }
                 $roleBindings = @(
                     $Bindings | Where-Object {
                         $_.Role -eq $target.Role -and
@@ -771,6 +713,7 @@ function Get-ConnectorHistoryModel {
             else {
                 $binding = $bindingMatches[0]
                 $role = $binding.Role
+                $deliverableRoot = $binding.DeliverableRoot
                 foreach ($comparison in @(
                         @{ Name = 'connector'; Actual = $entry.ExternalConnectorId; Expected = $binding.ConnectorId }
                         @{ Name = 'endpoint'; Actual = $entry.ExternalEndpointKind; Expected = $binding.EndpointKind }
@@ -793,6 +736,8 @@ function Get-ConnectorHistoryModel {
                     BindingId   = $entry.ExternalBindingId
                     ConnectorId = $entry.ExternalConnectorId
                     Source      = $entry.Source
+                    Title       = $entry.Title
+                    DeliverableRoot = $deliverableRoot
                 })
         }
     }
@@ -1150,6 +1095,12 @@ function Get-SquadStateModel {
         foreach ($entry in $declared) {
             $resolved = Resolve-Deliverable $entry.Path
             $root = if ($agentRoots.ContainsKey($entry.Agent)) { $agentRoots[$entry.Agent] } else { $null }
+            if ($entry.Agent -ceq 'Squad Connector') {
+                $identity = @($connectorHistoryModel.Identities | Where-Object {
+                        $_.Source -ceq $entry.Source -and $_.Title -ceq $entry.Title -and $_.MemberName -ceq $entry.MemberName
+                    })
+                $root = if ($identity.Count -eq 1) { $identity[0].DeliverableRoot } else { $null }
+            }
 
             # Compared as tails, not as written: a promotion rebases the roster's roots
             # but cannot edit the append-only entries that predate it.
@@ -1162,7 +1113,9 @@ function Get-SquadStateModel {
                 Path       = $entry.Path
                 Resolved   = $resolved
                 Root       = $root
-                UnderRoot  = -not $root -or $declaredPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
+                UnderRoot  = if (-not $root) { $entry.Agent -cne 'Squad Connector' }
+                    elseif ($entry.Agent -ceq 'Squad Connector') { $declaredPath.StartsWith("$prefix/", [StringComparison]::OrdinalIgnoreCase) }
+                    else { $declaredPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) }
             }
         }
     )

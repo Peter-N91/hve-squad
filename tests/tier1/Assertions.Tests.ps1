@@ -547,6 +547,34 @@ BeforeAll {
         Add-Content -LiteralPath (Join-Path $Root 'decisions.md') -Value $entry -Encoding utf8NoBOM
     }
 
+    function Use-MultipleConnectorRoots {
+        param([string]$Root, [switch]$Shared)
+        Use-ConnectorReplacementState -Root $Root
+        $model = Get-SquadStateModel -SquadRoot $Root
+        $first = $model.Deliverables | Where-Object Agent -CEQ 'Squad Connector' | Select-Object -First 1
+        $secondRoot = if ($Shared) { $model.RoleRoots['researcher'] } else { '.copilot-tracking/reviews/external/' }
+        $manifest = Copy-ConnectorManifestFixture -Root $Root -Name 'manifest.capability-assessor.1.1.json'
+        $teamPath = Join-Path $Root 'team.md'
+        $team = [System.IO.File]::ReadAllText($teamPath)
+        $member = "| gcp | GCP Assessor | Squad Connector | | - | task | fast | $secondRoot |"
+        $team = [regex]::Replace($team, '(?m)^(\| scribe[^\r\n]+\|\r?\n)', ('$1' + $member + "`n"), 1)
+        $team = $team.TrimEnd() + "`n| gcp-assessor | acme-capability-assessor | $manifest | agent | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | researcher | connector |`n"
+        Set-Content -LiteralPath $teamPath -Value $team -Encoding utf8NoBOM
+        $secondPath = $secondRoot.TrimEnd('/') + '/second-connector.md'
+        $projectRoot = Split-Path (Split-Path $Root -Parent) -Parent
+        $diskPath = Join-Path $projectRoot $secondPath
+        [void][System.IO.Directory]::CreateDirectory((Split-Path $diskPath -Parent))
+        Copy-Item -LiteralPath $first.Resolved -Destination $diskPath
+        $historyPath = Join-Path $Root 'history/Squad Connector.md'
+        $body = [regex]::Match([System.IO.File]::ReadAllText($historyPath), '(?ms)^#{2,3}[ \t]+[^\r\n]+\r?\n(?<body>.*)').Groups['body'].Value
+        $body = $body.Replace('Org Researcher', 'GCP Assessor').Replace('acme-research-agent', 'acme-capability-assessor').
+            Replace('binding=research-org', 'binding=gcp-assessor').Replace('mode=replace', 'mode=add').
+            Replace('target=role:researcher', 'target=role:gcp/GCP Assessor')
+        $body = $body -replace '(?m)^\* Deliverable:[^\r\n]+', ('* Deliverable: `' + $secondPath + '`')
+        Add-Content -LiteralPath $historyPath -Value ("`n## 2026-08-19T10:30:00Z Second connector report`n" + $body) -Encoding utf8NoBOM
+        [pscustomobject]@{ FirstPath = $first.Path; SecondPath = $secondPath; SecondRoot = $secondRoot; HistoryPath = $historyPath }
+    }
+
     function Remove-ConnectorBindingFixture {
         param([string]$Root)
 
@@ -716,6 +744,39 @@ Describe 'The contract passes on a schema-correct tree' {
         Edit-Fixture -Path (Join-Path $root 'team.md') -Pattern '\| connector \|' -Replacement '| ask |'
 
         (Test-Contract $root).Passed | Should -BeTrue
+    }
+
+    It 'CONN-33 resolves each completed connector root when Shared=<Shared>' -ForEach @(
+        @{ Shared = $true }, @{ Shared = $false }
+    ) {
+        $root = New-Fixture "connector-multiple-roots-$Shared"
+        $paths = Use-MultipleConnectorRoots -Root $root -Shared:$Shared
+        $model = Get-SquadStateModel -SquadRoot $root
+        $model.ConnectorHistoryIssues | Should -BeNullOrEmpty
+        $reports = @($model.Deliverables | Where-Object Agent -CEQ 'Squad Connector')
+        $reports.Count | Should -Be 2
+        @($reports | Where-Object { -not $_.UnderRoot -or -not $_.Resolved }).Count | Should -Be 0
+        ($reports | Where-Object Path -EQ $paths.FirstPath).Root | Should -Be $model.RoleRoots['researcher']
+        ($reports | Where-Object Path -EQ $paths.SecondPath).Root | Should -Be $paths.SecondRoot
+    }
+
+    It 'CONN-33 does not admit a report merely because another connector owns its root' {
+        $root = New-Fixture 'connector-wrong-sibling-root'
+        $paths = Use-MultipleConnectorRoots -Root $root
+        $history = [System.IO.File]::ReadAllText($paths.HistoryPath).Replace($paths.FirstPath, $paths.SecondPath)
+        Set-Content -LiteralPath $paths.HistoryPath -Value $history -Encoding utf8NoBOM
+        $model = Get-SquadStateModel -SquadRoot $root
+        $model.ConnectorHistoryIssues | Should -BeNullOrEmpty
+        @($model.Deliverables | Where-Object { $_.Agent -ceq 'Squad Connector' -and -not $_.UnderRoot }).Count | Should -Be 1
+    }
+
+    It 'CONN-33 rejects a directory whose name only starts with the authorized root' {
+        $root = New-Fixture 'connector-root-prefix-collision'
+        $paths = Use-MultipleConnectorRoots -Root $root
+        $wrongPath = $paths.SecondRoot.TrimEnd('/') + '-sibling/report.md'
+        Set-Content -LiteralPath $paths.HistoryPath -Value ([System.IO.File]::ReadAllText($paths.HistoryPath).Replace($paths.SecondPath, $wrongPath))
+        $model = Get-SquadStateModel -SquadRoot $root
+        ($model.Deliverables | Where-Object Path -EQ $wrongPath).UnderRoot | Should -BeFalse
     }
 
     It 'preserves legacy state while upgrading the preflight schema' {

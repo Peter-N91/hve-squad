@@ -25,6 +25,7 @@ Describe 'CONN-28 connector resume live harness' {
         $requestTurn[0].captureDispatchEvents | Should -BeTrue
         $resumeTurn[0].captureDispatchEvents | Should -BeTrue
         $requestTurn[0].connectorConsumer.connectorId | Should -Be 'tier1-research-agent'
+        $resumeTurn[0].prompt | Should -Not -Match 'Squad Connector|Scribe|Invoke-Squad|taskId|validation inline'
     }
 
     It 'publishes a result without rewriting the request or snapshot' {
@@ -87,5 +88,25 @@ Describe 'CONN-28 connector resume live harness' {
         $scribe = @(Get-SquadDispatchEvidence -TranscriptPath $transcript -AgentName 'Squad Scribe')
         $connector.Count | Should -Be 1
         $scribe.Count | Should -Be 0
+    }
+
+    It 'rejects script calls and other-agent prompts that merely mention the Connector' {
+        $transcript = Join-Path $script:Scratch 'inline-events.jsonl'
+        @(
+            '{"type":"tool.execution_start","tool":"powershell","arguments":{"command":"Invoke-SquadConnectorDispatch.ps1 # Squad Connector task-original"}}'
+            '{"type":"tool.execution_start","tool":"task","arguments":{"agent":"Squad Scribe","prompt":"Record the Squad Connector task-original result."}}'
+            '{"type":"tool.execution_complete","tool":"task","result":{"agent":"Squad Connector","taskId":"task-original"}}'
+        ) | Set-Content -LiteralPath $transcript
+        @(Get-SquadDispatchEvidence -TranscriptPath $transcript -AgentName 'Squad Connector').Count | Should -Be 0
+    }
+
+    It 'binds resume evidence to the exact native agent and original task id' {
+        $transcript = Join-Path $script:Scratch 'bound-events.jsonl'
+        @(
+            '{"type":"tool.execution_start","data":{"toolName":"task","arguments":{"agent_type":"hve-squad:squad-connector","prompt":"Resume task-original with unchanged inputs."}}}'
+            '{"type":"subagent.started","data":{"agentName":"Squad Connector","prompt":"Resume task-original"}}'
+        ) | Set-Content -LiteralPath $transcript
+        @(Get-SquadDispatchEvidence -TranscriptPath $transcript -AgentName 'Squad Connector' -TaskId 'task-original').Count | Should -Be 2
+        @(Get-SquadDispatchEvidence -TranscriptPath $transcript -AgentName 'Squad Connector' -TaskId 'task-other').Count | Should -Be 0
     }
 }

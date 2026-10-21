@@ -54,13 +54,19 @@ Describe 'CONN-28 ordinary connector resume preserves dispatch and collision evi
         Test-Path -LiteralPath (Join-Path $WorkspaceRoot $Artifact) -PathType Leaf | Should -BeTrue
     }
 
+    It 'resumes only the original request without publishing additional work' {
+        $requests = @(Get-ChildItem -LiteralPath (Split-Path $RequestPath -Parent) -Filter '*.request.json' -File)
+        $requests.Count | Should -Be 1 -Because 'resume must not create a second request before consuming the original'
+        $requests[0].Name | Should -Be "$TaskId.request.json"
+    }
+
     It 'records an actual Squad Connector dispatch for the first request' {
         $evidence = @(Get-SquadDispatchEvidence -TranscriptPath $RequestTranscript -LogDir $RequestLogDir -AgentName $ConnectorAgent)
         $evidence.Count | Should -BeGreaterThan 0 -Because 'an awaiting request must come from a real connector dispatch, not an inline coordinator write'
     }
 
     It 'records actual Squad Connector and Squad Scribe dispatches for resume' {
-        $connectorEvidence = @(Get-SquadDispatchEvidence -TranscriptPath $ResumeTranscript -LogDir $ResumeLogDir -AgentName $ConnectorAgent)
+        $connectorEvidence = @(Get-SquadDispatchEvidence -TranscriptPath $ResumeTranscript -LogDir $ResumeLogDir -AgentName $ConnectorAgent -TaskId $TaskId)
         $scribeEvidence = @(Get-SquadDispatchEvidence -TranscriptPath $ResumeTranscript -LogDir $ResumeLogDir -AgentName $ScribeAgent)
         $connectorEvidence.Count | Should -BeGreaterThan 0 -Because 'the result must be validated by the roster-resolved shim'
         $scribeEvidence.Count | Should -BeGreaterThan 0 -Because 'completed connector work must be persisted by the internal Scribe'

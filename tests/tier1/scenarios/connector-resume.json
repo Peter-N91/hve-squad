@@ -23,7 +23,7 @@
     {
       "id": "resume",
       "captureDispatchEvents": true,
-      "prompt": "Act as the Squad Coordinator. Resume the pending connector-backed research task now that its external result is available. Follow the ordinary roster-resolved resume and persistence path for the existing task id. Do not infer completion from plausible files, run connector validation inline, or write Scribe state yourself."
+      "prompt": "Act as the Squad Coordinator. Resume the pending researcher work now that the external result is available."
     }
   ],
   "connectorResumeIntegrity": {

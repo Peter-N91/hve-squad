@@ -62,8 +62,10 @@ function Get-ConnectorDispatchPathLocal {
     param(
         [Parameter(Mandatory)][string]$WorkspaceRoot,
         [Parameter(Mandatory)][string]$Path,
-        [switch]$AllowAbsolute
+        [switch]$AllowAbsolute,
+        [switch]$Directory
     )
+    if ($Directory) { $Path = $Path.TrimEnd([char[]]'\/') }
     if (-not $AllowAbsolute -and ($Path -match '^[\\/]' -or $Path -match '^[A-Za-z]:')) {
         Stop-ConnectorDispatchLocal 'repository-relative-path-required'
     }
@@ -128,7 +130,7 @@ function Invoke-SquadConnectorDispatch {
         if (-not (Test-Path -LiteralPath $InputObject.workspaceRoot -PathType Container)) { Stop-ConnectorDispatchLocal 'invalid-workspace-root' }
         $workspace = (Resolve-Path -LiteralPath $InputObject.workspaceRoot).Path
         $manifestPath = Get-ConnectorDispatchPathLocal -WorkspaceRoot $workspace -Path $InputObject.manifestPath -AllowAbsolute
-        $root = Get-ConnectorDispatchPathLocal -WorkspaceRoot $workspace -Path $InputObject.deliverableRoot
+        $root = Get-ConnectorDispatchPathLocal -WorkspaceRoot $workspace -Path $InputObject.deliverableRoot -Directory
         $phase = 'manifest'
         $manifest = Read-ConnectorDispatchJsonLocal -Path $manifestPath
         $check = Test-SquadConnectorManifestShape -Manifest $manifest
@@ -143,7 +145,7 @@ function Invoke-SquadConnectorDispatch {
             }
         }
         if ($manifest.deadlineMinutesDefault -eq 0) { Stop-ConnectorDispatchLocal 'invalid-manifest-limit' }
-        $drop = Get-ConnectorDispatchPathLocal -WorkspaceRoot $workspace -Path $manifest.dropPath
+        $drop = Get-ConnectorDispatchPathLocal -WorkspaceRoot $workspace -Path $manifest.dropPath -Directory
         if (Test-ConnectorRootsCollideLocal -Left $InputObject.deliverableRoot -Right $manifest.dropPath) {
             Stop-ConnectorDispatchLocal 'mailbox-overlaps-deliverable-root'
         }
@@ -229,7 +231,12 @@ function Invoke-SquadConnectorDispatch {
         try { $lock = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None) }
         catch [System.IO.IOException] { Stop-ConnectorDispatchLocal 'dispatch-locked' }
         $manifestHash = Get-ConnectorDispatchFileHashLocal -Path $manifestPath
-        $identityHash = Get-ConnectorDispatchHashLocal -Text ($provenance | ConvertTo-Json -Compress)
+        $identity = [ordered]@{
+            provenance = $provenance
+            memberName = $member
+            teamPath = ConvertTo-ConnectorPathKeyLocal -Path ([System.IO.Path]::GetRelativePath($workspace, $teamPath))
+        }
+        $identityHash = Get-ConnectorDispatchHashLocal -Text ($identity | ConvertTo-Json -Depth 8 -Compress)
         if (-not $resume) {
             $task = Get-ConnectorInputValueLocal -Object $InputObject -Name 'task'
             if ($task -isnot [string] -or [string]::IsNullOrWhiteSpace($task)) { Stop-ConnectorDispatchLocal 'missing-task' }
@@ -263,7 +270,7 @@ function Invoke-SquadConnectorDispatch {
                     if (-not (Test-ConnectorRootContainedLocal -ParentRoot $request.deliverableRoot -ChildRoot $output.deliverableRoot)) {
                         Stop-ConnectorDispatchLocal 'output-root-outside-deliverable-root'
                     }
-                    [void](Get-ConnectorDispatchPathLocal -WorkspaceRoot $workspace -Path $output.deliverableRoot)
+                    [void](Get-ConnectorDispatchPathLocal -WorkspaceRoot $workspace -Path $output.deliverableRoot -Directory)
                 }
             }
             $existing = @(

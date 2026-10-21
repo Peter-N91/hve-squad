@@ -126,22 +126,31 @@ plan must actually require its work.
 For a selected `Squad Connector` endpoint, the coordinator supplies
 `workspaceRoot`, the registered `manifestPath`, owning `teamPath`, `connectorId`,
 `role`, `deliverableRoot`, bounded `task`, and resolved 1.1 binding/output/execution
-inputs. Preserve classified `owner` where needed. The thin agent runs
-`Invoke-SquadConnectorDispatch.ps1` once; on resume include the existing `taskId`
-and unchanged inputs. Use only its validated JSON metadata for the Scribe
-handoff, never raw result narrative.
+inputs. Preserve classified `owner` where needed. Dispatch the native
+`Squad Connector` agent through `runSubagent` or `task` on both first request and
+resume, with normal model attribution and Cost Preflight admission. Only that
+child runs `Invoke-SquadConnectorDispatch.ps1`; the coordinator may run the
+side-effect-free resolver, never the lifecycle wrapper. Use only the child's
+validated JSON metadata for the Scribe handoff, never raw result narrative.
 
 Automatic selection is not synchronous transport. An external `awaiting`
 result holds the current stage; it is not completion, permission to advance,
 or a reason to fall back to the internal agent. Keep the pending request's
-task/binding identity in the handoff decision and request file, preserve the
+task/binding identity and complete original dispatch inputs in a Scribe-owned
+pending handoff decision and request file, preserve the
 shim-owned `<taskId>.snapshot.json` collision baseline unchanged, and
-re-dispatch the shim with the same `taskId` when the result is available. The
-resume dispatch runs `scripts/Invoke-SquadConnectorDispatch.ps1`, which loads
+re-dispatch the native agent with the same `taskId` when the result is available.
+Recover the pending input before classifying new work; never omit `taskId`,
+re-resolve a pending task under a new member, or create another request while
+resuming it. Missing or ambiguous pending identity stops for clarification,
+not a guessed dispatch. The resumed child runs
+`scripts/Invoke-SquadConnectorDispatch.ps1`, which loads
 that original snapshot, checks its private hashes and consumed-task state,
 and never rebuilds it after the producer has written artifacts. Preserve the
 wrapper-owned `dropPath/.squad-connector` state; the thin agent returns only the
-script's JSON, not raw external narrative. Record no
+script's JSON, not raw external narrative. A direct coordinator script call
+does not count as a Connector dispatch or establish its model execution.
+Record no
 completed dispatch history until artifacts validate. Consumer automation may
 trigger the resume; this package supplies no external runner or automatic
 cross-process wake-up service.
@@ -291,6 +300,13 @@ each timestamped no later than the retirement decision. Every retained entry
 must still match the former binding id, connector, endpoint kind, mode, target,
 external Member Name, verification marker, and unmetered marker exactly. Its
 Attribution row must match that same role and external member.
+`Measure-SquadLedger.ps1` uses the shared, read-only
+`scripts/Resolve-SquadConnectorHistory.ps1` validator during regeneration. For
+the exact listed entries it derives role, external member, model tier, and
+alignment from the saved roster, even when today's binding/member/manifest was
+removed or replaced. It does not rewrite history or change token pricing.
+Missing, invalid, or unlisted historical identity blocks regeneration; it never
+falls back to a generic connector row or adopts the new member's identity.
 
 Retirement evidence is historical only: it cannot dispatch a removed connector,
 admit an unlisted later entry, override an invalid active binding, or authorize a

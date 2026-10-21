@@ -551,6 +551,15 @@ Describe 'CONN-26 retry exhaustion preserves the runtime unreachable status' {
 }
 
 Describe 'CONN-28 ordinary resume preserves a durable collision snapshot' {
+    It 'requires a native coordinator dispatch with the original id, not a direct wrapper call' {
+        $coordinator = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
+        $coordinator | Should -Match 'Resume pending connectors first'
+        $coordinator | Should -Match 'native `runSubagent` or `task` to dispatch\s+`Squad Connector`'
+        $coordinator | Should -Match 'never run the wrapper inline'
+        $coordinator | Should -Match 'original `taskId`'
+        $coordinator | Should -Match 'never run the wrapper inline or\s+create a replacement request'
+    }
+
     It 'preserves <_> pre-existing paths through library and CLI validation' -ForEach @(0, 1, 2, 3) {
         $pathCount = $_
         $request = Get-ExampleJson -Name 'delegation-request.agent.1.1.sample.json'

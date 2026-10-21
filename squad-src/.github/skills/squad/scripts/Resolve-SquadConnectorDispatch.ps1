@@ -66,9 +66,14 @@ function Split-ConnectorCellsLocal {
 
 function Get-MarkdownTablesFromPathLocal {
     param([Parameter(Mandatory)][string]$Path)
+    Get-MarkdownTablesFromContentLocal -Content ([System.IO.File]::ReadAllText($Path))
+}
+
+function Get-MarkdownTablesFromContentLocal {
+    param([AllowEmptyString()][string]$Content)
 
     $tables = [System.Collections.Generic.List[pscustomobject]]::new()
-    $lines = [System.IO.File]::ReadAllLines($Path)
+    $lines = $Content -split '\r?\n'
     $run = $null
     foreach ($line in ($lines + @(''))) {
         if ($line -match '^\s*\|') {
@@ -264,9 +269,15 @@ function Get-SquadConnectorRosterState {
     .SYNOPSIS
         Reads `team.md` and returns members + connector bindings.
     #>
-    param([Parameter(Mandatory)][string]$TeamPath)
+    param(
+        [Parameter(Mandatory)][string]$TeamPath,
+        [AllowEmptyString()][string]$TeamContent
+    )
 
-    $tables = @(Get-MarkdownTablesFromPathLocal -Path $TeamPath)
+    $tables = @(
+        if ($PSBoundParameters.ContainsKey('TeamContent')) { Get-MarkdownTablesFromContentLocal -Content $TeamContent }
+        else { Get-MarkdownTablesFromPathLocal -Path $TeamPath }
+    )
     $primaryHeaders = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent')
     $membersTable = @(
         $tables | Where-Object {
@@ -291,6 +302,8 @@ function Get-SquadConnectorRosterState {
                 Role       = $role
                 MemberName = $member
                 Agent      = $agent
+                Tier       = ([string]$row['Model Tier']).Trim()
+                DeliverableRoot = ([string]$row['Deliverable Root']).Trim()
             })
     }
 
@@ -386,7 +399,9 @@ function Get-ConnectorBindingIssuesLocal {
         [Parameter(Mandatory)]$Binding,
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Members,
         [Parameter(Mandatory)][string]$TeamPath,
-        [Parameter(Mandatory)][hashtable]$ManifestCache
+        [Parameter(Mandatory)][hashtable]$ManifestCache,
+        [System.Collections.IDictionary]$ManifestSnapshots,
+        [string]$ProjectRoot
     )
 
     $issues = [System.Collections.Generic.List[string]]::new()
@@ -448,66 +463,79 @@ function Get-ConnectorBindingIssuesLocal {
         $issues.Add('missing:manifestPath')
     }
     else {
-        $resolvedManifestPath = $manifestPath
-        if (-not [System.IO.Path]::IsPathRooted($manifestPath)) {
-            if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
-                $resolvedManifestPath = (Resolve-Path -LiteralPath $manifestPath).Path
+        $manifest = $null
+        if ($PSBoundParameters.ContainsKey('ManifestSnapshots')) {
+            if ($null -eq $ManifestSnapshots -or -not $ManifestSnapshots.Contains($manifestPath)) {
+                $issues.Add('snapshot-manifest-missing')
             }
-            else {
-                $resolvedManifestPath = Join-Path -Path (Split-Path -Parent $TeamPath) -ChildPath $manifestPath
-            }
-        }
-        if (-not (Test-Path -LiteralPath $resolvedManifestPath -PathType Leaf)) {
-            # Fail closed: an applicable binding may never be admitted as `ok` against a
-            # manifest path that does not resolve to a readable file (NR-004).
-            $issues.Add('manifest-not-found')
+            else { $manifest = $ManifestSnapshots[$manifestPath] }
         }
         else {
-            if (-not $ManifestCache.ContainsKey($resolvedManifestPath)) {
-                try {
-                    $manifestJson = Get-Content -LiteralPath $resolvedManifestPath -Raw
-                    $ManifestCache[$resolvedManifestPath] = $manifestJson | ConvertFrom-Json -AsHashtable -Depth 64
+            $resolvedManifestPath = $manifestPath
+            if (-not [System.IO.Path]::IsPathRooted($manifestPath)) {
+                if ($ProjectRoot -and (Test-Path -LiteralPath (Join-Path $ProjectRoot $manifestPath) -PathType Leaf)) {
+                    $resolvedManifestPath = Join-Path $ProjectRoot $manifestPath
                 }
-                catch {
-                    $ManifestCache[$resolvedManifestPath] = $null
-                    $issues.Add('manifest-parse-failed')
-                }
-            }
-            $manifest = $ManifestCache[$resolvedManifestPath]
-            if (-not $manifest) {
-                $issues.Add('manifest-unreadable')
-            }
-            else {
-                $manifestShape = Test-SquadConnectorManifestShape -Manifest $manifest
-                foreach ($shapeIssue in @($manifestShape.Issues)) { $issues.Add("manifest-shape:$shapeIssue") }
-
-                $manifestConnectorId = ([string](Get-ConnectorInputValueLocal -Object $manifest -Name 'connectorId' -Default '')).Trim()
-                if (-not $manifestConnectorId) {
-                    $issues.Add('manifest-missing:connectorId')
-                }
-                elseif ($connectorId -and $manifestConnectorId -cne $connectorId) {
-                    $issues.Add('manifest-connectorId-mismatch')
-                }
-
-                $manifestEndpointKind = ([string](Get-ConnectorInputValueLocal -Object $manifest -Name 'endpointKind' -Default '')).Trim().ToLowerInvariant()
-                if (-not $manifestEndpointKind) {
-                    $issues.Add('manifest-missing:endpointKind')
-                }
-                elseif ($endpointKind -and $manifestEndpointKind -ne $endpointKind) {
-                    $issues.Add('manifest-endpointKind-mismatch')
-                }
-
-                $manifestRoles = @((Get-ConnectorInputValueLocal -Object $manifest -Name 'roles' -Default @()) | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() } | Where-Object { $_ })
-                if ($manifestRoles.Count -eq 0) {
-                    $issues.Add('manifest-missing:roles')
+                elseif (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+                    $resolvedManifestPath = (Resolve-Path -LiteralPath $manifestPath).Path
                 }
                 else {
-                    if ($roleMode -eq 'replace' -and $targetKind -eq 'role' -and $target.Role -and $manifestRoles -notcontains $target.Role) {
-                        $issues.Add("manifest-role-missing:$($target.Role)")
+                    $resolvedManifestPath = Join-Path -Path (Split-Path -Parent $TeamPath) -ChildPath $manifestPath
+                }
+            }
+            if (-not (Test-Path -LiteralPath $resolvedManifestPath -PathType Leaf)) {
+                $issues.Add('manifest-not-found')
+            }
+            else {
+                if (-not $ManifestCache.ContainsKey($resolvedManifestPath)) {
+                    try {
+                        $manifestJson = Get-Content -LiteralPath $resolvedManifestPath -Raw
+                        $ManifestCache[$resolvedManifestPath] = $manifestJson | ConvertFrom-Json -AsHashtable -Depth 64
                     }
-                    if ($roleMode -eq 'add' -and $addedRole -and $manifestRoles -notcontains $addedRole) {
-                        $issues.Add("manifest-role-missing:$addedRole")
+                    catch [System.ArgumentException] {
+                        $ManifestCache[$resolvedManifestPath] = $null
+                        $issues.Add('manifest-parse-failed')
                     }
+                }
+                $manifest = $ManifestCache[$resolvedManifestPath]
+            }
+        }
+        if ($manifest -isnot [System.Collections.IDictionary]) {
+            $issues.Add('manifest-unreadable')
+        }
+        else {
+            $manifestShape = Test-SquadConnectorManifestShape -Manifest $manifest
+            foreach ($shapeIssue in @($manifestShape.Issues)) { $issues.Add("manifest-shape:$shapeIssue") }
+            if ([string](Get-ConnectorInputValueLocal -Object $manifest -Name 'schemaVersion' -Default '') -ne '1.1') {
+                $issues.Add('manifest-version-not-1.1')
+            }
+
+            $manifestConnectorId = ([string](Get-ConnectorInputValueLocal -Object $manifest -Name 'connectorId' -Default '')).Trim()
+            if (-not $manifestConnectorId) {
+                $issues.Add('manifest-missing:connectorId')
+            }
+            elseif ($connectorId -and $manifestConnectorId -cne $connectorId) {
+                $issues.Add('manifest-connectorId-mismatch')
+            }
+
+            $manifestEndpointKind = ([string](Get-ConnectorInputValueLocal -Object $manifest -Name 'endpointKind' -Default '')).Trim().ToLowerInvariant()
+            if (-not $manifestEndpointKind) {
+                $issues.Add('manifest-missing:endpointKind')
+            }
+            elseif ($endpointKind -and $manifestEndpointKind -ne $endpointKind) {
+                $issues.Add('manifest-endpointKind-mismatch')
+            }
+
+            $manifestRoles = @((Get-ConnectorInputValueLocal -Object $manifest -Name 'roles' -Default @()) | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() } | Where-Object { $_ })
+            if ($manifestRoles.Count -eq 0) {
+                $issues.Add('manifest-missing:roles')
+            }
+            else {
+                if ($roleMode -eq 'replace' -and $targetKind -eq 'role' -and $target.Role -and $manifestRoles -notcontains $target.Role) {
+                    $issues.Add("manifest-role-missing:$($target.Role)")
+                }
+                if ($roleMode -eq 'add' -and $addedRole -and $manifestRoles -notcontains $addedRole) {
+                    $issues.Add("manifest-role-missing:$addedRole")
                 }
             }
         }

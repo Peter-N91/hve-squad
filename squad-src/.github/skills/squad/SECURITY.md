@@ -12,6 +12,7 @@ estimated_reading_time: 6
 
 The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `Invoke-SquadConnectorDispatch.ps1`,
+`Resolve-SquadConnectorHistory.ps1`,
 `Resolve-SquadModelRoute.ps1`, `Get-SquadDispatchBrief.ps1`,
 `Write-SquadHandoff.ps1`, `Measure-SquadLedger.ps1`,
 `Set-SquadCostPreflight.ps1`, and `Initialize-SquadConsumptionRates.ps1`.
@@ -59,6 +60,9 @@ Different filesystem permissions or unattended policies change the risk.
 * The thin connector agent runs the lifecycle wrapper once. That wrapper owns
   request/snapshot publication, result checks, and private replay state; the
   shared resolver remains side-effect free.
+* The historical identity helper validates confirmed retirement snapshots for
+  the ledger and assurance reader. Exact completed headings scope that evidence;
+  it cannot register a removed endpoint or authorize later work.
 * The consumer's adapter runs its own agents or workflow outside this package.
 * The handoff writer, ledger calculator, preflight helper, and rate seeder write
   their declared local state/output files. The ledger can read local host usage
@@ -154,6 +158,9 @@ an adversary allowed to modify them can change the routing policy itself.
 
 Binding/member ids and Scribe-rendered provenance identify the selected
 configuration. They are not a signed record of who authored that configuration.
+Pending identity hashes include the external member and owning roster, so a
+rename or cross-squad resume cannot silently relabel a result. Retirement records
+retain historical attribution only while the trusted local record remains intact.
 
 ### Information Disclosure
 

@@ -1164,6 +1164,186 @@ description: "Append-only dispatch history for a single squad agent"
     }
 }
 
+Describe 'CONN-32 production connector ledger regeneration after confirmed binding changes' {
+    BeforeAll {
+        function New-ConnectorLedgerRoot {
+            param([string]$RoleMode = 'replace')
+            $workspace = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            $root = Join-Path $workspace '.copilot-tracking/squad'
+            [void][System.IO.Directory]::CreateDirectory((Split-Path $root -Parent))
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+            $teamPath = Join-Path $root 'team.md'
+            $team = [System.IO.File]::ReadAllText($teamPath).Replace('| default    | research/', '| extended   | research/')
+            $role = if ($RoleMode -eq 'add') { 'gcp' } else { 'researcher' }
+            $target = if ($RoleMode -eq 'add') { 'role:gcp/External Researcher' } else { 'role:researcher/Alpha' }
+            if ($RoleMode -eq 'add') {
+                $team = $team.TrimEnd() + "`n| gcp | External Researcher | Squad Connector | | - | task | extended | research/ |`n"
+            }
+            $addedRole = if ($RoleMode -eq 'add') { 'gcp' } else { '' }
+            $team += @"
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| external-research | external-agent | connectors/manifest.json | agent | $RoleMode | role | $target | External Researcher | $addedRole | researcher | connector |
+"@
+            Set-Content -LiteralPath $teamPath -Value $team -Encoding utf8NoBOM
+            $manifest = [ordered]@{
+                connectorId = 'external-agent'; schemaVersion = '1.1'; transport = 'file'; endpointKind = 'agent'
+                capabilities = @('Bounded research'); roles = @($role); dropPath = '.connector-drops/research/'
+                deadlineMinutesDefault = 60; retryCapDefault = 2; contact = 'Consumer operator'; version = '1.0'
+            }
+            $manifestPath = Join-Path $workspace 'connectors/manifest.json'
+            [void][System.IO.Directory]::CreateDirectory((Split-Path $manifestPath -Parent))
+            $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
+            $oldHistory = Join-Path $root 'history/Squad Researcher.md'
+            $historyPath = Join-Path $root 'history/Squad Connector.md'
+            $history = [System.IO.File]::ReadAllText($oldHistory).Replace('# History: Squad Researcher', '# History: Squad Connector')
+            $history = $history -replace '(?m)^(\* Outcome:[^\r\n]*)', ('$1' + "`n* Member Name: External Researcher" +
+                "`n* External provenance: connector=external-agent; binding=external-research; endpoint=agent; mode=$RoleMode; target=$target" +
+                "`n* Verification: external, unverified`n* External-unmetered: connector=external-agent")
+            Set-Content -LiteralPath $historyPath -Value $history -Encoding utf8NoBOM -NoNewline
+            Remove-Item -LiteralPath $oldHistory
+            [pscustomobject]@{ Root = $root; Workspace = $workspace; Manifest = $manifest; ManifestPath = $manifestPath; Role = $role; RoleMode = $RoleMode; HistoryPath = $historyPath }
+        }
+
+        function Save-LedgerRetirement {
+            param($Fixture, [string]$Mutation)
+            $record = [ordered]@{
+                team = [System.IO.File]::ReadAllText((Join-Path $Fixture.Root 'team.md'))
+                manifests = @{ 'connectors/manifest.json' = $Fixture.Manifest }
+                confirmed = $true; confirmationRef = 'in-chat:confirmed-ledger-refresh'
+                historyEntries = @([regex]::Matches([System.IO.File]::ReadAllText($Fixture.HistoryPath), '(?m)^###[ \t]+([^\r\n]+)') |
+                    ForEach-Object { $_.Groups[1].Value.Trim() })
+            }
+            switch ($Mutation) {
+                'unconfirmed' { $record.confirmed = $false }
+                'missing confirmation' { $record.confirmationRef = '' }
+                'missing snapshot' { $record.manifests = @{} }
+                'wrong manifest' { $record.manifests['connectors/manifest.json'] = @{ connectorId = 'wrong-id' } }
+                'unknown field' { $record.authority = 'external' }
+                'invalid prior target' { $record.team = $record.team.Replace('role:researcher/Alpha', 'role:researcher/Missing') }
+                'postdated entry' { $record.historyEntries = @('2027-01-01T00:00:00Z Future work') }
+            }
+            $decision = "`n## Connector Binding Retirement 2026-10-21T12:00:00Z external-research`n`n" +
+                '```json' + "`n" + ($record | ConvertTo-Json -Depth 16) + "`n" + '```'
+            Add-Content -LiteralPath (Join-Path $Fixture.Root 'decisions.md') -Value $decision -Encoding utf8NoBOM
+        }
+
+        function Change-LedgerBinding {
+            param($Fixture, [string]$Change = 'unbind')
+            $path = Join-Path $Fixture.Root 'team.md'
+            $team = [System.IO.File]::ReadAllText($path)
+            if ($Change -eq 'unbind') {
+                $team = $team -replace '(?ms)^## Connector Bindings\b.*', ''
+                $team = $team -replace '(?m)^\| gcp \| External Researcher[^\r\n]*\r?\n', ''
+                Remove-Item -LiteralPath $Fixture.ManifestPath
+            }
+            else {
+                $team = $team.Replace('External Researcher', 'New Researcher').Replace('external-agent', 'new-agent')
+                $manifest = $Fixture.Manifest | ConvertTo-Json -Depth 10 | ConvertFrom-Json -AsHashtable
+                $manifest.connectorId = 'new-agent'
+                $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $Fixture.ManifestPath -Encoding utf8NoBOM
+            }
+            Set-Content -LiteralPath $path -Value $team.Replace('extended', 'fast') -Encoding utf8NoBOM
+        }
+    }
+
+    It 'keeps ordinary ledger execution independent of the connector-only helper and its runtime requirement' {
+        $directory = Join-Path $TestDrive 'standalone-ledger'
+        [void][System.IO.Directory]::CreateDirectory($directory)
+        $standalone = Join-Path $directory 'Measure-SquadLedger.ps1'
+        Copy-Item -LiteralPath $script:LedgerScript -Destination $standalone
+        $output = & pwsh -NoProfile -File $standalone -SquadRoot (Join-Path $script:FixtureRoot 'applied') -Check 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $output
+        $output | Should -Match 'PASS'
+    }
+
+    It 'derives binding-free legacy provenance from the actual history entry rather than an array property' {
+        $fixture = New-ConnectorLedgerRoot
+        Change-LedgerBinding $fixture
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath).Replace('binding=external-research', 'binding=legacy-1.0')
+        Set-Content -LiteralPath $fixture.HistoryPath -Value $history -NoNewline
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 0 -Because $rewrite.Output
+        $ledger = [System.IO.File]::ReadAllText((Join-Path $fixture.Root 'consumption.md'))
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|'
+        (Invoke-Ledger -SquadRoot $fixture.Root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'preserves the actual <RoleMode> ledger after <Change>, without changing cost or history' -ForEach @(
+        @{ RoleMode = 'replace'; Change = 'unbind' }, @{ RoleMode = 'replace'; Change = 'rebind' },
+        @{ RoleMode = 'add'; Change = 'unbind' }, @{ RoleMode = 'add'; Change = 'rebind' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot -RoleMode $RoleMode
+        $before = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $before.ExitCode | Should -Be 0 -Because $before.Output
+        $beforeCost = ((Invoke-Ledger -SquadRoot $fixture.Root -Format json).Output | ConvertFrom-Json).total.estCostUsd
+        $historyHash = (Get-FileHash -LiteralPath $fixture.HistoryPath).Hash
+        Save-LedgerRetirement $fixture
+        Change-LedgerBinding $fixture $Change
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 0 -Because $rewrite.Output
+        $ledger = [System.IO.File]::ReadAllText((Join-Path $fixture.Root 'consumption.md'))
+        $ledger | Should -Match "\|\s*$($fixture.Role)\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*extended\s*\|"
+        $ledger | Should -Not -Match '\|\s*Squad Connector\s*\|\s*\|\s*Squad Connector'
+        ((Invoke-Ledger -SquadRoot $fixture.Root -Format json).Output | ConvertFrom-Json).total.estCostUsd | Should -Be $beforeCost
+        (Get-FileHash -LiteralPath $fixture.HistoryPath).Hash | Should -Be $historyHash
+        $check = Invoke-Ledger -SquadRoot $fixture.Root -Check
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+    }
+
+    It 'keeps old and new completed entries distinct after reuse of the binding id' {
+        $fixture = New-ConnectorLedgerRoot
+        Save-LedgerRetirement $fixture
+        Change-LedgerBinding $fixture 'rebind'
+        $old = [System.IO.File]::ReadAllText($fixture.HistoryPath)
+        $newEntry = ($old -split '(?m)(?=^### )', 2)[1].
+            Replace('2026-09-27T10:00:00Z', '2026-10-21T12:30:00Z').
+            Replace('External Researcher', 'New Researcher').Replace('external-agent', 'new-agent')
+        Add-Content -LiteralPath $fixture.HistoryPath -Value $newEntry -Encoding utf8NoBOM
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 0 -Because $rewrite.Output
+        $ledger = [System.IO.File]::ReadAllText((Join-Path $fixture.Root 'consumption.md'))
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*extended\s*\|'
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*New Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*fast\s*\|'
+        (Invoke-Ledger -SquadRoot $fixture.Root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'refuses <Mutation> retirement evidence without rewriting ledger or state' -ForEach @(
+        @{ Mutation = 'unconfirmed' }, @{ Mutation = 'missing confirmation' }, @{ Mutation = 'missing snapshot' },
+        @{ Mutation = 'wrong manifest' }, @{ Mutation = 'unknown field' }, @{ Mutation = 'invalid prior target' },
+        @{ Mutation = 'postdated entry' }, @{ Mutation = 'unlisted entry' }, @{ Mutation = 'wrong member' },
+        @{ Mutation = 'wrong verification' }, @{ Mutation = 'wrong unmetered marker' }, @{ Mutation = 'invalid active binding' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        Save-LedgerRetirement $fixture $Mutation
+        Change-LedgerBinding $fixture $(if ($Mutation -eq 'invalid active binding') { 'rebind' } else { 'unbind' })
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath)
+        switch ($Mutation) {
+            'unlisted entry' { $history = $history.Replace('2026-09-27T10:00:00Z', '2026-10-21T13:00:00Z') }
+            'wrong member' { $history = $history.Replace('* Member Name: External Researcher', '* Member Name: Unknown Member') }
+            'wrong verification' { $history = $history.Replace('* Verification: external, unverified', '* Verification: approved') }
+            'wrong unmetered marker' { $history = $history.Replace('External-unmetered: connector=external-agent', 'External-unmetered: connector=other') }
+            'invalid active binding' {
+                $teamPath = Join-Path $fixture.Root 'team.md'
+                Set-Content -LiteralPath $teamPath -Value ([System.IO.File]::ReadAllText($teamPath).Replace('role:researcher/Alpha', 'role:researcher/Missing'))
+            }
+        }
+        Set-Content -LiteralPath $fixture.HistoryPath -Value $history -NoNewline
+        $ledgerPath = Join-Path $fixture.Root 'consumption.md'
+        $statePath = Join-Path $fixture.Root 'state.json'
+        $ledgerHash = (Get-FileHash -LiteralPath $ledgerPath).Hash
+        $stateHash = (Get-FileHash -LiteralPath $statePath).Hash
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 1 -Because $rewrite.Output
+        (Get-FileHash -LiteralPath $ledgerPath).Hash | Should -Be $ledgerHash
+        (Get-FileHash -LiteralPath $statePath).Hash | Should -Be $stateHash
+    }
+}
+
 # P01b / C2: the history-identity guard. consumption.md's own '### Derivation'
 # block records, per history file, the ordered short-hash identities of that
 # file's '###' dispatch-entry headings at the time the ledger was last written.

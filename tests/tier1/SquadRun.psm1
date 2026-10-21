@@ -275,20 +275,28 @@ function Get-SquadDispatchEvidence {
     .SYNOPSIS
         Finds machine-generated dispatch-start evidence for one agent.
     .DESCRIPTION
-        Model prose is never evidence. JSON output is accepted only for start/invoke
-        events whose serialized event contains the exact agent name. Debug logs are a
-        fallback only when a line contains both a dispatch/tool marker and that name.
+        Accepts native subagent-start events or task/runSubagent tool-start events
+        with a matching agent identifier, never a name mentioned in a shell command,
+        tool result, or prompt for another agent. TaskId optionally binds a resume
+        to the original task in the native dispatch arguments.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$TranscriptPath,
         [string]$LogDir,
-        [Parameter(Mandatory)][string]$AgentName
+        [Parameter(Mandatory)][string]$AgentName,
+        [string]$TaskId
     )
 
     $evidence = [System.Collections.Generic.List[string]]::new()
-    if (Test-Path -LiteralPath $TranscriptPath) {
-        foreach ($line in (Get-Content -LiteralPath $TranscriptPath)) {
+    $sources = @(
+        if (Test-Path -LiteralPath $TranscriptPath -PathType Leaf) { $TranscriptPath }
+        if ($LogDir -and (Test-Path -LiteralPath $LogDir -PathType Container)) {
+            Get-ChildItem -LiteralPath $LogDir -Filter '*.jsonl' -File -Recurse | ForEach-Object FullName
+        }
+    ) | Sort-Object -Unique
+    foreach ($source in $sources) {
+        foreach ($line in (Get-Content -LiteralPath $source)) {
             $trimmed = $line.Trim()
             if (-not $trimmed.StartsWith('{')) { continue }
             try { $event = $trimmed | ConvertFrom-Json -Depth 64 } catch { continue }
@@ -296,22 +304,32 @@ function Get-SquadDispatchEvidence {
                 ForEach-Object { $event.PSObject.Properties[$_]?.Value } |
                 Where-Object { $_ } |
                 Select-Object -First 1
-            if (-not $type -or [string]$type -notmatch '(?i)start|begin|invoke|dispatch') { continue }
-            $serialized = $event | ConvertTo-Json -Depth 64 -Compress
-            if ($serialized.Contains($AgentName, [System.StringComparison]::Ordinal)) {
-                $evidence.Add("json:$type")
+            $details = $event.PSObject.Properties['data']?.Value
+            if ($null -eq $details) { $details = $event }
+            $arguments = $null
+            $agent = ''
+            if ($type -in @('subagent.started', 'subagent.start')) {
+                $agent = [string]$details.PSObject.Properties['agentName']?.Value
+                $arguments = $details.PSObject.Properties['prompt']?.Value
             }
-        }
-    }
-
-    if ($evidence.Count -eq 0 -and $LogDir -and (Test-Path -LiteralPath $LogDir)) {
-        foreach ($file in (Get-ChildItem -LiteralPath $LogDir -Filter '*.log' -File -Recurse -ErrorAction SilentlyContinue)) {
-            foreach ($line in (Get-Content -LiteralPath $file.FullName -ErrorAction SilentlyContinue)) {
-                if ($line -notmatch '(?i)dispatch|subagent|tool|task|invoke') { continue }
-                if ($line.Contains($AgentName, [System.StringComparison]::Ordinal)) {
-                    $evidence.Add("log:$($file.Name)")
+            elseif ($type -in @('tool.execution_start', 'tool.start', 'tool.invoke')) {
+                $tool = @('toolName', 'tool', 'name') | ForEach-Object { $details.PSObject.Properties[$_]?.Value } |
+                    Where-Object { $_ } | Select-Object -First 1
+                if ([string]$tool -notmatch '^(?:[^.]+\.)?(?:task|runSubagent)$') { continue }
+                $arguments = $details.PSObject.Properties['arguments']?.Value
+                if ($arguments -is [string]) {
+                    try { $arguments = $arguments | ConvertFrom-Json -Depth 64 }
+                    catch [System.ArgumentException] { continue }
                 }
+                if ($null -eq $arguments) { continue }
+                $agent = @('agent_type', 'agent', 'agentName') | ForEach-Object { $arguments.PSObject.Properties[$_]?.Value } |
+                    Where-Object { $_ } | Select-Object -First 1
             }
+            else { continue }
+            $agentKey = ConvertTo-ComparableName (([string]$agent -split ':')[-1])
+            if (-not $agentKey -or $agentKey -cne (ConvertTo-ComparableName $AgentName)) { continue }
+            if ($TaskId -and -not ($arguments | ConvertTo-Json -Depth 64 -Compress).Contains($TaskId, [StringComparison]::Ordinal)) { continue }
+            $evidence.Add("json:$type")
         }
     }
     $evidence.ToArray()

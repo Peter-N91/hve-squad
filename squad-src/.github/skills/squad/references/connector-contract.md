@@ -117,6 +117,9 @@ selection; `executionChoice` is the selected connector or coordinator-approved
 `both`. Legacy `memberName`, `deadline`, and `retryCap` remain optional.
 All filesystem outputs stay inside the workspace and outside reparse points.
 The mailbox and deliverable root must not overlap.
+Directory roots, including the shipped manifests' `dropPath`, may end in `/` or
+`\`. Removing that terminal separator does not permit empty interior segments,
+rooted paths, traversal, or unsafe filenames.
 
 A first invocation generates a fresh id, atomically writes the snapshot, saves
 private state, then atomically publishes the request without overwriting an
@@ -128,12 +131,18 @@ The wrapper owns `dropPath/.squad-connector/<taskId>.state.json` and the adjacen
 exclusive `<taskId>.lock`. State has exactly `taskId`, `connectorId`,
 `requestHash`, `snapshotHash`, `manifestHash`, `identityHash`, `attempts`, and
 `consumed`. SHA-256 hashes pin the original UTF-8 request, snapshot, manifest,
-and validated identity; `attempts` starts at zero and increments on each
+and validated identity, including the original external `memberName` and owning
+`teamPath`; `attempts` starts at zero and increments on each
 unanswered resume. The initial publication is not a retry. At or after the
 deadline, or on the resume reaching `retryCap`, an unanswered exchange returns
 `unreachable`. As before, these bounds govern unanswered work: a present
 terminal result is validated rather than discarded solely for arriving late.
 An external `awaiting` result remains unanswered for these bounds.
+A member rename or a different owning roster during pending work returns
+`failed` with `changed-dispatch-identity`, without consuming or relabelling the
+result. Finish or explicitly abandon pending work before changing its identity.
+Older private state that did not pin member/owner identity is not silently
+upgraded; it also fails closed rather than guessing the original attribution.
 
 Before returning a validated terminal result, the wrapper atomically persists
 `consumed: true` under the exclusive task lock. Another invocation of that id
@@ -152,6 +161,10 @@ The closed response carries `status`, connector/binding/target/execution ids,
 `narrative` or artifact contents. Failure reasons do not quote untrusted values.
 The coordinator retains routing, admission, escalation, and stage control; the
 internal Scribe retains all history and ledger writes.
+Both initial dispatch and ordinary resume invoke the native `Squad Connector`
+agent; only that child runs the wrapper. A coordinator-side script call is not
+Proof of Dispatch or evidence of the Connector's model execution. Resume keeps
+the original task id and does not publish an additional request.
 
 ## Statuses
 

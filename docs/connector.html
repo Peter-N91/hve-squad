@@ -834,7 +834,12 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         across processes even if the public exchange files were removed. Missing or changed state
         fails closed. The wrapper returns validated paths and provenance, never raw external
         <code>narrative</code> or artifact contents. HVE retains routing, gates, and Scribe history writes;
-        the contract remains your consumer-facing protocol reference.
+        the contract remains your consumer-facing protocol reference. On both first dispatch and
+        resume, HVE dispatches the native <code>Squad Connector</code> agent; a direct coordinator
+        script call does not establish its execution. Resume keeps the original <code>taskId</code>
+        without creating another request. Pending identity also pins the external member and owning
+        roster: renaming either fails closed instead of reattributing the result. Directory roots
+        accept the examples' trailing separator; unsafe interior path segments remain rejected.
       </p>
 
       <p>
@@ -1094,7 +1099,11 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         <code>Connector Binding Retirement</code> decision to the owning squad's
         <code>decisions.md</code>, recording the prior validated identity, operator confirmation,
         and exact completed history headings. This historical evidence grants no new dispatch
-        authority and cannot admit an unlisted entry. A default-only refresh leaves identity unchanged.
+        authority and cannot admit an unlisted entry. <code>Measure-SquadLedger.ps1</code> uses the
+        shared <code>Resolve-SquadConnectorHistory.ps1</code> validator to regenerate those entries'
+        original role, external member, and model tier from the saved roster, without changing
+        history or token pricing. Invalid historical evidence blocks regeneration. A default-only
+        refresh leaves identity unchanged.
       </p>
 
       <p>

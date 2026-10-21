@@ -854,6 +854,12 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         modifié bloque l'échange. Le wrapper renvoie les chemins validés et la provenance, jamais le
         <code>narrative</code> externe brut ni le contenu des artefacts. HVE conserve le routage, les
         gates et l'historique du Scribe ; le contrat reste la référence du protocole consommateur.
+        Au premier appel comme à la reprise, HVE délègue à l'agent natif <code>Squad Connector</code> ;
+        un appel direct du script par le coordinateur ne prouve pas son exécution. La reprise garde
+        le <code>taskId</code> original sans créer une autre demande. L'identité en attente fixe aussi
+        le membre externe et le roster propriétaire : un renommage bloque l'échange au lieu de
+        réattribuer le résultat. Les racines acceptent le séparateur final des exemples ; les segments
+        internes non sûrs restent rejetés.
       </p>
 
       <p>
@@ -1141,7 +1147,11 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         <code>Connector Binding Retirement</code> dans le fichier <code>decisions.md</code>
         du squad propriétaire, avec l'identité précédemment validée, la confirmation de l'opérateur
         et les titres exacts des entrées terminées. Cette preuve historique n'autorise aucune nouvelle
-        délégation ni entrée non répertoriée. Modifier seulement le choix par défaut ne change pas l'identité.
+        délégation ni entrée non répertoriée. <code>Measure-SquadLedger.ps1</code> utilise le validateur
+        partagé <code>Resolve-SquadConnectorHistory.ps1</code> pour régénérer le rôle, le membre externe
+        et le niveau de modèle d'origine depuis le roster sauvegardé, sans modifier l'historique ni la
+        tarification des jetons. Une preuve historique invalide bloque la régénération. Modifier
+        seulement le choix par défaut ne change pas l'identité.
       </p>
 
       <p>

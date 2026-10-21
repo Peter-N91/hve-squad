@@ -327,6 +327,92 @@ Describe 'CONN-08/28/30 real scripted connector lifecycle' {
     }
 }
 
+Describe 'CONN-31 compatible directory roots and immutable pending identity' {
+    It 'accepts trailing directory separators in <Version> roots through <Mode>' -ForEach @(
+        @{ Version = '1.0'; Mode = 'Library' }, @{ Version = '1.0'; Mode = 'CLI' },
+        @{ Version = '1.1'; Mode = 'Library' }, @{ Version = '1.1'; Mode = 'CLI' }
+    ) {
+        $Fixture = New-DispatchFixture -Version $Version
+        $Fixture.Manifest.dropPath += '/'
+        $Fixture.Manifest | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $Fixture.ManifestPath
+        $Fixture.Input.deliverableRoot += '/'
+        if ($Version -eq '1.1') { $Fixture.Input.allowedOutputs[0].deliverableRoot += '/' }
+        $first = Invoke-TestDispatch $Fixture $Mode
+        $first.status | Should -Be 'awaiting' -Because ($first | ConvertTo-Json)
+        $Fixture.Input.taskId = $first.taskId
+        [void](Save-TestResult $Fixture)
+        (Invoke-TestDispatch $Fixture $Mode).status | Should -Be 'completed'
+    }
+
+    It 'does not weaken directory confinement for <Path>' -ForEach @(
+        @{ Path = '.connector-drops//research/' }, @{ Path = '.connector-drops/../research/' },
+        @{ Path = '/rooted/' }, @{ Path = 'C:\outside\' }, @{ Path = '.connector-drops/folder./' }
+    ) {
+        $Fixture = New-DispatchFixture
+        $Fixture.Manifest.dropPath = $Path
+        $Fixture.Manifest | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $Fixture.ManifestPath
+        (Invoke-TestDispatch $Fixture 'CLI').status | Should -Not -Be 'awaiting'
+        @(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Filter '*.request.json').Count | Should -Be 0
+    }
+
+    It 'rejects a pending <Version> member rename without consuming the original result' -ForEach @(
+        @{ Version = '1.0' }, @{ Version = '1.1' }
+    ) {
+        $Fixture = New-DispatchFixture -Version $Version
+        if ($Version -eq '1.0') { $Fixture.Input.memberName = 'Partner' }
+        $Fixture.Input.taskId = (Invoke-TestDispatch $Fixture).taskId
+        [void](Save-TestResult $Fixture)
+        if ($Version -eq '1.1') {
+            $teamPath = Join-Path $Fixture.Root 'team.md'
+            $team = [System.IO.File]::ReadAllText($teamPath)
+            [System.IO.File]::WriteAllText($teamPath, $team.Replace('| Partner |', '| Renamed Partner |'))
+        }
+        else { $Fixture.Input.memberName = 'Renamed Partner' }
+        $result = Invoke-TestDispatch $Fixture 'CLI'
+        $result.status | Should -Be 'failed'
+        $result.reasons | Should -Contain 'changed-dispatch-identity'
+        @($result.artifacts).Count | Should -Be 0
+        (Read-ConnectorDispatchJsonLocal (Get-ExchangePath $Fixture 'state')).consumed | Should -BeFalse
+    }
+
+    It 'rejects an identical binding in another owning roster during resume' {
+        $Fixture = New-DispatchFixture -Version '1.1'
+        $Fixture.Input.taskId = (Invoke-TestDispatch $Fixture).taskId
+        [void](Save-TestResult $Fixture)
+        Copy-Item -LiteralPath (Join-Path $Fixture.Root 'team.md') -Destination (Join-Path $Fixture.Root 'other-team.md')
+        $Fixture.Input.teamPath = 'other-team.md'
+        $result = Invoke-TestDispatch $Fixture 'CLI'
+        $result.status | Should -Be 'failed'
+        $result.reasons | Should -Contain 'changed-dispatch-identity'
+        (Read-ConnectorDispatchJsonLocal (Get-ExchangePath $Fixture 'state')).consumed | Should -BeFalse
+    }
+
+    It 'dispatches the actual shipped example manifests without editing their directory spelling' {
+        $examples = Join-Path $PSScriptRoot '..' '..' 'docs' 'templates' 'connector-example'
+        foreach ($source in (Get-ChildItem -LiteralPath $examples -Filter 'manifest*.json' -File | Where-Object Name -NotLike '*.template.json')) {
+            $manifest = Get-Content -LiteralPath $source.FullName -Raw | ConvertFrom-Json -AsHashtable
+            $Fixture = New-DispatchFixture -Version $manifest.schemaVersion
+            $role = $manifest.roles[0]
+            $oldId = $Fixture.Input.connectorId
+            Copy-Item -LiteralPath $source.FullName -Destination $Fixture.ManifestPath
+            $Fixture.Manifest = $manifest
+            $Fixture.Input.connectorId = $manifest.connectorId
+            $Fixture.Input.role = $role
+            if ($manifest.schemaVersion -eq '1.1') {
+                $Fixture.Input.allowedOutputs[0].role = $role
+                $teamPath = Join-Path $Fixture.Root 'team.md'
+                $team = [System.IO.File]::ReadAllText($teamPath).Replace($oldId, $manifest.connectorId).
+                    Replace('| researcher |', "| $role |").Replace('role:researcher/Original', "role:$role/Original").
+                    Replace('| agent | replace |', "| $($manifest.endpointKind) | replace |")
+                [System.IO.File]::WriteAllText($teamPath, $team)
+            }
+            $result = Invoke-TestDispatch $Fixture 'CLI'
+            $result.status | Should -Be 'awaiting' -Because "$($source.Name): $($result | ConvertTo-Json -Compress)"
+            @(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Filter '*.request.json').Count | Should -Be 1
+        }
+    }
+}
+
 Describe 'CONN-30 scripted validation uses real files rather than proxy predicates' {
     BeforeEach {
         $script:Fixture = New-DispatchFixture
