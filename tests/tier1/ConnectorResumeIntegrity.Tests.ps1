@@ -22,6 +22,7 @@ param(
 
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'SquadRun.psm1') -Force
+    Import-Module (Join-Path $PSScriptRoot 'SquadState.psm1') -Force
 }
 
 Describe 'CONN-28 ordinary connector resume preserves dispatch and collision evidence' {
@@ -70,6 +71,35 @@ Describe 'CONN-28 ordinary connector resume preserves dispatch and collision evi
         $scribeEvidence = @(Get-SquadDispatchEvidence -TranscriptPath $ResumeTranscript -LogDir $ResumeLogDir -AgentName $ScribeAgent)
         $connectorEvidence.Count | Should -BeGreaterThan 0 -Because 'the result must be validated by the roster-resolved shim'
         $scribeEvidence.Count | Should -BeGreaterThan 0 -Because 'completed connector work must be persisted by the internal Scribe'
+    }
+
+    It 'CONN-35 invokes the wrapper only once per native Connector child on both turns' {
+        foreach ($turn in @(
+                @{ TranscriptPath = $RequestTranscript; LogDir = $RequestLogDir },
+                @{ TranscriptPath = $ResumeTranscript; LogDir = $ResumeLogDir }
+            )) {
+            $execution = @(Get-SquadConnectorExecutionEvidence @turn)
+            $execution.Count | Should -Be 1 -Because 'an ordinary request or resume has one actual native Connector child'
+            $execution[0].WrapperCallCount | Should -Be 1 -Because 'rejected helper calls cannot be hidden by eventual completion'
+        }
+    }
+
+    It 'CONN-35 persists canonical provenance and validated report paths with faithful native model attribution' {
+        $model = Get-SquadStateModel -SquadRoot $SquadRoot
+        $model.ConnectorHistoryIssues | Should -BeNullOrEmpty
+        $reports = @($model.Deliverables | Where-Object Agent -CEQ $ConnectorAgent)
+        $reports.Count | Should -BeGreaterThan 0
+        @($reports | Where-Object { -not $_.Resolved -or -not $_.UnderRoot }).Count | Should -Be 0
+        $execution = @(Get-SquadConnectorExecutionEvidence -TranscriptPath $ResumeTranscript -LogDir $ResumeLogDir)
+        $execution.Count | Should -Be 1
+        $execution[0].Model | Should -Not -BeNullOrEmpty
+        $historyPath = Join-Path $SquadRoot 'history' "$ConnectorAgent.md"
+        $block = @(Get-ConsumptionBlock -Path $historyPath)[-1]
+        $actual = ConvertTo-ComparableName ($block.Fields['model'] -replace '(?i)\s*\(copilot\)', '')
+        $actual | Should -Be (ConvertTo-ComparableName $execution[0].Model)
+        if ($execution[0].ModelSelectionSource -eq 'agent_definition_default' -or $execution[0].TaskModelSource -eq 'custom_agent_definition') {
+            $block.Fields['model_source'] | Should -BeIn @('dispatch-reported', 'agent-pinned')
+        }
     }
 
     It 'leaves connector provenance in history after the dispatched Scribe handoff' {

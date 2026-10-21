@@ -860,6 +860,11 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         le membre externe et le roster propriétaire : un renommage bloque l'échange au lieu de
         réattribuer le résultat. Les racines acceptent le séparateur final des exemples ; les segments
         internes non sûrs restent rejetés.
+        HVE fournit un JSON de délégation exact ; la reprise recharge les champs optionnels de tâche,
+        de sortie et d'échéance depuis la demande figée au lieu de les reconstruire. L'agent renvoie
+        son premier résultat, échecs inclus, sans réessayer avec des entrées modifiées. L'historique
+        du Scribe utilise les puces littérales <code>* </code> pour la provenance, uniquement les
+        rapports validés comme livrables et les preuves d'attribution du modèle du Connector natif.
       </p>
 
       <p>
@@ -1150,8 +1155,11 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         délégation ni entrée non répertoriée. <code>Measure-SquadLedger.ps1</code> utilise le validateur
         partagé <code>Resolve-SquadConnectorHistory.ps1</code> pour régénérer le rôle, le membre externe
         et le niveau de modèle d'origine depuis le roster sauvegardé, sans modifier l'historique ni la
-        tarification des jetons. Une preuve historique invalide bloque la régénération. Modifier
-        seulement le choix par défaut ne change pas l'identité.
+        tarification des jetons. Une preuve historique invalide bloque la régénération : les valeurs
+        de tentatives et d'échéance sauvegardées doivent être des entiers dans les limites du manifeste.
+        Une autorité de retrait dupliquée ou chevauchante pour une même liaison et un même titre terminé
+        est rejetée même si l'identité active correspond. Les entrées distinctes après réutilisation
+        d'un identifiant restent valides. Modifier seulement le choix par défaut ne change pas l'identité.
       </p>
 
       <p>

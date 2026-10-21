@@ -84,6 +84,7 @@ function Get-SquadConnectorRetirementModel {
 
     $issues = [System.Collections.Generic.List[string]]::new()
     $retirements = [System.Collections.Generic.List[object]]::new()
+    $historyAuthority = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $required = @('team', 'manifests', 'confirmed', 'confirmationRef', 'historyEntries')
     foreach ($entry in [regex]::Matches([string]$Content, '(?ms)^## Connector Binding Retirement(?<heading>[^\r\n]*)\r?\n(?<body>.*?)(?=^##[ \t]|\z)')) {
         $issueCount = $issues.Count
@@ -141,6 +142,13 @@ function Get-SquadConnectorRetirementModel {
         $binding = @($prior.Bindings | Where-Object BindingId -CEQ $heading.Groups['bindingId'].Value)
         if ($binding.Count -ne 1) { $issues.Add("${label}:one-valid-prior-binding-required") }
         if ($issues.Count -ne $issueCount) { continue }
+        foreach ($title in $titles) {
+            if ($historyAuthority.Contains("$($binding[0].BindingId)`n$title")) {
+                $issues.Add("${label}:duplicate:history-authority")
+            }
+        }
+        if ($issues.Count -ne $issueCount) { continue }
+        foreach ($title in $titles) { [void]$historyAuthority.Add("$($binding[0].BindingId)`n$title") }
         $binding[0] | Add-Member -NotePropertyName HistoryEntries -NotePropertyValue @($titles)
         $retirements.Add($binding[0])
     }

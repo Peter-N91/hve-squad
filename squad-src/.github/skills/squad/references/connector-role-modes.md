@@ -132,11 +132,18 @@ resume, with normal model attribution and Cost Preflight admission. Only that
 child runs `Invoke-SquadConnectorDispatch.ps1`; the coordinator may run the
 side-effect-free resolver, never the lifecycle wrapper. Use only the child's
 validated JSON metadata for the Scribe handoff, never raw result narrative.
+Supply one complete, machine-ready JSON dispatch object or its `-InputPath`,
+not a prose list the child must translate. Keep contextual paths such as
+`dropPath` outside that closed object. On resume supply the original identity
+fields and `taskId`, omitting optional `task`, `allowedOutputs`, `deadline`,
+and `retryCap`; the wrapper reloads those from the hash-pinned request.
+Never paraphrase pending task text, reconstruct output objects, or reserialize
+dates. Explicitly supplied optional fields must still match exactly.
 
 Automatic selection is not synchronous transport. An external `awaiting`
 result holds the current stage; it is not completion, permission to advance,
 or a reason to fall back to the internal agent. Keep the pending request's
-task/binding identity and complete original dispatch inputs in a Scribe-owned
+task/binding identity and complete original dispatch JSON in a Scribe-owned
 pending handoff decision and request file, preserve the
 shim-owned `<taskId>.snapshot.json` collision baseline unchanged, and
 re-dispatch the native agent with the same `taskId` when the result is available.
@@ -150,8 +157,10 @@ and never rebuilds it after the producer has written artifacts. Preserve the
 wrapper-owned `dropPath/.squad-connector` state; the thin agent returns only the
 script's JSON, not raw external narrative. A direct coordinator script call
 does not count as a Connector dispatch or establish its model execution.
-Record no
-completed dispatch history until artifacts validate. Consumer automation may
+The child returns its first wrapper JSON, including `failed` or `unreachable`;
+it does not retry with edited inputs. Only the coordinator may admit a corrected
+native redispatch with the same pending id. Record no completed dispatch history
+until artifacts validate. Consumer automation may
 trigger the resume; this package supplies no external runner or automatic
 cross-process wake-up service.
 
@@ -215,11 +224,25 @@ externalProvenance:
   metering: external-unmetered
 ```
 
-Rendered bullets are fixed:
+Rendered bullets include the literal `* ` prefixes shown here:
 
-* `External provenance: connector=<connectorId>; binding=<bindingId>; endpoint=<endpointKind>; mode=<roleMode>; target=<target>`
-* `Verification: external, unverified`
-* `External-unmetered: connector=<connectorId>`
+```markdown
+* External provenance: connector=<connectorId>; binding=<bindingId>; endpoint=<endpointKind>; mode=<roleMode>; target=<target>
+* Verification: external, unverified
+* External-unmetered: connector=<connectorId>
+```
+
+Only wrapper-validated `artifacts` and `outputs[].artifacts` become
+`* Deliverable:` paths. Authorized source changes remain separate outcome or
+`* Source changes:` references; source files, plans, and mailbox paths do not
+become report-root deliverables. The Scribe writes these fields, not the endpoint.
+
+Consumption describes the native Connector dispatch, never the external endpoint
+or replaced internal role. Apply the normal Model Attribution ladder: an actual
+host-reported dispatch model is `dispatch-reported`; absent that evidence, read
+the Connector agent's pin before `agent-pinned` or any lower rung. A model equal
+to the parent/session model is not evidence of `session-inherited`. Preserve
+actual host substitution evidence rather than asserting a pin was used.
 
 ## 10) Build/Refresh Question Group
 
@@ -290,6 +313,11 @@ Its single JSON block has this closed schema; all five fields are required:
 Validate the prior table with its saved roster and manifests using the same
 membership, manifest-shape, authorized-role, connector-id, and uniqueness rules
 as active bindings. It must resolve the heading's binding id exactly once.
+Saved deadline/retry defaults obey the same integer limits as live manifests.
+Across retirement records, each binding id and exact completed heading may be
+authorized only once, including when today's binding still matches. Reject
+duplicate or overlapping authority; disjoint completed headings after binding-id
+reuse remain valid.
 Do not re-read today's manifest to validate a retired identity: a confirmed
 rebind may replace or remove that file.
 
@@ -304,7 +332,9 @@ Attribution row must match that same role and external member.
 `scripts/Resolve-SquadConnectorHistory.ps1` validator during regeneration. For
 the exact listed entries it derives role, external member, model tier, and
 alignment from the saved roster, even when today's binding/member/manifest was
-removed or replaced. It does not rewrite history or change token pricing.
+removed or replaced. The state reader uses that same saved identity/root for
+listed entries before considering a matching current binding. It does not
+rewrite history or change token pricing.
 Missing, invalid, or unlisted historical identity blocks regeneration; it never
 falls back to a generic connector row or adopts the new member's identity.
 

@@ -2322,6 +2322,7 @@ function Get-HistoryEntryRecordsLocal {
             Workstream         = (& $field 'Workstream').ToLowerInvariant()
             MemberName         = (& $field 'Member Name')
             ExternalProvenance = (& $field 'External provenance')
+            MalformedExternalMarkers = [regex]::IsMatch($text, '(?mi)^[ \t]*(?:-[ \t]+)?(?:External provenance|Verification|External-unmetered):')
             Title              = $headings[$i].Groups['title'].Value.Trim()
             Verification       = (& $field 'Verification')
             ExternalUnmeteredConnector = ((& $field 'External-unmetered') -replace '^connector=', '')
@@ -2683,6 +2684,11 @@ foreach ($file in $historyFiles) {
 
     $blocks = @(Get-ConsumptionBlockLocal -Content $content -SourceName $file.Name)
     $fileEntries = if ($agentName -eq 'Squad Scribe') { @() } else { @(Get-HistoryEntryRecordsLocal -Content $content -AgentName $agentName) }
+    if ($agentName -ceq 'Squad Connector') {
+        foreach ($entry in @($fileEntries | Where-Object MalformedExternalMarkers)) {
+            $attributionIssues.Add("history/$($file.Name) entry '$($entry.Title)' has malformed connector metadata; External provenance, Verification, and External-unmetered must use the literal '* ' bullet prefix.")
+        }
+    }
     $enumerationLines.Add("$($file.Name) — $($blocks.Count) block(s) — identities: $identityLabel")
 
     foreach ($block in $blocks) {

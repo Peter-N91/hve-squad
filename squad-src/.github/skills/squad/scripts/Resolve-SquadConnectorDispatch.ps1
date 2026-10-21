@@ -974,6 +974,13 @@ function Test-SquadConnectorManifestShape {
         $value = Get-ConnectorInputValueLocal -Object $Manifest -Name $field
         if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) { $issues.Add("invalid:$field") }
     }
+    foreach ($field in @('deadlineMinutesDefault', 'retryCapDefault')) {
+        $value = Get-ConnectorInputValueLocal -Object $Manifest -Name $field
+        $minimum = if ($field -eq 'deadlineMinutesDefault') { 1 } else { 0 }
+        if (($value -isnot [int] -and $value -isnot [long]) -or $value -lt $minimum -or $value -gt [int]::MaxValue) {
+            $issues.Add("invalid:$field")
+        }
+    }
     $version = ([string]$Manifest.schemaVersion).Trim()
     if ($version -eq '1.0') {
         foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $Manifest -Required $base)) { $issues.Add($issue) }

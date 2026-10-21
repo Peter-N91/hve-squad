@@ -271,7 +271,7 @@ function Get-DeliverableTail {
     #>
     param([string]$Path)
 
-    ($Path -replace '^\./', '') -replace '^\.copilot-tracking/(squad/members/[^/]+/)?', ''
+    (($Path -replace '\\', '/') -replace '^\./', '') -replace '^\.copilot-tracking/(squad/members/[^/]+/)?', ''
 }
 
 function Get-LedgerTable {
@@ -691,21 +691,12 @@ function Get-ConnectorHistoryModel {
             }
         }
         else {
-            $bindingMatches = @($ValidBindings | Where-Object { $_.BindingId -ceq $entry.ExternalBindingId })
-            $exactCurrent = @($bindingMatches | Where-Object {
-                    $_.ConnectorId -ceq $entry.ExternalConnectorId -and
-                    $_.EndpointKind -ceq $entry.ExternalEndpointKind -and
-                    $_.RoleMode -ceq $entry.ExternalRoleMode -and
-                    $_.Target -ceq $entry.ExternalTarget -and
-                    $_.MemberName -ceq $entry.MemberName
+            # The calculator gives a listed retirement precedence over today's root/tier.
+            $bindingMatches = @($RetiredBindings | Where-Object {
+                    $_.BindingId -ceq $entry.ExternalBindingId -and $_.HistoryEntries -ccontains $entry.Title
                 })
-            if ($exactCurrent.Count -eq 0) {
-                # Retirement evidence admits only the completed entries named before a
-                # confirmed change; it never becomes a current dispatch registration.
-                $retired = @($RetiredBindings | Where-Object {
-                        $_.BindingId -ceq $entry.ExternalBindingId -and $_.HistoryEntries -ccontains $entry.Title
-                    })
-                if ($retired.Count -gt 0) { $bindingMatches = $retired }
+            if ($bindingMatches.Count -eq 0) {
+                $bindingMatches = @($ValidBindings | Where-Object { $_.BindingId -ceq $entry.ExternalBindingId })
             }
             if ($bindingMatches.Count -ne 1) {
                 $issues.Add("$($entry.Source): connector history binding '$($entry.ExternalBindingId)' does not resolve to one valid binding")

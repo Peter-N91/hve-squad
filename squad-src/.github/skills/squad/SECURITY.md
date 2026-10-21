@@ -62,7 +62,9 @@ Different filesystem permissions or unattended policies change the risk.
   shared resolver remains side-effect free.
 * The historical identity helper validates confirmed retirement snapshots for
   the ledger and assurance reader. Exact completed headings scope that evidence;
-  it cannot register a removed endpoint or authorize later work.
+  duplicate binding/heading authority and malformed manifest integer limits
+  reject in both readers. It cannot register a removed endpoint or authorize
+  later work.
 * The consumer's adapter runs its own agents or workflow outside this package.
 * The handoff writer, ledger calculator, preflight helper, and rate seeder write
   their declared local state/output files. The ledger can read local host usage

@@ -676,6 +676,69 @@ Describe 'CONN-29 confirmed binding changes preserve completed provenance' {
     }
 }
 
+Describe 'CONN-34 shared manifest integer limits' {
+    It 'rejects <Name> through library and CLI validation in both contract versions' -ForEach @(
+        @{ Name = 'retry string'; Field = 'retryCapDefault'; Value = 'invalid' },
+        @{ Name = 'numeric retry string'; Field = 'retryCapDefault'; Value = '2' },
+        @{ Name = 'negative retries'; Field = 'retryCapDefault'; Value = -1 },
+        @{ Name = 'boolean retries'; Field = 'retryCapDefault'; Value = $true },
+        @{ Name = 'fractional retries'; Field = 'retryCapDefault'; Value = 1.5 },
+        @{ Name = 'overflowing retries'; Field = 'retryCapDefault'; Value = 2147483648L },
+        @{ Name = 'deadline string'; Field = 'deadlineMinutesDefault'; Value = 'invalid' },
+        @{ Name = 'zero deadline'; Field = 'deadlineMinutesDefault'; Value = 0 },
+        @{ Name = 'negative deadline'; Field = 'deadlineMinutesDefault'; Value = -1 },
+        @{ Name = 'fractional deadline'; Field = 'deadlineMinutesDefault'; Value = 1.5 },
+        @{ Name = 'overflowing deadline'; Field = 'deadlineMinutesDefault'; Value = 2147483648L }
+    ) {
+        foreach ($name in @('manifest.json', 'manifest.1.1.json')) {
+            $manifest = Get-ExampleJson -Name $name
+            $manifest.$Field = $Value
+            $direct = Test-SquadConnectorManifestShape -Manifest $manifest
+            $direct.Status | Should -Be 'error'
+            $direct.Issues | Should -Contain "invalid:$Field"
+            $cli = Invoke-DispatchHelperCli -Operation 'validate-manifest' -Payload @{ manifest = $manifest }
+            $cli.Status | Should -Be 'error'
+            $cli.Issues | Should -Contain "invalid:$Field"
+        }
+    }
+
+    It 'accepts integer boundaries with Deadline=<Deadline> and Retry=<Retry>' -ForEach @(
+        @{ Deadline = 1; Retry = 0 },
+        @{ Deadline = 2147483647; Retry = 2147483647 }
+    ) {
+        foreach ($name in @('manifest.json', 'manifest.1.1.json')) {
+            $manifest = Get-ExampleJson -Name $name
+            $manifest.deadlineMinutesDefault = $Deadline
+            $manifest.retryCapDefault = $Retry
+            (Test-SquadConnectorManifestShape -Manifest $manifest).Status | Should -Be 'ok'
+            (Invoke-DispatchHelperCli -Operation 'validate-manifest' -Payload @{ manifest = $manifest }).Status | Should -Be 'ok'
+        }
+    }
+}
+
+Describe 'CONN-35 native resume input and Scribe handoff fidelity' {
+    It 'requires exact closed dispatch JSON and returns the first wrapper result without a child retry' {
+        $agent = Get-Content -LiteralPath $script:AgentPath -Raw
+        $modes = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/connector-role-modes.md') -Raw
+        $agent | Should -Match 'complete dispatch JSON'
+        $agent | Should -Match 'Omit optional `task`, `allowedOutputs`, `deadline`, and `retryCap`'
+        $agent | Should -Match 'Return the first JSON even when it reports failure'
+        $agent | Should -Match 'do not correct inputs, debug, or invoke again'
+        $modes | Should -Match 'machine-ready JSON dispatch'
+        $modes | Should -Match 'not a prose list'
+        $modes | Should -Match 'A model equal\s+to the parent/session model is not evidence of `session-inherited`'
+    }
+
+    It 'renders literal provenance bullets and keeps source changes out of report deliverables' {
+        $modes = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/connector-role-modes.md') -Raw
+        $schema = Get-Content -LiteralPath (Join-Path $script:Root 'squad-src/.github/skills/squad/references/entry-schemas.md') -Raw
+        $modes | Should -Match '(?ms)^```markdown\r?\n\* External provenance:[^\r\n]+\r?\n\* Verification: external, unverified\r?\n\* External-unmetered:'
+        $modes | Should -Match 'Only wrapper-validated `artifacts` and `outputs\[\]\.artifacts`'
+        $schema | Should -Match 'literal `\* ` bullets'
+        $schema | Should -Match 'source changes go in `Outcome:`'
+    }
+}
+
 Describe 'CONN-24 and CONN-25 version gates, binding checks, and allowed-output checks' {
     It 'accepts the legacy 1.0 fixtures and rejects 1.1-only fields under 1.0' {
         $manifest = Get-ExampleJson -Name 'manifest.json'

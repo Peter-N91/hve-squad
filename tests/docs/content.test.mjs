@@ -124,6 +124,9 @@ test("connector guides retain completed history across confirmed binding changes
     for (const term of ["Measure-SquadLedger.ps1", "Resolve-SquadConnectorHistory.ps1"]) {
       assert(paragraph.includes(term), `${prefix}connector: production ledger must preserve retired attribution`);
     }
+    assert.match(paragraph, prefix ? /entiers/ : /integers/);
+    assert.match(paragraph, prefix ? /dupliquée/ : /duplicate/);
+    assert.match(paragraph, prefix ? /distinctes/ : /Disjoint/);
   }
 });
 
@@ -140,6 +143,9 @@ test("connector guides explain the thin scripted lifecycle and durable private r
     assert(paragraph.includes("taskId"), `${prefix}connector: native resume must retain its task id`);
     assert.match(paragraph, prefix ? /agent natif/ : /native/);
     assert.match(paragraph, prefix ? /renommage/ : /renaming/);
+    assert.match(paragraph, prefix ? /JSON de délégation exact/ : /exact dispatch JSON/);
+    assert.match(paragraph, prefix ? /premier résultat/ : /first result/);
+    assert(paragraph.includes("* "), `${prefix}connector: provenance must keep its literal bullet prefix`);
   }
 });
 

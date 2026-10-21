@@ -1166,6 +1166,8 @@ description: "Append-only dispatch history for a single squad agent"
 
 Describe 'CONN-32 production connector ledger regeneration after confirmed binding changes' {
     BeforeAll {
+        Import-Module (Join-Path $PSScriptRoot 'SquadState.psm1') -Force
+
         function New-ConnectorLedgerRoot {
             param([string]$RoleMode = 'replace')
             $workspace = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
@@ -1209,7 +1211,11 @@ Describe 'CONN-32 production connector ledger regeneration after confirmed bindi
         }
 
         function Save-LedgerRetirement {
-            param($Fixture, [string]$Mutation)
+            param(
+                $Fixture, [string]$Mutation,
+                [string[]]$HistoryEntries,
+                [string]$RetiredAt = '2026-10-21T12:00:00Z'
+            )
             $record = [ordered]@{
                 team = [System.IO.File]::ReadAllText((Join-Path $Fixture.Root 'team.md'))
                 manifests = @{ 'connectors/manifest.json' = $Fixture.Manifest }
@@ -1217,6 +1223,7 @@ Describe 'CONN-32 production connector ledger regeneration after confirmed bindi
                 historyEntries = @([regex]::Matches([System.IO.File]::ReadAllText($Fixture.HistoryPath), '(?m)^###[ \t]+([^\r\n]+)') |
                     ForEach-Object { $_.Groups[1].Value.Trim() })
             }
+            if ($PSBoundParameters.ContainsKey('HistoryEntries')) { $record.historyEntries = $HistoryEntries }
             switch ($Mutation) {
                 'unconfirmed' { $record.confirmed = $false }
                 'missing confirmation' { $record.confirmationRef = '' }
@@ -1225,8 +1232,16 @@ Describe 'CONN-32 production connector ledger regeneration after confirmed bindi
                 'unknown field' { $record.authority = 'external' }
                 'invalid prior target' { $record.team = $record.team.Replace('role:researcher/Alpha', 'role:researcher/Missing') }
                 'postdated entry' { $record.historyEntries = @('2027-01-01T00:00:00Z Future work') }
+                'retry string' { $record.manifests['connectors/manifest.json'].retryCapDefault = 'invalid' }
+                'retry numeric string' { $record.manifests['connectors/manifest.json'].retryCapDefault = '2' }
+                'retry negative' { $record.manifests['connectors/manifest.json'].retryCapDefault = -1 }
+                'retry boolean' { $record.manifests['connectors/manifest.json'].retryCapDefault = $true }
+                'retry overflow' { $record.manifests['connectors/manifest.json'].retryCapDefault = [long][int]::MaxValue + 1 }
+                'deadline string' { $record.manifests['connectors/manifest.json'].deadlineMinutesDefault = 'invalid' }
+                'deadline zero' { $record.manifests['connectors/manifest.json'].deadlineMinutesDefault = 0 }
+                'deadline fraction' { $record.manifests['connectors/manifest.json'].deadlineMinutesDefault = 1.5 }
             }
-            $decision = "`n## Connector Binding Retirement 2026-10-21T12:00:00Z external-research`n`n" +
+            $decision = "`n## Connector Binding Retirement $RetiredAt external-research`n`n" +
                 '```json' + "`n" + ($record | ConvertTo-Json -Depth 16) + "`n" + '```'
             Add-Content -LiteralPath (Join-Path $Fixture.Root 'decisions.md') -Value $decision -Encoding utf8NoBOM
         }
@@ -1309,6 +1324,99 @@ Describe 'CONN-32 production connector ledger regeneration after confirmed bindi
         $ledger | Should -Match '\|\s*researcher\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*extended\s*\|'
         $ledger | Should -Match '\|\s*researcher\s*\|\s*New Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*fast\s*\|'
         (Invoke-Ledger -SquadRoot $fixture.Root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'CONN-34 rejects an archived <Mutation> in state assurance and every calculator mode' -ForEach @(
+        @{ Mutation = 'retry string' }, @{ Mutation = 'retry numeric string' }, @{ Mutation = 'retry negative' },
+        @{ Mutation = 'retry boolean' }, @{ Mutation = 'retry overflow' }, @{ Mutation = 'deadline string' },
+        @{ Mutation = 'deadline zero' }, @{ Mutation = 'deadline fraction' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        Save-LedgerRetirement $fixture $Mutation
+        Change-LedgerBinding $fixture
+        (Get-SquadStateModel -SquadRoot $fixture.Root).ConnectorRetirementIssues.Count | Should -BeGreaterThan 0
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-34 rejects duplicate retirement authority when Active=<Active>' -ForEach @(
+        @{ Active = $true }, @{ Active = $false }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        Save-LedgerRetirement $fixture
+        Save-LedgerRetirement $fixture -RetiredAt '2026-10-21T13:00:00Z'
+        if (-not $Active) { Change-LedgerBinding $fixture }
+        $model = Get-SquadStateModel -SquadRoot $fixture.Root
+        $model.ConnectorRetirementIssues | Should -Not -BeNullOrEmpty
+        $model.ConnectorRetirementIssues -join ',' | Should -Match 'duplicate:history-authority'
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            (Invoke-Ledger -SquadRoot $fixture.Root @options).ExitCode | Should -Be 1
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-34 rejects a malformed <Field> in the active manifest too' -ForEach @(
+        @{ Field = 'retryCapDefault' }, @{ Field = 'deadlineMinutesDefault' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        $fixture.Manifest[$Field] = 'invalid'
+        $fixture.Manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $fixture.ManifestPath
+        (Get-SquadStateModel -SquadRoot $fixture.Root).ConnectorBindingIssues.Count | Should -BeGreaterThan 0
+        $result = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+    }
+
+    It 'CONN-34 permits disjoint retirement records after reuse of a binding id' {
+        $fixture = New-ConnectorLedgerRoot
+        Save-LedgerRetirement $fixture
+        Change-LedgerBinding $fixture 'rebind'
+        $old = [System.IO.File]::ReadAllText($fixture.HistoryPath)
+        $newEntry = ($old -split '(?m)(?=^### )', 2)[1].
+            Replace('2026-09-27T10:00:00Z', '2026-10-21T12:30:00Z').
+            Replace('External Researcher', 'New Researcher').Replace('external-agent', 'new-agent')
+        $newTitle = [regex]::Match($newEntry, '^###[ \t]+([^\r\n]+)').Groups[1].Value.Trim()
+        Add-Content -LiteralPath $fixture.HistoryPath -Value $newEntry -Encoding utf8NoBOM
+        $fixture.Manifest = Get-Content -LiteralPath $fixture.ManifestPath -Raw | ConvertFrom-Json -AsHashtable
+        Save-LedgerRetirement $fixture -HistoryEntries @($newTitle) -RetiredAt '2026-10-21T13:00:00Z'
+        Change-LedgerBinding $fixture
+
+        $model = Get-SquadStateModel -SquadRoot $fixture.Root
+        $model.ConnectorRetirementIssues | Should -BeNullOrEmpty
+        $model.ConnectorRetirements.Count | Should -Be 2
+        $model.ConnectorHistoryIssues | Should -BeNullOrEmpty
+        $model.ConnectorHistoryIdentities.Count | Should -Be 2
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 0 -Because $rewrite.Output
+        $ledger = [System.IO.File]::ReadAllText((Join-Path $fixture.Root 'consumption.md'))
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*extended\s*\|'
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*New Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*fast\s*\|'
+        (Invoke-Ledger -SquadRoot $fixture.Root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'CONN-35 rejects <Marker> metadata without the fixed bullet prefix, even with a matching active binding' -ForEach @(
+        @{ Marker = 'External provenance' }, @{ Marker = 'Verification' }, @{ Marker = 'External-unmetered' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath).Replace("* ${Marker}:", "${Marker}:")
+        Set-Content -LiteralPath $fixture.HistoryPath -Value $history -NoNewline
+        (Get-SquadStateModel -SquadRoot $fixture.Root).ConnectorHistoryIssues.Count | Should -BeGreaterThan 0
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            (Invoke-Ledger -SquadRoot $fixture.Root @options).ExitCode | Should -Be 1
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
     }
 
     It 'refuses <Mutation> retirement evidence without rewriting ledger or state' -ForEach @(

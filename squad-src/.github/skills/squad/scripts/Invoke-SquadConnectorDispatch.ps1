@@ -134,17 +134,16 @@ function Invoke-SquadConnectorDispatch {
         $phase = 'manifest'
         $manifest = Read-ConnectorDispatchJsonLocal -Path $manifestPath
         $check = Test-SquadConnectorManifestShape -Manifest $manifest
-        if ($check.Status -ne 'ok') { Stop-ConnectorDispatchLocal 'invalid-manifest' }
+        if ($check.Status -ne 'ok') {
+            $limitIssues = @('invalid:deadlineMinutesDefault', 'invalid:retryCapDefault')
+            if (@($check.Issues | Where-Object { $_ -notin $limitIssues }).Count -eq 0) {
+                Stop-ConnectorDispatchLocal 'invalid-manifest-limit'
+            }
+            Stop-ConnectorDispatchLocal 'invalid-manifest'
+        }
         if ($manifest.connectorId -cne $InputObject.connectorId -or $manifest.roles -cnotcontains $InputObject.role) {
             Stop-ConnectorDispatchLocal 'manifest-identity-mismatch'
         }
-        foreach ($field in @('deadlineMinutesDefault', 'retryCapDefault')) {
-            $number = $manifest[$field]
-            if (($number -isnot [int] -and $number -isnot [long]) -or $number -lt 0 -or $number -gt [int]::MaxValue) {
-                Stop-ConnectorDispatchLocal 'invalid-manifest-limit'
-            }
-        }
-        if ($manifest.deadlineMinutesDefault -eq 0) { Stop-ConnectorDispatchLocal 'invalid-manifest-limit' }
         $drop = Get-ConnectorDispatchPathLocal -WorkspaceRoot $workspace -Path $manifest.dropPath -Directory
         if (Test-ConnectorRootsCollideLocal -Left $InputObject.deliverableRoot -Right $manifest.dropPath) {
             Stop-ConnectorDispatchLocal 'mailbox-overlaps-deliverable-root'

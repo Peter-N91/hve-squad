@@ -109,4 +109,49 @@ Describe 'CONN-28 connector resume live harness' {
         @(Get-SquadDispatchEvidence -TranscriptPath $transcript -AgentName 'Squad Connector' -TaskId 'task-original').Count | Should -Be 2
         @(Get-SquadDispatchEvidence -TranscriptPath $transcript -AgentName 'Squad Connector' -TaskId 'task-other').Count | Should -Be 0
     }
+
+    It 'CONN-35 counts every wrapper attempt inside its actual native child, not eventual success alone' {
+        $transcript = Join-Path $script:Scratch 'attempt-events.jsonl'
+        @(
+            '{"type":"subagent.started","agentId":"connector-child","data":{"agentName":"Squad Connector","toolCallId":"dispatch-1","model":"claude-sonnet-5.5","taskModelSource":"custom_agent_definition","modelSelectionSource":"agent_definition_default"}}'
+            '{"type":"tool.execution_start","agentId":"connector-child","data":{"toolName":"powershell","toolCallId":"attempt-1","arguments":{"command":"& scripts\\Invoke-SquadConnectorDispatch.ps1 -InputJson $j"}}}'
+            '{"type":"tool.execution_start","agentId":"connector-child","data":{"toolName":"powershell","toolCallId":"attempt-2","arguments":{"command":"& scripts\\Invoke-SquadConnectorDispatch.ps1 -InputJson $j"}}}'
+            '{"type":"tool.execution_start","agentId":"connector-child","data":{"toolName":"powershell","toolCallId":"attempt-3","arguments":{"command":"& scripts\\Invoke-SquadConnectorDispatch.ps1 -InputJson $j"}}}'
+            '{"type":"tool.execution_start","agentId":"connector-child","data":{"toolName":"powershell","toolCallId":"attempt-4","arguments":{"command":"& scripts\\Invoke-SquadConnectorDispatch.ps1 -InputPath dispatch.json"}}}'
+            '{"type":"tool.execution_complete","agentId":"connector-child","data":{"toolName":"powershell","toolCallId":"attempt-4","result":{"status":"completed"}}}'
+        ) | Set-Content -LiteralPath $transcript
+        $evidence = @(Get-SquadConnectorExecutionEvidence -TranscriptPath $transcript)
+        $evidence.Count | Should -Be 1
+        $evidence[0].WrapperCallCount | Should -Be 4
+        $evidence[0].Model | Should -Be 'claude-sonnet-5.5'
+        $evidence[0].ModelSelectionSource | Should -Be 'agent_definition_default'
+    }
+
+    It 'CONN-35 deduplicates copied event logs and excludes other agents, inline calls, and script reads' {
+        $directory = Join-Path $script:Scratch 'copied-events'
+        [void][System.IO.Directory]::CreateDirectory($directory)
+        $transcript = Join-Path $directory 'events.jsonl'
+        @(
+            '{"type":"subagent.started","agentId":"connector-child","data":{"agentName":"Squad Connector","toolCallId":"dispatch-1"}}'
+            '{"type":"tool.execution_start","agentId":"connector-child","data":{"toolName":"powershell","toolCallId":"read-1","arguments":{"command":"Get-Content scripts\\Invoke-SquadConnectorDispatch.ps1"}}}'
+            '{"type":"tool.execution_start","agentId":"other-child","data":{"toolName":"powershell","toolCallId":"other-1","arguments":{"command":"& scripts\\Invoke-SquadConnectorDispatch.ps1 -InputJson $j"}}}'
+            '{"type":"tool.execution_start","data":{"toolName":"powershell","toolCallId":"inline-1","arguments":{"command":"& scripts\\Invoke-SquadConnectorDispatch.ps1 -InputJson $j"}}}'
+            '{"type":"tool.execution_start","data":{"toolName":"powershell","toolCallId":"attempt-1","parentToolCallId":"dispatch-1","arguments":{"command":"pwsh -File \"scripts\\Invoke-SquadConnectorDispatch.ps1\" -InputPath dispatch.json"}}}'
+        ) | Set-Content -LiteralPath $transcript
+        Copy-Item -LiteralPath $transcript -Destination (Join-Path $directory 'copy.jsonl')
+        $evidence = @(Get-SquadConnectorExecutionEvidence -TranscriptPath $transcript -LogDir $directory)
+        $evidence.Count | Should -Be 1
+        $evidence[0].WrapperCallCount | Should -Be 1
+    }
+
+    It 'CONN-35 counts multiple invocations even when one shell call contains them' {
+        $transcript = Join-Path $script:Scratch 'combined-attempts.jsonl'
+        @(
+            '{"type":"subagent.started","agentId":"connector-child","data":{"agentName":"Squad Connector","toolCallId":"dispatch-1"}}'
+            '{"type":"tool.execution_start","agentId":"connector-child","data":{"toolName":"powershell","toolCallId":"combined","arguments":{"command":"& scripts\\Invoke-SquadConnectorDispatch.ps1 -InputJson $first; & scripts\\Invoke-SquadConnectorDispatch.ps1 -InputJson $second"}}}'
+        ) | Set-Content -LiteralPath $transcript
+        $evidence = @(Get-SquadConnectorExecutionEvidence -TranscriptPath $transcript)
+        $evidence.Count | Should -Be 1
+        $evidence[0].WrapperCallCount | Should -Be 2
+    }
 }

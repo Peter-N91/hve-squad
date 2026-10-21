@@ -178,9 +178,12 @@ Describe 'CONN-21 council bypass remains canonical and internal' {
 Describe 'CONN-22 and Consumption shape: trusted provenance extends history without widening consumption schema' {
     It 'pins the fixed trusted-provenance rendering bullets' {
         $section = Get-SectionBodyLocal -Text $script:RoleModes -Heading '9) Trusted Provenance'
-        $section | Should -Match ([regex]::Escape('* `External provenance: connector=<connectorId>; binding=<bindingId>; endpoint=<endpointKind>; mode=<roleMode>; target=<target>`'))
-        $section | Should -Match ([regex]::Escape('* `Verification: external, unverified`'))
-        $section | Should -Match ([regex]::Escape('* `External-unmetered: connector=<connectorId>`'))
+        $rendered = [regex]::Match($section, '(?ms)^```markdown\r?\n(?<bullets>.*?)\r?\n```').Groups['bullets'].Value
+        @($rendered -split '\r?\n') | Should -Be @(
+            '* External provenance: connector=<connectorId>; binding=<bindingId>; endpoint=<endpointKind>; mode=<roleMode>; target=<target>'
+            '* Verification: external, unverified'
+            '* External-unmetered: connector=<connectorId>'
+        )
     }
 
     Describe 'connector registration activates the setup contract and generic additive policy' -Tag 'Unit' {

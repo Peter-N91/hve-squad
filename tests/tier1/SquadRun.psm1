@@ -270,6 +270,28 @@ function Publish-ConnectorConsumerResult {
     }
 }
 
+function Get-SquadRunEvents {
+    param(
+        [Parameter(Mandatory)][string]$TranscriptPath,
+        [string]$LogDir
+    )
+
+    $sources = @(
+        if (Test-Path -LiteralPath $TranscriptPath -PathType Leaf) { $TranscriptPath }
+        if ($LogDir -and (Test-Path -LiteralPath $LogDir -PathType Container)) {
+            Get-ChildItem -LiteralPath $LogDir -Filter '*.jsonl' -File -Recurse -Force | ForEach-Object FullName
+        }
+    ) | Sort-Object -Unique
+    foreach ($source in $sources) {
+        foreach ($line in (Get-Content -LiteralPath $source)) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed.StartsWith('{')) { continue }
+            try { $trimmed | ConvertFrom-Json -Depth 64 }
+            catch [System.ArgumentException] { continue }
+        }
+    }
+}
+
 function Get-SquadDispatchEvidence {
     <#
     .SYNOPSIS
@@ -289,50 +311,92 @@ function Get-SquadDispatchEvidence {
     )
 
     $evidence = [System.Collections.Generic.List[string]]::new()
-    $sources = @(
-        if (Test-Path -LiteralPath $TranscriptPath -PathType Leaf) { $TranscriptPath }
-        if ($LogDir -and (Test-Path -LiteralPath $LogDir -PathType Container)) {
-            Get-ChildItem -LiteralPath $LogDir -Filter '*.jsonl' -File -Recurse | ForEach-Object FullName
+    foreach ($event in (Get-SquadRunEvents -TranscriptPath $TranscriptPath -LogDir $LogDir)) {
+        $type = @('type', 'event', 'kind') |
+            ForEach-Object { $event.PSObject.Properties[$_]?.Value } |
+            Where-Object { $_ } |
+            Select-Object -First 1
+        $details = $event.PSObject.Properties['data']?.Value
+        if ($null -eq $details) { $details = $event }
+        $arguments = $null
+        $agent = ''
+        if ($type -in @('subagent.started', 'subagent.start')) {
+            $agent = [string]$details.PSObject.Properties['agentName']?.Value
+            $arguments = $details.PSObject.Properties['prompt']?.Value
         }
-    ) | Sort-Object -Unique
-    foreach ($source in $sources) {
-        foreach ($line in (Get-Content -LiteralPath $source)) {
-            $trimmed = $line.Trim()
-            if (-not $trimmed.StartsWith('{')) { continue }
-            try { $event = $trimmed | ConvertFrom-Json -Depth 64 } catch { continue }
-            $type = @('type', 'event', 'kind') |
-                ForEach-Object { $event.PSObject.Properties[$_]?.Value } |
+        elseif ($type -in @('tool.execution_start', 'tool.start', 'tool.invoke')) {
+            $tool = @('toolName', 'tool', 'name') | ForEach-Object { $details.PSObject.Properties[$_]?.Value } |
                 Where-Object { $_ } |
                 Select-Object -First 1
-            $details = $event.PSObject.Properties['data']?.Value
-            if ($null -eq $details) { $details = $event }
-            $arguments = $null
-            $agent = ''
-            if ($type -in @('subagent.started', 'subagent.start')) {
-                $agent = [string]$details.PSObject.Properties['agentName']?.Value
-                $arguments = $details.PSObject.Properties['prompt']?.Value
+            if ([string]$tool -notmatch '^(?:[^.]+\.)?(?:task|runSubagent)$') { continue }
+            $arguments = $details.PSObject.Properties['arguments']?.Value
+            if ($arguments -is [string]) {
+                try { $arguments = $arguments | ConvertFrom-Json -Depth 64 }
+                catch [System.ArgumentException] { continue }
             }
-            elseif ($type -in @('tool.execution_start', 'tool.start', 'tool.invoke')) {
-                $tool = @('toolName', 'tool', 'name') | ForEach-Object { $details.PSObject.Properties[$_]?.Value } |
-                    Where-Object { $_ } | Select-Object -First 1
-                if ([string]$tool -notmatch '^(?:[^.]+\.)?(?:task|runSubagent)$') { continue }
-                $arguments = $details.PSObject.Properties['arguments']?.Value
-                if ($arguments -is [string]) {
-                    try { $arguments = $arguments | ConvertFrom-Json -Depth 64 }
-                    catch [System.ArgumentException] { continue }
-                }
-                if ($null -eq $arguments) { continue }
-                $agent = @('agent_type', 'agent', 'agentName') | ForEach-Object { $arguments.PSObject.Properties[$_]?.Value } |
-                    Where-Object { $_ } | Select-Object -First 1
-            }
-            else { continue }
-            $agentKey = ConvertTo-ComparableName (([string]$agent -split ':')[-1])
-            if (-not $agentKey -or $agentKey -cne (ConvertTo-ComparableName $AgentName)) { continue }
-            if ($TaskId -and -not ($arguments | ConvertTo-Json -Depth 64 -Compress).Contains($TaskId, [StringComparison]::Ordinal)) { continue }
-            $evidence.Add("json:$type")
+            if ($null -eq $arguments) { continue }
+            $agent = @('agent_type', 'agent', 'agentName') | ForEach-Object { $arguments.PSObject.Properties[$_]?.Value } |
+                Where-Object { $_ } | Select-Object -First 1
         }
+        else { continue }
+        $agentKey = ConvertTo-ComparableName (([string]$agent -split ':')[-1])
+        if (-not $agentKey -or $agentKey -cne (ConvertTo-ComparableName $AgentName)) { continue }
+        if ($TaskId -and -not ($arguments | ConvertTo-Json -Depth 64 -Compress).Contains($TaskId, [StringComparison]::Ordinal)) { continue }
+        $evidence.Add("json:$type")
     }
     $evidence.ToArray()
+}
+
+function Get-SquadConnectorExecutionEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TranscriptPath,
+        [string]$LogDir
+    )
+
+    $events = @(Get-SquadRunEvents -TranscriptPath $TranscriptPath -LogDir $LogDir |
+        Where-Object { $_.PSObject.Properties['type']?.Value -in @('subagent.started', 'subagent.start', 'tool.execution_start', 'tool.start', 'tool.invoke') })
+    $seenAgents = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($event in $events) {
+        if ($event.PSObject.Properties['type']?.Value -notin @('subagent.started', 'subagent.start')) { continue }
+        $details = $event.PSObject.Properties['data']?.Value
+        if ($null -eq $details) { $details = $event }
+        $agent = [string]$details.PSObject.Properties['agentName']?.Value
+        if ((ConvertTo-ComparableName (($agent -split ':')[-1])) -cne 'squadconnector') { continue }
+        $agentId = [string]$event.PSObject.Properties['agentId']?.Value
+        $dispatchId = [string]$details.PSObject.Properties['toolCallId']?.Value
+        if (-not $agentId -or -not $dispatchId -or -not $seenAgents.Add($agentId)) { continue }
+        $calls = [System.Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
+        foreach ($toolEvent in $events) {
+            if ($toolEvent.PSObject.Properties['type']?.Value -notin @('tool.execution_start', 'tool.start', 'tool.invoke')) { continue }
+            $data = $toolEvent.PSObject.Properties['data']?.Value
+            if ($null -eq $data) { $data = $toolEvent }
+            $childId = [string]$toolEvent.PSObject.Properties['agentId']?.Value
+            $parentId = [string]$data.PSObject.Properties['parentToolCallId']?.Value
+            if ($childId -cne $agentId -and ($childId -or $parentId -cne $dispatchId)) { continue }
+            $tool = [string]$data.PSObject.Properties['toolName']?.Value
+            if ($tool -notmatch '^(?:[^.]+\.)?(?:powershell|bash|shell|terminal|execute)$') { continue }
+            $arguments = $data.PSObject.Properties['arguments']?.Value
+            if ($arguments -is [string]) {
+                try { $arguments = $arguments | ConvertFrom-Json -Depth 64 }
+                catch [System.ArgumentException] { continue }
+            }
+            if ($null -eq $arguments) { continue }
+            $command = [string]$arguments.PSObject.Properties['command']?.Value
+            $invocations = [regex]::Matches($command, '(?i)(?:^|[\\/\s"''])Invoke-SquadConnectorDispatch\.ps1["'']?\s+-Input(?:Path|Json)\b').Count
+            if ($invocations -eq 0) { continue }
+            $callId = [string]$data.PSObject.Properties['toolCallId']?.Value
+            if ($callId -and -not $calls.ContainsKey($callId)) { $calls.Add($callId, $invocations) }
+        }
+        [pscustomobject]@{
+            AgentId = $agentId
+            DispatchId = $dispatchId
+            Model = [string]$details.PSObject.Properties['model']?.Value
+            TaskModelSource = [string]$details.PSObject.Properties['taskModelSource']?.Value
+            ModelSelectionSource = [string]$details.PSObject.Properties['modelSelectionSource']?.Value
+            WrapperCallCount = [int]($calls.Values | Measure-Object -Sum).Sum
+        }
+    }
 }
 
 function Get-RosterMap {
@@ -503,4 +567,4 @@ function Get-RunObservation {
     }
 }
 
-Export-ModuleMember -Function New-SquadWorkspace, Invoke-SquadTurn, Publish-ConnectorConsumerResult, Get-SquadDispatchEvidence, Get-RunObservation, Get-RosterMap, Get-GateVerdict, ConvertTo-ComparableName
+Export-ModuleMember -Function New-SquadWorkspace, Invoke-SquadTurn, Publish-ConnectorConsumerResult, Get-SquadDispatchEvidence, Get-SquadConnectorExecutionEvidence, Get-RunObservation, Get-RosterMap, Get-GateVerdict, ConvertTo-ComparableName

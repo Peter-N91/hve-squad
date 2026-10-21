@@ -840,6 +840,11 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         without creating another request. Pending identity also pins the external member and owning
         roster: renaming either fails closed instead of reattributing the result. Directory roots
         accept the examples' trailing separator; unsafe interior path segments remain rejected.
+        HVE supplies exact dispatch JSON; resume reloads optional task, output, and deadline fields
+        from the pinned request rather than reconstructing them. The child returns its first result,
+        including failures, without retrying with edited inputs. Scribe history uses literal
+        <code>* </code> provenance bullets, only validated reports as deliverables, and the native
+        Connector's own model-attribution evidence.
       </p>
 
       <p>
@@ -1102,8 +1107,11 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         authority and cannot admit an unlisted entry. <code>Measure-SquadLedger.ps1</code> uses the
         shared <code>Resolve-SquadConnectorHistory.ps1</code> validator to regenerate those entries'
         original role, external member, and model tier from the saved roster, without changing
-        history or token pricing. Invalid historical evidence blocks regeneration. A default-only
-        refresh leaves identity unchanged.
+        history or token pricing. Invalid historical evidence blocks regeneration: saved retry/deadline
+        defaults must be integers within the manifest limits, and duplicate or overlapping retirement
+        authority for the same binding and completed heading is rejected even when the active identity
+        matches. Disjoint entries after binding-id reuse remain valid. A default-only refresh leaves
+        identity unchanged.
       </p>
 
       <p>

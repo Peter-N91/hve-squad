@@ -116,7 +116,7 @@ Field order is contractual and every numeric field is a bare number. The block r
 
 These bullets are additive and never a new JSON key — the closed ten-field block above is unchanged whether or not they are present. Omit all four entirely when no routing policy applied to this dispatch: a no-policy entry keeps exactly the block shape above with nothing beneath it.
 
-**Connector provenance.** Completed `Squad Connector` dispatches require closed `externalProvenance`; append the fixed bullets from `connector-role-modes.md` §9 and reject non-connector use, missing provenance, or extra keys.
+**Connector provenance.** Only `Squad Connector` uses `externalProvenance` (`connector-role-modes.md` §9): no extra/missing keys. Literal `* ` bullets only. Validated reports go in `Deliverable:`; source changes go in `Outcome:`.
 
 When Cost Preflight is configured, the `Cost Preflight Ref` and `Cost Preflight Slot` pair is also unique across history. One admitted slot authorizes one dispatch; a second entry carrying the same run, round, and slot is a replay and must be rejected before any write.
 

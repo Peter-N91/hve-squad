@@ -770,6 +770,47 @@ Describe 'The contract passes on a schema-correct tree' {
         @($model.Deliverables | Where-Object { $_.Agent -ceq 'Squad Connector' -and -not $_.UnderRoot }).Count | Should -Be 1
     }
 
+    It 'CONN-33 accepts Windows roots with <Ending> separators when Shared=<Shared>' -ForEach @(
+        @{ Shared = $true; Ending = 'none' }, @{ Shared = $false; Ending = 'none' },
+        @{ Shared = $true; Ending = 'backslash' }, @{ Shared = $false; Ending = 'backslash' },
+        @{ Shared = $true; Ending = 'mixed' }, @{ Shared = $false; Ending = 'mixed' }
+    ) {
+        $root = New-Fixture "connector-windows-roots-$Shared-$Ending"
+        [void](Use-MultipleConnectorRoots -Root $root -Shared:$Shared)
+        $before = Get-SquadStateModel -SquadRoot $root
+        $teamPath = Join-Path $root 'team.md'
+        $team = [System.IO.File]::ReadAllText($teamPath)
+        foreach ($declaredRoot in @($before.ConnectorHistoryIdentities.DeliverableRoot | Sort-Object -Unique)) {
+            $windowsRoot = $declaredRoot.Replace('/', '\').TrimEnd('\')
+            if ($Ending -eq 'backslash') { $windowsRoot += '\' }
+            elseif ($Ending -eq 'mixed') { $windowsRoot = $windowsRoot.Replace('.copilot-tracking\', '.copilot-tracking/') + '/' }
+            $team = $team.Replace($declaredRoot, $windowsRoot)
+        }
+        Set-Content -LiteralPath $teamPath -Value $team -Encoding utf8NoBOM
+
+        $model = Get-SquadStateModel -SquadRoot $root
+        $model.ConnectorHistoryIssues | Should -BeNullOrEmpty
+        $reports = @($model.Deliverables | Where-Object Agent -CEQ 'Squad Connector')
+        $reports.Count | Should -Be 2
+        @($reports | Where-Object { -not $_.Resolved -or -not $_.UnderRoot }).Count | Should -Be 0
+    }
+
+    It 'CONN-34 uses the retired root for its listed entry even when the current identity still matches' {
+        $root = New-Fixture 'connector-retired-root-current-identity'
+        Use-ConnectorReplacementState -Root $root
+        $before = Get-SquadStateModel -SquadRoot $root
+        $oldRoot = $before.ConnectorHistoryIdentities[0].DeliverableRoot
+        Save-ConnectorRetirementFixture -Root $root
+        $teamPath = Join-Path $root 'team.md'
+        Set-Content -LiteralPath $teamPath -Value ([System.IO.File]::ReadAllText($teamPath).Replace($oldRoot, '.copilot-tracking/reviews/new-root/'))
+
+        $model = Get-SquadStateModel -SquadRoot $root
+        $model.ConnectorRetirementIssues | Should -BeNullOrEmpty
+        $model.ConnectorHistoryIssues | Should -BeNullOrEmpty
+        $model.ConnectorHistoryIdentities[0].DeliverableRoot | Should -Be $oldRoot
+        @($model.Deliverables | Where-Object { $_.Agent -ceq 'Squad Connector' -and -not $_.UnderRoot }).Count | Should -Be 0
+    }
+
     It 'CONN-33 rejects a directory whose name only starts with the authorized root' {
         $root = New-Fixture 'connector-root-prefix-collision'
         $paths = Use-MultipleConnectorRoots -Root $root

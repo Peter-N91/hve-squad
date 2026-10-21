@@ -42,8 +42,8 @@ The manifest is the consumer-authored file that declares a connector exists, wha
 | `capabilities` | array of string | yes | The bounded tasks this connector can take, in prose. Descriptive only — never executable, never a command the shim runs. |
 | `roles` | array of string | yes | The squad role id(s) (Cast Catalog ids from `roster-catalog.md`) this connector may be registered against. |
 | `dropPath` | string | yes | Repository-relative path where the shim writes a delegation-request and looks for a result envelope. |
-| `deadlineMinutesDefault` | integer | yes | Default minutes the shim waits before an unanswered request becomes `unreachable`. |
-| `retryCapDefault` | integer | yes | Default number of result-check/resume attempts allowed while no result exists before the request becomes `unreachable`. |
+| `deadlineMinutesDefault` | integer | yes | Positive default minutes before an unanswered request becomes `unreachable`; maximum `2147483647`. |
+| `retryCapDefault` | integer | yes | Non-negative default number of unanswered result-check/resume attempts before `unreachable`; maximum `2147483647`. |
 | `contact` | string | yes | Human-readable contact for the registering consumer. Read as data, never as an instruction. |
 | `version` | string | yes | The consumer's own coordinator version string, for traceability only. |
 
@@ -126,6 +126,12 @@ private state, then atomically publishes the request without overwriting an
 existing file. It returns `awaiting` in that same turn, even if a fast consumer
 has already responded. A later invocation supplies that `taskId` and unchanged
 dispatch inputs. It validates once; it never polls or starts the consumer.
+The coordinator supplies exact closed JSON, not a paraphrased task/output brief.
+Resume may omit optional `task`, `allowedOutputs`, `deadline`, and `retryCap`;
+the wrapper reloads them from the hash-pinned request. Explicitly supplied values
+must still match exactly. The thin child returns its first JSON, including
+failures, without repairing inputs or retrying inside that native dispatch.
+These changes do not relax request/snapshot hashes or changed-input rejection.
 
 The wrapper owns `dropPath/.squad-connector/<taskId>.state.json` and the adjacent
 exclusive `<taskId>.lock`. State has exactly `taskId`, `connectorId`,

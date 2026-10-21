@@ -352,7 +352,7 @@ Describe 'CONN-31 compatible directory roots and immutable pending identity' {
         $Fixture.Manifest.dropPath = $Path
         $Fixture.Manifest | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $Fixture.ManifestPath
         (Invoke-TestDispatch $Fixture 'CLI').status | Should -Not -Be 'awaiting'
-        @(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Filter '*.request.json').Count | Should -Be 0
+        @(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Force -File -Filter '*.request.json').Count | Should -Be 0
     }
 
     It 'rejects a pending <Version> member rename without consuming the original result' -ForEach @(
@@ -408,8 +408,57 @@ Describe 'CONN-31 compatible directory roots and immutable pending identity' {
             }
             $result = Invoke-TestDispatch $Fixture 'CLI'
             $result.status | Should -Be 'awaiting' -Because "$($source.Name): $($result | ConvertTo-Json -Compress)"
-            @(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Filter '*.request.json').Count | Should -Be 1
+            if ($IsWindows) {
+                $drop = Join-Path $Fixture.Root $manifest.dropPath
+                [System.IO.File]::SetAttributes($drop, (Get-Item -LiteralPath $drop -Force).Attributes -bor [System.IO.FileAttributes]::Hidden)
+            }
+            @(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Force -File -Filter '*.request.json').Count | Should -Be 1
         }
+    }
+}
+
+Describe 'CONN-35 exact resume input without reconstructing the pending request' {
+    It 'resumes <RoleMode>/<Kind> with only the pinned identity inputs through <Mode>' -ForEach @(
+        @{ RoleMode = 'replace'; Kind = 'agent'; Mode = 'Library' },
+        @{ RoleMode = 'replace'; Kind = 'agent'; Mode = 'CLI' },
+        @{ RoleMode = 'replace'; Kind = 'orchestrator'; Mode = 'Library' },
+        @{ RoleMode = 'replace'; Kind = 'orchestrator'; Mode = 'CLI' },
+        @{ RoleMode = 'add'; Kind = 'agent'; Mode = 'Library' },
+        @{ RoleMode = 'add'; Kind = 'agent'; Mode = 'CLI' },
+        @{ RoleMode = 'add'; Kind = 'orchestrator'; Mode = 'Library' },
+        @{ RoleMode = 'add'; Kind = 'orchestrator'; Mode = 'CLI' }
+    ) {
+        $Fixture = New-DispatchFixture -Version '1.1' -Kind $Kind -RoleMode $RoleMode
+        $Fixture.Input.taskId = (Invoke-TestDispatch $Fixture $Mode).taskId
+        [void](Save-TestResult $Fixture)
+        $requestHash = (Get-FileHash -LiteralPath (Get-ExchangePath $Fixture 'request')).Hash
+        $snapshotHash = (Get-FileHash -LiteralPath (Get-ExchangePath $Fixture 'snapshot')).Hash
+        foreach ($field in @('task', 'allowedOutputs', 'deadline', 'retryCap')) { [void]$Fixture.Input.Remove($field) }
+
+        $completed = Invoke-TestDispatch $Fixture $Mode
+        $completed.status | Should -Be 'completed' -Because ($completed | ConvertTo-Json -Depth 16)
+        $completed.memberName | Should -Be 'Partner'
+        $completed.trustedProvenance.roleMode | Should -Be $RoleMode
+        $completed.trustedProvenance.endpointKind | Should -Be $Kind
+        (Get-FileHash -LiteralPath (Get-ExchangePath $Fixture 'request')).Hash | Should -Be $requestHash
+        (Get-FileHash -LiteralPath (Get-ExchangePath $Fixture 'snapshot')).Hash | Should -Be $snapshotHash
+        (Read-ConnectorDispatchJsonLocal (Get-ExchangePath $Fixture 'state')).consumed | Should -BeTrue
+    }
+
+    It 'still rejects an explicitly changed <Field> without consuming the result' -ForEach @(
+        @{ Field = 'task'; Value = 'Paraphrased pending instructions.' },
+        @{ Field = 'deadline'; Value = '2026-10-21T14:00:00Z' },
+        @{ Field = 'retryCap'; Value = 17 },
+        @{ Field = 'allowedOutputs'; Value = @() }
+    ) {
+        $Fixture = New-DispatchFixture -Version '1.1'
+        $Fixture.Input.taskId = (Invoke-TestDispatch $Fixture).taskId
+        [void](Save-TestResult $Fixture)
+        $Fixture.Input[$Field] = $Value
+        $failed = Invoke-TestDispatch $Fixture 'CLI'
+        $failed.status | Should -Be 'failed'
+        $failed.reasons | Should -Contain 'changed-resume-input'
+        (Read-ConnectorDispatchJsonLocal (Get-ExchangePath $Fixture 'state')).consumed | Should -BeFalse
     }
 }
 
@@ -583,7 +632,7 @@ Describe 'CONN-30 dispatch configuration and process boundaries' {
         $result = Invoke-TestDispatch $Fixture 'CLI'
         $result.status | Should -Be 'unreachable'
         ($result | ConvertTo-Json) | Should -Not -Match 'UNTRUSTED'
-        @(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Filter '*.request.json').Count | Should -Be 0
+        @(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Force -File -Filter '*.request.json').Count | Should -Be 0
     }
 
     It 'does not allow legacy dispatch to bypass an applicable 1.1 binding' {

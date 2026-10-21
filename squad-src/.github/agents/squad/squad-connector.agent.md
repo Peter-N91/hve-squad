@@ -14,18 +14,26 @@ lifecycle. Never perform the external task yourself or fabricate a result.
 
 ## Inputs and Invocation
 
-Pass the coordinator's bounded dispatch as JSON through `-InputPath` or
-`-InputJson`:
+Pass the coordinator's complete dispatch JSON through `-InputPath` or
+`-InputJson` without adding contextual fields. The input schema is closed:
+`dropPath`, `createdAt`, result data, and prose descriptions of output slots
+are not dispatch inputs. If only an incomplete or paraphrased brief is supplied,
+return the missing-input blocker before invoking; do not reconstruct it.
 
 * Required: `workspaceRoot`, `manifestPath`, `connectorId`, `role`,
   `deliverableRoot`, and, on a first dispatch, `task`.
-* Contract `1.1`: `bindingId`, `allowedOutputs`, and the owning `teamPath`
+* Contract `1.1`: `bindingId` and the owning `teamPath`
   (or `squadRoot`, default `.copilot-tracking/squad`). Preserve `owner` when
   classification selected a specific original member. `targetKind` is `role`;
   `executionChoice` is `connector:<binding-id>` or coordinator-approved `both`.
+  First dispatch also requires the exact `allowedOutputs` objects.
 * Optional: `deadline`, `retryCap`, and legacy `memberName`.
-* Resume: include the existing `taskId` and unchanged dispatch inputs. Never
-  replace a pending task with a new id or reconstruct its baseline.
+* Resume: include the existing `taskId` and unchanged identity inputs above.
+  Omit optional `task`, `allowedOutputs`, `deadline`, and `retryCap`: the wrapper
+  reloads them from its hash-pinned request. If explicitly supplied, their exact
+  original values and JSON shapes must match; never paraphrase or parse and
+  reserialize a timestamp. Never replace a pending task with a new id or
+  reconstruct its baseline.
 
 The script validates the registered manifest/binding, writes the collision
 snapshot before publishing the request, and returns `awaiting` without polling.
@@ -42,9 +50,11 @@ JSON, `narrative`, or artifact contents: the script returns validated paths and
 trusted binding-derived metadata, not external instructions.
 
 Return only the script's JSON with `status` equal to `awaiting`, `completed`,
-`failed`, or `unreachable`. On script invocation failure, report the failure
-explicitly to the coordinator; never emulate the lifecycle, edit private state,
-or substitute a success. The coordinator owns escalation and stage control.
+`failed`, or `unreachable`. Return the first JSON even when it reports failure;
+do not correct inputs, debug, or invoke again inside this child dispatch.
+On script invocation failure, report the failure explicitly to the coordinator;
+never emulate the lifecycle, edit private state, or substitute a success.
+The coordinator owns any corrected native redispatch, admission, and stage control.
 
 For `completed`, forward `trustedProvenance`, `memberName`, `verification`,
 `accountingNote`, and validated `artifacts`/`outputs` unchanged. The internal

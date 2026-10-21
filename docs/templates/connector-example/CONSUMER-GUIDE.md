@@ -226,6 +226,13 @@ validated completion to the internal Scribe. Finish or explicitly abandon
 pending work before renaming its external member or moving its owning roster:
 the identity check refuses to attach the old result to a new name. Directory
 roots accept the trailing separator used in the shipped examples.
+The coordinator gives the native child exact dispatch JSON. Resume reloads
+optional task/output/deadline fields from the pinned request; it does not
+reconstruct them from prose. The child returns its first result, failures
+included, without retrying edited inputs. The Scribe records only validated
+report paths as deliverables, keeps source-change references separate, uses
+literal `* ` provenance bullets, and attributes the native Connector's own
+model evidence rather than assuming it inherited the parent model.
 
 ## Step 5: Add a .NET or GCP specialist
 
