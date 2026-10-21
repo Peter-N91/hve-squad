@@ -26,9 +26,9 @@ on:
         default: main
         type: string
       run_benchmark:
-        description: 'Require recorded benchmark non-regression before release. Uncheck only for an intentional manual bypass.'
+        description: 'Automatically collect fresh benchmark evidence before release. Uncheck only for an intentional manual bypass.'
         required: false
-        default: false
+        default: true
         type: boolean
   push:
     branches:
@@ -54,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.identity.outputs.sha }}
+      version: ${{ steps.identity.outputs.version }}
+      tag_exists: ${{ steps.tag.outputs.exists }}
     steps:
       - name: Checkout release candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,17 +64,44 @@ jobs:
           ref: ${{ github.event_name == 'push' && github.sha || inputs.ref || 'main' }}
       - name: Record candidate identity
         id: identity
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        shell: pwsh
+        env:
+          VERSION_OVERRIDE: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $text = Get-Content -LiteralPath apm.yml -Raw
+          $matches = [regex]::Matches($text, '(?m)^version: ([^\r\n]+)\r?$')
+          if ($matches.Count -ne 1) { throw 'One candidate version required.' }
+          $version = if ($env:VERSION_OVERRIDE) { $env:VERSION_OVERRIDE } else { $matches[0].Groups[1].Value }
+          if ($version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:[-+][0-9A-Za-z.-]+)?$') { throw 'Invalid effective release version.' }
+          "sha=$((git rev-parse HEAD).Trim())", "version=$version" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Skip paid collection when release tag already exists
+        id: tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
+          $uri = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/git/ref/tags/v$([Uri]::EscapeDataString($env:RELEASE_VERSION))"
+          $null = Invoke-RestMethod -Uri $uri -Headers $headers -SkipHttpErrorCheck -StatusCodeVariable status
+          if ($status -notin @(200, 404)) { throw 'Cannot determine whether release tag exists.' }
+          "exists=$(([bool]($status -eq 200)).ToString().ToLowerInvariant())" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
   benchmark:
     name: Benchmark before release
     needs: candidate
-    if: github.event_name != 'workflow_dispatch' || inputs.run_benchmark != false
+    if: needs.candidate.outputs.tag_exists == 'false' && (github.event_name != 'workflow_dispatch' || inputs.run_benchmark != false)
     permissions:
       contents: read
     uses: ./.github/workflows/tier2-benchmark.yml
     with:
       candidate_sha: ${{ needs.candidate.outputs.sha }}
+      effective_version: ${{ needs.candidate.outputs.version }}
+    secrets:
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
 
   release:
     name: Create Release
@@ -98,6 +127,42 @@ jobs:
         run: |
           echo "::warning::Benchmark gate explicitly disabled for this manual release."
           echo "## Benchmark gate intentionally disabled by manual release input" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout frozen evidence validator
+        if: needs.benchmark.result == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ needs.benchmark.outputs.controller_repository }}
+          ref: ${{ needs.benchmark.outputs.controller_sha }}
+          path: .benchmark-controller
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Download exact current-run benchmark artifact
+        if: needs.benchmark.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.benchmark.outputs.artifact_id }}
+          path: .benchmark-public
+          merge-multiple: true
+
+      - name: Validate frozen campaign before publication
+        if: needs.benchmark.result == 'success'
+        shell: pwsh
+        env:
+          CONTROLLER: ${{ needs.benchmark.outputs.controller_sha }}
+          CONTROLLER_REPOSITORY: ${{ needs.benchmark.outputs.controller_repository }}
+          CANDIDATE: ${{ needs.candidate.outputs.sha }}
+          EFFECTIVE_VERSION: ${{ needs.candidate.outputs.version }}
+          MANIFEST_DIGEST: ${{ needs.benchmark.outputs.manifest_digest }}
+        run: |
+          git -c core.hooksPath=/dev/null fetch --no-tags --no-recurse-submodules -- "https://github.com/$env:CONTROLLER_REPOSITORY.git" $env:CONTROLLER
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot fetch frozen controller evidence.' }
+          Import-Module ./.benchmark-controller/tests/tier2/live-benchmark/ReleaseBenchmark.psm1
+          $null = Assert-ReleaseBenchmarkPublication -Repository $PWD -OutputDirectory (Join-Path $PWD '.benchmark-public') `
+            -Controller $env:CONTROLLER -Candidate $env:CANDIDATE -EffectiveVersion $env:EFFECTIVE_VERSION `
+            -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT -RepositorySlug $env:GITHUB_REPOSITORY -ManifestDigest $env:MANIFEST_DIGEST
 
       # ── Release gate ─────────────────────────────────────────────────────
       #    Tier 0 runs twice, and the two runs assert different things.
@@ -214,7 +279,7 @@ jobs:
           if [[ -z "$NOTES" ]]; then
             NOTES="See [CHANGELOG.md](CHANGELOG.md) for full details."
           fi
-          printf '%s' "$NOTES" > /tmp/release_notes.md
+          printf '%s' "$NOTES" > release_notes.md
 
       # ── Pin squad self-references, then tag that commit ──────────────────
       #    The 47 Peter-N91/hve-squad entries in apm.yml ship as bare paths, and
@@ -231,6 +296,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
+          BENCHMARK_REQUIRED: ${{ needs.benchmark.result == 'success' }}
+          CONTROLLER: ${{ needs.benchmark.outputs.controller_sha }}
+          CANDIDATE: ${{ needs.candidate.outputs.sha }}
+          EFFECTIVE_VERSION: ${{ needs.candidate.outputs.version }}
+          MANIFEST_DIGEST: ${{ needs.benchmark.outputs.manifest_digest }}
         run: |
           pwsh -File scripts/Set-SquadSelfRefPin.ps1 -ApmFile apm.yml -Ref "$TAG"
           git config user.name  "github-actions[bot]"
@@ -239,6 +309,14 @@ jobs:
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git add apm.yml
           git commit -m "chore(release): pin squad self-references to $TAG"
+          if [[ "$BENCHMARK_REQUIRED" == "true" ]]; then
+            pwsh -NoProfile -Command '
+              Import-Module ./.benchmark-controller/tests/tier2/live-benchmark/ReleaseBenchmark.psm1
+              $null = Assert-ReleaseBenchmarkPublication -Repository $PWD -OutputDirectory (Join-Path $PWD ".benchmark-public") `
+                -Controller $env:CONTROLLER -Candidate $env:CANDIDATE -EffectiveVersion $env:EFFECTIVE_VERSION `
+                -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT -RepositorySlug $env:GITHUB_REPOSITORY -ManifestDigest $env:MANIFEST_DIGEST -BindFinalCommit
+            '
+          fi
           git push origin "HEAD:refs/tags/$TAG"
           echo "::notice::Tagged $TAG at a pinned manifest; main is unchanged."
 
@@ -263,12 +341,17 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
           DRAFT: ${{ inputs.draft }}
+          BENCHMARK_REQUIRED: ${{ needs.benchmark.result == 'success' }}
         run: |
           ARGS=(
             "$TAG"
             --title "$TAG"
-            --notes-file /tmp/release_notes.md
+            --notes-file release_notes.md
           )
+          if [[ "$BENCHMARK_REQUIRED" == "true" ]]; then
+            ARGS+=(.benchmark-public/report.json .benchmark-public/report.md .benchmark-public/badge.svg
+              .benchmark-public/identity.json .benchmark-public/base-record.json .benchmark-public/head-record.json)
+          fi
           [[ "$DRAFT" == "true" ]] && ARGS+=(--draft)
 
           # A hotfix cut off an older line is newer by date but lower by version,

@@ -424,11 +424,12 @@ Describe 'Portable benchmark history and reporting' {
         (Get-Item (Join-Path $Output 'badge.svg')).Length | Should -BeGreaterThan 0
         { Resolve-BenchmarkCommit $Fixture.repository '--help' } | Should -Throw '*unsafe-ref*'
     }
-    It 'keeps the report workflow read-only with verified base execution and bootstrap failure' {
+    It 'keeps the collection workflow read-only with verified controller execution and failure artifacts' {
         $Workflow = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/tier2-benchmark.yml'))
         $Workflow | Should -Match 'contents: read'
-        $Workflow | Should -Not -Match 'pull_request_target|secrets\.|contents: write|COPILOT_'
-        $Workflow | Should -Match 'ref: \$\{\{ steps.refs.outputs.base \}\}'
+        $Workflow | Should -Not -Match 'pull_request_target|contents: write'
+        $Workflow | Should -Match 'ref: \$\{\{ steps.refs.outputs.controller \}\}'
+        $Workflow | Should -Match 'COPILOT_GITHUB_TOKEN: \$\{\{ secrets.COPILOT_GITHUB_TOKEN \}\}'
         $Workflow | Should -Match 'persist-credentials: false'
         $Workflow | Should -Match 'base-comparison-tooling-unavailable'
         $Workflow | Should -Match 'FETCH_HEAD'
@@ -460,10 +461,11 @@ Describe 'Pre-release benchmark gate' {
             throw 'run_benchmark must declare an explicit boolean default.'
         }
         $ConfiguredDefault = $Default.Groups[1].Value -ceq 'true'
-        $BenchmarkCondition = [regex]::Match($Release, '(?m)^    if: (github.event_name != .+inputs.run_benchmark != false)\s*$').Groups[1].Value
+        $BenchmarkCondition = [regex]::Match($Release, '(?ms)^  benchmark:\r?\n.*?^    if: ([^\r\n]+)').Groups[1].Value
         if (-not $BenchmarkCondition) { throw 'Missing benchmark admission condition.' }
-        $Admission = [scriptblock]::Create($BenchmarkCondition.Replace('github.event_name', '$Event').
-            Replace('inputs.run_benchmark', '$Enabled').Replace('!=', '-ne').Replace('||', '-or').Replace('false', '$false'))
+        $TagExists = $false
+        $Admission = [scriptblock]::Create($BenchmarkCondition.Replace("needs.candidate.outputs.tag_exists == 'false'", '(-not $TagExists)').Replace('github.event_name', '$Event').
+            Replace('inputs.run_benchmark', '$Enabled').Replace('!=', '-ne').Replace('||', '-or').Replace('&&', '-and').Replace('false', '$false'))
     }
     It 'permits publication only for a passed gate or an explicitly skipped manual gate: <Event>/<Benchmark>/<Enabled>' -ForEach @(
         @{ Event='push'; Candidate='success'; Benchmark='success'; Enabled=$false; Expected=$true }
@@ -479,6 +481,7 @@ Describe 'Pre-release benchmark gate' {
         (& $Gate) | Should -Be $Expected
     }
     It 'honors manual selection and keeps automatic releases gated regardless of the configured default' {
+        $TagExists = $false
         foreach ($Event in @('push', 'workflow_dispatch')) {
             foreach ($Enabled in @($false, $true)) {
                 (& $Admission) | Should -Be ($Event -eq 'push' -or $Enabled)
@@ -491,8 +494,11 @@ Describe 'Pre-release benchmark gate' {
         (& $Gate) | Should -BeTrue
         $Event = 'push'; $Benchmark = 'skipped'
         (& $Gate) | Should -BeFalse
+        $TagExists = $true
+        $Event = 'push'; $Enabled = $true
+        (& $Admission) | Should -BeFalse
     }
-    It 'freezes the same candidate before writes and lets Release Prep inherit the Release default' {
+    It 'freezes the same candidate before writes and makes Release Prep explicitly collect evidence' {
         $Release | Should -Match 'candidate_sha: \$\{\{ needs.candidate.outputs.sha \}\}'
         $Release | Should -Match 'ref: \$\{\{ needs.candidate.outputs.sha \}\}'
         $Release | Should -Match 'Benchmark gate explicitly disabled'
@@ -501,7 +507,7 @@ Describe 'Pre-release benchmark gate' {
         $Prep | Should -Not -Match '(?m)^      run_benchmark:'
         $Dispatch = [regex]::Match($Prep, '(?m)^\s+gh workflow run release\.yml .+$').Value
         $Dispatch | Should -Match ([regex]::Escape('-f ref="$REF"'))
-        $Dispatch | Should -Not -Match 'run_benchmark'
+        $Dispatch | Should -Match '-f run_benchmark=true'
     }
 }
 
@@ -514,13 +520,13 @@ Describe 'Release benchmark event identities' {
             if (-not $Body) { throw "Missing workflow script: $Name" }
             [scriptblock]::Create(($Body -replace '(?m)^          ', ''))
         }
-        $ResolveRelease = Get-WorkflowRun 'Validate immutable event identities'
-        $MissingBaseline = Get-WorkflowRun 'Compare or report missing baseline tooling'
+        $ResolveRelease = Get-WorkflowRun 'Freeze reviewed controller and candidate'
+        $FailureSummary = Get-WorkflowRun 'Finalize sanitized failure evidence and summary'
         $Bootstrap = Get-WorkflowRun 'Apply temporary release baseline bootstrap'
     }
     BeforeEach {
         $SavedEnvironment = @{}
-        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA', 'VERDICT', 'GITHUB_STEP_SUMMARY')) {
+        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA', 'VERDICT', 'GITHUB_STEP_SUMMARY', 'INPUT_BASE', 'INPUT_HEAD', 'INPUT_VERSION', 'COLLECTION_REQUIRED')) {
             $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
         }
         $env:GITHUB_REPOSITORY = 'fixture/benchmark'
@@ -530,38 +536,21 @@ Describe 'Release benchmark event identities' {
         $env:GH_TOKEN = 'fixture-only'
         $env:RELEASE_TAG = 'v2'
         $env:CANDIDATE_SHA = ''
+        $env:INPUT_BASE = ''
+        $env:INPUT_HEAD = '2' * 40
+        $env:COLLECTION_REQUIRED = ''
         [IO.File]::WriteAllText($env:GITHUB_OUTPUT, '')
-        $CurrentRelease = @{ id = 20; tag_name = 'v2'; draft = $false; prerelease = $false; published_at = '2026-10-20T00:00:00Z' }
-        $PriorRelease = @{ id = 10; tag_name = 'v1'; draft = $false; prerelease = $false; published_at = '2026-10-18T00:00:00Z' }
         $script:ReleaseApi = @{
-            'releases/tags/v2' = $CurrentRelease
-            'git/ref/tags/v2' = @{ object = @{ type = 'tag'; sha = ('c' * 40) } }
-            "git/tags/$('c' * 40)" = @{ object = @{ type = 'commit'; sha = ('2' * 40) } }
-            'releases?per_page=100&page=1' = @(
-                $CurrentRelease, $PriorRelease
-                @{ id = 15; tag_name = 'unrelated-hotfix'; draft = $false; prerelease = $false; published_at = '2026-10-19T00:00:00Z' }
-                @{ id = 19; tag_name = 'rolling-preview'; draft = $false; prerelease = $true; published_at = '2026-10-19T00:00:00Z' }
-                @{ id = 18; tag_name = 'draft'; draft = $true; prerelease = $false; published_at = '2026-10-19T00:00:00Z' }
-                @{ id = 30; tag_name = 'future-release'; draft = $false; prerelease = $false; published_at = '2026-10-21T00:00:00Z' }
-            )
-            'git/ref/tags/unrelated-hotfix' = @{ object = @{ type = 'commit'; sha = ('9' * 40) } }
-            'git/ref/tags/v1' = @{ object = @{ type = 'commit'; sha = ('1' * 40) } }
-            "compare/$('9' * 40)...$('2' * 40)" = @{ status = 'diverged' }
-            "compare/$('1' * 40)...$('2' * 40)" = @{ status = 'ahead' }
+            'repos/fixture/benchmark' = '{"fork":false,"default_branch":"main"}'
+            'repos/fixture/benchmark/commits/main' = ('1' * 40)
         }
         $script:ReleaseCalls = [Collections.Generic.List[string]]::new()
-        Mock Invoke-RestMethod {
-            param($Uri)
-            $Prefix = 'https://api.github.invalid/repos/fixture/benchmark/'
-            if (-not ([string]$Uri).StartsWith($Prefix, [StringComparison]::Ordinal)) { throw 'Unexpected API host.' }
-            $Path = ([string]$Uri).Substring($Prefix.Length)
+        Mock gh {
+            $Path = $args[1]
             $script:ReleaseCalls.Add($Path)
             if (-not $script:ReleaseApi.ContainsKey($Path)) { throw "Unexpected API request: $Path" }
-            if ($script:ReleaseApi[$Path] -is [array]) {
-                Write-Output -NoEnumerate $script:ReleaseApi[$Path]
-            } else {
-                $script:ReleaseApi[$Path]
-            }
+            $global:LASTEXITCODE = 0
+            $script:ReleaseApi[$Path]
         }
     }
     AfterEach {
@@ -569,49 +558,47 @@ Describe 'Release benchmark event identities' {
             [Environment]::SetEnvironmentVariable($Name, $SavedEnvironment[$Name])
         }
     }
-    It 'peels annotated tags and selects an earlier stable ancestor rather than a newer unrelated hotfix' {
+    It 'freezes the reviewed default-branch controller without trusting unrelated release or hotfix order' {
         & $ResolveRelease
         $Output = [IO.File]::ReadAllText($env:GITHUB_OUTPUT)
-        $Output | Should -Match "(?m)^base=$('1' * 40)\r?$"
-        $Output | Should -Match "(?m)^head=$('2' * 40)\r?$"
-        $script:ReleaseCalls | Should -Contain "git/tags/$('c' * 40)"
-        $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/rolling-preview'
-        $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/draft'
-        $script:ReleaseCalls | Should -Not -Contain 'git/ref/tags/future-release'
+        $Output | Should -Match "(?m)^controller=$('1' * 40)\r?$"
+        $Output | Should -Match "(?m)^candidate=$('2' * 40)\r?$"
+        ($script:ReleaseCalls -join ',') | Should -Be 'repos/fixture/benchmark,repos/fixture/benchmark/commits/main'
     }
-    It 'selects a stable ancestor for an unpublished immutable candidate without looking up its release' {
-        $env:RELEASE_TAG = ''
-        $env:CANDIDATE_SHA = '2' * 40
-        $script:ReleaseApi['releases?per_page=100&page=1'] = @($PriorRelease)
+    It 'freezes an unpublished immutable candidate without looking up its release and rejects unsafe candidates' {
         & $ResolveRelease
-        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^base=$('1' * 40)\r?$"
-        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^head=$('2' * 40)\r?$"
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^controller=$('1' * 40)\r?$"
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^candidate=$('2' * 40)\r?$"
         $script:ReleaseCalls | Should -Not -Contain 'releases/tags/v2'
-        $env:CANDIDATE_SHA = '--help'
-        { & $ResolveRelease } | Should -Throw '*immutable candidate SHA required*'
+        $env:INPUT_HEAD = '--help'
+        { & $ResolveRelease } | Should -Throw '*full commit SHA*'
     }
-    It 'keeps manual full-SHA comparisons independent of release API lookups and rejects unsafe refs' {
-        $env:RELEASE_TAG = ''
-        Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = ('a' * 40); head_sha = ('b' * 40) } }
+    It 'accepts manual full-SHA diagnostics only with the reviewed controller and rejects unreviewed bases' {
+        $env:INPUT_BASE = '1' * 40
+        $env:INPUT_HEAD = 'b' * 40
         & $ResolveRelease
-        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^base=$('a' * 40)\r?$"
-        $script:ReleaseCalls.Count | Should -Be 0
-        Write-TestJson $env:GITHUB_EVENT_PATH @{ inputs = @{ base_sha = '--help'; head_sha = ('b' * 40) } }
-        { & $ResolveRelease } | Should -Throw '*Full commit SHA required*'
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^candidate=$('b' * 40)\r?$"
+        $env:INPUT_BASE = '--help'
+        { & $ResolveRelease } | Should -Throw '*reviewed default-branch tip*'
+        $env:INPUT_BASE = ''
+        $script:ReleaseApi['repos/fixture/benchmark'] = '{"fork":true,"parent":{"full_name":"upstream/benchmark","default_branch":"main"}}'
+        $script:ReleaseApi['repos/upstream/benchmark/commits/main'] = 'c' * 40
+        & $ResolveRelease
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match '(?m)^controller_repository=upstream/benchmark\r?$'
     }
-    It 'emits missing-baseline exit 2 for a first release without running candidate helpers' {
-        $script:ReleaseApi['releases?per_page=100&page=1'] = @($CurrentRelease)
-        & $ResolveRelease
-        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match '(?m)^base=\r?$'
-        $env:RUNNER_TEMP = Join-Path $TestDrive 'release-no-baseline'
-        $env:BASE_SHA = ''
-        $env:HEAD_SHA = '2' * 40
+    It 'emits a sanitized non-passing failure report without running candidate helpers when preflight fails' {
+        $script:ReleaseApi['repos/fixture/benchmark/commits/main'] = ''
+        { & $ResolveRelease } | Should -Throw '*freeze reviewed controller*'
+        $env:GITHUB_STEP_SUMMARY = Join-Path $TestDrive 'failure-summary'
+        $Root = Join-Path $TestDrive 'failure-workspace'
+        New-Item -ItemType Directory -Path $Root | Out-Null
         Mock pwsh { throw 'Candidate helper must not run.' }
-        & $MissingBaseline
-        $Result = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $env:RUNNER_TEMP 'efficiency-report/report.json')))
-        $Result.status | Should -Be 'missing-baseline'
-        $Result.exitCode | Should -Be 2
-        $Result.reasons | Should -Contain 'previous-stable-release-unavailable'
+        Push-Location $Root
+        try { & $FailureSummary } finally { Pop-Location }
+        $Result = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Root '.benchmark-public/report.json')))
+        $Result.status | Should -Be 'operational-error'
+        $Result.exitCode | Should -Be 1
+        $Result.reasons | Should -Contain 'workflow-preflight-failed'
         Should -Invoke pwsh -Times 0
     }
     It 'limits bootstrap to missing release tooling through 0.18.1 without changing evidence' -ForEach @(
@@ -639,24 +626,26 @@ Describe 'Release benchmark event identities' {
         & $Bootstrap
         [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^verdict=$Expected\r?$"
         [IO.File]::ReadAllText($path) | Should -BeExactly $original
+        $env:COLLECTION_REQUIRED = 'true'
+        [IO.File]::WriteAllText($env:GITHUB_OUTPUT, '')
+        & $Bootstrap
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^verdict=$InputVerdict\r?$"
+        [IO.File]::ReadAllText($path) | Should -BeExactly $original
     }
-    It 'paginates published releases instead of silently missing an older baseline' {
-        $script:ReleaseApi['releases?per_page=100&page=1'] = @(1..100 | ForEach-Object {
-            @{ id = (100 + $_); tag_name = "preview-$_"; draft = $false; prerelease = $true; published_at = '2026-10-19T00:00:00Z' }
-        })
-        $script:ReleaseApi['releases?per_page=100&page=2'] = @($PriorRelease)
+    It 'resolves an encoded non-main default branch without enumerating releases' {
+        $script:ReleaseApi['repos/fixture/benchmark'] = '{"fork":false,"default_branch":"reviewed/default"}'
+        $script:ReleaseApi['repos/fixture/benchmark/commits/reviewed%2Fdefault'] = 'a' * 40
         & $ResolveRelease
-        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^base=$('1' * 40)\r?$"
-        $script:ReleaseCalls | Should -Contain 'releases?per_page=100&page=2'
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^controller=$('a' * 40)\r?$"
+        $script:ReleaseCalls | Should -Contain 'repos/fixture/benchmark/commits/reviewed%2Fdefault'
     }
-    It 'rejects nonstable releases, malformed object identities and cyclic annotated tags' {
-        $CurrentRelease.prerelease = $true
-        { & $ResolveRelease } | Should -Throw '*published stable release is required*'
-        $CurrentRelease.prerelease = $false
-        $script:ReleaseApi['git/ref/tags/v2'].object.sha = '--help'
-        { & $ResolveRelease } | Should -Throw '*Invalid release object identity*'
-        $script:ReleaseApi['git/ref/tags/v2'].object.sha = 'c' * 40
-        $script:ReleaseApi["git/tags/$('c' * 40)"].object = @{ type = 'tag'; sha = ('c' * 40) }
-        { & $ResolveRelease } | Should -Throw '*Invalid release tag chain*'
+    It 'rejects malformed controller identities and candidates instead of falling back to candidate tooling' {
+        foreach ($Bad in @('--help', ('A' * 40), 'main')) {
+            $script:ReleaseApi['repos/fixture/benchmark/commits/main'] = $Bad
+            { & $ResolveRelease } | Should -Throw '*freeze reviewed controller*'
+        }
+        $script:ReleaseApi['repos/fixture/benchmark/commits/main'] = '1' * 40
+        $env:INPUT_HEAD = 'main'
+        { & $ResolveRelease } | Should -Throw '*full commit SHA*'
     }
 }

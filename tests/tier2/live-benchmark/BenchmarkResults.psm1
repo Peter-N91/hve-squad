@@ -404,7 +404,7 @@ function Write-BenchmarkFile {
 }
 
 function Get-BenchmarkSelection {
-    param([string]$Repository, [string]$Commit, [string]$MissingStatus)
+    param([string]$Repository, [string]$Commit, [string]$MissingStatus = 'missing-baseline', [switch]$Historical)
     $Bytes = Get-BenchmarkGitFile $Repository $Commit 'benchmarks/efficiency/current.json' -Optional
     if ($null -eq $Bytes) { Stop-BenchmarkData 'no-selected-record' $MissingStatus }
     $Pointer = ConvertFrom-BenchmarkJson $Bytes
@@ -417,8 +417,32 @@ function Get-BenchmarkSelection {
     $Record = ConvertFrom-BenchmarkJson $RecordBytes
     Assert-BenchmarkSeries $Record
     if ($Record.seriesId -cne $SeriesId) { Stop-BenchmarkData 'pointer-series' }
-    Assert-BenchmarkSnapshot $Repository $Commit $Record
+    if ($Historical) {
+        if ($Record.schemaVersion -cne 'benchmark-series-v2') { Stop-BenchmarkData 'unbound-execution-protocol' }
+        Assert-BenchmarkHistoricalSeries $Repository $Record
+        $Ancestor = Invoke-BenchmarkGit $Repository @('merge-base', '--is-ancestor', $Record.measuredRevision, $Commit) -AllowFailure
+        if ($null -eq $Ancestor) { Stop-BenchmarkData 'measured-revision-not-ancestor' }
+    }
+    else { Assert-BenchmarkSnapshot $Repository $Commit $Record }
     @{ record = $Record; sha256 = $Pointer.sha256 }
+}
+
+function Assert-BenchmarkHistory {
+    param([string]$Repository, [string]$Controller, [string]$Candidate, [switch]$AllowNewControllerRecords)
+    $Common = if ($AllowNewControllerRecords) {
+        [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('merge-base', $Controller, $Candidate))).Trim()
+    } else { $null }
+    $OldRecords = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', '-r', '-z', $Controller, '--', 'benchmarks/efficiency/records')))
+    foreach ($Entry in $OldRecords.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)) {
+        if ($Entry -notmatch '^100644 blob ([0-9a-f]{40})\t(benchmarks/efficiency/records/[a-z0-9-]+\.json)$') { Stop-BenchmarkData 'historical-record-path' }
+        $OldHash = $Matches[1]; $Path = $Matches[2]
+        $NewEntry = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', $Candidate, '--', $Path))).TrimEnd("`n")
+        if ($AllowNewControllerRecords -and -not $NewEntry) {
+            $CommonEntry = Invoke-BenchmarkGit $Repository @('ls-tree', $Common, '--', $Path)
+            if ($CommonEntry.Length -eq 0) { continue }
+        }
+        if ($NewEntry -cne "100644 blob $OldHash`t$Path") { Stop-BenchmarkData 'historical-record-modified' }
+    }
 }
 
 function Get-BenchmarkMedian {
@@ -466,9 +490,12 @@ function Assert-BenchmarkPolicy {
 }
 
 function Compare-BenchmarkSeries {
-    param([Collections.IDictionary]$Base, [Collections.IDictionary]$Head, [Collections.IDictionary]$Policy)
+    param([Collections.IDictionary]$Base, [Collections.IDictionary]$Head, [Collections.IDictionary]$Policy, [switch]$DeploymentComparison)
     Assert-BenchmarkPolicy $Policy; Assert-BenchmarkSeries $Base; Assert-BenchmarkSeries $Head
-    foreach ($Key in $Base.protocol.Keys) { if ($Base.protocol[$Key] -cne $Head.protocol[$Key]) { Stop-BenchmarkData "compatibility-$Key" 'incompatible' } }
+    foreach ($Key in $Base.protocol.Keys) {
+        if ($DeploymentComparison -and $Key -ceq 'installHash') { continue }
+        if ($Base.protocol[$Key] -cne $Head.protocol[$Key]) { Stop-BenchmarkData "compatibility-$Key" 'incompatible' }
+    }
     $Before = Get-BenchmarkStatistics $Base; $After = Get-BenchmarkStatistics $Head
     $Reasons = [Collections.Generic.List[string]]::new(); $Deltas = [ordered]@{}
     foreach ($Field in $script:Efficiency) {
@@ -514,13 +541,7 @@ function Compare-BranchBenchmark {
         $PolicyBytes = Get-BenchmarkGitFile $Repository $Report.baseCommit 'benchmarks/efficiency/policy.json'
         $Policy = ConvertFrom-BenchmarkJson $PolicyBytes
         $Report.policyHash = Get-BenchmarkDigest $PolicyBytes
-        $OldRecords = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', '-r', '-z', $Report.baseCommit, '--', 'benchmarks/efficiency/records')))
-        foreach ($Entry in $OldRecords.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)) {
-            if ($Entry -notmatch '^100644 blob ([0-9a-f]{40})\t(benchmarks/efficiency/records/[a-z0-9-]+\.json)$') { Stop-BenchmarkData 'historical-record-path' }
-            $OldHash = $Matches[1]; $Path = $Matches[2]
-            $NewEntry = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', $Report.headCommit, '--', $Path))).TrimEnd("`n")
-            if ($NewEntry -cne "100644 blob $OldHash`t$Path") { Stop-BenchmarkData 'historical-record-modified' }
-        }
+        Assert-BenchmarkHistory $Repository $Report.baseCommit $Report.headCommit
         $Comparison = Compare-BenchmarkSeries $Base.record $Head.record $Policy
         foreach ($Key in $Comparison.Keys) { $Report[$Key] = $Comparison[$Key] }
     }
@@ -799,4 +820,4 @@ function Write-BenchmarkSeriesReport {
     Write-BenchmarkReport $Report $OutputDirectory
 }
 
-Export-ModuleMember -Function Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit
+Export-ModuleMember -Function Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit, Get-BenchmarkSelection, Assert-BenchmarkHistory, Get-BenchmarkGitFile, Invoke-BenchmarkGit
