@@ -243,7 +243,17 @@ comparison, or leave it unchecked to bypass only this gate. **Release Prep**
 does not expose or forward this input; its downstream manual Release dispatch
 inherits the Release workflow's default, so currently skips the benchmark.
 The skipped gate and warning are recorded in the run summary;
-other release checks remain mandatory. Push-triggered releases cannot bypass it.
+other release checks remain mandatory. Push-triggered releases cannot use that
+manual bypass.
+
+A temporary release bootstrap exception applies through **v0.18.1 inclusive**:
+when the frozen candidate's `apm.yml` declares a stable version no higher than
+0.18.1, a missing previous stable release or missing trusted base comparator
+emits a warning but permits the release gate. The original missing-baseline
+report remains unchanged; no benchmark approval is claimed. This exception
+applies only to the pre-publication release caller, not standalone comparisons,
+and expires from v0.18.2. Stale/incompatible evidence, missing candidate records,
+regressions and operational failures still block.
 No post-publication benchmark trigger remains. Direct publication outside the
 Release workflow is not controlled by this gate.
 

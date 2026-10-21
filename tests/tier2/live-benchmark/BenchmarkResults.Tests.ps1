@@ -516,10 +516,11 @@ Describe 'Release benchmark event identities' {
         }
         $ResolveRelease = Get-WorkflowRun 'Validate immutable event identities'
         $MissingBaseline = Get-WorkflowRun 'Compare or report missing baseline tooling'
+        $Bootstrap = Get-WorkflowRun 'Apply temporary release baseline bootstrap'
     }
     BeforeEach {
         $SavedEnvironment = @{}
-        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA')) {
+        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA', 'VERDICT', 'GITHUB_STEP_SUMMARY')) {
             $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
         }
         $env:GITHUB_REPOSITORY = 'fixture/benchmark'
@@ -612,6 +613,32 @@ Describe 'Release benchmark event identities' {
         $Result.exitCode | Should -Be 2
         $Result.reasons | Should -Contain 'previous-stable-release-unavailable'
         Should -Invoke pwsh -Times 0
+    }
+    It 'limits bootstrap to missing release tooling through 0.18.1 without changing evidence' -ForEach @(
+        @{ Version = '0.18.0'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '0' }
+        @{ Version = '0.18.1'; Status = 'missing-baseline'; Reason = 'previous-stable-release-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '0' }
+        @{ Version = '0.18.2'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.19.0'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.18.1'; Status = 'stale-record'; Reason = 'unbound-execution-protocol'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.18.1'; Status = 'incompatible'; Reason = 'protocol'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.18.1'; Status = 'missing-candidate'; Reason = 'selection'; InputVerdict = '2'; ReleaseCandidate = $true; Expected = '2' }
+        @{ Version = '0.18.1'; Status = 'regression'; Reason = 'quality'; InputVerdict = '3'; ReleaseCandidate = $true; Expected = '3' }
+        @{ Version = '0.18.1'; Status = 'operational-error'; Reason = 'failure'; InputVerdict = '1'; ReleaseCandidate = $true; Expected = '1' }
+        @{ Version = '0.18.1'; Status = 'missing-baseline'; Reason = 'base-comparison-tooling-unavailable'; InputVerdict = '2'; ReleaseCandidate = $false; Expected = '2' }
+    ) {
+        $env:RUNNER_TEMP = Join-Path $TestDrive ([guid]::NewGuid().ToString())
+        $directory = Join-Path $env:RUNNER_TEMP 'efficiency-report'
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        $path = Join-Path $directory 'report.json'
+        Write-TestJson $path @{ status = $Status; reasons = @($Reason); exitCode = [int]$InputVerdict }
+        $original = [IO.File]::ReadAllText($path)
+        $env:VERDICT = $InputVerdict
+        $env:CANDIDATE_SHA = if ($ReleaseCandidate) { 'a' * 40 } else { '' }
+        $env:GITHUB_STEP_SUMMARY = Join-Path $env:RUNNER_TEMP 'summary'
+        Mock git { $global:LASTEXITCODE = 0; "version: $Version" }
+        & $Bootstrap
+        [IO.File]::ReadAllText($env:GITHUB_OUTPUT) | Should -Match "(?m)^verdict=$Expected\r?$"
+        [IO.File]::ReadAllText($path) | Should -BeExactly $original
     }
     It 'paginates published releases instead of silently missing an older baseline' {
         $script:ReleaseApi['releases?per_page=100&page=1'] = @(1..100 | ForEach-Object {
