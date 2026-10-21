@@ -487,6 +487,97 @@ Describe 'The verifier resolves known rate spellings without guessing costs' -Ta
     }
 }
 
+Describe 'The verifier prices long-context blocks and calibration independently of the writer' -Tag 'Unit' {
+    BeforeAll {
+        function Get-PricingScenario {
+            # Rewrites the correct-write fixture with a header-keyed LC rate table (base 1/0.1/0/2 and
+            # LC 3/0.5/0/6 for Sonnet, flat-equivalent halves for Haiku) and the given per-block tokens.
+            param(
+                [Parameter(Mandatory)][int[]]$Sonnet,
+                [Parameter(Mandatory)][int[]]$Haiku,
+                [Parameter(Mandatory)][double]$Total,
+                [double]$Calibration = 1.0,
+                [string]$Threshold = '<=100K / >100K',
+                [string]$LcCached = '0.50',
+                [string]$LcCacheWrite = '0',
+                [string]$Headers = '| Model | Input | Cached | Cache write | Output | LC Threshold | LC Input | LC Cached | LC Cache write | LC Output |',
+                [string]$Delimiter = '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+                [string]$SonnetRow = $null,
+                [string]$HaikuRow = $null
+            )
+            $root = Get-CorrectWriteFixture
+            if (-not $SonnetRow) { $SonnetRow = "| Claude Sonnet 4.6 | 1.00 | 0.10 | 0 | 2.00 | $Threshold | 3.00 | $LcCached | $LcCacheWrite | 6.00 |" }
+            if (-not $HaikuRow) { $HaikuRow = "| Claude Haiku 4.5 | 1.00 | 0.10 | 0 | 2.00 | $Threshold | 2.00 | 0.20 | 0 | 4.00 |" }
+            $ratesPath = Join-Path $root 'consumption-rates.md'
+            $rates = (Get-Content -LiteralPath $ratesPath -Raw).Replace('calibration_factor: 1.00', "calibration_factor: $Calibration")
+            $table = "$Headers`n$Delimiter`n$SonnetRow`n$HaikuRow`n`n"
+            Set-Content -LiteralPath $ratesPath -Value $rates.Replace('## Per-model token rates', "$table## Per-model token rates") -Encoding utf8NoBOM
+
+            foreach ($entry in @(@{ File = 'Squad Researcher.md'; Tokens = $Sonnet }, @{ File = 'Squad Scribe.md'; Tokens = $Haiku })) {
+                $path = Join-Path $root "history/$($entry.File)"
+                $text = Get-Content -LiteralPath $path -Raw
+                $fields = 'input_tokens', 'cached_tokens', 'cache_write_tokens', 'output_tokens'
+                for ($i = 0; $i -lt 4; $i++) { $text = $text -replace ('"' + $fields[$i] + '": \d+'), ('"' + $fields[$i] + '": ' + $entry.Tokens[$i]) }
+                Set-Content -LiteralPath $path -Value $text -Encoding utf8NoBOM
+            }
+            $sum = for ($i = 0; $i -lt 4; $i++) { $Sonnet[$i] + $Haiku[$i] }
+            $ledgerPath = Join-Path $root 'consumption.md'
+            $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+            $totalRow = '| **Total**     | **16** | **{0}** | **{1}** | **{2}** | **{3}**  | **{4}**       | **0.00**    |           |' -f $sum[0], $sum[1], $sum[2], $sum[3], $Total.ToString('0.0000', [cultureinfo]::InvariantCulture)
+            $ledger = [regex]::Replace($ledger, '(?m)^\| \*\*Total\*\*.*$', [System.Text.RegularExpressions.MatchEvaluator] { $totalRow })
+            Set-Content -LiteralPath $ledgerPath -Value $ledger -Encoding utf8NoBOM
+            $root
+        }
+    }
+
+    BeforeEach { $script:PricingRoot = $null }
+    AfterEach { if ($script:PricingRoot) { Remove-Item -LiteralPath $script:PricingRoot -Recurse -Force -ErrorAction SilentlyContinue } }
+
+    # Haiku's default block (3000/12000/1250/3200) prices flat to 0.0106 here: 3000x1 + 12000x0.1 + 3200x2 = 10600 per 1e6.
+    # Sonnet: base 1/0.1/0/2 and LC 3/0.5/0/6, so 40000/50000/0/1000 = 47000 and 1000/100000/0/1000 above threshold = 59000 (base would be 13000).
+    It 'prices <Name> per block from known rates: expected pass=<Pass>' -ForEach @(
+        @{ Name = 'below threshold'; Sonnet = @(40000, 50000, 0, 1000); Total = 0.0576; Calibration = 1.0; Pass = $true }
+        @{ Name = 'exactly at threshold (not strictly above)'; Sonnet = @(50000, 50000, 0, 1000); Total = 0.0676; Calibration = 1.0; Pass = $true }
+        @{ Name = 'above only through cached tokens'; Sonnet = @(1000, 100000, 0, 1000); Total = 0.0696; Calibration = 1.0; Pass = $true }
+        @{ Name = 'above threshold priced at base rates (wrong total)'; Sonnet = @(1000, 100000, 0, 1000); Total = 0.0236; Calibration = 1.0; Pass = $false }
+        @{ Name = 'above threshold with calibration applied once'; Sonnet = @(1000, 100000, 0, 1000); Total = 0.10440; Calibration = 1.5; Pass = $true }
+        @{ Name = 'above threshold with calibration applied twice (wrong total)'; Sonnet = @(1000, 100000, 0, 1000); Total = 0.15660; Calibration = 1.5; Pass = $false }
+        @{ Name = 'sub-threshold blocks whose sum exceeds it stay flat'; Sonnet = @(30000, 30000, 0, 0); Total = 0.0624; Calibration = 1.0; Pass = $true; Haiku = @(20000, 30000, 0, 3200) }
+        @{ Name = 'long-context cache writes use the LC rate'; Sonnet = @(1000, 100000, 10000, 1000); Total = 0.1096; Calibration = 1.0; Pass = $true; Extra = @{ LcCacheWrite = '4.00' } }
+        @{ Name = 'cache-write and output tokens do not trigger long context'; Sonnet = @(1000, 1000, 200000, 200000); Total = 0.4117; Calibration = 1.0; Pass = $true; Extra = @{ LcCacheWrite = '4.00' } }
+    ) {
+        $haikuTokens = if ($Haiku) { $Haiku } else { @(3000, 12000, 1250, 3200) }
+        $scenarioOptions = if ($Extra) { $Extra } else { @{} }
+        $script:PricingRoot = Get-PricingScenario -Sonnet $Sonnet -Haiku $haikuTokens -Total $Total -Calibration $Calibration @scenarioOptions
+        $outcome = Invoke-Verifier -SquadRootPath $script:PricingRoot
+        $outcome.Result.passed | Should -Be $Pass -Because ($outcome.Result.failures -join ' | ')
+        if (-not $Pass) { ($outcome.Result.failures -join ' | ') | Should -Match 'ledger says' }
+    }
+
+    It 'refuses to price <Name> and names the rate metadata' -ForEach @(
+        @{ Name = 'a partial LC header set'; Extra = @{
+                Headers = '| Model | Input | Cached | Cache write | Output | LC Threshold | LC Input | LC Cached | LC Cache write |'
+                Delimiter = '| --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+                SonnetRow = '| Claude Sonnet 4.6 | 1.00 | 0.10 | 0 | 2.00 | <=100K | 3.00 | 0.50 | 0 |'
+                HaikuRow = '| Claude Haiku 4.5 | 1.00 | 0.10 | 0 | 2.00 | <=100K | 2.00 | 0.20 | 0 |'
+            }
+        }
+        @{ Name = 'a malformed threshold'; Extra = @{ Threshold = 'about a hundred thousand' } }
+        @{ Name = 'a non-numeric LC rate'; Extra = @{ LcCached = 'n/a' } }
+    ) {
+        $script:PricingRoot = Get-PricingScenario -Sonnet @(1000, 100000, 0, 1000) -Haiku @(3000, 12000, 1250, 3200) -Total 0.0696 @Extra
+        $outcome = Invoke-Verifier -SquadRootPath $script:PricingRoot
+        $outcome.Result.passed | Should -BeFalse
+        ($outcome.Result.failures -join ' | ') | Should -Match 'invalid long-context rate metadata'
+    }
+
+    It 'keeps a declared none (flat rate) table flat even when tokens exceed any threshold' {
+        $script:PricingRoot = Get-PricingScenario -Sonnet @(1000, 100000, 0, 1000) -Haiku @(3000, 12000, 1250, 3200) -Total 0.0236 -Threshold 'none (flat rate)' -LcCached 'n/a'
+        $outcome = Invoke-Verifier -SquadRootPath $script:PricingRoot
+        $outcome.Result.passed | Should -BeTrue -Because ($outcome.Result.failures -join ' | ')
+    }
+}
+
 Describe 'The correctness inventory fails on content-level mutations (OBJ-02, CH5-04)' {
     # These tests exist because the checked-in-baseline regression Describe above
     # only proves the inventory catches wholesale deletions of a baseline snapshot.

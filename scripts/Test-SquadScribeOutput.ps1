@@ -294,6 +294,9 @@ else {
         # an arithmetic slip is caught even when every token column reconciles.
         $expectedCost = 0.0
         $unpriced = [System.Collections.Generic.List[string]]::new()
+        $invalidRates = [System.Collections.Generic.List[string]]::new()
+        # Pricing evaluator v2: long-context tiers per block, then calibration exactly once.
+        $calibrationFactor = if ($model.Calibration) { [double]$model.Calibration } else { 1.0 }
         foreach ($block in $model.Blocks) {
             $rate = if ($block.Fields['priced_as']) { $model.Rates[[string]$block.Fields['priced_as']] }
             if (-not $rate) {
@@ -304,10 +307,20 @@ else {
                 }
             }
             if (-not $rate) { $unpriced.Add("$($block.Source):$($block.Fields['priced_as'])"); continue }
-            $expectedCost += (([double]$block.Fields['input_tokens'] * $rate.input) + ([double]$block.Fields['cached_tokens'] * $rate.cached) +
-                ([double]$block.Fields['cache_write_tokens'] * $rate.cache_write) + ([double]$block.Fields['output_tokens'] * $rate.output)) / 1e6
+            if ($rate.ContainsKey('lc_error')) { $invalidRates.Add("$($block.Source):$($block.Fields['priced_as']) ($($rate.lc_error))"); continue }
+            $inputTokens = [double]$block.Fields['input_tokens']
+            $cachedTokens = [double]$block.Fields['cached_tokens']
+            $effective = @{ input = $rate.input; cached = $rate.cached; cache_write = $rate.cache_write; output = $rate.output }
+            if ($rate.ContainsKey('long_context_threshold') -and ($inputTokens + $cachedTokens) -gt [double]$rate.long_context_threshold) {
+                $effective = @{ input = $rate.lc_input; cached = $rate.lc_cached; cache_write = $rate.lc_cache_write; output = $rate.lc_output }
+            }
+            $expectedCost += (($inputTokens * $effective.input) + ($cachedTokens * $effective.cached) +
+                ([double]$block.Fields['cache_write_tokens'] * $effective.cache_write) + ([double]$block.Fields['output_tokens'] * $effective.output)) / 1e6 * $calibrationFactor
         }
-        if ($unpriced.Count -gt 0) {
+        if ($invalidRates.Count -gt 0) {
+            Add-Check -Name 'ledger Total cost reconciles with blocks priced at consumption-rates.md' -Passed $false -Detail "invalid long-context rate metadata for: $($invalidRates -join ', ')"
+        }
+        elseif ($unpriced.Count -gt 0) {
             Add-Check -Name 'ledger Total cost reconciles with blocks priced at consumption-rates.md' -Passed $false -Detail "no rate row for: $($unpriced -join ', ')"
         }
         elseif ($totalRow.Count -gt 6) {
