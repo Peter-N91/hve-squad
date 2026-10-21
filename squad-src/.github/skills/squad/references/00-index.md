@@ -10,7 +10,7 @@ metadata:
 
 # Squad Reference Index
 
-Read this index first, then only references your Skill Reference Contract names or conditionally requires. Unneeded whole-file reads cost attention.
+Read this index first; load only references your Skill Reference Contract names or conditionally requires.
 
 ## Which file for which job
 
@@ -20,8 +20,9 @@ Read this index first, then only references your Skill Reference Contract names 
 | [roster-catalog.md](roster-catalog.md)             | Casting a role for the first time, recasting after an HVE Core upgrade, applying or registering a pack's external agents, resolving an external role, or assembling a custom roster |
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
 | [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
+| [requirements-quality.md](requirements-quality.md) | Only BRD/PRD or requirements authoring/review; not startup or code-only reviews |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |
-| [economy-scribe.md](economy-scribe.md)             | Supported ordinary handoffs in every routing mode; minimal JSON, synchronous `-Quiet` writer, verified status and failure handling |
+| [economy-scribe.md](economy-scribe.md)             | Ordinary handoffs, all modes: minimal JSON, synchronous `-Quiet`, status verification and failures |
 | [scribe-cold-charter.md](scribe-cold-charter.md)    | Full legacy charter for cold initialization, verdicts, memory, notifications, ceiling slots, federation changes, summaries, and unsupported operations |
 | [scribe-procedure.md](scribe-procedure.md)         | Writing squad state, Scribe only: the Non-Negotiable Rules, every payload-to-step rule, the Cold-File Dispatch Table, and the Write-Completeness Self-Check |
 | [entry-schemas.md](entry-schemas.md)               | Cold writes and schema reference: `decisions.md` base shape, `history/<agent>.md`, state.json |
@@ -36,7 +37,7 @@ Read this index first, then only references your Skill Reference Contract names 
 | [model-routing.md](model-routing.md)               | Applying `routing=` (all modes): modes, the Model column, fit ranking, floors, and identity bullets |
 | [federation-templates.md](federation-templates.md) | Creating or expanding a federation: registry, meta-routing, root files    |
 
-The ordinary hot path reads only `economy-scribe.md`; coordinators may execute its validated writer directly with `-Quiet` in every routing mode. A dispatched Scribe uses the same path. Cold operations first read `scribe-cold-charter.md`, then `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` plus every conditional file required by the Cold-File Dispatch Table. Coordinators fill the small script JSON for ordinary writes and the full payload template only for cold handoffs. Seed templates remain Init/federation-change-only reads.
+The ordinary hot path reads only `economy-scribe.md`; coordinators run its validated writer directly with `-Quiet` in all modes. Scribe uses it too. Cold operations first read `scribe-cold-charter.md`, then `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` plus conditional files required by the Cold-File Dispatch Table. Use small script JSON for ordinary writes; the full template only for cold handoffs. Seed templates remain Init/federation-change-only reads.
 
 ## Companion instruction files
 
