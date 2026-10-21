@@ -454,6 +454,16 @@ Describe 'Pre-release benchmark gate' {
             Replace('github.event_name', '$Event').Replace('inputs.run_benchmark', '$Enabled').
             Replace('==', '-eq').Replace('&&', '-and').Replace('||', '-or').Replace('false', '$false')
         $Gate = [scriptblock]::Create($Expression)
+        $InputBlock = [regex]::Match($Release, '(?ms)^      run_benchmark:\r?\n(?<body>.*?)(?=^ {0,6}\S|\z)').Groups['body'].Value
+        $Default = [regex]::Match($InputBlock, '(?m)^        default: (true|false)\s*$')
+        if (-not $Default.Success -or $InputBlock -notmatch '(?m)^        type: boolean\s*$') {
+            throw 'run_benchmark must declare an explicit boolean default.'
+        }
+        $ConfiguredDefault = $Default.Groups[1].Value -ceq 'true'
+        $BenchmarkCondition = [regex]::Match($Release, '(?m)^    if: (github.event_name != .+inputs.run_benchmark != false)\s*$').Groups[1].Value
+        if (-not $BenchmarkCondition) { throw 'Missing benchmark admission condition.' }
+        $Admission = [scriptblock]::Create($BenchmarkCondition.Replace('github.event_name', '$Event').
+            Replace('inputs.run_benchmark', '$Enabled').Replace('!=', '-ne').Replace('||', '-or').Replace('false', '$false'))
     }
     It 'permits publication only for a passed gate or an explicitly skipped manual gate: <Event>/<Benchmark>/<Enabled>' -ForEach @(
         @{ Event='push'; Candidate='success'; Benchmark='success'; Enabled=$false; Expected=$true }
@@ -468,16 +478,30 @@ Describe 'Pre-release benchmark gate' {
     ) {
         (& $Gate) | Should -Be $Expected
     }
-    It 'defaults to benchmarking and freezes the same candidate before any release writes' {
-        $Release | Should -Match '(?s)run_benchmark:.*?default: true\s+type: boolean'
-        $Release | Should -Match "if: github.event_name != 'workflow_dispatch' \|\| inputs.run_benchmark != false"
+    It 'honors manual selection and keeps automatic releases gated regardless of the configured default' {
+        foreach ($Event in @('push', 'workflow_dispatch')) {
+            foreach ($Enabled in @($false, $true)) {
+                (& $Admission) | Should -Be ($Event -eq 'push' -or $Enabled)
+            }
+        }
+        $Event = 'workflow_dispatch'; $Enabled = $ConfiguredDefault
+        (& $Admission) | Should -Be $ConfiguredDefault
+        $Candidate = 'success'
+        $Benchmark = if ($ConfiguredDefault) { 'success' } else { 'skipped' }
+        (& $Gate) | Should -BeTrue
+        $Event = 'push'; $Benchmark = 'skipped'
+        (& $Gate) | Should -BeFalse
+    }
+    It 'freezes the same candidate before writes and lets Release Prep inherit the Release default' {
         $Release | Should -Match 'candidate_sha: \$\{\{ needs.candidate.outputs.sha \}\}'
         $Release | Should -Match 'ref: \$\{\{ needs.candidate.outputs.sha \}\}'
         $Release | Should -Match 'Benchmark gate explicitly disabled'
         $Release | Should -Not -Match 'benchmark_tag|Benchmark published release'
         $Prep = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/release-prep.yml'))
-        $Prep | Should -Match '(?s)run_benchmark:.*?default: true\s+type: boolean'
-        $Prep | Should -Match ([regex]::Escape('-f run_benchmark="$RUN_BENCHMARK"'))
+        $Prep | Should -Not -Match '(?m)^      run_benchmark:'
+        $Dispatch = [regex]::Match($Prep, '(?m)^\s+gh workflow run release\.yml .+$').Value
+        $Dispatch | Should -Match ([regex]::Escape('-f ref="$REF"'))
+        $Dispatch | Should -Not -Match 'run_benchmark'
     }
 }
 

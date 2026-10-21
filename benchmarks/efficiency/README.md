@@ -237,10 +237,12 @@ Tier 0 still applies. The release uses the same frozen candidate that was compar
 not a moving branch. Version and self-reference manifest edits do not change the
 measured Squad source or benchmark protocol.
 
-Manual Release and Release Prep runs expose a boolean **`run_benchmark`**, default **true**;
-Release Prep forwards the selection to Release.
-A human with release-dispatch permission can uncheck it to intentionally bypass
-only this gate. The skipped gate and warning are recorded in the run summary;
+Manual **Release** runs expose a boolean **`run_benchmark`**, currently default
+**false**. A human with release-dispatch permission can check it to require the
+comparison, or leave it unchecked to bypass only this gate. **Release Prep**
+does not expose or forward this input; its downstream manual Release dispatch
+inherits the Release workflow's default, so currently skips the benchmark.
+The skipped gate and warning are recorded in the run summary;
 other release checks remain mandatory. Push-triggered releases cannot bypass it.
 No post-publication benchmark trigger remains. Direct publication outside the
 Release workflow is not controlled by this gate.
