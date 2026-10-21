@@ -104,8 +104,9 @@ grey. SVG is static, contains no script and uses no remote badge service.
   -OutputDirectory ./benchmark-report
 ```
 
-The parent is explicit, not assumed to be `main`. PR Actions use immutable
-`pull_request.base.sha` and `head.sha`, including stacked/fork PRs. Each pointer,
+The parent is explicit, not assumed to be `main`. The separate read-only
+**Tier 2 Recorded Benchmark** workflow resolves immutable parent/head SHAs,
+including stacked/fork PRs. Each pointer,
 record and source fingerprint is read from its own snapshot. The merge-base is
 reported only for context, not used as the baseline. A head-edited policy or
 copy of the original file cannot replace the base's policy/evidence.
@@ -219,22 +220,58 @@ is separate from non-regression, product acceptance and strict promotion.
 Three independent series samples are unpaired screening evidence, not
 statistical significance or a guarantee of causality.
 
-## GitHub Actions and bootstrap
+## Automatic release collection
 
-The read-only **Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) runs
-manually or as a **pre-publication gate in the Release workflow**, never on PRs
-or rolling previews. Standalone manual comparisons accept optional base
-and head commit SHA overrides. Leave them blank to resolve the selected branch's
-latest head and its open PR's current base branch (including an upstream PR
-from a fork). With no open PR, the repository default branch is used; ambiguous
-parents or selecting the default branch itself require an explicit base SHA.
-Git does not record a unique parent branch. Explicit overrides win independently,
-and resolved repository identities and immutable SHAs appear in `report.json`.
-Release runs freeze the candidate commit and select the
-most recently published stable release that is an ancestor of that commit,
-not a hardcoded branch or a newer unrelated hotfix.
-Annotated tags are peeled to commits. No earlier stable ancestor means an
-explicit missing-baseline result (exit 2), not a passing self-comparison.
+**Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) is the bounded
+pre-publication collector used by Release and standalone manual diagnostics.
+It never runs on PRs or ordinary pushes; the existing Release event remains the
+only automatic paid entry point. It freezes the reviewed default-branch
+controller (upstream default branch for a fork), its selected immutable v2
+record, candidate SHA, effective release version and policy before installation
+or spending. An optional diagnostic `base_sha` must equal that reviewed tip;
+`head_sha` defaults to the selected branch's immutable SHA.
+
+By default, **only candidate-1, candidate-2 and candidate-3 are launched**.
+The historical base is copied byte-for-byte from the controller selection.
+Baseline is not prepared, installed, run or exported. The original candidate
+observations are exported in their own frozen candidate HEAD context using the
+existing three-run `efficiency-control-v1` wrapper; no baseline runs are invented.
+Candidate-edited pointers cannot select the reference. Pointer/digest, measured
+source/revision ancestry, immutable common history and all seven executing
+scenario/parser/exercise/preparation/grader/verifier/converter digests still
+fail closed before spending.
+
+This is always an **approximate historical comparison**, not source-only
+causality or proof of equal environments, even when all protocol values agree.
+The explicit `Compare-BenchmarkSeries -HistoricalReference` mode permits only
+`installHash`, `powershell`, `cliVersion`, `maxCredits` and `roleModelPolicyHash`
+differences. Exact original old/new values appear in returned
+`protocolDifferences`, JSON, Markdown and the release identity. A role-policy
+digest is disclosed as a digest; it cannot recover the original policy text.
+Model, schema, rubric, host profile, evaluator digests, MCP configuration,
+evaluation/recovery policy and continuations remain strict. Neither record is
+normalized. All existing quality, reliability, failure and 5% efficiency gates
+remain unchanged; historical credits stay in the statistics, not today's spend.
+
+Manual Release, reusable collection and diagnostic entry points expose
+`refresh_reference`, a boolean defaulting to **false**. Only an explicit true
+requests fresh paired deployments: baseline-1, candidate-1 through baseline-3,
+candidate-3. Both arms use their own frozen source-bound dependency installs,
+original six-run evidence and HEAD-correct exports. This mode permits installation
+variance only; ordinary stored-record comparisons remain fully strict.
+Missing/incompatible evidence, large deltas, regressions and failures never
+trigger a refresh, retry, fallback or automatic baseline promotion.
+
+`collection-policy.json` is the reviewed controller authority, not a candidate
+input. Its default is 1000 credits per trial and a 6000-credit campaign ceiling
+(a maximum, not required spend), with pinned CLI/model and a bounded campaign
+timeout. Default mode reserves 3000; explicit refresh reserves 6000.
+A future 3000 ceiling permits candidate-only mode and rejects paired refresh
+before installation. Failed slots retain known cumulative workflow and
+independent judge usage exactly once. Missing, invalid or timed-out accounting
+leaves the total unknown, preserves its known lower bound, stops further
+launches and blocks publication. Historical usage neither consumes nor expands
+the current reservation.
 
 The Release workflow requires comparison success **before any version bump,
 tag push or GitHub Release creation**, including draft creation. Regressions,
@@ -243,39 +280,56 @@ Tier 0 still applies. The release uses the same frozen candidate that was compar
 not a moving branch. Version and self-reference manifest edits do not change the
 measured Squad source or benchmark protocol.
 
-Manual **Release** runs expose a boolean **`run_benchmark`**, currently default
-**false**. A human with release-dispatch permission can check it to require the
-comparison, or leave it unchecked to bypass only this gate. **Release Prep**
-does not expose or forward this input; its downstream manual Release dispatch
-inherits the Release workflow's default, so currently skips the benchmark.
+Manual **Release** runs expose a boolean **`run_benchmark`**, default **true**.
+A human with release-dispatch permission can uncheck it to bypass only this
+gate. **Release Prep** explicitly passes `run_benchmark=true` and preserves
+candidate-only collection by not requesting refresh.
 The skipped gate and warning are recorded in the run summary;
 other release checks remain mandatory. Push-triggered releases cannot bypass it.
 No post-publication benchmark trigger remains. Direct publication outside the
 Release workflow is not controlled by this gate.
 
-This compares existing immutable records; it does **not** run agents or spend
-model requests. Fresh compatible records must be collected separately. In
-particular, historical v1 records cannot satisfy the current v2 protocol gate.
+The paid secret reaches only the collection step, never installation.
+Private trials, logs and documents stay out of uploads. The exact artifact
+allowlist is `report.json`, `report.md`, `badge.svg`, `identity.json`,
+`base-record.json` and `head-record.json`; failures retain sanitized reports.
+Both publication validations receive the independent requested refresh mode.
+They recompute scope, differences, warnings, verdict and accounting from original
+records, require the historical base digest to equal the exact controller
+selection, and bind fresh series IDs to
+`release-RUN-ATTEMPT-candidate` (and `release-RUN-ATTEMPT-baseline` on refresh).
+Old resealed same-candidate records, wrong modes/slots and current candidate
+policy violations cannot pass. Historical bases are not required to match today's
+reservation or CLI. Final publication binds the tag commit, permitting only
+version/self-reference manifest edits. Existing tags skip paid collection.
 
-The workflow publishes the full report in
-the run Summary and uploads Markdown, JSON and SVG even when comparison fails.
-It calls no paid model, uses no model secrets and executes the selected **base**
-comparator/dependencies; head contents are Git blobs/JSON, not executable code.
-Actions are SHA-pinned and checkout credentials are not persisted.
-
-The reviewed workflow YAML/bootstrap is itself the controller trust root.
+The reviewed workflow YAML is itself the controller trust root.
 A PR editing it is review-required infrastructure, not independently
 authenticated evidence. Manual overrides require **full commit SHAs**; automatic
-defaults resolve branch tips once before checkout. The PR base (or default branch)
+defaults resolve branch tips once before checkout. The default-branch controller
 must be reviewed and trusted; never choose an unreviewed base merely because it
 is called base. Fork identity does not grant code trust.
 
-When the base lacks the helper or selected record, the bootstrap explicitly
-reports missing baseline/tooling and fails; it never runs a head helper.
+When the controller lacks tooling or selected compatible evidence, collection
+fails; it never runs a candidate evaluator as fallback.
 Never bypass existing required checks. Workflow registration and automatic
 release orchestration requires the workflow on the default branch; a change delivered
 only on an integration branch may need that merge before manual dispatch is
-available. Use the local report in the meantime, not a fabricated Actions run.
+available. Hosted use requires the trusted controller to contain this
+implementation. Offline tests do not establish a hosted or paid campaign result.
+
+### Strict stored-record analysis (no paid calls)
+
+The prior read-only workflow is retained as
+`.github/workflows/tier2-recorded-benchmark.yml`. Its optional base/head overrides
+resolve independently to the selected branch and PR parent (including upstream
+fork PRs), or the default branch when no PR exists. Ambiguous/self parents
+require an explicit base. Release-tag analysis peels annotated tags and paginates
+stable releases to find a prior ancestor rather than an unrelated newer hotfix.
+It executes only reviewed base tooling, never candidate helpers, and emits
+missing-baseline exit 2 if no prior evidence/tooling exists. It does not collect,
+refresh or promote records, use model secrets, or waive protocol differences.
+Its artifact allowlist remains only Markdown, JSON and SVG.
 
 ## Reproduce the original environment
 
@@ -284,8 +338,8 @@ source hash, protocol and dependency-install identities. Their verifier hash was
 derived from the measured Git revision, not observed executing-file telemetry;
 they also lack a native converter digest. They remain readable for descriptive
 historical analysis, but current snapshot validation explicitly rejects them as
-`stale-record:unbound-execution-protocol`. The currently selected v1 baseline is
-therefore stale under this protocol; neither it nor its pointer is rewritten.
+`stale-record:unbound-execution-protocol`. Existing records and their pointer
+are never rewritten by collection.
 
 New exports use `benchmark-series-v2`. Live compatibility binds the native
 converter actually loaded from the selected source checkout
@@ -303,8 +357,8 @@ $env:COPILOT_AUTO_UPDATE = 'false'
 
 Validate the actual CLI, model, PowerShell, prepared installation and frozen
 scenario/parser/exercise/preparation/grader/verifier/converter before any paid execution.
-Use fresh workspaces. A mismatch blocks the historical comparison: do not
-waive it or automatically buy replacement controls. A different reference
+Use fresh workspaces. Outside the five explicitly disclosed historical fields,
+a mismatch blocks comparison: do not waive it or automatically buy replacement controls. A different reference
 campaign needs separate authorization. Never retry until the result looks good.
 
 Run the portable record, study and installer regressions without paid execution

@@ -404,7 +404,7 @@ function Write-BenchmarkFile {
 }
 
 function Get-BenchmarkSelection {
-    param([string]$Repository, [string]$Commit, [string]$MissingStatus)
+    param([string]$Repository, [string]$Commit, [string]$MissingStatus = 'missing-baseline', [switch]$Historical)
     $Bytes = Get-BenchmarkGitFile $Repository $Commit 'benchmarks/efficiency/current.json' -Optional
     if ($null -eq $Bytes) { Stop-BenchmarkData 'no-selected-record' $MissingStatus }
     $Pointer = ConvertFrom-BenchmarkJson $Bytes
@@ -417,8 +417,32 @@ function Get-BenchmarkSelection {
     $Record = ConvertFrom-BenchmarkJson $RecordBytes
     Assert-BenchmarkSeries $Record
     if ($Record.seriesId -cne $SeriesId) { Stop-BenchmarkData 'pointer-series' }
-    Assert-BenchmarkSnapshot $Repository $Commit $Record
-    @{ record = $Record; sha256 = $Pointer.sha256 }
+    if ($Historical) {
+        if ($Record.schemaVersion -cne 'benchmark-series-v2') { Stop-BenchmarkData 'unbound-execution-protocol' }
+        Assert-BenchmarkHistoricalSeries $Repository $Record
+        $Ancestor = Invoke-BenchmarkGit $Repository @('merge-base', '--is-ancestor', $Record.measuredRevision, $Commit) -AllowFailure
+        if ($null -eq $Ancestor) { Stop-BenchmarkData 'measured-revision-not-ancestor' }
+    }
+    else { Assert-BenchmarkSnapshot $Repository $Commit $Record }
+    @{ record = $Record; sha256 = $Pointer.sha256; bytes = $RecordBytes }
+}
+
+function Assert-BenchmarkHistory {
+    param([string]$Repository, [string]$Controller, [string]$Candidate, [switch]$AllowNewControllerRecords)
+    $Common = if ($AllowNewControllerRecords) {
+        [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('merge-base', $Controller, $Candidate))).Trim()
+    } else { $null }
+    $OldRecords = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', '-r', '-z', $Controller, '--', 'benchmarks/efficiency/records')))
+    foreach ($Entry in $OldRecords.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)) {
+        if ($Entry -notmatch '^100644 blob ([0-9a-f]{40})\t(benchmarks/efficiency/records/[a-z0-9-]+\.json)$') { Stop-BenchmarkData 'historical-record-path' }
+        $OldHash = $Matches[1]; $Path = $Matches[2]
+        $NewEntry = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', $Candidate, '--', $Path))).TrimEnd("`n")
+        if ($AllowNewControllerRecords -and -not $NewEntry) {
+            $CommonEntry = Invoke-BenchmarkGit $Repository @('ls-tree', $Common, '--', $Path)
+            if ($CommonEntry.Length -eq 0) { continue }
+        }
+        if ($NewEntry -cne "100644 blob $OldHash`t$Path") { Stop-BenchmarkData 'historical-record-modified' }
+    }
 }
 
 function Get-BenchmarkMedian {
@@ -465,10 +489,26 @@ function Assert-BenchmarkPolicy {
     if ($Policy.schemaVersion -cne 'benchmark-policy-v1' -or $Policy.efficiencyTolerancePercent -ne 5 -or $Policy.minimumImprovementPercent -ne 10 -or $Policy.qualityReducer -cne 'median-no-decrease' -or $Policy.failureReducer -cne 'sum-no-increase' -or $Policy.reliabilityReducer -cne 'per-check-count-no-decrease' -or $Policy.criticalHighReducer -cne 'sum-no-increase') { Stop-BenchmarkData 'unsupported-policy' }
 }
 
+function Get-BenchmarkProtocolDifferences {
+    param($Base, $Head, [switch]$DeploymentComparison, [switch]$HistoricalReference)
+    if ($DeploymentComparison -and $HistoricalReference) { Stop-BenchmarkData 'conflicting-comparison-mode' }
+    if ((($Base.Keys | Sort-Object) -join ',') -cne (($Head.Keys | Sort-Object) -join ',')) { Stop-BenchmarkData 'compatibility-fields' 'incompatible' }
+    $Differences = [ordered]@{}
+    foreach ($Key in $Base.Keys) {
+        if ($Base[$Key] -ceq $Head[$Key]) { continue }
+        if (($DeploymentComparison -and $Key -ceq 'installHash') -or
+            ($HistoricalReference -and $Key -cin @('installHash', 'powershell', 'cliVersion', 'maxCredits', 'roleModelPolicyHash'))) {
+            $Differences[$Key] = @{ old = $Base[$Key]; new = $Head[$Key] }
+        } else { Stop-BenchmarkData "compatibility-$Key" 'incompatible' }
+    }
+    $Differences
+}
+
 function Compare-BenchmarkSeries {
-    param([Collections.IDictionary]$Base, [Collections.IDictionary]$Head, [Collections.IDictionary]$Policy)
+    param([Collections.IDictionary]$Base, [Collections.IDictionary]$Head, [Collections.IDictionary]$Policy, [switch]$DeploymentComparison, [switch]$HistoricalReference)
     Assert-BenchmarkPolicy $Policy; Assert-BenchmarkSeries $Base; Assert-BenchmarkSeries $Head
-    foreach ($Key in $Base.protocol.Keys) { if ($Base.protocol[$Key] -cne $Head.protocol[$Key]) { Stop-BenchmarkData "compatibility-$Key" 'incompatible' } }
+    if ($HistoricalReference -and ($Base.schemaVersion -cne 'benchmark-series-v2' -or $Head.schemaVersion -cne 'benchmark-series-v2')) { Stop-BenchmarkData 'unbound-execution-protocol' 'incompatible' }
+    $Differences = Get-BenchmarkProtocolDifferences $Base.protocol $Head.protocol -DeploymentComparison:$DeploymentComparison -HistoricalReference:$HistoricalReference
     $Before = Get-BenchmarkStatistics $Base; $After = Get-BenchmarkStatistics $Head
     $Reasons = [Collections.Generic.List[string]]::new(); $Deltas = [ordered]@{}
     foreach ($Field in $script:Efficiency) {
@@ -483,11 +523,19 @@ function Compare-BenchmarkSeries {
     $Same = (ConvertTo-BenchmarkCanonicalJson $Base) -ceq (ConvertTo-BenchmarkCanonicalJson $Head)
     if (-not $Same -and ($Base.seriesId -ceq $Head.seriesId -or @($Base.trials.runId | Where-Object { $_ -cin $Head.trials.runId }).Count -gt 0)) { Stop-BenchmarkData 'overlapping-independent-evidence' }
     $Improved = -not $Same -and @('requests', 'inputTokens').Where({ $null -ne $Deltas[$_].percent -and $Deltas[$_].percent -le -$Policy.minimumImprovementPercent }).Count -gt 0
-    @{
+    $Result = @{
         status = if ($Same) { 'unchanged' } elseif ($Reasons.Count) { 'regression' } else { 'no-regression' }
         exitCode = if ($Reasons.Count) { 3 } else { 0 }
         reasons = @($Reasons); improvementScreen = $Improved; deltas = $Deltas; baseStatistics = $Before; headStatistics = $After
     }
+    if ($HistoricalReference -or $DeploymentComparison) {
+        $Result.comparisonScope = if ($HistoricalReference) { 'historical-reference' } else { 'fresh-paired-deployments' }
+        $Result.protocolDifferences = $Differences
+        $Result.comparisonWarning = if ($HistoricalReference) {
+            'Approximate historical comparison: the stored parent was measured in an older environment. All original metrics and protocol values are retained; this is not source-only causality or equal-environment evidence.'
+        } else { 'Fresh paired deployment comparison: installation differences are measured treatment, not evidence of source-only causality.' }
+    }
+    $Result
 }
 
 function Compare-BranchBenchmark {
@@ -514,13 +562,7 @@ function Compare-BranchBenchmark {
         $PolicyBytes = Get-BenchmarkGitFile $Repository $Report.baseCommit 'benchmarks/efficiency/policy.json'
         $Policy = ConvertFrom-BenchmarkJson $PolicyBytes
         $Report.policyHash = Get-BenchmarkDigest $PolicyBytes
-        $OldRecords = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', '-r', '-z', $Report.baseCommit, '--', 'benchmarks/efficiency/records')))
-        foreach ($Entry in $OldRecords.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)) {
-            if ($Entry -notmatch '^100644 blob ([0-9a-f]{40})\t(benchmarks/efficiency/records/[a-z0-9-]+\.json)$') { Stop-BenchmarkData 'historical-record-path' }
-            $OldHash = $Matches[1]; $Path = $Matches[2]
-            $NewEntry = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', $Report.headCommit, '--', $Path))).TrimEnd("`n")
-            if ($NewEntry -cne "100644 blob $OldHash`t$Path") { Stop-BenchmarkData 'historical-record-modified' }
-        }
+        Assert-BenchmarkHistory $Repository $Report.baseCommit $Report.headCommit
         $Comparison = Compare-BenchmarkSeries $Base.record $Head.record $Policy
         foreach ($Key in $Comparison.Keys) { $Report[$Key] = $Comparison[$Key] }
     }
@@ -623,6 +665,16 @@ function Write-BenchmarkReport {
     }
     $Lines.Add($Verdict)
     $Lines.Add('')
+    if ($Report.Contains('comparisonWarning')) {
+        $Lines.Add("**$(Escape-Display $Report.comparisonWarning)**")
+        $Lines.Add('')
+        $Lines.Add("Comparison scope: $(Escape-Display $Report.comparisonScope)")
+        foreach ($Key in $Report.protocolDifferences.Keys | Sort-Object) {
+            $Difference = $Report.protocolDifferences[$Key]
+            $Lines.Add("* $(Escape-Display $Key): old ``$(Escape-Display $Difference.old)``; new ``$(Escape-Display $Difference.new)``.")
+        }
+        $Lines.Add('')
+    }
     $Lines.Add('Each series contains three trials. Per-trial figures below are **medians**; explicitly labelled totals cover all three trials. These are independent screening observations, not proof of statistical significance or causality.')
     if ($Arms.Count) {
         $Lines.Add(''); $Lines.Add('## Performance and consumption'); $Lines.Add('')
@@ -799,4 +851,4 @@ function Write-BenchmarkSeriesReport {
     Write-BenchmarkReport $Report $OutputDirectory
 }
 
-Export-ModuleMember -Function Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit
+Export-ModuleMember -Function Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit, Get-BenchmarkSelection, Assert-BenchmarkHistory, Get-BenchmarkGitFile, Invoke-BenchmarkGit, Get-BenchmarkProtocolDifferences

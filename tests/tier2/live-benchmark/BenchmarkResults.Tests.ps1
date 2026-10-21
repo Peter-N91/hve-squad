@@ -131,6 +131,48 @@ BeforeAll {
 }
 
 Describe 'Portable benchmark history and reporting' {
+    It 'historically permits only the five disclosed environment differences without normalizing records' {
+        $Fixture = New-TestRepository; $Candidate = New-TestCandidate $Fixture.record
+        $Changes = @{ installHash = ('b' * 64); powershell = '99.0.0'; cliVersion = '9.9.9'; maxCredits = 600; roleModelPolicyHash = ('c' * 64) }
+        foreach ($Key in $Changes.Keys) { $Candidate.protocol[$Key] = $Changes[$Key] }
+        $Before = ConvertTo-BenchmarkCanonicalJson $Fixture.record
+        $After = ConvertTo-BenchmarkCanonicalJson $Candidate
+        { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy } | Should -Throw '*compatibility-*'
+        { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -DeploymentComparison } | Should -Throw '*compatibility-*'
+        $Comparison = Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference
+        $Comparison.exitCode | Should -Be 0
+        $Comparison.protocolDifferences.Count | Should -Be 5
+        foreach ($Key in $Changes.Keys) {
+            $Comparison.protocolDifferences[$Key].old | Should -BeExactly $Fixture.record.protocol[$Key]
+            $Comparison.protocolDifferences[$Key].new | Should -BeExactly $Changes[$Key]
+        }
+        $Report = Compare-BranchBenchmark $Fixture.repository main
+        foreach ($Key in $Comparison.Keys) { $Report[$Key] = $Comparison[$Key] }
+        $Output = Join-Path $TestDrive 'historical-report'
+        Write-BenchmarkReport $Report $Output
+        $Json = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'report.json')))
+        $Json.comparisonWarning | Should -Match 'Approximate historical'
+        $Markdown = [IO.File]::ReadAllText((Join-Path $Output 'report.md'))
+        foreach ($Key in $Changes.Keys) {
+            $Markdown | Should -Match ([regex]::Escape([string]$Changes[$Key]))
+            $Markdown | Should -Match ([regex]::Escape([string]$Fixture.record.protocol[$Key]))
+        }
+        (ConvertTo-BenchmarkCanonicalJson $Fixture.record) | Should -BeExactly $Before
+        (ConvertTo-BenchmarkCanonicalJson $Candidate) | Should -BeExactly $After
+        $SameProtocol = New-TestCandidate $Fixture.record
+        (Compare-BenchmarkSeries $Fixture.record $SameProtocol $Policy -HistoricalReference).comparisonWarning | Should -Match 'Approximate historical'
+        $InstallOnly = New-TestCandidate $Fixture.record; $InstallOnly.protocol.installHash = 'b' * 64
+        (Compare-BenchmarkSeries $Fixture.record $InstallOnly $Policy -DeploymentComparison).exitCode | Should -Be 0
+    }
+    It 'historically rejects every non-allowlisted protocol difference with unchanged regression reducers' {
+        $Fixture = New-TestRepository
+        foreach ($Key in $Fixture.record.protocol.Keys | Where-Object { $_ -cnotin @('installHash', 'powershell', 'cliVersion', 'maxCredits', 'roleModelPolicyHash') }) {
+            $Candidate = New-TestCandidate $Fixture.record
+            $Candidate.protocol[$Key] = if ($Candidate.protocol[$Key] -is [ValueType]) { $Candidate.protocol[$Key] + 1 }
+                elseif ($Key.EndsWith('Hash')) { '0' * 64 } else { 'different-protocol' }
+            { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference } | Should -Throw
+        }
+    }
     It 'exports only validated numeric evidence and never overwrites a series' {
         $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
         $Record = Export-BenchmarkSeries -Repository $Fixture.repository -ControlPath $Raw.control -TrialDirectories $Raw.directories -SeriesId safe-series -SelectCurrent
@@ -278,6 +320,7 @@ Describe 'Portable benchmark history and reporting' {
         $Candidate = New-TestCandidate $Fixture.record
         $Candidate.trials[1].runId = $Fixture.record.trials[1].runId
         { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy } | Should -Throw '*overlapping-independent-evidence*'
+        { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference } | Should -Throw '*overlapping-independent-evidence*'
         $Candidate = New-TestCandidate $Fixture.record; $Candidate.protocol.model = 'different-model'
         { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy } | Should -Throw '*incompatible:compatibility-model*'
         $Candidate = New-TestCandidate $Fixture.record
@@ -300,8 +343,12 @@ Describe 'Portable benchmark history and reporting' {
         $Result = Compare-BranchBenchmark $Fixture.repository $Base $Head
         $Result.status | Should -Be 'no-regression'
         $Result.improvementScreen | Should -BeFalse
+        (Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference).status | Should -Be 'no-regression'
+        foreach ($Trial in $Candidate.trials) { $Trial.workflow.credits = 115 }
+        (Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference).status | Should -Be 'no-regression'
         foreach ($Trial in $Candidate.trials) { $Trial.workflow.credits = 116 }
         (Compare-BenchmarkSeries $Fixture.record $Candidate $Policy).status | Should -Be 'regression'
+        (Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference).status | Should -Be 'regression'
     }
     It 'separates a 10 percent improvement screen from quality and reliability gates' {
         $Fixture = New-TestRepository; $Candidate = New-TestCandidate $Fixture.record
@@ -310,9 +357,14 @@ Describe 'Portable benchmark history and reporting' {
         $Result.improvementScreen | Should -BeTrue
         $Result.reasons | Should -Contain 'quality-businessClarity'
         $Result.status | Should -Be 'regression'
+        $HistoricalResult = Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference
+        $HistoricalResult.improvementScreen | Should -BeTrue
+        $HistoricalResult.reasons | Should -Contain 'quality-businessClarity'
+        $HistoricalResult.status | Should -Be 'regression'
         $Candidate.trials[0].outcomes['init/stateVerifier'] = $false
         $Candidate.trials[0].outcomes['stage/init'] = $false; $Candidate.trials[0].outcomes.completed = $false
         (Compare-BenchmarkSeries $Fixture.record $Candidate $Policy).reasons | Should -Contain 'outcome-init/stateVerifier'
+        (Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference).reasons | Should -Contain 'outcome-init/stateVerifier'
     }
     It 'counts an outlying failure and critical findings with sums not medians' {
         $Fixture = New-TestRepository; $Candidate = New-TestCandidate $Fixture.record
@@ -321,6 +373,10 @@ Describe 'Portable benchmark history and reporting' {
         $Result.headStatistics.resources.total.failedTools.median | Should -Be 0
         $Result.reasons | Should -Contain 'failed-tools-sum'
         $Result.reasons | Should -Contain 'critical-high-sum'
+        $HistoricalResult = Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference
+        $HistoricalResult.headStatistics.resources.total.failedTools.median | Should -Be 0
+        $HistoricalResult.reasons | Should -Contain 'failed-tools-sum'
+        $HistoricalResult.reasons | Should -Contain 'critical-high-sum'
     }
     It 'does not divide by zero and leaves missing optional metrics unknown' {
         $Fixture = New-TestRepository; $Candidate = New-TestCandidate $Fixture.record
@@ -427,8 +483,9 @@ Describe 'Portable benchmark history and reporting' {
     It 'keeps the report workflow read-only with verified base execution and bootstrap failure' {
         $Workflow = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/tier2-benchmark.yml'))
         $Workflow | Should -Match 'contents: read'
-        $Workflow | Should -Not -Match 'pull_request_target|secrets\.|contents: write|COPILOT_'
-        $Workflow | Should -Match 'ref: \$\{\{ steps.refs.outputs.base \}\}'
+        $Workflow | Should -Not -Match 'pull_request_target|contents: write'
+        $Workflow | Should -Match 'ref: \$\{\{ steps.refs.outputs.controller \}\}'
+        $Workflow | Should -Match 'COPILOT_GITHUB_TOKEN: \$\{\{ secrets.COPILOT_GITHUB_TOKEN \}\}'
         $Workflow | Should -Match 'persist-credentials: false'
         $Workflow | Should -Match 'base-comparison-tooling-unavailable'
         $Workflow | Should -Match 'FETCH_HEAD'
@@ -460,10 +517,11 @@ Describe 'Pre-release benchmark gate' {
             throw 'run_benchmark must declare an explicit boolean default.'
         }
         $ConfiguredDefault = $Default.Groups[1].Value -ceq 'true'
-        $BenchmarkCondition = [regex]::Match($Release, '(?m)^    if: (github.event_name != .+inputs.run_benchmark != false)\s*$').Groups[1].Value
+        $BenchmarkCondition = [regex]::Match($Release, '(?ms)^  benchmark:\r?\n.*?^    if: ([^\r\n]+)').Groups[1].Value
         if (-not $BenchmarkCondition) { throw 'Missing benchmark admission condition.' }
-        $Admission = [scriptblock]::Create($BenchmarkCondition.Replace('github.event_name', '$Event').
-            Replace('inputs.run_benchmark', '$Enabled').Replace('!=', '-ne').Replace('||', '-or').Replace('false', '$false'))
+        $TagExists = $false
+        $Admission = [scriptblock]::Create($BenchmarkCondition.Replace("needs.candidate.outputs.tag_exists == 'false'", '(-not $TagExists)').Replace('github.event_name', '$Event').
+            Replace('inputs.run_benchmark', '$Enabled').Replace('!=', '-ne').Replace('||', '-or').Replace('&&', '-and').Replace('false', '$false'))
     }
     It 'permits publication only for a passed gate or an explicitly skipped manual gate: <Event>/<Benchmark>/<Enabled>' -ForEach @(
         @{ Event='push'; Candidate='success'; Benchmark='success'; Enabled=$false; Expected=$true }
@@ -491,6 +549,8 @@ Describe 'Pre-release benchmark gate' {
         (& $Gate) | Should -BeTrue
         $Event = 'push'; $Benchmark = 'skipped'
         (& $Gate) | Should -BeFalse
+        $TagExists = $true
+        (& $Admission) | Should -BeFalse
     }
     It 'freezes the same candidate before writes and lets Release Prep inherit the Release default' {
         $Release | Should -Match 'candidate_sha: \$\{\{ needs.candidate.outputs.sha \}\}'
@@ -501,13 +561,14 @@ Describe 'Pre-release benchmark gate' {
         $Prep | Should -Not -Match '(?m)^      run_benchmark:'
         $Dispatch = [regex]::Match($Prep, '(?m)^\s+gh workflow run release\.yml .+$').Value
         $Dispatch | Should -Match ([regex]::Escape('-f ref="$REF"'))
-        $Dispatch | Should -Not -Match 'run_benchmark'
+        $Dispatch | Should -Match '-f run_benchmark=true'
+        $Dispatch | Should -Not -Match 'refresh_reference=true'
     }
 }
 
 Describe 'Release benchmark event identities' {
     BeforeAll {
-        $WorkflowText = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/tier2-benchmark.yml'))
+        $WorkflowText = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/tier2-recorded-benchmark.yml'))
         function Get-WorkflowRun([string]$Name) {
             $Step = [regex]::Match($WorkflowText, '(?ms)^      - name: ' + [regex]::Escape($Name) + '\r?\n(.*?)(?=^      - name:|\z)').Groups[1].Value
             $Body = [regex]::Match($Step, '(?ms)^        run: \|\r?\n(.*)').Groups[1].Value
@@ -679,8 +740,10 @@ Describe 'Release benchmark event identities' {
         $env:BASE_SHA = ''
         $env:HEAD_SHA = '2' * 40
         Mock pwsh { throw 'Candidate helper must not run.' }
-        & $MissingBaseline
-        $Result = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $env:RUNNER_TEMP 'efficiency-report/report.json')))
+        New-Item -ItemType Directory -Path $env:RUNNER_TEMP -Force | Out-Null
+        Push-Location $env:RUNNER_TEMP
+        try { & $MissingBaseline } finally { Pop-Location }
+        $Result = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $env:RUNNER_TEMP '.benchmark-recorded-public/report.json')))
         $Result.status | Should -Be 'missing-baseline'
         $Result.exitCode | Should -Be 2
         $Result.reasons | Should -Contain 'previous-stable-release-unavailable'
