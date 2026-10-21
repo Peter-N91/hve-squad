@@ -148,6 +148,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Source') {
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Manifest.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'PrValidation.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Build-SquadPlugin.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
