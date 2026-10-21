@@ -269,7 +269,12 @@ Each original slot is validated before the next launch. Final cumulative
 workflow accounting is counted once and the separately metered judge is added
 once; their combined actual credits must fit the trial reservation and campaign
 ceiling. Missing meters, budget stops, infrastructure failures and deadline
-expiry stop further launches. Product-only failed checks remain false and are
+expiry stop further launches. Failed slots retain independently validated known
+workflow/judge spending in `creditsKnown`. `accountingComplete` identifies whether
+all launched-slot consumption is known; `creditsUsed` is null when the total is
+unknown, and the report labels known spending as a lower bound. Complete metered
+overruns remain visible even though they fail the gate. Publication requires
+complete accounting for all six slots. Product-only failed checks remain false and are
 retained for comparison, not retried for a better score. The native 10%
 improvement screen is **not** the release gate: direct `Compare-BenchmarkSeries`
 applies the unchanged non-regression thresholds with the explicit deployment

@@ -119,6 +119,31 @@ function Assert-CollectionRun {
     $Used
 }
 
+function Get-CollectionAccounting {
+    param([Collections.IDictionary]$Run)
+    [decimal]$Known = 0
+    $Complete = $true
+    $Judge = $Run['judge']
+    $JudgeMetrics = if ($Judge -is [Collections.IDictionary]) { $Judge['metrics'] } else { $null }
+    foreach ($Metrics in @($Run['metrics'], $JudgeMetrics)) {
+        $Credits = if ($Metrics -is [Collections.IDictionary]) { $Metrics['credits'] } else { $null }
+        if ($Credits -isnot [Collections.IDictionary] -or $Credits['complete'] -cne $true) {
+            $Complete = $false
+            continue
+        }
+        $Value = $Credits['used']
+        if ($Value -isnot [ValueType] -or $Value -is [bool] -or
+            -not [double]::IsFinite([double]$Value) -or $Value -lt 0 -or $Value -ge [decimal]::MaxValue -or
+            $Value -ge ([decimal]::MaxValue - $Known)) {
+            $Complete = $false
+            continue
+        }
+        # Workflow meters are cumulative; count the final snapshot and judge once.
+        $Known += [decimal]$Value
+    }
+    @{ known = $Known; complete = $Complete }
+}
+
 function Invoke-ReleaseBenchmark {
     [CmdletBinding()]
     param(
@@ -143,7 +168,7 @@ function Invoke-ReleaseBenchmark {
         tag = $(if ($SafeVersion) { "v$SafeVersion" } else { $null })
         collectionPolicyHash = $null; comparisonPolicyHash = $null; historicalRecordDigest = $null
         baseRecordDigest = $null; headRecordDigest = $null; reportDigest = $null; verdict = 1; finalTagCommit = $null
-        slots = @(); creditsUsed = 0
+        slots = @(); creditsUsed = 0; creditsKnown = 0; accountingComplete = $true
         comparisonScope = 'fresh-paired-deployments'
         referenceManifestHash = $null; candidateManifestHash = $null
     }
@@ -183,9 +208,11 @@ function Invoke-ReleaseBenchmark {
                 if ($Used + [decimal]$Policy.perTrialCredits -gt [decimal]$Policy.campaignCredits) { throw 'collection-campaign-exceeded' }
                 $TrialPath = Join-Path $PrivateRoot "trials/$Arm-$Pair"
                 [void][IO.Directory]::CreateDirectory((Split-Path $TrialPath))
-                $Slot = @{ arm = $Arm; pair = $Pair; status = 'launched'; credits = $null }
+                $Slot = @{ arm = $Arm; pair = $Pair; status = 'launched'; credits = $null; creditsKnown = 0; accountingComplete = $false }
                 $Slots += $Slot
                 $Manifest.slots = $Slots
+                $Manifest.creditsUsed = $null
+                $Manifest.accountingComplete = $false
                 Write-CollectionJson (Join-Path $OutputDirectory 'identity.json') $Manifest
                 $Arguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run',
                     '-TrialRoot', $TrialPath, '-SourceRoot', $Roots[$Arm], '-InstallRoot', (Join-Path $InstallRoot $Arm),
@@ -193,11 +220,21 @@ function Invoke-ReleaseBenchmark {
                     '-MaxCredits', ([double]$Policy.perTrialCredits).ToString('R', [Globalization.CultureInfo]::InvariantCulture),
                     '-Live', '-IsolatedEnvironment', '-ObservationOnly')
                 $Process = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $PrivateRoot -OutputPath (Join-Path $PrivateRoot "$Arm-$Pair-launch.jsonl") -TimeoutSeconds ([int]$Remaining)
+                $RunPath = Join-Path $TrialPath 'out/run.json'
+                $Run = $null
+                if (Test-Path -LiteralPath $RunPath -PathType Leaf) {
+                    $Run = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($RunPath)) 16777216
+                    $Accounting = Get-CollectionAccounting $Run
+                    $Slot.creditsKnown = $Accounting.known
+                    $Slot.accountingComplete = $Accounting.complete -and $Process.stopCause -ceq 'none'
+                    if ($Slot.accountingComplete) { $Slot.credits = $Accounting.known }
+                    $Manifest.creditsKnown += $Accounting.known
+                    $Manifest.accountingComplete = $Slot.accountingComplete
+                    if ($Manifest.accountingComplete) { $Manifest.creditsUsed = $Manifest.creditsKnown }
+                }
                 if ($Process.stopCause -cne 'none') { throw 'collection-deadline' }
                 if ($Process.exitCode -notin @(0, 2)) { throw 'collection-child-failed' }
-                $RunPath = Join-Path $TrialPath 'out/run.json'
-                if (-not (Test-Path -LiteralPath $RunPath -PathType Leaf)) { throw 'collection-child-without-evidence' }
-                $Run = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($RunPath)) 16777216
+                if ($null -eq $Run) { throw 'collection-child-without-evidence' }
                 $Revision = if ($Arm -ceq 'baseline') { $Context.reference } else { $Candidate }
                 $Credits = Assert-CollectionRun $Run $Arm $Pair $Revision $Expected[$Arm] $Policy.perTrialCredits
                 $Used += $Credits
@@ -237,6 +274,9 @@ function Invoke-ReleaseBenchmark {
         Write-BenchmarkReport $Report $OutputDirectory
         'Fresh paired deployment comparison: each arm uses its own frozen package dependencies. Installation differences are measured treatment, not evidence of source-only causality; all other protocol fields must agree.' |
             Add-Content -LiteralPath (Join-Path $OutputDirectory 'report.md')
+        $Spending = if ($Manifest.accountingComplete) { "Credits used: $($Manifest.creditsUsed) (complete accounting)." }
+            else { "Known credits used: $($Manifest.creditsKnown) (lower bound; total unknown because accounting is incomplete)." }
+        $Spending | Add-Content -LiteralPath (Join-Path $OutputDirectory 'report.md')
         $Manifest.reportDigest = Get-BenchmarkDigest ([IO.File]::ReadAllBytes((Join-Path $OutputDirectory 'report.json')))
         $Manifest.verdict = $Report.exitCode
         Write-CollectionJson (Join-Path $OutputDirectory 'identity.json') $Manifest
@@ -285,6 +325,8 @@ function Assert-ReleaseBenchmarkPublication {
     }
     $Comparison = Compare-BenchmarkSeries $Records.base $Records.head (ConvertFrom-BenchmarkJson $PolicyBytes) -DeploymentComparison
     if ($Identity.slots.Count -ne 6) { throw 'publication-slots' }
+    if ($Identity.accountingComplete -cne $true -or $null -eq $Identity.creditsUsed -or
+        $Identity.creditsKnown -ne $Identity.creditsUsed) { throw 'publication-accounting' }
     [decimal]$Used = 0
     foreach ($Arm in @('baseline', 'candidate')) {
         $Name = if ($Arm -ceq 'baseline') { 'base' } else { 'head' }
@@ -293,6 +335,7 @@ function Assert-ReleaseBenchmarkPublication {
             $Trial = @($Records[$Name].trials | Where-Object slot -EQ $Pair)[0]
             [decimal]$Credits = [decimal]$Trial.workflow.credits + [decimal]$Trial.judge.credits
             if ($Slots.Count -ne 1 -or $Slots[0].status -cne 'recorded' -or $Slots[0].credits -ne $Credits -or
+                $Slots[0].accountingComplete -cne $true -or $Slots[0].creditsKnown -ne $Credits -or
                 $Credits -gt [decimal]$Config.policy.perTrialCredits) { throw 'publication-accounting' }
             $Used += $Credits
         }

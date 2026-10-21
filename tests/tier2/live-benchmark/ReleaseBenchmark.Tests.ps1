@@ -267,7 +267,11 @@ Describe 'Automatic release collection and publication' {
         $Report.headRecord.measuredRevision | Should -Be $F.candidate
         $Report.baseRecord.sourceHash | Should -Not -Be $Report.headRecord.sourceHash
         $PublicationParams = Publication-Args $F
-        (Assert-ReleaseBenchmarkPublication @PublicationParams).creditsUsed | Should -Be 1200
+        $Identity = Assert-ReleaseBenchmarkPublication @PublicationParams
+        $Identity.creditsUsed | Should -Be 1200
+        $Identity.creditsKnown | Should -Be 1200
+        $Identity.accountingComplete | Should -BeTrue
+        @($Identity.slots | Where-Object { -not $_.accountingComplete }).Count | Should -Be 0
         foreach ($Arm in @('baseline', 'candidate')) {
             (Invoke-FixtureGit (Join-Path $F.private $Arm) @('rev-parse', 'HEAD')) | Should -Be $(if ($Arm -eq 'baseline') { $F.reference } else { $F.candidate })
         }
@@ -326,19 +330,38 @@ Describe 'Automatic release collection and publication' {
     }
 
     It 'stops before a second launch on budget, infrastructure, incomplete accounting or combined workflow plus judge overrun' {
-        foreach ($Kind in @('credit-limit', 'request-limit', 'timeout', 'meter', 'judge', 'overrun')) {
+        foreach ($Kind in @('credit-limit', 'request-limit', 'timeout', 'meter', 'judge', 'overrun', 'negative', 'nonnumeric', 'missing-judge', 'invalid-number')) {
             $script:F = New-Fixture
             $script:MutateRun = {
                 param($Run)
                 if ($Kind -eq 'meter') { $Run.metrics.credits.complete = $false }
                 elseif ($Kind -eq 'judge') { $Run.judge.metrics.credits.complete = $false }
                 elseif ($Kind -eq 'overrun') { $Run.metrics.credits.used = 950; $Run.judge.metrics.credits.used = 100 }
+                elseif ($Kind -eq 'negative') { $Run.metrics.credits.used = -1 }
+                elseif ($Kind -eq 'nonnumeric') { $Run.metrics.credits.used = 'PRIVATE SENTINEL' }
+                elseif ($Kind -eq 'missing-judge') { $Run.judge = $null }
+                elseif ($Kind -eq 'invalid-number') { $Run.metrics.credits.used = [double]::PositiveInfinity }
                 else { $Run.stages[0].process.stopCause = $Kind }
             }
             $Launches.Clear()
             (Invoke-Campaign $F).exitCode | Should -Be 1
             $Launches.Count | Should -Be 1
             (Get-Content (Join-Path $F.output 'identity.json') -Raw) | Should -Not -Match 'PRIVATE SENTINEL'
+            $Identity = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'identity.json')))
+            $Identity.slots[0].status | Should -Be 'failed'
+            if ($Kind -in @('meter', 'judge', 'negative', 'nonnumeric', 'missing-judge', 'invalid-number')) {
+                $Identity.accountingComplete | Should -BeFalse
+                $Identity.creditsUsed | Should -BeNullOrEmpty
+                $Identity.creditsKnown | Should -Be 100
+                $Identity.slots[0].credits | Should -BeNullOrEmpty
+                (Get-Content (Join-Path $F.output 'report.md') -Raw) | Should -Match 'lower bound; total unknown'
+            } else {
+                $Expected = if ($Kind -eq 'overrun') { 1050 } else { 200 }
+                $Identity.accountingComplete | Should -BeTrue
+                $Identity.creditsUsed | Should -Be $Expected
+                $Identity.creditsKnown | Should -Be $Expected
+                $Identity.slots[0].credits | Should -Be $Expected
+            }
         }
     }
 
@@ -347,9 +370,26 @@ Describe 'Automatic release collection and publication' {
             $script:F = New-Fixture; $script:ChildMode = $Mode; $Launches.Clear()
             (Invoke-Campaign $F).exitCode | Should -Be 1
             $Launches.Count | Should -Be 1
+            $Identity = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'identity.json')))
+            if ($Mode -eq 'exit') {
+                $Identity.accountingComplete | Should -BeTrue
+                $Identity.creditsUsed | Should -Be 200
+            } else {
+                $Identity.accountingComplete | Should -BeFalse
+                $Identity.creditsUsed | Should -BeNullOrEmpty
+                $Identity.creditsKnown | Should -Be $(if ($Mode -eq 'timeout') { 200 } else { 0 })
+            }
             Test-Path (Join-Path $F.output 'head-record.json') | Should -BeFalse
             foreach ($File in Get-ChildItem $F.output -File) { (Get-Content $File.FullName -Raw) | Should -Not -Match 'PRIVATE.SENTINEL' }
         }
+        $script:F = New-Fixture; $Launches.Clear(); $script:ChildMode = 'normal'
+        $script:MutateRun = { param($Run) if ($Run.metadata.arm -eq 'candidate') { $Run.judge.metrics.credits.complete = $false } }
+        (Invoke-Campaign $F).exitCode | Should -Be 1
+        $Launches.Count | Should -Be 2
+        $Identity = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'identity.json')))
+        $Identity.creditsKnown | Should -Be 300
+        $Identity.creditsUsed | Should -BeNullOrEmpty
+        $Identity.accountingComplete | Should -BeFalse
     }
 
     It 'initializes safe non-passing reports before a deadline and launches no child after expiration' {
@@ -382,11 +422,14 @@ Describe 'Automatic release collection and publication' {
         }
         $Path = Join-Path $F.output 'identity.json'
         $Original = [IO.File]::ReadAllBytes($Path)
-        foreach ($Key in @('reference', 'historicalRecordDigest', 'collectionPolicyHash', 'comparisonPolicyHash', 'baseRecordDigest', 'headRecordDigest', 'reportDigest')) {
+        foreach ($Key in @('reference', 'historicalRecordDigest', 'collectionPolicyHash', 'comparisonPolicyHash', 'baseRecordDigest', 'headRecordDigest', 'reportDigest', 'creditsKnown', 'creditsUsed', 'accountingComplete')) {
             $Identity = ConvertFrom-BenchmarkJson $Original; $Identity[$Key] = '0' * 64; Write-Json $Path $Identity
             $PublicationParams = Publication-Args $F
             { Assert-ReleaseBenchmarkPublication @PublicationParams } | Should -Throw '*publication-*'
         }
+        $Identity = ConvertFrom-BenchmarkJson $Original; $Identity.slots[0].accountingComplete = $false; Write-Json $Path $Identity
+        $PublicationParams = Publication-Args $F
+        { Assert-ReleaseBenchmarkPublication @PublicationParams } | Should -Throw '*publication-accounting*'
     }
 
     It 'binds a hotfix version override and exact self-pin-only final tag, rejecting product or dependency mutations' {
