@@ -459,6 +459,31 @@ td { color: var(--muted); }
 .demo-hub .card.soon { opacity: 0.6; pointer-events: none; }
 .demo-hub .card.soon .step { color: var(--warn); }
 
+/* Documentation images */
+.image-figure {
+  margin: 20px 0 28px;
+  padding: 12px;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.image-figure img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--cp-bg);
+}
+.image-figure figcaption {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* Video walkthroughs */
 .video-figure {
   margin: 20px 0 28px;
