@@ -46,6 +46,7 @@
     <div class="container">
       <h2>Appeler le coordinateur</h2>
       <p>Adressez vos demandes dans la conversation de l'agent Squad correspondant, et non dans le terminal de votre système. Dans Copilot Harness pour VS Code, choisissez l'agent dans le sélecteur d'agents ; la CLI et l'application utilisent aussi l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
+      <p>Pas encore d'initialisation, ou vous hésitez sur la marche à suivre ? Sélectionnez l'agent de conseil <strong>Squad Coach</strong> dans VS Code, la CLI ou l'application. Il lit le code et la documentation actuels et fournit un parcours détaillé prêt à copier sans modifier l'état. Consultez <a href="getting-started.html#chat-with-the-squad-coach">le guide du Coach</a>.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
@@ -838,7 +839,7 @@ flowchart TD
         (voir ci-dessous) ; choisir une squad unique conserve le déroulement décrit ci-dessus.
       </p>
 
-      <h2>Fédération &mdash; plusieurs sous-squads dans un même dépôt</h2>
+      <h2 id="federation">Fédération &mdash; plusieurs sous-squads dans un même dépôt</h2>
       <p>
         La fédération permet à un dépôt d'héberger plusieurs squads côte à côte &mdash; par exemple une
         sous-squad <code>product</code> pour l'équipe métier et une sous-squad <code>azure</code> pour les

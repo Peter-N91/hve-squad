@@ -41,6 +41,66 @@ Describe 'Selected-source replacement' {
         foreach ($Path in $Dependencies) { Get-Content (Join-Path $Install $Path) | Should -Be 'dependency bytes' }
     }
 
+    Describe 'PKG-16 Source-mode failure tolerance' {
+        BeforeEach {
+            $script:Source = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            $script:AgentPath = 'squad-src/.github/agents/squad/squad-coach.agent.md'
+            $script:PromptPath = 'squad-src/.github/prompts/squad/squad-coach.prompt.md'
+            Write-InstallFixture $script:Source 'apm.yml' "name: hve-squad`nversion: 1.0.0"
+            Write-InstallFixture $script:Source $script:AgentPath 'selected Coach agent'
+            Write-InstallFixture $script:Source $script:PromptPath 'selected Coach prompt'
+            $script:Destination = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        }
+
+        It 'overlays an agent and prompt sharing a package slug after both missing-path failures' {
+            $diagnostics = @(
+                '+- hve-squad-squad-coach -- Failed to download dependency'
+                'Peter-N91/hve-squad: Failed to download virtual package: File not found:'
+                "$script:AgentPath in Peter-N91/hve-squad"
+                "+- hve-squad-squad-coach -- File '$script:PromptPath' not found after git sparse checkout"
+            )
+            $install = { param($InstallArgs, $Target, $Attempt) [pscustomobject]@{ ExitCode = 1; Output = $diagnostics } }.GetNewClosure()
+            $result = Install-SquadPackage -SourceRoot $script:Source -Destination $script:Destination -InstallCommand $install
+            $result.Mode | Should -BeExactly 'Source'
+            Get-Content -LiteralPath (Join-Path $result.Root '.github/agents/squad-coach.agent.md') |
+                Should -BeExactly 'selected Coach agent'
+            Get-Content -LiteralPath (Join-Path $result.Root '.github/prompts/squad-coach.prompt.md') |
+                Should -BeExactly 'selected Coach prompt'
+        }
+
+        It 'rejects a separate unexplained dependency failure even beside tolerated self-references' {
+            $diagnostics = @(
+                "+- hve-squad-squad-coach -- File not found: $script:AgentPath in Peter-N91/hve-squad"
+                '+- hve-core-other -- Authentication failed'
+            )
+            $install = { param($InstallArgs, $Target, $Attempt) [pscustomobject]@{ ExitCode = 1; Output = $diagnostics } }.GetNewClosure()
+            { Install-SquadPackage -SourceRoot $script:Source -Destination $script:Destination -InstallCommand $install } |
+                Should -Throw '*Unexplained failure for hve-core-other*'
+        }
+
+        It 'rejects a failed dependency path the selected overlay does not supply' {
+            $diagnostics = @("+- hve-squad-missing -- File not found: squad-src/.github/agents/squad/missing.agent.md in Peter-N91/hve-squad")
+            $install = { param($InstallArgs, $Target, $Attempt) [pscustomobject]@{ ExitCode = 1; Output = $diagnostics } }.GetNewClosure()
+            { Install-SquadPackage -SourceRoot $script:Source -Destination $script:Destination -InstallCommand $install } |
+                Should -Throw '*Not explained by the working copy*'
+        }
+
+        It 'does not tolerate missing content outside the squad overlay' {
+            Write-InstallFixture $script:Source 'other/agent.md'
+            $diagnostics = @('+- external-agent -- File not found: other/agent.md in external/package')
+            $install = { param($InstallArgs, $Target, $Attempt) [pscustomobject]@{ ExitCode = 1; Output = $diagnostics } }.GetNewClosure()
+            { Install-SquadPackage -SourceRoot $script:Source -Destination $script:Destination -InstallCommand $install } |
+                Should -Throw '*Not explained by the working copy*'
+        }
+
+        It 'keeps published-ref installation failures fatal' {
+            $diagnostics = @("+- hve-squad-squad-coach -- File not found: $script:AgentPath in Peter-N91/hve-squad")
+            $install = { param($InstallArgs, $Target, $Attempt) [pscustomobject]@{ ExitCode = 1; Output = $diagnostics } }.GetNewClosure()
+            { Install-SquadPackage -Ref main -Destination $script:Destination -InstallCommand $install } |
+                Should -Throw '*apm install failed*'
+        }
+    }
+
     It 'tracks renamed nonreserved package paths across prepared overlays' {
         $Install = Join-Path $TestDrive 'prepared'
         $Older = Join-Path $TestDrive 'older-source'; $Selected = Join-Path $TestDrive 'newer-source'

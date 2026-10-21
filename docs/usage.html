@@ -46,6 +46,7 @@
     <div class="container">
       <h2>Invoke the coordinator</h2>
       <p>Use the matching Squad agent's conversation for requests, not your system shell. In VS Code Copilot Harness, choose the agent from the agents dropdown; CLI and App also use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
+      <p>Not initialized yet, or unsure how to reach your goal? Select the advisory <strong>Squad Coach</strong> agent in VS Code, CLI, or App. It reads current code and documentation and provides a detailed, copy-ready runbook without changing state. See <a href="getting-started.html#chat-with-the-squad-coach">the Coach guide</a>.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
@@ -839,7 +840,7 @@ flowchart TD
         (see below); choosing a single squad keeps the flow above unchanged.
       </p>
 
-      <h2>Federation &mdash; several sub-squads in one repo</h2>
+      <h2 id="federation">Federation &mdash; several sub-squads in one repo</h2>
       <p>
         Federation lets one repository host more than one squad side by side &mdash; for example a
         <code>product</code> sub-squad for the business team and an <code>azure</code> sub-squad for the

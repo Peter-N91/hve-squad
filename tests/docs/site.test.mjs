@@ -31,7 +31,7 @@ function assertNoPartnerWorkshopLinks(document) {
   }
 }
 
-const invocation = /^\s*\/squad(?:-federation|-document|-governance-report|-learn)?(?:\s|$)/m;
+const invocation = /^\s*\/squad(?:-coach|-federation|-document|-governance-report|-learn)?(?:\s|$)/m;
 
 for (const name of pages) {
   for (const locale of ['en', 'fr']) {
@@ -68,7 +68,7 @@ for (const name of pages) {
         assert.ok(scripts.some(script => script.src.endsWith('/assets/site.js') && script.defer));
         for (const code of document.querySelectorAll('code')) {
           if (code.closest('pre, [data-host-reference]')) continue;
-          assert.doesNotMatch(code.textContent, /^\/squad(?:-federation|-document|-governance-report|-learn)?\s+(?:request=|init\b|promote\b|profile=|mode=|squad=)/,
+          assert.doesNotMatch(code.textContent, /^\/squad(?:-coach|-federation|-document|-governance-report|-learn)?\s+(?:request=|init\b|promote\b|profile=|mode=|squad=)/,
             'Runnable examples belong in local command blocks, not inline prose');
         }
       } finally { dom.window.close(); }
@@ -126,7 +126,7 @@ for (const name of pages) {
               assert.doesNotMatch(input, invocation, 'Agent inputs have no slash-command prefix');
               assert.doesNotMatch(input, /^#|^\/agent/m, 'Selection instructions stay outside copyable inputs');
             }
-            const argumentLines = canonical.split('\n').filter(line => !line.trimStart().startsWith('#')).map(line => line.replace(/^[ \t]*\/squad(?:-federation|-document|-governance-report|-learn)?(?=\s|$)[ \t]?/, '')).filter(line => line.trim());
+            const argumentLines = canonical.split('\n').filter(line => !line.trimStart().startsWith('#')).map(line => line.replace(/^[ \t]*\/squad(?:-coach|-federation|-document|-governance-report|-learn)?(?=\s|$)[ \t]?/, '')).filter(line => line.trim());
             for (const line of argumentLines) assert.ok(inputs.join('\n').includes(line), `Preserve arguments: ${line}`);
           });
           const unchanged = [...document.querySelectorAll('pre > code')].filter(code => !code.closest('.command-example')).map(code => code.textContent);
@@ -148,6 +148,7 @@ function renderExample(text, lang = 'en') {
 test('each workflow selects its own agent, including requests with no arguments', () => {
   const workflows = [
     ['/squad init', 'Squad Coordinator', 'init'],
+    ['/squad-coach', 'Squad Coach', 'Help me choose the simplest HVE Squad setup for my goal.'],
     ['/squad-federation promote', 'Squad Federation Coordinator', 'promote'],
     ['/squad-document request="summarize" format=html', 'Squad Document', 'request="summarize" format=html'],
     ['/squad-governance-report', 'Squad Governance Report', 'Generate the governance report with default settings.'],
@@ -174,6 +175,48 @@ test('multiline quoted content, embedded slash commands and escaped quotes remai
       assert.equal(inputs[0].textContent, argumentsText);
     }
   } finally { dom.window.close(); }
+});
+
+test('Squad Coach is prominent and documented in both languages', () => {
+  for (const [locale, label] of [['', 'New here? Chat with the Squad Coach'], ['fr/', 'Vous débutez ? Discutez avec le Squad Coach']]) {
+    for (const page of [`${locale}index.html`, `${locale}getting-started.html`]) {
+      const dom = openPage(page, { scripts: false });
+      try {
+        assert.ok(dom.window.document.body.textContent.includes(label), `${page} includes the Coach entry`);
+      } finally { dom.window.close(); }
+    }
+  }
+});
+
+test('Coach onboarding uses agents on every host and shows a complete, conditional lifecycle example', () => {
+  let englishMessages;
+  for (const locale of ['', 'fr/']) {
+    const dom = openPage(`${locale}getting-started.html`, { query: '?host=vscode' });
+    try {
+      const document = dom.window.document;
+      const content = document.body.textContent;
+      assert.doesNotMatch(content, /VS Code uses the APM package and slash prompts|VS Code utilise le package APM et les prompts slash/);
+      assert.doesNotMatch(content, /choose the \/squad-coach prompt|choisissez le \/squad-coach prompt/);
+      const runbook = document.getElementById('coach-runbook');
+      assert.ok(runbook);
+      assert.equal(runbook.querySelectorAll(':scope > li').length, 6);
+      const panels = [...runbook.querySelectorAll('[data-host="vscode"]')];
+      assert.equal(panels.length, 5);
+      const messages = panels.map(panel => panel.querySelector('pre code').textContent);
+      if (!locale) englishMessages = messages;
+      else assert.deepEqual(messages, englishMessages, 'Runnable inputs are identical across translations');
+      assert.match(messages[0], /^init profile=default routing=ranked$/);
+      assert.match(messages[1], /mode=autopilot cost-ceiling=10$/);
+      assert.match(messages[3], / promote$/);
+      assert.match(messages[4], /squad=<confirmed-member> mode=autopilot$/);
+      assert.deepEqual(panels.map(panel => panel.querySelector('strong').textContent), [
+        'Squad Coordinator', 'Squad Coordinator', 'Squad Coordinator',
+        'Squad Federation Coordinator', 'Squad Federation Coordinator'
+      ]);
+      for (const message of messages) assert.doesNotMatch(message, invocation);
+      assert.match(runbook.textContent, locale ? /Uniquement si les responsabilités se séparent/ : /Only if ownership later splits/);
+    } finally { dom.window.close(); }
+  }
 });
 
 test('usage.html documents roster-catalog.md and the routing= modes', () => {
