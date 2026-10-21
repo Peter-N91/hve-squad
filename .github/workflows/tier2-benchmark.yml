@@ -191,11 +191,51 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Propagate comparison verdict
+      - name: Checkout candidate metadata without a baseline
+        if: inputs.candidate_sha != '' && steps.refs.outputs.base == '' && steps.compare.outputs.verdict == '2'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.refs.outputs.head }}
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Apply temporary release baseline bootstrap
+        id: gate
         if: always()
         shell: pwsh
         env:
           VERDICT: ${{ steps.compare.outputs.verdict }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $verdict = $env:VERDICT
+          if ($verdict -notmatch '^[0-3]$') { $verdict = '1' }
+          if ($verdict -eq '2' -and $env:CANDIDATE_SHA -cmatch '^[0-9a-f]{40}$') {
+            $reportPath = Join-Path $env:RUNNER_TEMP 'efficiency-report/report.json'
+            $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+            $bootstrapReasons = @('base-comparison-tooling-unavailable', 'previous-stable-release-unavailable')
+            if ($report.status -ceq 'missing-baseline' -and @($report.reasons).Count -eq 1 -and $report.reasons[0] -cin $bootstrapReasons) {
+              $manifest = git show "$($env:CANDIDATE_SHA):apm.yml"
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot read frozen candidate version.' }
+              $versions = [regex]::Matches(($manifest -join "`n"), '(?m)^version: (0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\r?$')
+              if ($versions.Count -ne 1) { throw 'One stable candidate version required for baseline bootstrap.' }
+              $version = [version]($versions[0].Value.Substring(9).Trim())
+              if ($version -le [version]'0.18.1') {
+                $verdict = '0'
+                $message = "Temporary release bootstrap: missing baseline allowed for $version (expires after v0.18.1). No benchmark approval; original report unchanged."
+                Write-Host "::warning::$message"
+                $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+              }
+            }
+          }
+          "verdict=$verdict" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Propagate comparison verdict
+        if: always()
+        shell: pwsh
+        env:
+          VERDICT: ${{ steps.gate.outputs.verdict }}
         run: |
           if ($env:VERDICT -notmatch '^[0-3]$') { exit 1 }
           exit ([int]$env:VERDICT)
