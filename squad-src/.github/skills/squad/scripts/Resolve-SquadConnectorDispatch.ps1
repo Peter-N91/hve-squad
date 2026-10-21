@@ -170,8 +170,39 @@ function Get-ConnectorInputValueLocal {
 function Test-ConnectorArrayLikeLocal {
     param([AllowNull()]$Value)
     if ($null -eq $Value) { return $false }
-    if ($Value -is [string]) { return $false }
+    if ($Value -is [string] -or $Value -is [System.Collections.IDictionary]) { return $false }
     return ($Value -is [System.Collections.IEnumerable])
+}
+
+function Test-ConnectorSecretLocal {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    # Scribe credential indicators, including quoted JSON/YAML keys; never echo a match.
+    $pattern = '(?i)\b(password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token|refresh[_-]?token|token|bearer|connection[_-]?string|accountkey|sharedaccesskey|sharedaccesssignature|private[_-]?key)\s*["'']?\s*[=:]|\bauthorization\s*["'']?\s*:|\bbearer\s+[A-Za-z0-9._~+/=-]{16,}|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]+|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|\bxox[abprs]-[A-Za-z0-9-]{8,}|\bsig=|\bsv=\d{4}-|-----BEGIN [A-Z ]*PRIVATE KEY|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bsk-[A-Za-z0-9]{20,}|DefaultEndpointsProtocol=|AccountKey='
+    [regex]::IsMatch($Text, $pattern)
+}
+
+function Get-ConnectorDocumentIssuesLocal {
+    param([AllowNull()]$Object)
+    if ($null -eq $Object) { return }
+    if ($Object -is [string]) {
+        if ($Object.Length -gt 10000) { 'oversize-string' }
+        if (Test-ConnectorSecretLocal -Text $Object) { 'secret-content' }
+    }
+    elseif ($Object -is [System.Collections.IDictionary]) {
+        foreach ($key in $Object.Keys) {
+            Get-ConnectorDocumentIssuesLocal -Object ([string]$key)
+            Get-ConnectorDocumentIssuesLocal -Object $Object[$key]
+        }
+    }
+    elseif ($Object -is [System.Collections.IEnumerable]) {
+        foreach ($item in $Object) { Get-ConnectorDocumentIssuesLocal -Object $item }
+    }
+    elseif ($Object -is [pscustomobject]) {
+        foreach ($property in $Object.PSObject.Properties) {
+            Get-ConnectorDocumentIssuesLocal -Object $property.Name
+            Get-ConnectorDocumentIssuesLocal -Object $property.Value
+        }
+    }
 }
 
 function Test-ConnectorPathUnderRootLocal {
@@ -207,15 +238,21 @@ function Get-ConnectorArtifactPathIssueLocal {
         [Parameter(Mandatory)][AllowEmptyString()][string]$ArtifactPath
     )
     if (-not (Test-ConnectorRootSegmentsValidLocal -Path $DeliverableRoot)) { return 'invalid-deliverable-root' }
-    $candidate = ([string]$ArtifactPath).Trim()
-    if (-not $candidate) { return 'missing-path' }
+    $candidate = [string]$ArtifactPath
+    if ([string]::IsNullOrWhiteSpace($candidate)) { return 'missing-path' }
     if ($candidate -match '^[A-Za-z]:[\\/]') { return 'absolute-path' }
     if ($candidate -match '^/') { return 'absolute-path' }
     if ($candidate -match '^\\\\' -or $candidate -match '^//') { return 'unc-path' }
+    if ($candidate -match '^\\') { return 'absolute-path' }
     if ($candidate -match '^[A-Za-z]:') { return 'drive-letter' }
     $segments = @($candidate -split '[\\/]')
     if (@($segments | Where-Object { $_ -eq '..' }).Count -gt 0) { return 'path-traversal' }
     if ($candidate -match ':[^\\/:]') { return 'alternate-data-stream' }
+    foreach ($segment in $segments) {
+        if ($segment -match '[. ]$') { return 'trailing-dot-or-space' }
+        if ($segment -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)') { return 'reserved-device-name' }
+    }
+    if ($segments.Count -gt 5) { return 'artifact-depth-exceeded' }
     if (-not (Test-ConnectorPathUnderRootLocal -Root $DeliverableRoot -Candidate $candidate)) { return 'escapes-deliverable-root' }
     $extension = [System.IO.Path]::GetExtension($candidate).TrimStart('.').ToLowerInvariant()
     if ($extension -notin @('md', 'json', 'txt')) { return 'disallowed-extension' }
@@ -840,7 +877,7 @@ function Resolve-SquadConnectorExecution {
 
 function Get-ClosedSchemaIssuesLocal {
     param(
-        [Parameter(Mandatory)]$Object,
+        [Parameter(Mandatory)][AllowNull()]$Object,
         [Parameter(Mandatory)][string[]]$Required,
         [string[]]$Optional = @(),
         [string]$Prefix = ''
@@ -887,8 +924,10 @@ function Test-ConnectorArtifactsShapeLocal {
     foreach ($artifact in @($Artifacts)) {
         foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $artifact -Required @('path', 'type') -Optional @() -Prefix "$Prefix.")) { $issues.Add($issue) }
         if ($null -eq $artifact) { continue }
-        $type = ([string]$artifact.type).Trim().ToLowerInvariant()
-        if ($type -and $type -notin @('md', 'json', 'txt')) { $issues.Add("$Prefix.invalid-type:$type") }
+        $path = Get-ConnectorInputValueLocal -Object $artifact -Name 'path'
+        $type = Get-ConnectorInputValueLocal -Object $artifact -Name 'type'
+        if ($path -isnot [string] -or [string]::IsNullOrWhiteSpace($path)) { $issues.Add("$Prefix.invalid-path") }
+        if ($type -isnot [string] -or $type -cnotin @('md', 'json', 'txt')) { $issues.Add("$Prefix.invalid-type") }
     }
     $issues.ToArray()
 }
@@ -899,6 +938,14 @@ function Test-SquadConnectorManifestShape {
 
     $issues = [System.Collections.Generic.List[string]]::new()
     $base = @('connectorId', 'schemaVersion', 'transport', 'capabilities', 'roles', 'dropPath', 'deadlineMinutesDefault', 'retryCapDefault', 'contact', 'version')
+    $missing = @($base | Where-Object { $null -eq (Get-ConnectorInputValueLocal -Object $Manifest -Name $_) })
+    if ($missing.Count -gt 0) {
+        return [pscustomobject]@{ Status = 'error'; Issues = @($missing | ForEach-Object { "missing:$_" }) }
+    }
+    foreach ($field in @('connectorId', 'schemaVersion', 'transport', 'dropPath', 'contact', 'version')) {
+        $value = Get-ConnectorInputValueLocal -Object $Manifest -Name $field
+        if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) { $issues.Add("invalid:$field") }
+    }
     $version = ([string]$Manifest.schemaVersion).Trim()
     if ($version -eq '1.0') {
         foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $Manifest -Required $base)) { $issues.Add($issue) }
@@ -906,7 +953,7 @@ function Test-SquadConnectorManifestShape {
     }
     elseif ($version -eq '1.1') {
         foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $Manifest -Required @($base + 'endpointKind'))) { $issues.Add($issue) }
-        $endpointKind = ([string]$Manifest.endpointKind).Trim().ToLowerInvariant()
+        $endpointKind = ([string](Get-ConnectorInputValueLocal -Object $Manifest -Name 'endpointKind' -Default '')).Trim().ToLowerInvariant()
         if ($endpointKind -notin @('agent', 'orchestrator')) { $issues.Add('invalid:endpointKind') }
     }
     else {
@@ -932,6 +979,7 @@ function Test-SquadConnectorManifestShape {
     if ($Manifest.contact -isnot [string] -or [string]::IsNullOrWhiteSpace(([string]$Manifest.contact).Trim())) {
         $issues.Add('invalid:contact')
     }
+    foreach ($issue in @(Get-ConnectorDocumentIssuesLocal -Object $Manifest)) { $issues.Add($issue) }
 
     [pscustomobject]@{
         Status = if ($issues.Count -eq 0) { 'ok' } else { 'error' }
@@ -985,6 +1033,14 @@ function Test-SquadConnectorRequestShape {
             else {
                 foreach ($item in @($Request.allowedOutputs)) {
                     foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $item -Required @('outputId', 'role', 'deliverableRoot') -Optional @('memberName') -Prefix 'allowedOutputs.')) { $issues.Add($issue) }
+                    foreach ($field in @('outputId', 'role', 'deliverableRoot')) {
+                        $value = Get-ConnectorInputValueLocal -Object $item -Name $field
+                        if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) { $issues.Add("allowedOutputs.invalid-$field") }
+                    }
+                    $memberName = Get-ConnectorInputValueLocal -Object $item -Name 'memberName'
+                    if ($null -ne $memberName -and ($memberName -isnot [string] -or [string]::IsNullOrWhiteSpace($memberName))) {
+                        $issues.Add('allowedOutputs.invalid-memberName')
+                    }
                     if (Test-ConnectorGovernanceRoleLocal -Role (Get-ConnectorInputValueLocal -Object $item -Name 'role')) {
                         $issues.Add('allowedOutputs.reserved-role')
                     }
@@ -993,6 +1049,7 @@ function Test-SquadConnectorRequestShape {
         }
     }
 
+    foreach ($issue in @(Get-ConnectorDocumentIssuesLocal -Object $Request)) { $issues.Add($issue) }
     [pscustomobject]@{
         Status = if ($issues.Count -eq 0) { 'ok' } else { 'error' }
         Issues = $issues.ToArray()
@@ -1100,12 +1157,41 @@ function Test-SquadConnectorResultShape {
             else {
                 foreach ($item in @($Result.outputs)) {
                     foreach ($issue in (Get-ClosedSchemaIssuesLocal -Object $item -Required @('outputId', 'artifacts') -Prefix 'outputs.')) { $issues.Add($issue) }
-                    foreach ($issue in (Test-ConnectorArtifactsShapeLocal -Artifacts $item.artifacts -Prefix 'outputs.artifacts')) { $issues.Add($issue) }
+                    $outputId = Get-ConnectorInputValueLocal -Object $item -Name 'outputId'
+                    if ($outputId -isnot [string] -or [string]::IsNullOrWhiteSpace($outputId)) { $issues.Add('outputs.invalid-outputId') }
+                    $artifacts = Get-ConnectorInputValueLocal -Object $item -Name 'artifacts'
+                    if ($null -eq $artifacts) { $issues.Add('outputs.artifacts-not-array') }
+                    else {
+                        foreach ($issue in (Test-ConnectorArtifactsShapeLocal -Artifacts $artifacts -Prefix 'outputs.artifacts')) { $issues.Add($issue) }
+                    }
                 }
             }
         }
     }
-    foreach ($issue in (Test-ConnectorArtifactsShapeLocal -Artifacts $Result.artifacts -Prefix 'artifacts')) { $issues.Add($issue) }
+    foreach ($field in @('taskId', 'connectorId', 'role', 'status')) {
+        $value = Get-ConnectorInputValueLocal -Object $Result -Name $field
+        if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value)) { $issues.Add("invalid:$field") }
+    }
+    $createdAt = Get-ConnectorInputValueLocal -Object $Result -Name 'createdAt'
+    if ($createdAt -isnot [DateTime] -and $createdAt -isnot [DateTimeOffset] -and
+        ($createdAt -isnot [string] -or [string]::IsNullOrWhiteSpace($createdAt))) { $issues.Add('invalid:createdAt') }
+    elseif ($createdAt -is [string]) {
+        try { [void][DateTimeOffset]::Parse($createdAt, [Globalization.CultureInfo]::InvariantCulture) }
+        catch [FormatException] { $issues.Add('invalid:createdAt') }
+    }
+    if ((Get-ConnectorInputValueLocal -Object $Result -Name 'narrative') -isnot [string]) { $issues.Add('invalid:narrative') }
+    if ($SchemaVersion -eq '1.1') {
+        $bindingId = Get-ConnectorInputValueLocal -Object $Result -Name 'bindingId'
+        if ($bindingId -isnot [string] -or [string]::IsNullOrWhiteSpace($bindingId)) { $issues.Add('invalid:bindingId') }
+    }
+    $status = Get-ConnectorInputValueLocal -Object $Result -Name 'status'
+    if ($status -cnotin @('awaiting', 'completed', 'failed', 'unreachable')) { $issues.Add('invalid:status') }
+    $artifacts = Get-ConnectorInputValueLocal -Object $Result -Name 'artifacts'
+    if ($null -eq $artifacts) { $issues.Add('artifacts-not-array') }
+    else {
+        foreach ($issue in (Test-ConnectorArtifactsShapeLocal -Artifacts $artifacts -Prefix 'artifacts')) { $issues.Add($issue) }
+    }
+    foreach ($issue in @(Get-ConnectorDocumentIssuesLocal -Object $Result)) { $issues.Add($issue) }
 
     [pscustomobject]@{
         Status = if ($issues.Count -eq 0) { 'ok' } else { 'error' }
@@ -1253,6 +1339,12 @@ function Test-SquadConnectorExchange {
         }
     }
 
+    if ($declaredArtifactSlots.Count -gt 20) { $issues.Add('artifact-count-exceeded') }
+    if ($resultStatus -eq 'completed' -and $declaredArtifactSlots.Count -eq 0) { $issues.Add('missing-delivered-artifact') }
+    if ($issues.Count -gt 0) {
+        return [pscustomobject]@{ Status = 'error'; Issues = $issues.ToArray(); TrustedProvenance = $null }
+    }
+
     $preExistingKeySet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $requestRootKey = ConvertTo-ConnectorPathKeyLocal -Path ([string]$Request.deliverableRoot)
     foreach ($pre in @($PreExistingPaths)) {
@@ -1281,12 +1373,16 @@ function Test-SquadConnectorExchange {
                 $issues.Add("missing-delivered-artifact:$($slot.Path)")
             }
             else {
-                if (Test-ConnectorReparsePointInChainLocal -RootPath $diskRoot -TargetPath $diskPath) {
+                if (Test-ConnectorReparsePointInChainLocal -RootPath $WorkspaceRoot -TargetPath $diskPath) {
                     $issues.Add("reparse-point-artifact:$($slot.Path)")
+                    continue
                 }
                 $length = (Get-Item -LiteralPath $diskPath -Force).Length
                 if ($length -gt 1048576) {
                     $issues.Add("oversize-artifact:$($slot.Path)")
+                }
+                elseif (Test-ConnectorSecretLocal -Text ([System.IO.File]::ReadAllText($diskPath))) {
+                    $issues.Add('artifact-secret-content')
                 }
                 $totalBytes += $length
             }

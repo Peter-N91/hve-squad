@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.1"
-  last_updated: "2026-10-19"
+  last_updated: "2026-10-21"
 ---
 
 # Squad Connector Contract
@@ -14,7 +14,12 @@ A consumer who wants to keep their own coordinator, agents, skills, and executio
 
 Role-mode authority (binding table schema, replace/add semantics, execution precedence, `both` constraints, council exclusion, coordinator shell, trusted provenance, and 1.0↔1.1 boundaries) is normative in `connector-role-modes.md`.
 
-Read this file in full before authoring a manifest, before registering a connector against a role, and on every dispatch of the Squad Connector shim.
+Read this file before authoring a manifest or registering a connector. The thin
+Squad Connector agent runs `scripts/Invoke-SquadConnectorDispatch.ps1`; that
+side-effecting wrapper enforces the fixed lifecycle through the shared,
+side-effect-free `Resolve-SquadConnectorDispatch.ps1` validators. This reference
+remains the consumer-facing protocol, not a second implementation the agent
+must interpret on every dispatch.
 
 ## Invocation Mode
 
@@ -46,7 +51,7 @@ No other field is defined, and the schema is **closed**. A manifest, delegation-
 
 ## Delegation-Request Envelope
 
-Written by the shim as `<taskId>.request.json` at `dropPath` in Step 2 of its dispatch.
+Written by the lifecycle wrapper as `<taskId>.request.json` at `dropPath`.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
@@ -100,6 +105,53 @@ Before publishing a first-time request, the shim records the pre-task filesystem
 The snapshot schema is closed. It is internal collision evidence, not a consumer-authored envelope: consumers watch `*.request.json`, ignore `*.snapshot.json`, and never edit or replace the snapshot. The shim validates the snapshot with `Resolve-SquadConnectorDispatch.ps1 validate-snapshot`, writes it before the request becomes visible, and preserves both files unchanged across every resume.
 
 A later dispatch must load the original sidecar and pass its validated `preExistingPaths` into exchange validation. It never rebuilds the snapshot from the current filesystem, because the producer may already have written the result artifact by then. A missing, malformed, mismatched, or rewritten snapshot is a validation failure (`failed`), and no artifact from that exchange is accepted.
+
+## Scripted Lifecycle and Private State
+
+`Invoke-SquadConnectorDispatch.ps1 -InputPath <dispatch.json>` (or `-InputJson`)
+accepts the coordinator's `workspaceRoot`, `manifestPath`, `connectorId`, `role`,
+and `deliverableRoot`; a first dispatch also requires `task`. Contract `1.1`
+adds `bindingId`, `allowedOutputs`, and the owning `teamPath` (or `squadRoot`,
+default `.copilot-tracking/squad`). Optional `owner` preserves classified member
+selection; `executionChoice` is the selected connector or coordinator-approved
+`both`. Legacy `memberName`, `deadline`, and `retryCap` remain optional.
+All filesystem outputs stay inside the workspace and outside reparse points.
+The mailbox and deliverable root must not overlap.
+
+A first invocation generates a fresh id, atomically writes the snapshot, saves
+private state, then atomically publishes the request without overwriting an
+existing file. It returns `awaiting` in that same turn, even if a fast consumer
+has already responded. A later invocation supplies that `taskId` and unchanged
+dispatch inputs. It validates once; it never polls or starts the consumer.
+
+The wrapper owns `dropPath/.squad-connector/<taskId>.state.json` and the adjacent
+exclusive `<taskId>.lock`. State has exactly `taskId`, `connectorId`,
+`requestHash`, `snapshotHash`, `manifestHash`, `identityHash`, `attempts`, and
+`consumed`. SHA-256 hashes pin the original UTF-8 request, snapshot, manifest,
+and validated identity; `attempts` starts at zero and increments on each
+unanswered resume. The initial publication is not a retry. At or after the
+deadline, or on the resume reaching `retryCap`, an unanswered exchange returns
+`unreachable`. As before, these bounds govern unanswered work: a present
+terminal result is validated rather than discarded solely for arriving late.
+An external `awaiting` result remains unanswered for these bounds.
+
+Before returning a validated terminal result, the wrapper atomically persists
+`consumed: true` under the exclusive task lock. Another invocation of that id
+returns `failed` with `replayed-task-id`, even in another process or after the
+public exchange files were removed. Invalid results do not consume the id.
+Keep private state for as long as replay protection is required; deleting or
+editing it defeats that protection. Consumers watch only `*.request.json` and
+never write `.squad-connector` or the snapshot. Existing pending files without
+private state fail closed; they are not silently adopted or re-snapshotted.
+These are local trusted records, not signatures or an immutable audit store.
+
+The closed response carries `status`, connector/binding/target/execution ids,
+`taskId`, validated repository-relative `artifacts` and `outputs`, and stable
+`reasons`. A completed response adds `memberName`, `verification`,
+`trustedProvenance`, and `accountingNote`. It never includes raw result
+`narrative` or artifact contents. Failure reasons do not quote untrusted values.
+The coordinator retains routing, admission, escalation, and stage control; the
+internal Scribe retains all history and ledger writes.
 
 ## Statuses
 

@@ -844,6 +844,19 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
       </ol>
 
       <p>
+        <strong>Cycle scripté, responsabilités inchangées.</strong> L'agent Squad Connector allégé
+        exécute <code>Invoke-SquadConnectorDispatch.ps1</code> une fois et renvoie son JSON.
+        <code>Resolve-SquadConnectorDispatch.ps1</code> reste sans effet de bord. Le wrapper conserve
+        les empreintes demande/photographie, les tentatives et les identifiants consommés dans
+        <code>dropPath/.squad-connector/&lt;taskId&gt;.state.json</code>, sous verrou exclusif par tâche.
+        Conservez cet état privé sans laisser votre adaptateur le modifier : un identifiant consommé
+        est rejeté entre processus même si les fichiers publics ont été supprimés. Un état absent ou
+        modifié bloque l'échange. Le wrapper renvoie les chemins validés et la provenance, jamais le
+        <code>narrative</code> externe brut ni le contenu des artefacts. HVE conserve le routage, les
+        gates et l'historique du Scribe ; le contrat reste la référence du protocole consommateur.
+      </p>
+
+      <p>
         <strong>Pas de réponse immédiate.</strong> La différence clé avec un RPC traditionnel est
         que les étapes 2 et 6 sont séparées. Le shim ne bloque jamais. Votre coordinateur
         s'exécute de façon asynchrone selon votre propre calendrier. Si votre coordinateur doit

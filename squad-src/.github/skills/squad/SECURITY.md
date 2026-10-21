@@ -11,6 +11,7 @@ estimated_reading_time: 6
 # Squad Skill Security Model
 
 The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
+`Invoke-SquadConnectorDispatch.ps1`,
 `Resolve-SquadModelRoute.ps1`, `Get-SquadDispatchBrief.ps1`,
 `Write-SquadHandoff.ps1`, `Measure-SquadLedger.ps1`,
 `Set-SquadCostPreflight.ps1`, and `Initialize-SquadConsumptionRates.ps1`.
@@ -55,8 +56,9 @@ Different filesystem permissions or unattended policies change the risk.
 * The coordinator classifies work and retains governance and admission.
 * Connector/model resolvers and the dispatch brief read roster, manifests,
   packaged model metadata, and local availability information.
-* The connector shim writes requests and validates results through the helper
-  and the full transport procedure.
+* The thin connector agent runs the lifecycle wrapper once. That wrapper owns
+  request/snapshot publication, result checks, and private replay state; the
+  shared resolver remains side-effect free.
 * The consumer's adapter runs its own agents or workflow outside this package.
 * The handoff writer, ledger calculator, preflight helper, and rate seeder write
   their declared local state/output files. The ledger can read local host usage
@@ -190,18 +192,22 @@ writer can still reproduce these ids. Scribe marks accepted work unverified.
 
 ### Tampering
 
-The deterministic helper rejects undeclared output ids and structurally escaping
-paths. The shim's transport procedure additionally requires filesystem/reparse,
-file-type, size, secret-content, replay, and overwrite checks. Do not mistake a
-successful `validate-exchange` call for completion of those filesystem checks.
+The deterministic helper rejects undeclared output ids, escaping/reserved paths,
+reparse points, file-type/size/depth/count violations, and secret-shaped content.
+The wrapper supplies the real workspace and immutable collision baseline,
+checks hashes, and publishes without overwrite. A stateless validation call
+alone does not prove replay protection or request/snapshot immutability.
 Use distinct write scopes; separate report roots do not isolate source writers.
 
 ### Repudiation
 
 Scribe records bound member identities, timestamps, artifact references, and
 trusted accounting markers, and checks the resulting ledger. Local history is
-not an immutable audit store. Durable claim/consumed-task tracking belongs to
-the shim/adapter workflow; the stateless resolver cannot prevent replay alone.
+not an immutable audit store. The wrapper persists hashes, unanswered attempts,
+and consumed ids under `dropPath/.squad-connector`, using an exclusive task lock
+and atomic state updates before returning terminal results. The stateless
+resolver cannot prevent replay alone. Protect private state from the producer:
+a local principal able to rewrite or delete it can defeat those checks.
 Confirmed binding changes retain prior identities through Scribe-owned retirement
 decisions scoped to exact completed history entries. These decisions do not grant
 dispatch authority and, like the roster, rely on trusted local state writers.
@@ -210,13 +216,15 @@ dispatch authority and, like the roster, rely on trusted local state writers.
 
 Artifacts and usage logs may contain sensitive material. Apply the transport's
 secret-content checks before accepting reports, and protect local logs and
-outputs with host permissions. External spend is not measured by the shim.
+outputs with host permissions. The wrapper returns validated metadata and
+stable reasons, never raw external narrative or artifact contents. External
+spend is not measured by the shim.
 
 ### Denial of Service
 
 Missing results return `awaiting` and eventually escalate under deadline/retry
-rules. The protocol's caps and atomic producer publication limit malformed or
-partial deliveries when the runner and shim implement them. The validator does
+rules. The wrapper enforces protocol caps and atomic request publication;
+consumers must also publish results atomically. The validator does
 not supervise or terminate an external workflow.
 
 ### Elevation of Privilege
@@ -231,7 +239,7 @@ least-privilege worktrees and isolation outside the prompt layer.
 | Threat | Likelihood | Impact | Residual Risk | Status |
 |---|---|---|---|---|
 | Forged or replaced mailbox result | Medium | Medium | Medium | Identity checks and unverified marking; no message authentication |
-| Escaping/undeclared report path | Medium | High | Medium | Structural checks tested; full filesystem validation and host permissions still required |
+| Escaping/undeclared report path | Medium | High | Medium | Wrapper filesystem/content checks tested; filesystem races and host permissions remain deployment boundaries |
 | Duplicate/partial or absent delivery | Medium | Medium | Medium | Consumer/shim lifecycle and atomic publication required |
 | Sensitive report/log disclosure | Deployment-dependent | High | Medium | Data minimization, content checks, and host ACLs required |
 
@@ -240,16 +248,17 @@ least-privilege worktrees and isolation outside the prompt layer.
 | ID | Severity | Gap | Status |
 |---|---|---|---|
 | G-SPF-1 | Spoofing-Med | File identities do not authenticate the producer. | Accepted transport limitation; require an appropriately protected mailbox. |
-| G-TAM-1 | Tampering-Med | Full filesystem/content enforcement is not provided by the stateless envelope helper alone. | Shim procedure and host enforcement remain required. |
-| G-REP-1 | Repudiation-Med | No immutable audit store or built-in durable adapter replay database | Consumer deployment responsibility |
+| G-TAM-1 | Tampering-Med | A stateless validation call alone does not establish lifecycle integrity. | Use the lifecycle wrapper and protect its private state with host permissions. |
+| G-REP-1 | Repudiation-Med | Local durable replay state is not an immutable audit store. | Wrapper enforces consumption; host ACLs, retention, and backups remain consumer responsibilities. |
 | G-INF-1 | InfoDisc-Med | Sensitive source/report/log access depends on host permissions and consumer data handling. | Consumer deployment responsibility |
-| G-DOS-1 | DoS-Med | No packaged external runner, process supervision, or live transport | File-drop adapter and lifecycle are consumer-owned. |
+| G-DOS-1 | DoS-Med | No packaged external runner, process supervision, or live transport | External runner and wake-up remain consumer-owned. |
 
 ## References
 
 * [Connector transport contract](references/connector-contract.md)
 * [Connector binding and governance contract](references/connector-role-modes.md)
 * [Connector resolver](scripts/Resolve-SquadConnectorDispatch.ps1)
+* [Connector lifecycle wrapper](scripts/Invoke-SquadConnectorDispatch.ps1)
 * [Handoff writer](scripts/Write-SquadHandoff.ps1)
 * [Consumer guide and examples](https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/CONSUMER-GUIDE.md)
 * [Repository security policy](https://github.com/Peter-N91/hve-squad/blob/main/SECURITY.md)

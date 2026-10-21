@@ -19,7 +19,7 @@ and this one is a convenience copy.
       `taskId` is replay and is rejected rather than re-executed.
 * [ ] Watches or polls the manifest's `dropPath` for `*.request.json`, by
       whatever means it chooses, and ignores the shim-owned `*.snapshot.json`
-      collision baseline.
+      collision baseline and private `.squad-connector` lifecycle state.
 * [ ] Writes back exactly one result envelope per `taskId`, never reusing a
       `taskId` and never writing to a `dropPath` it was not given.
 * [ ] In 1.1 mode, echoes and binds trusted identity fields correctly:
@@ -33,7 +33,8 @@ and this one is a convenience copy.
 * [ ] Honors `deadline` and `retryCap`; a coordinator with a failure result
       writes `status: "failed"`, while an unanswered request reaches
       `unreachable` when its deadline or retry cap is exhausted rather than
-      accepting a late, unsolicited result.
+      fabricating completion. A present terminal result is still validated;
+      lateness alone does not make a correctly bound result unsolicited.
 * [ ] Never embeds credentials, tokens, or other secret-shaped content in the
       manifest, request, or result.
 * [ ] Never emits action fields (`command`, `exec`, `script`, `url`, `fetch`)
@@ -52,6 +53,8 @@ and this one is a convenience copy.
       empty top-level `artifacts` and declared `outputs[]`.
 * [ ] Publishes complete results atomically and durably tracks claimed/consumed
       task ids so restarts cannot execute or accept the same task twice.
+      Preserves the shim's `.squad-connector` state without editing it; producer
+      execution deduplication and the shim's result-consumption record are separate.
 * [ ] Gives every additive capability a validated manifest role, unique member,
       binding, route, resolved alignment, and explicit deliverable root.
 * [ ] Keeps worktree source changes separate from transported report artifacts;

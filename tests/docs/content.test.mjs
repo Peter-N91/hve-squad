@@ -124,6 +124,19 @@ test("connector guides retain completed history across confirmed binding changes
   }
 });
 
+test("connector guides explain the thin scripted lifecycle and durable private replay state", () => {
+  for (const prefix of ["", "fr/"]) {
+    const { $ } = readSource("connector", prefix);
+    const paragraph = $("main p").filter((_, element) => $(element).text().includes("Invoke-SquadConnectorDispatch.ps1")).text();
+    for (const term of ["Resolve-SquadConnectorDispatch.ps1", "dropPath/.squad-connector/<taskId>.state.json",
+      "JSON", "narrative", "Scribe"]) {
+      assert(paragraph.includes(term), `${prefix}connector: missing lifecycle boundary ${term}`);
+    }
+    assert.match(paragraph, prefix ? /jamais le/ : /never raw external/);
+    assert.match(paragraph, prefix ? /entre processus/ : /across processes/);
+  }
+});
+
 test("the consumer companion teaches onboarding rather than developer smoke tests", () => {
   const guide = readFileSync(new URL("../../docs/templates/connector-example/CONSUMER-GUIDE.md", import.meta.url), "utf8");
   for (let step = 1; step <= 6; step++) assert.match(guide, new RegExp(`^## Step ${step}:`, "m"));

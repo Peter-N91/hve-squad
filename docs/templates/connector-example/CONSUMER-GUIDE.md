@@ -192,11 +192,12 @@ Planning stays with the existing lead. Implementation uses your coordinator's
 workflow. HVE's closing review and applicable council/risk gates remain in place.
 Other ordinary work roles support the same binding mechanism.
 
-Your running adapter handles the request and returns the reports. Make sure the
-artifact your agent produces is genuinely grounded in the repository sources
-and citations requested by `request.task`—the `Squad Connector` shim inspects
-returned artifacts before placing them under `deliverableRoot` and rejects
-generic placeholder text or uncited claims. A result that
+Your running adapter handles the request and writes the reports directly under
+the declared root before returning the result. Your endpoint is responsible for
+grounding those reports in the repository sources and citations requested by
+`request.task`; HVE's ordinary review assesses their domain quality. The
+scripted shim validates identity, paths, files, caps, and secret-shaped content,
+not whether the report's claims are correct. A result that
 is not ready leaves the current stage `awaiting`; it does not trigger a fallback
 to the internal worker. Consumer automation can resume the run when the result
 arrives. If your workflow uses manual file handoff, resume the same task:
@@ -207,6 +208,17 @@ arrives. If your workflow uses manual file handoff, resume the same task:
 
 The connector does not provide an external runner or automatic wake-up service.
 That transport limitation is separate from automatic role selection.
+
+The thin `Squad Connector` agent runs `Invoke-SquadConnectorDispatch.ps1` once
+and returns its JSON; the existing resolver stays side-effect free. The wrapper
+keeps request/snapshot hashes, unanswered retry counts, and consumed ids in
+`dropPath/.squad-connector/<taskId>.state.json` under an exclusive task lock.
+Preserve that private state and never let your watcher edit it. Replay rejection
+survives a new process and removal of public exchange files, but not deletion or
+tampering with trusted private state. Pending exchanges without that state fail
+closed instead of being re-snapshotted. Only validated paths and provenance
+return to the coordinator, never raw `narrative` or artifact contents. Routing,
+admission, escalation, and Scribe persistence remain internal to HVE.
 
 ## Step 5: Add a .NET or GCP specialist
 

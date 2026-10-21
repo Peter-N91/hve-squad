@@ -454,16 +454,8 @@ Describe 'CONN-08 envelope binding and replay protection' {
         ($result.role -eq $request.role) | Should -BeFalse
     }
 
-    It 'a replayed taskId is rejected on a second result' {
-        $consumedTaskIds = New-Object System.Collections.Generic.HashSet[string]
-        $result = Get-ExampleJson -Name 'result-envelope.sample.json'
-
-        $firstAccepted = $consumedTaskIds.Add($result.taskId)
-        $firstAccepted | Should -BeTrue -Because 'the first validated result for this taskId is accepted'
-
-        $secondAccepted = $consumedTaskIds.Add($result.taskId)
-        $secondAccepted | Should -BeFalse -Because 'connector-contract.md: once a taskId has been consumed by a validated result, a repeat is a replay and is rejected'
-    }
+    # Durable replay rejection is exercised against the real library and separate
+    # CLI processes in ConnectorDispatch.Tests.ps1, not an in-memory stand-in.
 }
 
 Describe 'CONN-09 squad-connector.agent.md frontmatter' {
@@ -538,9 +530,11 @@ Describe 'CONN-12 the sample coordinator is never auto-run, and blank templates 
 }
 
 Describe 'CONN-26 retry exhaustion preserves the runtime unreachable status' {
-    It 'the connector agent returns unreachable when either unanswered terminal bound is reached' {
+    It 'the thin connector agent delegates terminal classification to the lifecycle wrapper' {
         $agent = Get-Content -LiteralPath $script:AgentPath -Raw
-        $agent | Should -Match ([regex]::Escape('When none exists and the deadline has passed, or `retryCap` is exhausted, return `unreachable` and escalate.'))
+        $agent | Should -Match 'Invoke-SquadConnectorDispatch\.ps1'
+        $agent | Should -Match 'return its JSON verbatim'
+        $agent | Should -Match 'retry/deadline bounds'
     }
 
     It 'the normative contract distinguishes unanswered exhaustion from a present failed result' {
@@ -639,13 +633,13 @@ Describe 'CONN-28 ordinary resume preserves a durable collision snapshot' {
         @($check.Issues | Where-Object { $_ -like 'outside-deliverable-root:preExistingPath:*' }).Count | Should -Be 1
     }
 
-    It 'requires snapshot-before-request publication and reuse on later dispatches' {
+    It 'routes snapshot publication and reuse through the deterministic lifecycle owner' {
         $agent = Get-Content -LiteralPath $script:AgentPath -Raw
         $contract = Get-Content -LiteralPath $script:ContractPath -Raw
 
-        $agent | Should -Match ([regex]::Escape('Write this sidecar **before** publishing `<taskId>.request.json`'))
-        $agent | Should -Match ([regex]::Escape('Do not rewrite either file and never regenerate `preExistingPaths` from the current filesystem'))
-        $agent | Should -Match ([regex]::Escape('Revalidate `<taskId>.snapshot.json` against the unchanged request with `validate-snapshot`'))
+        $agent | Should -Match 'Invoke-SquadConnectorDispatch\.ps1'
+        $agent | Should -Match 'never reconstruct its baseline|Never\s+replace a pending task'
+        $agent | Should -Match 'original request/snapshot hashes'
         $contract | Should -Match ([regex]::Escape('The snapshot schema is closed. It is internal collision evidence, not a consumer-authored envelope'))
         $contract | Should -Match ([regex]::Escape('A later dispatch must load the original sidecar'))
         $contract | Should -Match ([regex]::Escape('A missing, malformed, mismatched, or rewritten snapshot is a validation failure (`failed`)'))

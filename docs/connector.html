@@ -825,6 +825,19 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
       </ol>
 
       <p>
+        <strong>Scripted lifecycle, unchanged ownership.</strong> The thin Squad Connector agent runs
+        <code>Invoke-SquadConnectorDispatch.ps1</code> once and returns its JSON. The separate
+        <code>Resolve-SquadConnectorDispatch.ps1</code> stays side-effect free. The wrapper stores
+        request/snapshot hashes, retry attempts, and consumed task ids in
+        <code>dropPath/.squad-connector/&lt;taskId&gt;.state.json</code>, under an exclusive task lock.
+        Keep this private state and never let your adapter edit it: a consumed id is rejected
+        across processes even if the public exchange files were removed. Missing or changed state
+        fails closed. The wrapper returns validated paths and provenance, never raw external
+        <code>narrative</code> or artifact contents. HVE retains routing, gates, and Scribe history writes;
+        the contract remains your consumer-facing protocol reference.
+      </p>
+
+      <p>
         <strong>No immediate response.</strong> The key difference from a traditional RPC is that
         steps 2 and 6 are separate. The shim never blocks. Your coordinator runs asynchronously on
         your own timeline. If your coordinator needs to run synchronously, you can trigger it

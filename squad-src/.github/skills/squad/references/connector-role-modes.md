@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.1"
-  last_updated: "2026-10-19"
+  last_updated: "2026-10-21"
 ---
 
 # Squad Connector Role Modes (Contract 1.1)
@@ -123,14 +123,25 @@ plan must actually require its work.
 
 ### Pending file exchanges
 
+For a selected `Squad Connector` endpoint, the coordinator supplies
+`workspaceRoot`, the registered `manifestPath`, owning `teamPath`, `connectorId`,
+`role`, `deliverableRoot`, bounded `task`, and resolved 1.1 binding/output/execution
+inputs. Preserve classified `owner` where needed. The thin agent runs
+`Invoke-SquadConnectorDispatch.ps1` once; on resume include the existing `taskId`
+and unchanged inputs. Use only its validated JSON metadata for the Scribe
+handoff, never raw result narrative.
+
 Automatic selection is not synchronous transport. An external `awaiting`
 result holds the current stage; it is not completion, permission to advance,
 or a reason to fall back to the internal agent. Keep the pending request's
 task/binding identity in the handoff decision and request file, preserve the
 shim-owned `<taskId>.snapshot.json` collision baseline unchanged, and
 re-dispatch the shim with the same `taskId` when the result is available. The
-resume dispatch loads that original snapshot rather than rebuilding it after
-the producer has written artifacts. Record no
+resume dispatch runs `scripts/Invoke-SquadConnectorDispatch.ps1`, which loads
+that original snapshot, checks its private hashes and consumed-task state,
+and never rebuilds it after the producer has written artifacts. Preserve the
+wrapper-owned `dropPath/.squad-connector` state; the thin agent returns only the
+script's JSON, not raw external narrative. Record no
 completed dispatch history until artifacts validate. Consumer automation may
 trigger the resume; this package supplies no external runner or automatic
 cross-process wake-up service.
