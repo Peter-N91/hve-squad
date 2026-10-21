@@ -53,7 +53,9 @@ jobs:
           $baseSha = $null
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
           function Get-BranchApi([string]$Repository, [string]$Path) {
-            $response = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$Repository/$Path" -Headers $headers
+            $uri = "$env:GITHUB_API_URL/repos/$Repository"
+            if ($Path) { $uri += "/$Path" }
+            $response = Invoke-RestMethod -Uri $uri -Headers $headers
             foreach ($item in $response) { $item }
           }
           if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA) {
