@@ -223,8 +223,14 @@ statistical significance or a guarantee of causality.
 
 The read-only **Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) runs
 manually or as a **pre-publication gate in the Release workflow**, never on PRs
-or rolling previews. Standalone manual comparisons retain explicit base
-and head commit SHAs. Release runs freeze the candidate commit and select the
+or rolling previews. Standalone manual comparisons accept optional base
+and head commit SHA overrides. Leave them blank to resolve the selected branch's
+latest head and its open PR's current base branch (including an upstream PR
+from a fork). With no open PR, the repository default branch is used; ambiguous
+parents or selecting the default branch itself require an explicit base SHA.
+Git does not record a unique parent branch. Explicit overrides win independently,
+and resolved repository identities and immutable SHAs appear in `report.json`.
+Release runs freeze the candidate commit and select the
 most recently published stable release that is an ancestor of that commit,
 not a hardcoded branch or a newer unrelated hotfix.
 Annotated tags are peeled to commits. No earlier stable ancestor means an
@@ -259,9 +265,10 @@ Actions are SHA-pinned and checkout credentials are not persisted.
 
 The reviewed workflow YAML/bootstrap is itself the controller trust root.
 A PR editing it is review-required infrastructure, not independently
-authenticated evidence. Manual dispatch requires authorized reviewed base and
-candidate **full commit SHAs** in this repository; never choose an unreviewed
-base merely because it is called base. Fork identity does not grant code trust.
+authenticated evidence. Manual overrides require **full commit SHAs**; automatic
+defaults resolve branch tips once before checkout. The PR base (or default branch)
+must be reviewed and trusted; never choose an unreviewed base merely because it
+is called base. Fork identity does not grant code trust.
 
 When the base lacks the helper or selected record, the bootstrap explicitly
 reports missing baseline/tooling and fails; it never runs a head helper.
