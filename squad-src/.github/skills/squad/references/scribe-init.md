@@ -7,9 +7,9 @@ description: "Fresh single-squad or member-root Init: confirmed JSON, one determ
 
 Success is one published state tree and a helper JSON status with `status`,
 `rosterCheck`, and `ledgerCheck` all `PASS`. Initialization is outside admission.
-Serialize it with other writers. Read only this brief for fresh Init when a shell
-and `pwsh` 7.4+ are available. The helper reads templates; you do not read the
-charter, procedure, schemas, cast catalog, seed templates, or rate template.
+Serialize writers. With a shell and `pwsh` 7.4+, read only this brief.
+The helper reads templates; do not read the charter, procedure, schemas,
+cast catalog, seed templates, or rate template.
 
 ## Confirmed input
 
@@ -19,7 +19,8 @@ its payload. Legacy prose/YAML is adapted to this JSON, never executed:
 
 * `squadRoot`: resolved single-squad `.copilot-tracking/squad` or member root
   `.copilot-tracking/squad/members/<name>`, inside the consumer repository.
-* `runId`, `timestamp`: supplied run identity and ISO timestamp; Init is turn 1.
+* `runId`: supplied identity; Init is turn 1. Omit optional `timestamp` for helper UTC.
+  Never guess time; explicit future timestamps fail before publication.
 * `roster`: array of confirmed row objects, in supplied order, keyed exactly by
   `Role`, `Member Name`, `Agent Name (Primary)`, `Alternate Agents`, `Selection Cue`,
   `Invocation`, `Model Tier`, `Deliverable Root`, plus `Model` only when routing
@@ -83,7 +84,7 @@ its payload. Legacy prose/YAML is adapted to this JSON, never executed:
   blocks to `usage`. `ledgerCommand` is accepted as inert compatibility data;
   it is never run. Other fields fail closed; omit irrelevant legacy sections.
 
-The helper preserves cells and names. For member roots it rebases repository
+For member roots the helper rebases repository
 tracking and relative deliverable roots under that member; sibling-member paths
 are rejected. Each path in an ADO/Jira alternative is confined independently;
 `docs/` and `outputs/` remain unprefixed, and `—` and `(squad state)` stay literal.
