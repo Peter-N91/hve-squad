@@ -106,11 +106,13 @@
     try { id = decodeURIComponent(window.location.hash.slice(1)); }
     catch (error) { console.warn("Invalid documentation anchor.", error); return; }
     const target = document.getElementById(id);
-    const panel = target?.closest("[data-host][hidden]");
-    if (!panel) return;
-    const guide = panel.closest(".host-guide");
-    const tab = [...guide.querySelectorAll('[role="tab"]')].find(item => item.getAttribute("aria-controls") === panel.id);
-    tab?.click();
+    if (!target) return;
+    const panel = target.closest("[data-host][hidden]");
+    if (panel) {
+      const guide = panel.closest(".host-guide");
+      const tab = [...guide.querySelectorAll('[role="tab"]')].find(item => item.getAttribute("aria-controls") === panel.id);
+      tab?.click();
+    }
     target.scrollIntoView();
   }
   window.addEventListener("hashchange", revealAnchor);

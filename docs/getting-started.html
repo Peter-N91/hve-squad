@@ -208,9 +208,35 @@ targets:
       <h3>Re-deploy after an update</h3>
       <p>Re-run install with the published tag you want, including <code>--target copilot</code> unless your project declares <code>targets:</code>:</p>
       <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
-      <p>To test merged work before release, use the rolling <code>vX.Y.z-pre</code> tag shown on <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>. That tag moves; pin a stable release for work you depend on. Reinstallation refreshes <code>.github/</code>, not your state under <code>.copilot-tracking/squad/</code>.</p>
+      <p>To test merged work before release, follow <a href="#testing-the-pre-release">Install and test the pre-release</a> for the current tag and exact command. That tag moves; pin a stable release for work you depend on. Reinstallation refreshes <code>.github/</code>, not your state under <code>.copilot-tracking/squad/</code>.</p>
       </section>
       </div>
+
+      <h2 id="testing-the-pre-release">Install and test the pre-release</h2>
+      <p>
+        These docs follow <code>main</code>, which can be ahead of the latest stable release.
+        A <strong>Pre-release only</strong> badge identifies a feature that has merged but has not
+        shipped in a stable release. The notice on every page shows both versions, and each badge
+        links here. Use stable releases for work you depend on.
+      </p>
+      <p>
+        Test in a separate scratch repository with PowerShell 7+ and APM CLI <code>0.29.0</code>;
+        confirm with <code>apm --version</code>. The published site fills in the current command below.
+        You can also find the tag marked as a pre-release on
+        <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>.
+      </p>
+      <div data-release-install="preview"></div>
+      <ol>
+        <li>Install the full APM package in the scratch repository. The plugin and MCP mirrors follow stable releases; installing or updating those does not install this pre-release. Do not mix the stable plugins and the APM preview in the same test environment.</li>
+        <li>Restart your Copilot client, select <strong>Squad Coordinator</strong>, send <code>init</code>, and confirm the proposed team.</li>
+        <li>Send a small request exercising the badged feature and inspect the resulting artifacts. Report unexpected behavior with the pre-release tag, the resolved commit in <code>apm.lock.yaml</code>, reproduction steps, and expected versus actual results; remove private project data before sharing.</li>
+      </ol>
+      <p>
+        The rolling tag moves on every merge. Re-run the install to refresh it, and check the notice
+        again because a higher release bump can rename the tag. Use the command below to return to
+        stable; reinstallation does not reset your local squad state, so keep preview testing isolated.
+      </p>
+      <div data-release-install="stable"></div>
 
       <h2>2. Initialize the squad</h2>
       <p>

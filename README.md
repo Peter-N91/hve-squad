@@ -37,6 +37,12 @@ Full documentation lives on the project site:
 
 **[peter-n91.github.io/hve-squad](https://peter-n91.github.io/hve-squad/)**
 
+> **Merged does not mean released.** This README and the documentation follow `main`.
+> The site shows the latest stable and rolling pre-release numbers; **Pre-release only**
+> badges identify documented features that have not shipped in stable.
+> Follow [Install and test the pre-release](https://peter-n91.github.io/hve-squad/getting-started.html#testing-the-pre-release)
+> for the current tag, exact installation command, testing steps, and return-to-stable command.
+
 | Page                                                                          | What it covers                                                           |
 |-------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Prerequisites, installing the package with the correct target, first run |
@@ -45,9 +51,9 @@ Full documentation lives on the project site:
 | [Maintaining](https://peter-n91.github.io/hve-squad/maintaining.html)         | Dependency generation, author workflow, customization, release process   |
 | [Troubleshooting](https://peter-n91.github.io/hve-squad/troubleshooting.html) | Known install errors with fixes, versioning, and repository notes        |
 
-The site source is in [docs/](docs/) and is published to GitHub Pages by
-[.github/workflows/docs.yml](.github/workflows/docs.yml) on every push to `main` that touches
-`docs/`.
+The site source is in [docs/](docs/), with its shared shell in [site/](site/), and is
+built and published to GitHub Pages by [.github/workflows/docs.yml](.github/workflows/docs.yml).
+Documentation, package-version, and pending change-fragment updates on `main` refresh the site.
 
 ## Benchmark methodology and sources
 
@@ -148,7 +154,7 @@ only untargeted federation autopilot uses one aggregate federation ceiling.
 |------|---------------------------------|----------------------|
 | `off` (default) | Not chosen; the agent's own pin or the session model runs | No `Model` column |
 | `ranked` | The squad picks the model that best fits the role's work, among the models your host offers | `Model routing: ranked` and a `Model` column listing each pick |
-| `economy` | As `ranked`, except five low-impact implementation roles (developer, technical-writer, presenter, prompt-engineer, data-scientist) get the cheapest model with a fit of 2 or better within their floor, and move once to their `ranked` pick after a failed review. The squad asks for and records your consent first; gates never change | `Model routing: economy` and a `Model` column listing each pick |
+| [`economy` (release availability)](https://peter-n91.github.io/hve-squad/usage.html#routing-economy) | As `ranked`, except five low-impact implementation roles (developer, technical-writer, presenter, prompt-engineer, data-scientist) get the cheapest model with a fit of 2 or better within their floor, and move once to their `ranked` pick after a failed review. The squad asks for and records your consent first; gates never change | `Model routing: economy` and a `Model` column listing each pick |
 | `manual` | You pick, once, with suggestions pre-filled | `Model routing: manual` and a `Model` column holding your picks |
 
 **How ranked picks are made.** Each role maps to an assignment class (`research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`). The model catalog scores every model 0–3 for each class, and the squad picks the highest fit, then the lowest blended cost, then the newest generation of the same model family. It never breaks a tie by a model's name. On the Copilot CLI the seeded roster resolves to, for example, `researcher` → `claude-opus-5.5`, `lead` → `gpt-5.6-sol`, `developer` → `gpt-5.3-codex`, `tester` → `gpt-6-sol`, `architect` → `gpt-5.5`, `intake-validator` → `claude-sonnet-5.5`, and `scribe` → `claude-haiku-4.5`.

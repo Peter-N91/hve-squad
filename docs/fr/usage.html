@@ -78,7 +78,7 @@
           <code>routing=off|ranked|economy|manual</code> — la méthode de sélection du modèle de chaque rôle, enregistrée dans
           <code>team.md</code> jusqu'à ce que vous la changiez. <code>off</code> (par défaut) n'applique aucune politique ;
           <code>ranked</code> choisit le modèle le mieux adapté au travail de chaque rôle parmi ceux
-          que propose votre hôte ; <code>economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
+          que propose votre hôte ; <code data-release-change="20261005-routing-economy">economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
           rôles d'implémentation, après votre accord ; <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir
           <a href="#model-selection-per-role">Sélection du modèle par rôle</a> ci-dessous.
         </li>
@@ -1500,7 +1500,7 @@ layouts:
           de chaque rôle parmi ceux proposés par votre hôte, et affiche chaque choix dans une colonne <code>Model</code>
           sous une ligne <code>Model routing: ranked</code>.
         </li>
-        <li>
+        <li data-release-change="20261005-routing-economy">
           <strong><code>economy</code></strong> — comme <code>ranked</code>, sauf que cinq rôles d'implémentation
           à faible impact reçoivent le modèle le moins cher suffisamment adapté à leur travail ; affiché sous une ligne
           <code>Model routing: economy</code>. Sur option, et seulement après que vous avez accepté le compromis. Voir
@@ -1534,7 +1534,7 @@ layouts:
         squad propose donc des modèles du catalogue dont le prix est inférieur ou égal à celui du modèle de votre session ; si VS Code refuse un
         choix, la question vous est reposée avec la liste signalée par VS Code.
       </p>
-      <p id="routing-economy">
+      <p id="routing-economy" data-release-change="20261005-routing-economy">
         <strong>Mode economy (<code>routing=economy</code>).</strong> Seuls ces cinq rôles changent de
         modèle : <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code> et <code>data-scientist</code>. Chacun reçoit le modèle du catalogue le
@@ -1571,7 +1571,7 @@ layouts:
       <p><strong>Ordre de priorité</strong> (le plus élevé l'emporte, pour chaque rôle) :</p>
       <ol>
         <li><code>routing=manual</code> : la cellule <code>Model</code> valide du rôle.</li>
-        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code>routing=economy</code> : le choix economy).</li>
+        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code data-release-change="20261005-routing-economy">routing=economy</code> : le choix economy).</li>
         <li>
           <code>tier=</code> (le paramètre de niveau statique existant) ou le niveau de modèle initialisé dans <code>team.md</code>
           — le mécanisme de repli actuel, inchangé.
@@ -1579,7 +1579,7 @@ layouts:
         <li>Omettre le paramètre — le comportement par défaut sans politique.</li>
       </ol>
       <p>
-        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code>economy</code> ou <code>manual</code>, chaque
+        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code data-release-change="20261005-routing-economy">economy</code> ou <code>manual</code>, chaque
         lancement d'un agent de l'équipe transmet exactement la cellule <code>Model</code> de sa ligne, sauf pour le Scribe,
         dont le propre modèle fixé prévaut. Dans la distribution plugin, le hook <code>dispatch-guards</code>
         refuse un lancement dont le <code>model</code> manque ou diffère de la cellule, et indique la
@@ -1612,12 +1612,10 @@ layouts:
       </p>
       <p><strong>Exemples :</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
-/squad request="implement the design" routing=ranked
-
-# Switch to economy; the squad states the trade and records your consent first.
-/squad request="update the getting-started guide" routing=economy
-
-# Switch to manual selection; you are asked for the models before the request runs.
+/squad request="implement the design" routing=ranked</code></pre>
+      <pre data-release-change="20261005-routing-economy"><code># Switch to economy; the squad states the trade and records your consent first.
+/squad request="update the getting-started guide" routing=economy</code></pre>
+      <pre><code># Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual
 
 # Return to the default; the Model column is removed.

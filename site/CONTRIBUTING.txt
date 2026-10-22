@@ -30,6 +30,7 @@ Key files
   site/assets/hosts.js            Existing command-to-host examples and synchronized tabs
   site/assets/diagrams.js         Local, theme-aware Mermaid with source fallback
   scripts/docs-content.mjs         Source extraction and stable section anchors
+  scripts/docs-release.mjs         Stable/preview versions, feature badges and install commands
   scripts/check-docs.mjs           Prose/code/translation/media/link contracts
   scripts/diagram-locales.mjs      Diagram-label translations without graph changes
 
@@ -61,6 +62,27 @@ Only the named public pages/assets, videos, existing public templates and archiv
 governance report are copied. docs/planning, docs/architecture, knowledge-docs and
 .copilot-tracking are not published. Generated _site is ignored and rebuilt cleanly.
 No changes to squad-src, APM pins, package release logic or runtime agents are needed.
+
+Release availability
+The site tracks main, not just the latest stable tag. Every guide shows the last
+stable version from apm.yml and the rolling preview resolved from the highest
+bump in .changes/unreleased, using the same rules as Invoke-ReleasePrep.ps1.
+No network request or hardcoded preview number is needed for a build.
+
+For newly documented unreleased behavior, add data-release-change to the smallest
+feature label, paragraph, heading, list item or whole pre block in both languages.
+The value is that feature's change-fragment filename without .md, for example
+data-release-change="20261005-routing-economy". Do not put it inside a link or a
+copyable block, or apply it to already stable options and documentation fixes.
+The build inserts an accessible, versioned badge linking to
+getting-started.html#testing-the-pre-release. Consumption of that fragment retires
+the badge automatically, including for an overridden release version; a later
+unrelated preview does not restore it. Keep markers identical in all languages.
+
+Empty data-release-install="preview" and data-release-install="stable" containers
+receive exact APM commands at build time. With no pending fragments, the preview
+slot says so instead of advertising a nonexistent tag. Generated commands are
+checked independently from the source-prose preservation contract.
 
 Newsletter
 site/_includes/footer-extra.njk is the reserved component extension. It currently
