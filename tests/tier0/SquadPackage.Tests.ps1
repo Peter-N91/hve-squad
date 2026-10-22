@@ -201,7 +201,10 @@ Describe 'Requirements document quality source contracts (RQ-01..06)' -Tag 'Requ
         $guide | Should -Match 'tester writes only its own independent closing review linking the captures.+does not edit squad state'
         $guide | Should -Match 'Never use a future closing file as predecessor evidence'
         $guide | Should -Match 'parallel returns, drain the existing barrier order.+each required return before the dependent tester'
-        $guide | Should -Match 'No extra Scribe startup, specialist dispatch, agent, writer key or payload schema'
+        $guide | Should -Match 'No additional pass, specialist dispatch, agent, writer key or payload schema is added, except the existing required cold Scribe path'
+        $guide | Should -Match 'configured cost ceiling, or a member under a federation aggregate ceiling.+exit 2.+existing cold Scribe reassembly.+actual reviewer, the complete capture, and the admission run id, round id, slot and Decision Ref'
+        $guide | Should -Match 'Invalid input, history-integrity or restore failures are never reinterpreted as permission, partial replay or hand-edits'
+        $guide | Should -Match 'tester.s actual handoff through the same supported route'
     }
 
     It 'RQ-05 maps source clauses to existing IDs with binary SMART and honest ownership' {
@@ -222,7 +225,7 @@ Describe 'Requirements document quality source contracts (RQ-01..06)' -Tag 'Requ
         $guide | Should -Match 'Requirements-only stages do not demand implementation; implementation stages still find missing implementation'
         $guide | Should -Match 'Required source clauses stay binding, decisions stay challengeable.+read-only payload barrier are preserved.+no extra review pass or judge change'
         $guide | Should -Match 'Missing context stays unavailable; escalate only through the existing gate when blocking'
-        $guide | Should -Match 'No extra Scribe startup, specialist dispatch, agent, writer key or payload schema is added'
+        $guide | Should -Match 'No additional pass, specialist dispatch, agent, writer key or payload schema is added, except the existing required cold Scribe path'
     }
 }
 

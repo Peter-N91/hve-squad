@@ -546,9 +546,11 @@ Describe 'The verifier prices long-context blocks and calibration independently 
         @{ Name = 'long-context cache writes use the LC rate'; Sonnet = @(1000, 100000, 10000, 1000); Total = 0.1096; Calibration = 1.0; Pass = $true; Extra = @{ LcCacheWrite = '4.00' } }
         @{ Name = 'cache-write and output tokens do not trigger long context'; Sonnet = @(1000, 1000, 200000, 200000); Total = 0.4117; Calibration = 1.0; Pass = $true; Extra = @{ LcCacheWrite = '4.00' } }
     ) {
-        $haikuTokens = if ($Haiku) { $Haiku } else { @(3000, 12000, 1250, 3200) }
-        $scenarioOptions = if ($Extra) { $Extra } else { @{} }
-        $script:PricingRoot = Get-PricingScenario -Sonnet $Sonnet -Haiku $haikuTokens -Total $Total -Calibration $Calibration @scenarioOptions
+        param(
+            [int[]]$Haiku = @(3000, 12000, 1250, 3200),
+            [hashtable]$Extra = @{}
+        )
+        $script:PricingRoot = Get-PricingScenario -Sonnet $Sonnet -Haiku $Haiku -Total $Total -Calibration $Calibration @Extra
         $outcome = Invoke-Verifier -SquadRootPath $script:PricingRoot
         $outcome.Result.passed | Should -Be $Pass -Because ($outcome.Result.failures -join ' | ')
         if (-not $Pass) { ($outcome.Result.failures -join ' | ') | Should -Match 'ledger says' }
