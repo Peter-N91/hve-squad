@@ -1,0 +1,46 @@
+# Latest benchmark campaign
+
+**Not evaluable for comparison (exit 2).** Observations are not an approved baseline.
+
+Measured revision: `2a646f23b40000ef6f5ad12bdf14f0cf5c28184c`.
+Source SHA-256: `3db2617b2bff41054f3a754217af99cc82b5104d4749d31b88e329218b95460b`.
+
+| Trial | Quality /100 | Workflow credits | Judge credits | Known credits | Complete total credits | Full workflow | Unavailable |
+|---:|---:|---:|---:|---:|---:|---|---|
+| 1 | unavailable | 162.6594435 | unavailable | 162.6594435 | unavailable | False | judge-unavailable, quality-unavailable, missing-brd, missing-prd |
+| 2 | 82 | 299.2325385 | 4.71965 | 303.9521885 | 303.9521885 | True |  |
+| 3 | 79 | 395.4756795 | 8.6539 | 404.1295795 | 404.1295795 | False |  |
+
+Known consumption: **870.7412115 credits**. Complete-trial subtotal: **708.081768**.
+Whole three-trial consumption: **unavailable**. Three-trial quality median: **unavailable**.
+
+Known consumption counts each final cumulative workflow meter and each available independent judge once; it never sums stage snapshots. Missing judge evidence is unknown, not zero. Complete-trial subtotal excludes slots with incomplete accounting, not failed workflows.
+
+This separate campaign archive cannot be selected by current.json, used in complete-series reducers or promoted. The strict complete-series schema is unchanged. The comparator exposes this campaign and returns non-evaluable; no regression, improvement or compatible-baseline claim is made.
+
+Raw run/event/document SHA-256 bindings and exact measured protocol are retained in campaign JSON. Private prompts, documents, judge explanations and session identifiers are excluded. Hashes establish integrity, not authenticated execution.
+
+## Measured protocol
+
+| Field | Value |
+|---|---|
+| cliVersion | 1.0.101-0 |
+| continuations | 1000 |
+| converterHash | 20773d56958398348e9986acb2a67b56c65ad098f8b201cffb1700890c969503 |
+| disabledMcpServersHash | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| evaluationPolicy | baseline-observation-v1 |
+| exerciseHash | 9ea06111125c09ec91e02ffb9a7d54a0b96b7cf859eda3bccbf2c9a2f6776556 |
+| graderHash | 5e7474d5ebc1f5426992b57ea344263335c0e120ae5c2166c0932980aa87a7c1 |
+| hostProfile | native-cli-references |
+| installHash | 9c0f443fdf84d8618b069fc945e737e9f7222f743ebf860887ad36d509b5a74d |
+| maxCredits | 1000 |
+| model | claude-sonnet-5.5 |
+| parserHash | 03a10dec2d38fd327e11ee87e243579f285c804d96c2ce11676b91940501dd7f |
+| powershell | 7.6.7 |
+| preparationHash | e4c7372091a8e5a9dbe84690d4ef48841cd9f5ecaac8b053577e4eee1bc35eb2 |
+| recoveryPolicy | baseline-observation-v1 |
+| roleModelPolicyHash | 007d8f0e7464108bca76256cceb8677cf373c62eed1dcba4e2df98b598e227eb |
+| rubric | requirements-quality-v1 |
+| scenarioHash | 4946fca0eeab4ca66c030a378cda3dcbbc9b720dbaeb729546480e92e4c7787d |
+| schema | squad-efficiency-v1 |
+| verifierHash | 25ef7a438d48248cc6d78122effc2ddef44091208358e84d1cac798f0b237336 |

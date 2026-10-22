@@ -48,6 +48,50 @@ Describe 'Wizard offline Python provisioning' -Tag 'Unit' {
     }
 }
 
+Describe 'Wizard portable observation finalization' -Tag 'Unit' {
+    BeforeAll {
+        Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
+    }
+    It 'exports outside measured source and prints a parseable offline publication command' {
+        $Source = Join-Path $TestDrive 'source'
+        $Root = Join-Path $TestDrive "run's-evidence"
+        $RunFile = Join-Path $Root 'trials/candidate-1/out/run.json'
+        [void][IO.Directory]::CreateDirectory($Source)
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($RunFile))
+        [IO.File]::WriteAllText($RunFile, '{}')
+        Mock Export-BenchmarkCampaign {}
+        $Result = Complete-WizardBenchmarkExport @{ Mode = 'Series'; CandidateSourceRoot = $Source; TrialRoot = $Root }
+        $Result.status | Should -Be 'exported'
+        $Result.recordedTrials | Should -Be 1
+        $Result.publicationCommand | Should -Match "run''s-evidence"
+        $Result.publicationCommand | Should -Match '-ObservationOnly.*-TrialDirectories @\('
+        $Result.publicationCommand | Should -Not -Match '-Live|-Mode Run|copilot'
+        $Tokens = $null; $Errors = $null
+        [void][Management.Automation.Language.Parser]::ParseInput($Result.publicationCommand, [ref]$Tokens, [ref]$Errors)
+        $Errors.Count | Should -Be 0
+        Should -Invoke Export-BenchmarkCampaign -Times 1 -Exactly -ParameterFilter {
+            $Repository -eq $Source -and $TrialDirectories.Count -eq 1 -and $OutputDirectory -eq (Join-Path $Root 'portable')
+        }
+        @(Get-ChildItem -LiteralPath $Source -Force).Count | Should -Be 0
+    }
+    It 'finalizes failed collections and never replaces their exit with export success or failure' {
+        $Options = @{ Mode = 'Series'; CandidateSourceRoot = (Join-Path $TestDrive 'source'); TrialRoot = (Join-Path $TestDrive 'failed-run') }
+        $Unavailable = Complete-WizardBenchmarkExport $Options
+        $Unavailable.status | Should -Be 'failed'
+        Should -Invoke Write-Host -ParameterFilter { $Object -match 'Offline export failed.*Export-BenchmarkResults.ps1' } -Times 1
+        Mock Invoke-WizardCommand { 5 }
+        Mock Complete-WizardBenchmarkExport { @{ status = 'exported' } }
+        Invoke-WizardBenchmark $Options | Should -Be 5
+        Mock Complete-WizardBenchmarkExport { @{ status = 'failed' } }
+        Invoke-WizardBenchmark $Options | Should -Be 5
+        Mock Invoke-WizardCommand { 0 }
+        Invoke-WizardBenchmark $Options | Should -Be 1
+        Mock Invoke-WizardCommand { throw 'child launch failed' }
+        { Invoke-WizardBenchmark $Options } | Should -Throw '*child launch failed*'
+        Should -Invoke Complete-WizardBenchmarkExport -Times 4 -Exactly
+    }
+}
+
 Describe 'Wizard decisions and guards' -Tag 'Unit' {
     It 'recommends Establish without a control and Series with a supplied control' {
         Mock Read-WizardChoice { $Default }

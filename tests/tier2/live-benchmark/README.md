@@ -108,6 +108,17 @@ Comparisons assess relative quality and reliability as well as efficiency; an
 imperfect baseline need not first score 90. Unavailable evidence makes a comparison
 not evaluable, and observations are never automatically promoted.
 
+After each wizard collection step, offline finalization exports available
+observations into that step's external `portable/` directory and prints a
+PowerShell command to publish them in a matching writable delivery checkout.
+This also runs after collection failure, preserves the collection exit, and
+never retries paid work. Export needs PowerShell 7.5+; failures remain explicit.
+Review and commit generated evidence yourself; no files are written into the
+measured source while collecting. Direct `-Mode Run` calls still only collect
+private evidence. See [complete and incomplete export commands](../../../benchmarks/efficiency/README.md#record-and-regenerate).
+Unavailable grades/accounting are retained in a separate campaign archive,
+not accepted as a complete three-trial series.
+
 Observational workflows have no request-count cap, allow up to 1,000 native autopilot
 continuations, and use a 180-minute hung-run watchdog. They reserve 30 credits for
 the independently metered judge and the remainder for the shared workflow: 970/30
