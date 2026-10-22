@@ -341,8 +341,13 @@ implementation. Offline tests do not establish a hosted or paid campaign result.
 
 ### Strict stored-record analysis (no paid calls)
 
-The prior read-only workflow is retained as
-`.github/workflows/tier2-recorded-benchmark.yml`. Its optional base/head overrides
+The read-only workflow `.github/workflows/tier2-recorded-benchmark.yml` also runs
+once per pull request to `main` (`pull_request` event, no secrets, concurrency
+group per PR number so a new push cancels the stale run). For a PR it resolves
+base SHA/repository and head SHA/repository from the event, so fork heads are
+fetched as objects only; just the reviewed base checkout executes. In this
+experimental branch Release uses the paid collector instead; the prior read-only
+workflow is retained as `.github/workflows/tier2-recorded-benchmark.yml`. Its optional base/head overrides
 resolve independently to the selected branch and PR parent (including upstream
 fork PRs), or the default branch when no PR exists. Ambiguous/self parents
 require an explicit base. Release-tag analysis peels annotated tags and paginates

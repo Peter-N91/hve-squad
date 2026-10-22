@@ -581,7 +581,7 @@ Describe 'Release benchmark event identities' {
     }
     BeforeEach {
         $SavedEnvironment = @{}
-        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'SELECTED_BRANCH', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA', 'VERDICT', 'GITHUB_STEP_SUMMARY', 'COLLECTION_REQUIRED')) {
+        foreach ($Name in @('GITHUB_REPOSITORY', 'GITHUB_API_URL', 'GITHUB_OUTPUT', 'GITHUB_EVENT_PATH', 'GITHUB_EVENT_NAME', 'GH_TOKEN', 'RELEASE_TAG', 'CANDIDATE_SHA', 'SELECTED_BRANCH', 'RUNNER_TEMP', 'BASE_SHA', 'HEAD_SHA', 'VERDICT', 'GITHUB_STEP_SUMMARY', 'COLLECTION_REQUIRED')) {
             $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name)
         }
         $env:GITHUB_REPOSITORY = 'fixture/benchmark'
@@ -589,6 +589,7 @@ Describe 'Release benchmark event identities' {
         $env:GITHUB_OUTPUT = Join-Path $TestDrive 'release-outputs'
         $env:GITHUB_EVENT_PATH = Join-Path $TestDrive 'release-event.json'
         $env:GH_TOKEN = 'fixture-only'
+        $env:GITHUB_EVENT_NAME = 'workflow_call'
         $env:RELEASE_TAG = 'v2'
         $env:CANDIDATE_SHA = ''
         $env:COLLECTION_REQUIRED = ''
@@ -656,6 +657,49 @@ Describe 'Release benchmark event identities' {
         $script:ReleaseCalls | Should -Not -Contain 'releases/tags/v2'
         $env:CANDIDATE_SHA = '--help'
         { & $ResolveRelease } | Should -Throw '*immutable candidate SHA required*'
+    }
+    It 'resolves pull request identity from the event for same-repository and fork heads' {
+        $env:GITHUB_EVENT_NAME = 'pull_request'
+        $env:RELEASE_TAG = ''
+        foreach ($HeadRepo in @('fixture/benchmark', 'contributor/benchmark-fork')) {
+            [IO.File]::WriteAllText($env:GITHUB_OUTPUT, '')
+            Write-TestJson $env:GITHUB_EVENT_PATH @{ pull_request = @{
+                base = @{ ref = 'main'; sha = ('a' * 40); repo = @{ full_name = 'fixture/benchmark' } }
+                head = @{ sha = ('b' * 40); repo = @{ full_name = $HeadRepo } } } }
+            & $ResolveRelease
+            $Output = [IO.File]::ReadAllText($env:GITHUB_OUTPUT)
+            $Output | Should -Match "(?m)^base=$('a' * 40)\r?$"
+            $Output | Should -Match "(?m)^head=$('b' * 40)\r?$"
+            $Output | Should -Match '(?m)^base_repository=fixture/benchmark\r?$'
+            $Output | Should -Match "(?m)^head_repository=$([regex]::Escape($HeadRepo))\r?$"
+        }
+        $script:ReleaseCalls.Count | Should -Be 0
+    }
+    It 'rejects pull request events with a foreign base, non-main target, or unsafe identities' {
+        $env:GITHUB_EVENT_NAME = 'pull_request'
+        foreach ($Case in @(
+            @{ Ref = 'main'; Base = 'other/benchmark'; Head = 'fixture/benchmark'; Sha = ('b' * 40); Error = '*must target main*' }
+            @{ Ref = 'release'; Base = 'fixture/benchmark'; Head = 'fixture/benchmark'; Sha = ('b' * 40); Error = '*must target main*' }
+            @{ Ref = 'main'; Base = 'fixture/benchmark'; Head = '--upload-pack=x'; Sha = ('b' * 40); Error = '*head repository identity*' }
+            @{ Ref = 'main'; Base = 'fixture/benchmark'; Head = 'fixture/benchmark'; Sha = 'HEAD'; Error = '*Full commit SHA required*' }
+        )) {
+            Write-TestJson $env:GITHUB_EVENT_PATH @{ pull_request = @{
+                base = @{ ref = $Case.Ref; sha = ('a' * 40); repo = @{ full_name = $Case.Base } }
+                head = @{ sha = $Case.Sha; repo = @{ full_name = $Case.Head } } } }
+            { & $ResolveRelease } | Should -Throw $Case.Error
+        }
+    }
+    It 'has exactly one pull request trigger, deduplicated per PR, and is not also called by the experimental paid Release' {
+        $Triggers = [regex]::Matches($WorkflowText, '(?m)^  (pull_request|pull_request_target|push|schedule):').Value
+        $Triggers | Should -Be @('  pull_request:')
+        $WorkflowText | Should -Match '(?ms)^  pull_request:\r?\n    branches:\r?\n      - main\r?\n'
+        $WorkflowText | Should -Match "format\('pr-\{0\}', github\.event\.pull_request\.number\)"
+        $WorkflowText | Should -Match 'cancel-in-progress: true'
+        $WorkflowText | Should -Match 'persist-credentials: false'
+        $WorkflowText | Should -Not -Match 'COPILOT_GITHUB_TOKEN|secrets\.'
+        $Callers = Get-ChildItem (Join-Path $SourceRoot '.github/workflows') -Filter *.yml |
+            Where-Object { [IO.File]::ReadAllText($_.FullName) -match 'tier2-recorded-benchmark\.yml' -and $_.Name -ne 'tier2-recorded-benchmark.yml' }
+        @($Callers).Count | Should -Be 0
     }
     It 'keeps manual full-SHA comparisons independent of release API lookups and rejects unsafe refs' {
         $env:RELEASE_TAG = ''

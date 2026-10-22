@@ -16,3 +16,4 @@ type: Changed
   current-run series identities and only today's actual spending.
   The prior no-cost stored-record analysis remains separately available.
   The explicit manual Release benchmark bypass remains available.
+  Pull requests to `main` additionally run the stored comparison once per PR.
