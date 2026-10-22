@@ -126,7 +126,7 @@ Describe 'PKG-09 Entrypoint prompts are delivered' {
     }
 }
 
-Describe 'Requirements document quality source contracts (RQ-01..03)' -Tag 'RequirementsQuality' {
+Describe 'Requirements document quality source contracts (RQ-01..06)' -Tag 'RequirementsQuality' {
     BeforeAll {
         $script:RequirementsGuide = Join-Path $script:Model.SquadSkillRoot 'references/requirements-quality.md'
         $script:RequirementsCoordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
@@ -202,6 +202,27 @@ Describe 'Requirements document quality source contracts (RQ-01..03)' -Tag 'Requ
         $guide | Should -Match 'Never use a future closing file as predecessor evidence'
         $guide | Should -Match 'parallel returns, drain the existing barrier order.+each required return before the dependent tester'
         $guide | Should -Match 'No extra Scribe startup, specialist dispatch, agent, writer key or payload schema'
+    }
+
+    It 'RQ-05 maps source clauses to existing IDs with binary SMART and honest ownership' {
+        $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
+        $guide | Should -Match 'caller-confirmed input clause.+existing canonical requirement/AC mapping with a source anchor'
+        $guide | Should -Match 'unmapped literal subclause as a gap.+never a heading/range mapping or inflated coverage percentage'
+        $guide | Should -Match 'platform, encoding, data, error and dependency clauses; do not invent scope'
+        $guide | Should -Match 'binary per dimension; any failed dimension fails overall.+Unknown baseline stays unknown.+not a production KPI'
+        $guide | Should -Match 'configured IDs or qualified references, never invented namespaces'
+        $guide | Should -Match 'engineering decisions and risks with evidence, rationale, owner/status and validation, each marked unavailable when not supplied, in the existing template only'
+    }
+
+    It 'RQ-06 gives reviewers stage context without erasing genuine findings' {
+        $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
+        $guide | Should -Match 'Give reviewers and the closing tester common context from the existing caller/author handoff'
+        $guide | Should -Match 'exact user-turn stage, required/deferred deliverables, source contract/template/taxonomy/phase'
+        $guide | Should -Match 'assumptions/decisions as UNVERIFIED CLAIMS, not pre-approval'
+        $guide | Should -Match 'Requirements-only stages do not demand implementation; implementation stages still find missing implementation'
+        $guide | Should -Match 'Required source clauses stay binding, decisions stay challengeable.+read-only payload barrier are preserved.+no extra review pass or judge change'
+        $guide | Should -Match 'Missing context stays unavailable; escalate only through the existing gate when blocking'
+        $guide | Should -Match 'No extra Scribe startup, specialist dispatch, agent, writer key or payload schema is added'
     }
 }
 
