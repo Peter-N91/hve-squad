@@ -264,6 +264,15 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Identities[$Identity] = $true
             $Roles += $Row.Role
             $Row['Deliverable Root'] = Resolve-InitDeliverable $Row['Deliverable Root'] $Relative $Repository
+            if ($Row.Role -eq 'intake-validator') {
+                $CaptureRoot = $Row['Deliverable Root'].TrimEnd('/')
+                if ($CaptureRoot -in @('-', [string][char]0x2014, '(squad state)') -or
+                    $CaptureRoot -match '\s+or\s+|[<>]' -or
+                    $CaptureRoot -match '^\.copilot-tracking/squad(?:/members/[^/]+)?(?:$|/(?:team\.md|routing\.md|decisions\.md|notifications\.md|state\.json|consumption(?:-rates)?\.md|history|memory)(?:/|$))') {
+                    throw 'intake-validator requires an explicit non-state capture directory; no fallback root is allowed.'
+                }
+                Assert-UnlinkedPath ([System.IO.Path]::GetFullPath($CaptureRoot, $Repository))
+            }
             '| ' + (($Columns | ForEach-Object { $Row[$_] }) -join ' | ') + ' |'
         }
         if ('scribe' -notin $Roles -or @($Payload.roster | Where-Object { $_.Role -eq 'scribe' -and $_['Agent Name (Primary)'] -eq 'Squad Scribe' }).Count -ne 1) { throw 'Confirmed Squad Scribe roster row required.' }

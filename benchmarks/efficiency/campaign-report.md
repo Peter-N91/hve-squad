@@ -2,17 +2,17 @@
 
 **Not evaluable for comparison (exit 2).** Observations are not an approved baseline.
 
-Measured revision: `58d285da34a7ae18e7d6e359389e2f07d86b45a1`.
-Source SHA-256: `1cbf59dd22b50ef32895d50a281753ea491277e7f0ca149fe4ce88815fbcf768`.
+Measured revision: `b436d794efd971c01861e15c0015b4c9298d7ff5`.
+Source SHA-256: `40e12f0962ceed35b25abaced4d82c4d8d06adff73a103bc2ece78f512967a7a`.
 
 | Trial | Quality /100 | Workflow credits | Judge credits | Known credits | Complete total credits | Full workflow | Unavailable |
 |---:|---:|---:|---:|---:|---:|---|---|
-| 1 | 81 | 249.8426495 | 6.26393 | 256.1065795 | 256.1065795 | False |  |
-| 2 | 83 | 244.3230305 | 8.04593 | 252.3689605 | 252.3689605 | False |  |
-| 3 | 84 | 331.5468915 | 7.69343 | 339.2403215 | 339.2403215 | False |  |
+| 1 | 80 | 476.2836945 | 9.44768 | 485.7313745 | 485.7313745 | False |  |
+| 2 | 78 | 523.148588 | 5.77918 | 528.927768 | 528.927768 | False |  |
+| 3 | 69 | 510.980551 | 8.25668 | 519.237231 | 519.237231 | False |  |
 
-Known consumption: **847.7158615 credits**. Complete-trial subtotal: **847.7158615**.
-Whole three-trial consumption: **847.7158615**. Three-trial quality median: **83**.
+Known consumption: **1533.8963735 credits**. Complete-trial subtotal: **1533.8963735**.
+Whole three-trial consumption: **1533.8963735**. Three-trial quality median: **78**.
 
 Known consumption counts each final cumulative workflow meter and each available independent judge once; it never sums stage snapshots. Missing judge evidence is unknown, not zero. Complete-trial subtotal excludes slots with incomplete accounting, not failed workflows.
 
@@ -32,7 +32,7 @@ Raw run/event/document SHA-256 bindings and exact measured protocol are retained
 | exerciseHash | 9ea06111125c09ec91e02ffb9a7d54a0b96b7cf859eda3bccbf2c9a2f6776556 |
 | graderHash | 5e7474d5ebc1f5426992b57ea344263335c0e120ae5c2166c0932980aa87a7c1 |
 | hostProfile | native-cli-references |
-| installHash | 487f58023874c7d4b987119c4ceb2a7ae049f6eaf0fed52301444efe656fb595 |
+| installHash | 28b4ab83cecbb1037385345ef929c500b91d8672eeb1997a6079c35ec6065dcc |
 | maxCredits | 1000 |
 | model | claude-sonnet-5.5 |
 | parserHash | 03a10dec2d38fd327e11ee87e243579f285c804d96c2ce11676b91940501dd7f |

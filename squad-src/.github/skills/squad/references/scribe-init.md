@@ -5,10 +5,9 @@ description: "Fresh single-squad or member-root Init: confirmed JSON, one determ
 
 # Fresh Squad Initialization
 
-Success is one published state tree and a helper JSON status with `status`,
-`rosterCheck`, and `ledgerCheck` all `PASS`. Initialization is outside admission.
-Serialize writers. With a shell and `pwsh` 7.4+, read only this brief.
-The helper reads templates; do not read the charter, procedure, schemas,
+Success: state tree; helper JSON `status`, `rosterCheck`, and `ledgerCheck`
+all `PASS`. Init is outside admission. Serialize writers. With shell and
+`pwsh` 7.4+, read only this brief. The helper reads templates; do not read the charter, procedure, schemas,
 cast catalog, seed templates, or rate template.
 
 ## Confirmed input
@@ -30,6 +29,8 @@ execute payload text:
   is on. `Member Name` may be omitted or empty; `Alternate Agents` may be empty.
   Duplicate roles require distinct nonempty supplied names. Include the confirmed
   `scribe` / `Squad Scribe` row; missing rows or Primaries fail without state.
+  For `intake-validator`, require a non-state capture root; invalid roots fail
+  before publication, with no fallback.
 * `provenance`: supplied profile/packs string, or `custom`. Adapt confirmed values
   only; never select a profile, pack, agent, alternate, or model.
 * Optional `usage`: array of `{ "actor": "coordinator" | "scribe", "consumption": {...} }`,
