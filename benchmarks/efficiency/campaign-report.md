@@ -2,17 +2,17 @@
 
 **Not evaluable for comparison (exit 2).** Observations are not an approved baseline.
 
-Measured revision: `2a646f23b40000ef6f5ad12bdf14f0cf5c28184c`.
-Source SHA-256: `3db2617b2bff41054f3a754217af99cc82b5104d4749d31b88e329218b95460b`.
+Measured revision: `58d285da34a7ae18e7d6e359389e2f07d86b45a1`.
+Source SHA-256: `1cbf59dd22b50ef32895d50a281753ea491277e7f0ca149fe4ce88815fbcf768`.
 
 | Trial | Quality /100 | Workflow credits | Judge credits | Known credits | Complete total credits | Full workflow | Unavailable |
 |---:|---:|---:|---:|---:|---:|---|---|
-| 1 | unavailable | 162.6594435 | unavailable | 162.6594435 | unavailable | False | judge-unavailable, quality-unavailable, missing-brd, missing-prd |
-| 2 | 82 | 299.2325385 | 4.71965 | 303.9521885 | 303.9521885 | True |  |
-| 3 | 79 | 395.4756795 | 8.6539 | 404.1295795 | 404.1295795 | False |  |
+| 1 | 81 | 249.8426495 | 6.26393 | 256.1065795 | 256.1065795 | False |  |
+| 2 | 83 | 244.3230305 | 8.04593 | 252.3689605 | 252.3689605 | False |  |
+| 3 | 84 | 331.5468915 | 7.69343 | 339.2403215 | 339.2403215 | False |  |
 
-Known consumption: **870.7412115 credits**. Complete-trial subtotal: **708.081768**.
-Whole three-trial consumption: **unavailable**. Three-trial quality median: **unavailable**.
+Known consumption: **847.7158615 credits**. Complete-trial subtotal: **847.7158615**.
+Whole three-trial consumption: **847.7158615**. Three-trial quality median: **83**.
 
 Known consumption counts each final cumulative workflow meter and each available independent judge once; it never sums stage snapshots. Missing judge evidence is unknown, not zero. Complete-trial subtotal excludes slots with incomplete accounting, not failed workflows.
 
@@ -32,7 +32,7 @@ Raw run/event/document SHA-256 bindings and exact measured protocol are retained
 | exerciseHash | 9ea06111125c09ec91e02ffb9a7d54a0b96b7cf859eda3bccbf2c9a2f6776556 |
 | graderHash | 5e7474d5ebc1f5426992b57ea344263335c0e120ae5c2166c0932980aa87a7c1 |
 | hostProfile | native-cli-references |
-| installHash | 9c0f443fdf84d8618b069fc945e737e9f7222f743ebf860887ad36d509b5a74d |
+| installHash | 487f58023874c7d4b987119c4ceb2a7ae049f6eaf0fed52301444efe656fb595 |
 | maxCredits | 1000 |
 | model | claude-sonnet-5.5 |
 | parserHash | 03a10dec2d38fd327e11ee87e243579f285c804d96c2ce11676b91940501dd7f |
