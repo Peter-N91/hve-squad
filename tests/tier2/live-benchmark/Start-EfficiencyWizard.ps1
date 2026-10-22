@@ -507,7 +507,59 @@ function Invoke-WizardBenchmark {
         if ($Options[$Key] -is [bool]) { if ($Options[$Key]) { $Arguments += "-$Key" } }
         else { $Arguments += @("-$Key", [Convert]::ToString($Options[$Key], [Globalization.CultureInfo]::InvariantCulture)) }
     }
-    Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments $Arguments
+    $Code = 1
+    try { $Code = Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments $Arguments }
+    finally { $Export = Complete-WizardBenchmarkExport -Options $Options }
+    if ($Code -ne 0) { return $Code }
+    if ($Export.status -ne 'exported') { return 1 }
+    return 0
+}
+
+function Complete-WizardBenchmarkExport {
+    <# .SYNOPSIS
+    Finalizes available observations offline without writing into measured source.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Options)
+    $Arm = if ($Options.Mode -eq 'Establish') { 'baseline' } else { 'candidate' }
+    $Source = if ($Arm -eq 'candidate') { $Options.CandidateSourceRoot } else { $Options.SourceRoot }
+    $Directories = @(foreach ($Slot in 1..3) {
+        $Directory = Join-Path $Options.TrialRoot "trials/$Arm-$Slot"
+        if (Test-Path -LiteralPath (Join-Path $Directory 'out/run.json') -PathType Leaf) { $Directory }
+    })
+    $Id = 'observed-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+    $Destination = Join-Path $Options.TrialRoot 'portable'
+    $Result = @{ status = 'unavailable'; recordedTrials = $Directories.Count; outputDirectory = $Destination; publicationCommand = $null; reason = 'no-run-evidence' }
+    if ($Directories.Count) {
+        function Quote-WizardExport([string]$Value) { "'" + $Value.Replace("'", "''") + "'" }
+        $Path = Join-Path $PSScriptRoot 'Export-BenchmarkResults.ps1'
+        $TrialArguments = (@($Directories | ForEach-Object { Quote-WizardExport $_ })) -join ', '
+        $Result.publicationCommand = "& $(Quote-WizardExport $Path) -ObservationOnly -Repository $(Quote-WizardExport $Source) -TrialDirectories @($TrialArguments) -SeriesId '$Id'"
+    }
+    try {
+        if ($Directories.Count -eq 0) { throw 'No run.json files exist. Inspect retained child diagnostics; no observation can be exported.' }
+        $Source = [IO.Path]::GetFullPath($Source)
+        $Destination = Assert-WizardScratchPath $Destination $Source
+        Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
+        $null = Export-BenchmarkCampaign -Repository $Source -TrialDirectories $Directories -CampaignId $Id -OutputDirectory $Destination
+        $Result.status = 'exported'; $Result.reason = 'observational-campaign-not-comparable'
+        Write-Host "Portable observations: $Destination. No measured source files were changed. To publish offline, run this in PowerShell 7.5+ from the writable delivery checkout, review and commit the generated files:"
+        Write-Host $Result.publicationCommand
+        Write-Host 'Use -Repository for the intended delivery checkout if the measured source is frozen. Source/protocol identity must still match. Missing quality/accounting stays unavailable; current.json is not selected.'
+    }
+    catch {
+        $Result.status = 'failed'; $Result.reason = 'offline-export-failed'
+        Write-Host 'Offline export failed. Retain all evidence. In PowerShell 7.5+, run Export-BenchmarkResults.ps1 -ObservationOnly -Repository <delivery-checkout> -TrialDirectories <available-trial-directories> -SeriesId <new-id>. Inspect source/protocol, evidence files and document hashes; do not rerun paid trials to repair export.'
+        if ($_.Exception.Message -cmatch '^(invalid-record|stale-record|operational-error):[A-Za-z0-9/-]+$') {
+            $Result.reason = $_.Exception.Message
+            Write-Host "Export diagnostic: $($Result.reason)"
+        }
+        if ($Result.publicationCommand) { Write-Host $Result.publicationCommand }
+    }
+    if (Test-Path -LiteralPath (Join-Path $Options.TrialRoot 'out') -PathType Container) {
+        $Result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $Options.TrialRoot 'out/benchmark-export.json') -Encoding utf8NoBOM
+    }
+    $Result
 }
 
 function Invoke-EfficiencyWizard {

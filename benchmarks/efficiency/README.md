@@ -1,6 +1,23 @@
 # Repository benchmark evidence
 
-[![Observed document quality, acceptance and average benchmark time](badge.svg)](report.md)
+[![Latest campaign: comparison unavailable](campaign-badge.svg)](campaign-report.md)
+
+The latest [committed campaign](campaign-report.md) measured revision
+`2a646f23b40000ef6f5ad12bdf14f0cf5c28184c` on 22 October 2026. Its three
+document-quality results are **unavailable, 82, 79**. Trial 1 produced no BRD/PRD
+or independent judge; it is not a zero score. Only trial 2 completed the full
+workflow. Known consumption is **870.7412115 credits**; the complete-accounting
+subtotal for trials 2/3 is **708.0817680 credits**. The whole-campaign total and
+three-trial quality median are **unavailable**, not fabricated.
+
+`latest-campaign.json` selects a separate immutable `benchmark-campaign-v1`
+archive by digest. It is not selectable as a complete comparison series.
+The strict comparison remains non-evaluable: neither this missing grade nor
+the historical parent's changed verifier/exercise protocol can be waived.
+
+## Earlier complete comparison record
+
+[![Earlier complete-series observations](badge.svg)](report.md)
 
 `current.json` selects one immutable `records/<series-id>.json` by SHA-256.
 This is **recorded observational evidence, not an approved quality baseline**.
@@ -101,6 +118,47 @@ No model is called and no observation is regraded during export.
 Incomplete metering or unavailable required fields stop import; product failures
 remain false. SHA changes for docs/results alone need no new measurements.
 
+### Preserve an incomplete campaign
+
+`-Mode Run` produces private observations, not Git-ready files. Previously only
+the explicit complete-series export existed, so a missing grade blocked all
+publication. The separate observational exporter now retains available evidence
+without loosening the complete-series schema:
+
+```powershell
+$trials = @(
+  '/private/first-campaign/trials/candidate-1'
+  '/private/continued-campaign/trials/candidate-2'
+  '/private/continued-campaign/trials/candidate-3'
+)
+./tests/tier2/live-benchmark/Export-BenchmarkResults.ps1 `
+  -ObservationOnly -Repository . -TrialDirectories $trials `
+  -SeriesId observed-YYYYMMDD-source
+```
+
+Review/commit `campaigns/<id>.json`, `latest-campaign.json`,
+`campaign-report.json`, `campaign-report.md`, and `campaign-badge.svg` together.
+The command succeeds when export succeeds; the generated report still carries
+**comparison exit 2**, not a passing benchmark. `current.json` stays unchanged.
+Campaign records cannot be overwritten, selected as complete series, passed to
+complete reducers, or promoted. Slots must have disjoint IDs and the same
+measured source/protocol; every available run, event and judged-document digest
+is checked. Workflow metering must be complete; unavailable judge/grade/documents
+stay null. Known spend counts final workflow and available judge exactly once;
+no stage-snapshot summation or assumed zero judge cost is permitted.
+
+The wizard now finalizes available observations after each collection step,
+including failed collection, into `<run>/control/portable` or
+`<run>/comparison/portable`, **outside measured source**. PowerShell 7.5+ is
+needed for this export; a 7.4 collection cannot claim export success. It prints
+an executable offline PowerShell publication command. Set its `-Repository` to
+the writable delivery checkout with matching source/protocol, review and commit.
+Collection failure retains its original exit; export failure is separately
+reported and cannot trigger a paid retry. Direct `-Mode Run` callers use the
+explicit offline command above.
+An explicit successful complete-series `-SelectCurrent` export clears the
+replaceable campaign pointer; its immutable campaign archive remains untouched.
+
 The root README uses relative image/report links, so its badge follows the
 branch being viewed. It shows quality median, functional pass count and complete
 workflow pass count independently; incomplete acceptance is amber, unavailable
@@ -134,6 +192,25 @@ measurement**, not improvement. Changed source with inherited evidence is stale;
 independent series must have disjoint IDs. Historical records cannot be edited
 or removed in a comparison. Selecting a new current record requires review and
 does not invoke the harness's strict baseline-promotion function.
+
+### Useful reports when comparison is unavailable
+
+Each side resolves and validates independently. A missing/broken parent does
+not hide trustworthy head values. Supported v1/v2 records may be displayed as
+historical observations only after verifying their original measured Git source
+and protocol. They remain stale for current comparison; v1 has no bound executing
+converter identity. Unknown schema versions, corrupt pointer digests and invalid
+records show diagnostics, never guessed numeric values.
+
+Unavailable reports use **separate parent/head observation sections**, with each
+source, revision and protocol explicitly labeled. Valid incompatible records
+are descriptive only: no paired deltas, ratios or regression certification.
+The latest campaign appears separately, including missing values. There is no
+silent substitute baseline or history scan. Missing trusted comparison tooling
+still reports unavailable; candidate code is never executed as a fallback.
+Reports and a grey badge are written before the nonzero verdict. A current
+campaign can be archived alongside older complete records, but cannot make
+stale, incomplete or incompatible evidence pass.
 
 Trial UUIDs must use canonical lowercase, hyphenated `D` format. Alternate casing
 is rejected as invalid evidence, not normalized, so it cannot disguise reused

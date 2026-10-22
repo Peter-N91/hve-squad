@@ -31,7 +31,12 @@
 
 ## Documentation
 
-[![Observed efficiency benchmark: document quality, acceptance and average benchmark time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
+[![Latest measured campaign: comparison unavailable](benchmarks/efficiency/campaign-badge.svg)](benchmarks/efficiency/campaign-report.md)
+
+Latest measured results: **unavailable / 82 / 79**, **870.7412115 known credits**;
+the missing first grade and whole-campaign total remain unavailable.
+[Earlier complete-series observations](benchmarks/efficiency/report.md):
+[![Earlier observed efficiency benchmark](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
 
 Full documentation lives on the project site:
 
@@ -69,7 +74,8 @@ Its methodology review and measurement hardening drew on these primary sources
 These sources informed the design; they do not certify it. The current three-trial,
 single-scenario baseline is a regression-screening reference, not a representative
 agent leaderboard. Human calibration, repeated-judge agreement and broader held-out
-task studies remain future empirical work. See the [generated report](benchmarks/efficiency/report.md)
+task studies remain future empirical work. See the [latest campaign report](benchmarks/efficiency/campaign-report.md),
+the [earlier complete-series report](benchmarks/efficiency/report.md)
 for actual results and the [collection guide](tests/tier2/live-benchmark/README.md)
 for execution details.
 
