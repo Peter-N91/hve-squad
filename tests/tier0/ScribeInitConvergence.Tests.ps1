@@ -411,6 +411,46 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Team | Should -Match '\| \.copilot-tracking/squad/members/product/reviews/ \|'
     }
 
+    It 'RQ-04 rejects an unusable intake capture root <Root> before any state publication' -ForEach @(
+        @{ Root = [string][char]0x2014 }
+        @{ Root = '(squad state)' }
+        @{ Root = '.copilot-tracking/squad/' }
+        @{ Root = '.copilot-tracking/squad/state.json/' }
+        @{ Root = '.copilot-tracking/squad/history/' }
+        @{ Root = '' }
+        @{ Root = '../outside/' }
+        @{ Root = '/absolute/reviews/' }
+    ) {
+        $Payload = Get-InitPayload
+        $Payload.roster[1].Role = 'intake-validator'
+        $Payload.roster[1]['Agent Name (Primary)'] = 'Confirmed Read Only Reviewer'
+        $Payload.roster[1]['Deliverable Root'] = $Root
+        $Repository = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Not -Be 0
+        Join-Path $Repository $Payload.squadRoot | Should -Not -Exist
+        @(Get-ChildItem -LiteralPath $Repository -Force -Recurse -File |
+                Where-Object Name -ne 'init.json').Count | Should -Be 0
+        @(Get-ChildItem -LiteralPath $Repository -Force -Recurse -Directory).Count | Should -Be 0
+    }
+
+    It 'RQ-04 preserves a custom capture root and actual reviewer name under <SquadRoot>' -ForEach @(
+        @{ SquadRoot = '.copilot-tracking/squad'; Expected = '.copilot-tracking/custom-reviews/' }
+        @{ SquadRoot = '.copilot-tracking/squad/members/product'; Expected = '.copilot-tracking/squad/members/product/custom-reviews/' }
+    ) {
+        $Payload = Get-InitPayload $SquadRoot
+        $Payload.roster[1].Role = 'intake-validator'
+        $Payload.roster[1]['Agent Name (Primary)'] = 'Confirmed Read Only Reviewer'
+        $Payload.roster[1]['Deliverable Root'] = '.copilot-tracking/custom-reviews/'
+        $Repository = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Team = Get-Content -LiteralPath (Join-Path $Repository "$SquadRoot/team.md") -Raw
+        $Team | Should -Match ([regex]::Escape('| intake-validator | Alpha | Confirmed Read Only Reviewer |'))
+        $Team | Should -Match ([regex]::Escape("| $Expected |"))
+        @(Get-ChildItem -LiteralPath (Join-Path $Repository "$SquadRoot/history") -File).Name | Should -Be 'Squad Scribe.md'
+    }
+
     It 'accepts an absent or empty-directory-only root: <Case>' -ForEach @(
         @{ Case = 'empty root'; Dirs = @('.') }
         @{ Case = 'nested empty scaffold'; Dirs = @('history', 'a/b/c') }

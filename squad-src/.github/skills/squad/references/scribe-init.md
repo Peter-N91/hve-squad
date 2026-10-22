@@ -5,17 +5,15 @@ description: "Fresh single-squad or member-root Init: confirmed JSON, one determ
 
 # Fresh Squad Initialization
 
-Success is one published state tree and a helper JSON status with `status`,
-`rosterCheck`, and `ledgerCheck` all `PASS`. Initialization is outside admission.
-Serialize writers. With a shell and `pwsh` 7.4+, read only this brief.
-The helper reads templates; do not read the charter, procedure, schemas,
+Success: state tree; helper JSON `status`, `rosterCheck`, and `ledgerCheck`
+all `PASS`. Init is outside admission. Serialize writers. With shell and
+`pwsh` 7.4+, read only this brief. The helper reads templates; do not read the charter, procedure, schemas,
 cast catalog, seed templates, or rate template.
 
 ## Confirmed input
 
-Write a JSON object to a temporary payload file outside the squad root. Copy the
-already-confirmed coordinator fields once; do not ask the coordinator to change
-its payload. Legacy prose/YAML is adapted to this JSON, never executed:
+Write a JSON payload outside the squad root. Copy confirmed coordinator fields
+once; do not request changes. Adapt legacy prose/YAML to JSON, never execute it:
 
 * `squadRoot`: resolved single-squad `.copilot-tracking/squad` or member root
   `.copilot-tracking/squad/members/<name>`, inside the consumer repository.
@@ -28,6 +26,8 @@ its payload. Legacy prose/YAML is adapted to this JSON, never executed:
   Preserve these cells without inventing names or alternates.
   Duplicate roles require distinct nonempty supplied names. Include the confirmed
   `scribe` / `Squad Scribe` row; missing rows or Primaries fail without state.
+  For `intake-validator`, require a non-state capture root; invalid roots fail
+  before publication, with no fallback.
 * `provenance`: one supplied string recording profile and applied packs, or
   `custom`. Adapt the coordinator's confirmed profile/packs into that string;
   do not select a profile, pack, agent, alternate, or model.
