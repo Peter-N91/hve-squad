@@ -539,6 +539,61 @@ img {
   color: var(--muted);
 }
 
+.release-notice {
+  margin-bottom: 28px;
+  padding: 16px 20px;
+  border: 1px solid var(--accent-border);
+  border-inline-start: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.release-notice p {
+  margin: 0;
+}
+
+.release-channels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-block: 10px;
+}
+
+.prerelease-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-inline-start: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--warn-border);
+  border-radius: 5px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.4;
+  vertical-align: middle;
+  text-decoration: none;
+}
+
+.prerelease-badge:hover {
+  color: var(--warn);
+  text-decoration: underline;
+}
+
+.prerelease-badge svg {
+  flex: 0 0 16px;
+}
+
+.release-channels .prerelease-badge {
+  margin-inline-start: 0;
+}
+
 .doc-content {
   min-width: 0;
   overflow-wrap: anywhere;
