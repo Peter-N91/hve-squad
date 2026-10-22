@@ -11,6 +11,9 @@ on:
         description: Published stable release to compare against an earlier stable ancestor
         required: false
         type: string
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Read-only stored comparison; overrides resolve to immutable commits before checkout.
     inputs:
@@ -28,7 +31,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: tier2-recorded-benchmark-${{ inputs.candidate_sha || inputs.release_tag || github.run_id }}
+  group: tier2-recorded-benchmark-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || inputs.candidate_sha || inputs.release_tag || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -58,7 +61,15 @@ jobs:
             $response = Invoke-RestMethod -Uri $uri -Headers $headers
             foreach ($item in $response) { $item }
           }
-          if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA) {
+          if ($env:GITHUB_EVENT_NAME -ceq 'pull_request') {
+            $pull = (Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json).pull_request
+            $baseRepo = $pull.base.repo.full_name
+            $headRepo = $pull.head.repo.full_name
+            if ($baseRepo -cne $env:GITHUB_REPOSITORY -or $pull.base.ref -cne 'main') { throw 'Pull request must target main in this repository.' }
+            if ($headRepo -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid pull request head repository identity.' }
+            $baseSha = $pull.base.sha
+            $headSha = $pull.head.sha
+          } elseif ($env:RELEASE_TAG -or $env:CANDIDATE_SHA) {
             function Get-ReleaseApi([string]$Path) {
               $response = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$baseRepo/$Path" -Headers $headers
               foreach ($item in $response) { $item }
