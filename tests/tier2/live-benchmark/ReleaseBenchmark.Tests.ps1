@@ -630,7 +630,7 @@ Describe 'Automatic release collection and publication' {
         { Assert-ReleaseBenchmarkPublication @PublicationParams -BindFinalCommit } | Should -Throw '*publication-dependencies-changed*'
     }
 
-    It 'isolates credentials, forbids PR or ordinary-push paid triggers, allowlists artifacts and wires release prep and publication' {
+    It 'isolates credentials, forbids PR or ordinary-push paid triggers, allowlists artifacts and keeps Release Prep requesting the stored gate' {
         $Workflow = Get-Content (Join-Path $SourceRoot '.github/workflows/tier2-benchmark.yml') -Raw
         $Workflow | Should -Not -Match '(?m)^  (pull_request|push|pull_request_target):'
         ([regex]::Matches($Workflow, 'COPILOT_GITHUB_TOKEN: \$\{\{ secrets.COPILOT_GITHUB_TOKEN \}\}')).Count | Should -Be 1
@@ -643,16 +643,6 @@ Describe 'Automatic release collection and publication' {
         $Workflow | Should -Match 'foreach \(\$arm in \$context.arms\)'
         $Workflow | Should -Not -Match "foreach \(\`$arm in @\('baseline', 'candidate'\)\)"
         ([regex]::Matches($Workflow, '-RefreshReference:\(\$env:REFRESH_REFERENCE -ceq ''true''\)')).Count | Should -Be 3
-        $Release = Get-Content (Join-Path $SourceRoot '.github/workflows/release.yml') -Raw
-        $Release | Should -Match 'artifact-ids: \$\{\{ needs.benchmark.outputs.artifact_id \}\}'
-        $Release | Should -Match 'effective_version: \$\{\{ needs.candidate.outputs.version \}\}'
-        $Release | Should -Match 'BindFinalCommit'
-        $Release | Should -Match 'ARGS\+=\(\.benchmark-public/report.json'
-        $Release | Should -Match 'inputs.run_benchmark == false'
-        $Release | Should -Match "needs.candidate.outputs.tag_exists == 'false'"
-        $Release | Should -Match 'Skip paid collection when release tag already exists'
-        $Release | Should -Match 'refresh_reference: \$\{\{ inputs.refresh_reference \|\| false \}\}'
-        ([regex]::Matches($Release, '-ExpectedRefresh:')).Count | Should -Be 2
         (Get-Content (Join-Path $SourceRoot '.github/workflows/release-prep.yml') -Raw) | Should -Match '-f run_benchmark=true'
     }
 }

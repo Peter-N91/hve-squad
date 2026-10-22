@@ -496,7 +496,8 @@ Describe 'Portable benchmark history and reporting' {
         $Workflow | Should -Match 'workflow_call:'
         $Release = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/release.yml'))
         $Release | Should -Match 'needs: \[candidate, benchmark\]'
-        $Release | Should -Match 'uses: ./\.github/workflows/tier2-benchmark.yml'
+        $Release | Should -Match 'uses: ./\.github/workflows/tier2-recorded-benchmark.yml'
+        $Release | Should -Not -Match 'tier2-benchmark\.yml|COPILOT_GITHUB_TOKEN|secrets: |refresh_reference|Assert-ReleaseBenchmarkPublication'
         $Readme = [IO.File]::ReadAllText((Join-Path $SourceRoot 'README.md'))
         $Readme | Should -Match '\]\(benchmarks/efficiency/badge.svg\)\]\(benchmarks/efficiency/report.md\)'
     }
@@ -519,8 +520,7 @@ Describe 'Pre-release benchmark gate' {
         $ConfiguredDefault = $Default.Groups[1].Value -ceq 'true'
         $BenchmarkCondition = [regex]::Match($Release, '(?ms)^  benchmark:\r?\n.*?^    if: ([^\r\n]+)').Groups[1].Value
         if (-not $BenchmarkCondition) { throw 'Missing benchmark admission condition.' }
-        $TagExists = $false
-        $Admission = [scriptblock]::Create($BenchmarkCondition.Replace("needs.candidate.outputs.tag_exists == 'false'", '(-not $TagExists)').Replace('github.event_name', '$Event').
+        $Admission = [scriptblock]::Create($BenchmarkCondition.Replace('github.event_name', '$Event').
             Replace('inputs.run_benchmark', '$Enabled').Replace('!=', '-ne').Replace('||', '-or').Replace('&&', '-and').Replace('false', '$false'))
     }
     It 'permits publication only for a passed gate or an explicitly skipped manual gate: <Event>/<Benchmark>/<Enabled>' -ForEach @(
@@ -549,8 +549,6 @@ Describe 'Pre-release benchmark gate' {
         (& $Gate) | Should -BeTrue
         $Event = 'push'; $Benchmark = 'skipped'
         (& $Gate) | Should -BeFalse
-        $TagExists = $true
-        (& $Admission) | Should -BeFalse
     }
     It 'freezes the same candidate before writes and lets Release Prep inherit the Release default' {
         $Release | Should -Match 'candidate_sha: \$\{\{ needs.candidate.outputs.sha \}\}'
@@ -689,7 +687,7 @@ Describe 'Release benchmark event identities' {
             { & $ResolveRelease } | Should -Throw $Case.Error
         }
     }
-    It 'has exactly one pull request trigger, deduplicated per PR, and is not also called by the experimental paid Release' {
+    It 'has exactly one pull request trigger, deduplicated per PR, and no second caller besides Release' {
         $Triggers = [regex]::Matches($WorkflowText, '(?m)^  (pull_request|pull_request_target|push|schedule):').Value
         $Triggers | Should -Be @('  pull_request:')
         $WorkflowText | Should -Match '(?ms)^  pull_request:\r?\n    branches:\r?\n      - main\r?\n'
@@ -699,7 +697,7 @@ Describe 'Release benchmark event identities' {
         $WorkflowText | Should -Not -Match 'COPILOT_GITHUB_TOKEN|secrets\.'
         $Callers = Get-ChildItem (Join-Path $SourceRoot '.github/workflows') -Filter *.yml |
             Where-Object { [IO.File]::ReadAllText($_.FullName) -match 'tier2-recorded-benchmark\.yml' -and $_.Name -ne 'tier2-recorded-benchmark.yml' }
-        @($Callers).Count | Should -Be 0
+        @($Callers.Name) | Should -Be @('release.yml')
     }
     It 'keeps manual full-SHA comparisons independent of release API lookups and rejects unsafe refs' {
         $env:RELEASE_TAG = ''
