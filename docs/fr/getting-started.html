@@ -87,14 +87,10 @@ copilot</code></pre>
       <h2>VS Code</h2>
       <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. Choisissez ci-dessous l'installation via le plugin ou l'installation du package dans le dépôt.</p>
 
-      <h3>Option 1 — Installer via le plugin depuis le terminal intégré</h3>
-      <p>Ouvrez le terminal intégré de VS Code avec <strong>Terminal → Nouveau terminal</strong>, placez-vous à la racine du dépôt de votre projet, puis collez :</p>
-      <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
-copilot plugin install hve-squad@hve-squad-plugin
-copilot plugin install hve-squad-hve-core@hve-squad-plugin
-copilot</code></pre>
-      <p>Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>. Après avoir vérifié l'installation, passez à l'initialisation ci-dessous.</p>
-      <p>N'installez pas le plugin officiel <code>hve-core</code> à côté de <code>hve-squad-hve-core</code>. Pour les mises à jour, réinstallez l'entrée compagnon au lieu d'utiliser la commande de mise à jour du plugin. Suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">guide d'installation et de mise à jour pour CLI</a>.</p>
+      <h3>Option 1 — Installer les plugins dans les paramètres de VS Code</h3>
+      <p>Dans VS Code, ouvrez <strong>Paramètres → Extensions → Copilot → Plugins</strong>, enregistrez <code>Peter-N91/hve-squad-plugin</code>, puis installez <code>hve-squad</code> et <code>hve-squad-hve-core</code>. Les noms et emplacements des paramètres peuvent varier selon la version de VS Code ; suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">guide d'installation pour VS Code</a>.</p>
+      <p>Vérifiez la paire dans VS Code lui-même avant le sélecteur d'agents et l'initialisation ci-dessous. Une installation par terminal peut utiliser un autre <code>COPILOT_HOME</code> et ne prouve pas que Copilot Chat dispose des mêmes plugins. Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>.</p>
+      <p>N'installez pas le plugin officiel <code>hve-core</code> à côté de <code>hve-squad-hve-core</code>. Pour les mises à jour, réinstallez l'entrée compagnon au lieu d'utiliser la commande de mise à jour du plugin, comme le décrit le <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">guide d'installation pour VS Code</a>.</p>
 
       <h3>Option 2 — Installer le package dans le dépôt avec APM</h3>
       <p>Cette méthode installe l'ensemble des agents dans le dépôt via APM.</p>

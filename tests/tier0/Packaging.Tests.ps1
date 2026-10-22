@@ -220,10 +220,13 @@ BeforeAll {
     $script:ScribeHotCoreBytes = ($script:ScribeHotCoreFiles | ForEach-Object {
             [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)) -replace "`r`n", "`n"))
         } | Measure-Object -Sum).Sum
-    $script:ScribeColdCoreBytes = (@(
-            'scribe-cold-charter.md', '00-index.md', 'scribe-procedure.md', 'entry-schemas.md', 'scribe-payload-template.md'
-        ) | ForEach-Object {
-            [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved "squad-src/.github/skills/squad/references/$_")) -replace "`r`n", "`n"))
+    $script:ScribeColdCoreFiles = @(
+        'squad-src/.github/agents/squad/squad-scribe.agent.md'
+    ) + @(
+        'scribe-cold-charter.md', '00-index.md', 'scribe-procedure.md', 'entry-schemas.md', 'scribe-payload-template.md'
+    ) | ForEach-Object { if ($_ -like 'squad-src/*') { $_ } else { "squad-src/.github/skills/squad/references/$_" } }
+    $script:ScribeColdCoreBytes = ($script:ScribeColdCoreFiles | ForEach-Object {
+            [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)) -replace "`r`n", "`n"))
         } | Measure-Object -Sum).Sum
 
     $baselinePath = Join-Path $script:SourceRootResolved 'tests/tier0/baselines/prefill-baseline.json'

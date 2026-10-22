@@ -148,6 +148,11 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $coldCharter = Get-SquadReferenceBody -Name 'scribe-cold-charter.md'
             $coldCharter | Should -Match 'immediately after Step 13 invoke only the installed squad skill.s trusted'
             $coldCharter | Should -Match 'fixed `-Write -SessionLog auto`'
+            $coldCharter | Should -Match 'verdict label, conditions, blocking issues and brief exactly; never synthesize, downgrade or summarize them away'
+            $coldCharter | Should -Match 'For a single-squad or member root, or a promotion.s relocated member root, with a shell and `pwsh` 7\+, immediately after Step 13'
+            $coldCharter | Should -Match 'A federation root \(`federation\.md`\) never uses this helper, because `-Write` rejects it: its aggregation stays in the federation procedure of `scribe-cold-federation\.md` and `federation-templates\.md`'
+            $coldCharter | Should -Match 'Payload `ledgerCommand` is inert compatibility data: never execute, inspect, parse, validate, transform, or replay it'
+            $coldCharter | Should -Match 're-run up to 3 times.+never substitute hand-written figures'
             (Get-SquadReferenceBody -Name 'scribe-procedure.md') | Should -Match 'cold charter.s trusted ledger invocation after Step 13'
         }
 
