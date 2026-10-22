@@ -129,6 +129,25 @@ No Copilot invocation. Install the ref into a scratch directory, then inspect th
 | COACH-05 | The Coach exposes only portable read/search tools and never initializes, dispatches, changes configuration, migrates state, or requests secret values | `squad-coach.agent.md`, Boundaries and Missing Evidence: coaching cannot cross the delivery or credential boundary |
 | COACH-06 | README, homepage, Getting Started, first-run guidance, and all three host renderers expose the Coach in English and French | `README.md`, `docs/getting-started.html`, `docs/fr/getting-started.html`, `references/operating-procedure.md`, and `site/assets/hosts.js`: first-time users need visible, host-correct guidance |
 | COACH-07 | The read-only PowerShell inventory discovers flattened APM prompts, repository and plugin sources, future entrypoints and references, and state with federation precedence; it never executes discovered code or treats consumer docs as product instructions | `scripts/Get-SquadCoachContext.ps1` in the squad skill; `references/coach-discovery.md`, Source Classes and Layouts |
+| COACH-08 | Before a runnable transition, the Coach shows a readiness evidence row for every admission condition, following definition links to actual seed defaults and current state; unmet or unverified conditions precede conditional snippets, with a supported preparation path or an explicit stop, never fabricated evidence or silently removed safeguards | `squad-coach.agent.md`, Response; `references/coach-discovery.md`, Prerequisite Closure; `consumption.md`, Calculation and confidence, links directly to its eligibility definition |
+| COACH-09 | Artifact presence and absence claims cover the source-defined disk scope, not just state or history; the optional inventory includes tracking directories and file pointers, including unrecorded legacy artifacts, and uninspected locations remain unverified | `references/coach-discovery.md`, Artifact Scope; `scripts/Get-SquadCoachContext.ps1` |
+| COACH-10 | Native first-run coaching with no state and a positive ceiling explains why freshly seeded calibration cannot admit work, the real reconciliation and approval prerequisites, and a safe preparation or stop path; legacy coaching finds artifacts absent from history, while both cases preserve all files | Opt-in cases and semantic review criteria in `tests/tier1/coach/cases.json`; keyword presence alone does not establish acceptance |
+
+Run the opt-in native Coach regression separately from state-writing scenarios:
+
+```powershell
+.\tests\tier1\coach\Invoke-CoachAcceptance.ps1 -SourceRoot . -ResultRoot <evidence-root> -Model <pinned-model> -Repetitions 2
+```
+
+`-ProvisionOnly` checks the isolated fixtures without model requests. Live runs use the
+working-copy source overlay, not a full network-backed APM install. The first-capped-run
+fixture deliberately omits product documentation so a corrected example cannot substitute
+for reading the installed admission and seed contracts. Read each saved
+`response.txt` and trace against the case's source-cited criteria in `review.json`;
+record a verdict and exact evidence for every criterion. All criteria must pass for
+semantic acceptance. Mechanical success and keyword matches cannot supply that verdict.
+Each repetition is an independent conversation; keep failures as well as successes.
+These native CLI observations do not establish execution in VS Code or App engines.
 
 ## Tier 1 — Single squad
 

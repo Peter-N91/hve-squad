@@ -199,23 +199,55 @@ test('Coach onboarding uses agents on every host and shows a complete, condition
       assert.doesNotMatch(content, /choose the \/squad-coach prompt|choisissez le \/squad-coach prompt/);
       const runbook = document.getElementById('coach-runbook');
       assert.ok(runbook);
-      assert.equal(runbook.querySelectorAll(':scope > li').length, 6);
+      assert.equal(runbook.querySelectorAll(':scope > li').length, 7);
       const panels = [...runbook.querySelectorAll('[data-host="vscode"]')];
-      assert.equal(panels.length, 5);
+      assert.equal(panels.length, 6);
       const messages = panels.map(panel => panel.querySelector('pre code').textContent);
       if (!locale) englishMessages = messages;
       else assert.deepEqual(messages, englishMessages, 'Runnable inputs are identical across translations');
       assert.match(messages[0], /^init profile=default routing=ranked$/);
-      assert.match(messages[1], /mode=autopilot cost-ceiling=10$/);
-      assert.match(messages[3], / promote$/);
-      assert.match(messages[4], /squad=<confirmed-member> mode=autopilot$/);
+      assert.match(messages[1], /calibration run.*explicit approval before any uncapped dispatch/);
+      assert.match(messages[2], /mode=autopilot cost-ceiling=10$/);
+      assert.match(messages[4], / promote$/);
+      assert.match(messages[5], /squad=<confirmed-member> mode=autopilot$/);
       assert.deepEqual(panels.map(panel => panel.querySelector('strong').textContent), [
-        'Squad Coordinator', 'Squad Coordinator', 'Squad Coordinator',
+        'Squad Coordinator', 'Squad Coordinator', 'Squad Coordinator', 'Squad Coordinator',
         'Squad Federation Coordinator', 'Squad Federation Coordinator'
       ]);
+      const readiness = document.getElementById('coach-cost-readiness');
+      assert.equal(readiness, runbook.children[2], 'First-ceiling preparation follows initialization');
+      assert.ok(readiness.querySelector('a[href="usage.html#first-capped-run"]'));
+      const cappedStep = panels[2].closest('li');
+      assert.equal(cappedStep, runbook.children[3], 'Capped work follows preparation');
+      assert.match(cappedStep.textContent, locale ? /Uniquement après/ : /Only after/);
       for (const message of messages) assert.doesNotMatch(message, invocation);
       assert.match(runbook.textContent, locale ? /Uniquement si les responsabilités se séparent/ : /Only if ownership later splits/);
     } finally { dom.window.close(); }
+  }
+});
+
+test('first-ceiling guidance explains seed ineligibility, real reconciliation and the non-waivable blocker', () => {
+  const seed = readFileSync(new URL('../../squad-src/.github/skills/squad/references/consumption-rates-template.md', import.meta.url), 'utf8');
+  assert.match(seed, /observations: 0/);
+  assert.match(seed, /last_reconciled: never/);
+  for (const locale of ['', 'fr/']) {
+    for (const [page, section] of [['getting-started.html', 'coach-cost-readiness'], ['usage.html', 'first-capped-run']]) {
+      const dom = openPage(`${locale}${page}`, { scripts: false });
+      try {
+        const element = dom.window.document.getElementById(section);
+        assert.ok(element, `${locale}${page}: first-ceiling preparation exists`);
+        const text = section === 'first-capped-run'
+          ? element.nextElementSibling.textContent + element.nextElementSibling.nextElementSibling.textContent
+          : element.textContent;
+        for (const field of ['observations: 0', 'last_reconciled: never', 'cannot-confirm', 'calibration_basis', 'Observed-on', 'estimator_revision']) {
+          assert.ok(text.includes(field), `${locale}${page}: explains ${field}`);
+        }
+        assert.match(text, locale ? /avant et après/ : /before and after/);
+        assert.match(text, locale ? /approbation explicite/ : /explicit approval/);
+        assert.match(text, locale ? /jamais.*approbation|approbation.*ne.*pas/ : /approval cannot|cannot be approved/);
+        assert.match(text, locale ? /reste.*bloqu/ : /remain.*blocked/);
+      } finally { dom.window.close(); }
+    }
   }
 });
 

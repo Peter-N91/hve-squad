@@ -7,9 +7,9 @@
 .SYNOPSIS
     Prints a read-only inventory of the selected Squad installation and project state.
 .DESCRIPTION
-    Discovers source paths, headings, entrypoint metadata, and script parameters without
-    executing discovered code, fetching remote content, or writing files. No squad state
-    is required. New sources are included without a feature-specific list.
+    Discovers source paths, headings, entrypoint metadata, script parameters, and tracking
+    paths without executing discovered code, fetching remote content, or writing files.
+    No squad state is required. New sources are included without a feature-specific list.
 .PARAMETER RepoRoot
     Consumer project or source repository. Defaults to the current directory.
 .PARAMETER SkillRoot
@@ -143,7 +143,13 @@ if ($isProductRoot) {
     }
 }
 
-$squadRoot = Join-Path $RepoRoot '.copilot-tracking' 'squad'
+$trackingRoot = Join-Path $RepoRoot '.copilot-tracking'
+$trackingEntries = @(
+    if (Test-Path -LiteralPath $trackingRoot -PathType Container) {
+        Get-ChildItem -LiteralPath $trackingRoot -Recurse -Force | Sort-Object FullName
+    }
+)
+$squadRoot = Join-Path $trackingRoot 'squad'
 $federationPath = Join-Path $squadRoot 'federation.md'
 $teamPath = Join-Path $squadRoot 'team.md'
 $stateKind = if (Test-Path -LiteralPath $federationPath -PathType Leaf) { 'federation' }
@@ -162,6 +168,11 @@ $stateFiles = @(
     skillRoot          = $SkillRoot
     documentationRoots = @($documentation)
     state              = [ordered]@{ kind = $stateKind; root = $squadRoot; files = $stateFiles }
+    tracking           = [ordered]@{
+        root        = $trackingRoot
+        directories = @($trackingEntries | Where-Object PSIsContainer | ForEach-Object FullName)
+        files       = @($trackingEntries | Where-Object { -not $_.PSIsContainer } | ForEach-Object FullName)
+    }
     entrypoints        = @($sources | Where-Object {
             $_.kind -in @('prompt', 'invocation') -or
             ($_.kind -eq 'agent' -and $_.metadata['user-invocable'] -eq 'true')

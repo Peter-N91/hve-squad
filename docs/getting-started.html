@@ -299,6 +299,11 @@ targets:
         strings, or credential values.</strong> State only that an access category is available and
         configure its value through the host's secure secret mechanism later.
       </p>
+      <p>
+        The Coach reads the selected installed version; it does not install or update releases.
+        Update your installation first when you want a newer contract. It re-reads affected sources
+        when the version or project state changes, but cannot guarantee every future undocumented change.
+      </p>
 
       <h3>Beginner example conversations</h3>
       <div class="callout">
@@ -329,10 +334,15 @@ targets:
           <pre><code>/squad init profile=default routing=ranked</code></pre>
           <p>Confirm the proposed topology, profile, roles, member naming, and approval channel. Only then does the Scribe create the squad state. Inspect <code>.copilot-tracking/squad/team.md</code>: <code>Model routing: ranked</code> and its <code>Model</code> column show the selected models. Ranking chooses among models your host supports; it does not change the coordinator's session model. See <a href="usage.html#model-selection-per-role">Model selection per role</a>.</p>
         </li>
+        <li id="coach-cost-readiness">
+          <p><strong>Prepare the first cost-controlled run.</strong> Initialization seeds <code>consumption-rates.md</code> with <code>observations: 0</code> and <code>last_reconciled: never</code>. A positive ceiling therefore produces <code>cannot-confirm</code>, which approval cannot waive. Ask the Coordinator to plan preparation, not to start an uncapped run:</p>
+          <pre><code>/squad request="Explain Cost Preflight prerequisites and propose a small calibration run; wait for my explicit approval before any uncapped dispatch"</code></pre>
+          <p>If you approve that separate uncapped preparation, collect real per-user <code>ai_credits_used</code> measurements before and after the small run, isolate its usage window, and have the coordinator arrange the Scribe's reconciliation against the run's estimated credits. Verify positive observations, a non-<code>never</code> reconciliation date, and <code>calibration_basis</code> matching the current <code>Observed-on</code> and <code>estimator_revision</code>. Never invent measurements. If access is unavailable or you decline uncapped preparation, remain blocked on capped work. See <a href="usage.html#first-capped-run">Before the first capped run</a>; a larger ceiling does not repair missing evidence.</p>
+        </li>
         <li>
-          <p><strong>Run the requested work in autopilot.</strong> In the same Coordinator conversation, send a separate work request:</p>
+          <p><strong>Run the requested work in autopilot.</strong> Only after the preceding preparation verifies eligible calibration and the other Cost Preflight prerequisites, send a separate work request in the same Coordinator conversation:</p>
           <pre><code>/squad request="Add input validation to the login form, with tests for valid and invalid inputs" mode=autopilot cost-ceiling=10</code></pre>
-          <p>The persisted ranked policy is reused. Autopilot sequences research, plan, implementation, and review; it does not approve impactful actions or the final outcome for you. The example ceiling is an estimated model-spend control, not a bill guarantee; choose your own value or omit it. Expect the requested changes, tests, and review evidence. See <a href="usage.html#cost-admission-control">Cost admission control</a>.</p>
+          <p>The persisted ranked policy is reused. Autopilot sequences research, plan, implementation, and review; it does not approve impactful actions or the final outcome for you. The example ceiling is an estimated model-spend control, not a bill guarantee; choose your own positive value. Running without this protection is a separate, explicit choice, not a remedy for a blocked capped request. Expect the requested changes, tests, and review evidence. See <a href="usage.html#cost-admission-control">Cost admission control</a>.</p>
         </li>
         <li>
           <p><strong>Inspect, approve, and continue.</strong> Read the progress and final summary, inspect the deliverables and review evidence, and run your project's tests. Answer required human gates in the configured approval channel. To resume rather than initialize again, send:</p>
@@ -363,7 +373,7 @@ targets:
             <tr><td>Autonomy</td><td>Omit <code>mode</code> for interactive approvals. <code>mode=autonomous</code> runs a bounded validation loop; <code>mode=autopilot</code> sequences the full pipeline but keeps mandatory human gates.</td></tr>
             <tr><td>Approvals</td><td>Impactful actions, high-risk outcomes, unresolved cost gates, and final release decisions still stop for a human. Initialization also asks how approvals should reach you.</td></tr>
             <tr><td>Models</td><td><code>routing=off</code> keeps host defaults; <code>ranked</code>, <code>economy</code>, and <code>manual</code> are opt-in policies. The Coach explains only modes present in your installed version.</td></tr>
-            <tr><td>Cost controls</td><td><code>cost-ceiling</code> is an estimated model-spend admission control, not a bill guarantee. Start without it or choose a deliberate ceiling; use <code>unset</code> to remove an active one.</td></tr>
+            <tr><td>Cost controls</td><td><code>cost-ceiling</code> is an estimated model-spend admission control, not a bill guarantee. The first positive ceiling requires eligible calibration; fresh seeds produce <code>cannot-confirm</code>, which approval cannot waive. Uncapped preparation needs explicit approval; <code>unset</code> explicitly removes an active ceiling.</td></tr>
             <tr><td>Outputs and progress</td><td>Expect research, plan, implementation or requested deliverables, review evidence, and concise in-chat progress. Durable records live under the selected squad root.</td></tr>
             <tr><td>Review</td><td>Read the coordinator's summary, inspect changed files and artifacts, run the project's validation, and resolve open questions before approving impactful actions.</td></tr>
             <tr><td>Continue or resume</td><td>Return to the same coordinator conversation and describe the next outcome. Existing state is reused; in a federation, target a member when needed rather than reinitializing.</td></tr>
@@ -398,6 +408,9 @@ targets:
         Add <code>cost-ceiling=&lt;positive USD&gt;</code> when you want the squad to forecast the
         remaining work before dispatching it. The ceiling governs estimated model spend for the
         current run; it is not a GitHub invoice guarantee and does not govern Azure workload cost.
+        Complete the <a href="#coach-cost-readiness">first-ceiling preparation</a> before using the example:
+        freshly seeded pricing files are not calibrated, so the first capped work request remains blocked
+        as <code>cannot-confirm</code> until real, eligible reconciliation exists.
       </p>
       <pre><code>/squad request="add input validation to the login form" cost-ceiling=10</code></pre>
       <p>

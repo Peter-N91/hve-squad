@@ -7,7 +7,9 @@ type: Added
   Squad Coach discovers workflows from installed code and documentation, recommends the simplest
   sufficient setup, and returns preparation checklists and detailed A-to-Z runbooks with owning agents,
   exact messages, expected outputs, approvals, and source citations without changing state. A read-only
-  PowerShell helper inventories current sources without a feature checklist. VS Code, CLI, and App
+  PowerShell helper inventories current sources and unrecorded tracking artifacts without a feature
+  checklist. Generic prerequisite closure checks admission rules, seed defaults, and current state
+  before dependent snippets; bilingual starter guidance explains first-ceiling preparation. VS Code, CLI, and App
   guidance consistently selects agents and uses prefix-free messages. Plugin coaching uses a manual
   handoff and is advertised only when the selected source contains its agent and prompt; source-mode
   installs handle paired dependencies with the same package name

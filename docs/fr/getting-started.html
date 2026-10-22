@@ -301,6 +301,11 @@ targets:
         Indiquez uniquement qu'une catégorie d'accès est disponible, puis configurez sa valeur plus tard
         via le mécanisme sécurisé de secrets de l'hôte.
       </p>
+      <p>
+        Le Coach lit la version installée sélectionnée ; il n'installe ni ne met à jour les versions.
+        Mettez d'abord votre installation à jour pour utiliser un contrat plus récent. Il relit les
+        sources concernées lorsque la version ou l'état change, sans garantir tout futur changement non documenté.
+      </p>
 
       <h3>Exemples de conversations pour débuter</h3>
       <div class="callout">
@@ -331,10 +336,15 @@ targets:
           <pre><code>/squad init profile=default routing=ranked</code></pre>
           <p>Confirmez la topologie, le profil, les rôles, les noms des membres et le canal d'approbation proposés. Le Scribe crée ensuite l'état de la squad. Inspectez <code>.copilot-tracking/squad/team.md</code> : <code>Model routing: ranked</code> et la colonne <code>Model</code> montrent les modèles choisis. Le classement utilise les modèles disponibles sur votre hôte, sans changer le modèle de session du coordinateur. Consultez <a href="usage.html#model-selection-per-role">Sélection des modèles par rôle</a>.</p>
         </li>
+        <li id="coach-cost-readiness">
+          <p><strong>Préparer la première exécution avec plafond.</strong> L'initialisation crée <code>consumption-rates.md</code> avec <code>observations: 0</code> et <code>last_reconciled: never</code>. Un plafond positif produit donc <code>cannot-confirm</code>, qu'une approbation ne peut pas lever. Demandez au coordinateur de préparer une proposition, pas de lancer une exécution sans plafond :</p>
+          <pre><code>/squad request="Explain Cost Preflight prerequisites and propose a small calibration run; wait for my explicit approval before any uncapped dispatch"</code></pre>
+          <p>Si vous donnez votre approbation explicite à cette préparation sans plafond, collectez des mesures réelles par utilisateur <code>ai_credits_used</code> avant et après la petite exécution, isolez sa fenêtre d'utilisation et faites organiser par le coordinateur la réconciliation du Scribe avec les crédits estimés de l'exécution. Vérifiez des observations positives, une date de réconciliation différente de <code>never</code> et un <code>calibration_basis</code> correspondant aux valeurs actuelles <code>Observed-on</code> et <code>estimator_revision</code>. N'inventez jamais de mesures. Si l'accès manque ou si vous refusez la préparation sans plafond, restez bloqué sur le travail plafonné. Consultez <a href="usage.html#first-capped-run">Avant la première exécution plafonnée</a> ; augmenter le plafond ne remplace pas les preuves manquantes.</p>
+        </li>
         <li>
-          <p><strong>Lancer le travail demandé en autopilot.</strong> Dans la même conversation du coordinateur, envoyez une demande de travail distincte :</p>
+          <p><strong>Lancer le travail demandé en autopilot.</strong> Uniquement après avoir vérifié à l'étape précédente une calibration éligible et les autres prérequis de Cost Preflight, envoyez une demande de travail distincte dans la même conversation du coordinateur :</p>
           <pre><code>/squad request="Add input validation to the login form, with tests for valid and invalid inputs" mode=autopilot cost-ceiling=10</code></pre>
-          <p>La stratégie ranked enregistrée est réutilisée. Autopilot enchaîne recherche, plan, implémentation et revue, sans approuver à votre place les actions importantes ni le résultat final. Le plafond d'exemple contrôle les dépenses estimées des modèles, pas la facture ; choisissez votre valeur ou omettez-le. Attendez-vous aux modifications, tests et preuves de revue demandés. Consultez <a href="usage.html#cost-admission-control">Contrôle d'admission par le coût</a>.</p>
+          <p>La stratégie ranked enregistrée est réutilisée. Autopilot enchaîne recherche, plan, implémentation et revue, sans approuver à votre place les actions importantes ni le résultat final. Le plafond d'exemple contrôle les dépenses estimées des modèles, pas la facture ; choisissez votre valeur positive. Travailler sans cette protection relève d'un choix explicite distinct, pas d'une correction automatique d'une demande plafonnée bloquée. Attendez-vous aux modifications, tests et preuves de revue demandés. Consultez <a href="usage.html#cost-admission-control">Contrôle d'admission par le coût</a>.</p>
         </li>
         <li>
           <p><strong>Inspecter, approuver et continuer.</strong> Lisez le suivi et la synthèse finale, inspectez les livrables et la revue, puis exécutez les tests du projet. Répondez aux validations humaines dans le canal configuré. Pour reprendre sans réinitialiser, envoyez :</p>
@@ -365,7 +375,7 @@ targets:
             <tr><td>Autonomie</td><td>Omettez <code>mode</code> pour des approbations interactives. <code>mode=autonomous</code> exécute une boucle de validation bornée ; <code>mode=autopilot</code> enchaîne le pipeline complet tout en conservant les validations humaines obligatoires.</td></tr>
             <tr><td>Approbations</td><td>Les actions importantes, résultats à haut risque, contrôles de coût non résolus et décisions finales de publication attendent toujours un humain. L'initialisation demande également comment vous joindre pour les approbations.</td></tr>
             <tr><td>Modèles</td><td><code>routing=off</code> conserve les valeurs par défaut de l'hôte ; <code>ranked</code>, <code>economy</code> et <code>manual</code> sont des stratégies facultatives. Le Coach explique uniquement les modes présents dans votre version installée.</td></tr>
-            <tr><td>Contrôle des coûts</td><td><code>cost-ceiling</code> est un contrôle d'admission des dépenses modèles estimées, pas une garantie de facture. Commencez sans plafond ou choisissez-le délibérément ; utilisez <code>unset</code> pour supprimer un plafond actif.</td></tr>
+            <tr><td>Contrôle des coûts</td><td><code>cost-ceiling</code> est un contrôle d'admission des dépenses modèles estimées, pas une garantie de facture. Le premier plafond positif exige une calibration éligible ; un état neuf produit <code>cannot-confirm</code>, qu'une approbation ne peut lever. La préparation sans plafond exige une approbation explicite ; <code>unset</code> supprime explicitement un plafond actif.</td></tr>
             <tr><td>Résultats et suivi</td><td>Attendez-vous à une recherche, un plan, une implémentation ou les livrables demandés, des preuves de revue et un suivi concis dans la conversation. Les enregistrements durables résident sous la racine de squad sélectionnée.</td></tr>
             <tr><td>Revue</td><td>Lisez la synthèse du coordinateur, inspectez les fichiers et artefacts modifiés, exécutez la validation du projet et résolvez les questions ouvertes avant d'approuver les actions importantes.</td></tr>
             <tr><td>Continuer ou reprendre</td><td>Revenez à la même conversation du coordinateur et décrivez le prochain résultat. L'état existant est réutilisé ; dans une fédération, ciblez un membre si nécessaire au lieu de réinitialiser.</td></tr>
@@ -400,6 +410,9 @@ targets:
         Ajoutez <code>cost-ceiling=&lt;positive USD&gt;</code> pour demander à la squad d'estimer le coût du
         travail restant avant de le déléguer. Le plafond porte sur les dépenses estimées des modèles pour
         l'exécution en cours ; il ne garantit pas le montant de la facture GitHub et ne régit pas le coût des charges de travail Azure.
+        Effectuez la <a href="#coach-cost-readiness">préparation du premier plafond</a> avant cet exemple :
+        les fichiers de tarifs neufs ne sont pas calibrés ; la première demande plafonnée reste donc
+        bloquée par <code>cannot-confirm</code> tant qu'une réconciliation réelle et éligible manque.
       </p>
       <pre><code>/squad request="add input validation to the login form" cost-ceiling=10</code></pre>
       <p>

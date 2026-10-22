@@ -18,6 +18,8 @@ BeforeAll {
     $script:SquadPrompt = @($model.Prompts | Where-Object Name -eq 'squad.prompt.md')
     $script:InventoryScript = Join-Path $PackageRoot '.agents/skills/squad/scripts/Get-SquadCoachContext.ps1'
     $script:InitProcedure = Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/operating-procedure.md') -Raw
+    $script:DiscoveryContract = Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/coach-discovery.md') -Raw
+    $script:AdmissionReference = Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/consumption.md') -Raw
 
     function Write-CoachFixture {
         param([string]$Path, [string]$Content)
@@ -139,6 +141,41 @@ Describe 'Squad Coach behavior contract' {
         $script:Body | Should -Match 'Preserve completed setup'
     }
 
+    It 'closes admission prerequisites through seed defaults without hardcoding a workflow' {
+        $script:Body | Should -Match 'admission conditions'
+        $script:Body | Should -Match 'seed defaults'
+        $script:Body | Should -Match 'bounded line ranges'
+        $script:Body | Should -Match 'readiness evidence table'
+        $script:Body | Should -Not -Match 'calibrat|cost-ceiling|observations|last_reconciled'
+        $script:DiscoveryContract | Should -Match '## Prerequisite Closure'
+        $script:DiscoveryContract | Should -Match '## Retrieval Completeness'
+        $script:DiscoveryContract | Should -Match 'even when the tool reports success'
+        $script:DiscoveryContract | Should -Match 'access or policy refusal'
+        $script:DiscoveryContract | Should -Match 'do not try alternate routes'
+        $script:DiscoveryContract | Should -Match 'Read linked seed/default files themselves'
+        $script:DiscoveryContract | Should -Match 'initial or effective value'
+        $script:DiscoveryContract | Should -Match 'producer identity, scope, revision, and observation window'
+        $script:DiscoveryContract | Should -Match '\| Transition \| Admission condition \| Initial/effective value \|'
+        $script:DiscoveryContract | Should -Match 'Carry every condition'
+        $script:DiscoveryContract | Should -Match 'one row per predicate'
+        $script:AdmissionReference | Should -Match '\[seed/default eligibility conditions\]\(consumption-rates-template\.md\)'
+        $script:AdmissionReference | Should -Match 'Freshly seeded calibration is ineligible'
+        $script:DiscoveryContract | Should -Match 'unmet or unverified'
+        $script:DiscoveryContract | Should -Match 'before its dependent'
+        $script:DiscoveryContract | Should -Match 'Never fabricate'
+        $script:DiscoveryContract | Should -Match 'explicit approval'
+        $script:DiscoveryContract | Should -Match 'every copy-ready'
+    }
+
+    It 'requires disk-scope evidence before reporting artifacts absent' {
+        $script:Body | Should -Match 'source-defined artifact scope'
+        $script:DiscoveryContract | Should -Match '## Artifact Scope'
+        $script:DiscoveryContract | Should -Match 'not just state or history'
+        $script:DiscoveryContract | Should -Match 'unverified, not absent'
+        $script:DiscoveryContract | Should -Match 'Resolve expected output paths'
+        $script:DiscoveryContract | Should -Match 'does not install or update'
+    }
+
     It 'returns preparation and invocation material beginners can act on' {
         $script:Body | Should -Match 'essential inputs'
         $script:Body | Should -Match 'optional inputs'
@@ -183,6 +220,9 @@ Describe 'COACH-07 Deterministic source discovery' {
         $inventory = Get-CoachInventory -Fixture $fixture
         $inventory.schemaVersion | Should -Be 1
         $inventory.state.kind | Should -BeExactly 'none'
+        $inventory.tracking.root | Should -BeExactly (Join-Path $fixture.Repo '.copilot-tracking')
+        @($inventory.tracking.directories) | Should -HaveCount 0
+        @($inventory.tracking.files) | Should -HaveCount 0
         $agents = @($inventory.entrypoints | Where-Object kind -eq 'agent')
         $agents | Should -HaveCount 1
         $agents[0].metadata.name | Should -BeExactly 'Squad Future'
@@ -242,9 +282,62 @@ Describe 'COACH-07 Deterministic source discovery' {
         Get-CoachTreeSnapshot -Root $fixture.Repo | Should -BeExactly $before
     }
 
+    It 'discovers unrecorded <Layout> artifacts outside squad state without writing' -ForEach @(
+        @{ Layout = 'Source' }
+        @{ Layout = 'Apm' }
+        @{ Layout = 'Plugin' }
+    ) {
+        $fixture = New-CoachFixture -Layout $Layout
+        $tracking = Join-Path $fixture.Repo '.copilot-tracking'
+        $team = Join-Path $tracking 'squad/team.md'
+        $plan = Join-Path $tracking 'plans/claims-plan.txt'
+        $unknown = Join-Path $tracking 'legacy-output/nested/release.txt'
+        $memberHistory = Join-Path $tracking 'squad/members/existing/history/worker.md'
+        Write-CoachFixture $team '# Existing team; no artifact references'
+        Write-CoachFixture $plan 'An unrecorded pre-promotion plan'
+        Write-CoachFixture $unknown 'An artifact outside the current cast root table'
+        Write-CoachFixture $memberHistory '# Existing member history'
+        $before = Get-CoachTreeSnapshot -Root $fixture.Repo
+        $inventory = Get-CoachInventory -Fixture $fixture
+        $inventory.state.kind | Should -BeExactly 'squad'
+        $inventory.state.files | Should -Not -Contain $plan
+        $inventory.tracking.directories | Should -Contain (Join-Path $tracking 'plans')
+        $inventory.tracking.directories | Should -Contain (Join-Path $tracking 'legacy-output')
+        $inventory.tracking.files | Should -Contain $plan
+        $inventory.tracking.files | Should -Contain $unknown
+        $inventory.tracking.files | Should -Contain $memberHistory
+        $inventory.tracking.files | Should -Contain $team
+        Get-CoachTreeSnapshot -Root $fixture.Repo | Should -BeExactly $before
+    }
+
     It 'reports an invalid source root rather than returning an empty success' {
         $fixture = New-CoachFixture
         { & $script:InventoryScript -RepoRoot $fixture.Repo -SkillRoot (Join-Path $fixture.Repo 'missing') } |
             Should -Throw '*Coach inventory directory not found*'
+    }
+}
+
+Describe 'COACH-10 Native acceptance fixtures' {
+    It 'provisions no-state and unrecorded-legacy cases without a model call' {
+        $source = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        $runner = Join-Path $source 'tests/tier1/coach/Invoke-CoachAcceptance.ps1'
+        $prepared = & $runner -SourceRoot $source -ResultRoot (Join-Path $TestDrive 'acceptance') `
+            -Model 'not-used-during-provisioning' -ProvisionOnly
+        $prepared.Results | Should -HaveCount 2
+        $fresh = @($prepared.Results | Where-Object case -EQ 'first-capped-run')[0]
+        Test-Path -LiteralPath (Join-Path $fresh.workspace '.copilot-tracking') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $fresh.workspace 'package-docs') | Should -BeFalse
+        $fresh.productDocumentation | Should -BeFalse
+        $legacy = @($prepared.Results | Where-Object case -EQ 'legacy-artifacts')[0]
+        Test-Path -LiteralPath (Join-Path $legacy.workspace 'package-docs/docs/usage.html') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $legacy.workspace '.copilot-tracking/plans/claims-plan.txt') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $legacy.workspace '.copilot-tracking/legacy-output/nested/release.txt') | Should -BeTrue
+        foreach ($case in $prepared.Results) {
+            $case.execution | Should -BeExactly 'Provisioned'
+            $case.mechanical | Should -BeExactly 'NotRun'
+            $case.semantic | Should -BeExactly 'NotReviewed'
+            $case.criteria.Count | Should -BeGreaterThan 0
+            @($case.criteria | Where-Object verdict -NE 'NotReviewed') | Should -HaveCount 0
+        }
     }
 }

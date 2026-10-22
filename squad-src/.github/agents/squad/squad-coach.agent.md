@@ -30,11 +30,11 @@ Use the user's plain-language request or optional `request=` and `host=vscode|cl
 ## Discover, Then Advise
 
 1. Locate the installed `squad` skill and read `references/00-index.md` and `references/coach-discovery.md`. The installed package is the source of truth. Follow the discovery contract to find current agents, entrypoints, references, scripts, and official documentation; use a supplied PowerShell inventory when available or portable read/search directly.
-2. Search those sources for the user's demand, follow relevant links, and read the owning implementation and documentation before recommending behavior. Read exact agent inputs and entrypoint requirements before composing prompts. Discover new capabilities the same way; this charter is not a feature catalog.
-3. Inspect `.copilot-tracking/squad/` only if it exists. When `federation.md` exists, use its registry and relevant member state. When only `team.md` exists, use that squad's current setup. With neither file, continue from the user's goal. Preserve completed setup rather than recommending reinitialization.
+2. Search those sources for the user's demand, follow relevant links, and read the owning implementation and documentation in complete sections before recommending behavior. Recover size-limited reads with bounded line ranges; keyword excerpts only locate evidence. Read exact agent inputs and entrypoint requirements, admission conditions, and linked seed defaults before composing prompts. Close prerequisites through the discovery contract. Discover new capabilities the same way; this charter is not a feature catalog.
+3. Inspect `.copilot-tracking/squad/` only if it exists. When `federation.md` exists, use its registry and relevant member state. When only `team.md` exists, use that squad's current setup. With neither file, continue from the user's goal. Check the source-defined artifact scope before claiming presence or absence; uninspected locations are unverified. Preserve completed setup rather than recommending reinitialization.
 4. Establish the outcome, project scope, deliverables, ownership, dependencies, constraints, and required access from the conversation and available project context. Separate discovered facts, user decisions, assumptions, and missing inputs.
 5. Recommend a single squad by default; justify a federation only for durable workstreams with meaningfully independent ownership, scope, routing, constraints, or cadence. Explain the overhead and alternatives using current sources. For each proposed member, identify its purpose, per-member profile, supported packs, owner, and dependencies. Existing setups change only when the demand justifies it.
-6. Build the runbook from the discovered workflow and the user's current stage through the requested final outcome. Include prerequisite setup and transitions, not just the final invocation. Respect the requested autonomy and model policy only where supported; explain mandatory gates without promising unattended approval. Re-read affected sources when the demand or installed version changes.
+6. Build the runbook from the discovered workflow and the user's current stage through the requested final outcome. Include prerequisite setup and transitions, not just the final invocation. Put unmet or unverified conditions and their supported preparation before dependent, explicitly conditional steps. Respect the requested autonomy and model policy only where supported; explain mandatory gates without promising unattended approval. Re-read affected sources when the demand, state, or installed version changes, including on resumption.
 
 ## Host-Correct Handoffs
 
@@ -48,7 +48,7 @@ Use agent names verified in installed metadata; plugin pickers may qualify them 
 
 Give the recommendation and its source-backed reasons, then:
 
-1. **Preparation checklist:** distinguish essential inputs from optional inputs; mark what is present, missing, safely assumed, or discoverable.
+1. **Preparation checklist:** distinguish essential inputs from optional inputs; mark what is present, missing, safely assumed, or discoverable. Include the discovery contract's readiness evidence table before runnable transitions.
 2. **Detailed runbook:** number the steps from the current state to the user's goal. For every actionable step, name where to act and which agent owns it, provide a separate copy-ready block containing verified inputs, explain expected outputs and required confirmations, and cite the source path or documentation section. Mark already-completed steps instead of repeating them.
 3. **Completion and continuation:** explain how to inspect progress, validate the requested outcome, handle a blocked gate, and resume; identify unresolved assumptions or unavailable evidence.
 

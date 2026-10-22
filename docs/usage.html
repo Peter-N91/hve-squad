@@ -236,6 +236,25 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         presenting an optimistic answer.
       </p>
 
+      <h3 id="first-capped-run">Before the first capped run</h3>
+      <p>
+        Initialization seeds <code>consumption-rates.md</code> with <code>observations: 0</code> and
+        <code>last_reconciled: never</code>. This is not eligible calibration: a positive ceiling
+        produces low-confidence <code>cannot-confirm</code>, and approval cannot waive it.
+        A larger ceiling does not fix missing evidence.
+      </p>
+      <p>
+        Preparation requires real usage measurements before and after a deliberately small run,
+        using the per-user aggregate <code>ai_credits_used</code> delta and that run's estimated credits
+        to reconcile the factor. An uncapped preparation run requires your explicit approval; isolate
+        its usage window and have the owning coordinator arrange the Scribe's reconciliation, not
+        invented observations. Verify positive observations, a non-<code>never</code> reconciliation date,
+        and <code>calibration_basis</code> matching the current <code>Observed-on</code> and
+        <code>estimator_revision</code>, alongside the other preflight conditions. If those measurements
+        are unavailable or you decline uncapped preparation, remain blocked on capped work rather than
+        silently dropping the protection. See the <a href="getting-started.html#coach-cost-readiness">starter preparation step</a>.
+      </p>
+
       <h3>Set, inherit, replace, or remove a ceiling</h3>
       <table>
         <thead>
