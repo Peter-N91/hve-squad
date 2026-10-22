@@ -187,6 +187,34 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $LASTEXITCODE | Should -Be 0
     }
 
+    It 'uses the helper UTC clock when Init timestamp is omitted, keeping subsequent artifacts fresh' {
+        $Payload = Get-InitPayload
+        $Payload.Remove('timestamp')
+        $Repository = Join-Path $TestDrive 'clock-init'
+        $Before = [DateTimeOffset]::UtcNow
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Root = Join-Path $Repository $Payload.squadRoot
+        $State = Get-Content -LiteralPath (Join-Path $Root 'state.json') -Raw | ConvertFrom-Json
+        $Started = [DateTimeOffset]::Parse($State.updated)
+        $Started.ToUnixTimeSeconds() | Should -BeGreaterOrEqual $Before.ToUnixTimeSeconds()
+        $Started.ToUnixTimeSeconds() | Should -BeLessOrEqual ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+        $Artifact = Join-Path $Repository 'research.md'
+        Set-Content -LiteralPath $Artifact -Value 'Actual subsequent research'
+        ([IO.File]::GetLastWriteTimeUtc($Artifact)) | Should -BeGreaterOrEqual $Started.UtcDateTime
+    }
+
+    It 'refuses a future Init timestamp before publishing state' {
+        $Payload = Get-InitPayload
+        $Payload.timestamp = [DateTimeOffset]::UtcNow.AddMinutes(2).ToString('o')
+        $Repository = Join-Path $TestDrive 'future-init'
+        $Result = Invoke-InitPayload $Payload $Repository
+        $Result.ExitCode | Should -Be 1
+        $Result.Output | Should -Match 'Future Init timestamp refused'
+        Join-Path $Repository $Payload.squadRoot | Should -Not -Exist
+        @(Get-ChildItem -LiteralPath $Repository -Directory -Recurse -Force).Count | Should -Be 0
+    }
+
     It 'accepts legacy absent usage with estimator floors and unresolved auto without partial state' {
         $Payload = Get-InitPayload
         $Payload.Remove('usage')

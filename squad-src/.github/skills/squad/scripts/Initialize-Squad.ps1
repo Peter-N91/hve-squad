@@ -181,12 +181,15 @@ if ($MyInvocation.InvocationName -ne '.') {
     $Stage = $null
     try {
         $Payload = Get-Content -LiteralPath $PayloadPath -Raw | ConvertFrom-Json -AsHashtable
+        Assert-ObjectKey $Payload @('squadRoot', 'runId', 'roster', 'provenance') @('timestamp', 'usage', 'payloadType', 'turn', 'mode', 'modelRouting', 'sessionModel', 'modelOverrides', 'notify', 'stateAdvance', 'ledgerCommand')
+        $Now = [DateTimeOffset]::UtcNow
+        if (-not $Payload.Contains('timestamp')) { $Payload.timestamp = $Now.ToString('o') }
         if ($Payload.timestamp -is [DateTime]) { $Payload.timestamp = $Payload.timestamp.ToString('o') }
-        Assert-ObjectKey $Payload @('squadRoot', 'runId', 'timestamp', 'roster', 'provenance') @('usage', 'payloadType', 'turn', 'mode', 'modelRouting', 'sessionModel', 'modelOverrides', 'notify', 'stateAdvance', 'ledgerCommand')
         if ($Payload.Contains('payloadType') -and $Payload.payloadType -ne 'initialization') { throw 'Only fresh initialization is supported.' }
         if ($Payload.Contains('turn') -and $Payload.turn -ne 1) { throw 'Init turn must be 1.' }
         foreach ($Key in @('squadRoot', 'runId', 'timestamp', 'provenance')) { Assert-Text $Payload[$Key] }
         $Timestamp = [DateTimeOffset]::Parse($Payload.timestamp, [cultureinfo]::InvariantCulture)
+        if ($Timestamp -gt $Now) { throw 'Future Init timestamp refused; omit timestamp to use the helper UTC clock.' }
         $Repository = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
         Assert-UnlinkedPath $Repository
         if ($Payload.squadRoot -match '(^|[\\/])\.\.([\\/]|$)') { throw 'Path traversal refused.' }
