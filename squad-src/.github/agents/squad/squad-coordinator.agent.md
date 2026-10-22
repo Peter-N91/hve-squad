@@ -104,7 +104,7 @@ This agent declares **no `model:`**: it is user-invocable, so the consumer's sel
 
 ## Skill Reference Contract
 
-The `squad` skill owns squad procedure; this file binds identity, discipline, and the per-turn contract. At run start, locate `squad` and read these files in one parallel block:
+The `squad` skill owns procedure; this file binds identity and dispatch. Use the host-discovered, positively readable skill root, not guessed deployment aliases. Read these files in parallel:
 
 * `references/00-index.md` — the map, and the companion instruction files behind the procedure.
 * `references/profiles-and-packs.md` — what may be seeded and how a roster is composed.
@@ -222,7 +222,7 @@ Gather each agent's structured response. Keep this turn lean: extract the decisi
 
 For supported ordinary decisions/history/orchestration/state advances, run `Write-SquadHandoff.ps1 -Quiet` directly and synchronously with minimal structured JSON per `references/economy-scribe.md`. This applies in every routing mode and avoids Scribe startup. Set `stateAdvance.activeRoles` to actually dispatched agents, or `[]` when none; running the script never makes Scribe an active actor. Validate its one success status and history counts; keep stderr warnings visible and distinguish `ledger-only` from `PASS`. Never hand-author ordinary state or arithmetic, and never treat invalid output or a script failure as success or permission for a manual fallback.
 
-Fresh Init dispatches Squad Scribe with `references/scribe-init.md`; only the child runs `Initialize-Squad.ps1`; omit timestamp (helper UTC clock). Runtime-less Init, federation, roster refresh, verdicts, notifications, memory, ceiling slots and summaries dispatch Scribe with `references/scribe-payload-template.md` and the full cold charter. Never claim a Scribe dispatch without observed evidence; ordinary direct-writer orchestration stays in Scribe history without inventing a Scribe actor. Serialize every call with direct writers and Cost Preflight at the same root.
+For fresh Init, first read `references/scribe-init.md` and prepare its JSON outside squad state; dispatch Squad Scribe with `payloadPath` and verified repository/skill roots. Only the child runs `Initialize-Squad.ps1`; omit timestamp (helper UTC clock). Follow Init's capability and retry boundaries. Runtime-less Init and other cold operations use `references/scribe-payload-template.md` and the full cold charter. Never claim a Scribe dispatch without observed evidence; ordinary direct-writer orchestration stays in Scribe history without inventing a Scribe actor. Serialize with writers and Cost Preflight at that root.
 
 Hand the turn's **state advance** on the same call — the mode in effect, the roles dispatched, and any escalation raised or resolved — so the Scribe moves `state.json` forward with the logs it just appended. A turn that appends a decision and leaves the status document behind makes every later turn read a squad that never moved.
 
