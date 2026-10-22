@@ -339,7 +339,7 @@ $Kind=if($Prompt -match 'Initialization only;'){'init'}elseif($Prompt -match 'Im
 $Ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1]
 if(-not (Test-Path 'initial-credit-limit.txt')){Set-Content 'initial-credit-limit.txt' $Ceiling}
 $EffectiveCeiling=[double](Get-Content 'initial-credit-limit.txt')
-@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
+@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first');boundaryValidation=$Prompt.Contains('test persisted Int32 and Int64 ID boundaries and data preservation');orderedHandoffs=$Prompt.Contains('finish and verify the preceding author/reviewer handoff synchronously');observationPolicy=$Prompt.Contains('without repeated remediation merely to reach a benchmark threshold')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
 if($EffectiveCeiling -lt 750){exit 38}
 $SessionRoot=Join-Path $HOME ".copilot/session-state/$Session"
 New-Item -ItemType Directory -Path $SessionRoot -Force|Out-Null
@@ -383,6 +383,8 @@ exit 0
                 $Run.stages[1].passed | Should -BeFalse
                 $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
                 @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(970)
+                ($Calls | Where-Object kind -EQ 'requirements').orderedHandoffs | Should -BeTrue
+                @($Calls | Where-Object { -not $_.observationPolicy }).Count | Should -Be 0
                 if ($Outcome -eq 'observe-credit-limit') {
                     $Run.stages.Count | Should -Be 2
                     $Run.stages[1].process.stopCause | Should -Be 'credit-limit'
@@ -392,6 +394,7 @@ exit 0
                     $Run.stages.name -join ',' | Should -Be 'init,requirements,build'
                     $Calls.kind -join ',' | Should -Be 'init,requirements,build'
                     $Run.stages[2].process.exitCode | Should -Be 37
+                    ($Calls | Where-Object kind -EQ 'build').boundaryValidation | Should -BeTrue
                 }
                 $Run.judge.valid | Should -BeFalse
                 $Run.judge.reason | Should -Be 'missing-or-oversized-document'
@@ -419,6 +422,10 @@ exit 0
             foreach($Prefix in @('requirements','requirements-compaction','requirements-continuation')) { Test-Path (Join-Path $Trial "out/$Prefix-events.jsonl") | Should -BeTrue }
             Get-Content (Join-Path $Trial 'out/requirements-stdout.jsonl') -Raw | Should -Match '127666'
             $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            ($Calls | Where-Object kind -EQ 'requirements').orderedHandoffs | Should -BeTrue
+            if ($Outcome -eq 'recovered') {
+                ($Calls | Where-Object kind -EQ 'build').boundaryValidation | Should -BeTrue
+            }
             @($Calls.session | Sort-Object -Unique).Count | Should -Be 1
             ($Calls | Where-Object kind -EQ continuation).resumeOnly | Should -BeTrue
             @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(750)
@@ -596,6 +603,11 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
     }
     It 'accepts initialized state without demanding implementation roles' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init).passed | Should -BeTrue
+        $script:StageMetrics.dispatches.Remove('Squad Scribe')
+        $Direct = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init
+        $Direct.checks['scribeHistory'] | Should -BeFalse
+        $Direct.passed | Should -BeFalse
+        $script:StageMetrics.dispatches['Squad Scribe'] = 1
         Set-Content (Join-Path $script:StageSquad 'history/Squad Scribe.md') '# Squad Scribe History'
         $Malformed = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init
         $Malformed.checks['stateVerifier'] | Should -BeTrue
@@ -1089,7 +1101,16 @@ try {
         @($Rejected.checks | Where-Object { -not $_.passed }).name | Should -Be 'id-boundary-preserves-store'
         Set-Content -LiteralPath $Path -Value $Source.Replace($CapacityGuard, '$Maximum=[long]$Maximum').Replace('[int]$Id', '[long]$Id') -Encoding utf8NoBOM
         $Wider = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
+        $Wider.passed | Should -BeFalse
+        @($Wider.checks | Where-Object { -not $_.passed }).name | Should -Be 'id-boundary-preserves-store'
+        $GuardedWider = $Source.Replace($CapacityGuard, '$Maximum=[long]$Maximum; if ($Maximum -eq [long]::MaxValue) {throw "id-capacity"}').Replace('[int]$Id', '[long]$Id')
+        Set-Content -LiteralPath $Path -Value $GuardedWider -Encoding utf8NoBOM
+        $Wider = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
         $Wider.passed | Should -BeTrue -Because (@($Wider.checks | Where-Object { -not $_.passed } | ForEach-Object name) -join ', ')
+        Set-Content -LiteralPath $Path -Value $GuardedWider.Replace('throw "id-capacity"', '$Maximum=0') -Encoding utf8NoBOM
+        $Wrapped = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
+        $Wrapped.passed | Should -BeFalse
+        @($Wrapped.checks | Where-Object { -not $_.passed }).name | Should -Be 'id-boundary-preserves-store'
     }
     It 'rejects a hanging <Probe> instead of treating the watchdog as input rejection' -ForEach @(
         @{ Probe = 'missing-title'; Needle = "if ([string]::IsNullOrWhiteSpace(`$Title))"; Replacement = "if (-not `$PSBoundParameters.ContainsKey('Title')) { while (`$true) { Start-Sleep -Milliseconds 200 } }; if ([string]::IsNullOrWhiteSpace(`$Title))" },

@@ -12,7 +12,7 @@ Goal: final requirements drafts retain canonical traceability and honest busines
 
 The owning authors, not the coordinator, activate the canonical `requirements-author` skill. Carry the actual selected template, configured taxonomy, and document-specific active phase in author and review briefs; resolve missing selections through the owning specialist, not a coordinator-created schema. Preserve prerequisite authoring phases and gates. BRD quality work uses its Define/Govern context; Validate/Finalize applies only to appropriate PRD review work, never as a shortcut around authoring. Reuse canonical rules rather than duplicating their taxonomy or hard-coding an ID prefix.
 
-Pass authoritative source paths and final BRD/PRD draft paths as explicit inputs/output arguments under each resolved roster Deliverable Root. Complete the BRD before its dependent PRD and pass that actual BRD path to the PRD author; do not re-derive authoritative inputs.
+Pass authoritative source paths and final BRD/PRD draft paths as explicit inputs/output arguments under each resolved roster Deliverable Root. Complete the BRD before its dependent PRD and pass that actual BRD path to the PRD author; do not re-derive authoritative inputs. Before dispatching a dependent domain reviewer or PRD author, capture and verify the predecessor author's handoff (artifact on disk plus persisted history/consumption). Failed verification stops the dependent dispatch: report the blocker, never touch or backdate artifact/`since`, bypass stale-input/history/restore refusals, or repeatedly remediate merely to claim completion. Drain a synchronous closing reviewer handoff before the next stage.
 
 Use the author's existing one-time self-check before domain review, not a new model pass:
 

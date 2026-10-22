@@ -97,6 +97,12 @@ Describe 'GATE-38 Init copies roster rows from the payload and never derives an 
             $script:Scribe | Should -Match ([regex]::Escape("references/$reference"))
         }
         $script:ScribeHot | Should -Match 'Cold loading is not a validation bypass'
+        $script:Coordinator | Should -Match 'never for fresh Init or `Initialize-Squad`'
+        $script:Coordinator | Should -Match 'dispatch the actual Squad Scribe via `task`/`runSubagent`'
+        $script:Coordinator | Should -Match 'only the child runs the helper and returns its validated status'
+        (Get-SquadReferenceBody 'operating-procedure.md') | Should -Match 'never the coordinator running the helper or `Initialize-Squad` directly'
+        $script:Coordinator | Should -Match 'ordinary direct-writer orchestration stays in Scribe history without inventing a Scribe actor'
+        $script:Coordinator | Should -Match 'Set `stateAdvance.activeRoles` to actually dispatched agents, or `\[\]` when none; running the script never makes Scribe an active actor'
     }
     It 'the payload template carries a roster field for initialization and roster refresh' {
         $script:PayloadTemplate | Should -Match '(?m)^roster: <initialization/roster refresh only'
