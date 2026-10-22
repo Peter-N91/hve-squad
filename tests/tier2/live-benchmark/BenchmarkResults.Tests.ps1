@@ -646,6 +646,123 @@ Describe 'Portable benchmark history and reporting' {
     }
 }
 
+Describe 'Hosted legacy-base report integration' {
+    BeforeAll {
+        function Get-RecordedWorkflowScript([string]$Name) {
+            $Lines = [IO.File]::ReadAllLines((Join-Path $SourceRoot '.github/workflows/tier2-recorded-benchmark.yml'))
+            $Start = [array]::FindIndex($Lines, [Predicate[string]]{ param($Line) $Line -ceq "      - name: $Name" })
+            if ($Start -lt 0) { throw "Workflow step unavailable: $Name" }
+            while ($Lines[$Start] -cne '        run: |') { $Start++ }
+            $Body = [Collections.Generic.List[string]]::new()
+            for ($Index = $Start + 1; $Index -lt $Lines.Count; $Index++) {
+                if ($Lines[$Index] -and -not $Lines[$Index].StartsWith('          ')) { break }
+                $Body.Add($(if ($Lines[$Index]) { $Lines[$Index].Substring(10) } else { '' }))
+            }
+            # Match the hosted pwsh wrapper's native-status propagation.
+            ($Body -join "`n") + "`nif (Test-Path variable:LASTEXITCODE) { exit `$LASTEXITCODE }`n"
+        }
+    }
+    It 'never turns a strict failure or unavailable observation into success for <Case>' -ForEach @(
+        @{ Case = 'strict-failure'; Strict = '2'; Outcome = 'success'; Render = '0'; Expected = 2 },
+        @{ Case = 'strict-regression'; Strict = '3'; Outcome = 'success'; Render = '2'; Expected = 3 },
+        @{ Case = 'incomplete-after-old-success'; Strict = '0'; Outcome = 'success'; Render = '2'; Expected = 2 },
+        @{ Case = 'report-failed'; Strict = '0'; Outcome = 'failure'; Render = ''; Expected = 1 },
+        @{ Case = 'missing-report-verdict'; Strict = '0'; Outcome = 'success'; Render = ''; Expected = 1 },
+        @{ Case = 'both-validated'; Strict = '0'; Outcome = 'success'; Render = '0'; Expected = 0 }
+    ) {
+        $Script = Join-Path $TestDrive "verdict-$Case.ps1"
+        [IO.File]::WriteAllText($Script, (Get-RecordedWorkflowScript 'Propagate comparison verdict'))
+        $Original = @($env:VERDICT, $env:REPORT_OUTCOME, $env:REPORT_VERDICT)
+        try {
+            $env:VERDICT = $Strict; $env:REPORT_OUTCOME = $Outcome; $env:REPORT_VERDICT = $Render
+            & pwsh -NoProfile -File $Script
+            $LASTEXITCODE | Should -Be $Expected
+        } finally {
+            $env:VERDICT = $Original[0]; $env:REPORT_OUTCOME = $Original[1]; $env:REPORT_VERDICT = $Original[2]
+        }
+    }
+    It 'runs exact hosted scripts against legacy 3504ffc and merged a64ee85 for <Case>' -ForEach @(
+        @{ Case = 'current-incomplete'; ExpectedRenderExit = 0; CurrentCampaign = $true },
+        @{ Case = 'wrong-reporter'; ExpectedRenderExit = 1; CurrentCampaign = $false },
+        @{ Case = 'changed-source'; ExpectedRenderExit = 0; CurrentCampaign = $false },
+        @{ Case = 'corrupt-campaign'; ExpectedRenderExit = 0; CurrentCampaign = $false }
+    ) {
+        $Repository = Join-Path $TestDrive "hosted-$Case"
+        [void](Invoke-TestGit $SourceRoot @('clone', '--quiet', '--shared', '--no-checkout', $SourceRoot, $Repository))
+        $Base = '3504ffc79c687d3da104e9a40f04e270ac13d9c0'
+        $Head = 'a64ee85b52bbb62b47ea88af89585638c324ab37'
+        $Pinned = '019c894bb0430802f47d2fc513fe326bec4023d2'
+        if ($Case -in @('changed-source', 'corrupt-campaign')) {
+            [void](Invoke-TestGit $Repository @('checkout', '--quiet', '--detach', $Head))
+            if ($Case -eq 'changed-source') {
+                [IO.File]::WriteAllText((Join-Path $Repository 'squad-src/hosted-source-changed.md'), 'changed source')
+            } else {
+                $PointerPath = Join-Path $Repository 'benchmarks/efficiency/latest-campaign.json'
+                $Pointer = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($PointerPath)); $Pointer.sha256 = '0' * 64
+                Write-TestJson $PointerPath $Pointer
+            }
+            $Head = Save-TestCommit $Repository
+        }
+        [void](Invoke-TestGit $Repository @('checkout', '--quiet', '--detach', $Base))
+        $Engine = Join-Path $Repository '.benchmark-report-engine'
+        [void](Invoke-TestGit $SourceRoot @('clone', '--quiet', '--shared', '--no-checkout', $SourceRoot, $Engine))
+        [void](Invoke-TestGit $Engine @('checkout', '--quiet', '--detach', $(if ($Case -eq 'wrong-reporter') { $Base } else { $Pinned })))
+        $CompareScript = Join-Path $TestDrive "compare-$Case.ps1"
+        $RenderScript = Join-Path $TestDrive "render-$Case.ps1"
+        [IO.File]::WriteAllText($CompareScript, (Get-RecordedWorkflowScript 'Compare or report missing baseline tooling'))
+        [IO.File]::WriteAllText($RenderScript, (Get-RecordedWorkflowScript 'Render observations with reviewed report implementation'))
+        $OriginalBase = $env:BASE_SHA; $OriginalHead = $env:HEAD_SHA; $OriginalOutput = $env:GITHUB_OUTPUT; $OriginalVerdict = $env:STRICT_VERDICT
+        try {
+            $env:BASE_SHA = $Base; $env:HEAD_SHA = $Head
+            $env:GITHUB_OUTPUT = Join-Path $TestDrive "github-output-$Case"
+            Push-Location $Repository
+            try {
+                & pwsh -NoProfile -File $CompareScript
+                $LASTEXITCODE | Should -Be 0
+                [IO.File]::ReadAllText($env:GITHUB_OUTPUT).Trim() | Should -Be 'verdict=2'
+                $env:STRICT_VERDICT = '2'
+                $Output = Join-Path $Repository '.benchmark-recorded-public'
+                $StrictPath = Join-Path $Output 'strict/report.json'
+                $StrictHash = (Get-FileHash $StrictPath).Hash
+                $Strict = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($StrictPath))
+                $Strict.status | Should -Be 'stale-record'
+                $Strict.exitCode | Should -Be 2
+                $RenderOutput = @(& pwsh -NoProfile -File $RenderScript 2>&1)
+                $LASTEXITCODE | Should -Be $ExpectedRenderExit
+                (Get-FileHash $StrictPath).Hash | Should -BeExactly $StrictHash
+                $Report = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'report.json')))
+                $Text = [IO.File]::ReadAllText((Join-Path $Output 'report.md'))
+                if ($CurrentCampaign) {
+                    $Report.status | Should -Be 'not-evaluable'
+                    $Report.reasons | Should -Be @('incomplete-observational-campaign')
+                    $Report.strictVerdict | Should -Be 2
+                    $Report.strictComparison.status | Should -Be 'stale-record'
+                    $Report.reportingEngine.revision | Should -BeExactly $Pinned
+                    $Text | Should -Match '^# Latest benchmark campaign'
+                    $Text | Should -Match '870.7412115'
+                    $Text | Should -Match '\| 1 \| unavailable'
+                    $Text | Should -Match '\| 2 \| 82'
+                    $Text | Should -Match '\| 3 \| 79'
+                    $Text | Should -Match 'Strict comparison \(unchanged gate\)'
+                    $Text | Should -Not -Match '\| Change|Change %|faster|slower'
+                } elseif ($Case -eq 'wrong-reporter') {
+                    $RenderOutput -join "`n" | Should -Match 'identity mismatch'
+                    (Get-FileHash (Join-Path $Output 'report.json')).Hash | Should -BeExactly $StrictHash
+                } else {
+                    $Report.exitCode | Should -Be 2
+                    $Report.status | Should -Be $(if ($Case -eq 'changed-source') { 'stale-record' } else { 'invalid-record' })
+                    $Text | Should -Not -Match '^# Latest benchmark campaign'
+                    if ($Case -eq 'corrupt-campaign') { $Report.headCampaign | Should -BeNullOrEmpty }
+                }
+                Test-Path (Join-Path $Output 'badge.svg') | Should -BeTrue
+            } finally { Pop-Location }
+        }
+        finally {
+            $env:BASE_SHA = $OriginalBase; $env:HEAD_SHA = $OriginalHead; $env:GITHUB_OUTPUT = $OriginalOutput; $env:STRICT_VERDICT = $OriginalVerdict
+        }
+    }
+}
+
 Describe 'Pre-release benchmark gate' {
     BeforeAll {
         $Release = [IO.File]::ReadAllText((Join-Path $SourceRoot '.github/workflows/release.yml'))

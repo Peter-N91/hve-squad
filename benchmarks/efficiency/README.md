@@ -212,6 +212,37 @@ Reports and a grey badge are written before the nonzero verdict. A current
 campaign can be archived alongside older complete records, but cannot make
 stale, incomplete or incompatible evidence pass.
 
+### Hosted reporting with an older parent implementation
+
+The hosted workflow still executes the **reviewed base** comparator for its
+strict gate. Updating a PR's comparator alone therefore cannot update the
+hosted report when main still contains an older implementation.
+
+Reporting uses a separate explicit trust source: the report-only implementation
+from reviewed PR42, pinned to
+`jmservera/hve-squad@019c894bb0430802f47d2fc513fe326bec4023d2`. The workflow
+checks out that fixed commit without persisted credentials and verifies its
+identity before importing it. The pin is not chosen by a PR ref, branch input,
+campaign pointer or candidate file. Candidate Git objects remain data-only:
+no candidate comparator, script, module or generated document is executed.
+Changing the reporter requires a reviewer-visible immutable pin update.
+
+The original base report, Markdown and badge are retained byte-for-byte under
+the uploaded artifact's `strict/` directory. The report engine independently
+validates both sides and current campaign source/protocol. A valid current
+campaign leads the summary as **incomplete/not-evaluable**, rather than calling
+its new measurements stale merely because an older complete pointer remains.
+The old strict `stale-record` result is still shown as an **unchanged gate**,
+with its original reason and exit. If campaign data is corrupt or its measured
+source is no longer current, it cannot receive that current-campaign headline.
+
+Report generation never overrides a failing strict gate. Conversely, a legacy
+strict success cannot hide an unavailable campaign or failed reporter: the
+final gate remains nonzero. A missing or mismatched reporting implementation
+retains the strict artifacts and fails reporting, never executes head tooling
+as a fallback. This affects reporting only; no paid work or baseline promotion
+is involved. Workflow changes need owner review/merge before hosted use.
+
 Trial UUIDs must use canonical lowercase, hyphenated `D` format. Alternate casing
 is rejected as invalid evidence, not normalized, so it cannot disguise reused
 trials within or across series.
