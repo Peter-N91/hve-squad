@@ -547,3 +547,11 @@ execution as that revision. Old `benchmark-series-v1` records remain available
 for historical analysis, but are explicitly `stale-record:unbound-execution-protocol`
 for current snapshot validation. The existing selected baseline therefore needs
 new, separately authorized evidence; old records and pointers are not rewritten.
+
+The Scribe verifier's pricing evaluator (v2) prices long-context blocks per block
+and applies calibration once, so its script source changed and `verifierHash`
+changed with it. That hash covers the verifier script only, not imported modules
+such as `SquadState.psm1`; module-only drift is not fingerprinted. The earlier
+83/81 series carry the old verifier hash, remain immutable, and are incompatible
+for direct strict comparison until matching new-verifier evidence is collected.
+There is no waiver and no automatic paid parent refresh.
