@@ -232,10 +232,17 @@ statistical significance or a guarantee of causality.
 
 ## Automatic release collection
 
+> **Release scope.** Release and Release Prep only consume stored evidence: they
+> call `.github/workflows/tier2-recorded-benchmark.yml` (strict stored-record
+> comparison, no model secret, no paid collection). The paid collector below is
+> operator-dispatched diagnostics only; wiring it into Release (the six release
+> artifacts, frozen-controller validation and publication binding) is kept on the
+> separate experimental branch and PR. Statements below that describe Release
+> collecting or publishing records apply only to that experiment.
+
 **Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) is the bounded
-pre-publication collector used by Release and standalone manual diagnostics.
-It never runs on PRs or ordinary pushes; the existing Release event remains the
-only automatic paid entry point. It freezes the reviewed default-branch
+paid collector for standalone manual diagnostics (and the experimental release
+wiring). It never runs on PRs or ordinary pushes. It freezes the reviewed default-branch
 controller (upstream default branch for a fork), its selected immutable v2
 record, candidate SHA, effective release version and policy before installation
 or spending. An optional diagnostic `base_sha` must equal that reviewed tip;
@@ -341,13 +348,12 @@ implementation. Offline tests do not establish a hosted or paid campaign result.
 
 ### Strict stored-record analysis (no paid calls)
 
-The read-only workflow `.github/workflows/tier2-recorded-benchmark.yml` also runs
-once per pull request to `main` (`pull_request` event, no secrets, concurrency
-group per PR number so a new push cancels the stale run). For a PR it resolves
-base SHA/repository and head SHA/repository from the event, so fork heads are
-fetched as objects only; just the reviewed base checkout executes. In this
-experimental branch Release uses the paid collector instead; the prior read-only
-workflow is retained as `.github/workflows/tier2-recorded-benchmark.yml`. Its optional base/head overrides
+The read-only workflow `.github/workflows/tier2-recorded-benchmark.yml` is the
+Release gate and also runs once per pull request to `main` (`pull_request` event,
+no secrets, concurrency group per PR number so a new push cancels the stale run).
+For a PR it resolves base SHA/repository and head SHA/repository from the event,
+so fork heads are fetched as objects only; just the reviewed base checkout
+executes. Release reaches it only through `workflow_call` with the frozen candidate. Its optional base/head overrides
 resolve independently to the selected branch and PR parent (including upstream
 fork PRs), or the default branch when no PR exists. Ambiguous/self parents
 require an explicit base. Release-tag analysis peels annotated tags and paginates
