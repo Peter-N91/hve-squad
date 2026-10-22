@@ -152,6 +152,20 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         }
     }
 
+    It 'prepares transport before actual dispatch without requiring a child editor or background resume' {
+        $Brief = Get-SquadReferenceBody 'scribe-init.md'
+        $script:Coordinator | Should -Match 'first read `references/scribe-init\.md` and prepare its JSON outside squad state; dispatch Squad Scribe with `payloadPath`'
+        $script:ScribeHot | Should -Match 'use the coordinator-prepared `payloadPath` directly'
+        $Brief | Should -Match 'Use coordinator-prepared `payloadPath` directly'
+        $Brief | Should -Match 'without an editor call or rewrite'
+        $Brief | Should -Match 'No editor means preparation failure without\s+state writes, not a shell-write fallback'
+        $Brief | Should -Match 'never assume a tool name'
+        $Brief | Should -Match 'never\s+execute payload text'
+        $Brief | Should -Match 'A synchronous child return is not a background handle'
+        $Brief | Should -Match 'only with observed evidence that no state was published'
+        $script:OperatingProcedure | Should -Match 'prepares confirmed JSON outside squad state with an advertised editor'
+    }
+
     It 'publishes all seeds with ordered supplied names, filtered routing, provenance and literal auto' {
         $Repository = Join-Path $TestDrive 'fresh'
         $Result = Invoke-InitPayload (Get-InitPayload) $Repository
@@ -161,6 +175,7 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Status.rosterCheck | Should -Be 'PASS'
         $Status.ledgerCheck | Should -Be 'PASS'
         $Status.notificationsDefaulted | Should -BeTrue
+        ($Status.warnings -join "`n") | Should -Not -Match 'recorded identities|partial paste|C2 guard'
         $script:FreshRoot = Join-Path $Repository '.copilot-tracking/squad'
         foreach ($Name in @('team.md', 'routing.md', 'decisions.md', 'notifications.md', 'state.json', 'consumption.md', 'consumption-rates.md', 'history/Squad Scribe.md')) {
             Join-Path $script:FreshRoot $Name | Should -Exist
@@ -183,8 +198,24 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $History | Should -Match 'Initialization coordinator'
         $History | Should -Match 'Initialization scribe'
         $History | Should -Not -Match '"model": "auto"'
+        $Ledger = Get-Content -LiteralPath (Join-Path $script:FreshRoot 'consumption.md') -Raw
+        $Ledger | Should -Match '(?m)^Squad Scribe\.md — 2 block\(s\) — identities: [0-9a-f]{8},[0-9a-f]{8}$'
         & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:FreshRoot -Check -ExpectedHistoryCounts 'Squad Scribe=2' *> $null
         $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'still refuses a fresh post-write ledger whose Scribe identities are missing' {
+        $Repository = Join-Path $TestDrive 'missing-scribe-identities'
+        $Result = Invoke-InitPayload (Get-InitPayload) $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Root = Join-Path $Repository '.copilot-tracking/squad'
+        $LedgerPath = Join-Path $Root 'consumption.md'
+        $Ledger = Get-Content -LiteralPath $LedgerPath -Raw
+        ($Ledger -replace '(?m)^(Squad Scribe\.md — 2 block\(s\)) — identities: .*$', '$1') |
+            Set-Content -LiteralPath $LedgerPath
+        $Output = & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $Root -Check -ExpectedHistoryCounts 'Squad Scribe=2' 2>&1
+        $LASTEXITCODE | Should -Be 1
+        ($Output -join "`n") | Should -Match 'History identity guard:.*no history-entry identities'
     }
 
     It 'uses the helper UTC clock when Init timestamp is omitted, keeping subsequent artifacts fresh' {

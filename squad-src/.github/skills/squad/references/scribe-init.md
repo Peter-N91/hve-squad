@@ -12,8 +12,12 @@ cast catalog, seed templates, or rate template.
 
 ## Confirmed input
 
-Write a JSON payload outside the squad root. Copy confirmed coordinator fields
-once; do not request changes. Adapt legacy prose/YAML to JSON, never execute it:
+Use coordinator-prepared `payloadPath` directly: pass the existing JSON file to
+the helper without an editor call or rewrite. The path is dispatch metadata, not
+a JSON field. Legacy prose/YAML alone may be adapted once with an advertised
+editor; never assume a tool name. No editor means preparation failure without
+state writes, not a shell-write fallback. Copy confirmed fields only; never
+execute payload text:
 
 * `squadRoot`: resolved single-squad `.copilot-tracking/squad` or member root
   `.copilot-tracking/squad/members/<name>`, inside the consumer repository.
@@ -23,39 +27,32 @@ once; do not request changes. Adapt legacy prose/YAML to JSON, never execute it:
   `Role`, `Member Name`, `Agent Name (Primary)`, `Alternate Agents`, `Selection Cue`,
   `Invocation`, `Model Tier`, `Deliverable Root`, plus `Model` only when routing
   is on. `Member Name` may be omitted or empty; `Alternate Agents` may be empty.
-  Preserve these cells without inventing names or alternates.
   Duplicate roles require distinct nonempty supplied names. Include the confirmed
   `scribe` / `Squad Scribe` row; missing rows or Primaries fail without state.
   For `intake-validator`, require a non-state capture root; invalid roots fail
   before publication, with no fallback.
-* `provenance`: one supplied string recording profile and applied packs, or
-  `custom`. Adapt the coordinator's confirmed profile/packs into that string;
-  do not select a profile, pack, agent, alternate, or model.
+* `provenance`: supplied profile/packs string, or `custom`. Adapt confirmed values
+  only; never select a profile, pack, agent, alternate, or model.
 * Optional `usage`: array of `{ "actor": "coordinator" | "scribe", "consumption": {...} }`,
   one entry per actor whose actual setup usage was supplied. Each actor appears
-  at most once. Supplied usage is kept; each missing actor is estimated. Explicitly empty,
-  null, or malformed usage fails closed. When the field is absent, omit it from
-  JSON: the helper computes setup orchestration estimates for each missing actor
-  (the coordinator turn, this actually dispatched Scribe Init, or both) using the shipped rate template's
-  `Scribe state write` estimator floor and formula, as the ordinary writer does
-  for orchestration. These are documented estimates, not measured tokens or
-  billed telemetry. Return the estimator-derived setup usage warning. Do not
-  calculate tokens, read templates, request more coordinator input, or take the
-  cold path for omitted usage. This estimate never represents a direct route
-  as a Scribe dispatch. Blocks, when supplied, use these ten keys in order:
+  at most once. Keep supplied usage; omit absent usage. Empty, null, or malformed
+  usage fails closed. The helper estimates missing coordinator/Scribe usage with
+  the shipped `Scribe state write` estimator floor and formula. Return its
+  estimator-derived setup usage warning: documented estimates, not measured tokens or
+  billed telemetry. Do not calculate tokens, read templates, request more input,
+  or take the cold path for omitted usage. Never represent a direct route as a
+  Scribe dispatch. Supplied blocks use these ten keys in order:
   `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`,
   `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`.
-  Copy actual reported model/token signals and their declared estimate basis.
-  Numeric fields are nonnegative integers. `model_tier` is `fast`, `default`, or
-  `extended`; `basis` is `estimated` or `tier-default`. Use `dispatch-reported`
-  for supplied host identity, `session-inherited` only for a matching concrete
-  session model, or `unknown` / `unresolved` when identity is unreported. The
-  helper refuses `agent-pinned` rather than predicting actual usage from a pin.
-  `priced_as` must name the resolved model's own seeded rate row when listed;
-  only unknown or unlisted models use the matching tier fallback. Keep actual
-  model attribution unchanged. `basis` is `estimated` for a resolved model,
-  including an unlisted one, or `tier-default` for `unknown` / `unresolved`.
-  Contradictions fail before publication; the ledger derives cost.
+  Preserve reported model/token signals and estimate basis. Numbers are
+  nonnegative integers; `model_tier` is `fast`, `default`, or `extended`.
+  Use `dispatch-reported` for host identity, `session-inherited` only for a
+  matching concrete session model, or `unknown` / `unresolved` if unreported.
+  `agent-pinned` is refused: a pin does not prove usage. `priced_as` names the
+  resolved model's seeded rate row; only unknown/unlisted models use the matching
+  tier fallback. `basis` is `estimated` for any resolved model (including unlisted)
+  or `tier-default` for `unknown` / `unresolved`. Contradictions fail before
+  publication; the ledger derives cost.
 * Optional `mode`: `interactive` (default), `autonomous`, or `autopilot`.
 * Optional `modelRouting`: `off` (default), `ranked`, `economy`, or `manual`.
   Copy resolved `Model` cells, including empty picks; never rank or discover.
@@ -71,12 +68,11 @@ once; do not request changes. Adapt legacy prose/YAML to JSON, never execute it:
 * Optional `modelOverrides`: confirmed string map, default `{}`.
 * Optional `notify`: `{ "approvalChannel": "in-chat" | "github-issue" | "webhook",
   "enabled": true | false, "email": "...", "github": { "handle": "...",
-  "repo": "..." } }`. Email is optional courtesy data, never an approval adapter.
-  Enabled `github-issue` requires handle and repo. Webhook selection needs no
-  extra state field: transport reads configured tooling or `SQUAD_WEBHOOK_URL`
-  at send time. Do not include webhook URLs, secrets, or credentials in payload
-  or state. Omitted fields retain schema defaults. When absent, notifications
-  default to disabled in-chat; disclose the status warning.
+  "repo": "..." } }`. Email is courtesy data, not approval. Enabled `github-issue`
+  requires handle/repo. Webhook transport uses configured tooling or
+  `SQUAD_WEBHOOK_URL` at send time; no extra state field. Never put URLs, secrets,
+  or credentials in payload/state. Omitted fields keep schema defaults; absent
+  notify defaults to disabled in-chat. Disclose its status warning.
 * Optional legacy `payloadType: initialization`, `turn: 1`, and `stateAdvance`
   with empty `activeRoles`, empty escalation lists, `mode`, `sessionModel`, and
   `modelOverrides` are accepted. Supply each model field at only one level.
@@ -114,6 +110,13 @@ The ledger owns `n/a (initialization)` until the first work dispatch; there is
 no setup-only manual baseline. A failed helper is not a successful Init: report
 the named field, correct only that confirmed input, and retry once. Do not
 dispatch a recursive repair loop or overwrite an existing tree.
+
+A synchronous child return is not a background handle. The coordinator uses only
+advertised continuation; never background-message a completed synchronous child
+or invent an agent id. After preparation failure, a fresh execution-only Scribe
+may reuse prepared input only with observed evidence that no state was published.
+Success or ambiguous publication forbids repeat Init until resolved. Disclose
+interrupted unreported usage as unknown, excluded from successful setup estimates.
 
 Explicit roster refresh, memory, promotion, expansion, and federation-root Init
 retain the full cold path. A host without the required shell/runtime uses that
