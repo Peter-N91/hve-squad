@@ -64,16 +64,21 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Before = (Get-FileHash -LiteralPath $Store).Hash
         $Bad = & $Invoke -Options @('-Action', 'list')
         & $Record 'corrupt-store-preserved' ($Bad.rejected -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before)
-        Set-Content -LiteralPath $Store -Value '[{"id":2147483647,"title":"Boundary task","status":"open"}]' -NoNewline -Encoding utf8NoBOM
-        $Before = (Get-FileHash -LiteralPath $Store).Hash
-        $Boundary = & $Invoke -Options @('-Action', 'add', '-Title', 'After boundary')
-        $BoundaryPassed = $false
-        if ($Boundary.ok -and $Boundary.value -is [Collections.IDictionary] -and ($Boundary.value['id'] -is [int] -or $Boundary.value['id'] -is [long]) -and $Boundary.value['id'] -gt [int]::MaxValue) {
-            $List = & $Invoke -Options @('-Action', 'list')
-            $Done = & $Invoke -Options @('-Action', 'done', '-Id', [string]$Boundary.value['id'])
-            $BoundaryPassed = ($List.ok -and $List.value -is [array] -and $List.value.Count -eq 2 -and $List.value[0]['id'] -eq [int]::MaxValue -and $List.value[0]['title'] -ceq 'Boundary task' -and $List.value[1]['id'] -eq $Boundary.value['id'] -and $Done.ok -and $Done.value['id'] -eq $Boundary.value['id'] -and $Done.value['title'] -ceq 'After boundary' -and $Done.value['status'] -eq 'done')
-        } elseif ($Boundary.rejected) {
-            $BoundaryPassed = (Test-Path -LiteralPath $Store -PathType Leaf) -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before
+        $BoundaryPassed = $true
+        foreach ($Maximum in @([long][int]::MaxValue, [long]::MaxValue)) {
+            $Seed = @(@{ id = $Maximum; title = 'Boundary task'; status = 'open' })
+            ConvertTo-Json -InputObject $Seed -Compress | Set-Content -LiteralPath $Store -NoNewline -Encoding utf8NoBOM
+            $Before = (Get-FileHash -LiteralPath $Store).Hash
+            $Boundary = & $Invoke -Options @('-Action', 'add', '-Title', 'After boundary')
+            $Preserved = $false
+            if ($Maximum -lt [long]::MaxValue -and $Boundary.ok -and $Boundary.value -is [Collections.IDictionary] -and ($Boundary.value['id'] -is [int] -or $Boundary.value['id'] -is [long]) -and $Boundary.value['id'] -gt $Maximum) {
+                $List = & $Invoke -Options @('-Action', 'list')
+                $Done = & $Invoke -Options @('-Action', 'done', '-Id', [string]$Boundary.value['id'])
+                $Preserved = ($List.ok -and $List.value -is [array] -and $List.value.Count -eq 2 -and $List.value[0]['id'] -eq $Maximum -and $List.value[0]['title'] -ceq 'Boundary task' -and $List.value[0]['status'] -eq 'open' -and $List.value[1]['id'] -eq $Boundary.value['id'] -and $Done.ok -and $Done.value['id'] -eq $Boundary.value['id'] -and $Done.value['title'] -ceq 'After boundary' -and $Done.value['status'] -eq 'done')
+            } elseif ($Boundary.rejected) {
+                $Preserved = (Test-Path -LiteralPath $Store -PathType Leaf) -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before
+            }
+            $BoundaryPassed = $BoundaryPassed -and $Preserved
         }
         & $Record 'id-boundary-preserves-store' $BoundaryPassed
     }

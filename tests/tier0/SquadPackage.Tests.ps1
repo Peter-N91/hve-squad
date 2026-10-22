@@ -205,6 +205,10 @@ Describe 'Requirements document quality source contracts (RQ-01..06)' -Tag 'Requ
         $guide | Should -Match 'configured cost ceiling, or a member under a federation aggregate ceiling.+exit 2.+existing cold Scribe reassembly.+actual reviewer, the complete capture, and the admission run id, round id, slot and Decision Ref'
         $guide | Should -Match 'Invalid input, history-integrity or restore failures are never reinterpreted as permission, partial replay or hand-edits'
         $guide | Should -Match 'tester.s actual handoff through the same supported route'
+        $guide | Should -Match 'Before dispatching a dependent domain reviewer or PRD author, capture and verify the predecessor author.s handoff \(artifact on disk plus persisted history/consumption\)'
+        $guide | Should -Match 'Failed verification stops the dependent dispatch: report the blocker'
+        $guide | Should -Match 'never touch or backdate artifact/`since`, bypass stale-input/history/restore refusals'
+        $guide | Should -Match 'Drain a synchronous closing reviewer handoff before the next stage'
     }
 
     It 'RQ-05 maps source clauses to existing IDs with binary SMART and honest ownership' {
