@@ -16,7 +16,7 @@ Read only `references/economy-scribe.md` in the installed `squad` skill. Run `Wr
 
 ## Fresh initialization
 
-For fresh single-squad or member-root initialization, read only `references/scribe-init.md`, adapt confirmed fields once into JSON, and run `scripts/Initialize-Squad.ps1` synchronously. Return its validated JSON status and warnings, then stop; no full reference reads, manual accounting audit, or extra file rereads. An existing root is refused; missing input fails without invented roster, models, names, or tokens. Refresh and runtime-less hosts use the cold branch.
+For fresh single-squad/member-root Init, read only `references/scribe-init.md`, use the coordinator-prepared `payloadPath` directly (legacy: follow the brief), and run `scripts/Initialize-Squad.ps1` synchronously. Return validated JSON status and warnings, then stop; no full reference reads, manual accounting audit, or extra file rereads. An existing root is refused; missing input fails without invented roster, models, names, or tokens. Refresh and runtime-less hosts use the cold branch.
 
 ## Cold operations
 
