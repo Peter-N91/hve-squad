@@ -178,6 +178,7 @@ jobs:
           HEAD_SHA: ${{ steps.refs.outputs.head }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
           $outputRoot = Join-Path $PWD '.benchmark-recorded-public'
           New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
           $helper = './tests/tier2/live-benchmark/Compare-BranchBenchmark.ps1'
@@ -196,7 +197,71 @@ jobs:
             $code = 2
           }
           if ($code -notin @(0, 1, 2, 3)) { $code = 1 }
+          $strictRoot = Join-Path $outputRoot 'strict'
+          New-Item -ItemType Directory -Path $strictRoot -Force | Out-Null
+          foreach ($name in @('report.json', 'report.md', 'badge.svg')) {
+            Copy-Item -LiteralPath (Join-Path $outputRoot $name) -Destination (Join-Path $strictRoot $name)
+          }
           "verdict=$code" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          $global:LASTEXITCODE = 0
+
+      # Report-only controller reviewed in PR42. Never select code from PR refs or data pointers.
+      - name: Checkout immutable reviewed report implementation
+        if: always() && steps.refs.outputs.base != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jmservera/hve-squad
+          ref: 019c894bb0430802f47d2fc513fe326bec4023d2 # reviewed PR42, reporting only
+          path: .benchmark-report-engine
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Render observations with reviewed report implementation
+        id: report
+        if: always() && steps.refs.outputs.base != ''
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ steps.refs.outputs.base }}
+          HEAD_SHA: ${{ steps.refs.outputs.head }}
+          STRICT_VERDICT: ${{ steps.compare.outputs.verdict }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $repository = $PWD.Path
+          $outputRoot = Join-Path $repository '.benchmark-recorded-public'
+          $engine = Join-Path $repository '.benchmark-report-engine'
+          $expected = '019c894bb0430802f47d2fc513fe326bec4023d2'
+          $actual = & git -C $engine rev-parse --verify HEAD
+          if ($LASTEXITCODE -ne 0 -or ([string]$actual).Trim() -cne $expected) { throw 'Reviewed report implementation identity mismatch; strict reports retained.' }
+          if ($env:STRICT_VERDICT -cnotmatch '^[0-3]$') { throw 'Strict comparison verdict unavailable; strict reports retained.' }
+          Import-Module (Join-Path $engine 'tests/tier2/live-benchmark/BenchmarkResults.psm1') -Force
+          $strictPath = Join-Path $outputRoot 'strict/report.json'
+          $strict = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($strictPath))
+          if ($strict.baseCommit -cne $env:BASE_SHA -or $strict.headCommit -cne $env:HEAD_SHA -or $strict.exitCode -ne [int]$env:STRICT_VERDICT) { throw 'Strict report identity/verdict mismatch; strict reports retained.' }
+          $report = Compare-BranchBenchmark -Repository $repository -BaseRef $env:BASE_SHA -HeadRef $env:HEAD_SHA
+          $report['strictComparison'] = $strict
+          $report['strictVerdict'] = [int]$env:STRICT_VERDICT
+          $report['reportingEngine'] = @{ repository = 'jmservera/hve-squad'; revision = $expected; scope = 'descriptive-only-no-verdict-override' }
+          if ($report.headCampaign -and -not $report.availability.Contains('campaign')) {
+            $campaign = $report.headCampaign
+            $incomplete = $campaign.trials.Count -ne 3 -or @($campaign.trials | Where-Object { $null -eq $_.quality -or -not $_.accounting.complete }).Count -gt 0
+            $report.status = 'not-evaluable'
+            $report.exitCode = 2
+            $report.reasons = @($(if ($incomplete) { 'incomplete-observational-campaign' } else { 'observational-campaign-not-comparable' }))
+          }
+          Write-BenchmarkReport -Report $report -OutputDirectory $outputRoot
+          $summary = Join-Path $outputRoot 'report.md'
+          $content = [IO.File]::ReadAllText($summary)
+          $strictNote = "## Strict comparison (unchanged gate)`n`nThe reviewed base implementation returned **$($strict.status)**, exit **$env:STRICT_VERDICT**. Reasons: $($strict.reasons -join ', '). This report-only renderer does not change that gate. Exact original artifacts are retained under ``strict/``.`n`n"
+          if ($report.headCampaign -and -not $report.availability.Contains('campaign')) {
+            $campaignText = [IO.File]::ReadAllText((Join-Path $outputRoot 'campaign-report.md'))
+            $content = $campaignText + "`n" + $strictNote + $content
+          } else { $content = $strictNote + $content }
+          [IO.File]::WriteAllText($summary, $content, [Text.UTF8Encoding]::new($false))
+          "verdict=$($report.exitCode)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          $global:LASTEXITCODE = 0
 
       - name: Publish report summary
         if: always()
@@ -221,6 +286,10 @@ jobs:
             .benchmark-recorded-public/report.json
             .benchmark-recorded-public/report.md
             .benchmark-recorded-public/badge.svg
+            .benchmark-recorded-public/campaign-report.json
+            .benchmark-recorded-public/campaign-report.md
+            .benchmark-recorded-public/campaign-badge.svg
+            .benchmark-recorded-public/strict/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
@@ -230,6 +299,12 @@ jobs:
         shell: pwsh
         env:
           VERDICT: ${{ steps.compare.outputs.verdict }}
+          REPORT_OUTCOME: ${{ steps.report.outcome }}
+          REPORT_VERDICT: ${{ steps.report.outputs.verdict }}
         run: |
           if ($env:VERDICT -notmatch '^[0-3]$') { exit 1 }
+          if ($env:VERDICT -eq '0') {
+            if ($env:REPORT_OUTCOME -ne 'success' -or $env:REPORT_VERDICT -notmatch '^[0-3]$') { exit 1 }
+            if ($env:REPORT_VERDICT -ne '0') { exit ([int]$env:REPORT_VERDICT) }
+          }
           exit ([int]$env:VERDICT)
