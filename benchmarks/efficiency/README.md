@@ -3,17 +3,33 @@
 [![Latest campaign: comparison unavailable](campaign-badge.svg)](campaign-report.md)
 
 The latest [committed campaign](campaign-report.md) measured revision
-`2a646f23b40000ef6f5ad12bdf14f0cf5c28184c` on 22 October 2026. Its three
-document-quality results are **unavailable, 82, 79**. Trial 1 produced no BRD/PRD
-or independent judge; it is not a zero score. Only trial 2 completed the full
-workflow. Known consumption is **870.7412115 credits**; the complete-accounting
-subtotal for trials 2/3 is **708.0817680 credits**. The whole-campaign total and
-three-trial quality median are **unavailable**, not fabricated.
+`b436d794efd971c01861e15c0015b4c9298d7ff5` on 22 October 2026, the exact
+PR45 requirements-repair head. Three original sequential candidate trials scored
+**80, 78, 69** (median **78/100**) and consumed **1533.8963735 credits** with
+complete canonical accounting. No paid parent trials or replacements ran.
+Readiness was **Init 3/3, Requirements 0/3, Build 1/3**; functional probes passed
+**3/3**, but full workflow completion was **0/3**.
+
+Both BRD/PRD reviewer-evidence checks passed in every trial; Requirements still
+failed its closing-review outcome. Original reviews retain unresolved business
+facts, incomplete captures, author-disposition inconsistencies and unsupported
+requirements. Build closing reviews in trials 2/3 could not execute required
+runtime probes because permission was denied; passing independent functional
+probes do not erase that failure. No corrective rerun was performed.
+
+Actual campaign wall time was **70m56.954s**, from **20:18:50.831 UTC** to
+**21:29:47.784 UTC**. Child wall times were **23m42.200s**, **20m34.876s** and
+**26m33.062s**. These UTC-derived elapsed times are not timeout ceilings or the
+stage-plus-judge benchmark-time metric. Native event accounting includes all
+five compaction identities and counts final cumulative workflow plus judge once.
+CLI usage-output files undercounted trials 1/3 by **6.80717** and **5.41306**
+credits; the canonical totals above retain that spend.
 
 `latest-campaign.json` selects a separate immutable `benchmark-campaign-v1`
 archive by digest. It is not selectable as a complete comparison series.
-The strict comparison remains non-evaluable: neither this missing grade nor
-the historical parent's changed verifier/exercise protocol can be waived.
+The strict comparison remains non-evaluable: the historical parent's changed
+exercise protocol is incompatible and was not waived. These observations
+establish neither a quality improvement nor Requirements readiness.
 
 ## Earlier complete comparison record
 
