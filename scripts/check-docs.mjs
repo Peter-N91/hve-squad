@@ -20,6 +20,13 @@ for (const page of pages) {
   assert.equal($("h1").length, 1, `${page.outputPath}: needs exactly one page heading`);
   assert.equal($("title").text(), page.title);
   assert.equal($('link[rel="alternate"][hreflang]').length, page.languages.length + 1);
+  const notice = $(".release-notice");
+  assert.equal(notice.length, 1, `${page.outputPath}: missing release availability notice`);
+  assert(notice.text().includes(page.release.stableTag), `${page.outputPath}: missing stable version`);
+  assert.equal(notice.find(".prerelease-badge").length, page.release.previewTag ? 1 : 0);
+  if (page.release.previewTag) {
+    assert(notice.text().includes(page.release.previewTag), `${page.outputPath}: missing pre-release version`);
+  }
   const ids = $("[id]").toArray().map(element => $(element).attr("id"));
   assert.equal(new Set(ids).size, ids.length, `${page.outputPath}: duplicate IDs`);
 
@@ -29,6 +36,7 @@ for (const page of pages) {
   sourceBody.find(".mermaid").remove();
   builtBody.find(".diagram").remove();
   builtBody.find("[data-site-ui]").remove();
+  builtBody.find("[data-release-generated]").remove();
   assert.equal(normalized(builtBody.text()), normalized(sourceBody.text()), `${page.outputPath}: source prose changed`);
   const sourceHero = source("header.hero").clone();
   const builtHero = $("[data-source-hero]").clone();
@@ -37,7 +45,8 @@ for (const page of pages) {
   assert.equal(normalized(builtHero.text()), normalized(sourceHero.text()), `${page.outputPath}: hero introduction changed`);
   assert.equal(normalized($("[data-source-demo]").text()), normalized(source(".demo-bar").text()), `${page.outputPath}: demo selector changed`);
   assert.equal(normalized($(".footer-source").text()), normalized(source("footer").text()), `${page.outputPath}: footer disclaimer changed`);
-  const code = doc => doc("main pre:not(.diagram-code)").toArray().map(element => doc(element).text());
+  const code = doc => doc("main pre:not(.diagram-code)").toArray()
+    .filter(element => !doc(element).closest("[data-release-generated]").length).map(element => doc(element).text());
   assert.deepEqual(code($), code(source), `${page.outputPath}: code samples changed`);
   const english = readSource(page.slug).$;
   const shape = doc => doc("body > header.hero, body > .demo-bar, main").find("*")
@@ -49,6 +58,20 @@ for (const page of pages) {
   const externalLinks = doc => doc("body > header.hero a[href], main a[href]").toArray()
     .map(element => doc(element).attr("href")).filter(href => /^https?:/.test(href));
   assert.deepEqual(externalLinks(source), externalLinks(english), `${page.outputPath}: external references changed`);
+  const releaseMarkers = doc => doc("main [data-release-change], main [data-release-install]").toArray()
+    .map(element => [doc(element).attr("data-release-change"), doc(element).attr("data-release-install")]);
+  assert.deepEqual(releaseMarkers(source), releaseMarkers(english), `${page.outputPath}: release annotations differ from English`);
+  for (const badge of $(".prerelease-badge").toArray()) {
+    assert($(badge).text().includes(page.release.previewTag), `${page.outputPath}: incorrect pre-release badge`);
+    assert.equal($(badge).attr("href"), "getting-started.html#testing-the-pre-release");
+  }
+  $("[data-release-install]").each((index, element) => {
+    const channel = $(element).attr("data-release-install");
+    const tag = channel === "preview" ? page.release.previewTag : page.release.stableTag;
+    assert.deepEqual($(element).find("pre code").toArray().map(code => $(code).text()),
+      tag ? [`apm install "Peter-N91/hve-squad#${tag}" --target copilot`] : [],
+      `${page.outputPath}: incorrect ${channel} installation command`);
+  });
   const sourceIds = source("main [id]").toArray().map(element => source(element).attr("id"));
   for (const id of sourceIds) assert(ids.includes(id), `${page.outputPath}: removed existing anchor ${id}`);
   const diagrams = source(".mermaid").toArray().map(element => diagramSource(source, element));

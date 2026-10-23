@@ -207,7 +207,7 @@ targets:
       <h3>Redéployer après une mise à jour</h3>
       <p>Relancez l'installation avec le tag publié souhaité, en incluant <code>--target copilot</code> sauf si votre projet déclare <code>targets:</code> :</p>
       <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
-      <p>Pour tester les modifications fusionnées avant leur publication, utilisez le tag de préversion glissante <code>vX.Y.z-pre</code> indiqué sur <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>. Ce tag évolue ; épinglez une version stable pour les travaux dont vous dépendez. La réinstallation actualise <code>.github/</code>, pas votre état sous <code>.copilot-tracking/squad/</code>.</p>
+      <p>Pour tester les modifications fusionnées avant leur publication, consultez <a href="#testing-the-pre-release">Installer et tester la préversion</a> pour obtenir le tag actuel et la commande exacte. Ce tag évolue ; épinglez une version stable pour les travaux dont vous dépendez. La réinstallation actualise <code>.github/</code>, pas votre état sous <code>.copilot-tracking/squad/</code>.</p>
       </section>
       </div>
 
@@ -382,6 +382,32 @@ targets:
           </tbody>
         </table>
       </div>
+
+      <h2 id="testing-the-pre-release">Installer et tester la préversion</h2>
+      <p>
+        Cette documentation suit <code>main</code>, qui peut devancer la dernière version stable.
+        Un badge <strong>Préversion uniquement</strong> identifie une fonctionnalité fusionnée mais pas
+        encore publiée dans une version stable. L'encart de chaque page affiche les deux versions, et chaque badge
+        renvoie ici. Utilisez les versions stables pour les travaux dont vous dépendez.
+      </p>
+      <p>
+        Testez dans un dépôt de test distinct avec PowerShell 7+ et APM CLI <code>0.29.0</code> ;
+        vérifiez avec <code>apm --version</code>. Le site publié renseigne la commande actuelle ci-dessous.
+        Vous pouvez aussi trouver le tag marqué comme préversion sur
+        <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>.
+      </p>
+      <div data-release-install="preview"></div>
+      <ol>
+        <li>Installez le package APM complet dans le dépôt de test. Les miroirs plugin et MCP suivent les versions stables ; leur installation ou mise à jour n'installe pas cette préversion. Ne mélangez pas les plugins stables et la préversion APM dans le même environnement de test.</li>
+        <li>Redémarrez votre client Copilot, sélectionnez <strong>Squad Coordinator</strong>, envoyez <code>init</code> et confirmez l'équipe proposée.</li>
+        <li>Envoyez une petite demande qui exerce la fonctionnalité portant un badge et examinez les livrables produits. Signalez les comportements inattendus avec le tag de préversion, le commit résolu dans <code>apm.lock.yaml</code>, les étapes de reproduction et les résultats attendus et observés ; retirez les données privées du projet avant tout partage.</li>
+      </ol>
+      <p>
+        Le tag glissant se déplace à chaque fusion. Relancez l'installation pour l'actualiser et revérifiez
+        l'encart, car une incrémentation de version supérieure peut renommer le tag. Utilisez la commande ci-dessous pour revenir à
+        la version stable ; la réinstallation ne réinitialise pas l'état local de votre squad, donc isolez les tests de préversion.
+      </p>
+      <div data-release-install="stable"></div>
 
       <h2>3. Initialiser la squad</h2>
       <p>
