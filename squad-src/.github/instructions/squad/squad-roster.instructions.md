@@ -5,7 +5,7 @@ applyTo: '**/.copilot-tracking/squad/**'
 
 # Squad Roster Conventions
 
-These conventions define the squad roster: the durable list of roles the Squad Coordinator can dispatch and the HVE Core agent that fills each role. The coordinator reads the roster at the start of every turn to decide who is available, how to invoke them, and which model tier to prefer.
+The roster binds dispatchable roles to HVE Core agents. At each turn, the coordinator reads it for availability, invocation, and preferred model tier.
 
 The roster is data, not behavior. It records identities and invocation details. Routing logic lives in `squad-routing.instructions.md`, and persistence rules live in `squad-state.instructions.md`.
 
@@ -39,6 +39,8 @@ The `Agent Name (Primary)` column holds exactly one agent; the role always has a
 
 <!-- <example-roster> -->
 ```markdown
+Ranked floors are minimums, not ceilings; copy resolver rationale and preserve Scribe/session exceptions.
+
 ## Members
 
 | Role          | Member Name | Agent Name (Primary)   | Alternate Agents                              | Selection Cue                                                             | Invocation         | Model Tier | Deliverable Root           |

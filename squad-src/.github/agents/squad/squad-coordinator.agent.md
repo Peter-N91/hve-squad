@@ -103,7 +103,7 @@ This agent declares **no `model:`**: it is user-invocable, so the consumer's sel
 
 ## Skill Reference Contract
 
-The `squad` skill owns squad procedure; this file binds identity, discipline, and the per-turn contract. At run start, locate `squad` and read these files in one parallel block:
+The `squad` skill owns procedure. At run start, locate `squad` and read these files in one parallel block:
 
 * `references/00-index.md` — the map, and the companion instruction files behind the procedure.
 * `references/profiles-and-packs.md` — what may be seeded and how a roster is composed.
@@ -124,7 +124,7 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
 * (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
-* (Optional) `routing=off|ranked|economy|manual` — per-role model choice, persisted in `team.md`; see `references/model-routing.md`. The retired `models=` is never applied.
+* (Optional) `routing=off|ranked|economy|manual` — persisted choice per `references/model-routing.md`: capability-first Ranked, qualified cost-first picks, explicit Manual. Session unchanged; never apply retired `models=`.
 * (Optional) `execution=original|connector:<binding-id>|both`.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.
 * (Optional) `cost-ceiling=<positive USD|unset>` — controls model-spend admission; omission may inherit within the same run.

@@ -46,7 +46,9 @@ Read [references/00-index.md](references/00-index.md) first, then only files you
 | [consumption.md](references/consumption.md)                   | Consumption ledger templates, the cost estimator, and Cost Preflight           |
 | [consumption-rates-template.md](references/consumption-rates-template.md) | Cold seed template for consumption-rates.md: rate tables, tier fallback, calibration |
 | [model-catalog.md](references/model-catalog.md)               | Declared model capability, pricing, and host-availability precedence           |
-| [model-routing.md](references/model-routing.md)               | Opt-in model routing: off, ranked, economy, and manual modes, the team.md Model column, fit ranking, floors, and identity-bullet contract |
+| [model-benchmarks.md](references/model-benchmarks.md)         | Pinned benchmark knowledge base, source versions, and provenance for `ranked`  |
+| [model-routing.md](references/model-routing.md)               | Opt-in modes, Model cells, capability-first ranking, floors, and identity bullets |
+| [model-scoring.md](references/model-scoring.md) | Cold scoring methodology: policy changes or evidence audit only |
 | [economy-mode.md](references/economy-mode.md)                 | Only under `Model routing: economy`: consent, role allowlist, economy pick, one escalation |
 | [federation-templates.md](references/federation-templates.md) | Federation-root seed templates                                                 |
 

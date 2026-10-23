@@ -1536,15 +1536,21 @@ layouts:
       <p>
         <strong>Comment les choix classés sont établis.</strong> Chaque rôle correspond à une classe de mission
         (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
-        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Le catalogue des modèles attribue
-        à chaque modèle une note de 0 à 3 pour chaque classe. La squad choisit d'abord la meilleure adéquation, puis le coût
-        pondéré le plus bas, puis la génération la plus récente au sein de la même famille de modèles. Elle ne départage jamais les ex æquo
-        par le nom du modèle. Les rôles eux-mêmes et l'agent derrière chacun sont répertoriés dans
-        <code>references/roster-catalog.md</code> du skill squad. Sur Copilot CLI, l'équipe initialisée utilise, par exemple,
-        <code>researcher</code> → <code>claude-opus-5.5</code>, <code>lead</code> →
-        <code>gpt-5.6-sol</code>, <code>developer</code> → <code>gpt-5.3-codex</code>,
-        <code>intake-validator</code> → <code>claude-sonnet-5.5</code> et <code>scribe</code> →
-        <code>claude-haiku-4.5</code>.
+        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Ranked donne la
+        <strong>priorité à la capacité</strong> : un panel versionné commun permet la même
+        comparaison des percentiles pour tous les candidats. La couverture indépendante de
+        l'instantané choisit le panel, jamais les scores, le prix ou la disponibilité sur l'hôte.
+        L'implémentation conserve le panel complet SciCode/Terminal-Bench et un panel SciCode
+        réduit, clairement signalé. La confiance, puis le coût, départagent les capacités égales.
+        Le délai de 90 jours concerne la vérification, pas l'âge de publication ; l'acquisition
+        et la génération ne prouvent pas cette vérification. Le rapport expose la couverture
+        et les exclusions précises. Sans comparaison défendable, le repli sur l'adéquation
+        déclarée est explicite, sans inventer de supériorité mesurée.
+        <code>references/model-scoring.md</code> décrit les poids, la couverture minimale et les limites ;
+        <code>references/roster-catalog.md</code> répertorie les rôles et les agents.
+        Les choix dépendent de l'instantané, pas du nom des modèles. Le seuil <code>fast</code>
+        admet aussi les modèles de pointe. Les coordinateurs conservent le modèle de session
+        sélectionné, et le Scribe conserve son modèle explicitement épinglé.
       </p>
       <p>
         <strong>Comment les choix manuels sont établis.</strong> Lorsque vous passez à <code>routing=manual</code>,
@@ -1560,13 +1566,22 @@ layouts:
         <strong>Mode economy (<code>routing=economy</code>).</strong> Seuls ces cinq rôles changent de
         modèle : <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code> et <code>data-scientist</code>. Chacun reçoit le modèle du catalogue le
-        moins cher dont l'adéquation au travail d'implémentation est d'au moins 2, dans le respect du seuil minimal
-        <code>Model Tier</code> du rôle ; tous les autres rôles, dont <code>product-owner</code>,
+        moins cher disposant de preuves indépendantes vérifiées suffisantes : un percentile
+        d'au moins <code>0.50</code> sur chaque évaluation du panel complet, ou <code>0.75</code>
+        sur le panel SciCode explicitement réduit, selon des règles de qualification versionnées
+        distinctes et dans le respect du seuil minimal <code>Model Tier</code> du rôle. Ce minimum de politique
+        ne garantit pas la réussite : une capacité ou une confiance supérieure ne justifie
+        jamais un prix Blended connu plus élevé. À prix égal, la capacité prime ; un prix absent
+        ne signifie jamais gratuit. Sans candidat qualifié, le script explique son repli sur
+        Ranked. Tous les autres rôles, dont <code>product-owner</code>,
         <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
         <code>backlog-executor</code> et tous les rôles de revue, de conseil, d'intake, de recherche, de planification et
         de tenue des registres, gardent leur choix <code>ranked</code>. Après un verdict <code>Fail</code>, une
         observation critique ou élevée, ou un responsable bloqué, ce responsable est relancé une seule fois sur son choix
-        <code>ranked</code>, puis la revue est refaite.
+        <code>ranked</code> fondé sur la capacité, puis la revue est refaite. Le Scribe enregistre
+        cette cellule Model avant le nouveau lancement ; un choix plus cher sous plafond exige
+        un nouveau Cost Preflight. Si les deux choix sont identiques, aucune escalade vers un
+        modèle mieux classé n'est possible.
       </p>
       <p>
         <strong>Accord.</strong> La première fois que vous passez à <code>economy</code>, avant tout

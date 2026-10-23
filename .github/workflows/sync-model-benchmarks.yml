@@ -1,0 +1,185 @@
+name: Sync Model Benchmarks
+
+# Runs every morning at 06:30 UTC or on demand.
+#
+# What it does:
+#   1. Runs scripts/Sync-ModelBenchmarks.ps1 to download the daily Epoch AI
+#      Benchmarking Hub dataset (CC BY 4.0) — and optionally enrich from the
+#      Artificial Analysis Free Data API when ARTIFICIAL_ANALYSIS_API_KEY is
+#      configured — extracting task-specific benchmark evaluations for the
+#      models declared in model-catalog.md.
+#   2. Verifies supported exact-model results against original publisher
+#      records and methodology, separately from result and generation dates.
+#      The evidence digest includes verification facts and comparison panels.
+#      If it matches the committed
+#      squad-src/.github/skills/squad/references/model-benchmarks.md and the
+#      identical evidence check is younger than the 60-day renewal window
+#      (before 90-day verification expiration), the run exits cleanly
+#      without opening a noisy pull request.
+#   3. When benchmark scores or source versions change (or the 60-day refresh
+#      window is reached, or force=true), validates the updated snapshot with
+#      Pester (tests/tier1/ModelRouting.Tests.ps1) to guarantee provenance and
+#      routing invariants hold before proposing any change.
+#   4. Records a patch change fragment under .changes/unreleased/, pushes the
+#      branch `chore/sync-model-benchmarks`, and opens or updates a reviewed
+#      pull request against `main` (satisfying the reviewed-snapshot contract
+#      in issue #166).
+#
+# Runtime squad dispatches NEVER fetch benchmark data from the web; they read
+# the committed model-benchmarks.md knowledge base offline.
+
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); dry_run is a typed boolean that gates publication directly.
+    inputs:
+      force:
+        description: 'Force snapshot refresh even if benchmark scores are unchanged'
+        type: boolean
+        default: false
+      allow_coverage_reduction:
+        description: 'Accept intentional loss of existing independent model/evaluation coverage'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Compute and validate the snapshot without pushing a branch or opening a PR'
+        type: boolean
+        default: false
+
+concurrency:
+  group: sync-model-benchmarks
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync-benchmarks:
+    name: Refresh model-benchmarks.md knowledge base
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Sync benchmark knowledge base
+        id: sync
+        shell: pwsh
+        env:
+          FORCE: ${{ inputs.force }}
+          ALLOW_COVERAGE_REDUCTION: ${{ inputs.allow_coverage_reduction }}
+          ARTIFICIAL_ANALYSIS_API_KEY: ${{ secrets.ARTIFICIAL_ANALYSIS_API_KEY }}
+        run: |
+          $params = @{
+            GitHubOutput = $true
+          }
+          if ($env:FORCE -eq 'true') {
+            $params['Force'] = $true
+          }
+          if ($env:ALLOW_COVERAGE_REDUCTION -eq 'true') {
+            $params['AllowCoverageReduction'] = $true
+          }
+          $result = ./scripts/Sync-ModelBenchmarks.ps1 @params
+          @(
+            '### Model Benchmarks Sync'
+            ''
+            "| Field | Value |"
+            "| --- | --- |"
+            "| Updated | ``$($result.Updated)`` |"
+            "| Retrieved | ``$($result.Retrieved)`` |"
+            "| Generated | ``$($result.Generated)`` |"
+            "| Models covered | **$($result.ModelsCovered)** |"
+            "| Models with verified evidence | **$($result.VerifiedModelsCovered)** |"
+            "| Score rows | **$($result.ScoresCount)** |"
+            "| Content digest | ``$($result.Digest)`` |"
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      - name: Install Pester
+        if: steps.sync.outputs.updated == 'true'
+        shell: pwsh
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Validate benchmark snapshot and routing contract
+        if: steps.sync.outputs.updated == 'true'
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests/tier1/ModelRouting.Tests.ps1'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Normal'
+          $res = Invoke-Pester -Configuration $config
+          if ($res.FailedCount -gt 0 -or $res.Result -ne 'Passed') {
+            throw "ModelRouting.Tests.ps1 failed ($($res.FailedCount) failure(s)); refusing to propose an invalid benchmark snapshot."
+          }
+
+      - name: Verify shared scoring and offline snapshot reproducibility
+        if: steps.sync.outputs.updated == 'true'
+        shell: pwsh
+        run: |
+          $path = './squad-src/.github/skills/squad/references/model-benchmarks.md'
+          $result = ./scripts/Sync-ModelBenchmarks.ps1 -SnapshotPath $path -OutputPath $path -DryRun
+          if ($result.Updated -or $result.ScoringPolicy -ne 'squad-capability-v3') {
+            throw 'Shared scoring views or policy identity differ from the generated snapshot; refusing publication.'
+          }
+
+      - name: Propose reviewed pull request
+        if: steps.sync.outputs.updated == 'true' && !inputs.dry_run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
+          RETRIEVED: ${{ steps.sync.outputs.retrieved }}
+          DIGEST: ${{ steps.sync.outputs.digest }}
+          MODELS_COVERED: ${{ steps.sync.outputs.models_covered }}
+          SCORES_COUNT: ${{ steps.sync.outputs.scores_count }}
+          REPO: ${{ github.repository }}
+        run: |
+          $branch = 'chore/sync-model-benchmarks'
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git remote set-url origin "https://x-access-token:$($env:GH_TOKEN)@github.com/$($env:REPO).git"
+          git checkout -B $branch
+
+          $fragmentBody = "- Refreshed ``references/model-benchmarks.md`` knowledge base ($($env:SCORES_COUNT) score rows across $($env:MODELS_COVERED) models; digest ``$($env:DIGEST)``)."
+          ./scripts/New-ChangeFragment.ps1 -Type Changed -Bump patch -Force `
+            -Title "sync model benchmarks $($env:RETRIEVED)" `
+            -Body $fragmentBody
+
+          git add squad-src/.github/skills/squad/references/model-benchmarks.md .changes/unreleased
+          if ((git status --porcelain).Count -eq 0) {
+            Write-Host '::notice::No working tree changes to commit.'
+            return
+          }
+
+          git commit -m "chore(benchmarks): sync model benchmark knowledge base ($($env:RETRIEVED))"
+          git push --force origin "refs/heads/$branch"
+
+          $prTitle = "chore(benchmarks): sync model benchmark knowledge base ($($env:RETRIEVED))"
+          $prBody = @(
+            '## Summary'
+            ''
+            'Automated daily refresh of `squad-src/.github/skills/squad/references/model-benchmarks.md` from independent upstream benchmark sources (`epoch-ai`, `artificial-analysis`).'
+            ''
+            "- **Retrieved**: ``$($env:RETRIEVED)``"
+            "- **Content digest**: ``$($env:DIGEST)``"
+            "- **Independently evaluated catalog models**: $($env:MODELS_COVERED)"
+            "- **Total benchmark score rows**: $($env:SCORES_COUNT)"
+            ''
+            '## Validation'
+            ''
+            '- `Invoke-Pester -Path ./tests/tier1/ModelRouting.Tests.ps1`: **passed**'
+          ) -join "`n"
+
+          $existingPr = gh pr list --repo $env:REPO --head $branch --state open --json number --jq '.[0].number'
+          if ($existingPr) {
+            gh pr edit $existingPr --repo $env:REPO --title $prTitle --body $prBody
+            Write-Host "::notice::Updated open benchmark sync PR #$existingPr."
+          }
+          else {
+            $url = gh pr create --repo $env:REPO --base main --head $branch --title $prTitle --body $prBody
+            Write-Host "::notice::Opened benchmark sync PR: $url"
+          }

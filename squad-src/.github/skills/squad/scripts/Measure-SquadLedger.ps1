@@ -476,6 +476,31 @@ function Get-RateTableLocal {
         }
     }
 
+    if ($byModel.Count -gt 0) {
+        if (-not $byNormalized.ContainsKey('hydrafusion-max')) {
+            $hfRate = @{
+                input                  = 0.80
+                cached                 = 0.05
+                cache_write            = 1.00
+                output                 = 4.00
+                pricedAsName           = 'HydraFusion Max'
+                tier                   = 'default'
+                long_context_threshold = 272000.0
+                lc_input               = 1.60
+                lc_cached              = 0.10
+                lc_cache_write         = 2.00
+                lc_output              = 6.00
+            }
+            $byModel['HydraFusion Max'] = $hfRate
+            $byModel['hydrafusion-max'] = $hfRate
+            $byNormalized['hydrafusion-max'] = $hfRate
+        }
+        $hfResolved = $byNormalized['hydrafusion-max']
+        foreach ($alias in @('HydraFusion', 'hydrafusion', 'hydrafusion-max')) {
+            if (-not $byModel.ContainsKey($alias)) { $byModel[$alias] = $hfResolved }
+        }
+    }
+
     [pscustomobject]@{ ByModel = $byModel; ByTier = $byTier; ByNormalized = $byNormalized }
 }
 
@@ -488,7 +513,9 @@ function ConvertTo-RateKeyLocal {
     #>
     param([AllowEmptyString()][string]$Value)
     $text = ($Value -replace '`', '' -replace '\((copilot|preview)\)', '').Trim().ToLowerInvariant()
-    return ($text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
+    $key = ($text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
+    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    return $key
 }
 
 function Get-CalibrationFactorLocal {
@@ -2025,6 +2052,7 @@ function Read-SessionUsageLocal {
     $memberPattern = if ($memberMatch.Success) { 'members[\\/]+' + [regex]::Escape($memberMatch.Groups['name'].Value) + '([\\/]|\b)' } else { $null }
 
     $dispatches = [System.Collections.Generic.List[pscustomobject]]::new()
+    $fusionSolvers = [System.Collections.Generic.List[string]]::new()
     $prompts = @{}
     $nanoAiu = $null
     $first = $null
@@ -2034,7 +2062,7 @@ function Read-SessionUsageLocal {
     $reader = [System.IO.StreamReader]::new($stream)
     try {
         while ($null -ne ($line = $reader.ReadLine())) {
-            $typeMatch = [regex]::Match($line, '"type"\s*:\s*"(?<type>subagent\.completed|session\.usage_checkpoint|tool\.execution_start)"')
+            $typeMatch = [regex]::Match($line, '"type"\s*:\s*"(?<type>subagent\.completed|session\.usage_checkpoint|session\.fusion_resolved|tool\.execution_start)"')
             $timeMatch = [regex]::Match($line, '"timestamp"\s*:\s*"(?<ts>[^"]+)"')
             if ($timeMatch.Success) {
                 if (-not $first) { $first = $timeMatch.Groups['ts'].Value }
@@ -2050,16 +2078,25 @@ function Read-SessionUsageLocal {
                 'tool.execution_start' {
                     $prompts[[string]$data['toolCallId']] = ($data['arguments'] | ConvertTo-Json -Depth 6 -Compress)
                 }
+                'session.fusion_resolved' {
+                    $primarySolver = [string]$data['primaryModel']
+                    if ($primarySolver -and $primarySolver -notin $fusionSolvers) { $fusionSolvers.Add($primarySolver) }
+                }
                 'session.usage_checkpoint' {
                     if ($null -ne $data['totalNanoAiu']) { $nanoAiu = [double]$data['totalNanoAiu'] }
                 }
                 'subagent.completed' {
+                    $firstDispatched = if ($data.ContainsKey('firstDispatchedModel')) { [string]$data['firstDispatchedModel'] } else { '' }
+                    if ($firstDispatched -and ([string]$data['model']) -match '(?i)^hydrafusion' -and $firstDispatched -notin $fusionSolvers) {
+                        $fusionSolvers.Add($firstDispatched)
+                    }
                     $dispatches.Add([pscustomobject]@{
-                            ToolCallId = [string]$data['toolCallId']
-                            AgentName  = [string]$data['agentName']
-                            Model      = [string]$data['model']
-                            Tokens     = [double]$data['totalTokens']
-                            DurationMs = [double]$data['durationMs']
+                            ToolCallId           = [string]$data['toolCallId']
+                            AgentName            = [string]$data['agentName']
+                            Model                = [string]$data['model']
+                            FirstDispatchedModel = $firstDispatched
+                            Tokens               = [double]$data['totalTokens']
+                            DurationMs           = [double]$data['durationMs']
                         })
                 }
             }
@@ -2077,13 +2114,14 @@ function Read-SessionUsageLocal {
     }
 
     [pscustomobject]@{
-        Path       = $Path
-        SessionId  = Split-Path -Leaf (Split-Path -Parent $Path)
-        Dispatches = $dispatches
-        NanoAiu    = $nanoAiu
-        First      = $first
-        Last       = $last
-        MemberName = if ($memberMatch.Success) { $memberMatch.Groups['name'].Value } else { $null }
+        Path          = $Path
+        SessionId     = Split-Path -Leaf (Split-Path -Parent $Path)
+        Dispatches    = $dispatches
+        FusionSolvers = @($fusionSolvers)
+        NanoAiu       = $nanoAiu
+        First         = $first
+        Last          = $last
+        MemberName    = if ($memberMatch.Success) { $memberMatch.Groups['name'].Value } else { $null }
     }
 }
 
@@ -2134,14 +2172,49 @@ function Get-ObservedUsageLocal {
     if ($Session.Dispatches.Count -eq 0 -and $null -eq $Session.NanoAiu) { return $null }
 
     $estimatedByAgent = @{}
+    $hydraEstimateByAgent = @{}
     $ledgerModelsByAgent = @{}
     foreach ($entry in $OrderedAggregates) {
         $agg = $entry.Aggregate
-        $estimatedByAgent[$entry.AgentName] = $agg.Input + $agg.Cached + $agg.CacheWrite + $agg.Output
+        $estimatedByAgent[$entry.AgentName] = [pscustomobject]@{
+            Scaled = $agg.Input + $agg.Cached + $agg.CacheWrite
+            Output = $agg.Output
+            Total  = $agg.Input + $agg.Cached + $agg.CacheWrite + $agg.Output
+        }
+        $hydraScaled = 0.0
+        $hydraInput = 0.0
+        $hydraCached = 0.0
+        $hydraCacheWrite = 0.0
+        $hydraOutput = 0.0
+        foreach ($blockEntry in $agg.Blocks) {
+            $fields = $blockEntry.Block.Fields
+            if ((ConvertTo-RateKeyLocal ([string]$fields['model'])) -ne 'hydrafusion-max') {
+                continue
+            }
+            $hydraInput += [double]$fields['input_tokens']
+            $hydraCached += [double]$fields['cached_tokens']
+            $hydraCacheWrite += [double]$fields['cache_write_tokens']
+            $hydraOutput += [double]$fields['output_tokens']
+        }
+        $hydraScaled = $hydraInput + $hydraCached + $hydraCacheWrite
+        if ($hydraScaled -gt 0 -or $hydraOutput -gt 0) {
+            $hydraEstimateByAgent[$entry.AgentName] = [pscustomobject]@{
+                Input      = $hydraInput
+                Cached     = $hydraCached
+                CacheWrite = $hydraCacheWrite
+                Scaled     = $hydraScaled
+                Output     = $hydraOutput
+                Total      = $hydraScaled + $hydraOutput
+            }
+        }
         $ledgerModelsByAgent[$entry.AgentName] = @($agg.Models)
     }
     if ($OrchestrationAggregate) {
-        $estimatedByAgent['Squad Scribe'] = $OrchestrationAggregate.Input + $OrchestrationAggregate.Cached + $OrchestrationAggregate.CacheWrite + $OrchestrationAggregate.Output
+        $estimatedByAgent['Squad Scribe'] = [pscustomobject]@{
+            Scaled = $OrchestrationAggregate.Input + $OrchestrationAggregate.Cached + $OrchestrationAggregate.CacheWrite
+            Output = $OrchestrationAggregate.Output
+            Total  = $OrchestrationAggregate.Input + $OrchestrationAggregate.Cached + $OrchestrationAggregate.CacheWrite + $OrchestrationAggregate.Output
+        }
         $ledgerModelsByAgent['Squad Scribe'] = @($OrchestrationAggregate.Models)
     }
 
@@ -2149,9 +2222,13 @@ function Get-ObservedUsageLocal {
     $rows = [System.Collections.Generic.List[pscustomobject]]::new()
     foreach ($group in ($Session.Dispatches | Group-Object AgentName)) {
         $observedModels = @($group.Group | ForEach-Object { $_.Model } | Where-Object { $_ } | Select-Object -Unique)
+        $solverModels = @($group.Group | ForEach-Object { if ($_.PSObject.Properties['FirstDispatchedModel']) { $_.FirstDispatchedModel } } | Where-Object { $_ -and $_ -notin $observedModels } | Select-Object -Unique)
         $cost = 0.0
         foreach ($d in $group.Group) {
             $blended = Get-BlendedRateLocal -Model $d.Model -Rates $Rates
+            if ($null -eq $blended -and $d.PSObject.Properties['FirstDispatchedModel'] -and $d.FirstDispatchedModel) {
+                $blended = Get-BlendedRateLocal -Model $d.FirstDispatchedModel -Rates $Rates
+            }
             if ($null -eq $blended) { if ($d.Model -notin $unpriced) { $unpriced.Add($d.Model) }; continue }
             $cost += $d.Tokens * $blended / 1e6
         }
@@ -2169,10 +2246,11 @@ function Get-ObservedUsageLocal {
                 IsScribe       = ($group.Name -eq 'Squad Scribe')
                 Dispatches     = $group.Count
                 ObservedModels = $observedModels
+                SolverModels   = $solverModels
                 LedgerModels   = $ledgerModels
                 Match          = $match
                 Tokens         = Get-PropertySumLocal -InputObject $group.Group -Property Tokens
-                Estimated      = if ($estimatedByAgent.ContainsKey($group.Name)) { $estimatedByAgent[$group.Name] } else { 0.0 }
+                Estimated      = if ($estimatedByAgent.ContainsKey($group.Name)) { $estimatedByAgent[$group.Name].Total } else { 0.0 }
                 Minutes        = (Get-PropertySumLocal -InputObject $group.Group -Property DurationMs) / 60000.0
                 CostUsd        = $cost
             })
@@ -2181,15 +2259,110 @@ function Get-ObservedUsageLocal {
 
     $roleRows = @($rows | Where-Object { -not $_.IsScribe })
     $roleTokens = Get-PropertySumLocal -InputObject $roleRows -Property Tokens
+    $hydraDispatchRows = @(
+        $Session.Dispatches | Where-Object {
+            $_.AgentName -ne 'Squad Scribe' -and (
+                (ConvertTo-RateKeyLocal $_.Model) -eq 'hydrafusion-max' -or
+                ($_.PSObject.Properties['FirstDispatchedModel'] -and (ConvertTo-RateKeyLocal $_.FirstDispatchedModel) -eq 'hydrafusion-max')
+            )
+        }
+    )
 
     $baseline = $BaselineModel
     if (-not $baseline) {
-        $baseline = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique |
+        $candidateModels = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique)
+        if ($hydraDispatchRows.Count -gt 0) {
+            $nonHydra = @($candidateModels | Where-Object { (ConvertTo-RateKeyLocal $_) -ne 'hydrafusion-max' })
+            $defaultFallback = if ($null -ne (Get-BlendedRateLocal -Model 'claude-sonnet-4.6' -Rates $Rates)) { 'claude-sonnet-4.6' }
+            elseif ($Rates.ByTier.ContainsKey('default') -and $Rates.ByTier['default'].pricedAsName) { [string]$Rates.ByTier['default'].pricedAsName }
+            else { $null }
+            $candidateModels = @($nonHydra + $(if ($defaultFallback) { @($defaultFallback) } else { @() }) | Select-Object -Unique)
+            if ($candidateModels.Count -eq 0) { $candidateModels = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique) }
+        }
+        $baseline = @($candidateModels |
                 Sort-Object { $rate = Get-BlendedRateLocal -Model $_ -Rates $Rates; if ($null -eq $rate) { -1 } else { $rate } } -Descending |
                 Select-Object -First 1) | Select-Object -First 1
     }
     $baselineRate = if ($baseline) { Get-BlendedRateLocal -Model $baseline -Rates $Rates } else { $null }
     if ($baseline -and $null -eq $baselineRate) { $Warnings.Add("WARN: baseline model '$baseline' has no rate row; the without-HVE-Squad comparison is omitted.") }
+
+    $hydraSummary = $null
+    if ($hydraDispatchRows.Count -gt 0) {
+        $hydraObservedTokens = Get-PropertySumLocal -InputObject $hydraDispatchRows -Property Tokens
+        $hydraCostUsd = 0.0
+        foreach ($dispatch in $hydraDispatchRows) {
+            $blended = Get-BlendedRateLocal -Model $dispatch.Model -Rates $Rates
+            if ($null -eq $blended -and $dispatch.PSObject.Properties['FirstDispatchedModel']) {
+                $blended = Get-BlendedRateLocal -Model $dispatch.FirstDispatchedModel -Rates $Rates
+            }
+            if ($null -ne $blended) {
+                $hydraCostUsd += $dispatch.Tokens * $blended / 1e6
+            }
+        }
+
+        $hydraEstimatedTokens = 0.0
+        $hasHydraEstimate = $false
+        $hasCategoryEstimate = $false
+        $hasProportionalEstimate = $false
+        foreach ($agentGroup in ($hydraDispatchRows | Group-Object AgentName)) {
+            if ($hydraEstimateByAgent.ContainsKey($agentGroup.Name)) {
+                $estimate = $hydraEstimateByAgent[$agentGroup.Name]
+                $hydraEstimatedTokens += ($estimate.Scaled / 0.35) + $estimate.Output
+                $hasHydraEstimate = $true
+                $hasCategoryEstimate = $true
+                continue
+            }
+            if (-not $estimatedByAgent.ContainsKey($agentGroup.Name)) {
+                continue
+            }
+
+            $allAgentDispatches = @($Session.Dispatches | Where-Object { $_.AgentName -eq $agentGroup.Name })
+            $allAgentTokens = Get-PropertySumLocal -InputObject $allAgentDispatches -Property Tokens
+            if ($allAgentTokens -le 0) {
+                continue
+            }
+            $hydraAgentTokens = Get-PropertySumLocal -InputObject $agentGroup.Group -Property Tokens
+            $share = [math]::Min(1.0, [math]::Max(0.0, $hydraAgentTokens / $allAgentTokens))
+            $hydraEstimatedTokens += $estimatedByAgent[$agentGroup.Name].Total * $share
+            $hasHydraEstimate = $true
+            $hasProportionalEstimate = $true
+        }
+        $counterfactualBasis = if ($hasCategoryEstimate -and $hasProportionalEstimate) {
+            'mixed category-specific 0.35x inverse and proportional token-share estimate; representative blended-rate pricing'
+        }
+        elseif ($hasCategoryEstimate) {
+            'category-specific 0.35x inverse for input/cache/cache-write with output unchanged; representative blended-rate pricing'
+        }
+        elseif ($hasProportionalEstimate) {
+            'proportional token-share estimate; representative blended-rate pricing'
+        }
+        else {
+            $null
+        }
+        $hydraSolvers = @(
+            $hydraDispatchRows |
+                ForEach-Object {
+                    if ($_.PSObject.Properties['FirstDispatchedModel'] -and $_.FirstDispatchedModel -and (ConvertTo-RateKeyLocal $_.FirstDispatchedModel) -ne 'hydrafusion-max') {
+                        $_.FirstDispatchedModel
+                    }
+                } |
+                Where-Object { $_ } |
+                Select-Object -Unique
+        )
+        if ($hydraSolvers.Count -eq 0 -and $Session.PSObject.Properties['FusionSolvers']) {
+            $hydraSolvers = @($Session.FusionSolvers)
+        }
+        $hydraSummary = [pscustomobject]@{
+            Dispatches            = [int]$hydraDispatchRows.Count
+            ObservedTokens        = $hydraObservedTokens
+            EstimatedTokens       = if ($hasHydraEstimate) { $hydraEstimatedTokens } else { $null }
+            BlendedCostUsd        = $hydraCostUsd
+            CounterfactualModel   = $baseline
+            CounterfactualCostUsd = if ($hasHydraEstimate -and $null -ne $baselineRate) { $hydraEstimatedTokens * $baselineRate / 1e6 } else { $null }
+            CounterfactualBasis   = $counterfactualBasis
+            SolverModels          = @($hydraSolvers)
+        }
+    }
 
     [pscustomobject]@{
         Session          = $Session
@@ -2200,6 +2373,7 @@ function Get-ObservedUsageLocal {
         RoleTokens       = $roleTokens
         BaselineModel    = $baseline
         BaselineCostUsd  = if ($null -ne $baselineRate) { $roleTokens * $baselineRate / 1e6 } else { $null }
+        HydraFusion      = $hydraSummary
         SessionAiu       = if ($null -ne $Session.NanoAiu) { $Session.NanoAiu / 1e9 } else { $null }
     }
 }
@@ -2219,8 +2393,8 @@ function Get-ObservedSectionLinesLocal {
     $scope = if ($s.MemberName) { " Only dispatches whose prompt names ``members/$($s.MemberName)`` are counted." } else { '' }
     $lines.Add("Source: Copilot session ``$($s.SessionId)`` (``events.jsonl``, $($s.First) to $($s.Last)). The host reports one real token total per dispatch, not split into input, cached, and output, so these figures sit beside the estimates above rather than replacing them. Blended USD prices each total with model-catalog.md's blended mix (0.20 input, 0.80 cached, 0.08 cache write, 0.02 output) over this root's rate rows.$scope")
     $lines.Add('')
-    $lines.Add('| Agent | Dispatches | Observed Model | Ledger Model | Match | Observed Tokens | Estimated Tokens | Minutes | Blended USD |')
-    $lines.Add('| ----- | ---------- | -------------- | ------------ | ----- | --------------- | ---------------- | ------- | ----------- |')
+    $lines.Add('| Agent | Dispatches | Observed Model | Ledger Model | Match | Observed Tokens | Estimated Tokens | Minutes | Calculated Blended USD |')
+    $lines.Add('| ----- | ---------- | -------------- | ------------ | ----- | --------------- | ---------------- | ------- | ---------------------- |')
     foreach ($r in ($Observed.Rows | Sort-Object IsScribe, Agent)) {
         $ledger = if ($r.LedgerModels.Count -gt 0) { $r.LedgerModels -join ', ' } else { '—' }
         $lines.Add(('| {0} | {1} | {2} | {3} | {4} | {5:N0} | {6:N0} | {7:N1} | {8:N4} |' -f $r.Agent, $r.Dispatches, ($r.ObservedModels -join ', '), $ledger, $r.Match, $r.Tokens, $r.Estimated, $r.Minutes, $r.CostUsd))
@@ -2234,8 +2408,8 @@ function Get-ObservedSectionLinesLocal {
     if ($null -ne $Observed.BaselineCostUsd) {
         $lines.Add('### Without HVE Squad')
         $lines.Add('')
-        $lines.Add('| Scenario | Tokens | Model | Blended USD |')
-        $lines.Add('| -------- | ------ | ----- | ----------- |')
+        $lines.Add('| Scenario | Tokens | Model | Calculated Blended USD |')
+        $lines.Add('| -------- | ------ | ----- | ---------------------- |')
         $lines.Add(('| With HVE Squad: routed roles plus Scribe, as observed | {0:N0} | as routed | {1:N4} |' -f $Observed.ObservedTokens, $Observed.SquadCostUsd))
         $lines.Add(('| Without HVE Squad: the same role work on one model, no Scribe | {0:N0} | {1} | {2:N4} |' -f $Observed.RoleTokens, $Observed.BaselineModel, $Observed.BaselineCostUsd))
         $lines.Add('')
@@ -2244,6 +2418,18 @@ function Get-ObservedSectionLinesLocal {
         $direction = if ($delta -ge 0) { 'lower' } else { 'higher' }
         $lines.Add(('HVE Squad is **{0:N4} USD ({1:N1}%) {2}** than running the same role work on `{3}`. Both rows use the same blended mix; neither includes coordinator turns, and the single-model row adds no context growth or rework a long single chat would carry, so it is a floor for that scenario rather than a forecast.' -f [math]::Abs($delta), $pct, $direction, $Observed.BaselineModel))
         $lines.Add('')
+        if ($Observed.PSObject.Properties['HydraFusion'] -and $Observed.HydraFusion -and $null -ne $Observed.HydraFusion.CounterfactualCostUsd) {
+            $hf = $Observed.HydraFusion
+            $solverNote = if ($hf.SolverModels.Count -gt 0) { " (solver: $($hf.SolverModels -join ', '))" } else { '' }
+            $tokDelta = $hf.EstimatedTokens - $hf.ObservedTokens
+            $tokPct = if ($hf.EstimatedTokens -gt 0) { [math]::Abs($tokDelta) / $hf.EstimatedTokens * 100.0 } else { 0.0 }
+            $tokDirection = if ($tokDelta -ge 0) { 'fewer' } else { 'more' }
+            $costSaved = $hf.CounterfactualCostUsd - $hf.BlendedCostUsd
+            $costPct = if ($hf.CounterfactualCostUsd -gt 0) { [math]::Abs($costSaved) / $hf.CounterfactualCostUsd * 100.0 } else { 0.0 }
+            $costDirection = if ($costSaved -ge 0) { 'lower' } else { 'higher' }
+            $lines.Add(('HydraFusion comparison: **{0}** role dispatch(es) on `hydrafusion-max`{1} consumed **{2:N0} host-reported tokens** with a **calculated representative-blend cost of {3:N4} USD**, against an **estimated counterfactual of {4:N0} standard-model tokens ({5:N4} calculated USD on `{6}`)** — **{7:N1}% {8} tokens and {9:N4} USD ({10:N1}%) {11} calculated cost** on those dispatches. Counterfactual basis: {12}.' -f $hf.Dispatches, $solverNote, $hf.ObservedTokens, $hf.BlendedCostUsd, $hf.EstimatedTokens, $hf.CounterfactualCostUsd, $hf.CounterfactualModel, $tokPct, $tokDirection, [math]::Abs($costSaved), $costPct, $costDirection, $hf.CounterfactualBasis))
+            $lines.Add('')
+        }
     }
     return $lines.ToArray()
 }
@@ -3204,8 +3390,13 @@ $fragmentLines.Add(('| **Total** | **{0:N0}** | **{1:N0}** | **{2:N0}** | **{3:N
             $totalTurns, $totalInput, $totalCached, $totalCacheWrite, $totalOutput, $totalCost, $totalCredits))
 if ($observed -and $null -ne $observed.SessionAiu -and $observed.SessionAiu -gt 0) {
     $billedUsd = $observed.SessionAiu * 0.01
+    $hydraNote = ''
+    if ($observed.PSObject.Properties['HydraFusion'] -and $observed.HydraFusion -and @($roleAggregates | Where-Object { 'unknown' -in $_.Models }).Count -gt 0) {
+        $hf = $observed.HydraFusion
+        $hydraNote = (' Roles recorded as `unknown` above were priced at the `tier-default` fallback (`Claude Sonnet 4.6`) over static token floors; the session log shows {0} role dispatch(es) actually ran on `hydrafusion-max` ({1:N0} observed tokens, {2:N4} USD blended).' -f $hf.Dispatches, $hf.ObservedTokens, $hf.BlendedCostUsd)
+    }
     $fragmentLines.Add('')
-    $fragmentLines.Add(('> **Billed by the host for this session so far: {0:N2} AI units, about {1:N2} USD.** The estimate above is {2:N2}x that figure. Estimates come from dispatch-size guesses; the billed figure is the host''s own count, coordinator included. See *Observed Usage (host-reported)* below.' -f $observed.SessionAiu, $billedUsd, ($totalCost / $billedUsd)))
+    $fragmentLines.Add(('> **Billed by the host for this session so far: {0:N2} AI units, about {1:N2} USD.** The estimate above is {2:N2}x that figure. Estimates come from dispatch-size guesses; the billed figure is the host''s own count, coordinator included.{3} See *Observed Usage (host-reported)* below.' -f $observed.SessionAiu, $billedUsd, ($totalCost / $billedUsd), $hydraNote))
 }
 $fragmentLines.Add('')
 $fragmentLines.Add('### Derivation')
@@ -3329,6 +3520,19 @@ if ($Format -eq 'json') {
                 blendedCostUsd  = [math]::Round($observed.SquadCostUsd, 4)
                 baselineModel   = $observed.BaselineModel
                 baselineCostUsd = if ($null -ne $observed.BaselineCostUsd) { [math]::Round($observed.BaselineCostUsd, 4) } else { $null }
+                hydraFusion     = if ($observed.PSObject.Properties['HydraFusion'] -and $observed.HydraFusion) {
+                    [ordered]@{
+                        dispatches            = $observed.HydraFusion.Dispatches
+                        observedTokens        = $observed.HydraFusion.ObservedTokens
+                        estimatedTokens       = $observed.HydraFusion.EstimatedTokens
+                        blendedCostUsd        = [math]::Round($observed.HydraFusion.BlendedCostUsd, 4)
+                        counterfactualModel   = $observed.HydraFusion.CounterfactualModel
+                        counterfactualCostUsd = if ($null -ne $observed.HydraFusion.CounterfactualCostUsd) { [math]::Round($observed.HydraFusion.CounterfactualCostUsd, 4) } else { $null }
+                        counterfactualBasis   = $observed.HydraFusion.CounterfactualBasis
+                        solverModels          = @($observed.HydraFusion.SolverModels)
+                    }
+                }
+                else { $null }
                 agents          = @(
                     foreach ($r in $observed.Rows) {
                         [ordered]@{ agent = $r.Agent; dispatches = $r.Dispatches; observedModels = @($r.ObservedModels); ledgerModels = @($r.LedgerModels); match = $r.Match; observedTokens = $r.Tokens; estimatedTokens = $r.Estimated; blendedCostUsd = [math]::Round($r.CostUsd, 4) }

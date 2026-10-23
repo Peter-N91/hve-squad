@@ -16,24 +16,26 @@ Read this index first, then only references your Skill Reference Contract names 
 
 | File                                               | Read it when                                                              |
 |----------------------------------------------------|---------------------------------------------------------------------------|
-| [profiles-and-packs.md](profiles-and-packs.md)     | Seeding or amending a roster: profile choice, packs, which roles exist    |
-| [roster-catalog.md](roster-catalog.md)             | Casting, upgrades, custom rosters, external roles, and pack registration/resolution |
+| [profiles-and-packs.md](profiles-and-packs.md)     | Roster seeding/changes: profiles, packs, roles |
+| [roster-catalog.md](roster-catalog.md)             | Casting/upgrades, custom/external roles, pack registration/resolution |
 | [connector-role-modes.md](connector-role-modes.md) | Setup/refresh, bindings, execution; [shim transport](connector-contract.md) |
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
 | [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |
-| [scribe-procedure.md](scribe-procedure.md)         | Writing squad state, Scribe only: the Non-Negotiable Rules, every payload-to-step rule, the Cold-File Dispatch Table, and the Write-Completeness Self-Check |
-| [entry-schemas.md](entry-schemas.md)               | Any ordinary write turn: `decisions.md` base shape, `history/<agent>.md`, state.json |
-| [scribe-payload-template.md](scribe-payload-template.md) | Filling or reading the Scribe hand-off payload: field order, and the byte-stable-prefix / volatile-tail section order both coordinators follow |
-| [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) | Scribe only, initialization or memory payload: the full state-tree seed and Repository Memory and Learning Promotion |
-| [scribe-cold-federation.md](scribe-cold-federation.md) | Scribe only, promotion, expansion, or a federation-level autopilot-run-summary or history payload |
-| [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Scribe only, a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write |
+| [scribe-procedure.md](scribe-procedure.md)         | Scribe state writes: rules, payload/step map, cold reads, completeness |
+| [entry-schemas.md](entry-schemas.md)               | Ordinary Scribe writes: decision/history/state schemas |
+| [scribe-payload-template.md](scribe-payload-template.md) | Every hand-off: fields and stable-prefix/volatile-tail order |
+| [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) | Scribe Init or memory: state seeds and memory/learning promotion |
+| [scribe-cold-federation.md](scribe-cold-federation.md) | Scribe promotion, expansion, federation autopilot summary/history |
+| [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Scribe verdict, loop or single-squad autopilot summary, notification |
 | [seed-templates.md](seed-templates.md)             | Stamping first-run state, Init only: `team.md` and `routing.md`           |
 | [consumption.md](consumption.md)                   | Recording or estimating cost: ledger templates, the estimator, and Cost Preflight |
 | [consumption-rates-template.md](consumption-rates-template.md) | Scribe only, initialization or a Step 7.1 reseed: the cold seed template for `consumption-rates.md` |
-| [model-catalog.md](model-catalog.md)               | Routing a dispatch to a specific model: declared capability, pricing, and host-availability precedence |
-| [model-routing.md](model-routing.md)               | Applying `routing=` (all modes): modes, the Model column, fit ranking, floors, and identity bullets |
-| [federation-templates.md](federation-templates.md) | Creating or expanding a federation: registry, meta-routing, root files    |
+| [model-catalog.md](model-catalog.md)               | Model routing: declared capability, prices, host precedence |
+| [model-benchmarks.md](model-benchmarks.md) | Offline evidence, provenance, and source versions |
+| [model-routing.md](model-routing.md) | Applying routing: modes, cells, floors, and identity |
+| [model-scoring.md](model-scoring.md) | Policy or evidence audit only |
+| [federation-templates.md](federation-templates.md) | Federation creation/expansion: registry, meta-routing, root seeds |
 | [coach-discovery.md](coach-discovery.md)           | Coach only: discover current code, documentation, entrypoints, and state without a feature-specific playbook |
 
 The Scribe reads `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` on every turn — this hot core replaced a heavier unconditional set so the common case reads less — and reads every other file above, including the three `scribe-cold-*.md` files, only when the turn's payload calls for it per the Cold-File Dispatch Table in `scribe-procedure.md`. The coordinators read `seed-templates.md` and `federation-templates.md` only to verify deliverable roots during Init or a federation change, and fill `scribe-payload-template.md` on every hand-off.

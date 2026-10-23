@@ -1536,15 +1536,20 @@ layouts:
       <p>
         <strong>How ranked picks are made.</strong> Each role maps to an assignment class
         (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
-        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). The model catalog scores
-        every model 0–3 for each class, and the squad picks the highest fit, then the lowest blended
-        cost, then the newest generation of the same model family. It never breaks a tie by a
-        model's name. The roles themselves, and the agent behind each one, are listed in the squad
-        skill's <code>references/roster-catalog.md</code>. On the Copilot CLI the seeded roster resolves to, for example,
-        <code>researcher</code> → <code>claude-opus-5.5</code>, <code>lead</code> →
-        <code>gpt-5.6-sol</code>, <code>developer</code> → <code>gpt-5.3-codex</code>,
-        <code>intake-validator</code> → <code>claude-sonnet-5.5</code>, and <code>scribe</code> →
-        <code>claude-haiku-4.5</code>.
+        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Ranked is
+        <strong>capability-first</strong>: one versioned panel supports the same benchmark-specific
+        percentile comparison for every candidate, not a fit-bucket price race. Snapshot-wide
+        evidence coverage selects the panel, never scores, price or host availability.
+        Implementation retains the full SciCode/Terminal-Bench panel and a labeled reduced
+        SciCode panel. Confidence and then cost break genuine capability ties. The 90-day
+        safeguard expires verification, not older publication dates; acquisition and snapshot
+        generation never establish verification. Reports expose exact coverage and exclusions.
+        Unsupported comparisons receive an explicit declared-fit fallback, not a superiority claim.
+        <code>references/model-scoring.md</code> documents the weights, minimum coverage, and
+        limitations; <code>references/roster-catalog.md</code> lists the roles and agents.
+        Picks are snapshot-relative, not promises about today's model names. A <code>fast</code>
+        floor admits frontier candidates too. Coordinators keep the selected session model,
+        and the Scribe keeps its explicit pin.
       </p>
       <p>
         <strong>How manual picks are made.</strong> When you switch to <code>routing=manual</code>,
@@ -1560,13 +1565,20 @@ layouts:
         <strong>Economy mode (<code>routing=economy</code>).</strong> Only these five roles change
         model: <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code>, and <code>data-scientist</code>. Each gets the cheapest catalog
-        model with a fit of 2 or better for implementation work, within the role's own
-        <code>Model Tier</code> floor; every other role, including <code>product-owner</code>,
+        model with sufficient verified independent evidence: at least <code>0.50</code> on
+        each full-panel primary, or <code>0.75</code> on the explicitly reduced SciCode
+        panel, under distinct versioned qualification rules and within the role's own
+        <code>Model Tier</code> floor. This is a policy minimum, not a guarantee of task success:
+        once it is met, extra capability or confidence never overrides a lower known Blended
+        price. Equal prices use capability first; missing prices are never free. With no
+        qualified candidate, the helper explains its Ranked fallback. Every other role, including <code>product-owner</code>,
         <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
         <code>backlog-executor</code>, and every review, council, intake, research, planning, and
         bookkeeping role, keeps its <code>ranked</code> pick. After a <code>Fail</code> verdict, a
         Critical or High finding, or a blocked owner, that owner is re-dispatched once on its
-        <code>ranked</code> pick, then reviewed again.
+        capability-first <code>ranked</code> pick, then reviewed again. The Scribe persists that
+        Model cell before redispatch; a costlier pick under a ceiling needs a new Cost Preflight.
+        If both picks coincide, no higher-ranked escalation target exists.
       </p>
       <p>
         <strong>Consent.</strong> The first time you switch to <code>economy</code>, before any

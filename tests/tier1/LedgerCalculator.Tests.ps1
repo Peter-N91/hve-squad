@@ -2321,6 +2321,7 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
 
         $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
         $ledger | Should -Match '(?m)^## Observed Usage \(host-reported\)\s*$'
+        $ledger | Should -Match '\| Agent \| Dispatches \| Observed Model \| Ledger Model \| Match \| Observed Tokens \| Estimated Tokens \| Minutes \| Calculated Blended USD \|'
         $ledger | Should -Match '\| Squad Researcher \| 1 \| claude-sonnet-4\.6 \| Claude Sonnet 4\.6 \| yes \| 500,000 \|'
         $ledger | Should -Match '\| Squad Scribe \| 1 \| claude-haiku-4\.5 \|'
         $ledger | Should -Match '\*\*Subagents total\*\* \| \*\*2\*\* \| \| \| \| \*\*800,000\*\*'
@@ -2426,6 +2427,69 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
         $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
         $json.observed.observedTokens | Should -Be 400000
+    }
+
+    It 'prices hydrafusion-max in Observed Usage (never 0.0000) and labels the token and calculated-cost comparison against the default baseline' {
+        $events = @(
+            '{"type":"session.start","data":{"selectedModel":"hydrafusion-max"},"timestamp":"2026-10-01T10:00:00.000Z"}'
+            '{"type":"session.fusion_resolved","data":{"syntheticModel":"hydrafusion-max","policy":"max","primaryModel":"gpt-6.1-sol"},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"h1","agentName":"Squad Researcher","model":"hydrafusion-max","firstDispatchedModel":"gpt-6.1-sol","totalTokens":200000,"durationMs":60000},"timestamp":"2026-10-01T10:02:01.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"h2","agentName":"Squad Scribe","model":"claude-haiku-5.5","firstDispatchedModel":"claude-haiku-5.5","totalTokens":100000,"durationMs":30000},"timestamp":"2026-10-01T10:03:01.000Z"}'
+            '{"type":"session.usage_checkpoint","data":{"totalNanoAiu":8000000000},"timestamp":"2026-10-01T10:04:00.000Z"}'
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        # 200,000 tokens x 0.360 / 1e6 = 0.0720 USD (never 0.0000!)
+        $ledger | Should -Match '\| Squad Researcher \| 1 \| hydrafusion-max \| Claude Sonnet 4\.6 \| no \| 200,000 \| 71,000 \| 1\.0 \| 0\.0720 \|'
+        $ledger | Should -Match 'HydraFusion comparison: \*\*1\*\* role dispatch\(es\) on `hydrafusion-max` \(solver: gpt-6\.1-sol\) consumed \*\*200,000 host-reported tokens\*\* with a \*\*calculated representative-blend cost of 0\.0720 USD\*\*'
+        $ledger | Should -Not -Match 'Observed tokens and blended cost are host-reported'
+
+        $jsonResult = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $json = ($jsonResult.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.observed.hydraFusion.dispatches | Should -Be 1
+        $json.observed.hydraFusion.blendedCostUsd | Should -Be 0.072
+        $json.observed.hydraFusion.solverModels | Should -Contain 'gpt-6.1-sol'
+        $json.observed.baselineModel | Should -BeIn @('claude-sonnet-4.6', 'Claude Sonnet 4.6')
+    }
+
+    It 'counts only HydraFusion dispatches when one agent also ran a non-Hydra model' {
+        $events = @(
+            '{"type":"subagent.completed","data":{"toolCallId":"h1","agentName":"Squad Researcher","model":"hydrafusion-max","firstDispatchedModel":"gpt-6.1-sol","totalTokens":10000,"durationMs":1000},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            '{"type":"subagent.completed","data":{"toolCallId":"s1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","firstDispatchedModel":"claude-sonnet-4.6","totalTokens":20000,"durationMs":1000},"timestamp":"2026-10-01T10:00:02.000Z"}'
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+
+        $json.observed.hydraFusion.dispatches | Should -Be 1
+        $json.observed.hydraFusion.observedTokens | Should -Be 10000
+        $json.observed.hydraFusion.blendedCostUsd | Should -Be 0.0036
+        $json.observed.hydraFusion.counterfactualBasis | Should -Match '^proportional token-share estimate'
+    }
+
+    It 'reverses the Hydra factor only for scaled token categories in the estimated counterfactual' {
+        $events = @(
+            '{"type":"subagent.completed","data":{"toolCallId":"h1","agentName":"Squad Researcher","model":"hydrafusion-max","firstDispatchedModel":"gpt-6.1-sol","totalTokens":2146900,"durationMs":1000},"timestamp":"2026-10-01T10:00:01.000Z"}'
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $historyPath = Join-Path $f.Root 'history/Squad Researcher.md'
+        $history = Get-Content -LiteralPath $historyPath -Raw
+        $history = $history.Replace('"model": "Claude Sonnet 4.6"', '"model": "hydrafusion-max"')
+        $history = $history.Replace('"priced_as": "Claude Sonnet 4.6"', '"priced_as": "HydraFusion Max"')
+        $history = $history.Replace('"input_tokens": 9600', '"input_tokens": 415380')
+        $history = $history.Replace('"cached_tokens": 38400', '"cached_tokens": 1661520')
+        $history = $history.Replace('"cache_write_tokens": 8000', '"cache_write_tokens": 0')
+        $history = $history.Replace('"output_tokens": 15000', '"output_tokens": 70000')
+        Set-Content -LiteralPath $historyPath -Value $history -Encoding utf8NoBOM -NoNewline
+
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.observed.hydraFusion.estimatedTokens | Should -Be 6004000
+        $json.observed.hydraFusion.counterfactualCostUsd | Should -Be 8.6458
+        $json.observed.hydraFusion.counterfactualBasis | Should -Match '^category-specific 0\.35x inverse'
     }
 }
 Describe 'Measure-SquadLedger names an insert-above-the-end as an ordering defect, not lost content' {
