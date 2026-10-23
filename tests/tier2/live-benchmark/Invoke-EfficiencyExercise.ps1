@@ -39,7 +39,8 @@ param(
     [switch]$IsolatedEnvironment,
     [string[]]$RunPaths,
     [string]$AcceptedPath,
-    [switch]$ObservationOnly
+    [switch]$ObservationOnly,
+    [switch]$ParallelTrials
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -98,9 +99,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             $InstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
             $Saved = if ($BaselineEvidencePath) { Get-Content -LiteralPath $BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable } else { $null }
             $IdentitySource = if ($Mode -eq 'Establish') { $BaselineSourceRoot } else { $CandidateSourceRoot }
-            $Expected = Get-EfficiencyCompatibility -SourceRoot $IdentitySource -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
+            $Expected = Get-EfficiencyCompatibility -SourceRoot $IdentitySource -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
             if ($Mode -eq 'Series' -and $BaselineSourceRoot) {
-                $ControlCompatibility = Get-EfficiencyCompatibility -SourceRoot $BaselineSourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
+                $ControlCompatibility = Get-EfficiencyCompatibility -SourceRoot $BaselineSourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
                 $Before = @($ControlCompatibility.Keys | Sort-Object | ForEach-Object { $_ + '=' + ($ControlCompatibility[$_] | ConvertTo-Json -Depth 10 -Compress) }) -join "`n"
                 $After = @($Expected.Keys | Sort-Object | ForEach-Object { $_ + '=' + ($Expected[$_] | ConvertTo-Json -Depth 10 -Compress) }) -join "`n"
                 if ($Before -cne $After) { throw 'Baseline/candidate model policy or installed environment is incompatible.' }
@@ -109,34 +110,17 @@ if ($MyInvocation.InvocationName -ne '.') {
             $TrialRoot = [IO.Path]::GetFullPath($TrialRoot)
             $Out = Join-Path $TrialRoot 'out'; $Trials = Join-Path $TrialRoot 'trials'
             New-Item -ItemType Directory -Path $Out, $Trials | Out-Null
-            $EntryScript = $PSCommandPath
-            $SourcePaths = @{ baseline = $BaselineSourceRoot; candidate = $CandidateSourceRoot }
+            $TrialContext = @{
+                EntryScript = $PSCommandPath; Trials = $Trials; Out = $Out
+                SourcePaths = @{ baseline = $BaselineSourceRoot; candidate = $CandidateSourceRoot }
+                InstallRoot = $InstallRoot; Model = $Model; CliPath = $CliPath
+                ObservationOnly = [bool]$ObservationOnly; ParallelTrials = [bool]$ParallelTrials
+            }
             $TrialRunner = {
                 param($TrialArm, $TrialPair, [double]$CreditCeiling)
-                $TrialPath = Join-Path $Trials "$TrialArm-$TrialPair"
-                $Arguments = @('-NoProfile', '-File', $EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $SourcePaths[$TrialArm], '-InstallRoot', $InstallRoot, '-Arm', $TrialArm, '-Pair', [string]$TrialPair, '-Model', $Model, '-CliPath', $CliPath, '-MaxCredits', $CreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
-                if ($ObservationOnly) { $Arguments += '-ObservationOnly' }
-                $LaunchPath = Join-Path $Out "$TrialArm-$TrialPair-launch.jsonl"
-                try {
-                    $ScenarioLimits = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
-                    $TrialSeconds = if ($ObservationOnly) { [int]$ScenarioLimits.observationTimeoutMinutes * 60 + 120 } else { 2820 }
-                    $Process = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Trials -OutputPath $LaunchPath -TimeoutSeconds $TrialSeconds
-                    $EvidencePath = Join-Path $TrialPath 'out/run.json'
-                    if (-not (Test-Path -LiteralPath $EvidencePath)) {
-                        $Failure = [InvalidOperationException]::new('Trial did not produce run evidence; inspect its retained launch stderr.')
-                        $Failure.Data['efficiencyCategory'] = 'child-exited-without-run-evidence'
-                        $Failure.Data['efficiencyExitCode'] = [int]$Process.exitCode
-                        $Failure.Data['efficiencyStopCause'] = [string]$Process.stopCause
-                        throw $Failure
-                    }
-                    Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json -AsHashtable
-                }
-                catch {
-                    ($_ | Out-String) + "`n" + $_.ScriptStackTrace | Set-Content -LiteralPath ($LaunchPath + '.exception.txt') -Encoding utf8NoBOM
-                    throw
-                }
+                Invoke-EfficiencyTrial -Context $TrialContext -Arm $TrialArm -Pair $TrialPair -MaxCredits $CreditCeiling
             }.GetNewClosure()
-            $Series = Invoke-EfficiencySeries -Kind $Mode -RunTrial $TrialRunner -PerRunCredits $MaxCredits -SeriesCredits $MaxSeriesCredits -BaselineEvidence $Saved -ExpectedCompatibility $Expected -ObservationOnly:$ObservationOnly
+            $Series = Invoke-EfficiencySeries -Kind $Mode -RunTrial $TrialRunner -TrialContext $TrialContext -PerRunCredits $MaxCredits -SeriesCredits $MaxSeriesCredits -BaselineEvidence $Saved -ExpectedCompatibility $Expected -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
             foreach ($Slot in $Series.report.slots) {
                 if ($Slot.status -ne 'failed') { continue }
                 $Prefix = "$($Slot.arm)-$($Slot.pair)"
@@ -223,9 +207,10 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (-not $CliPath) { $CliPath = (Get-Command copilot -ErrorAction Stop).Source }
         $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
         $HelpText = (& $CliPath --help | Out-String)
-        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--no-remote', '--no-remote-export', '--add-dir')) {
+        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--add-dir')) {
             if (-not $HelpText.Contains($Flag)) { throw "Installed CLI does not support $Flag" }
         }
+        $LocalArguments = @(Get-EfficiencyCliLocalArguments -HelpText $HelpText)
         $Revision = (& git -C $SourceRoot rev-parse HEAD).Trim()
         if ($LASTEXITCODE -ne 0) { throw 'Cannot identify source revision.' }
         Import-Module (Join-Path $PSScriptRoot '../../lib/SquadInstall.psm1') -Force
@@ -264,7 +249,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Prompts.build = "$Common Implement the frozen EXERCISE.txt CLI contract using available requirements, mapped roles and a Research, Plan, Implement, Review cycle. Produce src/task.ps1, tests and a short README. $BoundaryValidation Run your own tests and closing review; record actual failures, unresolved findings and missing evidence rather than inventing success. This stage must still attempt feasible work if the preceding stage had quality or bookkeeping failures."
         }
         $Prompts.requirements += " $RequirementsHandoffs"
-        $Compatibility = Get-EfficiencyCompatibility -SourceRoot $SourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
+        $Compatibility = Get-EfficiencyCompatibility -SourceRoot $SourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
         $Metadata = @{ runId = [guid]::NewGuid().ToString(); pair = $Pair; arm = $Arm; revision = $Revision; sourceHash = Get-EfficiencyTreeHash (Join-Path $SourceRoot 'squad-src'); hostProfile = $Compatibility.hostProfile; compatibility = $Compatibility; sessionId = $Session; started = [datetime]::UtcNow.ToString('o') }
         $Metadata | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath (Join-Path $Out 'metadata.json') -Encoding utf8NoBOM
         $Stages = [Collections.Generic.List[object]]::new()
@@ -282,7 +267,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Attempts = [Collections.Generic.List[object]]::new()
             $Recovery = @{ count = 0; status = 'not-needed'; reason = $null; resolvedDiscoveryDenials = 0 }
             $UsagePath = Join-Path $Out "$Stage-usage.json"
-            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN') + $LocalArguments
             if ($ObservationOnly) { $CliArgs[[array]::IndexOf($CliArgs, '--max-autopilot-continues') + 1] = '1000'; $StageRequestCeiling = 0 }
             foreach ($Server in $DisabledServers) { $CliArgs += @('--disable-mcp-server', $Server) }
             foreach ($Denied in @('shell(git push)', 'shell(gh)', 'shell(az)', 'shell(curl)', 'shell(wget)', 'shell(Invoke-WebRequest)', 'shell(Invoke-RestMethod)', 'shell(Start-Process)')) { $CliArgs += @('--deny-tool', $Denied) }

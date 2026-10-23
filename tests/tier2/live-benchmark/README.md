@@ -55,6 +55,7 @@ bash tests/tier2/live-benchmark/start-efficiency-wizard.sh
 
 # Optional paths are forwarded unchanged, including spaces.
 bash tests/tier2/live-benchmark/start-efficiency-wizard.sh \
+    -ParallelTrials \
     -WorkRoot "$HOME/bench/squad efficiency"
 ```
 
@@ -78,6 +79,24 @@ Optional `-WorkRoot 'C:\bench\efficiency'` and `-BaselineEvidencePath '<control-
 set initial paths. The default work root is `%LOCALAPPDATA%\hve-squad\efficiency`
 (the corresponding local application-data directory on Linux), outside the checkout.
 Every launch uses a fresh `run-<timestamp>-<id>` and preserves old reports and controls.
+
+Live modes accept current CLI versions advertising `--sync-session off`, or older
+versions advertising both `--no-remote` and `--no-remote-export`. The wizard no
+longer demands flags removed in CLI 1.0.103. The same policy protects workflow,
+judge and ACP launches; an unrecognized sync policy fails closed. Modern sync-off
+disables account-history upload, not incoming control: the harness creates local
+sessions and never opts into remote connection/hosting modes. This is not an OS sandbox.
+
+After the credit ceilings, choose **Serial** (default) or **Three observations in
+parallel**, or pass `-ParallelTrials` through either launcher to select it directly.
+The bash starter forwards this switch unchanged with quoted path arguments.
+Parallel mode starts three independent native trials, each with its
+own workspace, session, log, credit allowance and watchdog. All three allowances
+must fit before launch; failures do not retry or discard already-started siblings.
+Concurrent runs compete for host resources and service capacity. Scheduling mode
+is part of compatibility: parallel candidates require parallel controls, and older
+controls must be recollected after this protocol change. Complete still finishes
+the control phase before starting candidates; offline checks remain first.
 
 | Choice | Work after setup |
 | --- | --- |
@@ -328,6 +347,13 @@ $LASTEXITCODE
 
 The control is frozen in `control-001/out/control-series.json`. Establishment
 creates new evidence only; it does not overwrite an accepted optimization report.
+
+Add `-ParallelTrials` to Establish, or to Series with saved controls, to overlap
+the three trials. Use the same switch when collecting those controls. Six fresh
+paired trials remain serial to preserve alternating arm order; combining that
+mode with `-ParallelTrials` is rejected before launch. Catchable cancellation
+stops owned native process trees before removing worker jobs and preserves local
+evidence; forcibly killing the entire host cannot guarantee this cleanup.
 
 ### Run a complete comparison
 

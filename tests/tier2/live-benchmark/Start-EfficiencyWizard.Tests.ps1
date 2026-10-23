@@ -164,6 +164,32 @@ Describe 'Wizard decisions and guards' -Tag 'Unit' {
 }
 
 Describe 'Wizard unattended plan' -Tag 'Unit' {
+    It 'honors command-line parallel selection without repeating the scheduling question' {
+        $Source = Join-Path $TestDrive 'cli-source'; $Scratch = Join-Path $TestDrive 'cli-scratch'
+        New-Item -ItemType Directory -Path (Join-Path $Source 'squad-src'), (Join-Path $Source '.git') -Force | Out-Null
+        Set-Content (Join-Path $Source 'apm.yml') 'name: fixture'
+        Mock Get-WizardMode { 'Establish' }
+        Mock Read-WizardText { $Default }
+        Mock Read-WizardCreditLimit { 100 }
+        Mock Read-WizardChoice { throw 'Unexpected scheduling question' }
+        Mock New-WizardRunPlan {}
+        $Config = Get-WizardConfiguration -Source $Source -Scratch $Scratch -ParallelTrials
+        $Config.ParallelTrials | Should -BeTrue
+        Should -Invoke Read-WizardChoice -Times 0
+    }
+    It 'keeps serial default and propagates opt-in concurrency to both dependent Complete arms' {
+        $Config = New-WizardTestConfig
+        $Serial = New-WizardRunPlan $Config
+        $Serial[1].arguments.ContainsKey('ParallelTrials') | Should -BeFalse
+        $Config.ParallelTrials = $true
+        $Parallel = New-WizardRunPlan $Config
+        $Parallel[1].arguments.ParallelTrials | Should -BeTrue
+        $Parallel[2].arguments.ParallelTrials | Should -BeTrue
+        $Parallel[2].arguments.BaselineEvidencePath | Should -Be (Join-Path $TestDrive 'control/out/control-series.json')
+        $Parallel[1].arguments.MaxSeriesCredits + $Parallel[2].arguments.MaxSeriesCredits | Should -Be 360
+        $Config.Mode = 'Series'
+        { New-WizardRunPlan $Config } | Should -Throw '*six fresh*'
+    }
     It 'runs Complete as offline checks, three controls, then three saved-control candidates' {
         $Steps = New-WizardRunPlan (New-WizardTestConfig)
         $Steps.Count | Should -Be 3
@@ -401,7 +427,7 @@ export CHECK_STATUS="$2" WIZARD_STATUS="$3" ARG_LOG="$log_path"
 exec "$bash_path" "$launcher" "${@:7}"
 '@
                         $OutputPath = Join-Path $Directory 'output.txt'
-                        $Process = Invoke-EfficiencyProcess -FilePath $script:WizardBash -Arguments @('-c', $Command.Replace("`r", ''), 'test', $Directory.Replace('\', '/'), [string]$CheckStatus, [string]$WizardStatus, $Log.Replace('\', '/'), $script:ShellLauncher, $(if ($Missing) { '1' } else { '0' }), '-WorkRoot', '/tmp/work with spaces') -WorkingDirectory $TestDrive -OutputPath $OutputPath -TimeoutSeconds 10 -InputText ''
+                        $Process = Invoke-EfficiencyProcess -FilePath $script:WizardBash -Arguments @('-c', $Command.Replace("`r", ''), 'test', $Directory.Replace('\', '/'), [string]$CheckStatus, [string]$WizardStatus, $Log.Replace('\', '/'), $script:ShellLauncher, $(if ($Missing) { '1' } else { '0' }), '-ParallelTrials', '-WorkRoot', '/tmp/work with spaces') -WorkingDirectory $TestDrive -OutputPath $OutputPath -TimeoutSeconds 10 -InputText ''
                         $Logged = @(); if (Test-Path -LiteralPath $Log) { $Logged = @(Get-Content -LiteralPath $Log) }
                         @{ code = $Process.exitCode; output = ((Get-Content -LiteralPath $OutputPath -Raw) + (Get-Content -LiteralPath ($OutputPath + '.stderr') -Raw)); arguments = $Logged }
         }
@@ -431,6 +457,7 @@ exec "$bash_path" "$launcher" "${@:7}"
         $Result = Invoke-TestBashLauncher -CheckStatus 0 -WizardStatus 3
         $Result.code | Should -Be 3 -Because $Result.output
         $Result.arguments[-1] | Should -Be '/tmp/work with spaces'
+        $Result.arguments | Should -Contain '-ParallelTrials'
         $Result.arguments | Should -Contain '-File'
     }
 }
