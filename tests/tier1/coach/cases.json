@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "first-capped-run",
+      "includeProductDocumentation": false,
+      "prompt": "host=vscode I am a beginner with no squad state. One team owns this application. Give me an A-to-Z runbook to initialize, use ranked models, and add login-form validation with tests in autopilot with a positive USD 10 model-spend ceiling. Include every prerequisite, exact messages, approvals, progress, and resumption. Do not perform any work. Use the selected installed sources in .agents/skills/squad and .github/agents. Product documentation and online access are unavailable in this fixture; distinguish the consumer README from product installation authority and base advice on the installed contracts. Make non-blocking assumptions instead of asking questions.",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Consumer application\nOne team owns a login form. Required outcome: validation for valid and invalid inputs with tests.\n"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "seed-blocker",
+          "requirement": "Obtain the complete installed admission list and linked seed block in native tool results, not merely a successful call, size warning, or keyword-only excerpt. Before any proposed capped work, explain that initialization seeds observations=0 and last_reconciled=never, so calibration is ineligible and positive-ceiling admission returns low-confidence cannot-confirm. A generic gate warning or the word calibration alone does not pass.",
+          "sources": ["references/consumption.md", "references/consumption-rates-template.md"]
+        },
+        {
+          "id": "real-preparation",
+          "requirement": "Explain real reconciliation using isolated before/after per-user ai_credits_used and the same run's estimated credits, positive observations, a real reconciliation date, and a basis matching the current rate date and estimator revision. The observed window and estimated total must cover the same operation, without unaccounted setup or unrelated activity. Any separate uncapped preparation requires explicit approval; unavailable measurements or declined preparation leave capped work blocked.",
+          "sources": ["references/consumption-rates-template.md", "references/consumption.md"]
+        },
+        {
+          "id": "no-bypass",
+          "requirement": "Do not fabricate observations or recommend editing placeholders to appear calibrated, approve cannot-confirm, imply a larger ceiling fixes evidence, or silently drop the requested ceiling. Any capped snippet is conditional on verified readiness, with the blocker and preparation explained first.",
+          "sources": ["references/coach-discovery.md", "references/consumption.md"]
+        },
+        {
+          "id": "runbook-preserved",
+          "requirement": "Preserve detailed host-correct agent selection and prefix-free messages for ranked initialization, conditional autopilot, mandatory human gates, progress, review, and resumption. Cite sources beside actionable steps, and resolve any stated output paths from the owning contract rather than assuming the state root. Do not claim the Coach executes work or updates packages.",
+          "sources": ["squad-coach.agent.md", "references/coach-discovery.md"]
+        }
+      ]
+    },
+    {
+      "id": "legacy-artifacts",
+      "includeProductDocumentation": true,
+      "prompt": "host=cli I inherited this single squad. Help me prepare to promote it into a federation and later add an independently owned platform workstream, without losing existing work. Inspect what is already present and give a detailed preparation checklist, exact owning-agent messages, confirmations, and continuation. Do not migrate, initialize, or execute anything. Selected installed sources are in .agents/skills/squad and .github/agents; product documentation is in package-docs.",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Consumer application\nAn inherited single-squad project preparing for independently owned platform work.\n"
+        },
+        {
+          "path": ".copilot-tracking/squad/team.md",
+          "content": "# Existing Squad\n\nProfile: default\nModel routing: ranked\n\n| Role | Member Name | Primary | Deliverable Root |\n|---|---|---|---|\n| lead | Existing Lead | Squad Lead | .copilot-tracking/plans/ |\n| scribe | Existing Scribe | Squad Scribe | .copilot-tracking/squad/ |\n"
+        },
+        {
+          "path": ".copilot-tracking/squad/decisions.md",
+          "content": "# Decisions\n\n## Existing setup\nKeep the current squad and its completed work.\n"
+        },
+        {
+          "path": ".copilot-tracking/squad/history/Squad Scribe.md",
+          "content": "# Existing history\n\n## Prior setup\nThe original roster was confirmed. This deliberately incomplete legacy record lists no artifacts.\n"
+        },
+        {
+          "path": ".copilot-tracking/plans/claims-plan.txt",
+          "content": "Unrecorded claims plan: preserve this file during any future promotion.\n"
+        },
+        {
+          "path": ".copilot-tracking/legacy-output/nested/release.txt",
+          "content": "An unrecorded deliverable outside the current roster root table. Preserve it too.\n"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "disk-inventory",
+          "requirement": "Identify the existing plans/claims-plan.txt and legacy-output/nested/release.txt, even though state/history do not reference them. Inspect the workflow-defined tracking scope, not just squad state or the roster table. Do not report no deliverables; label other uninspected locations unverified.",
+          "sources": ["references/coach-discovery.md", "references/federation.md"]
+        },
+        {
+          "id": "preservation",
+          "requirement": "Preserve existing setup rather than reinitialize. Explain the owning Federation Coordinator's disk-enumeration and relocation-list confirmation, state/artifact preservation, and continuation. Distinguish missing legacy state from completed setup without fabricating history or claiming that migration already occurred.",
+          "sources": ["references/federation.md", "references/coach-discovery.md"]
+        }
+      ]
+    }
+  ]
+}

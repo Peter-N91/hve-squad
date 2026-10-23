@@ -1,0 +1,17 @@
+{
+  "connectorId": "acme-coordinator-v2",
+  "schemaVersion": "1.0",
+  "transport": "file",
+  "capabilities": [
+    "Implements a bounded development task against an existing in-house coding standard and returns the changed files as a result envelope.",
+    "Runs entirely on a consumer-owned coordinator process; never installed into this package."
+  ],
+  "roles": [
+    "developer"
+  ],
+  "dropPath": ".connector-drops/acme-coordinator-v2/",
+  "deadlineMinutesDefault": 120,
+  "retryCapDefault": 3,
+  "contact": "squad-integrations@example.com",
+  "version": "2.3.1"
+}

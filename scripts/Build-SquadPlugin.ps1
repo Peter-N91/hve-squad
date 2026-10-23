@@ -12,10 +12,10 @@
     plugin.json, .github/plugin/plugin.json, .github/plugin/marketplace.json) is generated
     output that never lives in hve-squad's own working tree. This script is
     the single, reproducible generator: it resolves an immutable source (a
-    git ref or, for local iteration only, a working copy), copies the 26
-    squad agents with their dead .instructions.md citations rewritten to the
+    git ref or, for local iteration only, a working copy), copies the squad
+    agents with their dead .instructions.md citations rewritten to the
     plugin's skill-reference targets, ports squad-src/.github/skills/squad/
-    with its two housekeeping edits, authors the 5 prompt-derived invocation
+    with its two housekeeping edits, authors the prompt-derived invocation
     skills, writes a cwd-independent hooks.json, and writes byte-identical
     version-stamped plugin.json manifests at the root and under
     .github/plugin/, plus a marketplace.json scaffold.
@@ -533,15 +533,47 @@ function Write-PluginHookManifest {
 function New-InvocationSkillContent {
     <#
     .SYNOPSIS
-        Returns the 5 prompt-derived invocation SKILL.md bodies (conversion
+        Returns the prompt-derived invocation SKILL.md bodies (conversion
         plan Section 2). Content is bespoke per skill, authored once here from
         each source .prompt.md's Inputs/Requirements, not mechanically derived.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
-    param()
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Source,
 
-    return [ordered]@{
+        [Parameter(Mandatory)]
+        [string]$RepoRoot
+    )
+
+    $skills = [ordered]@{
+        'squad-coach'              = @'
+---
+name: squad-coach
+description: "Helps a user open the advisory Squad Coach for source-grounded HVE Squad guidance and a detailed runbook. Use for onboarding or questions about how to achieve a goal with the installed Squad version."
+license: MIT
+metadata:
+  authors: "Peter-N91/hve-squad"
+---
+
+# Squad Coach
+
+## Input
+
+* **request** (optional): The user's goal, question, or changed demand. Continue from conversation context when it is omitted.
+* **host** (optional): `vscode`, `cli`, or `app` when the active host is unclear.
+
+## Flow
+
+1. Tell the user to select the `Squad Coach` agent manually: the agents dropdown in VS Code, `/agent` in Copilot CLI, or the agent picker in Copilot App.
+2. Provide their request as a prefix-free, copy-ready message for that conversation, preserving any supplied host hint. Keep selection instructions outside the message.
+3. Stop at this handoff. The Coach reads current code and documentation and returns advice without initializing, dispatching delivery work, or changing state.
+
+## Invocation
+
+Do not dispatch `Squad Coach`: it is a user-only agent (`disable-model-invocation: true`). This skill prepares a manual handoff; it neither impersonates the Coach nor applies its recommendations.
+'@
         'squad-run'                = @'
 ---
 name: squad-run
@@ -809,6 +841,24 @@ This is a **single-purpose action**: it drops hook files into the consuming repo
 Perform this as a direct file-write action — it is a mechanical copy-and-rewrite, not a role dispatch.
 '@
     }
+
+    $coachAgent = 'squad-src/.github/agents/squad/squad-coach.agent.md'
+    $coachPrompt = 'squad-src/.github/prompts/squad/squad-coach.prompt.md'
+    $agents = @(Get-SourceFileList -Source $Source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/agents/squad')
+    $prompts = @(Get-SourceFileList -Source $Source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/prompts/squad')
+    if ($coachAgent -notin $agents -or $coachPrompt -notin $prompts) {
+        $skills.Remove('squad-coach')
+    }
+    else {
+        $skills['squad-run'] += @'
+
+
+## First-Run Guidance
+
+If no state exists and the user is unsure, mention the advisory Squad Coach once; never repeat the hint after squad or federation state exists. If they choose coaching, pause for a manual agent selection rather than dispatching the user-only Coach.
+'@
+    }
+    return $skills
 }
 
 #endregion Functions
@@ -869,7 +919,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                     'the companion hook rules and reference files it depends on are catalogued in'
                 $content = $content.Replace(
                     ', and `squad-task.issue-template.yml` — keep their existing paths.',
-                    ', `squad-task.issue-template.yml`, and `invocations/` (the 5 prompt-derived invocation skills) — keep their existing paths.'
+                    ', `squad-task.issue-template.yml`, and `invocations/` (the prompt-derived invocation skills) — keep their existing paths.'
                 )
             }
             elseif ($subPath -eq 'references/00-index.md') {
@@ -889,8 +939,8 @@ if ($MyInvocation.InvocationName -ne '.') {
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/$subPath") -Content $content -DryRun:$DryRun
         }
 
-        # ── Invocation skills: 5 prompt-derived skills (P02-T04) ──
-        $invocationSkills = New-InvocationSkillContent
+        # ── Prompt-derived invocation skills (P02-T04) ──
+        $invocationSkills = New-InvocationSkillContent -Source $source -RepoRoot $RepoRoot
         Write-Host "Skills:  $($invocationSkills.Count) invocation skills" -ForegroundColor Cyan
         foreach ($name in $invocationSkills.Keys) {
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/invocations/$name/SKILL.md") -Content $invocationSkills[$name] -DryRun:$DryRun
@@ -904,7 +954,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             '$schema'     = 'https://raw.githubusercontent.com/github/open-plugin-spec/main/schemas/plugin.schema.json'
             name          = 'hve-squad'
             version       = $source.PluginVersion
-            description   = "Plugin distribution tree for hve-squad: $($agentFiles.Count) Squad Copilot agents and the squad skill (including 5 invocation skills under skills/squad/invocations/), generated and release-gated from Peter-N91/hve-squad."
+            description   = "Plugin distribution tree for hve-squad: $($agentFiles.Count) Squad Copilot agents and the squad skill (including $($invocationSkills.Count) invocation skills under skills/squad/invocations/), generated and release-gated from Peter-N91/hve-squad."
             agents        = @('agents/squad/')
             skills        = @('skills/squad/')
             hooks         = 'hooks.json'

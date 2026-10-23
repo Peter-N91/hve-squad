@@ -5,7 +5,7 @@ applyTo: '**/.copilot-tracking/squad/**'
 
 # Squad Roster Conventions
 
-These conventions define the squad roster: the durable list of roles the Squad Coordinator can dispatch and the HVE Core agent that fills each role. The coordinator reads the roster at the start of every turn to decide who is available, how to invoke them, and which model tier to prefer.
+The roster binds dispatchable roles to HVE Core agents. At each turn, the coordinator reads it for availability, invocation, and preferred model tier.
 
 The roster is data, not behavior. It records identities and invocation details. Routing logic lives in `squad-routing.instructions.md`, and persistence rules live in `squad-state.instructions.md`.
 
@@ -190,6 +190,10 @@ The coordinator turns a matched role into exactly one concrete agent at dispatch
 4. **Apply the external cast when the role is backed by a registered resource.** Follow *Resolving an External Role* in the *External Cast* section: a registered **opt-in** agent that is not installed is an absent role, and the escalation names the exact `Install or Entry` value from its row. A **bundled** resource ships with the package and cannot be absent; a missing one is a broken installation rather than an absent role.
 5. **Record any non-primary resolution** through the Squad Scribe, so `history/<agent>.md` reflects the agent that actually ran and the cue that selected it.
 6. **Never self-fill an absent role.** When the resolved agent is not installed, not dispatchable, or returns nothing, the coordinator stops and escalates to the user. It must not perform the role's work itself, and must not substitute a non-mapped agent to fill the gap. An absent role blocks the stage until the user installs the agent, names a substitute, or removes the role. A dispatch that returns nothing is an absent role, not an invitation to improvise.
+
+For connector setup, manual bindings, or dispatch, load the skill's
+`references/connector-role-modes.md`; it also owns consumer-defined additive
+roles and their explicit artifact roots.
 
 ## Casting Rules
 

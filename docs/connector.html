@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squad Connector — hve-squad</title>
+  <meta name="description" content="Configure your agents and workflows once for automatic work-role selection in autopilot. Keep HVE coordinators, Scribe, and council governance unchanged." />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <script src="assets/theme.js"></script>
+  <link rel="stylesheet" href="assets/style.css" />
+  <link rel="alternate" hreflang="fr" href="fr/connector.html" />
+  <script src="assets/site.js" defer></script>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="getting-started.html">Getting Started</a>
+        <a href="usage.html">Usage</a>
+        <a href="demo.html">Demo</a>
+        <a href="ecosystem.html">Ecosystem</a>
+        <a href="connector.html" class="active">Connector</a>
+        <a href="maintaining.html">Maintaining</a>
+        <a href="troubleshooting.html">Troubleshooting</a>
+        <a href="contributing.html">Contributing</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="fr/connector.html" lang="fr">Fran&ccedil;ais</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Integration Guide</div>
+      <h1>Squad Connector</h1>
+      <p class="lead">
+        Keep your own agents, skills, and execution boundaries. Register a capability manifest
+        and delegate bounded tasks to your external coordinator through the Squad Connector shim,
+        without migrating anything into this package.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2 id="consumer-walkthrough">Consumer walkthrough: your researcher and implementation coordinator</h2>
+
+      <p>
+        You already have a squad. Your organization has a research agent with its own skills and
+        an implementation coordinator that runs your coding and validation workflow.
+        This example makes them the automatic <code>researcher</code> and <code>developer</code>
+        endpoints, then adds a .NET practices or GCP specialist without replacing another member.
+      </p>
+      <div class="callout"><p>
+        Use a Squad package supporting connector contract <code>1.1</code> and your existing agent
+        host/adapter. The adapter runs your agents and exchanges request/result files with HVE.
+        HVE's Coordinator, Federation Coordinator, Scribe, and council remain unchanged.
+        Your implementation coordinator is a workflow behind the developer role, not the HVE Coordinator.
+      </p></div>
+
+      <h3>Step 1: Create the folders in your repository</h3>
+      <p>
+        Create the manifest folder and mailboxes below. Agent files are optional starters for your
+        own host; reuse your existing agents and skills if you already have them.
+        HVE/Scribe manages the squad-state files shown at the bottom of the tree.
+      </p>
+      <div class="code-block"><div class="code-heading">Repository folder tree</div>
+      <pre><code class="language-text">your-repository\
++-- connectors\                         You create these manifests
+|   +-- research-agent.json
+|   +-- delivery-workflow.json
+|   +-- specialists.json                Optional, Step 5
++-- .connector-drops\                   Mailboxes, not final reports
+|   +-- acme-research-agent\
+|   +-- acme-delivery-orchestrator-v3\
+|   +-- acme-capability-assessor\        Optional, Step 5
++-- .github\
+|   +-- agents\                         Optional consumer-owned starters
+|       +-- consumer-research.agent.md
+|       +-- consumer-implementation-orchestrator.agent.md
+|       +-- consumer-implementation.agent.md
+|       +-- consumer-validation.agent.md
+|       +-- consumer-capability-assessor.agent.md
++-- .copilot-tracking\
+    +-- squad\                          HVE/Scribe-managed squad state
+        +-- team.md                     Members and Connector Bindings
+        +-- routing.md
+        +-- decisions.md
+        +-- state.json
+        +-- history\</code></pre></div>
+      <div class="code-block"><div class="code-heading">Create the required folders with PowerShell</div>
+      <pre><code class="language-powershell">New-Item -ItemType Directory -Force -Path `
+    '.\connectors', `
+    '.\.connector-drops\acme-research-agent', `
+    '.\.connector-drops\acme-delivery-orchestrator-v3' | Out-Null</code></pre></div>
+      <p>
+        Keep skills in their existing supported location. The optional starters use
+        <code>org-research</code>, <code>org-dotnet</code>, and <code>org-validation</code> as example
+        names; replace them with your real skills. Copying these files does not launch an endpoint.
+      </p>
+
+      <h3>Step 2: Configure the two endpoints</h3>
+      <p>
+        Copy the complete manifest contents from <a href="#copy-the-templates">Copy the templates</a>
+        into the two project files below. A manifest declares capability and transport; the
+        registration in Step 3 decides which squad role it replaces.
+      </p>
+      <table><thead><tr><th>Project file</th><th>Connector ID</th><th>Endpoint Kind</th><th>Work role</th></tr></thead><tbody>
+        <tr><td><code>connectors/research-agent.json</code></td><td><code>acme-research-agent</code></td><td><code>agent</code></td><td><code>researcher</code></td></tr>
+        <tr><td><code>connectors/delivery-workflow.json</code></td><td><code>acme-delivery-orchestrator-v3</code></td><td><code>orchestrator</code></td><td><code>developer</code></td></tr>
+      </tbody></table>
+      <p>
+        In your adapter's trusted configuration, map the first connector id to your research agent
+        and the second to your implementation coordinator. The example names are Consumer Research
+        Agent and Consumer Implementation Orchestrator. The latter delegates to its own implementation
+        and validation agents, which retain their organizational skills.
+      </p>
+      <p>
+        This mapping is host-specific; HVE does not read an invented adapter file or infer an agent
+        from its filename. The <code>roles</code> array in each manifest is an allowlist of roles
+        that connector may be bound to, not an automatic replacement of every listed role. Your
+        actual <code>.agent.md</code> files and skills can live inside the repository or in an
+        external shared folder—your adapter script or watcher polls <code>.connector-drops/</code>,
+        maps <code>connectorId</code> to your agent or workflow, runs it against the sources named
+        in <code>request.task</code> (returning source-grounded content, not generic placeholder text),
+        and writes back the result envelope. Do not add command or agent-file execution fields to a
+        manifest. Adapt the sample contact address, ids, and paths consistently across the adapter
+        and registration.
+      </p>
+
+      <h3>Step 3: Register the connectors and choose what they replace</h3>
+      <p>Send this to the Squad Coordinator after saving the manifests:</p>
+      <div class="code-block"><div class="code-heading">Start connector registration</div>
+      <pre><code class="language-text">I added two connector manifests to this repository:
+connectors/research-agent.json
+connectors/delivery-workflow.json
+
+Help me connect them to this initialized squad.
+I want my research agent to perform researcher work, and my implementation
+coordinator to perform developer work. Keep HVE coordination, Scribe, and council unchanged.
+Show the proposed configuration and wait for my confirmation.</code></pre></div>
+      <p>
+        The coordinator asks for missing decisions one at a time. Exact wording may vary; values
+        already supplied in your request or manifest do not need to be asked again.
+        Choose the following for this example:
+      </p>
+      <table><thead><tr><th>Decision you confirm</th><th>Research connector</th><th>Delivery connector</th></tr></thead><tbody>
+        <tr><td>Replace an existing role or add a member?</td><td><code>replace</code></td><td><code>replace</code></td></tr>
+        <tr><td>Which role/member?</td><td>Existing <code>researcher</code> member</td><td>Existing <code>developer</code> member</td></tr>
+        <tr><td>One agent or a workflow?</td><td><code>agent</code>, from manifest</td><td><code>orchestrator</code>, from manifest</td></tr>
+        <tr><td>Automatic default or request-time alternative?</td><td><code>connector</code></td><td><code>connector</code></td></tr>
+        <tr><td>Member label in history?</td><td>Org Researcher</td><td>Org Delivery</td></tr>
+        <tr><td>Where should reports land?</td><td>Existing researcher root</td><td>Existing developer root and declared workflow output slots</td></tr>
+      </tbody></table>
+      <p>
+        Choose <code>ask</code> instead if you want an alternative, not an automatic replacement.
+        For unattended autopilot, settle that choice during setup: keep exactly one applicable
+        non-<code>ask</code> default. When several members share a role, confirm which member is targeted.
+      </p>
+      <p>
+        Confirm the proposal. The Scribe writes the bindings into the owning squad's
+        <code>team.md</code>, preserving the internal originals and their deliverable roots.
+        Existing research/developer routes remain in place. Do not overwrite the roster with a
+        sample or change its Primary to your external agent's name.
+      </p>
+      <table><thead><tr><th>Binding ID</th><th>Role Mode</th><th>Target</th><th>Default Execution</th></tr></thead><tbody>
+        <tr><td><code>research-org</code></td><td><code>replace</code></td><td>Researcher member</td><td><code>connector</code></td></tr>
+        <tr><td><code>developer-delivery-orchestrator</code></td><td><code>replace</code></td><td>Developer member</td><td><code>connector</code></td></tr>
+      </tbody></table>
+
+      <h3>Step 4: Run your squad normally</h3>
+      <div class="code-block"><div class="code-heading">Start autopilot with saved defaults</div>
+      <pre><code class="language-text">/squad mode=autopilot Implement the approved validation change and its regression tests. Do not deploy or push.</code></pre></div>
+      <p>
+        No <code>execution=</code> flag is needed. Research uses your research agent; planning stays
+        with the existing lead; implementation uses your coordinator's workflow; HVE's closing review
+        and applicable council/risk gates still apply. Other ordinary work roles support the same mechanism.
+      </p>
+      <p>
+        Your adapter must be running to handle the requests. With file-drop transport, a result that
+        is not ready leaves the stage <code>awaiting</code>, never a silent fallback to the built-in
+        worker. Consumer automation can resume it. For a manual handoff, continue the same task:
+      </p>
+      <div class="code-block"><div class="code-heading">Resume a pending exchange, if needed</div>
+      <pre><code class="language-text">/squad mode=autopilot Continue the current run. Check the pending connector result using its existing taskId and binding; do not create a new task.</code></pre></div>
+      <p>The connector supplies neither an external runner nor an automatic cross-process wake-up service.</p>
+
+      <h3>Step 5: Add a .NET or GCP specialist without replacing anyone</h3>
+      <p>
+        Save the specialist manifest from the templates as <code>connectors/specialists.json</code>,
+        create its mailbox, and configure your assessor in the adapter with its real domain skills.
+        The example Consumer Capability Assessor maps each requested role to an explicitly configured skill.
+      </p>
+      <div class="code-block"><div class="code-heading">Create the optional specialist mailbox</div>
+      <pre><code class="language-powershell">New-Item -ItemType Directory -Force -Path '.\.connector-drops\acme-capability-assessor' | Out-Null</code></pre></div>
+      <div class="code-block"><div class="code-heading">Add a .NET practices member</div>
+      <pre><code class="language-text">Add an extra specialist from connectors/specialists.json without replacing anyone.
+Use binding dotnet-assessor, member Dotnet Assessor, and added role dotnet-practices.
+Align it to tester for classification only.
+Use .copilot-tracking/squad/dotnet-practices/ for its reports.
+Route "assess dotnet practices" to it and set Default Execution=connector.
+Keep the existing tester, Coordinator, Scribe, and council unchanged.
+Show the proposed member, binding, route, and root before writing.</code></pre></div>
+      <p>
+        This time choose <code>add</code>. Confirm the new member, alignment, root, route, and default.
+        The Scribe creates a separate member whose Primary is <code>Squad Connector</code>; it does
+        not replace <code>tester</code> or create another council lens. For GCP, use these parallel choices:
+      </p>
+      <table><thead><tr><th>Field</th><th>.NET example</th><th>GCP example</th></tr></thead><tbody>
+        <tr><td>Binding ID</td><td><code>dotnet-assessor</code></td><td><code>gcp-assessor</code></td></tr>
+        <tr><td>Added Role</td><td><code>dotnet-practices</code></td><td><code>gcp</code></td></tr>
+        <tr><td>Member Name</td><td>Dotnet Assessor</td><td>GCP Assessor</td></tr>
+        <tr><td>Aligned Role</td><td><code>tester</code></td><td><code>azure-architect</code></td></tr>
+        <tr><td>Deliverable Root</td><td><code>.copilot-tracking/squad/dotnet-practices/</code></td><td><code>.copilot-tracking/squad/gcp-assessments/</code></td></tr>
+        <tr><td>Route</td><td>assess dotnet practices</td><td>assess GCP architecture</td></tr>
+        <tr><td>Default Execution</td><td><code>connector</code></td><td><code>connector</code></td></tr>
+      </tbody></table>
+      <p>
+        Alignment grants classification/output compatibility, not domain skills or authority.
+        Use resolved member roots in a federation. You can also add <code>data-quality</code> or
+        another declared capability with its own member, binding, root, and route.
+      </p>
+      <div class="code-block"><div class="code-heading">Request an extra assessment</div>
+      <pre><code class="language-text">/squad Assess dotnet practices in the implemented change.
+/squad Assess GCP architecture for the proposed design.</code></pre></div>
+      <p>
+        To include a specialist in autopilot, request its assessment as a deliverable so the plan
+        names its owning role. Adding a member alone does not run it on every pipeline.
+      </p>
+
+      <h3>Step 6: Find the outputs and history</h3>
+      <p>
+        Mailboxes contain requests/results, not the final report location. Research uses the active
+        researcher's <code>Deliverable Root</code>; the workflow uses its declared output slots;
+        extra specialists use their confirmed roots. Source code and tests stay in the authorized worktree.
+        The internal Scribe records artifact references and member/binding identities under the owning
+        <code>squadRoot</code>, including <code>history/Squad Connector.md</code> (where each connected
+        role is disambiguated by its unique <code>Member Name</code> and receives its own row in
+        <code>consumption.md</code>).
+      </p>
+      <p>
+        External work remains <code>external, unverified</code>; its spend is unmetered by the shim.
+        Bindings stay attached to that squad when promoted to a federation member. See the output
+        and federation reference below for root rebasing and pending exchanges.
+      </p>
+
+      <h2 id="copy-the-templates">Copy the templates</h2>
+      <p>
+        Expand a file, copy its complete contents, and save it at the displayed project path.
+        Copy buttons copy file content only, not the caption. Download links are also available.
+        These blocks use the source template files directly, so copied and downloaded versions match.
+      </p>
+      <h3>Connector manifests</h3>
+      <details data-connector-template="manifest.research-agent.1.1.json"><summary>Research agent manifest</summary>
+        <p><a href="templates/connector-example/manifest.research-agent.1.1.json" download="research-agent.json">Download research-agent.json</a></p>
+        <div class="code-block"><div class="code-heading">connectors\research-agent.json</div><pre><code class="language-json">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="manifest.delivery-workflow.1.1.json"><summary>Implementation coordinator manifest</summary>
+        <p><a href="templates/connector-example/manifest.delivery-workflow.1.1.json" download="delivery-workflow.json">Download delivery-workflow.json</a></p>
+        <div class="code-block"><div class="code-heading">connectors\delivery-workflow.json</div><pre><code class="language-json">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="manifest.capability-assessor.1.1.json"><summary>Optional .NET, GCP, or data-quality specialist manifest</summary>
+        <p><a href="templates/connector-example/manifest.capability-assessor.1.1.json" download="specialists.json">Download specialists.json</a></p>
+        <div class="code-block"><div class="code-heading">connectors\specialists.json</div><pre><code class="language-json">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <h3>Optional agent and workflow starters</h3>
+      <p>
+        Reuse your own agents or copy these starters into the host that runs your endpoints.
+        Replace the example skill names with your actual skills; these files are not installed or
+        executed by HVE merely because they appear here.
+      </p>
+      <details data-connector-template="agents/consumer-research.agent.md"><summary>Research agent</summary>
+        <p><a href="templates/connector-example/agents/consumer-research.agent.md" download="consumer-research.agent.md">Download research agent starter</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-research.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="agents/consumer-implementation-orchestrator.agent.md"><summary>Implementation coordinator</summary>
+        <p><a href="templates/connector-example/agents/consumer-implementation-orchestrator.agent.md" download="consumer-implementation-orchestrator.agent.md">Download implementation coordinator starter</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-implementation-orchestrator.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="agents/consumer-implementation.agent.md"><summary>Implementation worker used by the coordinator</summary>
+        <p><a href="templates/connector-example/agents/consumer-implementation.agent.md" download="consumer-implementation.agent.md">Download implementation worker</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-implementation.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="agents/consumer-validation.agent.md"><summary>Validation worker used by the coordinator</summary>
+        <p><a href="templates/connector-example/agents/consumer-validation.agent.md" download="consumer-validation.agent.md">Download validation worker</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-validation.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="agents/consumer-capability-assessor.agent.md"><summary>Optional domain specialist</summary>
+        <p><a href="templates/connector-example/agents/consumer-capability-assessor.agent.md" download="consumer-capability-assessor.agent.md">Download specialist starter</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-capability-assessor.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <p>
+        A <a href="templates/connector-example/CONSUMER-GUIDE.md">Markdown companion</a> is available.
+        Continue below for execution choices, envelope schemas, and safety requirements.
+      </p>
+
+      <h2>What is the Squad Connector?</h2>
+
+      <p>
+        The Squad Connector is a file-based integration contract that lets you bring your own
+        coordinator (or single agent) into HVE Squad's methodology. You register a single
+        <strong>capability manifest</strong> describing what your coordinator can do, where it
+        lives on disk, and which squad roles can delegate work to it. When a dispatched role
+        needs external work done, the Squad Connector shim writes a
+        <strong>delegation-request</strong> to your manifest's drop path. Your own coordinator
+        (running entirely outside this package) reads it, does the work, and writes back a
+        <strong>result envelope</strong> with the deliverable. The shim validates and reports the
+        outcome, exactly as it reports any other role's result.
+      </p>
+
+      <p>
+        <strong>You keep your own agents, skills, and execution boundaries.</strong> Nothing
+        inside this package runs or installs your coordinator code. No migration of your tools,
+        no fork of your methodology. The connector is a shim that hands work across a boundary
+        and brings back results — nothing more.
+      </p>
+
+      <div class="callout">
+        <p>
+          <strong>No blocking, no MCP, no live transport.</strong> The connector implements
+          Mode 2: human-in-the-loop file drop. The shim writes the delegation-request and returns
+          immediately; your coordinator runs on your own schedule (by file watcher, cron job,
+          human hand, or whatever you prefer), and the shim picks up the result on a later
+          dispatch. This is the only transport mode supported today.
+        </p>
+      </div>
+
+      <h2>Architectural fit: External Cast</h2>
+
+      <p>
+        Connector role modes are roster-owned. During registration/build/refresh, consumers add
+        entries under <code>Connector Bindings</code> and choose whether each binding
+        <strong>replaces</strong> an existing execution surface or <strong>adds</strong> a new
+        connector-backed team member. The endpoint behind a binding may be a single external agent
+        or an external orchestrator.
+      </p>
+
+      <p>
+        <strong>Replacement retains the original internal member.</strong> Request-time execution
+        can choose <code>original</code>, a named
+        <code>connector:&lt;binding-id&gt;</code>, or safe <code>both</code> where output roots are
+        collision-free. Interactive clarification happens after ordinary role classification when
+        choice remains ambiguous. In unattended/autopilot paths, unresolved ambiguity is fail-closed:
+        stop and escalate rather than guessing.
+      </p>
+
+      <p>
+        <strong>Multiple additive connector members are supported.</strong> Example: an Azure squad
+        can add a connector-backed <code>gcp</code> architecture assessor aligned to
+        <code>azure-architect</code>. That alignment grants routing and deliverable compatibility
+        only. It does <strong>not</strong> grant Azure capability by implication, and it does
+        <strong>not</strong> grant any council lens membership.
+      </p>
+
+      <p>
+        <strong>Governance shell and council stay internal.</strong> Even when a binding targets a
+        consumer-owned orchestrator endpoint for a work role, the HVE Squad Coordinator remains the governance shell.
+        External orchestrators cannot own gates, council verdicts, approvals, squad state writes,
+        or Scribe authority. Council membership remains canonical/internal and connector roles never
+        extend or replace it.
+      </p>
+
+      <h2>The seat model: your agents, HVE governance</h2>
+
+      <p>
+        HVE runs the method; your agents perform the bounded work. Think of a role as a seat:
+        keep the HVE agent, select your own agent with its skills, or put your entire workflow
+        behind that seat. Your implementation workflow does not replace the squad's
+        Research &rarr; Plan &rarr; Implement &rarr; Review cycle.
+      </p>
+
+      <table>
+        <thead><tr><th>Seat</th><th>Consumer choice</th><th>What stays with HVE</th></tr></thead>
+        <tbody>
+          <tr><td><code>researcher</code></td><td>Your researcher and organization research skills</td><td>Stage sequencing and artifact checks</td></tr>
+          <tr><td><code>developer</code></td><td>Your implementor, or your research/code/validation orchestrator</td><td>Plan prerequisites, council when required, and closing review</td></tr>
+          <tr><td>Extra specialist</td><td>GCP, .NET practices, data quality, or another declared capability</td><td>Routing, confirmation, evidence checks, and unchanged council membership</td></tr>
+          <tr><td>Coordinator and Scribe</td><td>Internal governance and persistence</td><td>Gates, admission, approvals, decisions, history, and final synthesis</td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        Your endpoint's internal review is evidence, not a council verdict or release approval.
+        HVE's Coordinator, Federation Coordinator, and Scribe cannot be connected or replaced.
+        Your orchestrator belongs behind an ordinary work role such as <code>developer</code>,
+        not in place of the HVE Coordinator.
+      </p>
+
+      <h2 id="register-or-extend-an-existing-squad">Execution choices reference</h2>
+
+      <p>
+        Ask the Squad Coordinator to register or refresh a connector, supplying your manifest path.
+        It asks for missing choices one at a time, validates complete manual configuration without
+        repeating answered questions, and confirms the proposed changes before the Scribe writes them.
+        Choose <code>replace</code> with default <code>connector</code> to use your endpoint by default,
+        or with <code>ask</code> to keep it as a request-time alternative. Choose <code>add</code>
+        for an extra member. Do not put connector ids in <code>Alternate Agents</code>.
+      </p>
+
+      <p>
+        <strong>Configure once, then use autopilot without execution flags.</strong>
+        The walkthrough's saved defaults use your research agent and implementation workflow.
+        Planning, review, architecture, writing, and other ordinary work roles support
+        the same mechanism. A role without a binding stays internal; council dispatch always stays internal.
+      </p>
+
+      <table>
+        <thead><tr><th>Role</th><th>Binding</th><th>Default Execution</th></tr></thead>
+        <tbody>
+          <tr><td><code>researcher</code></td><td><code>research-org</code></td><td><code>connector</code></td></tr>
+          <tr><td><code>developer</code></td><td><code>implementation-org</code></td><td><code>ask</code> (optional single-agent alternative)</td></tr>
+          <tr><td><code>developer</code></td><td><code>developer-delivery-orchestrator</code></td><td><code>connector</code></td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        Additive capabilities are not limited to GCP. Each needs a manifest-authorized role,
+        unique member name, binding, explicit route and root, and an alignment to an existing
+        assignment class. For example, <code>gcp</code> can align to <code>azure-architect</code>,
+        while <code>dotnet-practices</code> and <code>data-quality</code> align to
+        <code>tester</code>. Your endpoint must supply the actual domain skills; alignment does not.
+        Coordinators, Scribe, and council identities remain reserved.
+      </p>
+
+      <pre><code class="language-text">/squad mode=autopilot Implement the approved validation change and its regression tests. Do not deploy or push.
+/squad Assess GCP architecture
+/squad Assess dotnet practices
+/squad Assess dataset quality</code></pre>
+
+      <p>
+        To use a single implementor instead, confirm a refresh making its binding the
+        <code>connector</code> default and the workflow binding <code>ask</code>. The autopilot
+        command does not change. Exactly one applicable non-<code>ask</code> default is required.
+        An <code>execution=</code> argument remains an optional work-role override, not the normal setup.
+      </p>
+
+      <p>
+        Start with the <a href="#consumer-walkthrough">consumer walkthrough on this page</a>.
+        The <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/CONSUMER-GUIDE.md">consumer guide</a>
+        is its portable Markdown companion, with the same folders, registration decisions, and output ownership.
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/consumer-team.1.1.md">The consumer team example</a>
+        is a broader roster variant that defaults to a single implementor and includes three extra capabilities.
+        These are source-only starters, not automatically installed or executed agents.
+        Update or rebuild your installed squad package before expecting source changes to affect it.
+      </p>
+
+      <p>
+        Automatic selection is separate from transport. Your adapter must run the external endpoint.
+        File-drop results may leave the current stage <code>awaiting</code>; consumer automation or
+        a later resume checks the same task. There is no packaged external runner or automatic wake-up service.
+      </p>
+
+      <h2>Outputs, Scribe, and federation ownership</h2>
+
+      <table>
+        <thead><tr><th>Output</th><th>Writer and destination</th></tr></thead>
+        <tbody>
+          <tr><td>Request/result JSON</td><td>Shim/consumer adapter in manifest <code>dropPath</code>; the adapter publishes a complete result atomically.</td></tr>
+          <tr><td>Single-agent report</td><td>Endpoint/shim at the active roster's <code>Deliverable Root</code>; top-level <code>artifacts</code> paths are relative to it. Optional <code>outputs</code> may be omitted.</td></tr>
+          <tr><td>Orchestrator reports</td><td>One envelope with empty top-level <code>artifacts</code>; each <code>outputs[]</code> entry uses a declared <code>outputId</code> and that slot's root.</td></tr>
+          <tr><td>Source code and tests</td><td>Your implementor in the authorized shared/synchronized worktree. Only Markdown, JSON, and text reports cross the envelope boundary.</td></tr>
+          <tr><td>History, decisions, state, ledger</td><td>Internal Scribe under the owning <code>squadRoot</code>, including artifact references and distinct member/binding provenance.</td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        Connector members share <code>history/Squad Connector.md</code> but keep distinct member
+        and binding identities. The Scribe marks the work <code>external, unverified</code>;
+        external spend is unmetered, not zero. It records the outputs rather than rewriting
+        your external research or source code.
+      </p>
+
+      <p>
+        Bindings belong to one squad's roster. Promotion moves them with that roster into its
+        federation member; they do not become federation-global or attach to other squads.
+        Tracking deliverable roots are rebased for the owning member, while manifest/mailbox paths
+        remain separate transport configuration. Complete or abandon pending exchanges before
+        promotion, then issue fresh requests with the new roots. Use squad-isolated mailboxes when
+        needed, and isolate every task by its fresh id, never by role alone.
+      </p>
+
+      <h2>The capability manifest</h2>
+
+      <p>
+        You author one JSON file, the <strong>capability manifest</strong>, that describes your
+        connector. The squad never executes this file; it reads it as data to validate and route
+        work.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>connectorId</code></td>
+            <td>string</td>
+            <td>yes</td>
+            <td>Stable identifier for this connector, used to bind every request and result to it. Pick something like <code>acme-coordinator-v2</code>.</td>
+          </tr>
+          <tr>
+            <td><code>schemaVersion</code></td>
+            <td>string</td>
+            <td>yes</td>
+            <td>The contract version this manifest was authored against. Use <code>"1.0"</code> for legacy single-role flow, <code>"1.1"</code> for role modes.</td>
+          </tr>
+          <tr>
+            <td><code>transport</code></td>
+            <td>string</td>
+            <td>yes</td>
+            <td>The invocation mode. Must be <code>"file"</code> (no other value is supported). <code>"mcp"</code> is reserved for a possible future transport; do not use it.</td>
+          </tr>
+          <tr>
+            <td><code>endpointKind</code></td>
+            <td>string</td>
+            <td><code>1.1</code>: yes<br /><code>1.0</code>: omit</td>
+            <td>What is behind the connector boundary: <code>"agent"</code> or <code>"orchestrator"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>capabilities</code></td>
+            <td>array of string</td>
+            <td>yes</td>
+            <td>Descriptive prose of what your coordinator can do. Not executable. Example: <code>"Implements a bounded development task against our in-house coding standard and returns changed files."</code></td>
+          </tr>
+          <tr>
+            <td><code>roles</code></td>
+            <td>array of string</td>
+            <td>yes</td>
+            <td>Which squad role IDs this connector may be registered against. Example: <code>["developer", "reviewer"]</code>. Consult the roster catalog for valid role IDs.</td>
+          </tr>
+          <tr>
+            <td><code>dropPath</code></td>
+            <td>string</td>
+            <td>yes</td>
+            <td>Repository-relative path where the shim writes the delegation-request and your coordinator reads and writes result envelopes. Example: <code>".connector-drops/acme-coordinator-v2/"</code>. The directory must exist on disk.</td>
+          </tr>
+          <tr>
+            <td><code>deadlineMinutesDefault</code></td>
+            <td>integer</td>
+            <td>yes</td>
+            <td>How many minutes the shim waits for a result before declaring the request <code>unreachable</code>. A dispatching role can override this. Example: <code>120</code>.</td>
+          </tr>
+          <tr>
+            <td><code>retryCapDefault</code></td>
+            <td>integer</td>
+            <td>yes</td>
+            <td>How many result-check or resume attempts the shim allows while no result exists before escalating to <code>unreachable</code>. Example: <code>3</code>.</td>
+          </tr>
+          <tr>
+            <td><code>contact</code></td>
+            <td>string</td>
+            <td>yes</td>
+            <td>Human-readable contact for the coordinator's maintainer. Read as data, never as a command. Example: <code>"squad-integrations@example.com"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>version</code></td>
+            <td>string</td>
+            <td>yes</td>
+            <td>Your coordinator's own version string, for traceability. Example: <code>"2.3.1"</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        <strong>No extra fields.</strong> The manifest schema is closed. Any field other than the
+        listed fields above (including <code>command</code>, <code>exec</code>, <code>script</code>,
+        <code>url</code>, or any other field that names an action) will be rejected at validation.
+      </p>
+
+      <h2>The delegation-request envelope</h2>
+
+      <p>
+        When a dispatched role delegates work to your connector, the Squad Connector shim writes a
+        <strong>delegation-request</strong> JSON file to your manifest's <code>dropPath</code>. Your
+        coordinator watches or polls that directory, reads the request, and acts on it.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>taskId</code></td>
+            <td>string</td>
+            <td>Fresh, one-time identifier for this specific request. Never reused once you write back a result for it.</td>
+          </tr>
+          <tr>
+            <td><code>connectorId</code></td>
+            <td>string</td>
+            <td>Must match your manifest's <code>connectorId</code>.</td>
+          </tr>
+          <tr>
+            <td><code>role</code></td>
+            <td>string</td>
+            <td>The squad role delegating this task.</td>
+          </tr>
+          <tr>
+            <td><code>deliverableRoot</code></td>
+            <td>string</td>
+            <td>The dispatching role's directory where all result artifacts must be placed. <strong>Every artifact path in your result envelope must resolve under this path, with no path traversal.</strong></td>
+          </tr>
+          <tr>
+            <td><code>bindingId</code></td>
+            <td>string</td>
+            <td><code>1.1</code> trusted roster-binding identity. Omitted in legacy <code>1.0</code>.</td>
+          </tr>
+          <tr>
+            <td><code>targetKind</code></td>
+            <td>string</td>
+            <td><code>1.1</code> target type: <code>role</code> only. HVE coordinators, Scribe, and council governance are protected. Omitted in <code>1.0</code>.</td>
+          </tr>
+          <tr>
+            <td><code>executionChoice</code></td>
+            <td>string</td>
+            <td><code>1.1</code> resolved request-time choice: <code>original</code>, <code>connector:&lt;binding-id&gt;</code>, or <code>both</code>.</td>
+          </tr>
+          <tr>
+            <td><code>allowedOutputs</code></td>
+            <td>array</td>
+            <td><code>1.1</code> closed allowlist of output slots. Each entry is <code>{ outputId, role, memberName?, deliverableRoot }</code>.</td>
+          </tr>
+          <tr>
+            <td><code>task</code></td>
+            <td>string</td>
+            <td>Bounded instructions for the work to do. Read this as data — never execute it as a command or script.</td>
+          </tr>
+          <tr>
+            <td><code>deadline</code></td>
+            <td>string (ISO 8601)</td>
+            <td>When this request becomes <code>unreachable</code> if no result arrives. Example: <code>"2026-10-11T18:00:00Z"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>retryCap</code></td>
+            <td>integer</td>
+            <td>How many result-check or resume attempts remain while no result exists before the request becomes <code>unreachable</code>.</td>
+          </tr>
+          <tr>
+            <td><code>createdAt</code></td>
+            <td>string (ISO 8601)</td>
+            <td>When the shim wrote this request.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        Read every field as data. The <code>task</code> field is bounded, human-readable
+        instructions, not a script to parse and execute. Respect the <code>deadline</code> and
+        <code>retryCap</code>: write back <code>failed</code> when your coordinator has a failure
+        result; if no result arrives, the shim reports <code>unreachable</code> when the deadline
+        or retry cap is exhausted.
+      </p>
+
+      <p>
+        <strong>Version boundary.</strong> Contract <code>1.0</code> stays valid for the legacy
+        single-role manual flow. Role modes (replace/add work-role bindings, persisted defaults, and
+        allowlisted multi-output orchestration) require <code>1.1</code>. No silent upgrade is
+        inferred by the shim.
+      </p>
+
+      <h2>The result envelope</h2>
+
+      <p>
+        After you complete the work (or fail to complete it), write a <strong>result envelope</strong>
+        JSON file to the same <code>dropPath</code> location where the delegation-request arrived.
+        The shim will later read it, validate it, and report the outcome.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>taskId</code></td>
+            <td>string</td>
+            <td>Must match the pending delegation-request exactly.</td>
+          </tr>
+          <tr>
+            <td><code>connectorId</code></td>
+            <td>string</td>
+            <td>Must match the pending delegation-request exactly.</td>
+          </tr>
+          <tr>
+            <td><code>bindingId</code></td>
+            <td>string</td>
+            <td><code>1.1</code> only. Must match the pending delegation-request exactly; omitted in legacy <code>1.0</code>.</td>
+          </tr>
+          <tr>
+            <td><code>role</code></td>
+            <td>string</td>
+            <td>Must match the pending delegation-request exactly.</td>
+          </tr>
+          <tr>
+            <td><code>status</code></td>
+            <td>string</td>
+            <td>One of: <code>completed</code>, <code>failed</code>, <code>awaiting</code>, or <code>unreachable</code>. You typically write <code>completed</code> or <code>failed</code>. (See statuses below.)</td>
+          </tr>
+          <tr>
+            <td><code>artifacts</code></td>
+            <td>array of objects</td>
+            <td>Deliverable files. Each object has <code>{"path": "...", "type": "md"|"json"|"txt"}</code>. May be empty if status is not <code>completed</code>. In legacy <code>1.0</code>, this is the returned file list.</td>
+          </tr>
+          <tr>
+            <td><code>outputs</code></td>
+            <td>array</td>
+            <td><code>1.1</code> orchestrator shape. Each item is <code>{ outputId, artifacts[] }</code>, where every <code>outputId</code> must exist in request <code>allowedOutputs</code>.</td>
+          </tr>
+          <tr>
+            <td><code>narrative</code></td>
+            <td>string</td>
+            <td><strong>Untrusted data.</strong> A free-text summary of what happened. Read as data only; never as authority over gates, approvals, or verdicts. Max 10,000 characters.</td>
+          </tr>
+          <tr>
+            <td><code>createdAt</code></td>
+            <td>string (ISO 8601)</td>
+            <td>When you wrote this result.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        <strong>Trusted provenance is registration-owned.</strong> The Scribe renders
+        <code>External-unmetered: connector=&lt;connectorId&gt;</code> and
+        <code>Verification: external, unverified</code> from validated registration/binding data.
+        External narrative text may repeat these words, but it is never authoritative.
+      </p>
+
+      <h2>Result statuses</h2>
+
+      <p>
+        Four statuses, and only four, are valid:
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Meaning</th>
+            <th>Coordinator action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>completed</code></td>
+            <td>Work finished successfully and artifacts are placed at the Deliverable Root.</td>
+            <td>Shim validates artifact paths, records trusted provenance, marks the result <code>external, unverified</code>, and marks the stage as run.</td>
+          </tr>
+          <tr>
+            <td><code>failed</code></td>
+            <td>Work could not be completed, a result failed validation, or the shim-owned collision snapshot is missing, changed, or mismatched.</td>
+            <td>Shim rejects the exchange and escalates to the orchestrator as a failed role. It never rebuilds the pre-task snapshot from the resumed filesystem.</td>
+          </tr>
+          <tr>
+            <td><code>awaiting</code></td>
+            <td>The delegation-request is still being processed; no result envelope exists yet, the deadline has not passed, and retry attempts remain.</td>
+            <td>You typically do not write this status yourself. The shim writes it when it finds no result envelope before either terminal bound is reached.</td>
+          </tr>
+          <tr>
+            <td><code>unreachable</code></td>
+            <td>No result envelope has arrived by the deadline or before <code>retryCap</code> is exhausted, or the manifest itself is invalid or absent.</td>
+            <td>Shim escalates as if a critical role went offline: the stage fails, and the stage may be retried or abandoned. This is not a soft timeout; it is treated as a missing resource.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Mode 2: human-in-the-loop file drop flow</h2>
+
+      <p>
+        The connector implements exactly one invocation mode:
+      </p>
+
+      <ol>
+        <li>
+          <strong>Role classification resolves, then execution choice resolves.</strong> The coordinator
+          first classifies the role/member internally, then applies connector bindings and
+          request-time choice (<code>original</code>, named connector, or safe <code>both</code>).
+          Interactive clarification occurs only when ambiguity remains; unattended ambiguity stops and escalates.
+        </li>
+        <li>
+          <strong>Shim snapshots, then writes delegation-request.</strong> The Squad Connector shim
+          first writes its closed, shim-owned <code>&lt;taskId&gt;.snapshot.json</code> collision
+          baseline, then publishes <code>&lt;taskId&gt;.request.json</code> to your manifest's
+          <code>dropPath</code>. The request contains bounded work, timing, and in <code>1.1</code>
+          trusted binding/output allowlists. The shim returns immediately with status
+          <code>awaiting</code> — it does not block waiting for your response.
+        </li>
+        <li>
+          <strong>Your coordinator watches/polls.</strong> Your coordinator (running entirely outside
+          this package) watches the <code>dropPath</code> for new <code>*.request.json</code> files by
+          whatever means you choose — file watcher, cron job, human-triggered script, etc. It ignores
+          and never edits <code>*.snapshot.json</code>. There is no prescribed mechanism.
+        </li>
+        <li>
+          <strong>Coordinator does the work.</strong> Your coordinator reads the delegation-request,
+          executes the bounded task, and gathers the result (changed files, reports, etc.).
+        </li>
+        <li>
+          <strong>Coordinator writes result envelope.</strong> Your coordinator writes a JSON result
+          envelope to the same <code>dropPath</code>, with matching identity fields, status,
+          artifact paths, and a factual narrative. The Scribe derives accounting markers internally.
+        </li>
+        <li>
+          <strong>Later dispatch of shim checks for result.</strong> A later dispatch of the Squad
+          Connector shim (by the orchestrator on the next turn, or whenever the squad runs again) reads
+          the unchanged request and original collision snapshot, finds your result envelope, validates
+          the complete exchange, and reports <code>completed</code>, <code>failed</code>, or
+          <code>unreachable</code>. It never rebuilds the snapshot after your producer has written files.
+        </li>
+      </ol>
+
+      <p>
+        <strong>Scripted lifecycle, unchanged ownership.</strong> The thin Squad Connector agent runs
+        <code>Invoke-SquadConnectorDispatch.ps1</code> once and returns its JSON. The separate
+        <code>Resolve-SquadConnectorDispatch.ps1</code> stays side-effect free. The wrapper stores
+        request/snapshot hashes, retry attempts, and consumed task ids in
+        <code>dropPath/.squad-connector/&lt;taskId&gt;.state.json</code>, under an exclusive task lock.
+        Keep this private state and never let your adapter edit it: a consumed id is rejected
+        across processes even if the public exchange files were removed. Missing or changed state
+        fails closed. The wrapper returns validated paths and provenance, never raw external
+        <code>narrative</code> or artifact contents. HVE retains routing, gates, and Scribe history writes;
+        the contract remains your consumer-facing protocol reference. On both first dispatch and
+        resume, HVE dispatches the native <code>Squad Connector</code> agent; a direct coordinator
+        script call does not establish its execution. Resume keeps the original <code>taskId</code>
+        without creating another request. Pending identity also pins the external member and owning
+        roster: renaming either fails closed instead of reattributing the result. Directory roots
+        accept the examples' trailing separator; unsafe interior path segments remain rejected.
+        HVE supplies exact dispatch JSON; resume reloads optional task, output, and deadline fields
+        from the pinned request rather than reconstructing them. The child returns its first result,
+        including failures, without retrying with edited inputs. Scribe history uses literal
+        <code>* </code> provenance bullets, only validated reports as deliverables, and the native
+        Connector's own model-attribution evidence.
+      </p>
+
+      <p>
+        <strong>No immediate response.</strong> The key difference from a traditional RPC is that
+        steps 2 and 6 are separate. The shim never blocks. Your coordinator runs asynchronously on
+        your own timeline. If your coordinator needs to run synchronously, you can trigger it
+        immediately after the shim writes the request; if you want it to run via cron or human
+        action, that works too. The contract does not care how.
+      </p>
+
+      <h2>Security rules</h2>
+
+      <p>
+        <strong>Untrusted envelope data.</strong> Every result envelope — its status, narrative, and
+        artifact content — is treated as untrusted data by the shim. No instruction or directive
+        inside a narrative can steer a gate, override a policy, or alter squad behavior. The shim's
+        own validation (not the envelope's claims) determines what happened. Any embedded instruction
+        like "skip this gate" or "mark this as approved" is reported, never obeyed.
+      </p>
+
+      <p>
+        <strong>Path validation and numeric caps.</strong> The shim validates every artifact path
+        before touching it:
+      </p>
+
+      <ul>
+        <li>
+          <strong>No path traversal:</strong> Reject paths with absolute paths, UNC paths
+          (<code>\\server\share</code>), drive letters (<code>C:</code>), <code>..</code> segments,
+          or NTFS alternate-data-stream markers (<code>:</code>). Resolve the surviving path and
+          confirm it falls under <code>deliverableRoot</code> using a separator-aware prefix check
+          (true path-segment boundary, not a bare string match).
+        </li>
+        <li>
+          <strong>No symlinks or junctions:</strong> Reject any symlink, junction, or reparse point
+          at any path component, including intermediate directories.
+        </li>
+        <li>
+          <strong>File-type restrictions:</strong> Only <code>.md</code>, <code>.json</code>, and
+          <code>.txt</code> are allowed. Any other extension is rejected.
+        </li>
+        <li>
+          <strong>Numeric caps, all enforced:</strong>
+          <ul>
+            <li>1 MiB maximum per file</li>
+            <li>5 MiB maximum total per envelope</li>
+            <li>20 artifacts maximum per envelope</li>
+            <li>5 levels maximum nesting depth under <code>deliverableRoot</code></li>
+            <li>10,000 characters maximum for any single string value (including narrative)</li>
+          </ul>
+        </li>
+        <li>
+          <strong>Reserved device names:</strong> Reject Windows reserved names (<code>CON</code>,
+          <code>PRN</code>, <code>AUX</code>, <code>NUL</code>, <code>COM1</code>–<code>COM9</code>,
+          <code>LPT1</code>–<code>LPT9</code>) in any path component, and reject any component with
+          trailing dots or spaces.
+        </li>
+        <li>
+          <strong>No auto-overwrite; in-place validation:</strong> Your producer writes each new
+          task-owned artifact directly under <code>deliverableRoot</code> (or its declared
+          <code>allowedOutputs[].deliverableRoot</code> slot) before publishing
+          <code>&lt;taskId&gt;.result.json</code>. The shim reads pre-existing paths from the closed
+          <code>&lt;taskId&gt;.snapshot.json</code> it wrote before the request and rejects any declared
+          artifact path that already existed before the task, duplicates another path in the same
+          result, or is missing on disk when validated. A missing, changed, or mismatched snapshot
+          fails the exchange rather than being regenerated.
+        </li>
+      </ul>
+
+      <p>
+        <strong>Closed manifest and envelopes.</strong> The manifest, delegation-request, and result
+        envelope schemas are all closed. Any undeclared field is rejected at validation.
+      </p>
+
+      <p>
+        <strong>Envelope binding and replay protection.</strong> A result envelope's
+        <code>connectorId</code>, <code>taskId</code>, and <code>role</code> must match the
+        delegation-request exactly. Every <code>taskId</code> is one-time; once consumed, the same
+        <code>taskId</code> is never accepted again — a repeat is a replay and is rejected.
+      </p>
+
+      <p>
+        <strong>No secrets.</strong> A manifest, delegation-request, or result envelope containing
+        credential-shaped content (API keys, tokens, connection strings, PEM blocks, or other
+        high-entropy secret patterns) fails validation outright. Never embed secrets in any of these
+        files.
+      </p>
+
+      <h2>Accounting: External-unmetered marker</h2>
+
+      <p>
+        Externally run connector work is recorded as an ordinary history entry in the squad's ledger,
+        but under a special convention: trusted Scribe output carries the exact phrase
+        <code>External-unmetered: connector=&lt;connectorId&gt;</code>. This phrase is derived from
+        validated registration/binding provenance so a ledger reviewer can distinguish unmetered
+        external work from internal metered execution.
+      </p>
+
+      <p>
+        <strong>The ledger under-reports external spend.</strong> The shim's own dispatch is metered
+        (a thin operation), but your coordinator's actual work is not. The accounting marker documents
+        this gap — it is not a zero-cost operation, but rather an unmetered one. Never treat an entry
+        with this marker as cheap in budget or risk reasoning; the marker exists precisely so a
+        reviewer does not misread a low ledger figure as the true cost of the delegated work.
+      </p>
+
+      <p>
+        External narrative can include its own marker text, but that copy remains untrusted data and
+        never becomes the authoritative accounting source.
+      </p>
+
+      <p>
+        Example history-entry narrative bullet:
+      </p>
+
+      <pre><code>* Outcome: Result envelope validated and artifact placed at the Deliverable Root. External-unmetered: connector=acme-coordinator-v2.</code></pre>
+
+      <h2>Compatibility checklist for your coordinator</h2>
+
+      <p>
+        Before registering your connector, confirm your coordinator satisfies all of these:
+      </p>
+
+      <ul>
+        <li>
+          [ ] You have authored one manifest per connector, validating clean against the closed
+          Manifest Schema (no extra fields, <code>transport: "file"</code>, no secret-shaped content).
+        </li>
+        <li>
+          [ ] You treat each request as bounded, idempotent work. A duplicate
+          <code>taskId</code> is replay and is rejected rather than re-executed.
+        </li>
+        <li>
+          [ ] Your coordinator watches or polls the manifest's <code>dropPath</code> for a
+          delegation-request, by whatever means you choose.
+        </li>
+        <li>
+          [ ] You write back exactly one result envelope per <code>taskId</code>, never reusing a
+          <code>taskId</code> and never writing to a <code>dropPath</code> you were not given.
+        </li>
+        <li>
+          [ ] In <code>1.1</code>, you bind identity fields exactly
+          (<code>connectorId</code>, <code>bindingId</code>, <code>taskId</code>) and return only
+          declared <code>outputId</code> values from <code>allowedOutputs</code>.
+        </li>
+        <li>
+          [ ] Every artifact path is strictly under the <code>deliverableRoot</code> named in the
+          delegation-request, as one of <code>.md</code>, <code>.json</code>, or <code>.txt</code>,
+          within all the numeric caps (1 MiB per file, 5 MiB total, 20 artifacts max, 5 nesting
+          levels, 10,000 chars per string).
+        </li>
+        <li>
+          [ ] You honor <code>deadline</code> and <code>retryCap</code>; when your coordinator has a
+          failure result, you write <code>status: "failed"</code>. When no result arrives, the request
+          becomes <code>unreachable</code> at its deadline or retry cap rather than accepting a late,
+          unsolicited result.
+        </li>
+        <li>
+          [ ] You never embed credentials, tokens, or other secret-shaped content in the manifest,
+          request, or result.
+        </li>
+        <li>
+          [ ] You never emit action fields (<code>command</code>, <code>exec</code>,
+          <code>script</code>, <code>url</code>, <code>fetch</code>) or any undeclared schema field.
+        </li>
+        <li>
+          [ ] You never claim squad authority: no role/council/gate/approval claims, no squad state
+          writes, no Scribe writes.
+        </li>
+        <li>
+          [ ] If your endpoint fans out internally, disclose that in narrative/provenance while still
+          returning one bounded envelope mapped to declared outputs only.
+        </li>
+        <li>
+          [ ] You treat your own <code>narrative</code> as a summary a human and an automated validator
+          both read as data — never as a vehicle for steering what the squad does next.
+        </li>
+      </ul>
+
+      <h2>Worked example: acme-coordinator-v2</h2>
+
+      <p>
+        The <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/">connector example directory</a> contains a complete,
+        worked example of every file shape the contract defines, plus blank templates you can copy and
+        adapt:
+      </p>
+
+      <ul>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/manifest.json"><code>manifest.json</code></a> — a
+          realistic capability manifest declaring a coordinator that can implement development tasks
+          for the <code>developer</code> role.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/delegation-request.sample.json"
+            ><code>delegation-request.sample.json</code></a
+          >
+          — what the shim writes to <code>dropPath</code>: a bounded task to add input validation to
+          an invoice calculator.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/result-envelope.sample.json"
+            ><code>result-envelope.sample.json</code></a
+          >
+          — what the coordinator writes back in legacy 1.0 form: a change record describing the fix.
+          If external narrative text repeats accounting words, treat that copy as untrusted data; the
+          authoritative marker is Scribe-rendered from validated binding provenance.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/sample-consumer-coordinator.md"
+            ><code>sample-consumer-coordinator.md</code></a
+          >
+          — a pseudo-code sketch of how an external coordinator could honor the contract. This is
+          illustrative only and is never executed by anything in this repository.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/manifest.template.json"
+            ><code>manifest.template.json</code></a
+          >,
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/delegation-request.template.json"
+            ><code>delegation-request.template.json</code></a
+          >,
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/result-envelope.template.json"
+            ><code>result-envelope.template.json</code></a
+          >
+          — blank templates you can copy and fill in for your own connector.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/COMPATIBILITY-CHECKLIST.md"
+            ><code>COMPATIBILITY-CHECKLIST.md</code></a
+          >
+          — a standalone, copyable restatement of this guide's checklist.
+        </li>
+      </ul>
+
+      <p>
+        Copy these files as a starting point. Adapt them to your coordinator's own paths, roles, and
+        capabilities. Read <a href="https://github.com/Peter-N91/hve-squad/blob/main/squad-src/.github/skills/squad/references/connector-contract.md"
+          ><code>connector-contract.md</code></a
+        >
+        for the normative specification of every field and every validation rule.
+      </p>
+
+      <h2>What is not supported yet</h2>
+
+      <p>
+        <strong>Automatic migration from 1.0 to 1.1 role modes.</strong> Legacy 1.0 remains valid for
+        manual single-role connector flow, while role modes require 1.1 bindings and request fields.
+        Migration and rollback are explicit roster actions: route to <code>execution=original</code>,
+        or remove bindings and remove/rebind affected members/routes during a confirmed refresh. No silent upgrade or silent
+        downgrade is performed.
+      </p>
+
+      <p>
+        A confirmed unbind or identity-changing rebind preserves completed history and Attribution.
+        Before changing the active rows, the internal Scribe appends a
+        <code>Connector Binding Retirement</code> decision to the owning squad's
+        <code>decisions.md</code>, recording the prior validated identity, operator confirmation,
+        and exact completed history headings. This historical evidence grants no new dispatch
+        authority and cannot admit an unlisted entry. <code>Measure-SquadLedger.ps1</code> uses the
+        shared <code>Resolve-SquadConnectorHistory.ps1</code> validator to regenerate those entries'
+        original role, external member, and model tier from the saved roster, without changing
+        history or token pricing. Invalid historical evidence blocks regeneration: saved retry/deadline
+        defaults must be integers within the manifest limits, and duplicate or overlapping retirement
+        authority for the same binding and completed heading is rejected even when the active identity
+        matches. Disjoint entries after binding-id reuse remain valid. A default-only refresh leaves
+        identity unchanged.
+      </p>
+
+      <p>
+        <strong>MCP transport (reserved, not built).</strong> The manifest schema reserves a
+        <code>transport: "mcp"</code> value as a placeholder for a possible future synchronous
+        transport mode. It is not implemented today. The only transport mode that exists is
+        <code>transport: "file"</code> (Mode 2, human-in-the-loop file drop). A manifest declaring
+        <code>"mcp"</code> will fail validation. Building it requires a new Impactful-Action-gated
+        plan and a fresh Council pass.
+      </p>
+
+      <p>
+        <strong>Squad Connector Builder agent/skill (T2, deferred).</strong> This release ships the
+        connector contract and templates only. A dedicated Squad Connector Builder agent or skill,
+        which could help you author a compatible manifest and walk you through the integration step by
+        step, is planned as a follow-up after observing how teams use the template-based approach. If
+        you get stuck authoring a manifest or coordinator, check the <a href="troubleshooting.html"
+          >Troubleshooting</a
+        >
+        page or reach out to the maintainers.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="ecosystem.html">
+          <div class="dir">← Back</div>
+          <div class="ttl">Ecosystem</div>
+        </a>
+        <a class="next" href="maintaining.html">
+          <div class="dir">Next →</div>
+          <div class="ttl">Maintaining</div>
+        </a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

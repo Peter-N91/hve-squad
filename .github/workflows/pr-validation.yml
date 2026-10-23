@@ -44,12 +44,10 @@ jobs:
       - name: Compute diff against base
         id: diff
         # checkout leaves HEAD at the PR's merge commit, so diffing from the base
-        # SHA yields exactly this pull request's changes. Using the SHA the event
-        # supplies avoids a second fetch, which on a fetch-depth:0 clone would
-        # mark the repository shallow and break the comparison.
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # first parent yields exactly this pull request's changes, even if a
+        # rerun checks out a refreshed merge ref after the event base advanced.
         run: |
+          BASE_SHA=$(git rev-parse HEAD^1)
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
           git diff --name-only "$BASE_SHA" HEAD > /tmp/changed.txt
           echo "Changed files:"

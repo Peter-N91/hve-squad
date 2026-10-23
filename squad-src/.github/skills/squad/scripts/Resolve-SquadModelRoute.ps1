@@ -374,7 +374,7 @@ function Get-RoleClassMapLocal {
 function Get-RosterLocal {
     <#
     .SYNOPSIS
-        Reads team.md's mode line and Members rows.
+        Reads team.md's mode line, Members rows, and optional Connector Bindings.
     #>
     param([Parameter(Mandatory)][string]$Path)
 
@@ -382,13 +382,88 @@ function Get-RosterLocal {
     $modeMatch = [regex]::Match($raw, '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
     $recordedMode = if ($modeMatch.Success) { $modeMatch.Groups['mode'].Value } else { 'off' }
 
-    $members = @(Get-MarkdownTableLocal -Content $raw | Where-Object { 'Role' -in $_.Header -and 'Model Tier' -in $_.Header } | Select-Object -First 1)
+    $tables = @(Get-MarkdownTableLocal -Content $raw)
+    $members = @($tables | Where-Object { 'Role' -in $_.Header -and 'Model Tier' -in $_.Header } | Select-Object -First 1)
     if ($members.Count -eq 0) { throw "No Members table with Role and Model Tier columns found in $Path." }
 
+    $connectorHeader = @('Binding ID', 'Connector ID', 'Manifest', 'Endpoint Kind', 'Role Mode', 'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role', 'Default Execution')
+    $connectorTable = @(
+        $tables | Where-Object {
+            $table = $_
+            @($connectorHeader | Where-Object { $_ -in $table.Header }).Count -eq $connectorHeader.Count
+        } | Select-Object -First 1
+    )
+    $connectorBindings = [System.Collections.Generic.List[pscustomobject]]::new()
+    if ($connectorTable.Count -gt 0) {
+        foreach ($row in $connectorTable[0].Rows) {
+            $bindingId = ([string]$row['Binding ID']).Trim().Trim('`').Trim()
+            if (-not $bindingId -or $bindingId -in '—', '-') { continue }
+            $connectorBindings.Add([pscustomobject]@{
+                    BindingId    = $bindingId
+                    ConnectorId  = ([string]$row['Connector ID']).Trim().Trim('`').Trim()
+                    EndpointKind = ([string]$row['Endpoint Kind']).Trim().Trim('`').Trim().ToLowerInvariant()
+                    RoleMode     = ([string]$row['Role Mode']).Trim().Trim('`').Trim().ToLowerInvariant()
+                    TargetKind   = ([string]$row['Target Kind']).Trim().Trim('`').Trim().ToLowerInvariant()
+                    Target       = ([string]$row['Target']).Trim().Trim('`').Trim()
+                    MemberName   = ([string]$row['Member Name']).Trim().Trim('`').Trim()
+                    AddedRole    = ([string]$row['Added Role']).Trim().Trim('`').Trim().ToLowerInvariant()
+                    AlignedRole  = ([string]$row['Aligned Role']).Trim().Trim('`').Trim().ToLowerInvariant()
+                })
+        }
+    }
+
     [pscustomobject]@{
-        Mode      = $recordedMode
-        HasModel  = 'Model' -in $members[0].Header
-        Rows      = $members[0].Rows
+        Mode              = $recordedMode
+        HasModel          = 'Model' -in $members[0].Header
+        Rows              = $members[0].Rows
+        ConnectorBindings = $connectorBindings.ToArray()
+    }
+}
+
+function Resolve-ConnectorAlignedClassLocal {
+    <#
+    .SYNOPSIS
+        Resolves a connector-added role's assignment class from its validated
+        Aligned Role chain, failing on missing, ambiguous, or cyclic alignment.
+    #>
+    param(
+        [Parameter(Mandatory)]$Binding,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Bindings,
+        [Parameter(Mandatory)][hashtable]$ClassMap,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$Seen,
+        [Parameter(Mandatory)][string]$Context
+    )
+
+    if (-not $Binding) { throw "Connector alignment error ($Context): binding not found." }
+
+    $bindingId = [string]$Binding.BindingId
+    if ([string]::IsNullOrWhiteSpace($bindingId)) { throw "Connector alignment error ($Context): binding has no Binding ID." }
+    if ($Seen.Contains($bindingId)) {
+        throw "Connector alignment error ($Context): cyclic Aligned Role chain at binding '$bindingId'."
+    }
+
+    $alignedRole = ([string]$Binding.AlignedRole).Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($alignedRole)) {
+        throw "Connector alignment error ($Context): binding '$bindingId' is missing Aligned Role."
+    }
+
+    if ($ClassMap.ContainsKey($alignedRole)) {
+        return [pscustomobject]@{ Class = $ClassMap[$alignedRole]; Source = "connector-aligned: $alignedRole" }
+    }
+
+    [void]$Seen.Add($bindingId)
+    try {
+        $next = @($Bindings | Where-Object { $_.RoleMode -eq 'add' -and $_.AddedRole -eq $alignedRole })
+        if ($next.Count -eq 0) {
+            throw "Connector alignment error ($Context): aligned role '$alignedRole' has no assignment class mapping."
+        }
+        if ($next.Count -gt 1) {
+            throw "Connector alignment error ($Context): aligned role '$alignedRole' is ambiguous across $($next.Count) connector bindings."
+        }
+        return Resolve-ConnectorAlignedClassLocal -Binding $next[0] -Bindings $Bindings -ClassMap $ClassMap -Seen $Seen -Context $Context
+    }
+    finally {
+        $null = $Seen.Remove($bindingId)
     }
 }
 
@@ -634,6 +709,27 @@ $results = foreach ($row in $roster.Rows) {
     $tier = $row['Model Tier']
     $class = if ($classMap.ContainsKey($roleId)) { $classMap[$roleId] } else { 'implementation' }
     $classSource = if ($classMap.ContainsKey($roleId)) { 'mapped' } else { 'fallback: implementation' }
+    $primaryName = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent' | ForEach-Object { [string]$row[$_] } | Where-Object { $_ }) | Select-Object -First 1
+    $memberName = ([string]$row['Member Name']).Trim()
+    if ($primaryName -ceq 'Squad Connector') {
+        if ([string]::IsNullOrWhiteSpace($memberName)) {
+            throw "Connector alignment error (role '$roleId'): connector-backed row is missing Member Name."
+        }
+        $bindingMatches = @($roster.ConnectorBindings | Where-Object {
+                $_.RoleMode -eq 'add' -and $_.AddedRole -eq $roleId.ToLowerInvariant() -and $_.MemberName -ceq $memberName
+            })
+        if ($bindingMatches.Count -gt 1) {
+            throw "Connector alignment error (role '$roleId', member '$memberName'): $($bindingMatches.Count) matching add bindings found."
+        }
+        if ($bindingMatches.Count -eq 1) {
+            $aligned = Resolve-ConnectorAlignedClassLocal -Binding $bindingMatches[0] -Bindings @($roster.ConnectorBindings) -ClassMap $classMap -Seen ([System.Collections.Generic.HashSet[string]]::new([System.Collections.Generic.IEqualityComparer[string]][System.StringComparer]::OrdinalIgnoreCase)) -Context "role '$roleId', member '$memberName'"
+            $class = $aligned.Class
+            $classSource = $aligned.Source
+        }
+        else {
+            $classSource = "$classSource; connector:legacy-no-binding"
+        }
+    }
 
     $rankedAdmitted = @(Get-AdmittedClassesLocal -Tier $tier)
     $manualAdmitted = $rankedAdmitted

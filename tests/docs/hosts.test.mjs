@@ -90,6 +90,8 @@ for (const lang of ['en', 'fr']) {
       ['/squad', 'Squad Coordinator', locales[lang].defaultRequests['/squad']],
       ['/squad init', 'Squad Coordinator', 'init'],
       ['/squad request="Review this" mode=autopilot cost-ceiling=20', 'Squad Coordinator', 'request="Review this" mode=autopilot cost-ceiling=20'],
+      ['/squad-coach', 'Squad Coach', locales[lang].defaultRequests['/squad-coach']],
+      ['/squad-coach request="Help me choose a setup"', 'Squad Coach', 'request="Help me choose a setup"'],
       ['/squad-federation', 'Squad Federation Coordinator', locales[lang].defaultRequests['/squad-federation']],
       ['/squad-federation promote', 'Squad Federation Coordinator', 'promote'],
       ['/squad-document request="summarize" format=html outputPath=docs/summary.html', 'Squad Document', 'request="summarize" format=html outputPath=docs/summary.html'],
@@ -101,7 +103,7 @@ for (const lang of ['en', 'fr']) {
     const canonical = workflows.map(([command]) => command).join('\n');
     const { window, document } = openPage({ lang, examples: [canonical] });
     try {
-      for (const host of ['cli', 'app']) {
+      for (const host of hosts) {
         const panel = panelFor(document, host);
         assert.deepEqual(codes(panel), workflows.map(([, , input]) => input));
         assert.deepEqual([...panel.querySelectorAll('strong')].map(agent => agent.textContent), workflows.map(([, agent]) => agent));
@@ -112,7 +114,6 @@ for (const lang of ['en', 'fr']) {
           assert.doesNotMatch(input, /^\/squad(?:\s|-)/);
         }
       }
-      assert.deepEqual(codes(panelFor(document, 'vscode')), [canonical]);
       assert.equal(document.querySelector('[role="tablist"]').getAttribute('aria-label'), locales[lang].tablistLabel);
       for (const host of hosts) {
         const instruction = panelFor(document, host).querySelector('.command-instruction').textContent;
@@ -125,12 +126,14 @@ for (const lang of ['en', 'fr']) {
 test('default request translations retain their original English and French wording', () => {
   assert.deepEqual(locales.en.defaultRequests, {
     '/squad': 'Initialize the squad.',
+    '/squad-coach': 'Help me choose the simplest HVE Squad setup for my goal.',
     '/squad-federation': 'Initialize the federation.',
     '/squad-governance-report': 'Generate the governance report with default settings.',
     '/squad-learn': 'Help me propose a shared learning.'
   });
   assert.deepEqual(locales.fr.defaultRequests, {
     '/squad': 'Initialise la squad.',
+    '/squad-coach': 'Aide-moi à choisir la configuration HVE Squad la plus simple pour mon objectif.',
     '/squad-federation': 'Initialise la fédération.',
     '/squad-governance-report': 'Génère le rapport de gouvernance avec les paramètres par défaut.',
     '/squad-learn': 'Aide-moi à proposer un apprentissage partagé.'
@@ -142,11 +145,10 @@ test('multiline requests retain blank lines, embedded commands, comments and esc
   const canonical = `/squad ${input}\n/squad-federation promote`;
   const { window, document } = openPage({ examples: [canonical] });
   try {
-    for (const host of ['cli', 'app']) {
+    for (const host of hosts) {
       assert.deepEqual(codes(panelFor(document, host)), [input, 'promote']);
       assert.equal(panelFor(document, host).querySelector('.command-note'), null);
     }
-    assert.deepEqual(codes(panelFor(document, 'vscode')), [canonical]);
   } finally { window.close(); }
 });
 
@@ -154,12 +156,11 @@ test('indented comments attach to the next request and stay outside copyable inp
   const canonical = '# First request\n  # More context\n    /squad init\n\n\t# A federation request\n\t/squad-federation promote';
   const { window, document } = openPage({ examples: [canonical] });
   try {
-    for (const host of ['cli', 'app']) {
+    for (const host of hosts) {
       const panel = panelFor(document, host);
       assert.deepEqual(codes(panel), ['init', 'promote']);
       assert.deepEqual([...panel.querySelectorAll('.command-note')].map(note => note.textContent), ['First request\nMore context', 'A federation request']);
     }
-    assert.deepEqual(codes(panelFor(document, 'vscode')), [canonical]);
   } finally { window.close(); }
 });
 
@@ -167,7 +168,7 @@ test('argument whitespace, tabs and escaped backslashes remain literal', () => {
   const input = '  request="C:\\\\work\\\\\nContinue here" mode=manual  ';
   const { window, document } = openPage({ examples: [`\t/squad ${input}`] });
   try {
-    for (const host of ['cli', 'app']) assert.deepEqual(codes(panelFor(document, host)), [input]);
+    for (const host of hosts) assert.deepEqual(codes(panelFor(document, host)), [input]);
   } finally { window.close(); }
 });
 
@@ -352,7 +353,7 @@ test('build-time wrappers and stale copy targets are removed and all generated I
     }
     assert.equal(panelFor(document, 'vscode').querySelector('pre').className, 'source');
     assert.equal(panelFor(document, 'vscode').querySelector('code').className, 'language-text');
-    assert.deepEqual(codes(panelFor(document, 'vscode')), ['/squad init']);
+    assert.deepEqual(codes(panelFor(document, 'vscode')), ['init']);
     const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
     assert.equal(new Set(ids).size, ids.length);
     for (const code of document.querySelectorAll('.command-example pre > code')) {
@@ -420,6 +421,7 @@ test('request text, notes and locale strings are rendered as text rather than HT
     assert.deepEqual(codes(panelFor(document, 'app')), [input]);
     assert.equal(panelFor(document, 'app').querySelector('strong').textContent, custom.agents['/squad']);
     assert.equal(panelFor(document, 'app').querySelector('.command-note').textContent, '<iframe src=x></iframe>');
-    assert.deepEqual(codes(panelFor(document, 'vscode')), [canonical]);
+    assert.deepEqual(codes(panelFor(document, 'vscode')), [input]);
+    assert.equal(panelFor(document, 'vscode').querySelector('.command-note').textContent, '<iframe src=x></iframe>');
   } finally { window.close(); }
 });

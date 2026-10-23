@@ -21,6 +21,7 @@
         <a href="usage.html">Utilisation</a>
         <a href="demo.html">Démonstrations</a>
         <a href="ecosystem.html">Écosystème</a>
+        <a href="connector.html">Connecteur</a>
         <a href="maintaining.html" class="active">Maintenance</a>
         <a href="troubleshooting.html">Dépannage</a>
         <a href="contributing.html">Contribuer</a>
@@ -72,12 +73,15 @@
 
       <h2>Scripts</h2>
       <h3>Site de documentation</h3>
-      <p>Le site est en HTML statique avec du CSS partagé et du JavaScript d’amélioration progressive, publié directement depuis <code>docs/</code>. Ouvrez <code>docs/index.html</code> localement ; aucune compilation frontend ni aucun serveur n’est nécessaire. Les pages anglaises se trouvent dans <code>docs/</code> et leurs équivalents français dans <code>docs/fr/</code>, avec les mêmes noms de fichiers et des identifiants d’ancre communs.</p>
-      <p>Mettez à jour les deux langues dans le même changement. Conservez les noms et paramètres des commandes, et signalez les liens vers les guides externes, rapports historiques et vidéos disponibles uniquement en anglais. La présentation et les contrôles communs se trouvent dans <code>docs/assets/style.css</code>, <code>theme.js</code> et <code>site.js</code>. Les onglets d’environnement appartiennent à chaque exemple de commande et partagent l’environnement sélectionné entre les exemples et les pages ; le changement de langue conserve la page courante.</p>
-      <p>Rédigez les exemples Squad exécutables dans des blocs <code>pre &gt; code</code> avec la syntaxe des prompts VS Code. Le moteur de rendu partagé conserve cette source et crée les requêtes CLI/App avec l’agent correspondant, en préservant les arguments et le texte multiligne. Séparez les commandes shell et les déclencheurs par commentaire GitHub ; marquez les références qui comparent explicitement les environnements avec <code>data-host-reference</code>. Sans JavaScript, les exemples de prompts d’origine restent lisibles.</p>
-      <pre><code>npm --prefix tests/docs ci --ignore-scripts
-    npm --prefix tests/docs test</code></pre>
-      <p>La dépendance de test isolée n’est pas distribuée sur GitHub Pages. Les tests vérifient les paires de langues, les liens et ressources locaux, les onglets au clavier, les préférences enregistrées et le contenu de configuration sans script. Le workflow Pages les exécute pour les pull requests de documentation et avant le déploiement. Vérifiez aussi les mises en page pour ordinateur et mobile dans un navigateur après toute modification visuelle.</p>
+      <p>Eleventy construit le site publié à partir des sources anglaises dans <code>docs/</code> et françaises dans <code>docs/fr/</code>, avec les mêmes noms de fichiers et des identifiants d'ancre communs. Les pages et index de recherche générés sont placés dans <code>_site/</code> ; ouvrir une page source d'origine n'affiche pas les encarts de version ni les commandes d'installation versionnées générés.</p>
+      <p>Mettez à jour les deux langues dans le même changement. Conservez les noms et paramètres des commandes, et signalez les liens vers les guides externes, rapports historiques et vidéos disponibles uniquement en anglais. Le cadre publié, les traductions et l'apparence se trouvent dans <code>site/pages.njk</code>, <code>site/locales.json</code> et <code>site/assets/site.css</code>. Les onglets d'environnement appartiennent à chaque exemple de commande et partagent l'environnement sélectionné entre les exemples et les pages ; le changement de langue conserve la page courante.</p>
+      <p>Marquez chaque nouveau comportement documenté non encore publié avec <code>data-release-change="20261005-routing-economy"</code>, en utilisant le nom de son propre fragment en attente sans <code>.md</code>, dans les deux langues. Placez l'attribut sur le titre, le paragraphe, l'élément de liste, l'identifiant en ligne ou le bloc de code entier de la fonctionnalité, jamais dans un lien ni dans un bloc de code copiable. Ne marquez pas comme indisponibles les options déjà stables ni les simples corrections documentaires. <code>scripts/docs-release.mjs</code> lit la dernière version stable dans <code>apm.yml</code> et détermine le tag glissant à partir de l'incrémentation en attente la plus élevée. Les badges disparaissent lorsque leur fragment est consommé, même si un mainteneur remplace le numéro de version à publier.</p>
+      <p>Rédigez les exemples Squad exécutables dans des blocs <code>pre &gt; code</code> avec la syntaxe canonique des commandes slash. Le moteur de rendu partagé utilise cette source pour créer des requêtes sans préfixe pour VS Code, la CLI et l’application avec l’agent correspondant, en préservant les arguments et le texte multiligne. Séparez les commandes shell et les déclencheurs par commentaire GitHub ; marquez les références qui comparent explicitement les environnements avec <code>data-host-reference</code>. Sans JavaScript, les exemples canoniques d’origine restent lisibles.</p>
+      <pre><code>npm ci
+npm run docs:test
+npm run docs:build
+npm run docs:dev</code></pre>
+      <p>La compilation préserve le texte et les exemples sources, insère les versions actuelles et vérifie les traductions, liens, ressources et index de recherche. Les tests couvrent aussi les onglets au clavier, les préférences enregistrées, le contenu sans script et la promotion d'une version. Le workflow Pages reconstruit le site lors des changements de fragments en attente comme lors des changements documentaires, pour que l'encart suive les renommages du tag de préversion. Vérifiez les mises en page pour ordinateur et mobile après toute modification visuelle.</p>
       <h3>Scripts du package</h3>
       <p>Définis dans <code>apm.yml</code> :</p>
       <ul>
@@ -586,7 +590,7 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
       <p>
         <strong>Entre les publications, <code>main</code> est installable.</strong> Chaque fusion déclenche
         <strong>Rolling Preview</strong>, qui regroupe les fragments en attente dans une seule préversion GitHub
-        portant le tag de la version qu’ils déterminent (<code>v0.15.0-pre</code>) et déplace de force
+        portant le tag de la version qu’ils déterminent (voir la <a href="getting-started.html#testing-the-pre-release">version actuelle et la commande d'installation</a>) et déplace de force
         ce tag vers la nouvelle tête de branche. Ce workflow ne fait que lire : aucun fragment n’est consommé, aucune version n’est incrémentée et
         <code>CHANGELOG.md</code> reste intact. Une seule préversion est ouverte à la fois ; lorsqu’un
         fragment <code>minor</code> est intégré, l’ancienne est donc supprimée et le nouveau nom prend sa place.

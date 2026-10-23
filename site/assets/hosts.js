@@ -10,7 +10,7 @@
   }
   const messages = locales[language];
   const hosts = ['cli', 'app', 'vscode'];
-  const commands = ['/squad', '/squad-federation', '/squad-document', '/squad-governance-report', '/squad-learn'];
+  const commands = ['/squad', '/squad-coach', '/squad-federation', '/squad-document', '/squad-governance-report', '/squad-learn'];
   const requireMessage = (value, key) => {
     if (typeof value !== 'string' || !value.trim()) {
       throw new Error(`Host guides locale "${language}" is missing "${key}".`);
@@ -20,7 +20,7 @@
   hosts.forEach(host => {
     requireMessage(messages.hostLabels?.[host], `hostLabels.${host}`);
     requireMessage(messages.instructions?.[host], `instructions.${host}`);
-    if (host !== 'vscode' && messages.instructions[host].split('{agent}').length !== 2) {
+    if (messages.instructions[host].split('{agent}').length !== 2) {
       throw new Error(`Host guides locale "${language}" requires one {agent} in instructions.${host}.`);
     }
   });
@@ -44,7 +44,7 @@
       console.warn('Could not save the host preference; it applies only to this page.', error);
     }
   };
-  const commandPattern = /^[ \t]*(\/squad(?:-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
+  const commandPattern = /^[ \t]*(\/squad(?:-coach|-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
   const parseExample = text => {
     const requests = [];
     let current;
@@ -106,28 +106,21 @@
     for (const host of hosts) {
       const panel = document.createElement('section');
       panel.dataset.host = host;
-      if (host === 'vscode') {
+      requests.forEach(request => {
         const instruction = document.createElement('p');
         instruction.className = 'command-instruction';
-        instruction.textContent = messages.instructions.vscode;
-        panel.append(instruction, createCode(code.textContent, code));
-      } else {
-        requests.forEach(request => {
-          const instruction = document.createElement('p');
-          instruction.className = 'command-instruction';
-          const [before, after] = messages.instructions[host].split('{agent}');
-          const agent = document.createElement('strong');
-          agent.textContent = messages.agents[request.command];
-          instruction.append(before, agent, after);
-          if (request.notes.length) {
-            const note = document.createElement('p');
-            note.className = 'command-note';
-            note.textContent = request.notes.join('\n');
-            panel.append(note);
-          }
-          panel.append(instruction, createCode(request.input));
-        });
-      }
+        const [before, after] = messages.instructions[host].split('{agent}');
+        const agent = document.createElement('strong');
+        agent.textContent = messages.agents[request.command];
+        instruction.append(before, agent, after);
+        if (request.notes.length) {
+          const note = document.createElement('p');
+          note.className = 'command-note';
+          note.textContent = request.notes.join('\n');
+          panel.append(note);
+        }
+        panel.append(instruction, createCode(request.input, host === 'vscode' ? code : undefined));
+      });
       guide.append(panel);
     }
     replacement.replaceWith(guide);

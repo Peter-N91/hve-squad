@@ -1,0 +1,36 @@
+{
+  "id": "connector-resume",
+  "description": "A connector-backed research request pauses, receives a deterministic external result, and resumes through actual Squad Connector and Squad Scribe dispatches while preserving the original collision snapshot.",
+  "fixture": "minimal-app",
+  "squadRootGlob": ".copilot-tracking/squad",
+  "expectDispatches": true,
+  "turns": [
+    {
+      "id": "init",
+      "prompt": "Act as the Squad Coordinator for this repository. Run squad Init only and do not route work this turn. Treat these as my complete and confirmed connector setup decisions, so do not ask follow-up questions: use connectors/manifest.research-agent.1.1.json as a 1.1 agent endpoint, replace the researcher role, target role:researcher, use external Member Name Tier1 Research Partner, Binding ID tier1-research, and Default Execution connector. Retain the original internal researcher Members row for audit and explicit original execution. Do not configure a Cost Preflight ceiling."
+    },
+    {
+      "id": "request",
+      "captureDispatchEvents": true,
+      "prompt": "Act as the Squad Coordinator. Research the README's documented concurrency-control and persistence gap and request a short note at .copilot-tracking/research/connector-resume.md through the roster's normal researcher route. This is the first external file-drop turn: dispatch the selected role normally and stop at awaiting when the consumer result is absent. Do not perform the research inline or fabricate the requested artifact.",
+      "connectorConsumer": {
+        "connectorId": "tier1-research-agent",
+        "artifactPath": "connector-resume.md",
+        "artifactContent": "# Connector Resume Finding\n\nThe README identifies missing concurrency control and persistence as explicit limitations.\n",
+        "narrative": "Produced the bounded README finding requested by the pending research task."
+      }
+    },
+    {
+      "id": "resume",
+      "captureDispatchEvents": true,
+      "prompt": "Act as the Squad Coordinator. Resume the pending researcher work now that the external result is available."
+    }
+  ],
+  "connectorResumeIntegrity": {
+    "requestTurn": "request",
+    "resumeTurn": "resume",
+    "connectorAgent": "Squad Connector",
+    "scribeAgent": "Squad Scribe",
+    "artifact": ".copilot-tracking/research/connector-resume.md"
+  }
+}

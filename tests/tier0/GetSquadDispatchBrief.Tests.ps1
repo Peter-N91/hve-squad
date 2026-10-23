@@ -41,6 +41,8 @@ BeforeAll {
             [switch]$BlockedReviewer,
             [switch]$ModelColumn,
             [switch]$DriftedHeader,
+            [ValidateSet('none', 'legacy-no-bindings', 'valid-add', 'missing-aligned', 'invalid-aligned', 'cyclic-aligned')]
+            [string]$ConnectorMode = 'none',
             [AllowEmptyString()][string]$Routing = 'economy',
             [string]$Alternate = '—'
         )
@@ -79,6 +81,31 @@ BeforeAll {
                 "| developer | Dev | Squad Implementor | $Alternate | when a second opinion is asked | task | default | ``.copilot-tracking/changes/`` |",
                 '| tester | Rev | Squad Reviewer | — | — | task | fast | `.copilot-tracking/reviews/` |'
             )
+        }
+        if ($ConnectorMode -ne 'none' -and -not $ModelColumn -and -not $DriftedHeader) {
+            $team += '| gcp | GCP Assessor | Squad Connector | — | — | task | default | `.copilot-tracking/gcp-assessments/` |'
+        }
+        if ($ConnectorMode -notin @('none', 'legacy-no-bindings') -and -not $ModelColumn -and -not $DriftedHeader) {
+            $team += ''
+            $team += '## Connector Bindings'
+            $team += ''
+            $team += '| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |'
+            $team += '| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |'
+            switch ($ConnectorMode) {
+                'valid-add' {
+                    $team += '| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | azure-architect | connector |'
+                }
+                'missing-aligned' {
+                    $team += '| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp |  | connector |'
+                }
+                'invalid-aligned' {
+                    $team += '| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | imaginary-role | connector |'
+                }
+                'cyclic-aligned' {
+                    $team += '| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | bridge-role | connector |'
+                    $team += '| bridge-cycle | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:bridge-role/GCP Assessor | GCP Assessor | bridge-role | gcp | connector |'
+                }
+            }
         }
         Write-Text (Join-Path $squad 'team.md') ($team -join "`n")
         $preflight = if ($Ceiling) { '{"ceilingUsd":5,"decision":"within-ceiling"}' } else { '{"ceilingUsd":null,"decision":"not-requested"}' }
@@ -232,6 +259,32 @@ Describe 'Get-SquadDispatchBrief.ps1' {
     It 'reports a stub ledger so no Scribe repair is dispatched' {
         $result = Invoke-Brief -Repo (New-BriefRepo -StubLedger)
         $result.Output | Should -Match ([regex]::Escape('ledger: stub (do not dispatch the Scribe to repair it'))
+    }
+
+    It 'classifies an additive Squad Connector member from its aligned role when Connector Bindings are valid' {
+        $result = Invoke-Brief -Repo (New-BriefRepo -ConnectorMode 'valid-add')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match ([regex]::Escape('| gcp | Squad Connector | no (not installed) |'))
+        $result.Output | Should -Not -Match 'connector alignment error'
+    }
+
+    It 'preserves a legacy connector-backed roster row when Connector Bindings are absent' {
+        $result = Invoke-Brief -Repo (New-BriefRepo -ConnectorMode 'legacy-no-bindings')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match ([regex]::Escape('| gcp | Squad Connector | no (not installed) |'))
+        $result.Output | Should -Not -Match 'connector alignment error'
+    }
+
+    It 'fails closed on connector alignment errors: <Mode>' -ForEach @(
+        @{ Mode = 'missing-aligned'; Message = 'missing Aligned Role' }
+        @{ Mode = 'invalid-aligned'; Message = 'has no assignment class mapping' }
+        @{ Mode = 'cyclic-aligned'; Message = 'cyclic Aligned Role chain' }
+    ) {
+        $result = Invoke-Brief -Repo (New-BriefRepo -ConnectorMode $Mode)
+        $NormalizedOutput = ($result.Output -replace '\s*\|\s*', ' ') -replace '\s+', ' '
+        $result.ExitCode | Should -Not -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'connector alignment error'
+        $NormalizedOutput | Should -Match ([regex]::Escape($Message))
     }
 }
 

@@ -11,6 +11,8 @@
     every mutant killed, baseline fails), the scorer on synthetic workspaces, the judge
     anonymise/shuffle/de-anonymise round trip, and report generation. Needs Python with
     pytest on PATH. Deliberately not part of Tier 0 or the Tier 2 self-check.
+    Export/report/study suites run separately through Invoke-BenchmarkEvidenceTests.ps1
+    on PowerShell 7.5+ and in the Tier 2 comparator CI self-check.
 .PARAMETER PesterPath
     Optional path to a Pester 5 module manifest to import instead of the installed one.
 .EXAMPLE
@@ -33,7 +35,11 @@ if ($LASTEXITCODE -ne 0) {
 if ($PesterPath) { Import-Module $PesterPath -Force } else { Import-Module Pester -MinimumVersion 5.0 -Force }
 
 $config = New-PesterConfiguration
-$config.Run.Container = New-PesterContainer -Path (Join-Path $PSScriptRoot 'LiveBenchmark.Tests.ps1')
+$config.Run.Container = New-PesterContainer -Path @(
+    (Join-Path $PSScriptRoot 'LiveBenchmark.Tests.ps1'),
+    (Join-Path $PSScriptRoot 'EfficiencyBenchmark.Tests.ps1'),
+    (Join-Path $PSScriptRoot 'Start-EfficiencyWizard.Tests.ps1')
+)
 $config.Run.PassThru = $true
 $config.Output.Verbosity = $Output
 

@@ -3,13 +3,14 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "cheerio";
 import { localizeDiagram } from "./diagram-locales.mjs";
+import { addReleaseBadges, populateReleaseInstalls, previewBadge, readReleaseInfo } from "./docs-release.mjs";
 
 export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const pageOrder = ["index", "getting-started", "usage", "demo", "demo-1", "demo-2", "demo-3", "demo-4", "ecosystem", "maintaining", "troubleshooting", "contributing"];
+export const pageOrder = ["index", "getting-started", "usage", "demo", "demo-1", "demo-2", "demo-3", "demo-4", "ecosystem", "connector", "maintaining", "troubleshooting", "contributing"];
 export const navigationGroups = [
   { key: "start", pages: ["index", "getting-started", "usage"] },
   { key: "guides", pages: ["demo", "demo-1", "demo-2", "demo-3", "demo-4"], links: [{ key: "workshop", url: "https://peter-n91.github.io/hve-squad-hands-on-workshop/" }] },
-  { key: "reference", pages: ["ecosystem", "troubleshooting"] },
+  { key: "reference", pages: ["ecosystem", "connector", "troubleshooting"] },
   { key: "project", pages: ["maintaining", "contributing"] },
 ];
 export const publicUrl = "https://peter-n91.github.io/hve-squad/";
@@ -53,7 +54,21 @@ export function readSource(slug, prefix = "") {
   const $ = load(raw);
   if ($("main").length !== 1) throw new Error(`${sourcePath}: expected exactly one main element.`);
   if ($("body > header.hero").length !== 1) throw new Error(`${sourcePath}: expected the original hero header.`);
+  embedConnectorTemplates($);
   return { $, raw, sourcePath };
+}
+
+export function embedConnectorTemplates($) {
+  $("[data-connector-template]").each((index, element) => {
+    const block = $(element);
+    const filename = block.attr("data-connector-template");
+    if (!/^(?:agents\/)?[a-z0-9][a-z0-9.-]*\.(?:json|agent\.md)$/.test(filename || "")) {
+      throw new Error(`Invalid connector template path: ${filename}`);
+    }
+    const code = block.find("pre code");
+    if (code.length !== 1) throw new Error(`Connector template ${filename} needs exactly one code block.`);
+    code.text(readFileSync(resolve(repositoryRoot, "docs/templates/connector-example", filename), "utf8").replace(/\r\n?/g, "\n"));
+  });
 }
 
 export function assembleContent($) {
@@ -169,11 +184,8 @@ export function enhanceContent($, englishIds, ui, rootPrefix, language = "en", s
   return { content: main.html(), toc };
 }
 
-export function buildPages(locales = readLocales()) {
+export function buildPages(locales = readLocales(), release = readReleaseInfo()) {
   const pages = [];
-  const manifest = readFileSync(resolve(repositoryRoot, "apm.yml"), "utf8");
-  const version = manifest.match(/^version:\s*(\S+)/m)?.[1];
-  if (!version) throw new Error("The APM version could not be read.");
   const hostLocales = JSON.parse(readFileSync(resolve(repositoryRoot, "site/host-locales.json"), "utf8"));
   for (const language of Object.keys(locales)) validateMessages(hostLocales.en, hostLocales[language], `${language}.host`);
   for (const slug of pageOrder) {
@@ -185,8 +197,11 @@ export function buildPages(locales = readLocales()) {
       if ($("main h2, main h3").length !== ids.length) {
         throw new Error(`${sourcePath}: expected ${ids.length} section headings to match English.`);
       }
+      populateReleaseInstalls($, release, locale.ui.release);
       assembleContent($);
-      const { content, toc } = enhanceContent($, ids, locale.ui, rootPrefix, language, slug);
+      const { toc } = enhanceContent($, ids, locale.ui, rootPrefix, language, slug);
+      addReleaseBadges($, release, locale.ui.release);
+      const content = $("main").html();
       const title = $("title").text();
       const description = $('meta[name="description"]').attr("content");
       if (!title || !description) throw new Error(`Missing title or description: ${sourcePath}`);
@@ -196,7 +211,8 @@ export function buildPages(locales = readLocales()) {
       const outputPath = `${locale.prefix}${slug}.html`;
       pages.push({
         language, direction: locale.direction, slug, title, description, content, toc, rootPrefix, outputPath,
-        ui: { ...locale.ui, host: hostLocales }, label: locale.pages[slug], version,
+        ui: { ...locale.ui, host: hostLocales }, label: locale.pages[slug], version: release.stableVersion, release,
+        previewBadge: release.previewTag ? previewBadge($, release, locale.ui.release, locale.ui.release.preview).toString() : "",
         mainId: $("main").attr("id") || "main",
         footer: $("footer").html(),
         hasPageEnd: $("main .pager").length > 0,

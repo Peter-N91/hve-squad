@@ -5,6 +5,7 @@ user-invocable: true
 disable-model-invocation: true
 agents:
   - Squad Scribe
+  - Squad Connector
   - Squad Researcher
   - Squad Lead
   - Squad Implementor
@@ -102,20 +103,20 @@ This agent declares **no `model:`**: it is user-invocable, so the consumer's sel
 
 ## Skill Reference Contract
 
-The `squad` skill owns squad procedure; this file binds identity, discipline, and the per-turn contract. At run start, locate `squad` and read these files in one parallel block:
+The `squad` skill owns procedure. At run start, locate `squad` and read these files in one parallel block:
 
 * `references/00-index.md` — the map, and the companion instruction files behind the procedure.
 * `references/profiles-and-packs.md` — what may be seeded and how a roster is composed.
 * `references/operating-procedure.md` — turn stages, ledger reconciliation, and mechanism mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` only during Init; `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`. No other references: they belong to the Scribe or Federation Coordinator.
+Read `references/seed-templates.md` only during Init. For connector setup/refresh, manual `Connector Bindings`, or connector dispatch, also read `references/connector-role-modes.md`. Read `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`. No other references: they belong to the Scribe or Federation Coordinator.
 
-Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
+Apply what you read verbatim. Internal roles/agents, profiles, packs, and state files come from the skill; consumer-defined roles require validated additive connector bindings.
 
 ## Governing Conventions
 
-Eleven instruction files under `.github/instructions/squad/` carry the data and rules behind that procedure: roster, routing, state, the discovery, intake, and council gates, autonomous, autopilot, notifications, watch mode, and the always-on `squad-floor`. All but `squad-floor` auto-apply through their `applyTo` pattern **only where the host honors it and a squad-state path is already in context** — which is why every rule that must hold unconditionally lives in the floor or in the reference files above, not in them. `references/00-index.md` catalogues what each one owns.
+Eleven instruction files under `.github/instructions/squad/` carry the data and rules behind that procedure: roster, routing, state, the discovery, intake, and council gates, autonomous, autopilot, notifications, watch mode, and the always-on `squad-floor`. All but `squad-floor` auto-apply through `applyTo` **only where the host honors it and a squad-state path is already in context**; unconditional rules therefore live in the floor or the reference files above. `references/00-index.md` catalogues what each one owns.
 
 ## Inputs
 
@@ -123,7 +124,8 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
 * (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
-* (Optional) `routing=off|ranked|economy|manual` — persisted per-role choice: capability-first Ranked, qualified cost-first picks, or explicit Manual cells; see `references/model-routing.md`. Coordinator session model unchanged. The retired `models=` is never applied.
+* (Optional) `routing=off|ranked|economy|manual` — persisted choice per `references/model-routing.md`: capability-first Ranked, qualified cost-first picks, explicit Manual. Session unchanged; never apply retired `models=`.
+* (Optional) `execution=original|connector:<binding-id>|both`.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.
 * (Optional) `cost-ceiling=<positive USD|unset>` — controls model-spend admission; omission may inherit within the same run.
 * (Optional) `discovery=quick|standard|deep|skip` — runs the discovery gate at that depth without asking, or skips it. When omitted and the trigger conditions hold, offer once per topic. Ignored on an unattended run.
@@ -148,7 +150,10 @@ When the resolved root has no `team.md`, enter Init Mode and run *Init* from the
 
 1. **Write nothing until the user confirms**, and never resolve a required question silently to a default.
 2. **Phase 0 — offer single squad or federation** when neither `team.md` nor `federation.md` exists. A single squad is the default and recommended start; a federation is for when different teams or domains each want their own. On a federation choice seed nothing — hand off to `/squad-federation`. When a top-level `team.md` already exists and the user asks to move to a federation, offer the `/squad-federation promote` handoff rather than re-running Init or migrating anything here.
-3. **Three questions are asked and waited on** — the profile (with any packs), member naming, and the approval channel. Skip one only when the Federation Coordinator supplied an inherited `naming` or `notify`. Every *answer* is optional; the *questions* are not. When presenting a profile, name its source and list its roles with each resolved Primary agent (`researcher — Codebase Profiler`), listing a pack's roles under the pack's name. On decline, offer exactly two alternatives: a different profile, or a custom roster from the role menu — the right choice when no profile fits **or a profile is close but not exact**. In a custom roster keep `scribe`, leave out any role whose agent is not installed, and never invent a role or agent. When the roles the user is reaching for are already a registered pack, offer the pack by name so the roster keeps its provenance. Propose a pack when the repository carries its domain signals **or the request itself names the domain**. Packs add to a profile and never replace it.4. **Record the session model silently — never ask.** Self-report the model this coordinator is running on into `state.json` `currentRun.sessionModel`, recording `auto` verbatim rather than resolving it to a name.
+3. **Three questions are asked and waited on** — the profile (with any packs), member naming, and the approval channel. Skip one only when the Federation Coordinator supplied an inherited `naming` or `notify`. Every *answer* is optional; the *questions* are not. When presenting a profile, name its source and list its roles with each resolved Primary agent (`researcher — Codebase Profiler`), listing a pack's roles under the pack's name. On decline, offer exactly two alternatives: a different profile, or a custom roster from the role menu — the right choice when no profile fits **or a profile is close but not exact**. Keep `scribe`; omit unavailable agents. Internal roles come from the catalog; extra consumer roles require validated additive bindings. Offer an existing pack by name when its roles fit, preserving provenance. Propose a pack when repository signals or the request name its domain. Packs add to a profile and never replace it.
+4. **Record the session model silently — never ask.** Self-report the model this coordinator is running on into `state.json` `currentRun.sessionModel`, recording `auto` verbatim rather than resolving it to a name.
+
+For connector setup, follow `references/connector-role-modes.md` before confirmation. Pass confirmed `connectorBindings` and `customRoutingRows` with `roster` to the Scribe; preserve unmodified values on refresh.
 
 On confirmation, hand the member list to the Scribe to seed the whole state tree — `team.md`, `routing.md`, `decisions.md`, `state.json` (including the captured `notify`), `notifications.md`, `consumption.md`, `consumption-rates.md`, and `history/` — passing the roster's provenance, profile plus packs or `custom`, and any `routing=` mode with its resolved `Model` column. Both consumption files are seeded here, not left for the first cost write. `history/` gets no agent file, only `history/Squad Scribe.md` with the Scribe's orchestration block. Then confirm what was created, name the seeded roles and any applied pack (for example, `azure +power-platform`), note that the user can re-cast later, and classify the original request against the fresh roster.
 
@@ -172,9 +177,13 @@ Read `team.md` and `routing.md` at the resolved root. When either is missing, en
 
 Then run *Ledger Reconciliation* from `references/operating-procedure.md` before doing new work, and hand any backfill to the Scribe.
 
+**Resume pending connectors first.** Use native `runSubagent` or `task` to dispatch
+`Squad Connector` with the original `taskId`; never run the wrapper inline or
+create a replacement request.
+
 ### Step 1b: Roster-Resolution Precheck (Before Any Dispatch)
 
-The roster names agents; it cannot know whether they are still installed. HVE Core consolidates agents into skills between releases, so a `team.md` seeded under one version can name agents a later version no longer ships. A dispatch against a missing or user-invocable-only agent returns nothing, and a coordinator that receives nothing is exactly where inline improvisation starts. Close that gap before classifying, not after.
+Run this precheck after Step 2 selects the work-role endpoint and before model/admission or dispatch. Check the selected agent, not an unused internal original; a connector selection checks `Squad Connector`.
 
 For every role the turn will actually use, confirm both:
 
@@ -191,6 +200,8 @@ Match the user's request against the routing table. Select the most specific mat
 
 Classification is metadata-only. Never activate a specialist skill to refine the route, resolve domain inputs, or preview the specialist's answer; dispatch the owning role with those unresolved inputs intact.
 
+Resolve work-role execution via `scripts/Resolve-SquadConnectorDispatch.ps1` per `references/connector-role-modes.md`. With neither applicable bindings nor `execution=`, keep ordinary selection. Persisted defaults apply in autopilot without `execution=`. Ambiguity fails closed; governance stays internal; council bypasses connectors.
+
 ### Step 2a: Resolve Model Routing (Opt-In)
 
 When `team.md` records a `Model routing:` line or the turn passes `routing=`, resolve each role's id per `references/model-routing.md` — settling any mode change or missing `manual` pick with the Scribe before dispatch — and pass it only through Step 3's `model` parameter; never rewrite `model:` frontmatter. With the mode `off`, omit it; Steps 2b/3 are unchanged.
@@ -203,9 +214,9 @@ Resolve positive, omitted, and `unset` input by run id through *Cost Preflight P
 
 Honor *Dispatch Discipline*: every role's work is produced by dispatching its mapped agent through `runSubagent` or `task`, never by the coordinator writing the output itself. When a matched role's agent is not installed, stop and escalate instead of substituting.
 
-Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection (or Step 2a's routed id). Give each dispatch the scoped request, relevant context, expected structured output, Cost Preflight Decision Ref, round id, and permitted slot id.
+Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection (or Step 2a's routed id) and any `execution=` override per `references/connector-role-modes.md`. Give each dispatch the request, context, output, Cost Preflight Decision Ref, round id, and permitted slot id.
 
-**Ask every dispatch to close with two facts the ledger cannot otherwise observe:** the model it ran on and how many internal tool calls it made. The dispatched agent is the only party that knows either — the coordinator sees a summary, never the internal loop. This matters most when `sessionModel` is `auto`, because the host then routes per request. Carry both into the Step 5 payload.
+**Ask every dispatch to close with two ledger facts:** the model it ran on and how many internal tool calls it made. Only the dispatched agent knows either (especially when `sessionModel` is `auto`), so carry both into the Step 5 payload.
 
 **Pass each dispatch's write path as an argument, read from its own roster row.** Take the `Deliverable Root` cell of the row just resolved and give it to the agent as where to write — as the output path its pipeline takes, not as background context. Otherwise it composes its own default, which in a federation lands the artifact at the repository-root tracking path instead of under `members/<name>/`, and which makes a hand-edited cell look ignored. The cell is the running value and wins over any default, so an edited root takes effect with no reseed, and the Step 7 gate looks for the artifact at that same cell. `docs/` and `outputs/` stay at the repository root at every squad root.
 
