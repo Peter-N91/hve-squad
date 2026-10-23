@@ -1,0 +1,17 @@
+{
+  "connectorId": "acme-capability-assessor",
+  "schemaVersion": "1.1",
+  "transport": "file",
+  "endpointKind": "agent",
+  "capabilities": [
+    "Assesses GCP architecture using consumer-provided GCP skills.",
+    "Checks .NET implementation against consumer engineering practices.",
+    "Assesses data quality using consumer-provided data validation skills."
+  ],
+  "roles": ["gcp", "dotnet-practices", "data-quality"],
+  "dropPath": ".connector-drops/acme-capability-assessor/",
+  "deadlineMinutesDefault": 60,
+  "retryCapDefault": 2,
+  "contact": "squad-integrations@example.com",
+  "version": "1.0.0"
+}

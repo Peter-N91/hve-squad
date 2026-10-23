@@ -104,29 +104,65 @@ function Get-TableRows {
         ForEach-Object { , (Split-TableLine $_) })
 }
 
+function Get-MarkdownTablesForPath {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @() }
+    $tables = [System.Collections.Generic.List[pscustomobject]]::new()
+    $tableLines = $null
+    foreach ($line in (@(Get-Content -LiteralPath $Path -Encoding utf8) + '')) {
+        if ($line -match '^\s*\|') {
+            if ($null -eq $tableLines) { $tableLines = [System.Collections.Generic.List[string]]::new() }
+            $tableLines.Add($line)
+            continue
+        }
+        if ($null -eq $tableLines) { continue }
+        $rows = [System.Collections.Generic.List[hashtable]]::new()
+        $header = Split-TableLine $tableLines[0]
+        foreach ($rowLine in ($tableLines | Select-Object -Skip 1)) {
+            if ($rowLine -match '^\s*\|\s*:?-') { continue }
+            $cells = Split-TableLine $rowLine
+            $row = @{}
+            for ($i = 0; $i -lt $header.Count; $i++) { $row[$header[$i]] = if ($i -lt $cells.Count) { $cells[$i] } else { '' } }
+            $rows.Add($row)
+        }
+        $tables.Add([pscustomobject]@{ Header = $header; Rows = $rows })
+        $tableLines = $null
+    }
+    return $tables.ToArray()
+}
+
 function Get-Roster {
     # Members table of team.md as hashtables keyed by column header.
     param([string]$Path)
-    $lines = @(Get-Content -LiteralPath $Path -Encoding utf8)
-    $header = $null
-    $rows = [System.Collections.Generic.List[hashtable]]::new()
-    foreach ($line in $lines) {
-        if ($line -notmatch '^\s*\|') {
-            if ($header -and $rows.Count -gt 0) { break }
-            $header = $null
-            continue
-        }
-        if ($line -match '^\s*\|\s*:?-') { continue }
-        $cells = Split-TableLine $line
-        if (-not $header) {
-            if ($cells -contains 'Role') { $header = $cells }
-            continue
-        }
-        $row = @{}
-        for ($i = 0; $i -lt $header.Count; $i++) { $row[$header[$i]] = if ($i -lt $cells.Count) { $cells[$i] } else { '' } }
-        $rows.Add($row)
+    $tables = @(Get-MarkdownTablesForPath -Path $Path)
+    $membersTable = @($tables | Where-Object { 'Role' -in $_.Header } | Select-Object -First 1)
+    if ($membersTable.Count -eq 0) {
+        return [pscustomobject]@{ Header = @(); Rows = @(); ConnectorBindings = @() }
     }
-    [pscustomobject]@{ Header = @($header); Rows = $rows }
+
+    $connectorHeader = @('Binding ID', 'Connector ID', 'Manifest', 'Endpoint Kind', 'Role Mode', 'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role', 'Default Execution')
+    $connectorTable = @(
+        $tables | Where-Object {
+            $table = $_
+            @($connectorHeader | Where-Object { $_ -in $table.Header }).Count -eq $connectorHeader.Count
+        } | Select-Object -First 1
+    )
+    $connectorBindings = [System.Collections.Generic.List[pscustomobject]]::new()
+    if ($connectorTable.Count -gt 0) {
+        foreach ($raw in $connectorTable[0].Rows) {
+            $bindingId = ([string]$raw['Binding ID']).Trim().Trim('`').Trim()
+            if (-not $bindingId -or $bindingId -in '—', '-') { continue }
+            $connectorBindings.Add([pscustomobject]@{
+                    BindingId   = $bindingId
+                    RoleMode    = ([string]$raw['Role Mode']).Trim().Trim('`').Trim().ToLowerInvariant()
+                    MemberName  = ([string]$raw['Member Name']).Trim().Trim('`').Trim()
+                    AddedRole   = ([string]$raw['Added Role']).Trim().Trim('`').Trim().ToLowerInvariant()
+                    AlignedRole = ([string]$raw['Aligned Role']).Trim().Trim('`').Trim().ToLowerInvariant()
+                })
+        }
+    }
+
+    [pscustomobject]@{ Header = @($membersTable[0].Header); Rows = $membersTable[0].Rows; ConnectorBindings = $connectorBindings.ToArray() }
 }
 
 function Get-Cell {
@@ -139,6 +175,34 @@ function Get-Cell {
         }
     }
     ''
+}
+
+function Resolve-ConnectorAlignedClassForBrief {
+    param(
+        [Parameter(Mandatory)]$Binding,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Bindings,
+        [Parameter(Mandatory)][hashtable]$ClassMap,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$Seen,
+        [Parameter(Mandatory)][string]$Context
+    )
+    $bindingId = [string]$Binding.BindingId
+    if ([string]::IsNullOrWhiteSpace($bindingId)) { throw "Get-SquadDispatchBrief: connector alignment error ($Context): binding has no Binding ID." }
+    if ($Seen.Contains($bindingId)) { throw "Get-SquadDispatchBrief: connector alignment error ($Context): cyclic Aligned Role chain at binding '$bindingId'." }
+
+    $alignedRole = ([string]$Binding.AlignedRole).Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($alignedRole)) { throw "Get-SquadDispatchBrief: connector alignment error ($Context): binding '$bindingId' is missing Aligned Role." }
+    if ($ClassMap.ContainsKey($alignedRole)) { return [pscustomobject]@{ Class = $ClassMap[$alignedRole]; Source = "connector-aligned: $alignedRole" } }
+
+    $null = $Seen.Add($bindingId)
+    try {
+        $next = @($Bindings | Where-Object { $_.RoleMode -eq 'add' -and $_.AddedRole -eq $alignedRole })
+        if ($next.Count -eq 0) { throw "Get-SquadDispatchBrief: connector alignment error ($Context): aligned role '$alignedRole' has no assignment class mapping." }
+        if ($next.Count -gt 1) { throw "Get-SquadDispatchBrief: connector alignment error ($Context): aligned role '$alignedRole' is ambiguous across $($next.Count) connector bindings." }
+        return Resolve-ConnectorAlignedClassForBrief -Binding $next[0] -Bindings $Bindings -ClassMap $ClassMap -Seen $Seen -Context $Context
+    }
+    finally {
+        $null = $Seen.Remove($bindingId)
+    }
 }
 
 $out = [System.Collections.Generic.List[string]]::new()
@@ -309,6 +373,22 @@ foreach ($row in $roster.Rows) {
     $modelCol = if ($hasModel) { " $(if ($cell) { $cell } else { 'none' }) |" } else { '' }
     $out.Add("| $role | $agent$alts | $reach | $pinText |$modelCol $priced | $root |")
     $class = if ($classes.ContainsKey($role)) { $classes[$role] } else { 'implementation' }
+    if ($agent -ceq 'Squad Connector') {
+        $member = Get-Cell $row @('Member Name')
+        if (-not $member) {
+            throw "Get-SquadDispatchBrief: connector alignment error (role '$role'): connector-backed row is missing Member Name."
+        }
+        $matches = @($roster.ConnectorBindings | Where-Object {
+                $_.RoleMode -eq 'add' -and $_.AddedRole -eq $role.ToLowerInvariant() -and $_.MemberName -ceq $member
+            })
+        if ($matches.Count -gt 1) {
+            throw "Get-SquadDispatchBrief: connector alignment error (role '$role', member '$member'): $($matches.Count) matching add bindings found."
+        }
+        if ($matches.Count -eq 1) {
+            $aligned = Resolve-ConnectorAlignedClassForBrief -Binding $matches[0] -Bindings @($roster.ConnectorBindings) -ClassMap $classes -Seen ([System.Collections.Generic.HashSet[string]]::new([System.Collections.Generic.IEqualityComparer[string]][System.StringComparer]::OrdinalIgnoreCase)) -Context "role '$role', member '$member'"
+            $class = $aligned.Class
+        }
+    }
     if ($reach -ne 'yes' -or $class -notin 'implementation', 'review' -or -not $runs) { continue }
     if ($cell) {
         $c = New-Consumption -Model $cell -Source 'cli-pinned' -Class $class

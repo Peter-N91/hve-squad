@@ -27,6 +27,11 @@
     (tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1), which is opt-in and spends
     a live BEFORE/AFTER comparison rather than running as part of this scenario matrix.
 
+    A scenario carrying `connectorResumeIntegrity` may also attach a deterministic
+    consumer response after an awaiting turn. The harness then verifies the request
+    and snapshot stayed byte-identical and reads machine-generated CLI dispatch events
+    to prove the request and resume used Squad Connector, followed by Squad Scribe.
+
     The assertions never read the run's prose. They read files. See
     tests/squad-behavior-contract.md.
 .PARAMETER Ref
@@ -134,6 +139,8 @@ foreach ($file in $scenarioFiles) {
 
         $failures = @()
         $turnLog = @()
+        $turnEvidence = @{}
+        $connectorConsumerRecord = $null
         $answer = ''
 
         try {
@@ -167,15 +174,21 @@ foreach ($file in $scenarioFiles) {
             else {
                 foreach ($turn in $definition.turns) {
                     $transcript = Join-Path $attemptRoot "turn-$($turn.id).log"
+                    $captureDispatchEvents = $turn.PSObject.Properties.Name -contains 'captureDispatchEvents' -and [bool]$turn.captureDispatchEvents
+                    $logDir = if ($captureDispatchEvents) { Join-Path $attemptRoot "turn-$($turn.id)-logs" } else { '' }
                     $result = Invoke-SquadTurn -Workspace $install.Root -Prompt $turn.prompt -Model $Model `
-                        -TranscriptPath $transcript -TimeoutMinutes $TimeoutMinutes
+                        -TranscriptPath $transcript -LogDir $logDir -CaptureDispatchEvents:$captureDispatchEvents `
+                        -TimeoutMinutes $TimeoutMinutes
 
                     $turnLog += [pscustomobject]@{
                         id       = $turn.id
                         exitCode = $result.ExitCode
                         timedOut = $result.TimedOut
                         seconds  = $result.Seconds
+                        transcript = $transcript
+                        logDir   = $logDir
                     }
+                    $turnEvidence[[string]$turn.id] = [pscustomobject]@{ Transcript = $transcript; LogDir = $logDir }
                     $answer = $result.Answer
 
                     Write-Host "  turn '$($turn.id)': exit $($result.ExitCode) in $($result.Seconds)s" -ForegroundColor DarkGray
@@ -185,6 +198,17 @@ foreach ($file in $scenarioFiles) {
 
                     # A turn that never ran cannot leave the state the next turn assumes.
                     if ($failures) { break }
+
+                    if ($turn.PSObject.Properties.Name -contains 'connectorConsumer') {
+                        $consumer = $turn.connectorConsumer
+                        $connectorConsumerRecord = Publish-ConnectorConsumerResult -Workspace $install.Root `
+                            -ConnectorId ([string]$consumer.connectorId) `
+                            -ArtifactPath ([string]$consumer.artifactPath) `
+                            -ArtifactContent ([string]$consumer.artifactContent) `
+                            -Narrative ([string]$consumer.narrative)
+                        $connectorConsumerRecord | ConvertTo-Json -Depth 8 |
+                            Set-Content -LiteralPath (Join-Path $attemptRoot 'connector-consumer.json') -Encoding utf8NoBOM
+                    }
                 }
 
                 $squadRoots = @(Get-Item -Path (Join-Path $install.Root $definition.squadRootGlob) -ErrorAction SilentlyContinue |
@@ -249,6 +273,50 @@ foreach ($file in $scenarioFiles) {
 
                         if ($integrityResult.FailedCount -gt 0 -or $integrityResult.TotalCount -eq 0) {
                             $failures += "pipelining integrity checks failed for '$name' ($($integrityResult.FailedCount) of $($integrityResult.TotalCount))"
+                        }
+                    }
+
+                    if ($definition.PSObject.Properties.Name -contains 'connectorResumeIntegrity') {
+                        if (-not $connectorConsumerRecord) {
+                            $failures += "connector resume integrity has no consumer record for '$name'"
+                        }
+                        else {
+                            $integrity = $definition.connectorResumeIntegrity
+                            $requestTurn = $turnEvidence[[string]$integrity.requestTurn]
+                            $resumeTurn = $turnEvidence[[string]$integrity.resumeTurn]
+                            if (-not $requestTurn -or -not $resumeTurn) {
+                                $failures += "connector resume integrity could not resolve request/resume turn evidence for '$name'"
+                            }
+                            else {
+                                $resumeRunner = Join-Path $PSScriptRoot 'ConnectorResumeIntegrity.Tests.ps1'
+                                $resumeConfig = New-PesterConfiguration
+                                $resumeConfig.Run.Container = New-PesterContainer -Path $resumeRunner -Data @{
+                                    WorkspaceRoot     = $install.Root
+                                    SquadRoot         = $root
+                                    RequestTranscript = $requestTurn.Transcript
+                                    RequestLogDir     = $requestTurn.LogDir
+                                    ResumeTranscript  = $resumeTurn.Transcript
+                                    ResumeLogDir      = $resumeTurn.LogDir
+                                    RequestPath       = $connectorConsumerRecord.RequestPath
+                                    RequestHash       = $connectorConsumerRecord.RequestHash
+                                    SnapshotPath      = $connectorConsumerRecord.SnapshotPath
+                                    SnapshotHash      = $connectorConsumerRecord.SnapshotHash
+                                    ResultPath        = $connectorConsumerRecord.ResultPath
+                                    TaskId            = $connectorConsumerRecord.TaskId
+                                    Artifact          = [string]$integrity.artifact
+                                    ConnectorAgent    = [string]$integrity.connectorAgent
+                                    ScribeAgent       = [string]$integrity.scribeAgent
+                                }
+                                $resumeConfig.Run.PassThru = $true
+                                $resumeConfig.Output.Verbosity = 'Detailed'
+                                $resumeConfig.TestResult.Enabled = $true
+                                $resumeConfig.TestResult.OutputPath = Join-Path $attemptRoot "connector-resume-integrity-$name.xml"
+
+                                $resumeResult = Invoke-Pester -Configuration $resumeConfig
+                                if ($resumeResult.FailedCount -gt 0 -or $resumeResult.TotalCount -eq 0) {
+                                    $failures += "connector resume integrity checks failed for '$name' ($($resumeResult.FailedCount) of $($resumeResult.TotalCount))"
+                                }
+                            }
                         }
                     }
                 }
