@@ -6,8 +6,78 @@
 BeforeAll {
     . (Join-Path $PSScriptRoot 'Start-EfficiencyWizard.ps1')
     Mock Write-Host {}
+    Mock Get-WizardDefaultsPath { Join-Path $TestDrive 'wizard-defaults.json' }
     function New-WizardTestConfig {
-        @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 60.0; TotalCredits = 360.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = '' }
+        @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 60.0; TotalCredits = 360.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = ''; ParallelTrials = $false }
+    }
+    function New-WizardTestSummary {
+        @{ collection = 'recorded'; independentChecks = 'passed'; comparison = 'not-evaluable'; recordedTrials = 3; reportPath = 'fixture/report.md'; portableReportPath = 'fixture/portable/campaign-report.md'; exportManifestPath = 'fixture/benchmark-export.json' }
+    }
+    function New-WizardResultFixture {
+        param([string]$Root, [bool]$ChecksPassed = $true)
+        [void][IO.Directory]::CreateDirectory((Join-Path $Root 'out'))
+        [void][IO.Directory]::CreateDirectory((Join-Path $Root 'portable'))
+        @{ schemaVersion = 'efficiency-series-v1'; quality = @{ checksPassed = $ChecksPassed }; regressionVerdict = 'not-evaluable' } |
+            ConvertTo-Json | Set-Content (Join-Path $Root 'out/report.json')
+        @{ status = 'exported'; recordedTrials = 3; publicationCommand = "& './Export-BenchmarkResults.ps1' -ObservationOnly" } |
+            ConvertTo-Json | Set-Content (Join-Path $Root 'out/benchmark-export.json')
+        Set-Content (Join-Path $Root 'out/report.md') 'Retained findings'
+        Set-Content (Join-Path $Root 'out/control-series.json') '{}'
+        Set-Content (Join-Path $Root 'portable/campaign-report.md') 'Recorded observations, not approval'
+    }
+}
+
+Describe 'Wizard recorded collection outcomes' -Tag 'Unit' {
+    BeforeEach {
+        $script:SummaryOptions = @{ TrialRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N')) }
+    }
+    It 'links actual retained reports and saved controls without claiming Git publication' {
+        New-WizardResultFixture -Root $script:SummaryOptions.TrialRoot
+        $Summary = Get-WizardBenchmarkSummary $script:SummaryOptions
+        $Summary.collection | Should -Be recorded
+        $Summary.recordedTrials | Should -Be 3
+        $Summary.independentChecks | Should -Be passed
+        $Summary.publication | Should -Be 'local-only'
+        $Summary.publicationCommand | Should -Match '-ObservationOnly'
+        foreach ($Key in @('reportPath', 'rawReportPath', 'controlEvidencePath', 'portableReportPath', 'exportManifestPath')) {
+            Test-Path -LiteralPath $Summary[$Key] -PathType Leaf | Should -BeTrue
+        }
+    }
+    It 'retains failed quality in the serialized wizard result despite successful collection' {
+        New-WizardResultFixture -Root $script:SummaryOptions.TrialRoot -ChecksPassed $false
+        $Steps = @(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $script:SummaryOptions })
+        $Result = Invoke-WizardRunPlan -Steps $Steps -Execute { 0 }
+        $Saved = $Result | ConvertTo-Json -Depth 10 | ConvertFrom-Json -AsHashtable
+        $Saved.exitCode | Should -Be 0
+        $Saved.outcome | Should -Be 'completed-with-findings'
+        $Saved.stages[0].benchmark.independentChecks | Should -Be failed
+        $Saved.stages[0].benchmark.recordedTrials | Should -Be 3
+        $Saved.stages[0].benchmark.portableReportPath | Should -Be (Join-Path $script:SummaryOptions.TrialRoot 'portable/campaign-report.md')
+        $Saved.acceptedBaselineChanged | Should -BeFalse
+        Should -Invoke Write-Host -ParameterFilter { $Object -like '*Independent checks: failed*' } -Times 1 -Exactly
+    }
+    It 'fails explicitly on <Damage> evidence after executor exit <ExecutorExit>' -ForEach @(
+        @{ Damage = 'missing-report'; ExecutorExit = 0 }
+        @{ Damage = 'malformed-report'; ExecutorExit = 0 }
+        @{ Damage = 'invalid-report'; ExecutorExit = 0 }
+        @{ Damage = 'failed-export'; ExecutorExit = 0 }
+        @{ Damage = 'failed-export'; ExecutorExit = 1 }
+        @{ Damage = 'failed-export'; ExecutorExit = 2 }
+    ) {
+        New-WizardResultFixture -Root $script:SummaryOptions.TrialRoot
+        switch ($Damage) {
+            'missing-report' { Remove-Item -LiteralPath (Join-Path $script:SummaryOptions.TrialRoot 'out/report.json') }
+            'malformed-report' { Set-Content (Join-Path $script:SummaryOptions.TrialRoot 'out/report.json') '{"PRIVATE":"unfinished"' }
+            'invalid-report' { Set-Content (Join-Path $script:SummaryOptions.TrialRoot 'out/report.json') '{"schemaVersion":"efficiency-series-v1","quality":{"checksPassed":true}}' }
+            'failed-export' { Set-Content (Join-Path $script:SummaryOptions.TrialRoot 'out/benchmark-export.json') '{"status":"failed","recordedTrials":3}' }
+        }
+        { Get-WizardBenchmarkSummary $script:SummaryOptions } | Should -Throw '*Benchmark result evidence*offline*without paid retries*'
+        Mock Write-Warning {}
+        $Result = Invoke-WizardRunPlan -Steps @(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $script:SummaryOptions }) -Execute { $ExecutorExit }.GetNewClosure()
+        $Result.exitCode | Should -Be $(if ($ExecutorExit -eq 2) { 2 } else { 1 })
+        $Result.outcome | Should -Be failed
+        $Result.repair | Should -Match 'offline, without paid retries'
+        Should -Invoke Write-Warning -Times 1 -Exactly -ParameterFilter { $Message -like '*result evidence could not be read*' -and $Message -notlike '*PRIVATE*' }
     }
 }
 
@@ -45,6 +115,50 @@ Describe 'Wizard offline Python provisioning' -Tag 'Unit' {
         { Invoke-WizardOfflineTest -PesterPath 'pester.psd1' } | Should -Throw '*failed*exit 1*'
         Should -Invoke Invoke-WizardCommand -Times 0 -Exactly -ParameterFilter { $Arguments -contains '-File' }
         $env:PATH | Should -BeExactly $script:OriginalWizardPath
+    }
+}
+
+Describe 'Wizard portable observation finalization' -Tag 'Unit' {
+    BeforeAll {
+        Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
+    }
+    It 'exports outside measured source and prints a parseable offline publication command' {
+        $Source = Join-Path $TestDrive 'source'
+        $Root = Join-Path $TestDrive "run's-evidence"
+        $RunFile = Join-Path $Root 'trials/candidate-1/out/run.json'
+        [void][IO.Directory]::CreateDirectory($Source)
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($RunFile))
+        [IO.File]::WriteAllText($RunFile, '{}')
+        Mock Export-BenchmarkCampaign {}
+        $Result = Complete-WizardBenchmarkExport @{ Mode = 'Series'; CandidateSourceRoot = $Source; TrialRoot = $Root }
+        $Result.status | Should -Be 'exported'
+        $Result.recordedTrials | Should -Be 1
+        $Result.publicationCommand | Should -Match "run''s-evidence"
+        $Result.publicationCommand | Should -Match '-ObservationOnly.*-TrialDirectories @\('
+        $Result.publicationCommand | Should -Not -Match '-Live|-Mode Run|copilot'
+        $Tokens = $null; $Errors = $null
+        [void][Management.Automation.Language.Parser]::ParseInput($Result.publicationCommand, [ref]$Tokens, [ref]$Errors)
+        $Errors.Count | Should -Be 0
+        Should -Invoke Export-BenchmarkCampaign -Times 1 -Exactly -ParameterFilter {
+            $Repository -eq $Source -and $TrialDirectories.Count -eq 1 -and $OutputDirectory -eq (Join-Path $Root 'portable')
+        }
+        @(Get-ChildItem -LiteralPath $Source -Force).Count | Should -Be 0
+    }
+    It 'finalizes failed collections and never replaces their exit with export success or failure' {
+        $Options = @{ Mode = 'Series'; CandidateSourceRoot = (Join-Path $TestDrive 'source'); TrialRoot = (Join-Path $TestDrive 'failed-run') }
+        $Unavailable = Complete-WizardBenchmarkExport $Options
+        $Unavailable.status | Should -Be 'failed'
+        Should -Invoke Write-Host -ParameterFilter { $Object -match 'Offline export failed.*Export-BenchmarkResults.ps1' } -Times 1
+        Mock Invoke-WizardCommand { 5 }
+        Mock Complete-WizardBenchmarkExport { @{ status = 'exported' } }
+        Invoke-WizardBenchmark $Options | Should -Be 5
+        Mock Complete-WizardBenchmarkExport { @{ status = 'failed' } }
+        Invoke-WizardBenchmark $Options | Should -Be 5
+        Mock Invoke-WizardCommand { 0 }
+        Invoke-WizardBenchmark $Options | Should -Be 1
+        Mock Invoke-WizardCommand { throw 'child launch failed' }
+        { Invoke-WizardBenchmark $Options } | Should -Throw '*child launch failed*'
+        Should -Invoke Complete-WizardBenchmarkExport -Times 4 -Exactly
     }
 }
 
@@ -119,7 +233,181 @@ Describe 'Wizard decisions and guards' -Tag 'Unit' {
     }
 }
 
+Describe 'Wizard remembered defaults' -Tag 'Unit' {
+    BeforeEach {
+        $script:MemorySource = Join-Path $TestDrive 'memory-source'
+        $script:MemoryConfig = New-WizardTestConfig
+        $script:MemoryConfig.WorkRoot = Join-Path $TestDrive 'memory-work'
+        $script:MemoryConfig.BaselineSourceRoot = Join-Path $TestDrive 'memory-baseline'
+        $script:MemoryConfig.CandidateSourceRoot = Join-Path $TestDrive 'memory-candidate'
+        $script:MemoryConfig.Model = 'remembered-model'
+        $script:MemoryConfig.PerRunCredits = 1000.0
+        $script:MemoryConfig.TotalCredits = 7500.0
+        $script:MemoryConfig.ParallelTrials = $true
+        foreach ($Source in @($script:MemorySource, $script:MemoryConfig.BaselineSourceRoot, $script:MemoryConfig.CandidateSourceRoot)) {
+            New-Item -ItemType Directory -Path (Join-Path $Source 'squad-src'), (Join-Path $Source '.git') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $Source 'apm.yml') -Value 'name: fixture'
+        }
+        Mock Read-WizardText { $Default }
+        Mock Read-WizardChoice { $Default }
+    }
+    It 'uses remembered answers as defaults while creating fresh run evidence' {
+        $script:MemoryConfig.Token = 'not-a-real-credential'
+        Save-WizardDefaults -Config $script:MemoryConfig
+        $Config = Get-WizardConfiguration -Source $script:MemorySource
+        foreach ($Key in @('Mode', 'WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')) {
+            $Config[$Key] | Should -Be $script:MemoryConfig[$Key]
+        }
+        $Config.RunRoot | Should -Not -Be $script:MemoryConfig.RunRoot
+        $Saved = Get-Content -LiteralPath (Get-WizardDefaultsPath) -Raw
+        $Saved | Should -Not -Match 'Token|not-a-real-credential|RunRoot|InstallRoot'
+        Should -Invoke Read-WizardChoice -Times 1 -Exactly -ParameterFilter { $Question -eq 'What should run?' -and $Default -eq '3' }
+        Should -Invoke Read-WizardChoice -Times 1 -Exactly -ParameterFilter { $Question -eq 'Execution' -and $Default -eq '2' }
+    }
+    It 'honors explicit work paths and adjusts total defaults to changed reservations' {
+        $script:MemoryConfig.Mode = 'Establish'
+        $script:MemoryConfig.TotalCredits = 3000.0
+        Save-WizardDefaults -Config $script:MemoryConfig
+        Mock Read-WizardText { if ($Question -eq 'Maximum AI credits per complete run') { '2000' } else { $Default } }
+        Mock Read-WizardChoice { if ($Question -eq 'What should run?') { '3' } else { $Default } }
+        $Override = Join-Path $TestDrive 'explicit-work'
+        $Config = Get-WizardConfiguration -Source $script:MemorySource -Scratch $Override -ParallelTrials
+        $Config.WorkRoot | Should -Be $Override
+        $Config.TotalCredits | Should -Be 12000
+        $Config.ParallelTrials | Should -BeTrue
+        Should -Invoke Read-WizardChoice -Times 0 -Exactly -ParameterFilter { $Question -eq 'Execution' }
+    }
+    It 'preserves live answers in Offline mode and never treats remembered authorization as consent' {
+        Save-WizardDefaults -Config $script:MemoryConfig -SpendingAuthorized $true
+        Mock Read-WizardChoice { '4' }
+        $Config = Get-WizardConfiguration -Source $script:MemorySource
+        $Config.Mode | Should -Be Offline
+        $Saved = Read-WizardDefaults
+        $Saved.Model | Should -Be 'remembered-model'
+        $Saved.PerRunCredits | Should -Be 1000
+        $Saved.ParallelTrials | Should -BeTrue
+        $Saved.SpendingAuthorization.approved | Should -BeTrue
+        Mock Read-Host { '' }
+        Confirm-WizardAction 'Spend credits?' | Should -BeFalse
+    }
+    It 'remembers an explicit none control choice instead of rediscovering older controls' {
+        $script:MemoryConfig.Mode = 'Series'
+        $script:MemoryConfig.ParallelTrials = $false
+        Save-WizardDefaults -Config $script:MemoryConfig
+        $Control = Join-Path $script:MemoryConfig.WorkRoot 'run-old/control/out/control-series.json'
+        New-Item -ItemType Directory -Path (Split-Path $Control -Parent) -Force | Out-Null
+        @{ schemaVersion = 'efficiency-control-v1'; runs = @(@{}, @{}, @{}) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Control
+        $Config = Get-WizardConfiguration -Source $script:MemorySource
+        $Config.BaselineEvidencePath | Should -Be ''
+        $Config.ParallelTrials | Should -BeFalse
+        $Saved = Read-WizardDefaults
+        $Saved.Mode = 'Offline'
+        Save-WizardDefaults -Config @{ Mode = 'Offline'; WorkRoot = $Config.WorkRoot } -Previous $Saved
+        $Explicit = Get-WizardConfiguration -Source $script:MemorySource -SavedControl $Control
+        $Explicit.Mode | Should -Be Series
+        $Explicit.BaselineEvidencePath | Should -Be $Control
+    }
+    It 'leaves memory unchanged for cancelled or invalid questionnaires' {
+        Save-WizardDefaults -Config $script:MemoryConfig
+        $Before = (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash
+        Mock Read-WizardText {
+            if ($Question -like 'Coordinator*') { throw [OperationCanceledException]::new('Wizard cancelled.') }
+            $Default
+        }
+        { Get-WizardConfiguration -Source $script:MemorySource } | Should -Throw '*cancelled*'
+        (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
+        Mock Read-WizardText { if ($Question -eq 'Maximum AI credits per complete run') { 'NaN' } else { $Default } }
+        { Get-WizardConfiguration -Source $script:MemorySource } | Should -Throw '*finite positive*'
+        (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
+    }
+    It 'retains completed answers when a later prerequisite fails' {
+        Save-WizardDefaults -Config $script:MemoryConfig
+        Mock Read-WizardText { if ($Question -like 'Coordinator*') { 'retry-model' } else { $Default } }
+        Mock Install-WizardPrerequisite { throw 'Fixture prerequisite failure' }
+        Mock Confirm-WizardAction { throw 'No authorization should be requested yet' }
+        $Result = Invoke-EfficiencyWizard -Source $script:MemorySource
+        $Result.failedStage | Should -Be 'Prerequisite installation'
+        (Read-WizardDefaults).Model | Should -Be 'retry-model'
+        Should -Invoke Confirm-WizardAction -Times 0
+    }
+    It 'rejects invalid saved data with reset guidance: <Case>' -ForEach @(
+        @{ Case = 'syntax'; Json = '{invalid-json' },
+        @{ Case = 'version'; Json = '{"schemaVersion":"unknown"}' },
+        @{ Case = 'unexpected consent'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","Live":true}' },
+        @{ Case = 'credit type'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","PerRunCredits":"1000"}' },
+        @{ Case = 'credit value'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","PerRunCredits":0}' },
+        @{ Case = 'parallel type'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","ParallelTrials":"yes"}' },
+        @{ Case = 'authorization type'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","SpendingAuthorization":true}' }
+    ) {
+        Set-Content -LiteralPath (Get-WizardDefaultsPath) -Value $Json
+        { Read-WizardDefaults } | Should -Throw '*Remove this file to reset*'
+    }
+    It 'surfaces write failures without replacing previous memory' {
+        Save-WizardDefaults -Config $script:MemoryConfig
+        $Before = (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash
+        Mock Set-Content { throw [IO.IOException]::new('Fixture write failure') } -ParameterFilter { $LiteralPath -like '*wizard-defaults.json.*.tmp' }
+        { Save-WizardDefaults -Config $script:MemoryConfig } | Should -Throw '*write failure*'
+        (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
+    }
+}
+
 Describe 'Wizard unattended plan' -Tag 'Unit' {
+    BeforeEach { Mock Get-WizardBenchmarkSummary { New-WizardTestSummary } }
+    It 'monitors every scheduled trial separately for <Case> runs' -ForEach @(
+        @{ Case = 'parallel baseline'; Mode = 'Establish'; Saved = $false; Count = 3; First = 'baseline-1' },
+        @{ Case = 'parallel candidates'; Mode = 'Series'; Saved = $true; Count = 3; First = 'candidate-1' },
+        @{ Case = 'fresh paired'; Mode = 'Series'; Saved = $false; Count = 6; First = 'baseline-1' }
+    ) {
+        $Options = @{ Mode = $Mode; TrialRoot = Join-Path $TestDrive 'progress-series' }
+        if ($Saved) { $Options.BaselineEvidencePath = 'controls.json' }
+        Mock Invoke-WizardCommand { 0 }
+        Mock Complete-WizardBenchmarkExport { @{ status = 'exported' } }
+        Invoke-WizardBenchmark $Options | Should -Be 0
+        Should -Invoke Invoke-WizardCommand -Times 1 -Exactly -ParameterFilter {
+            $ProgressPaths.Count -eq $Count -and
+            $ProgressPaths.Contains($First) -and
+            $ProgressPaths[$First] -eq (Join-Path $Options.TrialRoot "trials/$First/out/progress.json")
+        }
+    }
+    It 'preserves output and exit codes while observing a real child command' {
+        Push-Location $TestDrive
+        try {
+            $Progress = Join-Path $TestDrive 'command-progress.json'
+            $Code = Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', '"retained fixture output"; exit 7') -ProgressPaths @{ 'baseline-1' = $Progress } -InformationVariable ProgressMessages
+            $Code | Should -Be 7
+            $Logs = @(Get-ChildItem -LiteralPath $TestDrive -Filter 'wizard-stage-*.log')
+            $Logs.Count | Should -Be 1
+            Get-Content $Logs[0].FullName | Should -Be 'retained fixture output'
+            @($ProgressMessages | Where-Object { $_.MessageData.ToString() -like 'Progress*baseline-1: awaiting preflight*' }).Count | Should -Be 2
+        }
+        finally { Pop-Location }
+    }
+    It 'honors command-line parallel selection without repeating the scheduling question' {
+        $Source = Join-Path $TestDrive 'cli-source'; $Scratch = Join-Path $TestDrive 'cli-scratch'
+        New-Item -ItemType Directory -Path (Join-Path $Source 'squad-src'), (Join-Path $Source '.git') -Force | Out-Null
+        Set-Content (Join-Path $Source 'apm.yml') 'name: fixture'
+        Mock Get-WizardMode { 'Establish' }
+        Mock Read-WizardText { $Default }
+        Mock Read-WizardCreditLimit { 100 }
+        Mock Read-WizardChoice { throw 'Unexpected scheduling question' }
+        Mock New-WizardRunPlan {}
+        $Config = Get-WizardConfiguration -Source $Source -Scratch $Scratch -ParallelTrials
+        $Config.ParallelTrials | Should -BeTrue
+        Should -Invoke Read-WizardChoice -Times 0
+    }
+    It 'keeps serial default and propagates opt-in concurrency to both dependent Complete arms' {
+        $Config = New-WizardTestConfig
+        $Serial = New-WizardRunPlan $Config
+        $Serial[1].arguments.ContainsKey('ParallelTrials') | Should -BeFalse
+        $Config.ParallelTrials = $true
+        $Parallel = New-WizardRunPlan $Config
+        $Parallel[1].arguments.ParallelTrials | Should -BeTrue
+        $Parallel[2].arguments.ParallelTrials | Should -BeTrue
+        $Parallel[2].arguments.BaselineEvidencePath | Should -Be (Join-Path $TestDrive 'control/out/control-series.json')
+        $Parallel[1].arguments.MaxSeriesCredits + $Parallel[2].arguments.MaxSeriesCredits | Should -Be 360
+        $Config.Mode = 'Series'
+        { New-WizardRunPlan $Config } | Should -Throw '*six fresh*'
+    }
     It 'runs Complete as offline checks, three controls, then three saved-control candidates' {
         $Steps = New-WizardRunPlan (New-WizardTestConfig)
         $Steps.Count | Should -Be 3
@@ -279,6 +567,7 @@ Describe 'Wizard complete coordination' -Tag 'Unit' {
         Mock Confirm-WizardAction { $true }
         Mock Invoke-WizardOfflineTest { $script:WizardCalls.Add('Offline'); 0 }
         Mock Invoke-WizardBenchmark { $script:WizardCalls.Add($Options.Mode); 0 }
+        Mock Get-WizardBenchmarkSummary { New-WizardTestSummary }
         Mock Read-WizardText { throw 'Unexpected interactive input during execution' }
     }
     It 'runs Complete end to end and writes the result without invoking a model' {
@@ -286,8 +575,9 @@ Describe 'Wizard complete coordination' -Tag 'Unit' {
         $Result.exitCode | Should -Be 0
         $script:WizardCalls -join ',' | Should -Be 'Offline,Establish,Series'
         $Saved = Get-Content (Join-Path $script:WizardConfig.RunRoot 'wizard-result.json') -Raw | ConvertFrom-Json
-        $Saved.outcome | Should -Be passed
+        $Saved.outcome | Should -Be completed
         $Saved.acceptedBaselineChanged | Should -BeFalse
+        (Read-WizardDefaults).SpendingAuthorization.approved | Should -BeTrue
         Should -Invoke Read-WizardText -Times 0
     }
     It 'stops before any benchmark when the full offline test stage fails' {
@@ -299,10 +589,24 @@ Describe 'Wizard complete coordination' -Tag 'Unit' {
         Test-Path (Join-Path $script:WizardConfig.RunRoot 'wizard-result.json') | Should -BeTrue
     }
     It 'does not launch on declined isolation or spending consent' {
+        Save-WizardDefaults -Config $script:WizardConfig -SpendingAuthorized $true
         Mock Confirm-WizardAction { $Question -notlike '*I confirm*' }
         $Result = Invoke-EfficiencyWizard -Source 'source'
         $Result.exitCode | Should -Be 3
         Should -Invoke Invoke-WizardOfflineTest -Times 0
+        Should -Invoke Invoke-WizardBenchmark -Times 0
+        Should -Invoke Confirm-WizardAction -Times 1 -Exactly -ParameterFilter { $Question -like '*I confirm*' }
+        (Read-WizardDefaults).SpendingAuthorization.approved | Should -BeFalse
+        Should -Invoke Write-Host -Times 1 -Exactly -ParameterFilter { $Object -like 'Previous spending authorization*yes*' }
+    }
+    It 'does not present previous authorization as matching changed credit ceilings' {
+        Save-WizardDefaults -Config $script:WizardConfig -SpendingAuthorized $true
+        $script:WizardConfig.PerRunCredits = 120.0
+        $script:WizardConfig.TotalCredits = 720.0
+        Mock Confirm-WizardAction { $Question -notlike '*I confirm*' }
+        $Result = Invoke-EfficiencyWizard -Source 'source'
+        $Result.exitCode | Should -Be 3
+        Should -Invoke Write-Host -Times 0 -Exactly -ParameterFilter { $Object -like 'Previous spending authorization*' }
         Should -Invoke Invoke-WizardBenchmark -Times 0
     }
     It 'does not authenticate or prepare packages in Offline mode' {
@@ -357,7 +661,7 @@ export CHECK_STATUS="$2" WIZARD_STATUS="$3" ARG_LOG="$log_path"
 exec "$bash_path" "$launcher" "${@:7}"
 '@
                         $OutputPath = Join-Path $Directory 'output.txt'
-                        $Process = Invoke-EfficiencyProcess -FilePath $script:WizardBash -Arguments @('-c', $Command.Replace("`r", ''), 'test', $Directory.Replace('\', '/'), [string]$CheckStatus, [string]$WizardStatus, $Log.Replace('\', '/'), $script:ShellLauncher, $(if ($Missing) { '1' } else { '0' }), '-WorkRoot', '/tmp/work with spaces') -WorkingDirectory $TestDrive -OutputPath $OutputPath -TimeoutSeconds 10 -InputText ''
+                        $Process = Invoke-EfficiencyProcess -FilePath $script:WizardBash -Arguments @('-c', $Command.Replace("`r", ''), 'test', $Directory.Replace('\', '/'), [string]$CheckStatus, [string]$WizardStatus, $Log.Replace('\', '/'), $script:ShellLauncher, $(if ($Missing) { '1' } else { '0' }), '-ParallelTrials', '-WorkRoot', '/tmp/work with spaces') -WorkingDirectory $TestDrive -OutputPath $OutputPath -TimeoutSeconds 10 -InputText ''
                         $Logged = @(); if (Test-Path -LiteralPath $Log) { $Logged = @(Get-Content -LiteralPath $Log) }
                         @{ code = $Process.exitCode; output = ((Get-Content -LiteralPath $OutputPath -Raw) + (Get-Content -LiteralPath ($OutputPath + '.stderr') -Raw)); arguments = $Logged }
         }
@@ -387,6 +691,7 @@ exec "$bash_path" "$launcher" "${@:7}"
         $Result = Invoke-TestBashLauncher -CheckStatus 0 -WizardStatus 3
         $Result.code | Should -Be 3 -Because $Result.output
         $Result.arguments[-1] | Should -Be '/tmp/work with spaces'
+        $Result.arguments | Should -Contain '-ParallelTrials'
         $Result.arguments | Should -Contain '-File'
     }
 }

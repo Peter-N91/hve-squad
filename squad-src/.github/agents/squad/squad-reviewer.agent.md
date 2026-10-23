@@ -28,11 +28,12 @@ This charter exists because the HVE Core review capability ships as the `rpi-rev
 
 ## Inputs
 
-* The implemented changes to review, and the change record the implementer wrote.
-* The plan and research artifacts the implementation was built from.
+* The implemented changes to review, and the change record the implementer wrote, as exact source paths.
+* The plan and research artifacts the implementation was built from, as exact source paths.
 * (Optional) Council conditions from a `Go-With-Conditions` verdict, which the review must confirm were honored.
 * (Optional) A review sub-type hint when the coordinator resolved a more specific perspective (security, accessibility, functional correctness, standards, or pull-request readiness).
 * (Optional) A squad-root path (`squadRoot`) identifying which squad or sub-squad dispatched this work.
+* For required runtime probes: literal absolute workspace, implementation and review-output paths, plus an explicitly authorized unique scratch directory inside that workspace. Review-only durable output does not prohibit transient probe files in that directory; a conflicting or missing allowance is a blocker to resolve before execution, not permission to write elsewhere.
 
 ## Required Steps
 
@@ -46,7 +47,9 @@ Compare what was implemented against what was planned. Report every deviation: w
 
 ### Step 3: Review the Change on Its Merits
 
-Apply the `code-review` skill's criteria to the changed source: correctness, error handling, edge cases, security, and the repository's own coding-standards instruction files. Ground every finding in a specific file and line.
+Apply the `code-review` skill's criteria to the changed source: correctness, error handling, edge cases, security, and the repository's own coding-standards instruction files. Ground every finding in a specific file and line. Initial local probes use literal authorized workspace paths and explicit scratch paths inside the workspace, not parent traversal, shell-dependent `$PWD` expansion or ambiguous wrappers. Respect a denied permission; never retry through an alternative to bypass it. An incomplete runtime remains `Fail` when required.
+
+Before a probe, verify the supplied implementation exists and the scratch path is inside the authorized workspace and separate from implementation/squad state. Use the supplied absolute implementation path, never derive it from the scratch directory or `$PWD`. Create probe data only in that unique scratch directory; clean only the specific files/directories created by this review, without broad or outside-root cleanup. Record denied/unexecuted probes as unverified rather than substituting the implementer's test results.
 
 ### Step 4: Grade and Record
 

@@ -87,14 +87,10 @@ copilot</code></pre>
       <h2>VS Code</h2>
       <p>Open your project in VS Code with GitHub Copilot Chat enabled and authenticated. Choose either the plugin installation or the repository package route below.</p>
 
-      <h3>Option 1 — Install through the plugin from the integrated terminal</h3>
-      <p>Open the VS Code integrated terminal with <strong>Terminal → New Terminal</strong>, change to the root of your project repository, and paste:</p>
-      <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
-copilot plugin install hve-squad@hve-squad-plugin
-copilot plugin install hve-squad-hve-core@hve-squad-plugin
-copilot</code></pre>
-      <p>In the agent picker, Squad Coordinator may be displayed as <code>hve-squad:squad-coordinator</code>. Continue with initialization below after checking the installation.</p>
-      <p>Do not install the official <code>hve-core</code> plugin alongside <code>hve-squad-hve-core</code>. For updates, reinstall the companion entry rather than using plugin update on it. Follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">CLI installation and update guide</a>.</p>
+      <h3>Option 1 — Install the plugins in VS Code settings</h3>
+      <p>In VS Code, open <strong>Settings → Extensions → Copilot → Plugins</strong>, register <code>Peter-N91/hve-squad-plugin</code>, and install both <code>hve-squad</code> and <code>hve-squad-hve-core</code>. Names and settings locations can vary by VS Code version; follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">VS Code installation guide</a>.</p>
+      <p>Verify the pair in VS Code itself before the agent picker and initialization below. A terminal installation may use a different <code>COPILOT_HOME</code> and does not prove Copilot Chat has the same plugins. In the agent picker, Squad Coordinator may be displayed as <code>hve-squad:squad-coordinator</code>.</p>
+      <p>Do not install the official <code>hve-core</code> plugin alongside <code>hve-squad-hve-core</code>. For updates, reinstall the companion entry rather than using plugin update on it, as the <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">VS Code installation guide</a> describes.</p>
 
       <h3>Option 2 — Install the package into the repository with APM</h3>
       <p>This route installs the full cast into the repository through APM.</p>

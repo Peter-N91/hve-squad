@@ -157,6 +157,15 @@
 
       <h2 id="autopilot-hand-off-pipelining">Autopilot hand-off pipelining</h2>
       <p>
+        Ordinary hand-offs now run synchronously through <code>Write-SquadHandoff.ps1 -Quiet</code>
+        directly from the coordinator, in every routing mode, without starting a Scribe subagent.
+        Its one-line JSON result reports the state turn, history counts and ledger check; warnings remain
+        on stderr. Nonzero exits stop the hand-off. Existing history, decision, ledger and state formats
+        are unchanged. Initialization, verdicts, notifications, memory, cost-ceiling slots, federation-root
+        changes and run summaries still use the cold Scribe procedure. Serialize both writers per root.
+        The pipelining rules below apply to these cold Scribe hand-offs, not ordinary direct writes.
+      </p>
+      <p>
         Under <code>mode=autopilot</code>, the coordinator dispatches stage N's Scribe hand-off and
         stage N+1's role together, as two calls in one parallel tool-call block, whenever no barrier
         applies and three conditions hold: stage N's own artifact is confirmed on
@@ -182,7 +191,7 @@
         <li>After a pipelined hand-off (one that ran beside a role) has failed verification in this run; a failed hand-off that ran alone is corrected without turning pipelining off</li>
       </ul>
       <p>
-        When pipelining is off, the coordinator dispatches stage N's Scribe hand-off, waits for it to
+        For a cold Scribe hand-off when pipelining is off, the coordinator dispatches stage N's hand-off, waits for it to
         complete and be verified, and only then dispatches stage N+1 — exactly as in prior versions.
         When pipelining is active, stage N+1 starts while stage N's hand-off is in flight, but stage
         N+2 does not start until stage N's hand-off has returned and passed verification.

@@ -134,7 +134,7 @@ jobs:
           NEW_VERSION: ${{ steps.prep.outputs.version }}
           REF: ${{ inputs.ref }}
         run: |
-          gh workflow run release.yml --ref main -f ref="$REF"
+          gh workflow run release.yml --ref main -f ref="$REF" -f run_benchmark=true
           echo "::notice::Triggered release.yml for v${NEW_VERSION} on ${REF}"
 
       # The fragments this run consumed are what the pre-release was rendering,

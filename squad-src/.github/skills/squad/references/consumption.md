@@ -43,8 +43,7 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 ### Derivation
 
 ```text
-history/<agent>.md — 0 block(s) — identities: (none)
-history/Squad Scribe.md — 0 block(s) — identities: (none)
+Squad Scribe.md — 0 block(s) — identities: (none)
 
 <role>         turns 0        0 × 0.00 +      0 × 0.00 +      0 × 0.00 +     0 × 0.00 =        0 / 1e6 = 0.0000
 orchestration  turns 0+0=0    0 × 0.00 +      0 × 0.00 +      0 × 0.00 +     0 × 0.00 =        0 / 1e6 = 0.0000
@@ -53,7 +52,7 @@ orchestration  turns 0+0=0    0 × 0.00 +      0 × 0.00 +      0 × 0.00 +     
 
 > Basis: estimated. No per-dispatch token telemetry exists; the runtime exposes only the per-user aggregate `ai_credits_used` via the Copilot usage-metrics REST API. `Model` is resolved per *Model Attribution* in `.github/instructions/squad/squad-state.instructions.md` and is never invented — `unknown` where it could not be resolved. `Model Source` is `cli-pinned`, `operator-declared`, `dispatch-reported`, `agent-pinned`, `session-inherited`, or `unresolved`; an `agent-pinned` row legitimately differs from the session model. `Priced As` is the rate row used and differs from `Model` only on a fallback. `Turns` is the estimated internal tool-loop turn count, because a dispatch is many model calls and not one; it accumulates across a role's blocks exactly as the token columns do, so a role dispatched twice at `15` and `4` carries `19`. The two tables share the same `Role` order so a row in one lines up with the same row in the other. Token rates and the dispatch-size estimator come from `consumption-rates.md` (observed <date>). Calibration factor <factor> (<observations> reconciled run(s)). 1 AI credit = $0.01 USD.
 >
-> The `history/<file> — <n> block(s) — identities: <hash>,<hash>,...` line above each file's derivation is not decoration: it is the ledger's own record of which `###` entries it has already folded in, one short deterministic hash per entry in file order. A rewrite that finds this run's recorded identities are not an ordered prefix of the file's current identities — same count but different hashes, or fewer current entries than recorded — means an entry was overwritten, reordered, or removed since the last rewrite rather than only appended to, and `Measure-SquadLedger.ps1 -Check` (or render mode) refuses rather than silently accepting it. A pre-existing ledger with no recorded identities at all (an older-format entry) only warns when checked plainly; it never fails on that account alone. But the Scribe's own post-write self-check always runs `-Check` together with `-ExpectedHistoryCounts` (*scribe-procedure.md*'s Write-Completeness Self-Check Step 3), and in that combination a Derivation missing identities entirely, or missing them for only some of the touched files (a partial paste), FAILS instead of warning — that call always follows a fresh write, so a missing or partial paste there is this run's own defect, never a genuinely old ledger.
+> The `<file>.md — <n> block(s) — identities: <hash>,<hash>,...` line uses the history file's basename, without a `history/` prefix. It is the ledger's own record of which `###` entries it has already folded in, one short deterministic hash per entry in file order. The initial Scribe-only seed records an empty prefix; the first ledger write replaces it with actual identities. A rewrite that finds this run's recorded identities are not an ordered prefix of the file's current identities — same count but different hashes, or fewer current entries than recorded — means an entry was overwritten, reordered, or removed since the last rewrite rather than only appended to, and `Measure-SquadLedger.ps1 -Check` (or render mode) refuses rather than silently accepting it. A pre-existing ledger with no recorded identities at all (an older-format entry) only warns when checked plainly; it never fails on that account alone. But the Scribe's own post-write self-check always runs `-Check` together with `-ExpectedHistoryCounts` (*scribe-procedure.md*'s Write-Completeness Self-Check Step 3), and in that combination a Derivation missing identities entirely, or missing them for only some of the touched files (a partial paste), FAILS instead of warning — that call always follows a fresh write, so a missing or partial paste there is this run's own defect, never a genuinely old ledger.
 
 ## Cost Comparison (illustrative)
 
@@ -64,13 +63,19 @@ This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** a
 > Estimates only. Token rates change. See `consumption-rates.md` for current rates, the dispatch-size estimator, and the calibration methodology. Token counts and iteration counts are illustrative, not guarantees.
 ````
 
+`Measure-SquadLedger.ps1 -Write` finalizes estimated Cost Comparison figures with
+the ledger and run totals. It preserves supplied baseline assumptions and notes,
+derives signed savings, and reports unavailable baselines honestly. Independent
+host observations remain separate. Run `-Check` afterward; never hand-edit derived
+comparison figures after a successful check.
+
 ## consumption-rates.md
 
 Single maintainable rate table that isolates volatile per-model token pricing from agent logic, plus the dispatch-size estimator and the calibration factor. Uses replace semantics. The Scribe seeds it from the template in [consumption-rates-template.md](consumption-rates-template.md) — a **cold** file, read only on initialization or at a Step 7.1 reseed, never on an ordinary decision or history dispatch — when the file is missing **or when the existing file does not carry the required sections** (see the Scribe's Step 7 shape check: a per-model rate table with `Input`, `Cached`, `Cache write`, and `Output` columns, a tier-fallback table, a dispatch-size estimator, and a calibration block), so a hand-edited or drifted table can never silently degrade every estimate. Because only this file holds token rates, a price change updates one table and never touches an agent prompt. Coordinators' Cost Preflight prices from the squad root's own `consumption-rates.md`, never from the template file.
 
 ## Orchestration overhead
 
-The coordinator's own turns and each Scribe write consume tokens too, and they are dispatches the ledger would otherwise never see. Record them as a single `orchestration` row per run: one coordinator turn per dispatch round at the coordinator's own model, plus one `Scribe state write` class dispatch per Scribe hand-off.
+Record actual coordinator/Scribe usage as one `orchestration` row per run: coordinator usage at its own model, plus `Scribe state write` usage only when Scribe actually ran. Direct deterministic handoffs add no fictional Scribe dispatch/tokens. Preserve the historical `history/Squad Scribe.md` overhead artifact on both routes; ordinary arithmetic is script-derived, never hand-authored.
 
 The row is an aggregate, not the storage. Each turn's orchestration figures are appended as a `#### Consumption — Orchestration` block to `history/Squad Scribe.md`, and the row is the sum of every such block recorded for the run. A figure that lives only in the turn's payload cannot be read back, so the row resets to the current turn on the next rewrite and the run under-reports its own overhead by every turn that came before.
 
@@ -87,7 +92,7 @@ est_cost_usd = raw_cost_usd × calibration_factor
 est_credits  = est_cost_usd / 0.01
 ```
 
-A rate is a property of the model, so it belongs to the one file that lists models. Copying it into every block restates the same fact once per dispatch and gives it that many chances to be restated wrong, and a cost stored beside its own inputs is a second copy of a number the inputs already determine. `calibration_factor` is read from the squad root's own `consumption-rates.md` — its calibration block and reconciliation procedure are documented in the template at [consumption-rates-template.md](consumption-rates-template.md), read only on initialization or a Step 7.1 reseed.
+Duplicated rates and costs drift. `calibration_factor` is read from the squad root's own `consumption-rates.md` — its calibration block and reconciliation procedure are documented in the template at [consumption-rates-template.md](consumption-rates-template.md), read only on initialization or a Step 7.1 reseed.
 
 ## Cost Preflight
 

@@ -25,10 +25,25 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Script = Join-Path (Resolve-Path -LiteralPath $Workspace) 'src/task.ps1'
         if (-not (Test-Path -LiteralPath $Script -PathType Leaf)) { throw 'Missing src/task.ps1' }
         $Store = Join-Path $Root 'tasks.json'
+        # Catch binding errors before the native host performs full error formatting.
+        $ProbeCommand = @'
+try {
+    $Parameters = ConvertFrom-Json -InputObject $env:HVE_EFFICIENCY_PROBE_PARAMETERS -AsHashtable
+    & $env:HVE_EFFICIENCY_PROBE_SCRIPT @Parameters
+    if (-not $?) { exit 1 }
+}
+catch [System.Management.Automation.RuntimeException] {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}
+'@
         $Invoke = {
             param([string[]]$Options)
             $Output = Join-Path $Root ("probe-$([guid]::NewGuid()).json")
-            $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments (@('-NoProfile', '-File', $Script, '-Store', $Store) + $Options) -WorkingDirectory $Root -OutputPath $Output -TimeoutSeconds 10
+            $Parameters = @{ Store = $Store }
+            for ($Index = 0; $Index -lt $Options.Count; $Index += 2) { $Parameters[$Options[$Index].Substring(1)] = $Options[$Index + 1] }
+            $Environment = @{ HVE_EFFICIENCY_PROBE_SCRIPT = $Script; HVE_EFFICIENCY_PROBE_PARAMETERS = (ConvertTo-Json -InputObject $Parameters -Compress) }
+            $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-NonInteractive', '-Command', $ProbeCommand) -WorkingDirectory $Root -OutputPath $Output -TimeoutSeconds 10 -EnvironmentVariables $Environment -InputText ''
             $Value = $null
             if ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none') { $Value = Get-Content -LiteralPath $Output -Raw | ConvertFrom-Json -AsHashtable -NoEnumerate }
             @{ ok = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none'); rejected = ($null -ne $Result.exitCode -and $Result.exitCode -ne 0 -and $Result.stopCause -eq 'none'); value = $Value; exitCode = $Result.exitCode; stopCause = $Result.stopCause }
@@ -64,16 +79,21 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Before = (Get-FileHash -LiteralPath $Store).Hash
         $Bad = & $Invoke -Options @('-Action', 'list')
         & $Record 'corrupt-store-preserved' ($Bad.rejected -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before)
-        Set-Content -LiteralPath $Store -Value '[{"id":2147483647,"title":"Boundary task","status":"open"}]' -NoNewline -Encoding utf8NoBOM
-        $Before = (Get-FileHash -LiteralPath $Store).Hash
-        $Boundary = & $Invoke -Options @('-Action', 'add', '-Title', 'After boundary')
-        $BoundaryPassed = $false
-        if ($Boundary.ok -and $Boundary.value -is [Collections.IDictionary] -and ($Boundary.value['id'] -is [int] -or $Boundary.value['id'] -is [long]) -and $Boundary.value['id'] -gt [int]::MaxValue) {
-            $List = & $Invoke -Options @('-Action', 'list')
-            $Done = & $Invoke -Options @('-Action', 'done', '-Id', [string]$Boundary.value['id'])
-            $BoundaryPassed = ($List.ok -and $List.value -is [array] -and $List.value.Count -eq 2 -and $List.value[0]['id'] -eq [int]::MaxValue -and $List.value[0]['title'] -ceq 'Boundary task' -and $List.value[1]['id'] -eq $Boundary.value['id'] -and $Done.ok -and $Done.value['id'] -eq $Boundary.value['id'] -and $Done.value['title'] -ceq 'After boundary' -and $Done.value['status'] -eq 'done')
-        } elseif ($Boundary.rejected) {
-            $BoundaryPassed = (Test-Path -LiteralPath $Store -PathType Leaf) -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before
+        $BoundaryPassed = $true
+        foreach ($Maximum in @([long][int]::MaxValue, [long]::MaxValue)) {
+            $Seed = @(@{ id = $Maximum; title = 'Boundary task'; status = 'open' })
+            ConvertTo-Json -InputObject $Seed -Compress | Set-Content -LiteralPath $Store -NoNewline -Encoding utf8NoBOM
+            $Before = (Get-FileHash -LiteralPath $Store).Hash
+            $Boundary = & $Invoke -Options @('-Action', 'add', '-Title', 'After boundary')
+            $Preserved = $false
+            if ($Maximum -lt [long]::MaxValue -and $Boundary.ok -and $Boundary.value -is [Collections.IDictionary] -and ($Boundary.value['id'] -is [int] -or $Boundary.value['id'] -is [long]) -and $Boundary.value['id'] -gt $Maximum) {
+                $List = & $Invoke -Options @('-Action', 'list')
+                $Done = & $Invoke -Options @('-Action', 'done', '-Id', [string]$Boundary.value['id'])
+                $Preserved = ($List.ok -and $List.value -is [array] -and $List.value.Count -eq 2 -and $List.value[0]['id'] -eq $Maximum -and $List.value[0]['title'] -ceq 'Boundary task' -and $List.value[0]['status'] -eq 'open' -and $List.value[1]['id'] -eq $Boundary.value['id'] -and $Done.ok -and $Done.value['id'] -eq $Boundary.value['id'] -and $Done.value['title'] -ceq 'After boundary' -and $Done.value['status'] -eq 'done')
+            } elseif ($Boundary.rejected) {
+                $Preserved = (Test-Path -LiteralPath $Store -PathType Leaf) -and (Get-FileHash -LiteralPath $Store).Hash -eq $Before
+            }
+            $BoundaryPassed = $BoundaryPassed -and $Preserved
         }
         & $Record 'id-boundary-preserves-store' $BoundaryPassed
     }

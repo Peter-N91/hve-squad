@@ -339,12 +339,13 @@ Describe 'model-routing.md phrase-survival for security- and precedence-critical
         }
     }
 
-    It 'carries the default routing=off behavior statement verbatim' {
-        $script:RoutingRaw | Should -Match $([regex]::Escape('No policy is the default and is byte-for-byte today''s behavior'))
+    It 'leaves dispatch model selection unchanged when no routing policy applies' {
+        $script:RoutingRaw | Should -Match $([regex]::Escape('**No policy is the default; dispatch model selection is unchanged.**'))
+        $script:RoutingRaw | Should -Match 'omits the dispatch `model` parameter entirely'
     }
 
-    It 'carries the new "Scribe must not inherit the frontier session model" sentence, consistent with its pin and floor' {
-        $script:RoutingRaw | Should -Match $([regex]::Escape('The Scribe must not inherit the frontier session model'))
+    It 'keeps the dispatched Scribe on its pin rather than the frontier session model' {
+        $script:RoutingRaw | Should -Match $([regex]::Escape('Never substitute the frontier session model for a dispatched Scribe'))
 
         $scribeAgentRaw = Get-Content -LiteralPath (Join-Path $script:AgentsRoot 'squad-scribe.agent.md') -Raw
         $scribeAgentRaw | Should -Match '(?m)^model:\s*Claude Haiku 5\.5'

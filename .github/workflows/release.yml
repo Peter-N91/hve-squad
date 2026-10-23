@@ -28,7 +28,7 @@ on:
       run_benchmark:
         description: 'Require recorded benchmark non-regression before release. Uncheck only for an intentional manual bypass.'
         required: false
-        default: false
+        default: true
         type: boolean
   push:
     branches:
@@ -70,7 +70,8 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.run_benchmark != false
     permissions:
       contents: read
-    uses: ./.github/workflows/tier2-benchmark.yml
+      pull-requests: read
+    uses: ./.github/workflows/tier2-recorded-benchmark.yml
     with:
       candidate_sha: ${{ needs.candidate.outputs.sha }}
 
@@ -214,7 +215,7 @@ jobs:
           if [[ -z "$NOTES" ]]; then
             NOTES="See [CHANGELOG.md](CHANGELOG.md) for full details."
           fi
-          printf '%s' "$NOTES" > /tmp/release_notes.md
+          printf '%s' "$NOTES" > release_notes.md
 
       # ── Pin squad self-references, then tag that commit ──────────────────
       #    The 47 Peter-N91/hve-squad entries in apm.yml ship as bare paths, and
@@ -267,7 +268,7 @@ jobs:
           ARGS=(
             "$TAG"
             --title "$TAG"
-            --notes-file /tmp/release_notes.md
+            --notes-file release_notes.md
           )
           [[ "$DRAFT" == "true" ]] && ARGS+=(--draft)
 

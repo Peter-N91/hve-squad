@@ -111,6 +111,11 @@
     or inserted, or a -BaselinePath file or protected artifact changed;
     `ledger-only` for every other mismatch, which is cost accounting the next
     -Write re-derives from history/ and which never blocks a run.
+    When history contains only Squad Scribe setup usage, also requires the
+    canonical initialization Cost Comparison: n/a until the first work dispatch.
+    Actual-work comparisons are checked numerically for stale estimated cost,
+    credits and recognized savings; missing/unrecognized comparisons are ledger-only
+    mismatches. Independent Observed Usage never substitutes for estimated figures.
 .PARAMETER ExpectedHistoryCounts
     Optional hashtable keyed by history file name (with or without the `.md`
     extension, e.g. `'Squad Researcher'` or `'Squad Researcher.md'`) whose value is
@@ -122,7 +127,9 @@
     Scribe-invoked write mode. Derives the same fragment the default markdown mode
     prints, then replaces the existing `## Attribution` heading through the closing
     fence of the `### Derivation` block inside the squad root's `consumption.md`,
-    leaving the H1, frontmatter, Basis note, and Cost Comparison section untouched,
+    leaving the H1, frontmatter and Basis note untouched, refreshing the estimated
+    Cost Comparison from those same totals while preserving supplied manual-baseline
+    assumptions and notes (no baseline is invented),
     and sets only `currentRun.estCostUsd` and `currentRun.estCreditsTotal` in
     `state.json` to the derived run totals (a value-only replacement, so every other
     byte of `state.json`, including date strings, is preserved). Refuses, writing
@@ -137,6 +144,8 @@
     orchestration shares; -Format json adds `unitEconomics`). -Write replaces it
     when present, else inserts it before `## Observed Usage (host-reported)` or
     `## Cost Comparison`; -Check ignores it.
+    Initialization-only history instead stamps a canonical n/a Cost Comparison;
+    it never invents a manual baseline. Observed Usage remains untouched.
 .PARAMETER Format
     Output shape: `markdown` (default) prints the pasteable table and Derivation
     block; `json` prints the same figures as a structured object instead, for a
@@ -1951,6 +1960,77 @@ function Get-ConsumptionWithSectionLocal {
     return ($lines -join $newline)
 }
 
+function Get-CostComparisonUpdateLocal {
+    param(
+        [Parameter(Mandatory)][string]$Text,
+        [Parameter(Mandatory)][double]$CostUsd,
+        [Parameter(Mandatory)][double]$Credits,
+        [Parameter(Mandatory)][int]$AgentCount
+    )
+    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+    $newline = if ($Text.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $issues = [System.Collections.Generic.List[string]]::new()
+    $heading = [regex]::Match($Text, '(?m)^##[ \t]+Cost Comparison[^\r\n]*(?:\r?\n|$)')
+    $added = -not $heading.Success
+    $start = if ($added) { $Text.Length } else { $heading.Index + $heading.Length }
+    $next = [regex]::Match($Text.Substring($start), '(?m)^##[ \t]+')
+    $length = if ($next.Success) { $next.Index } else { $Text.Length - $start }
+    $body = $Text.Substring($start, $length)
+    $number = '[0-9][0-9,]*(?:\.\d+)?'
+    $figure = '\*\*\$(?<cost>{0}) \(~(?<credits>{0}) AI credits\)\*\*' -f $number
+    $line = [regex]::Match($body, '(?m)^This run consumed an estimated (?<figure>\*\*\$[^*\r\n]+\*\*)[^\r\n]*')
+    $numeric = [regex]::Match($line.Groups['figure'].Value, "^$figure$")
+    $baselinePattern = 'estimated at \*\*\$(?<manual>{0}) \(~{0} AI credits\)\*\*' -f $number
+    if ($line.Success -and ($numeric.Success -or [regex]::IsMatch($line.Value, $baselinePattern))) {
+        if ($numeric.Success) {
+            $quotedCost = [double]::Parse($numeric.Groups['cost'].Value.Replace(',', ''), $culture)
+            $quotedCredits = [double]::Parse($numeric.Groups['credits'].Value.Replace(',', ''), $culture)
+            if ([math]::Round($quotedCost, 4) -ne [math]::Round($CostUsd, 4)) { $issues.Add('Cost Comparison estimated cost differs from the derived ledger total.') }
+            if ([math]::Round($quotedCredits, 2) -ne [math]::Round($Credits, 2)) { $issues.Add('Cost Comparison estimated credits differ from the derived ledger total.') }
+        }
+        else { $issues.Add('Cost Comparison has no recognizable estimated squad figures; run -Write to finalize it.') }
+        $prefix = 'This run consumed an estimated **${0} (~{1} AI credits)**' -f $CostUsd.ToString('F4', $culture), $Credits.ToString('F2', $culture)
+        $updated = $prefix + $line.Value.Substring($line.Groups['figure'].Index + $line.Groups['figure'].Length - $line.Index)
+        $updated = $updated.Replace('<n>', $AgentCount.ToString($culture))
+        $updated = $updated -replace 'across \d+ specialized agent\(s\) \(squad figure only;', "across $AgentCount specialized agent(s) (squad figure only;"
+        $updated = $updated -replace ' \(stale — refreshed at run end\)$', ''
+        $baseline = [regex]::Match($updated, $baselinePattern)
+        $saving = [regex]::Match($updated, '(?:a )?saving of about \*\*(?<pct>[+-]?\d+(?:\.\d+)?|<savings-pct>)%\*\*')
+        if ($baseline.Success -and $saving.Success) {
+            $manual = [double]::Parse($baseline.Groups['manual'].Value.Replace(',', ''), $culture)
+            if ($manual -gt 0) {
+                $digits = if ($saving.Groups['pct'].Value.Contains('.')) { [math]::Min(15, $saving.Groups['pct'].Value.Split('.')[1].Length) } else { 0 }
+                $expected = (100.0 * ($manual - $CostUsd) / $manual).ToString("F$digits", $culture)
+                if ($saving.Groups['pct'].Value -eq '<savings-pct>' -or [double]::Parse($saving.Groups['pct'].Value, $culture) -ne [double]::Parse($expected, $culture)) { $issues.Add('Cost Comparison saving differs from the supplied manual baseline and derived total.') }
+                $updated = $updated.Substring(0, $saving.Groups['pct'].Index) + $expected + $updated.Substring($saving.Groups['pct'].Index + $saving.Groups['pct'].Length)
+            }
+            else {
+                $issues.Add('Cost Comparison saving is unavailable with a non-positive manual baseline.')
+                $updated = $updated.Substring(0, $saving.Index) + 'saving unavailable (non-positive manual baseline)' + $updated.Substring($saving.Index + $saving.Length)
+            }
+        }
+        elseif ($saving.Success) {
+            $issues.Add('Cost Comparison saving has no recognizable manual baseline.')
+            $updated = $updated.Substring(0, $saving.Index) + 'saving unavailable (manual baseline unavailable)' + $updated.Substring($saving.Index + $saving.Length)
+        }
+        $body = $body.Substring(0, $line.Index) + $updated + $body.Substring($line.Index + $line.Length)
+    }
+    else {
+        $issues.Add('Cost Comparison is missing or has no recognizable estimated squad figures; run -Write to finalize it.')
+        $fallback = 'This run consumed an estimated **${0} (~{1} AI credits)** across {2} specialized agent(s) (squad figure only; manual baseline and saving unavailable; independent host-reported comparisons remain in Observed Usage).' -f $CostUsd.ToString('F4', $culture), $Credits.ToString('F2', $culture), $AgentCount
+        $seed = [regex]::Match($body, '(?m)^(?:n/a \(initialization\)\.|This run has not yet dispatched|This run consumed an estimated)[^\r\n]*')
+        if ($seed.Success) { $body = $body.Substring(0, $seed.Index) + $fallback + $body.Substring($seed.Index + $seed.Length) }
+        else { $body = "$newline$fallback$newline$newline" + $body }
+    }
+    $result = if ($added) {
+        $template = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '../references/consumption.md'))
+        $disclaimer = [regex]::Match($template, '(?m)^> Estimates only\.[^\r\n]*').Value
+        $Text.TrimEnd() + "$newline${newline}## Cost Comparison (illustrative)$newline" + $body + "$newline$disclaimer$newline"
+    }
+    else { $Text.Substring(0, $start) + $body + $Text.Substring($start + $length) }
+    [pscustomobject]@{ Text = $result; Issues = $issues.ToArray(); Added = $added }
+}
+
 # ---------------------------------------------------------------------------
 # Unit economics (value): cost per deliverable an independent review accepted.
 # ---------------------------------------------------------------------------
@@ -2497,9 +2577,19 @@ if (-not $Check -and $identityGuardResult) {
 # -Check: compare against the squad root's own consumption.md, write nothing.
 # ---------------------------------------------------------------------------
 
+$initializationOnly = @($historyFiles | Where-Object { $_.Name -ne 'Squad Scribe.md' }).Count -eq 0
+$initializationComparison = 'n/a (initialization). Setup spend is recorded above; the first comparison follows the first work dispatch. Estimates only, not billed.'
+
 if ($Check) {
     $mismatches = [System.Collections.Generic.List[string]]::new()
     $infoLines = [System.Collections.Generic.List[string]]::new()
+    if ($initializationOnly -and $existingConsumptionContent -notmatch ('(?m)^## Cost Comparison \(illustrative\)\r?\n\r?\n' + [regex]::Escape($initializationComparison) + '\r?$')) {
+        $mismatches.Add('Initialization Cost Comparison is missing or changed; run -Write to derive it without a fictional baseline.')
+    }
+    elseif (-not $initializationOnly -and -not $isFederationRoot -and $existingConsumptionContent) {
+        $comparison = Get-CostComparisonUpdateLocal -Text $existingConsumptionContent -CostUsd $totalCost -Credits $totalCredits -AgentCount (@($roleAggregates | Where-Object Label -ne 'orchestration').Count)
+        foreach ($issue in $comparison.Issues) { $mismatches.Add($issue) }
+    }
 
     # Post-baseline malformed/illegal-model_source blocks (item 3): under -Check
     # these are reported as FAILs rather than thrown (see the non--Check throw
@@ -2863,6 +2953,13 @@ if ($Write) {
     }
     # After the Observed section so a first write lands the value section before it.
     $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines (Get-UnitEconomicsSectionLinesLocal -Ue $unitEconomics) -HeadingPattern '^##\s+Unit Economics \(value\)\s*$' -InsertBeforePatterns @('^##\s+Observed Usage \(host-reported\)', '^##\s+Cost Comparison')
+    if ($initializationOnly) {
+        $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines @('## Cost Comparison (illustrative)', '', $initializationComparison, '') -HeadingPattern '^##\s+Cost Comparison.*$' -InsertBeforePatterns @('(?!)')
+    }
+    else {
+        $comparison = Get-CostComparisonUpdateLocal -Text $updates[0].Text -CostUsd $totalCost -Credits $totalCredits -AgentCount (@($roleAggregates | Where-Object Label -ne 'orchestration').Count)
+        $updates[0].Text = $comparison.Text
+    }
     # Each file is written to a temp file beside it and moved into place; when the second move fails,
     # the first file gets its original bytes back, so a direct -Write never leaves one file updated alone.
     $applied = [System.Collections.Generic.List[hashtable]]::new()
@@ -2890,6 +2987,7 @@ if ($Write) {
         }
     }
     foreach ($w in $warnings) { Write-Warning $w }
+    if (-not $initializationOnly -and $comparison.Added) { Write-Host 'APPENDED Cost Comparison section to consumption.md' }
     Write-Host ("Measure-SquadLedger -Write: rewrote the Attribution, Usage & Cost, Derivation, and Unit Economics (value) sections of consumption.md and set run totals in state.json (estCostUsd={0:F4}, estCreditsTotal={1:F2})." -f $totalCost, $totalCredits) -ForegroundColor Green
     exit 0
 }

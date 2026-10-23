@@ -29,7 +29,7 @@ BeforeAll {
         <#
         .SYNOPSIS
             Runs the seeder in a child pwsh and returns its exit code and combined output.
-            Seeding is economy-only, so -Mode economy is passed unless -NoMode is given.
+            Existing Init callers can still pass -Mode; seeding is routing-independent.
         #>
         param([Parameter(Mandatory)][string[]]$Arguments, [switch]$NoMode)
         if (-not $NoMode -and '-Mode' -notin $Arguments) { $Arguments += @('-Mode', 'economy') }
@@ -55,7 +55,7 @@ BeforeAll {
     }
 }
 
-Describe 'Initialize-SquadConsumptionRates.ps1 runs only under Model routing: economy (G2)' {
+Describe 'Initialize-SquadConsumptionRates.ps1 supports every routing mode (WRT-06)' {
     BeforeAll {
         function New-TeamRoot {
             param([string]$ModeLine)
@@ -68,29 +68,32 @@ Describe 'Initialize-SquadConsumptionRates.ps1 runs only under Model routing: ec
         }
     }
 
-    It 'refuses with exit 7 and writes nothing when team.md records <Case>' -ForEach @(
+    It 'seeds, checks and reseeds when team.md records <Case>' -ForEach @(
+        @{ Case = 'Model routing: off'; Line = 'Model routing: off' }
         @{ Case = 'Model routing: ranked'; Line = 'Model routing: ranked' }
         @{ Case = 'no Model routing line'; Line = '' }
         @{ Case = 'Model routing: manual'; Line = 'Model routing: manual' }
+        @{ Case = 'Model routing: economy'; Line = 'Model routing: economy' }
     ) {
         $root = New-TeamRoot -ModeLine $Line
         foreach ($extra in @(@(), @('-Check'), @('-Reseed'))) {
             $result = Invoke-Seeder -Arguments (@('-SquadRoot', $root) + $extra)
-            $result.ExitCode | Should -Be 7 -Because "team.md is authoritative over -Mode economy: $($result.Output)"
-            $result.Output | Should -Match 'economy-only'
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            Read-Lf (Join-Path $root 'consumption-rates.md') | Should -BeExactly $script:SeedBlock
         }
-        Test-Path -LiteralPath (Join-Path $root 'consumption-rates.md') | Should -BeFalse
     }
 
-    It 'refuses with exit 7 at Init when -Mode is <Mode>' -ForEach @(
+    It 'seeds at Init when -Mode is <Mode>' -ForEach @(
         @{ Mode = 'off' }
         @{ Mode = 'ranked' }
+        @{ Mode = 'manual' }
+        @{ Mode = 'economy' }
         @{ Mode = '' }
     ) {
         $root = Join-Path $TestDrive "init-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
         $result = if ($Mode) { Invoke-Seeder -Arguments @('-SquadRoot', $root, '-Mode', $Mode) } else { Invoke-Seeder -Arguments @('-SquadRoot', $root) -NoMode }
-        $result.ExitCode | Should -Be 7 -Because $result.Output
-        Test-Path -LiteralPath $root | Should -BeFalse
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Read-Lf (Join-Path $root 'consumption-rates.md') | Should -BeExactly $script:SeedBlock
     }
 
     It 'seeds when team.md records Model routing: economy, with no -Mode' {
