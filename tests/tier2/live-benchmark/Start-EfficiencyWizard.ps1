@@ -312,11 +312,15 @@ function Invoke-WizardRunPlan {
         try {
             $Code = & $Execute $Step
             if ($Code -isnot [int]) { $Code = 1; throw 'Executor did not return one status code.' }
-            if ($Step.kind -eq 'Benchmark') { $Summary = Get-WizardBenchmarkSummary -Options $Step.arguments }
+            if ($Step.kind -eq 'Benchmark') {
+                $ResultEvidenceFailed = $true
+                $Summary = Get-WizardBenchmarkSummary -Options $Step.arguments
+                $ResultEvidenceFailed = $false
+            }
         }
         catch {
             Write-Warning "Wizard step '$($Step.name)' failed or its result evidence could not be read. Inspect the retained stage log and out/report.json and out/benchmark-export.json."
-            if ($Code -eq 0) { $Code = 1; $ResultEvidenceFailed = $true }
+            if ($Code -eq 0) { $Code = 1 }
         }
         $Entry = @{ stage = $Step.name; exitCode = $Code }
         if ($Summary) { $Entry.benchmark = $Summary }

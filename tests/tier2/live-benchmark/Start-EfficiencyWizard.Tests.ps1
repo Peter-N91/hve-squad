@@ -56,8 +56,13 @@ Describe 'Wizard recorded collection outcomes' -Tag 'Unit' {
         $Saved.acceptedBaselineChanged | Should -BeFalse
         Should -Invoke Write-Host -ParameterFilter { $Object -like '*Independent checks: failed*' } -Times 1 -Exactly
     }
-    It 'fails explicitly on <Damage> evidence even when the child returned zero' -ForEach @(
-        @{ Damage = 'missing-report' }, @{ Damage = 'malformed-report' }, @{ Damage = 'invalid-report' }, @{ Damage = 'failed-export' }
+    It 'fails explicitly on <Damage> evidence after executor exit <ExecutorExit>' -ForEach @(
+        @{ Damage = 'missing-report'; ExecutorExit = 0 }
+        @{ Damage = 'malformed-report'; ExecutorExit = 0 }
+        @{ Damage = 'invalid-report'; ExecutorExit = 0 }
+        @{ Damage = 'failed-export'; ExecutorExit = 0 }
+        @{ Damage = 'failed-export'; ExecutorExit = 1 }
+        @{ Damage = 'failed-export'; ExecutorExit = 2 }
     ) {
         New-WizardResultFixture -Root $script:SummaryOptions.TrialRoot
         switch ($Damage) {
@@ -68,8 +73,8 @@ Describe 'Wizard recorded collection outcomes' -Tag 'Unit' {
         }
         { Get-WizardBenchmarkSummary $script:SummaryOptions } | Should -Throw '*Benchmark result evidence*offline*without paid retries*'
         Mock Write-Warning {}
-        $Result = Invoke-WizardRunPlan -Steps @(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $script:SummaryOptions }) -Execute { 0 }
-        $Result.exitCode | Should -Be 1
+        $Result = Invoke-WizardRunPlan -Steps @(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $script:SummaryOptions }) -Execute { $ExecutorExit }.GetNewClosure()
+        $Result.exitCode | Should -Be $(if ($ExecutorExit -eq 2) { 2 } else { 1 })
         $Result.outcome | Should -Be failed
         $Result.repair | Should -Match 'offline, without paid retries'
         Should -Invoke Write-Warning -Times 1 -Exactly -ParameterFilter { $Message -like '*result evidence could not be read*' -and $Message -notlike '*PRIVATE*' }

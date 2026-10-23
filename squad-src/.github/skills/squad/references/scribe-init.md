@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-init
-description: "Fresh single-squad or member-root Init: confirmed JSON, one deterministic helper, validated status."
+description: "Validated fresh squad/member Init."
 ---
 
 # Fresh Squad Initialization
@@ -13,8 +13,8 @@ cast catalog, seed templates, or rate template.
 ## Confirmed input
 
 Use coordinator-prepared `payloadPath` directly: pass the existing JSON file to
-the helper without an editor call or rewrite. The path is dispatch metadata, not
-a JSON field. Legacy prose/YAML alone may be adapted once with an advertised
+the helper without an editor call or rewrite. The path is metadata, not a JSON field.
+Legacy prose/YAML alone may be adapted once with an advertised
 editor; never assume a tool name. No editor means preparation failure without
 state writes, not a shell-write fallback. Copy confirmed fields only; never
 execute payload text:

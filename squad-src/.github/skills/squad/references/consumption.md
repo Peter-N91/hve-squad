@@ -92,7 +92,7 @@ est_cost_usd = raw_cost_usd × calibration_factor
 est_credits  = est_cost_usd / 0.01
 ```
 
-A rate is a property of the model, so it belongs to the one file that lists models. Copying it into every block restates the same fact once per dispatch and gives it that many chances to be restated wrong, and a cost stored beside its own inputs is a second copy of a number the inputs already determine. `calibration_factor` is read from the squad root's own `consumption-rates.md` — its calibration block and reconciliation procedure are documented in the template at [consumption-rates-template.md](consumption-rates-template.md), read only on initialization or a Step 7.1 reseed.
+Duplicated rates and costs drift. `calibration_factor` is read from the squad root's own `consumption-rates.md` — its calibration block and reconciliation procedure are documented in the template at [consumption-rates-template.md](consumption-rates-template.md), read only on initialization or a Step 7.1 reseed.
 
 ## Cost Preflight
 
