@@ -80,6 +80,19 @@ set initial paths. The default work root is `%LOCALAPPDATA%\hve-squad\efficiency
 (the corresponding local application-data directory on Linux), outside the checkout.
 Every launch uses a fresh `run-<timestamp>-<id>` and preserves old reports and controls.
 
+The last completed valid questionnaire is remembered in
+`.efficiency-wizard-defaults.json` at the wizard checkout root. This file and its
+atomic-write temporaries are gitignored. Both launchers reuse the saved mode,
+paths, model, credit ceilings and scheduling as question defaults; explicit
+work/control paths and `-ParallelTrials` take precedence. A changed plan raises
+the total default if needed to cover every reservation. Offline mode preserves
+your previous live answers. Cancelled or invalid questionnaires do not replace
+them, and later prerequisite/test failures do not discard completed answers.
+Delete this file to reset defaults; malformed settings stop with reset guidance.
+Credentials and login choices are never stored. The spending authorization
+answer is saved against its configuration as a reminder only: every live run
+still requires fresh explicit isolation/spending confirmation; blank means no.
+
 Live modes accept current CLI versions advertising `--sync-session off`, or older
 versions advertising both `--no-remote` and `--no-remote-export`. The wizard no
 longer demands flags removed in CLI 1.0.103. The same policy protects workflow,
@@ -87,7 +100,7 @@ judge and ACP launches; an unrecognized sync policy fails closed. Modern sync-of
 disables account-history upload, not incoming control: the harness creates local
 sessions and never opts into remote connection/hosting modes. This is not an OS sandbox.
 
-After the credit ceilings, choose **Serial** (default) or **Three observations in
+After the credit ceilings, choose **Serial** (initial default) or **Three observations in
 parallel**, or pass `-ParallelTrials` through either launcher to select it directly.
 The bash starter forwards this switch unchanged with quoted path arguments.
 Parallel mode starts three independent native trials, each with its
@@ -105,12 +118,13 @@ the control phase before starting candidates; offline checks remain first.
 | Complete | Full offline self-tests, three fresh controls, then three candidates against them and automatic comparison |
 | Offline | Full offline self-tests only; no GitHub/Copilot login or model requests |
 
-Establish is recommended without saved controls; Series is recommended when a
-control file is supplied or discovered. Complete is not retry-until-success.
+Initially, Establish is recommended without saved controls; Series is recommended
+when a control file is supplied or discovered. Later runs default to the remembered
+mode; an explicitly supplied control path recommends Series. Complete is not retry-until-success.
 Selecting the same source for both arms tests repeatability, not patch improvement.
 Select separate baseline/candidate checkouts to compare an actual patch.
 
-Wizard observational defaults are `claude-sonnet-5.5`, 100 AI credits per complete run, 300 total for
+Initial wizard observational defaults are `claude-sonnet-5.5`, 100 AI credits per complete run, 300 total for
 three new runs or 600 for six. These are ceilings, not cost predictions. Paths,
 model and credit ceilings can be changed. The wizard verifies the whole reservation,
 requires explicit disposable-isolation and spending confirmation, preserves the

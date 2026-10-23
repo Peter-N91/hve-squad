@@ -6,8 +6,9 @@
 BeforeAll {
     . (Join-Path $PSScriptRoot 'Start-EfficiencyWizard.ps1')
     Mock Write-Host {}
+    Mock Get-WizardDefaultsPath { Join-Path $TestDrive 'wizard-defaults.json' }
     function New-WizardTestConfig {
-        @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 60.0; TotalCredits = 360.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = '' }
+        @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 60.0; TotalCredits = 360.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = ''; ParallelTrials = $false }
     }
 }
 
@@ -160,6 +161,124 @@ Describe 'Wizard decisions and guards' -Tag 'Unit' {
         { Assert-WizardScratchPath $TestDrive $Source } | Should -Throw
         { Assert-WizardScratchPath ([IO.Path]::GetPathRoot($Source)) $Source } | Should -Throw
         Assert-WizardScratchPath (Join-Path $TestDrive 'scratch') $Source | Should -Be (Join-Path $TestDrive 'scratch')
+    }
+}
+
+Describe 'Wizard remembered defaults' -Tag 'Unit' {
+    BeforeEach {
+        $script:MemorySource = Join-Path $TestDrive 'memory-source'
+        $script:MemoryConfig = New-WizardTestConfig
+        $script:MemoryConfig.WorkRoot = Join-Path $TestDrive 'memory-work'
+        $script:MemoryConfig.BaselineSourceRoot = Join-Path $TestDrive 'memory-baseline'
+        $script:MemoryConfig.CandidateSourceRoot = Join-Path $TestDrive 'memory-candidate'
+        $script:MemoryConfig.Model = 'remembered-model'
+        $script:MemoryConfig.PerRunCredits = 1000.0
+        $script:MemoryConfig.TotalCredits = 7500.0
+        $script:MemoryConfig.ParallelTrials = $true
+        foreach ($Source in @($script:MemorySource, $script:MemoryConfig.BaselineSourceRoot, $script:MemoryConfig.CandidateSourceRoot)) {
+            New-Item -ItemType Directory -Path (Join-Path $Source 'squad-src'), (Join-Path $Source '.git') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $Source 'apm.yml') -Value 'name: fixture'
+        }
+        Mock Read-WizardText { $Default }
+        Mock Read-WizardChoice { $Default }
+    }
+    It 'uses remembered answers as defaults while creating fresh run evidence' {
+        $script:MemoryConfig.Token = 'not-a-real-credential'
+        Save-WizardDefaults -Config $script:MemoryConfig
+        $Config = Get-WizardConfiguration -Source $script:MemorySource
+        foreach ($Key in @('Mode', 'WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')) {
+            $Config[$Key] | Should -Be $script:MemoryConfig[$Key]
+        }
+        $Config.RunRoot | Should -Not -Be $script:MemoryConfig.RunRoot
+        $Saved = Get-Content -LiteralPath (Get-WizardDefaultsPath) -Raw
+        $Saved | Should -Not -Match 'Token|not-a-real-credential|RunRoot|InstallRoot'
+        Should -Invoke Read-WizardChoice -Times 1 -Exactly -ParameterFilter { $Question -eq 'What should run?' -and $Default -eq '3' }
+        Should -Invoke Read-WizardChoice -Times 1 -Exactly -ParameterFilter { $Question -eq 'Execution' -and $Default -eq '2' }
+    }
+    It 'honors explicit work paths and adjusts total defaults to changed reservations' {
+        $script:MemoryConfig.Mode = 'Establish'
+        $script:MemoryConfig.TotalCredits = 3000.0
+        Save-WizardDefaults -Config $script:MemoryConfig
+        Mock Read-WizardText { if ($Question -eq 'Maximum AI credits per complete run') { '2000' } else { $Default } }
+        Mock Read-WizardChoice { if ($Question -eq 'What should run?') { '3' } else { $Default } }
+        $Override = Join-Path $TestDrive 'explicit-work'
+        $Config = Get-WizardConfiguration -Source $script:MemorySource -Scratch $Override -ParallelTrials
+        $Config.WorkRoot | Should -Be $Override
+        $Config.TotalCredits | Should -Be 12000
+        $Config.ParallelTrials | Should -BeTrue
+        Should -Invoke Read-WizardChoice -Times 0 -Exactly -ParameterFilter { $Question -eq 'Execution' }
+    }
+    It 'preserves live answers in Offline mode and never treats remembered authorization as consent' {
+        Save-WizardDefaults -Config $script:MemoryConfig -SpendingAuthorized $true
+        Mock Read-WizardChoice { '4' }
+        $Config = Get-WizardConfiguration -Source $script:MemorySource
+        $Config.Mode | Should -Be Offline
+        $Saved = Read-WizardDefaults
+        $Saved.Model | Should -Be 'remembered-model'
+        $Saved.PerRunCredits | Should -Be 1000
+        $Saved.ParallelTrials | Should -BeTrue
+        $Saved.SpendingAuthorization.approved | Should -BeTrue
+        Mock Read-Host { '' }
+        Confirm-WizardAction 'Spend credits?' | Should -BeFalse
+    }
+    It 'remembers an explicit none control choice instead of rediscovering older controls' {
+        $script:MemoryConfig.Mode = 'Series'
+        $script:MemoryConfig.ParallelTrials = $false
+        Save-WizardDefaults -Config $script:MemoryConfig
+        $Control = Join-Path $script:MemoryConfig.WorkRoot 'run-old/control/out/control-series.json'
+        New-Item -ItemType Directory -Path (Split-Path $Control -Parent) -Force | Out-Null
+        @{ schemaVersion = 'efficiency-control-v1'; runs = @(@{}, @{}, @{}) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Control
+        $Config = Get-WizardConfiguration -Source $script:MemorySource
+        $Config.BaselineEvidencePath | Should -Be ''
+        $Config.ParallelTrials | Should -BeFalse
+        $Saved = Read-WizardDefaults
+        $Saved.Mode = 'Offline'
+        Save-WizardDefaults -Config @{ Mode = 'Offline'; WorkRoot = $Config.WorkRoot } -Previous $Saved
+        $Explicit = Get-WizardConfiguration -Source $script:MemorySource -SavedControl $Control
+        $Explicit.Mode | Should -Be Series
+        $Explicit.BaselineEvidencePath | Should -Be $Control
+    }
+    It 'leaves memory unchanged for cancelled or invalid questionnaires' {
+        Save-WizardDefaults -Config $script:MemoryConfig
+        $Before = (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash
+        Mock Read-WizardText {
+            if ($Question -like 'Coordinator*') { throw [OperationCanceledException]::new('Wizard cancelled.') }
+            $Default
+        }
+        { Get-WizardConfiguration -Source $script:MemorySource } | Should -Throw '*cancelled*'
+        (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
+        Mock Read-WizardText { if ($Question -eq 'Maximum AI credits per complete run') { 'NaN' } else { $Default } }
+        { Get-WizardConfiguration -Source $script:MemorySource } | Should -Throw '*finite positive*'
+        (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
+    }
+    It 'retains completed answers when a later prerequisite fails' {
+        Save-WizardDefaults -Config $script:MemoryConfig
+        Mock Read-WizardText { if ($Question -like 'Coordinator*') { 'retry-model' } else { $Default } }
+        Mock Install-WizardPrerequisite { throw 'Fixture prerequisite failure' }
+        Mock Confirm-WizardAction { throw 'No authorization should be requested yet' }
+        $Result = Invoke-EfficiencyWizard -Source $script:MemorySource
+        $Result.failedStage | Should -Be 'Prerequisite installation'
+        (Read-WizardDefaults).Model | Should -Be 'retry-model'
+        Should -Invoke Confirm-WizardAction -Times 0
+    }
+    It 'rejects invalid saved data with reset guidance: <Case>' -ForEach @(
+        @{ Case = 'syntax'; Json = '{invalid-json' },
+        @{ Case = 'version'; Json = '{"schemaVersion":"unknown"}' },
+        @{ Case = 'unexpected consent'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","Live":true}' },
+        @{ Case = 'credit type'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","PerRunCredits":"1000"}' },
+        @{ Case = 'credit value'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","PerRunCredits":0}' },
+        @{ Case = 'parallel type'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","ParallelTrials":"yes"}' },
+        @{ Case = 'authorization type'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","SpendingAuthorization":true}' }
+    ) {
+        Set-Content -LiteralPath (Get-WizardDefaultsPath) -Value $Json
+        { Read-WizardDefaults } | Should -Throw '*Remove this file to reset*'
+    }
+    It 'surfaces write failures without replacing previous memory' {
+        Save-WizardDefaults -Config $script:MemoryConfig
+        $Before = (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash
+        Mock Set-Content { throw [IO.IOException]::new('Fixture write failure') } -ParameterFilter { $LiteralPath -like '*wizard-defaults.json.*.tmp' }
+        { Save-WizardDefaults -Config $script:MemoryConfig } | Should -Throw '*write failure*'
+        (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
     }
 }
 
@@ -358,6 +477,7 @@ Describe 'Wizard complete coordination' -Tag 'Unit' {
         $Saved = Get-Content (Join-Path $script:WizardConfig.RunRoot 'wizard-result.json') -Raw | ConvertFrom-Json
         $Saved.outcome | Should -Be passed
         $Saved.acceptedBaselineChanged | Should -BeFalse
+        (Read-WizardDefaults).SpendingAuthorization.approved | Should -BeTrue
         Should -Invoke Read-WizardText -Times 0
     }
     It 'stops before any benchmark when the full offline test stage fails' {
@@ -369,10 +489,24 @@ Describe 'Wizard complete coordination' -Tag 'Unit' {
         Test-Path (Join-Path $script:WizardConfig.RunRoot 'wizard-result.json') | Should -BeTrue
     }
     It 'does not launch on declined isolation or spending consent' {
+        Save-WizardDefaults -Config $script:WizardConfig -SpendingAuthorized $true
         Mock Confirm-WizardAction { $Question -notlike '*I confirm*' }
         $Result = Invoke-EfficiencyWizard -Source 'source'
         $Result.exitCode | Should -Be 3
         Should -Invoke Invoke-WizardOfflineTest -Times 0
+        Should -Invoke Invoke-WizardBenchmark -Times 0
+        Should -Invoke Confirm-WizardAction -Times 1 -Exactly -ParameterFilter { $Question -like '*I confirm*' }
+        (Read-WizardDefaults).SpendingAuthorization.approved | Should -BeFalse
+        Should -Invoke Write-Host -Times 1 -Exactly -ParameterFilter { $Object -like 'Previous spending authorization*yes*' }
+    }
+    It 'does not present previous authorization as matching changed credit ceilings' {
+        Save-WizardDefaults -Config $script:WizardConfig -SpendingAuthorized $true
+        $script:WizardConfig.PerRunCredits = 120.0
+        $script:WizardConfig.TotalCredits = 720.0
+        Mock Confirm-WizardAction { $Question -notlike '*I confirm*' }
+        $Result = Invoke-EfficiencyWizard -Source 'source'
+        $Result.exitCode | Should -Be 3
+        Should -Invoke Write-Host -Times 0 -Exactly -ParameterFilter { $Object -like 'Previous spending authorization*' }
         Should -Invoke Invoke-WizardBenchmark -Times 0
     }
     It 'does not authenticate or prepare packages in Offline mode' {

@@ -30,6 +30,89 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$script:WizardDefaultsFields = @('Mode', 'WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'BaselineEvidencePath', 'Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')
+
+function Get-WizardDefaultsPath {
+    <# .SYNOPSIS
+    Locates per-checkout nonsecret settings, independent of the evidence root.
+    #>
+    [CmdletBinding()]
+    param()
+    [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../.efficiency-wizard-defaults.json'))
+}
+
+function Read-WizardDefaults {
+    <# .SYNOPSIS
+    Reads only recognized settings and rejects invalid memory with reset guidance.
+    #>
+    [CmdletBinding()]
+    param([string]$Path = (Get-WizardDefaultsPath))
+    if (-not (Test-Path -LiteralPath $Path)) { return @{} }
+    $Invalid = "Saved wizard defaults are invalid: $Path. Remove this file to reset them."
+    try { $Defaults = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable }
+    catch [ArgumentException] { throw $Invalid }
+    if ($Defaults -isnot [Collections.IDictionary] -or $Defaults['schemaVersion'] -cne 'efficiency-wizard-defaults-v1') { throw $Invalid }
+    $Allowed = @('schemaVersion', 'SpendingAuthorization') + $script:WizardDefaultsFields
+    foreach ($Key in $Defaults.Keys) { if ($Key -notin $Allowed) { throw $Invalid } }
+    foreach ($Key in @('WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'Model', 'BaselineEvidencePath')) {
+        if ($Defaults.Contains($Key) -and ($Defaults[$Key] -isnot [string] -or ($Key -ne 'BaselineEvidencePath' -and [string]::IsNullOrWhiteSpace($Defaults[$Key])))) { throw $Invalid }
+    }
+    if ($Defaults.Contains('Mode') -and $Defaults['Mode'] -notin @('Establish', 'Series', 'Complete', 'Offline')) { throw $Invalid }
+    foreach ($Key in @('PerRunCredits', 'TotalCredits')) {
+        if ($Defaults.Contains($Key)) {
+            $Value = $Defaults[$Key]
+            if (($Value -isnot [int] -and $Value -isnot [long] -and $Value -isnot [double]) -or -not [double]::IsFinite([double]$Value) -or $Value -le 0) { throw $Invalid }
+        }
+    }
+    if ($Defaults.Contains('ParallelTrials') -and $Defaults['ParallelTrials'] -isnot [bool]) { throw $Invalid }
+    if ($Defaults.Contains('SpendingAuthorization')) {
+        $Authorization = $Defaults['SpendingAuthorization']
+        if ($Authorization -isnot [Collections.IDictionary] -or $Authorization['approved'] -isnot [bool] -or $Authorization['planHash'] -cnotmatch '^[0-9a-f]{64}$' -or @($Authorization.Keys | Where-Object { $_ -notin @('approved', 'planHash') }).Count) { throw $Invalid }
+    }
+    $Defaults
+}
+
+function Get-WizardSpendingPlanHash {
+    <# .SYNOPSIS
+    Identifies the spending configuration without binding a fresh run directory.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Config)
+    $Identity = [ordered]@{}
+    foreach ($Key in $script:WizardDefaultsFields) { $Identity[$Key] = $Config[$Key] }
+    $Json = ConvertTo-Json -InputObject $Identity -Compress
+    [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Json))).ToLowerInvariant()
+}
+
+function Save-WizardDefaults {
+    <# .SYNOPSIS
+    Atomically remembers answered fields, never credentials or reusable consent.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Config, [Collections.IDictionary]$Previous = @{}, [bool]$SpendingAuthorized, [string]$Path = (Get-WizardDefaultsPath))
+    $Defaults = @{ schemaVersion = 'efficiency-wizard-defaults-v1' }
+    foreach ($Key in @($script:WizardDefaultsFields) + 'SpendingAuthorization') {
+        if ($Previous.Contains($Key)) { $Defaults[$Key] = $Previous[$Key] }
+    }
+    $Answered = @('Mode', 'WorkRoot')
+    if ($Config.Mode -ne 'Offline') {
+        $Answered += @('Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')
+        if ($Config.Mode -eq 'Series') { $Answered += 'BaselineEvidencePath' }
+        if ($Config.Mode -in @('Establish', 'Complete') -or ($Config.Mode -eq 'Series' -and -not $Config.BaselineEvidencePath)) { $Answered += 'BaselineSourceRoot' }
+        if ($Config.Mode -in @('Series', 'Complete')) { $Answered += 'CandidateSourceRoot' }
+    }
+    foreach ($Key in $Answered) { $Defaults[$Key] = $Config[$Key] }
+    if ($PSBoundParameters.ContainsKey('SpendingAuthorized')) {
+        $Defaults.SpendingAuthorization = @{ approved = $SpendingAuthorized; planHash = Get-WizardSpendingPlanHash $Config }
+    }
+    $Temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        $Defaults | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Temporary -Encoding utf8NoBOM
+        [IO.File]::Move($Temporary, [IO.Path]::GetFullPath($Path), $true)
+    }
+    finally { if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force } }
+}
+
 function Read-WizardText {
     <# .SYNOPSIS
     Reads nonsecret setup input; cancellation never implies consent.
@@ -79,17 +162,20 @@ function Confirm-WizardAction {
 
 function Get-WizardMode {
     <# .SYNOPSIS
-    Recommends Establish without controls, or Series when controls were supplied.
+    Reuses the last mode, otherwise recommends Establish or Series from controls.
     #>
     [CmdletBinding()]
-    param([switch]$HasBaseline)
-    $Choice = Read-WizardChoice -Question 'What should run?' -Default $(if ($HasBaseline) { '2' } else { '1' }) -Options ([ordered]@{
+    param([switch]$HasBaseline, [string]$DefaultMode = '')
+    $Modes = @{ '1' = 'Establish'; '2' = 'Series'; '3' = 'Complete'; '4' = 'Offline' }
+    $Default = if ($HasBaseline) { '2' } else { '1' }
+    foreach ($Key in $Modes.Keys) { if ($Modes[$Key] -eq $DefaultMode) { $Default = $Key } }
+    $Choice = Read-WizardChoice -Question 'What should run?' -Default $Default -Options ([ordered]@{
         '1' = 'Establish: all offline checks, then three baseline observations, retaining failures; no improvement claim.'
         '2' = 'Series: all offline checks, then three candidates against compatible saved controls, or six fresh paired trials.'
         '3' = 'Complete: all offline checks, establish three fresh controls, then run three candidates and compare.'
         '4' = 'Offline: all benchmark self-tests only; no model requests, login or accepted-baseline changes.'
     })
-    @{ '1' = 'Establish'; '2' = 'Series'; '3' = 'Complete'; '4' = 'Offline' }[$Choice]
+    $Modes[$Choice]
 }
 
 function Read-WizardCreditLimit {
@@ -403,27 +489,33 @@ function Get-WizardConfiguration {
     param([string]$Source, [string]$Scratch, [string]$SavedControl = '', [switch]$ParallelTrials)
     $Source = (Resolve-Path -LiteralPath $Source).Path
     foreach ($Required in @('squad-src', 'apm.yml')) { if (-not (Test-Path -LiteralPath (Join-Path $Source $Required))) { throw "Source checkout lacks $Required." } }
+    $Defaults = Read-WizardDefaults
+    $ExplicitControl = [bool]$SavedControl
+    if (-not $Scratch -and $Defaults['WorkRoot']) { $Scratch = $Defaults['WorkRoot'] }
     if (-not $Scratch) { $Scratch = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'hve-squad/efficiency' }
     $Scratch = Assert-WizardScratchPath $Scratch $Source
-    if (-not $SavedControl -and (Test-Path -LiteralPath $Scratch)) {
+    if (-not $SavedControl -and $Defaults.Contains('BaselineEvidencePath')) { $SavedControl = $Defaults['BaselineEvidencePath'] }
+    if (-not $SavedControl -and -not $Defaults.Contains('BaselineEvidencePath') -and (Test-Path -LiteralPath $Scratch)) {
         $Previous = @(Get-ChildItem -LiteralPath $Scratch -Directory -Filter 'run-*' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 20)
         foreach ($Directory in $Previous) {
             $Path = Join-Path $Directory.FullName 'control/out/control-series.json'
             if (Test-Path -LiteralPath $Path -PathType Leaf) { $SavedControl = $Path; break }
         }
     }
-    $Mode = Get-WizardMode -HasBaseline:([bool]$SavedControl)
+    $Mode = Get-WizardMode -HasBaseline:([bool]$SavedControl) -DefaultMode $(if ($ExplicitControl) { 'Series' } else { $Defaults['Mode'] })
+    $DefaultModel = if ($Defaults['Model']) { $Defaults['Model'] } else { 'claude-sonnet-5.5' }
+    $DefaultCredits = if ($Defaults['PerRunCredits']) { [double]$Defaults['PerRunCredits'] } else { 100.0 }
     $ScenarioDefaults = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
-    Write-Host "Defaults: offline self-tests first; model claude-sonnet-5.5; 100 AI credits per run (ceiling, not predicted cost); three observations; no outer retries or request-count cap; $($ScenarioDefaults.observationTimeoutMinutes)-minute hung-run watchdog; quality/readiness failures are recorded, not collection gates; no automatic promotion."
+    Write-Host "Defaults: offline self-tests first; model $DefaultModel; $DefaultCredits AI credits per run (ceiling, not predicted cost); three observations; no outer retries or request-count cap; $($ScenarioDefaults.observationTimeoutMinutes)-minute hung-run watchdog; quality/readiness failures are recorded, not collection gates; no automatic promotion."
     Write-Host 'Isolation is NOT created by the wizard. Live modes require a disposable OS-isolated environment, restricted credentials and no sensitive source data. Fresh run directories preserve previous evidence.'
     $Scratch = Assert-WizardScratchPath (Read-WizardText -Question 'Dedicated work/evidence root outside the checkout' -Default $Scratch -Required) $Source
     $Config = @{
         Mode = $Mode; SourceRoot = $Source; WorkRoot = $Scratch; InstallRoot = Join-Path $Scratch 'install'
         RunRoot = Join-Path $Scratch ('run-' + [datetime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-        BaselineSourceRoot = $Source; CandidateSourceRoot = $Source; BaselineEvidencePath = ''; Model = 'claude-sonnet-5.5'
+        BaselineSourceRoot = $Source; CandidateSourceRoot = $Source; BaselineEvidencePath = ''; Model = $DefaultModel
         PerRunCredits = 0.0; TotalCredits = 0.0; ParallelTrials = [bool]$ParallelTrials
     }
-    if ($Mode -eq 'Offline') { return $Config }
+    if ($Mode -eq 'Offline') { Save-WizardDefaults -Config $Config -Previous $Defaults; return $Config }
     if ($Mode -eq 'Series') {
         $Default = if ($SavedControl) { $SavedControl } else { 'none' }
         $Answer = Read-WizardText -Question 'Saved control-series.json path, or none for six fresh paired trials' -Default $Default -Required
@@ -434,10 +526,12 @@ function Get-WizardConfiguration {
         }
     }
     if ($Mode -in @('Establish', 'Complete') -or ($Mode -eq 'Series' -and -not $Config.BaselineEvidencePath)) {
-        $Config.BaselineSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Baseline source checkout' -Default $Source -Required)).Path
+        $DefaultSource = if ($Defaults['BaselineSourceRoot']) { $Defaults['BaselineSourceRoot'] } else { $Source }
+        $Config.BaselineSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Baseline source checkout' -Default $DefaultSource -Required)).Path
     }
     if ($Mode -in @('Series', 'Complete')) {
-        $Config.CandidateSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Candidate source checkout' -Default $Source -Required)).Path
+        $DefaultSource = if ($Defaults['CandidateSourceRoot']) { $Defaults['CandidateSourceRoot'] } else { $Source }
+        $Config.CandidateSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Candidate source checkout' -Default $DefaultSource -Required)).Path
         if (-not $Config.BaselineEvidencePath -and $Config.BaselineSourceRoot -eq $Config.CandidateSourceRoot) { Write-Host 'Both arms use the same checkout. This is a repeatability exercise, not a patch-improvement claim; it may correctly fail the 10% improvement gate.' }
     }
     foreach ($Checkout in @($Config.BaselineSourceRoot, $Config.CandidateSourceRoot) | Sort-Object -Unique) {
@@ -445,16 +539,18 @@ function Get-WizardConfiguration {
         Assert-WizardScratchPath $Scratch $Checkout | Out-Null
     }
     $Config.Model = Read-WizardText -Question 'Coordinator/judge model (must match saved controls)' -Default $Config.Model -Required
-    $Config.PerRunCredits = Read-WizardCreditLimit 'Maximum AI credits per complete run' 100
+    $Config.PerRunCredits = Read-WizardCreditLimit 'Maximum AI credits per complete run' $DefaultCredits
     $Number = if ($Mode -eq 'Establish' -or ($Mode -eq 'Series' -and $Config.BaselineEvidencePath)) { 3 } else { 6 }
-    $Config.TotalCredits = Read-WizardCreditLimit "Total ceiling for all $Number new runs (all reservations must fit)" ($Number * $Config.PerRunCredits)
+    $DefaultTotal = [Math]::Max([double]$Defaults['TotalCredits'], $Number * $Config.PerRunCredits)
+    $Config.TotalCredits = Read-WizardCreditLimit "Total ceiling for all $Number new runs (all reservations must fit)" $DefaultTotal
     if ($Config.ParallelTrials) { Write-Host 'Parallel trials selected by command-line option; all reservations and isolation/spending authorization still apply.' }
     elseif ($Mode -ne 'Series' -or $Config.BaselineEvidencePath) {
-        Write-Host 'Execution: 1. Serial [default]; 2. Three observations in parallel (higher host load; requires matching parallel controls). Complete still runs controls before candidates.'
-        $Config.ParallelTrials = (Read-WizardChoice -Question 'Execution' -Options ([ordered]@{ '1' = 'Serial'; '2' = 'Three observations in parallel' }) -Default '1') -eq '2'
+        Write-Host 'Execution: serial or three observations in parallel (higher host load; requires matching parallel controls). Complete still runs controls before candidates.'
+        $Config.ParallelTrials = (Read-WizardChoice -Question 'Execution' -Options ([ordered]@{ '1' = 'Serial'; '2' = 'Three observations in parallel' }) -Default $(if ($Defaults['ParallelTrials']) { '2' } else { '1' })) -eq '2'
     }
     else { Write-Host 'Six fresh paired trials remain serial to preserve their alternating arm order.' }
     New-WizardRunPlan $Config | Out-Null
+    Save-WizardDefaults -Config $Config -Previous $Defaults
     $Config
 }
 
@@ -604,7 +700,14 @@ function Invoke-EfficiencyWizard {
             $Stage = 'Compatibility preflight'
             Test-WizardCompatibility $Config
             Write-Host "Mode: $($Config.Mode); model: $($Config.Model); per-run ceiling: $($Config.PerRunCredits) credits; total ceiling: $($Config.TotalCredits) credits. Reports: $($Config.RunRoot)"
-            if (-not (Confirm-WizardAction 'I confirm this is a disposable OS-isolated environment with restricted credentials and no sensitive data, and authorize the displayed bounded spending after offline checks pass')) { throw [OperationCanceledException]::new('Isolation/spending authorization declined.') }
+            $Defaults = Read-WizardDefaults
+            $Authorization = $Defaults['SpendingAuthorization']
+            if ($Authorization -and $Authorization['planHash'] -ceq (Get-WizardSpendingPlanHash $Config)) {
+                Write-Host "Previous spending authorization for this configuration: $(if ($Authorization['approved']) { 'yes' } else { 'no' }). Fresh confirmation is still required; blank means no."
+            }
+            $Authorized = Confirm-WizardAction 'I confirm this is a disposable OS-isolated environment with restricted credentials and no sensitive data, and authorize the displayed bounded spending after offline checks pass'
+            Save-WizardDefaults -Config $Config -Previous $Defaults -SpendingAuthorized $Authorized
+            if (-not $Authorized) { throw [OperationCanceledException]::new('Isolation/spending authorization declined.') }
         }
         else { Write-Host "Mode: Offline. No login/model requests. Reports: $($Config.RunRoot)" }
         if (-not (Confirm-WizardAction 'Provision isolated Python/pytest if needed and run the selected plan unattended (retain quality failures; stop for execution/accounting errors)?')) { throw [OperationCanceledException]::new('Launch declined.') }
