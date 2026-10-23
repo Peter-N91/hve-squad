@@ -562,12 +562,13 @@ metadata:
 * **tier** (optional): A model-tier hint (`fast` or `default`) overriding cost-first defaults for this turn.
 * **owner** (optional): A `Member Name` from `team.md` that picks a specific named member when two rows share the same role.
 * **mode** (optional): The autonomy mode for this turn — `autonomous` or `autopilot`. When omitted, the coordinator uses the standard interactive tiers, approving each step.
+* **routing** (optional): `off`, `ranked`, `economy`, or `manual`, persisted in `team.md`. Ranked is capability-first; Economy is cost-first only after the existing allowlist and evidence minimum; Manual preserves explicit choices with capability-first suggestions. Scribe and coordinator pins/session behavior remain unchanged.
 
 ## Flow
 
 1. Hand **request** (and **owner** when provided) to the Squad Coordinator agent and let its per-turn protocol classify, dispatch, and synthesize the response.
 2. Pass **profile** through as the Init Mode profile hint when provided, and **pack** through as the Init Mode pack hint when provided. When the project has no squad and no profile is given, let the coordinator discover the project and propose a recommended profile before seeding.
-3. Pass **tier** through as the per-turn tier override when provided; otherwise leave model selection to the coordinator.
+3. Pass **tier** and **routing** through when provided; otherwise leave model selection to the coordinator under the persisted mode. Apply `references/model-routing.md`, never fit-bucket price ordering.
 4. Pass **discovery** through as the discovery-gate depth when provided; otherwise let the coordinator decide whether to offer the gate.
 5. When **mode** is `autonomous`, request the `auto-validated` tier (bounded re-validation loop, always-escalate triggers); when **mode** is `autopilot`, request the full research→plan→implement→review pipeline (Human Gates on impactful actions and final-outcome validation only); otherwise rely on the standard interactive tiers.
 6. Let the coordinator own roster, routing, state, and the notification contract — it seeds `.copilot-tracking/squad/{team.md,routing.md,state.json}` on first run and persists decisions, history, and notifications through the Squad Scribe.
@@ -626,6 +627,7 @@ metadata:
 * **discovery** (optional): The discovery-gate depth (`quick`, `standard`, `deep`, or `skip`) forwarded to every qualifying sub-squad the turn starts. Ignored on a Watch Mode or otherwise unattended run.
 * **tier** (optional): A model-tier hint (`fast` or `default`) forwarded to the selected sub-squad's coordinator run.
 * **owner** (optional): A `Member Name` forwarded to the selected sub-squad's coordinator run.
+* **routing** (optional): `off`, `ranked`, `economy`, or `manual`, forwarded verbatim for each sub-squad to persist: capability-first Ranked, qualified cost-first allowlisted work, or explicit Manual choices. Never change the selected coordinator session model or Scribe pin.
 * **mode** (optional): The autonomy mode (`autonomous` or `autopilot`). With a single **squad** target, or with `mode=autonomous`, it is forwarded to that sub-squad's coordinator run. With `mode=autopilot` and no **squad** target, the coordinator runs the federation-level autopilot meta-pipeline across the meta-routing-selected sub-squads.
 
 ## Flow
@@ -633,7 +635,7 @@ metadata:
 1. Hand **request** to the Squad Federation Coordinator and let its per-turn protocol classify the request to one or more sub-squads and run each scoped to its own squad root.
 2. When **squad** is provided, route the request to that registered sub-squad (escalate when the name is not registered); otherwise let the coordinator match `meta-routing.md`.
 3. When **init** is present, or the project has no federation yet, let the coordinator run Federation Init Mode (or Federation Expansion Mode when a federation already exists) before routing. When **promote** is present, or an existing single-squad project asks to move to a federation, let the coordinator run Federation Promotion Mode instead of a from-scratch Init.
-4. Forward **profile**, **discovery**, **tier**, **owner**, and **mode** as pass-through hints to the selected sub-squad's coordinator run. When **discovery** is omitted and at least one selected sub-squad qualifies, let the coordinator ask the discovery question once at the federation level and apply the answer to every qualifying sub-squad. When **mode** is `autopilot` and no **squad** target is given, let the coordinator run the federation-level autopilot meta-pipeline; a single **squad** target keeps the forward-only behavior.
+4. Forward **profile**, **discovery**, **tier**, **owner**, **routing**, and **mode** as pass-through hints to the selected sub-squad's coordinator run. Preserve the received routing mode and floors; a child may only narrow them. When **discovery** is omitted and at least one selected sub-squad qualifies, let the coordinator ask the discovery question once at the federation level and apply the answer to every qualifying sub-squad. When **mode** is `autopilot` and no **squad** target is given, let the coordinator run the federation-level autopilot meta-pipeline; a single **squad** target keeps the forward-only behavior.
 5. When **watch** is present, let the coordinator run Watch Mode Bootstrap Mode ahead of any classification: derive the sub-squad name from structural event metadata only, bootstrap the federation, reuse the sub-squad on matching provenance, escalate on a human-owned name collision, and then run that sub-squad's standard single-squad autopilot scoped to `members/<name>/`. An explicit **squad** target overrides the event sub-squad and creates nothing.
 6. Let the coordinator own the registry, meta-routing, and two-level state — it seeds `.copilot-tracking/squad/{federation.md,meta-routing.md,state.json}` and each `members/<name>/` sub-squad on first run, and persists federation-level decisions and history through the Squad Scribe while each sub-squad persists its own state under its root.
 

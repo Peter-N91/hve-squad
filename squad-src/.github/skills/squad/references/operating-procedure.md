@@ -26,7 +26,7 @@ Run once per project, then verify on every turn. Init Mode mirrors a propose →
 1. Read `team.md` and `routing.md`.
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
 3. Resolve each matched role to a deployed agent through the roster. A role marked **thin charter needed** has no deployed agent — escalate instead of substituting.
-4. Select cost-first: `fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`; user tier hints override per-role defaults for this turn. For `team.md` `Model routing: ranked|economy|manual` or `routing=`, resolve ids per `references/model-routing.md`; `off` keeps cost-first selection.
+4. For `team.md` `Model routing: ranked|economy|manual` or `routing=`, resolve ids per `references/model-routing.md`; otherwise `off` keeps cost-first selection: `fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`; user tier hints override per-role defaults for this turn.
 5. Determine which gates apply and establish the actual stage shape. Apply Progress Presentation before the first work dispatch.
 6. Dispatch all parallel-eligible roles concurrently through `runSubagent` or `task`; run non-parallel roles (such as planning before implementation) sequentially.
 

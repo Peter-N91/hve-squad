@@ -40,6 +40,8 @@ BeforeAll {
     $script:WatchInstructions = Get-EconomyFileText (@($script:Model.Instructions | Where-Object Name -eq 'squad-watch-mode.instructions.md')[0]).Path
     $script:OperatingProcedure = Get-EconomyFileText (Join-Path $skill 'references/operating-procedure.md')
     $script:Resolver = Get-EconomyFileText (Join-Path $skill 'scripts/Resolve-SquadModelRoute.ps1')
+    $script:Scoring = Get-EconomyFileText (Join-Path $skill 'scripts/ModelBenchmarkScoring.ps1')
+    $script:ScoringPolicy = Get-EconomyFileText (Join-Path $skill 'references/model-scoring.md')
     $script:Coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0]
     $script:FederationCoordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
     $script:Roster = @($script:Model.Instructions | Where-Object Name -eq 'squad-roster.instructions.md')[0]
@@ -90,10 +92,30 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $script:Routing | Should -Not -Match '(?i)fit 2 or better|lowest \*\*Blended\*\* rate'
     }
 
-    It 'picks the lowest-Blended id at fit 2 or better within the role''s own floor, allowlisted roles only' {
+    It 'picks the lowest known price after independent qualification, allowlisted roles only' {
         $script:EconomySection | Should -Match '`ranked` \(see `model-routing.md`\) with one change: roles on the \*Role Allowlist\* are ordered cost first'
-        $script:EconomySection | Should -Match ([regex]::Escape('under the role''s own floor, keep the rows at fit 2 or better for the `implementation` class, and take the lowest **Blended** rate'))
+        $script:EconomySection | Should -Match ([regex]::Escape('each primary percentile must be at least `0.50`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('Extra capability or confidence above the minimum never overrides a lower price.'))
+        $script:EconomySection | Should -Match ([regex]::Escape('An unpriced model is never free.'))
         $script:EconomySection | Should -Match ([regex]::Escape('the review that checks the cheaper work is never weakened'))
+    }
+
+    It 'ships one versioned scorer with explicit coverage and host-independent normalization' {
+        $script:Scoring | Should -Match "Version = 'squad-capability-v3'"
+        $script:Scoring | Should -Match 'MinimumPercentile = \[decimal\]0\.50'
+        $script:Scoring | Should -Match 'MinimumPercentile = \[decimal\]0\.75'
+        $script:ScoringPolicy | Should -Match 'implementation-scicode-upper-quartile-v1'
+        $script:Scoring | Should -Not -Match '\$AvailableModels'
+        $script:Resolver | Should -Match ([regex]::Escape(". (Join-Path `$PSScriptRoot 'ModelBenchmarkScoring.ps1')"))
+        $script:ScoringPolicy | Should -Match 'Secondary evaluations'
+        $script:ScoringPolicy | Should -Match 'not success probabilities'
+    }
+
+    It 'uses capability-first Ranked suggestions and admits frontier models above a fast floor' {
+        $script:Routing | Should -Match 'Compare \*\*granular task capability\*\*'
+        $script:Routing | Should -Match 'minimum, never a spending or capability ceiling'
+        $script:Resolver | Should -Not -Match "Purpose -eq 'ranked'"
+        $script:Resolver | Should -Match ([regex]::Escape("'fast' { return @('fast-lightweight', 'balanced', 'code-specialized', 'frontier-reasoning') }"))
     }
 
     It 'allowlists exactly the low-impact implementation roles and names the excluded ones' {

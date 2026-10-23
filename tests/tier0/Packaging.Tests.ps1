@@ -235,12 +235,21 @@ Describe 'D7-1 Plugin build succeeds and carries every new reference file' {
     }
 
     It '<_> ships in the built plugin output' -ForEach @(
-        'model-catalog.md', 'model-benchmarks.md', 'model-routing.md', 'scribe-payload-template.md',
+        'model-catalog.md', 'model-benchmarks.md', 'model-routing.md', 'model-scoring.md', 'scribe-payload-template.md',
         'scribe-cold-init-and-seeding.md', 'scribe-cold-federation.md', 'scribe-cold-gates-and-verdicts.md',
         'consumption-rates-template.md'
     ) {
         Test-Path -LiteralPath (Join-Path $script:PluginReferencesRoot $_) -PathType Leaf |
             Should -BeTrue -Because 'the deliverable requires every new reference file to ship in the plugin build, not only in squad-src'
+    }
+}
+
+Describe 'Shared scoring is delivered with the plugin runtime (SQ-33c)' {
+    It 'delivers the scorer unchanged beside the resolver' {
+        $source = Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/scripts/ModelBenchmarkScoring.ps1'
+        $delivered = Join-Path $script:PluginOutputRoot 'skills/squad/scripts/ModelBenchmarkScoring.ps1'
+        Test-Path -LiteralPath $delivered -PathType Leaf | Should -BeTrue
+        (Get-FileHash -LiteralPath $delivered).Hash | Should -Be (Get-FileHash -LiteralPath $source).Hash
     }
 }
 
@@ -322,5 +331,4 @@ Describe 'D7-6 Model routing never touches an agent''s own frontmatter model sca
         $Actual | Should -BeExactly $Expected -Because 'a routing/performance change must never add, remove, or alter an agent''s own frontmatter model: scalar'
     }
 }
-
 

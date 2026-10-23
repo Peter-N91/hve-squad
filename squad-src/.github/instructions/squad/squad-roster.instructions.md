@@ -39,6 +39,8 @@ The `Agent Name (Primary)` column holds exactly one agent; the role always has a
 
 <!-- <example-roster> -->
 ```markdown
+Ranked floors are minimums, not ceilings; copy resolver rationale and preserve Scribe/session exceptions.
+
 ## Members
 
 | Role          | Member Name | Agent Name (Primary)   | Alternate Agents                              | Selection Cue                                                             | Invocation         | Model Tier | Deliverable Root           |
@@ -351,4 +353,3 @@ Power BI is deliberately absent from the `power-platform` pack. Its upstream age
 **Two adjacent Microsoft verticals were assessed and deliberately produced no pack.** Data and Power BI, and AI application engineering, both reached the verification gate with no agent surviving it: the four `power-bi-*-expert` agents fail gate step 3, and every AI-engineering candidate duplicates capability HVE Core already deploys. A pack selects roles, and a role needs a dispatchable Primary, so inventing one would have meant authoring a squad charter purely to make a pack exist — and in the AI-engineering case that charter would have claimed work `developer` already owns. Both verticals are therefore registered as skills against widened existing roles, and their surviving resources are listed in *Registered External Cast*. Revisit the pack shape only when an upstream agent in either domain passes the gate.
 
 There is no Power Platform ALM or solution-deployment role. No verified resource can perform a solution import, and a role with no resource behind it is aspirational rather than dispatchable. ALM *planning* — environment strategy, solution segmentation, managed versus unmanaged, pipeline design — sits with `pp-architect`, which advises and never executes. Should an ALM writing role ever be added, it inherits both existing write postures rather than a default: opt-in like `backlog-executor`, because a solution import is announced to everyone in the target environment the moment it lands, and preview-first like `deployer`, because the import itself is not cleanly reversible.
-

@@ -8,11 +8,13 @@ name: Sync Model Benchmarks
 #      Artificial Analysis Free Data API when ARTIFICIAL_ANALYSIS_API_KEY is
 #      configured — extracting task-specific benchmark evaluations for the
 #      models declared in model-catalog.md.
-#   2. Computes a content digest over the normalized benchmark scores and
-#      mapping tables. If the digest matches the committed
+#   2. Verifies supported exact-model results against original publisher
+#      records and methodology, separately from result and generation dates.
+#      The evidence digest includes verification facts and comparison panels.
+#      If it matches the committed
 #      squad-src/.github/skills/squad/references/model-benchmarks.md and the
-#      existing snapshot is younger than the 60-day heartbeat refresh window
-#      (well below the 90-day staleness threshold), the run exits cleanly
+#      identical evidence check is younger than the 60-day renewal window
+#      (before 90-day verification expiration), the run exits cleanly
 #      without opening a noisy pull request.
 #   3. When benchmark scores or source versions change (or the 60-day refresh
 #      window is reached, or force=true), validates the updated snapshot with
@@ -90,7 +92,9 @@ jobs:
             "| --- | --- |"
             "| Updated | ``$($result.Updated)`` |"
             "| Retrieved | ``$($result.Retrieved)`` |"
+            "| Generated | ``$($result.Generated)`` |"
             "| Models covered | **$($result.ModelsCovered)** |"
+            "| Models with verified evidence | **$($result.VerifiedModelsCovered)** |"
             "| Score rows | **$($result.ScoresCount)** |"
             "| Content digest | ``$($result.Digest)`` |"
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -111,6 +115,16 @@ jobs:
           $res = Invoke-Pester -Configuration $config
           if ($res.FailedCount -gt 0 -or $res.Result -ne 'Passed') {
             throw "ModelRouting.Tests.ps1 failed ($($res.FailedCount) failure(s)); refusing to propose an invalid benchmark snapshot."
+          }
+
+      - name: Verify shared scoring and offline snapshot reproducibility
+        if: steps.sync.outputs.updated == 'true'
+        shell: pwsh
+        run: |
+          $path = './squad-src/.github/skills/squad/references/model-benchmarks.md'
+          $result = ./scripts/Sync-ModelBenchmarks.ps1 -SnapshotPath $path -OutputPath $path -DryRun
+          if ($result.Updated -or $result.ScoringPolicy -ne 'squad-capability-v3') {
+            throw 'Shared scoring views or policy identity differ from the generated snapshot; refusing publication.'
           }
 
       - name: Propose reviewed pull request

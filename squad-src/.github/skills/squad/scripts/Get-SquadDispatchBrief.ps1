@@ -39,6 +39,10 @@
     The repository root that holds `.github/agents/`. Defaults to the current directory.
 .PARAMETER SessionModel
     The coordinator's session model id, used for the orchestration consumption object.
+.PARAMETER AvailableModels
+    The exact host-advertised model IDs, forwarded to the read-only routing report.
+.PARAMETER AsOf
+    Evaluation date for the routing report; defaults to today.
 .EXAMPLE
     & .agents/skills/squad/scripts/Get-SquadDispatchBrief.ps1 -SquadRoot .copilot-tracking/squad -SessionModel claude-sonnet-5
 #>
@@ -49,7 +53,11 @@ param(
 
     [string]$RepoRoot = (Get-Location).Path,
 
-    [string]$SessionModel
+    [string]$SessionModel,
+
+    [string[]]$AvailableModels = @(),
+
+    [datetime]$AsOf = (Get-Date)
 )
 
 Set-StrictMode -Version Latest
@@ -101,7 +109,7 @@ function Get-TableRows {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return @() }
     @(Get-Content -LiteralPath $Path -Encoding utf8 | Where-Object { $_ -match '^\|' -and $_ -notmatch '^\|\s*:?-' } |
-        ForEach-Object { , (Split-TableLine $_) })
+            ForEach-Object { , (Split-TableLine $_) })
 }
 
 function Get-Roster {
@@ -198,7 +206,7 @@ else {
 $pins = @{}
 $blocked = @{}
 $agentBases = @('.github/agents', '.agents/agents', '.claude/agents' | ForEach-Object { Join-Path $RepoRoot $_ }) +
-    @('../../../agents', '../../agents', '../agents' | ForEach-Object { Join-Path $PSScriptRoot $_ })
+@('../../../agents', '../../agents', '../agents' | ForEach-Object { Join-Path $PSScriptRoot $_ })
 foreach ($base in $agentBases) {
     if (-not (Test-Path -LiteralPath $base -PathType Container)) { continue }
     foreach ($file in Get-ChildItem -LiteralPath $base -Recurse -Filter '*.agent.md' -File) {
@@ -217,7 +225,7 @@ foreach ($base in $agentBases) {
 # Per-model rate rows only (the tier fallback table has a number in its third column): the squad root's, then the template's.
 $isModelRow = { param($r) $r.Count -ge 7 -and $r[0] -ne 'Model (as routed)' -and $r[2] -notmatch '^\d' -and $r[3] -match '^\d' }
 $rates = @(Get-TableRows (Join-Path $SquadRoot 'consumption-rates.md') | Where-Object { & $isModelRow $_ }) +
-    @(Get-TableRows (Join-Path $refs 'consumption-rates-template.md') | Where-Object { & $isModelRow $_ })
+@(Get-TableRows (Join-Path $refs 'consumption-rates-template.md') | Where-Object { & $isModelRow $_ })
 function Find-Rate {
     param([string]$Model)
     if (-not $Model) { return $null }
@@ -278,7 +286,7 @@ $out.Add('')
 $out.Add('## Roster')
 $out.Add('')
 $out.Add('Dispatch each role with `task` `agent_type` (and `name`) set to its Agent cell verbatim; never `general-purpose`, `task`, or another built-in type.')
-if ($hasModel) { $out.Add('Pass each role''s Model cell as the dispatch `model` exactly as written; an empty cell passes no `model`.') }
+if ($hasModel) { $out.Add('Pass each role''s Model cell as the dispatch `model` exactly as written; an empty cell passes no `model`. Scribe exception: omit the parameter so its explicit pin governs. Coordinators keep the selected session model.') }
 $out.Add('')
 if ($hasModel) {
     $out.Add('| Role | Agent | Dispatchable | Pin | Model | Priced as (tier) | Deliverable root |')
@@ -299,7 +307,7 @@ foreach ($row in $roster.Rows) {
     $alternates = Get-Cell $row @('Alternate Agents')
     $pin = if ($pins.ContainsKey($agent)) { $pins[$agent] } else { $null }
     $pinText = if ($null -eq $pin) { 'agent file not found' } elseif ($pin) { $pin } else { 'none (session-inherited)' }
-    $runs = if ($cell) { $cell } elseif ($pin) { $pin } else { $SessionModel }
+    $runs = if ($role -eq 'scribe' -and $pin) { $pin } elseif ($cell) { $cell } elseif ($pin) { $pin } else { $SessionModel }
     $rate = Find-Rate $runs
     $priced = if ($rate) { "$($rate[0]) ($($rate[2]))" } elseif ($runs) { 'no rate row' } else { 'session model' }
     $alts = if ($alternates) { " (alternates: $alternates; cue: $(Get-Cell $row @('Selection Cue')))" } else { '' }
@@ -329,6 +337,43 @@ foreach ($row in $roster.Rows) {
 }
 $out.Add('')
 $out.Add($(if ($unreachable.Count -eq 0) { 'roster precheck (Step 1b): PASS, every Primary and Alternate is installed and dispatchable; no agent-file read is needed.' } else { "roster precheck (Step 1b): FAIL for $($unreachable -join ', '); escalate before dispatching those roles." }))
+
+$routeReport = & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') -SquadRoot $SquadRoot -AvailableModels $AvailableModels -SessionModel $SessionModel -AsOf $AsOf | ConvertFrom-Json
+$out.Add('')
+$out.Add('## Routing report (advisory until the Scribe persists changed Model cells)')
+$out.Add("Policy $($routeReport.scoringPolicy); snapshot $($routeReport.snapshotIdentity); evaluated $($routeReport.evaluationDate); availability $($routeReport.availability). Execution is host-unreported, not observed by this brief.")
+foreach ($warning in @($routeReport.warnings | Where-Object { $_ -notlike 'economy consent*' })) {
+    $out.Add("WARN routing: $warning")
+}
+foreach ($route in $routeReport.roles) {
+    $out.Add("- $($route.role) [$($route.selectionObjective)], suggested $($route.suggested), persisted '$($route.modelCell)': Route rationale: $($route.rationale); escalation: $($route.escalation) ($($route.escalationReason)).")
+}
+$reportedClasses = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+foreach ($route in $routeReport.roles) {
+    if (-not $reportedClasses.Add($route.class)) { continue }
+    foreach ($candidate in @($route.evidenceCandidates | Where-Object evidenceStatus -ne 'sufficient')) {
+        $issues = @(
+            foreach ($item in @($candidate.evaluations | Where-Object { $_.status -notin @('verified', 'older-valid-result') })) {
+                if ($item.status -eq 'missing-evaluation') { "$($item.evaluation): missing exact-model result" }
+                elseif ($item.status -eq 'verification-expired') { "$($item.evaluation): verification/cache expired since $($item.verified)" }
+                elseif ($item.status -eq 'unverified') {
+                    $unknown = @(
+                        if ($item.modelVersion -eq 'unknown') { 'model' }
+                        if ($item.configuration -eq 'unknown') { 'configuration' }
+                        if ($item.verified -eq 'unknown') { 'verification' }
+                        if ($item.retrieved -eq 'unknown') { 'acquisition' }
+                        if ($item.sourceUrl -eq 'unknown') { 'source' }
+                        if ($item.verificationBasis -eq 'unknown') { 'proof' }
+                    )
+                    if ($unknown.Count) { "$($item.evaluation): unverified ($($unknown -join ', ') unknown)" }
+                    else { "$($item.evaluation): unverified ($($item.reason))" }
+                }
+                else { "$($item.evaluation): $($item.status) ($($item.reason))" }
+            }
+        )
+        $out.Add("- Evidence exclusion $($route.class)/$($candidate.id): $($issues -join '; ').")
+    }
+}
 
 $out.Add('')
 $out.Add('## Consumption objects (estimator floors; raise internal_turns when the dispatch reported more)')

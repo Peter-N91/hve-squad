@@ -19,17 +19,17 @@
     The script extracts task-specific benchmark evaluations across coding,
     agentic execution, mathematics, scientific reasoning, and long-document
     synthesis for the models declared in `model-catalog.md`, tags every score
-    with its source ID, source version, retrieval date, and provenance
-    (`independent` or `self-reported`), computes the independent composite and
-    evidence-derived assignment-class fit table, and writes
+    with its source ID, source version, exact model/configuration and distinct
+    result, acquisition and verification facts, plus provenance
+    (`independent` or `self-reported`), computes the shared versioned capability
+    and compatibility-fit views, and writes
     `squad-src/.github/skills/squad/references/model-benchmarks.md`.
 
     To avoid daily commit churn when upstream scores have not changed, the
     script computes a SHA-256 content digest over normalized source metadata,
-    scores, and assignment mappings (excluding the snapshot `Retrieved:` date
-    stamp and the date-relative materialized fit view). Runtime routing
-    recomputes row freshness from the committed scores, so a score merely
-    crossing the 90-day boundary does not create a noisy daily snapshot PR.
+    scores, acquisition/verification facts and assignment panels (excluding
+    assembly dates and date-relative views). Runtime routing recomputes
+    the 90-day verification window, never publication-age expiration.
     When the semantic digest matches the existing file on disk and the existing
     `Retrieved:` date is younger than -RefreshThresholdDays (default 60 days,
     well below the 90-day staleness cliff), the script reports no update needed
@@ -46,6 +46,15 @@
 .PARAMETER ArchivePath
     Optional local path to an existing `benchmark_data.zip` file or extracted
     directory. When omitted, downloads -ArchiveUri to a temporary folder.
+.PARAMETER SnapshotPath
+    Rebuild derived views from a local pinned snapshot without fetching any data.
+    Source tables, score precision, provenance, and evidence dates are preserved.
+    Defaults -AsOf to that snapshot's generation date when not explicitly supplied.
+.PARAMETER VerificationPath
+    Optional JSON evidence checks with schemaVersion squad-benchmark-verification-v1.
+    Each record is bound to Get-SquadBenchmarkRecordDigest and supplies explicit
+    model/configuration, acquisition, verification, source URL and content hashes.
+    A local archive or offline rebuild never invents these facts from -AsOf.
 .PARAMETER ArchiveUri
     Upstream URL for the Epoch AI Benchmarking Hub ZIP archive (CC BY 4.0).
 .PARAMETER ArtificialAnalysisJsonPath
@@ -60,7 +69,8 @@
 .PARAMETER ArtificialAnalysisVersion
     Version identifier for the Artificial Analysis methodology. Defaults to `v4.3.2`.
 .PARAMETER AsOf
-    Retrieval date stamped into the snapshot (`yyyy-MM-dd`). Defaults to UTC today.
+    Evaluation/generation date (`yyyy-MM-dd`). Defaults to UTC today. It never
+    establishes acquisition or verification for a local archive.
 .PARAMETER RefreshThresholdDays
     Maximum age in days before a date-only refresh is written even if the
     content digest has not changed. Defaults to 60 (30 days before the 90-day
@@ -98,6 +108,12 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$ArchivePath,
+
+    [Parameter(Mandatory = $false)]
+    [string]$SnapshotPath,
+
+    [Parameter(Mandatory = $false)]
+    [string]$VerificationPath,
 
     [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
@@ -141,6 +157,8 @@ Set-StrictMode -Version Latest
 [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::InvariantCulture
 
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $repoRoot 'squad-src/.github/skills/squad/scripts/ModelBenchmarkScoring.ps1')
+$scoringPolicy = Get-SquadBenchmarkPolicy
 if (-not $OutputPath) {
     $OutputPath = Join-Path $repoRoot 'squad-src/.github/skills/squad/references/model-benchmarks.md'
 }
@@ -150,52 +168,13 @@ if (-not $CatalogPath) {
 
 $retrievedDate = $AsOf.ToString('yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
 
-$classes = @('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping')
-
-$catalogModelSpecs = [ordered]@{
-    'gpt-5.6-sol'         = @{ Display = 'GPT-5.6 Sol'; VersionRegex = '^gpt-5\.6-sol(_|$)' }
-    'gpt-6.1-sol'         = @{ Display = 'GPT-6.1 Sol'; VersionRegex = '^gpt-6\.1-sol(_|$)' }
-    'gpt-6-sol'           = @{ Display = 'GPT-6 Sol'; VersionRegex = '^gpt-6-sol(_|$)' }
-    'gpt-6-astra'         = @{ Display = 'GPT-6 Astra'; VersionRegex = '^gpt-6-astra(_|$)' }
-    'gpt-5.5'             = @{ Display = 'GPT-5.5'; VersionRegex = '^gpt-5\.5(_|-pre-release|$)' }
-    'gpt-5.4'             = @{ Display = 'GPT-5.4'; VersionRegex = '^gpt-5\.4(-2026-03-05)?(_|$)' }
-    'gpt-5.6-terra'       = @{ Display = 'GPT-5.6 Terra'; VersionRegex = '^gpt-5\.6-terra(_|$)' }
-    'gpt-5.3-codex'       = @{ Display = 'GPT-5.3 Codex'; VersionRegex = '^gpt-5\.3-codex(_|$)' }
-    'gpt-5.4-mini'        = @{ Display = 'GPT-5.4 Mini'; VersionRegex = '^gpt-5\.4-mini(-2026-03-17)?(_|$)' }
-    'gpt-5-mini'          = @{ Display = 'GPT-5 mini'; VersionRegex = '^gpt-5-mini(-2025-08-07)?(_|$)' }
-    'gpt-5.4-nano'        = @{ Display = 'GPT-5.4 Nano'; VersionRegex = '^gpt-5\.4-nano(-2026-03-17)?(_|$)' }
-    'gpt-6-luna'          = @{ Display = 'GPT-6 Luna'; VersionRegex = '^gpt-6-luna(_|$)' }
-    'gpt-5.6-luna'        = @{ Display = 'GPT-5.6 Luna'; VersionRegex = '^gpt-5\.6-luna(_|$)' }
-    'claude-opus-5.5'     = @{ Display = 'Claude Opus 5.5'; VersionRegex = '^claude-opus-5-5(_|$)' }
-    'claude-opus-5'       = @{ Display = 'Claude Opus 5'; VersionRegex = '^claude-opus-5(_|$)' }
-    'claude-opus-4.8'     = @{ Display = 'Claude Opus 4.8'; VersionRegex = '^claude-opus-4-8(_|$)' }
-    'claude-opus-4.7'     = @{ Display = 'Claude Opus 4.7'; VersionRegex = '^claude-opus-4-7(_|$)' }
-    'claude-opus-4.8-fast' = @{ Display = 'Claude Opus 4.8'; VersionRegex = '^claude-opus-4-8(_|$)'; AliasOf = 'claude-opus-4.8' }
-    'claude-fable-5.1'    = @{ Display = 'Claude Fable 5.1'; VersionRegex = '^claude-fable-5-1(_|$)' }
-    'claude-fable-5'      = @{ Display = 'Claude Fable 5'; VersionRegex = '^claude-fable-5(_|$)' }
-    'claude-sonnet-5.5'   = @{ Display = 'Claude Sonnet 5.5'; VersionRegex = '^claude-sonnet-5-5(_|$)' }
-    'claude-sonnet-5'     = @{ Display = 'Claude Sonnet 5'; VersionRegex = '^claude-sonnet-5(_|$)' }
-    'claude-sonnet-4.6'   = @{ Display = 'Claude Sonnet 4.6'; VersionRegex = '^claude-sonnet-4-6(_|$)' }
-    'claude-sonnet-4'     = @{ Display = 'Claude Sonnet 4'; VersionRegex = '^claude-sonnet-4-20250514(_|$)' }
-    'claude-haiku-5.5'    = @{ Display = 'Claude Haiku 5.5'; VersionRegex = '^claude-haiku-5-5(_|$)' }
-    'claude-haiku-4.5'    = @{ Display = 'Claude Haiku 4.5'; VersionRegex = '^claude-haiku-4-5(-20251001)?(_|$)' }
-    'gemini-3.8-flash'    = @{ Display = 'Gemini 3.8 Flash'; VersionRegex = '^gemini-3\.8-flash(_|$)' }
-    'gemini-3.7-flash'    = @{ Display = 'Gemini 3.7 Flash'; VersionRegex = '^gemini-3\.7-flash(_|$)' }
-    'gemini-3.6-flash'    = @{ Display = 'Gemini 3.6 Flash'; VersionRegex = '^gemini-3\.6-flash(_|$)' }
-    'gemini-3.5-flash'    = @{ Display = 'Gemini 3.5 Flash'; VersionRegex = '^gemini-3\.5-flash(_|$)' }
-    'grok-4.7'            = @{ Display = 'Grok 4.7'; VersionRegex = '^grok-4\.7(_|$)' }
-    'grok-4.6'            = @{ Display = 'Grok 4.6'; VersionRegex = '^grok-4\.6(_|$)' }
-    'grok-4.5'            = @{ Display = 'Grok 4.5'; VersionRegex = '^grok-4\.5(_|$)' }
-    'kimi-k3'             = @{ Display = 'Kimi K3'; VersionRegex = '^kimi-k3(_|$)' }
-    'kimi-k2.7-code'      = @{ Display = 'Kimi K2.7 Code'; VersionRegex = '^kimi-k2\.7-code(_|$)' }
-    'mai-code-1.1-flash'  = @{ Display = 'MAI-Code-1.1-Flash'; VersionRegex = '^mai-code-1\.1-flash(_|$)' }
-    'hydrafusion-max'     = @{ Display = 'GPT-6.1 Sol'; VersionRegex = '^gpt-6\.1-sol(_|$)'; AliasOf = 'gpt-6.1-sol' }
-}
+$catalogModelSpecs = Get-SquadBenchmarkModelSpec
 
 function Get-CatalogFitMap {
     param([Parameter(Mandatory)][string]$Path)
 
     $raw = Get-Content -LiteralPath $Path -Raw
+    $classes = @((Get-SquadBenchmarkPolicy).Profiles.Keys)
     $fitMap = @{}
     $inFit = $false
     $header = $null
@@ -256,7 +235,7 @@ function Get-BestVersionRow {
         if ($rawVal -notmatch '^-?\d+(\.\d+)?([eE][+-]?\d+)?$') {
             continue
         }
-        $val = [double]$rawVal
+        $val = ConvertTo-SquadBenchmarkDecimal -Value $rawVal
         $signature = @(
             $row.PSObject.Properties |
                 Sort-Object Name |
@@ -317,8 +296,7 @@ function Get-SourceDetailLocal {
         [Parameter(Mandatory)][string]$DefaultName,
         [Parameter(Mandatory)][string]$DefaultVersion,
         [AllowNull()][AllowEmptyString()][string]$VersionHint,
-        [AllowNull()][AllowEmptyString()][string]$RetrievedHint,
-        [Parameter(Mandatory)][string]$SnapshotRetrieved
+        [AllowNull()][AllowEmptyString()][string]$RetrievedHint
     )
 
     $source = if ($RawSource) { $RawSource.Trim() } else { '' }
@@ -416,7 +394,7 @@ function Get-SourceDetailLocal {
             if ($VersionHint) { ConvertTo-IsoDate -Value $VersionHint -Fallback $DefaultVersion } else { $DefaultVersion }
         }
     }
-    $retrieved = ConvertTo-IsoDate -Value $RetrievedHint -Fallback $SnapshotRetrieved
+    $retrieved = ConvertTo-IsoDate -Value $RetrievedHint -Fallback 'unknown'
 
     $license = switch ($id) {
         'epoch-ai' { 'CC-BY-4.0' }
@@ -445,20 +423,8 @@ function ConvertTo-NormalizedScore {
     if ($null -eq $Value -or [string]$Value -notmatch '^-?\d+(\.\d+)?([eE][+-]?\d+)?$') {
         return $null
     }
-    $score = [double]$Value
-    if ([math]::Abs($score) -gt 1.0 -and [math]::Abs($score) -le 100.0) {
-        $score /= 100.0
-    }
-    [Math]::Round($score, 3)
-}
-
-function ConvertTo-EvidenceFit {
-    param([Parameter(Mandatory)][double]$Average)
-
-    if ($Average -ge 0.75) { return 3 }
-    if ($Average -ge 0.50) { return 2 }
-    if ($Average -ge 0.25) { return 1 }
-    return 0
+    # This function is used only for the API's explicitly 0..100 aggregate indices.
+    (ConvertTo-SquadBenchmarkDecimal -Value ([string]$Value)) / 100
 }
 
 function Get-ModelLookupKey {
@@ -514,12 +480,12 @@ function Get-UniqueProcessedEvaluationRow {
         if ($rawScore -notmatch '^-?\d+(\.\d+)?([eE][+-]?\d+)?$') {
             continue
         }
-        $score = [double]$rawScore
+        $score = ConvertTo-SquadBenchmarkDecimal -Value $rawScore
         if ($score -lt 0.0 -or $score -gt 1.0) {
             throw "Benchmark row for '$CatalogId' / '$Evaluation' has out-of-range normalized score '$rawScore'; expected 0.0 through 1.0."
         }
         $signature = @(
-            $score.ToString('0.###############', [System.Globalization.CultureInfo]::InvariantCulture)
+            $score.ToString('0.############################', [System.Globalization.CultureInfo]::InvariantCulture)
             ([string]$row.benchmark_release_date).Trim()
             ([string]$row.model_version).Trim()
             ([string]$row.date).Trim()
@@ -549,23 +515,277 @@ function Get-IndependentSnapshotEvidenceKey {
     }
 
     $keys = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::Ordinal)
-    $inScores = $false
-    foreach ($line in (Get-Content -LiteralPath $Path)) {
-        if ($line -match '^## Benchmark Scores\s*$') {
-            $inScores = $true
-            continue
-        }
-        if ($inScores -and $line -match '^## ') {
-            break
-        }
-        if ($inScores -and $line -match '^\|\s*`(?<id>[^`]+)`\s*\|\s*(?<evaluation>[^|]+?)\s*\|.*\|\s*`independent`\s*\|\s*$') {
-            [void]$keys.Add("$($Matches['id'])`n$($Matches['evaluation'].Trim())")
-        }
+    foreach ($row in (Get-SquadBenchmarkRowsFromMarkdown -Content (Get-Content -LiteralPath $Path -Raw))) {
+        if ($row.Provenance -eq 'independent') { [void]$keys.Add("$($row.CatalogId)`n$($row.Evaluation)") }
     }
     @($keys)
 }
 
+function Get-ExplicitVerificationRowsLocal {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows, [string]$Path)
+
+    $checks = @{}
+    if ($Path) {
+        $manifest = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+        if ($manifest.schemaVersion -ne 'squad-benchmark-verification-v1') {
+            throw 'Unsupported verification manifest schema; expected squad-benchmark-verification-v1.'
+        }
+        foreach ($check in $manifest.records) {
+            if ($check.recordDigest -notmatch '^sha256:[0-9a-f]{64}$' -or $checks.ContainsKey($check.recordDigest)) {
+                throw 'Verification records need unique exact recordDigest identities.'
+            }
+            $checks[$check.recordDigest] = $check
+        }
+    }
+    $used = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($inputRow in $Rows) {
+        $row = ConvertTo-SquadBenchmarkRecord -Row $inputRow
+        $digest = Get-SquadBenchmarkRecordDigest -Row $row
+        if ($checks.ContainsKey($digest)) {
+            $check = $checks[$digest]
+            foreach ($field in @('ModelVersion', 'Configuration', 'ResultDate', 'Retrieved', 'Verified',
+                    'Verification', 'SourceUrl', 'VerificationBasis', 'VerificationReason')) {
+                $property = $check.PSObject.Properties[$field]
+                if (-not $property -or -not [string]$property.Value) { throw "Verification record $digest has no $field." }
+                $row.$field = [string]$property.Value
+            }
+            [void]$used.Add($digest)
+        }
+        $row
+    }
+    if ($used.Count -ne $checks.Count) {
+        throw 'Verification manifest contains an unmatched record digest; refusing to attach a check to different evidence.'
+    }
+}
+
+function Get-ArtificialAnalysisModelRecordsLocal {
+    param([Parameter(Mandatory)][string]$Html)
+
+    $flight = [System.Text.StringBuilder]::new()
+    foreach ($match in [regex]::Matches($Html, '<script[^>]*>self\.__next_f\.push\((?<payload>.*?)\)</script>', 'Singleline')) {
+        $payload = ConvertFrom-Json -InputObject $match.Groups['payload'].Value -Depth 100 -NoEnumerate
+        if ($payload.Count -gt 1 -and $payload[1] -is [string]) { [void]$flight.Append($payload[1]) }
+    }
+    $queue = [System.Collections.Generic.Queue[System.Text.Json.JsonElement]]::new()
+    foreach ($line in ($flight.ToString() -split "`n")) {
+        if ($line -notmatch '^[0-9a-f]+:(?<json>[\[{].*)$') { continue }
+        $json = $Matches['json']
+        try {
+            $document = [System.Text.Json.JsonDocument]::Parse($json)
+            $queue.Enqueue($document.RootElement.Clone())
+            $document.Dispose()
+        }
+        catch [System.Text.Json.JsonException] { continue } # RSC also carries non-JSON transport records.
+    }
+    while ($queue.Count) {
+        $value = $queue.Dequeue()
+        if ($value.ValueKind -eq [System.Text.Json.JsonValueKind]::Object) {
+            $slug = [System.Text.Json.JsonElement]::new()
+            $name = [System.Text.Json.JsonElement]::new()
+            $score = [System.Text.Json.JsonElement]::new()
+            if ($value.TryGetProperty('slug', [ref]$slug) -and $value.TryGetProperty('name', [ref]$name) -and
+                $value.TryGetProperty('scicode', [ref]$score) -and
+                $slug.ValueKind -eq [System.Text.Json.JsonValueKind]::String -and
+                $name.ValueKind -eq [System.Text.Json.JsonValueKind]::String -and
+                $score.ValueKind -eq [System.Text.Json.JsonValueKind]::Number) {
+                [pscustomobject]@{
+                    Slug = $slug.GetString(); Name = $name.GetString()
+                    Score = ConvertTo-SquadBenchmarkDecimal -Value $score.GetRawText()
+                }
+            }
+            foreach ($property in $value.EnumerateObject()) { $queue.Enqueue($property.Value) }
+        }
+        elseif ($value.ValueKind -eq [System.Text.Json.JsonValueKind]::Array) {
+            foreach ($item in $value.EnumerateArray()) { $queue.Enqueue($item) }
+        }
+    }
+}
+
+function Get-OnlineSciCodeVerificationLocal {
+    param([Parameter(Mandatory)][object[]]$Rows, [Parameter(Mandatory)][object[]]$SciCodeRows)
+
+    $date = [datetime]::UtcNow.ToString('yyyy-MM-dd')
+    $methodUri = 'https://artificialanalysis.ai/methodology/intelligence-benchmarking'
+    $method = Invoke-WebRequest -Uri $methodUri -UseBasicParsing
+    $methodHtml = [string]$method.Content
+    $section = [regex]::Match($methodHtml, '(?is)<h4\b[^>]*\bid=["'']scicode["''][^>]*>.*?(?=<h[234]\b|\z)').Value
+    $tableRow = [regex]::Match($methodHtml, '(?is)<tr\b[^>]*>(?:(?!</tr>).)*\bSciCode\b(?:(?!</tr>).)*</tr>').Value
+    $tableText = [regex]::Replace([System.Net.WebUtility]::HtmlDecode(($tableRow -replace '<[^>]+>', ' ')), '\s+', ' ')
+    $methodSupported = $section -match 'dataset v1\.0\.1' -and $section -match '300-second' -and
+    $section -match 'scientist-annotated background' -and $section -match 'sub-problem level scoring' -and
+    $section -match 'pass@1' -and $tableText -match '288 subproblems \(test set\)\s+3\b'
+    $methodHash = Get-SquadBenchmarkTextHash -Text $methodHtml
+    $publisherRecords = @{}
+    foreach ($row in $Rows) {
+        if ($row.Evaluation -ne 'SciCode' -or $row.SourceId -ne 'artificial-analysis') { continue }
+        $rowScore = ConvertTo-SquadBenchmarkDecimal -Value $row.NumericScore
+        $rawMatches = @($SciCodeRows | Where-Object {
+                $_.'Model version' -ceq $row.ModelVersion -and
+                (ConvertTo-SquadBenchmarkDecimal -Value ([string]$_.Score)) -eq $rowScore
+            })
+        $slugs = @($rawMatches | ForEach-Object {
+                if ($_.PSObject.Properties['AA model slug']) { [string]$_.'AA model slug' }
+            } | Where-Object { $_ } | Sort-Object -Unique)
+        $row.Retrieved = $date
+        $row.Configuration = if ($methodSupported) { 'aa-scicode-v1.0.1-background-subproblem-pass1-r3-t300-v1' } else { 'unknown' }
+        if ($slugs.Count -ne 1 -or $slugs[0] -notmatch '^[a-z0-9-]+$' -or -not $methodSupported) {
+            $row.VerificationReason = 'original source model slug or supported SciCode methodology is unknown; retrieval is not verification'
+            continue
+        }
+        $slug = $slugs[0]
+        if (-not $publisherRecords.ContainsKey($slug)) {
+            $uri = "https://artificialanalysis.ai/models/$slug"
+            $page = Invoke-WebRequest -Uri $uri -UseBasicParsing
+            $actualUri = $page.BaseResponse.RequestMessage.RequestUri
+            if ($actualUri.Host -ne 'artificialanalysis.ai' -or $actualUri.AbsolutePath.TrimEnd('/') -cne "/models/$slug") {
+                $row.VerificationReason = 'original model record redirected; exact source identity not verified'
+                continue
+            }
+            $hash = Get-SquadBenchmarkTextHash -Text ([string]$page.Content)
+            foreach ($record in (Get-ArtificialAnalysisModelRecordsLocal -Html ([string]$page.Content))) {
+                if ($publisherRecords.ContainsKey($record.Slug) -and $publisherRecords[$record.Slug].Score -ne $record.Score) {
+                    throw "Conflicting original SciCode records for '$($record.Slug)'; preserving the last-good snapshot."
+                }
+                $publisherRecords[$record.Slug] = [pscustomobject]@{
+                    Score = $record.Score; Name = $record.Name; Uri = $uri; Basis = "$hash+$methodHash"
+                }
+            }
+        }
+        if (-not $publisherRecords.ContainsKey($slug) -or $publisherRecords[$slug].Score -ne $rowScore) {
+            $row.VerificationReason = 'original publisher does not reproduce this exact model variant and score; result may have been superseded'
+            continue
+        }
+        $record = $publisherRecords[$slug]
+        $row.SourceUrl = $record.Uri
+        $row.VerificationBasis = $record.Basis
+        if ($record.Name -match '(?i)fallback' -or $row.ModelVersion -match '_unknown$') {
+            $row.Verification = 'incomparable'
+            $row.VerificationReason = "single-model/configuration attribution unproven: $($record.Name); measured $($row.ModelVersion)"
+            continue
+        }
+        $row.Verified = $date
+        $row.Verification = 'verified'
+        $row.VerificationReason = "original exact model variant/value and versioned SciCode protocol checked; measured configuration $($record.Name), not a host execution claim"
+    }
+    $Rows
+}
+
+function Get-BenchmarkSnapshotContentLocal {
+    param(
+        [Parameter(Mandatory)][object[]]$Rows,
+        [Parameter(Mandatory)]$Scoring,
+        [Parameter(Mandatory)][string]$SourceTerms,
+        [string]$LegacyStamp
+    )
+
+    $date = $Scoring.EvaluationDate
+    $acquisitions = @($Rows | Where-Object { $_.Retrieved -ne 'unknown' } | ForEach-Object Retrieved | Sort-Object -Descending)
+    $latestAcquisition = if ($acquisitions.Count) { $acquisitions[0] } else { 'unknown' }
+    $sourceBody = ($SourceTerms -replace "`r`n", "`n").Trim()
+    $sourceBody = $sourceBody -replace 'Every source evaluated for `routing=ranked` was checked for methodology transparency, provenance separation \(`independent` versus `self-reported`\), and redistribution licensing before any score entered this repository:', 'Source terms preserve attribution and provenance. Inclusion or active source status is not proof that every result is verified; each score records its own identity, configuration and verification facts.'
+    $lines = @(
+        '---'
+        'name: squad-model-benchmarks'
+        'description: "Pinned benchmark evidence with explicit model/configuration identities, separate dates, verification, selected comparison panels and auditable source terms."'
+        'license: MIT'
+        'metadata:'
+        '  authors: "Peter-N91/hve-squad"'
+        '  spec_version: "1.0"'
+        "  last_updated: `"$date`""
+        '---', '', '# Squad Model Benchmarks Knowledge Base', ''
+        '**Pinned, reviewed evidence; runtime stays offline.** Generation does not verify or refresh source records. See [model-scoring.md](model-scoring.md) for policy, date semantics, panels, qualification and limitations.'
+        ''
+        "* **Generated: $date**"
+        "* **Retrieved: $latestAcquisition**"
+        "* **Evidence Schema: $($scoringPolicy.Schema)**"
+        "* **Scoring Policy: $($scoringPolicy.Version)**"
+        '* **Content Digest: DIGEST_PLACEHOLDER**'
+        '* **Refresh Cadence: Daily source check; verification renewal at 60 days; verification expires after 90 days**'
+    )
+    if ($LegacyStamp) { $lines += "* **Legacy snapshot stamp: $LegacyStamp**" }
+    $lines += @(
+        ''
+        'Retrieved above is the latest recorded evidence acquisition, not universal verification. Per-row result, acquisition and verification dates are authoritative; unknown dates stay unknown.'
+        ''
+        $sourceBody
+        ''
+        '## Assignment Class Evidence Mapping', ''
+        "Policy ``$($scoringPolicy.Version)`` selects one common versioned panel by complete independent snapshot-wide coverage, then primary count and declared order, never scores, price or host availability. Every selected primary has equal weight. Secondary coverage is only a confidence tie-break."
+        ''
+        Get-SquadBenchmarkMappingLine
+        ''
+        '### Design Decisions on Open Questions', ''
+        '1. **Date semantics and legacy handling**: Result, acquisition, verification and generation dates are distinct. Legacy ambiguous Retrieved values are retained as Legacy date, not reinterpreted as genuine verification. Publication or model-release age alone never expires a verified result.'
+        '2. **Task proxies**: Reduced implementation evidence is explicitly narrower than the full SciCode/Terminal-Bench panel. Unknown original configurations, mixed/fallback identities and incomparable agent harnesses remain excluded with reasons, not relabeled as model unavailability.'
+        '3. **Verification and refresh**: Runtime recalculates the 90-day verification window offline. Only sync acquires sources. An unchanged score is not proof of verification; acquisition/verification facts affect the digest. New assembly or retrieval never renews an old verification.'
+        '4. **Coverage continuity**: An automatic refresh refuses loss of independent model/evaluation keys unless a reviewed -AllowCoverageReduction explicitly accepts it. Unverified evidence stays auditable rather than disappearing.'
+        '5. **Shared scoring**: Generated views and runtime use the same scorer, evidence and evaluation date. The report always names its panel, evidence level, coverage and date; numerical results from different panels are never pooled.'
+        '6. **Semantic duplicate normalization**: Unique normalized records define archive identity. Equivalent decimal spellings count once; conflicting records are rejected before snapshot replacement.'
+        ''
+        Get-SquadBenchmarkDerivedLine -Scoring $Scoring
+        '## Benchmark Scores', ''
+        'Each row preserves its numerical source record and provenance. Model/configuration identity, result date, actual acquisition, genuine verification and historical ambiguous dates are separate fields. Unknowns never become fresh by generation.'
+        ''
+        Get-SquadBenchmarkScoreLine -Rows $Rows
+        ''
+    )
+    $content = $lines -join "`n"
+    $digest = Get-SquadBenchmarkDigest -Content $content
+    $content.Replace('DIGEST_PLACEHOLDER', $digest)
+}
+
 $catalogFit = Get-CatalogFitMap -Path $CatalogPath
+
+if ($SnapshotPath) {
+    if ($ArchivePath -or $ArtificialAnalysisJsonPath) {
+        throw '-SnapshotPath is an offline rebuild and cannot be combined with archive or API JSON input.'
+    }
+    $original = Get-Content -LiteralPath $SnapshotPath -Raw
+    $dateMatch = [regex]::Match($original, '\*\*Generated:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
+    if (-not $dateMatch.Success) { $dateMatch = [regex]::Match($original, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*') }
+    if (-not $dateMatch.Success) { throw 'The pinned snapshot has no generation or legacy snapshot date.' }
+    $snapshotDate = [datetime]::ParseExact($dateMatch.Groups['date'].Value, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
+    if (-not $PSBoundParameters.ContainsKey('AsOf')) { $AsOf = $snapshotDate }
+    if ($snapshotDate.Date -gt $AsOf.Date) { throw 'The pinned snapshot is dated after the evaluation date.' }
+    $rows = @(Get-ExplicitVerificationRowsLocal -Rows @(Get-SquadBenchmarkRowsFromMarkdown -Content $original) -Path $VerificationPath)
+    $scoring = Get-SquadBenchmarkScore -Rows $rows -AsOf $AsOf -ModelIds @($catalogFit.Keys)
+    $terms = [regex]::Match($original, '(?ms)^## Source Terms and Licensing\s*\r?\n.*?(?=^## |\z)').Value.Trim()
+    if (-not $terms) { $terms = '## Source Terms and Licensing' + "`n`nExplicit synthetic/local evidence; source terms must accompany publication." }
+    $legacyStamp = [regex]::Match($original, '\*\*Legacy snapshot stamp:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+    if (-not $legacyStamp -and $original -notmatch '\*\*Generated:') { $legacyStamp = $dateMatch.Groups['date'].Value }
+    $content = Get-BenchmarkSnapshotContentLocal -Rows $rows -Scoring $scoring -SourceTerms $terms -LegacyStamp $legacyStamp
+    $digest = Get-SquadBenchmarkDigest -Content $content
+    $reportedAcquisition = [regex]::Match($content, '\*\*Retrieved:\s*(?<date>[^*]+)\*\*').Groups['date'].Value.Trim()
+    $existing = if (Test-Path -LiteralPath $OutputPath -PathType Leaf) { Get-Content -LiteralPath $OutputPath -Raw } else { '' }
+    $needsUpdate = $content -cne $existing
+    if ($DryRun) { Write-Host "[DryRun] Offline derived-view rebuild (needsUpdate=$needsUpdate)." }
+    elseif (($needsUpdate -or $Force) -and $PSCmdlet.ShouldProcess($OutputPath, 'Rebuild pinned benchmark views offline')) {
+        Set-Content -LiteralPath $OutputPath -Value $content -Encoding utf8NoBOM -NoNewline
+    }
+    if ($GitHubOutput -and $env:GITHUB_OUTPUT) {
+        @(
+            "updated=$($needsUpdate.ToString().ToLowerInvariant())"
+            "retrieved=$reportedAcquisition"
+            "generated=$($scoring.EvaluationDate)"
+            "digest=$digest"
+            "models_covered=$($scoring.IndependentModels.Count)"
+            "verified_models_covered=$($scoring.FreshIndependentModels.Count)"
+            "scores_count=$($rows.Count)"
+        ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+    }
+    [pscustomobject]@{
+        Updated = $needsUpdate
+        OutputPath = $OutputPath
+        Retrieved = $reportedAcquisition
+        Generated = $scoring.EvaluationDate
+        Digest = $digest
+        ModelsCovered = $scoring.IndependentModels.Count
+        VerifiedModelsCovered = $scoring.FreshIndependentModels.Count
+        ScoresCount = $rows.Count
+        ScoringPolicy = $scoringPolicy.Version
+    }
+    return
+}
 
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "squad-benchmarks-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
@@ -733,24 +953,24 @@ try {
             $matchRows = @($modelProcRows | Where-Object { ([string]$_.benchmark).Trim() -eq $evalSpec.RawName })
             $matchRow = Get-UniqueProcessedEvaluationRow -Rows $matchRows -CatalogId $catalogId -Evaluation $evalSpec.EvalName
             if ($matchRow) {
-                $scoreVal = [Math]::Round([double]$matchRow.performance, 3)
+                $scoreVal = ConvertTo-SquadBenchmarkDecimal -Value ([string]$matchRow.performance)
                 $source = Get-SourceDetailLocal `
                     -RawSource ([string]$matchRow.source) `
                     -DefaultId 'epoch-ai' `
                     -DefaultName 'Epoch AI Benchmarking Hub' `
                     -DefaultVersion $EpochVersion `
                     -VersionHint ([string]$matchRow.benchmark_release_date) `
-                    -RetrievedHint ([string]$matchRow.date) `
-                    -SnapshotRetrieved $retrievedDate
+                    -RetrievedHint ([string]$matchRow.date)
                 $entry = [pscustomobject][ordered]@{
                     CatalogId     = $catalogId
                     Evaluation    = $evalSpec.EvalName
                     Category      = $evalSpec.Category
-                    Score         = $scoreVal.ToString('0.000', [System.Globalization.CultureInfo]::InvariantCulture)
+                    Score         = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
                     NumericScore  = $scoreVal
                     SourceId      = $source.Id
                     SourceName    = $source.Name
                     SourceVersion = $source.Version
+                    ModelVersion  = [string]$matchRow.model_version
                     SourceUrl     = $source.Url
                     Retrieved     = $source.Retrieved
                     Provenance    = $source.Provenance
@@ -766,24 +986,24 @@ try {
         # SciCode (Artificial Analysis Coding evaluation)
         $scicodeBest = Get-BestVersionRow -Rows $scicodeRows -VersionPattern $versionRegex -ScoreColumn 'Score'
         if ($null -ne $scicodeBest) {
-            $scoreVal = [Math]::Round($scicodeBest.Score, 3)
+            $scoreVal = [decimal]$scicodeBest.Score
             $source = Get-SourceDetailLocal `
                 -RawSource ([string]$scicodeBest.Row.Source) `
                 -DefaultId 'artificial-analysis' `
                 -DefaultName 'Artificial Analysis' `
                 -DefaultVersion $ArtificialAnalysisVersion `
                 -VersionHint $ArtificialAnalysisVersion `
-                -RetrievedHint $retrievedDate `
-                -SnapshotRetrieved $retrievedDate
+                -RetrievedHint $retrievedDate
             $entry = [pscustomobject][ordered]@{
                 CatalogId     = $catalogId
                 Evaluation    = 'SciCode'
                 Category      = 'coding'
-                Score         = $scoreVal.ToString('0.000', [System.Globalization.CultureInfo]::InvariantCulture)
+                Score         = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
                 NumericScore  = $scoreVal
                 SourceId      = $source.Id
                 SourceName    = $source.Name
                 SourceVersion = $source.Version
+                ModelVersion  = [string]$scicodeBest.Row.'Model version'
                 SourceUrl     = $source.Url
                 Retrieved     = $source.Retrieved
                 Provenance    = $source.Provenance
@@ -798,24 +1018,24 @@ try {
         # CritPt (Artificial Analysis Scientific Reasoning evaluation)
         $critptBest = Get-BestVersionRow -Rows $critptRows -VersionPattern $versionRegex -ScoreColumn 'Accuracy'
         if ($null -ne $critptBest -and $critptBest.Score -gt 0) {
-            $scoreVal = [Math]::Round($critptBest.Score, 3)
+            $scoreVal = [decimal]$critptBest.Score
             $source = Get-SourceDetailLocal `
                 -RawSource 'Artificial Analysis CritPt' `
                 -DefaultId 'artificial-analysis' `
                 -DefaultName 'Artificial Analysis' `
                 -DefaultVersion $ArtificialAnalysisVersion `
                 -VersionHint $ArtificialAnalysisVersion `
-                -RetrievedHint $retrievedDate `
-                -SnapshotRetrieved $retrievedDate
+                -RetrievedHint $retrievedDate
             $entry = [pscustomobject][ordered]@{
                 CatalogId     = $catalogId
                 Evaluation    = 'CritPt'
                 Category      = 'scientific-reasoning'
-                Score         = $scoreVal.ToString('0.000', [System.Globalization.CultureInfo]::InvariantCulture)
+                Score         = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
                 NumericScore  = $scoreVal
                 SourceId      = $source.Id
                 SourceName    = $source.Name
                 SourceVersion = $source.Version
+                ModelVersion  = [string]$critptBest.Row.'Model version'
                 SourceUrl     = $source.Url
                 Retrieved     = $source.Retrieved
                 Provenance    = $source.Provenance
@@ -830,7 +1050,7 @@ try {
         # GDP.pdf (source publisher retained from the archive row).
         $gdpBest = Get-BestVersionRow -Rows $gdpPdfRows -VersionPattern $versionRegex -ScoreColumn 'GDP.pdf score'
         if ($null -ne $gdpBest -and $gdpBest.Score -gt 0) {
-            $scoreVal = [Math]::Round($gdpBest.Score, 3)
+            $scoreVal = [decimal]$gdpBest.Score
             $gdpSource = if ($gdpBest.Row.'Source link') { [string]$gdpBest.Row.'Source link' } else { [string]$gdpBest.Row.Source }
             $source = Get-SourceDetailLocal `
                 -RawSource $gdpSource `
@@ -838,17 +1058,17 @@ try {
                 -DefaultName 'Surge AI GDP.pdf' `
                 -DefaultVersion $EpochVersion `
                 -VersionHint ([string]$gdpBest.Row.'Last updated') `
-                -RetrievedHint ([string]$gdpBest.Row.'Last updated') `
-                -SnapshotRetrieved $retrievedDate
+                -RetrievedHint ([string]$gdpBest.Row.'Last updated')
             $entry = [pscustomobject][ordered]@{
                 CatalogId     = $catalogId
                 Evaluation    = 'GDP.pdf'
                 Category      = 'general-long-doc'
-                Score         = $scoreVal.ToString('0.000', [System.Globalization.CultureInfo]::InvariantCulture)
+                Score         = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
                 NumericScore  = $scoreVal
                 SourceId      = $source.Id
                 SourceName    = $source.Name
                 SourceVersion = $source.Version
+                ModelVersion  = [string]$gdpBest.Row.'Model version'
                 SourceUrl     = $source.Url
                 Retrieved     = $source.Retrieved
                 Provenance    = $source.Provenance
@@ -885,7 +1105,7 @@ try {
             $null
         }
         if ($eciMatch -and $eciMatch.eci -match '^-?\d+(\.\d+)?$') {
-            $eciNormalized = [Math]::Round(([double]$eciMatch.eci - 100.0) / 100.0, 3)
+            $eciNormalized = ((ConvertTo-SquadBenchmarkDecimal -Value ([string]$eciMatch.eci)) - 100) / 100
             if ($eciNormalized -lt 0.0 -or $eciNormalized -gt 1.0) {
                 throw "Epoch Capabilities Index for '$catalogId' normalizes to '$eciNormalized'; expected 0.0 through 1.0."
             }
@@ -895,13 +1115,12 @@ try {
                 -DefaultName 'Epoch AI Benchmarking Hub' `
                 -DefaultVersion $EpochVersion `
                 -VersionHint $EpochVersion `
-                -RetrievedHint $retrievedDate `
-                -SnapshotRetrieved $retrievedDate
+                -RetrievedHint $retrievedDate
             $entry = [pscustomobject][ordered]@{
                 CatalogId     = $catalogId
                 Evaluation    = 'Epoch Capabilities Index'
                 Category      = 'general-long-doc'
-                Score         = $eciNormalized.ToString('0.000', [System.Globalization.CultureInfo]::InvariantCulture)
+                Score         = $eciNormalized.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
                 NumericScore  = $eciNormalized
                 SourceId      = $source.Id
                 SourceName    = $source.Name
@@ -933,8 +1152,7 @@ try {
                 -DefaultName 'Artificial Analysis' `
                 -DefaultVersion $ArtificialAnalysisVersion `
                 -VersionHint $ArtificialAnalysisVersion `
-                -RetrievedHint $retrievedDate `
-                -SnapshotRetrieved $retrievedDate
+                -RetrievedHint $retrievedDate
             foreach ($apiSpec in $aaEvaluationSpecs) {
                 $property = $evaluations.PSObject.Properties[$apiSpec.Property]
                 if (-not $property) {
@@ -948,7 +1166,7 @@ try {
                     CatalogId      = $catalogId
                     Evaluation     = $apiSpec.EvalName
                     Category       = $apiSpec.Category
-                    Score          = $scoreVal.ToString('0.000', [System.Globalization.CultureInfo]::InvariantCulture)
+                    Score          = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
                     NumericScore   = $scoreVal
                     SourceId       = $source.Id
                     SourceName     = $source.Name
@@ -985,134 +1203,50 @@ try {
             Status        = 'self-reported-only'
         })
 
-    function Test-RoutingFreshScoreLocal {
-        param([Parameter(Mandatory)]$Row)
-
-        $scoreDate = [datetime]::MinValue
-        if (-not [datetime]::TryParseExact(
-                [string]$Row.Retrieved,
-                'yyyy-MM-dd',
-                [System.Globalization.CultureInfo]::InvariantCulture,
-                [System.Globalization.DateTimeStyles]::None,
-                [ref]$scoreDate
-            )) {
-            return $false
+    $evidenceRows = @(Get-ExplicitVerificationRowsLocal -Rows $scoreRows.ToArray() -Path $VerificationPath)
+    foreach ($row in $evidenceRows) {
+        if ($row.Evaluation -in @('SciCode', 'CritPt', 'Epoch Capabilities Index',
+                'Artificial Analysis Intelligence Index', 'Artificial Analysis Coding Index', 'Artificial Analysis Agentic Index')) {
+            $row.LegacyDate = 'unknown'
         }
-        $ageDays = ($AsOf.Date - $scoreDate.Date).TotalDays
-        return $ageDays -ge 0 -and $ageDays -le 90
-    }
-
-    # One mapping drives both the materialized fit table and the runtime-readable
-    # Assignment Class Evidence Mapping table, preventing aggregation drift.
-    $classEvidenceMap = [ordered]@{
-        research = [ordered]@{
-            Primary   = @('Artificial Analysis Intelligence Index', 'GDP.pdf', 'GPQA diamond', 'HLE', 'CritPt', 'DeepResearch Bench', 'SimpleQA Verified')
-            Secondary = @('Artificial Analysis Agentic Index', 'APEX-Agents', 'Epoch Capabilities Index')
-            Rule      = 'Long-document synthesis, scientific/general reasoning, and factual accuracy (`fit 3..0`, then `Blended` cost)'
-        }
-        planning = [ordered]@{
-            Primary   = @('FrontierMath-Tiers-1-3-v2', 'FrontierMath-Tier-4-v2', 'GPQA diamond', 'CritPt', 'HLE', 'GDP.pdf', 'Artificial Analysis Intelligence Index')
-            Secondary = @('Artificial Analysis Agentic Index', 'APEX-Agents', 'ProofBench', 'OTIS Mock AIME', 'Epoch Capabilities Index')
-            Rule      = 'Multi-step architectural, mathematical, and scientific reasoning (`fit 3..0`, then `Blended` cost)'
-        }
-        implementation = [ordered]@{
-            Primary   = @('Artificial Analysis Coding Index', 'Artificial Analysis Agentic Index', 'SciCode', 'Terminal-Bench', 'SWE-Bench verified', 'FrontierCode', 'DeepSWE', 'APEX-Agents')
-            Secondary = @('FrontierSWE', 'OSWorld 2.0', 'Epoch Capabilities Index')
-            Rule      = 'Agentic software engineering and coding sub-evaluations; math-specific sources (`FrontierMath`, `ProofBench`) apply to quantitative analysis roles (`data-scientist`, `experimenter`, `performance`) rather than general implementation (`fit 3..0`, then `Blended` cost)'
-        }
-        review = [ordered]@{
-            Primary   = @('Artificial Analysis Coding Index', 'SWE-Bench verified', 'Terminal-Bench', 'SciCode', 'GPQA diamond', 'CritPt', 'HLE')
-            Secondary = @('DeepSWE', 'FrontierCode', 'ProofBench', 'Epoch Capabilities Index')
-            Rule      = 'Code verification, defect detection, and adversarial scientific reasoning (`fit 3..0`, then `Blended` cost)'
-        }
-        council = [ordered]@{
-            Primary   = @('Artificial Analysis Intelligence Index', 'GPQA diamond', 'FrontierMath-Tiers-1-3-v2', 'FrontierMath-Tier-4-v2', 'CritPt', 'HLE', 'GDP.pdf')
-            Secondary = @('Artificial Analysis Agentic Index', 'APEX-Agents', 'SimpleQA Verified', 'Epoch Capabilities Index')
-            Rule      = 'Cross-domain architectural, security, cost, and governance judgment (`fit 3..0`, then `Blended` cost)'
-        }
-        intake = [ordered]@{
-            Primary   = @('Artificial Analysis Agentic Index', 'Artificial Analysis Intelligence Index', 'APEX-Agents', 'GDP.pdf', 'GPQA diamond', 'SimpleQA Verified')
-            Secondary = @('FrontierCode', 'Artificial Analysis Coding Index', 'SciCode', 'Epoch Capabilities Index')
-            Rule      = 'Cost and latency (`Blended`) among models clearing the requirements-judgment capability floor (`fit 3..0`, then `Blended` cost)'
-        }
-        bookkeeping = [ordered]@{
-            Primary   = @('Artificial Analysis Intelligence Index', 'GPQA diamond', 'Artificial Analysis Coding Index', 'SciCode', 'Artificial Analysis Agentic Index', 'APEX-Agents', 'FrontierCode')
-            Secondary = @('Epoch Capabilities Index')
-            Rule      = 'Cost and latency (`Blended`) first among models clearing the structured-output capability floor (`ECI >= 140` or `GPQA diamond >= 0.60`; `fit 3..0`, then `Blended` cost)'
+        if (-not $ArchivePath -and $row.Provenance -eq 'independent') {
+            $row.Retrieved = [datetime]::UtcNow.ToString('yyyy-MM-dd')
         }
     }
-
-    $evidenceFitRows = [System.Collections.Generic.List[pscustomobject]]::new()
-    foreach ($catalogId in $catalogModelSpecs.Keys) {
-        if (-not $modelEvalLookup.ContainsKey($catalogId)) {
-            continue
-        }
-        $evalMap = $modelEvalLookup[$catalogId]
-        if ($evalMap.Count -eq 0) {
-            continue
-        }
-
-        if (-not $catalogFit.ContainsKey($catalogId)) {
-            continue
-        }
-
-        $freshIndependentRows = @(
-            $evalMap.Values |
-                Where-Object { $_.Provenance -eq 'independent' -and (Test-RoutingFreshScoreLocal -Row $_) }
-        )
-        $numericValues = @($freshIndependentRows | ForEach-Object { $_.NumericScore })
-        if ($numericValues.Count -eq 0) {
-            continue
-        }
-        $composite = [Math]::Round((($numericValues | Measure-Object -Average).Average), 3)
-
-        $sourceTokens = @(
-            $freshIndependentRows |
-                ForEach-Object { "$($_.SourceId)@$($_.SourceVersion)" } |
-                Sort-Object -Unique
-        )
-
-        $keyEvalNames = [System.Collections.Generic.List[string]]::new()
-        $fitValues = [ordered]@{}
-        foreach ($classKey in $classes) {
-            $classRows = @(
-                foreach ($pref in @($classEvidenceMap[$classKey].Primary + $classEvidenceMap[$classKey].Secondary)) {
-                    if (
-                        $evalMap.Contains($pref) -and
-                        $evalMap[$pref].Provenance -eq 'independent' -and
-                        (Test-RoutingFreshScoreLocal -Row $evalMap[$pref])
-                    ) {
-                        $evalMap[$pref]
-                    }
-                }
-            )
-            if ($classRows.Count -eq 0) {
-                $fitValues[$classKey] = 0
-                continue
+    if (-not $ArchivePath -and -not $VerificationPath) {
+        $evidenceRows = @(Get-OnlineSciCodeVerificationLocal -Rows $evidenceRows -SciCodeRows $scicodeRows)
+        if (-not $Force -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
+            $priorRows = @{}
+            foreach ($prior in (Get-SquadBenchmarkRowsFromMarkdown -Content (Get-Content -LiteralPath $OutputPath -Raw))) {
+                $priorRows[(Get-SquadBenchmarkRecordDigest -Row $prior)] = $prior
             }
-            $average = [double](($classRows | Measure-Object -Property NumericScore -Average).Average)
-            $fitValues[$classKey] = ConvertTo-EvidenceFit -Average $average
-            foreach ($row in $classRows) {
-                if (-not $keyEvalNames.Contains($row.Evaluation) -and $keyEvalNames.Count -lt 6) {
-                    $keyEvalNames.Add($row.Evaluation)
+            foreach ($row in $evidenceRows) {
+                $key = Get-SquadBenchmarkRecordDigest -Row $row
+                if (-not $priorRows.ContainsKey($key)) { continue }
+                $prior = $priorRows[$key]
+                if ($row.Verification -ne 'verified' -and $prior.Verification -ceq $row.Verification -and
+                    $row.ModelVersion -ceq $prior.ModelVersion -and $row.Configuration -ceq $prior.Configuration -and
+                    $row.ResultDate -ceq $prior.ResultDate -and $row.SourceUrl -ceq $prior.SourceUrl -and
+                    $prior.Retrieved -ne 'unknown') {
+                    $acquired = [datetime]::ParseExact($prior.Retrieved, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
+                    if (($AsOf.Date - $acquired.Date).TotalDays -lt $RefreshThresholdDays) { $row.Retrieved = $prior.Retrieved }
+                }
+                if ($prior.Verification -ne 'verified' -or $row.Verification -ne 'verified' -or
+                    $row.ModelVersion -cne $prior.ModelVersion -or $row.Configuration -cne $prior.Configuration -or
+                    $row.ResultDate -cne $prior.ResultDate -or $prior.Verified -eq 'unknown') { continue }
+                $checked = [datetime]::ParseExact($prior.Verified, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
+                if (($AsOf.Date - $checked.Date).TotalDays -ge $RefreshThresholdDays) { continue }
+                foreach ($field in @('Retrieved', 'Verified', 'VerificationBasis', 'SourceUrl', 'VerificationReason')) {
+                    $row.$field = $prior.$field
                 }
             }
         }
-
-        $fitRow = [ordered]@{
-            CatalogId = $catalogId
-        }
-        foreach ($classKey in $classes) {
-            $fitRow[$classKey] = $fitValues[$classKey]
-        }
-        $fitRow['Composite'] = $composite.ToString('0.000', [System.Globalization.CultureInfo]::InvariantCulture)
-        $fitRow['Sources'] = ($sourceTokens -join ', ')
-        $fitRow['KeyEvaluations'] = ($keyEvalNames -join ', ')
-        $evidenceFitRows.Add([pscustomobject]$fitRow)
     }
+    $scoring = Get-SquadBenchmarkScore -Rows $evidenceRows -AsOf $AsOf -ModelIds @($catalogFit.Keys)
+    $modelsCovered = $scoring.IndependentModels.Count
 
     $independentScoreCount = @($scoreRows | Where-Object { $_.Provenance -eq 'independent' }).Count
-    if ($independentScoreCount -eq 0 -or $evidenceFitRows.Count -eq 0) {
+    if ($independentScoreCount -eq 0 -or $modelsCovered -eq 0) {
         throw "Benchmark refresh produced no usable independent model coverage; preserving the existing snapshot instead of replacing it."
     }
     if (-not $AllowCoverageReduction -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
@@ -1143,12 +1277,18 @@ try {
         }
     }
 
-    # Build canonical tables first so we can compute a date-independent content digest.
+    if ($scoring.FreshIndependentModels.Count -eq 0 -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
+        $priorScoring = Get-SquadBenchmarkScore -Rows @(Get-SquadBenchmarkRowsFromMarkdown -Content (Get-Content -LiteralPath $OutputPath -Raw)) -AsOf $AsOf
+        if ($priorScoring.FreshIndependentModels.Count -gt 0 -and -not $AllowCoverageReduction) {
+            throw 'Refresh lost all verified evidence; preserving the last-good snapshot. Local archives need explicit record-bound verification.'
+        }
+    }
+
+    # Source attribution remains separate from per-record eligibility.
     $sourcesTableLines = @(
         '| Source ID | Source name | Version | Retrieved | License | Redistribution | Status | URL |'
         '| --- | --- | --- | --- | --- | --- | --- | --- |'
     )
-    $digestSourceLines = [System.Collections.Generic.List[string]]::new()
     foreach ($group in ($scoreRows | Group-Object SourceId | Sort-Object Name)) {
         $sourceNames = @($group.Group | ForEach-Object { $_.SourceName } | Where-Object { $_ } | Sort-Object -Unique)
         $versions = @($group.Group | ForEach-Object { $_.SourceVersion } | Where-Object { $_ } | Sort-Object -Unique)
@@ -1157,78 +1297,17 @@ try {
         $statuses = @($group.Group | ForEach-Object { $_.Status } | Where-Object { $_ } | Sort-Object -Unique)
         $sourceUrls = @($group.Group | ForEach-Object { $_.SourceUrl } | Where-Object { $_ } | Sort-Object -Unique)
         $sourceUrlCell = if ($sourceUrls.Count -gt 0) { @($sourceUrls | ForEach-Object { "<$_>" }) -join ', ' } else { '—' }
-        $sourcesTableLines += "| ``$($group.Name)`` | $($sourceNames -join '; ') | ``$($versions -join ', ')`` | ``$retrievedDate`` | $($licenses -join '; ') | $($redistributions -join '; ') | $($statuses -join '; ') | $sourceUrlCell |"
-        $digestSourceLines.Add("$($group.Name)|$($sourceNames -join ';')|$($versions -join ',')|$($licenses -join ';')|$($redistributions -join ';')|$($statuses -join ';')|$($sourceUrls -join ',')")
+        $sourceAcquisitions = @($evidenceRows | Where-Object { $_.SourceId -eq $group.Name -and $_.Retrieved -ne 'unknown' } |
+                ForEach-Object Retrieved | Sort-Object -Descending)
+        $sourceAcquisition = if ($sourceAcquisitions.Count) { $sourceAcquisitions[0] } else { 'unknown' }
+        $sourcesTableLines += "| ``$($group.Name)`` | $($sourceNames -join '; ') | ``$($versions -join ', ')`` | ``$sourceAcquisition`` | $($licenses -join '; ') | $($redistributions -join '; ') | $($statuses -join '; ') | $sourceUrlCell |"
     }
     $sourcesTableLines += @(
-        "| ``llm-stats`` | LLM Stats (ZeroEval) | ``2026-10`` | ``$retrievedDate`` | Commercial contract required for dataset redistribution | prohibited-on-free-tier | excluded | <https://llm-stats.com/developer> |"
-        "| ``lmarena`` | Arena (formerly LMArena) | ``2026-10`` | ``$retrievedDate`` | CC-BY-4.0 / ToS | excluded-by-methodology | excluded | <https://arena.ai> |"
+        '| `llm-stats` | LLM Stats (ZeroEval) | `2026-10` | `unknown` | Commercial contract required for dataset redistribution | prohibited-on-free-tier | excluded | <https://llm-stats.com/developer> |'
+        '| `lmarena` | Arena (formerly LMArena) | `2026-10` | `unknown` | CC-BY-4.0 / ToS | excluded-by-methodology | excluded | <https://arena.ai> |'
     )
 
-    $mappingTableLines = @(
-        '| Assignment class | Primary evaluations | Secondary evaluations | Primary sources | Evidence rule |'
-        '| --- | --- | --- | --- | --- |'
-    )
-    foreach ($classKey in $classes) {
-        $mapping = $classEvidenceMap[$classKey]
-        $primary = @($mapping.Primary | ForEach-Object { "``$_``" }) -join ', '
-        $secondary = @($mapping.Secondary | ForEach-Object { "``$_``" }) -join ', '
-        $mappingTableLines += "| ``$classKey`` | $primary | $secondary | source-specific rows from the pinned snapshot | $($mapping.Rule) |"
-    }
-
-    $fitTableLines = [System.Collections.Generic.List[string]]::new()
-    $fitTableLines.Add('| Catalog ID | research | planning | implementation | review | council | intake | bookkeeping | Composite | Sources | Key evaluations |')
-    $fitTableLines.Add('| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |')
-    foreach ($row in $evidenceFitRows) {
-        $fitTableLines.Add("| ``$($row.CatalogId)`` | $($row.research) | $($row.planning) | $($row.implementation) | $($row.review) | $($row.council) | $($row.intake) | $($row.bookkeeping) | $($row.Composite) | $($row.Sources) | $($row.KeyEvaluations) |")
-    }
-
-    $scoreTableLines = [System.Collections.Generic.List[string]]::new()
-    $scoreTableLines.Add('| Catalog ID | Evaluation | Category | Score | Source ID | Source version | Retrieved | Provenance |')
-    $scoreTableLines.Add('| --- | --- | --- | ---: | --- | --- | --- | --- |')
-    $digestScoreLines = [System.Collections.Generic.List[string]]::new()
-    foreach ($row in $scoreRows) {
-        $scoreTableLines.Add("| ``$($row.CatalogId)`` | $($row.Evaluation) | ``$($row.Category)`` | $($row.Score) | ``$($row.SourceId)`` | ``$($row.SourceVersion)`` | ``$($row.Retrieved)`` | ``$($row.Provenance)`` |")
-        $digestScoreLines.Add("$($row.CatalogId)|$($row.Evaluation)|$($row.Category)|$($row.Score)|$($row.SourceId)|$($row.SourceVersion)|$($row.SourceUrl)|$($row.Provenance)")
-    }
-
-    $digestInput = (($digestSourceLines + $mappingTableLines + $digestScoreLines) -join "`n")
-    $digest = "sha256:$(Get-StringSha256 -Text $digestInput)"
-
-    $needsUpdate = $true
-    if (-not $Force -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
-        $existingRaw = Get-Content -LiteralPath $OutputPath -Raw
-        $existingDigestMatch = [regex]::Match($existingRaw, '\*\*Content Digest:\s*(?<digest>sha256:[0-9a-f]{64})\*\*')
-        $existingDateMatch = [regex]::Match($existingRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
-        if ($existingDigestMatch.Success -and $existingDateMatch.Success) {
-            $existingDate = [datetime]::ParseExact($existingDateMatch.Groups['date'].Value, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
-            $ageDays = ($AsOf.Date - $existingDate.Date).TotalDays
-            if ($existingDigestMatch.Groups['digest'].Value -eq $digest -and $ageDays -lt $RefreshThresholdDays) {
-                $needsUpdate = $false
-                Write-Host "Benchmark digest ($digest) is unchanged and snapshot age ($([int]$ageDays)d) is under the ${RefreshThresholdDays}d refresh threshold." -ForegroundColor Green
-            }
-        }
-    }
-
-    $docLines = @(
-        '---'
-        'name: squad-model-benchmarks'
-        'description: "Pinned, versioned benchmark knowledge base for routing=ranked: source licensing, assignment-class evidence mapping, per-evaluation scores with provenance, and evidence-derived fit tiers."'
-        'license: MIT'
-        'metadata:'
-        '  authors: "Peter-N91/hve-squad"'
-        '  spec_version: "1.0"'
-        "  last_updated: `"$retrievedDate`""
-        '---'
-        ''
-        '# Squad Model Benchmarks Knowledge Base'
-        ''
-        '**This knowledge base is a pinned, versioned snapshot updated by a scheduled workflow (`sync-model-benchmarks.yml`), never fetched live during a squad run.** Runtime model routing (`Resolve-SquadModelRoute.ps1` and `model-routing.md`) reads this file locally so dispatches remain deterministic, reproducible, and isolated from untrusted live web content.'
-        ''
-        "* **Retrieved: $retrievedDate**"
-        "* **Content Digest: $digest**"
-        '* **Refresh Cadence: Daily check via `.github/workflows/sync-model-benchmarks.yml` (60-day heartbeat refresh; 90-day staleness threshold)**'
-        ''
+    $sourceTerms = @(
         '## Source Terms and Licensing'
         ''
         'Every source evaluated for `routing=ranked` was checked for methodology transparency, provenance separation (`independent` versus `self-reported`), and redistribution licensing before any score entered this repository:'
@@ -1243,52 +1322,40 @@ try {
         "* **Artificial Analysis (``artificial-analysis``, Intelligence Index $ArtificialAnalysisVersion)**: Artificial Analysis API indices plus its ``SciCode`` and ``CritPt`` evaluations are attributed to [Artificial Analysis](https://artificialanalysis.ai/methodology/intelligence-benchmarking). Scores published by Cognition, Terminal-Bench, Surge AI, or another upstream publisher retain that publisher's source ID and version instead of being relabeled as Artificial Analysis."
         '* **LLM Stats (`llm-stats`, excluded from snapshot)**: ZeroEval / `llm-stats.com` developer terms state that redistributing the dataset requires a commercial contract license and that the aggregator blends vendor self-reported figures with verified ones. No `llm-stats.com` data is copied into this repository.'
         '* **Arena (`lmarena`, excluded from snapshot)**: Crowd-sourced chat preference votes measure general conversational preference rather than task-specific coding, mathematical, or long-document capability, and are never used to rank squad roles.'
-        ''
-        '## Assignment Class Evidence Mapping'
-        ''
-        '`routing=ranked` ranks models for each assignment class using independently measured benchmark evidence first, before consulting the declared *Catalog: Assignment Fit* table in `model-catalog.md`. Self-reported vendor figures (`Provenance = self-reported`) are recorded for transparency only and **never** decide or boost a ranked pick.'
-        ''
-    ) + $mappingTableLines + @(
-        ''
-        '### Design Decisions on Open Questions'
-        ''
-        "1. **Coverage and licensing**: Confirmed as of ``$retrievedDate``. The generated snapshot contains $independentScoreCount independently sourced score rows across $($evidenceFitRows.Count) catalog models. Every row retains its actual publisher, version, score date, and provenance; synthetic aliases such as ``hydrafusion-max`` are not presented as measured models."
-        '2. **Math-specific sources (`FrontierMath`, `ProofBench`, `OTIS Mock AIME`)**: Required for `planning`, `council`, and math-heavy analysis roles (`data-scientist`, `experimenter`, `performance`, `cost-manager`), where quantitative and formal reasoning drive task quality. Standard `implementation` roles (`developer`, `iac-author`, `deployer`, `release-engineer`, `technical-writer`, `presenter`, `prompt-engineer`) rank on Coding and Agents sub-evaluations (`SciCode`, `Terminal-Bench`, `SWE-Bench verified`, `FrontierCode`, `DeepSWE`, `APEX-Agents`) without requiring `FrontierMath`.'
-        '3. **Snapshot refresh cadence and staleness threshold**: `.github/workflows/sync-model-benchmarks.yml` runs daily at `06:30 UTC`, runs `scripts/Sync-ModelBenchmarks.ps1`, validates the snapshot with Pester, and opens or updates a reviewed pull request whenever benchmark scores or source versions change (or when the snapshot age reaches 60 days). At runtime, a snapshot older than **90 days** from its `Retrieved:` date (or one that fails to parse or lacks independent evidence for a candidate) falls back to `model-catalog.md`''s declared fit table and logs one warning.'
-        '4. **Coverage continuity**: An automatic refresh may add models or change evidence, but it refuses to remove any independent model/evaluation evidence key present in the current snapshot. An intentional upstream removal requires a reviewed rerun with `-AllowCoverageReduction`; this avoids guessing an arbitrary minimum model or score count while preserving the last-good snapshot through broad source or mapping outages.'
-        '5. **Materialized fit versus runtime freshness**: The table below is the fit view on this snapshot''s `Retrieved:` date. Its primary-plus-secondary aggregation is identical to the router''s, while `Resolve-SquadModelRoute.ps1` re-applies the 90-day row window on the actual dispatch date. The semantic digest therefore covers sources, mappings, and scores, not age-only changes to this derived view.'
-        '6. **Semantic duplicate normalization**: Inferred archive versions hash unique normalized records across every input dataset. Redundant identical records do not change the source version, semantic digest, or emitted evidence; conflicting model/evaluation records are still rejected before the previous snapshot can be replaced.'
-        ''
-        '## Evidence-Derived Assignment Fit'
-        ''
-        'Each row below is derived exclusively from rows in *Benchmark Scores* with `Provenance = independent` that are no more than 90 days old on the snapshot date. Models with no fresh independent benchmark evaluations (`mai-code-1.1-flash`) are omitted from this table so `Resolve-SquadModelRoute.ps1` falls back to `model-catalog.md`''s declared fit table with a warning and never ranks on self-reported or stale numbers.'
-        ''
-    ) + $fitTableLines + @(
-        ''
-        '## Benchmark Scores'
-        ''
-        'Every score entry records its exact `Source ID`, `Source version`, `Retrieved` date (`yyyy-MM-dd`), and `Provenance` (`independent` or `self-reported`). Validation tests reject any row missing provenance or carrying an unrecognized provenance value.'
-        ''
-    ) + $scoreTableLines + @('')
-
-    $content = ($docLines -join "`n")
+    )
+    $content = Get-BenchmarkSnapshotContentLocal -Rows $evidenceRows -Scoring $scoring -SourceTerms ($sourceTerms -join "`n")
+    $digest = Get-SquadBenchmarkDigest -Content $content
+    $reportedAcquisition = [regex]::Match($content, '\*\*Retrieved:\s*(?<date>[^*]+)\*\*').Groups['date'].Value.Trim()
+    $needsUpdate = $true
+    if (-not $Force -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
+        $existingRaw = Get-Content -LiteralPath $OutputPath -Raw
+        $existingDigest = [regex]::Match($existingRaw, '\*\*Content Digest:\s*(?<digest>sha256:[0-9a-f]{64})\*\*').Groups['digest'].Value
+        $existingDate = [regex]::Match($existingRaw, '\*\*Generated:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        if ($existingDigest -eq $digest -and $existingDate -and
+            ($AsOf.Date - [datetime]::ParseExact($existingDate, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)).TotalDays -lt $RefreshThresholdDays) {
+            $needsUpdate = $false
+            Write-Host "Benchmark evidence digest ($digest) unchanged; verification facts retained, not renewed by assembly." -ForegroundColor Green
+        }
+    }
 
     if ($DryRun) {
-        Write-Host "[DryRun] Would write $($scoreRows.Count) benchmark score rows across $($evidenceFitRows.Count) independently evaluated models (needsUpdate=$needsUpdate)." -ForegroundColor Cyan
+        Write-Host "[DryRun] Would write $($scoreRows.Count) benchmark score rows across $modelsCovered independently evaluated models (needsUpdate=$needsUpdate)." -ForegroundColor Cyan
     }
     elseif ($needsUpdate -or $Force) {
         if ($PSCmdlet.ShouldProcess($OutputPath, 'Write model-benchmarks.md knowledge base')) {
             Set-Content -LiteralPath $OutputPath -Value $content -Encoding utf8NoBOM -NoNewline
-            Write-Host "Wrote $OutputPath ($($scoreRows.Count) score rows, $($evidenceFitRows.Count) independently evaluated models)." -ForegroundColor Green
+            Write-Host "Wrote $OutputPath ($($scoreRows.Count) score rows, $modelsCovered independently evaluated models)." -ForegroundColor Green
         }
     }
 
     if ($GitHubOutput -and $env:GITHUB_OUTPUT) {
         @(
             "updated=$($needsUpdate.ToString().ToLowerInvariant())"
-            "retrieved=$retrievedDate"
+            "retrieved=$reportedAcquisition"
+            "generated=$($scoring.EvaluationDate)"
             "digest=$digest"
-            "models_covered=$($evidenceFitRows.Count)"
+            "models_covered=$modelsCovered"
+            "verified_models_covered=$($scoring.FreshIndependentModels.Count)"
             "scores_count=$($scoreRows.Count)"
         ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
     }
@@ -1296,10 +1363,13 @@ try {
     [pscustomobject][ordered]@{
         Updated       = $needsUpdate
         OutputPath    = $OutputPath
-        Retrieved     = $retrievedDate
+        Retrieved     = $reportedAcquisition
+        Generated     = $scoring.EvaluationDate
         Digest        = $digest
-        ModelsCovered = $evidenceFitRows.Count
+        ModelsCovered = $modelsCovered
+        VerifiedModelsCovered = $scoring.FreshIndependentModels.Count
         ScoresCount   = $scoreRows.Count
+        ScoringPolicy = $scoringPolicy.Version
     }
 }
 finally {
