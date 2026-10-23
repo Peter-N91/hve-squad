@@ -9,6 +9,7 @@
     "squad-backlog-executor.agent.md": "Claude Sonnet 5.5 (copilot)",
     "squad-challenger.agent.md": "Claude Sonnet 5.5 (copilot)",
     "squad-coach.agent.md": null,
+    "squad-connector.agent.md": "Claude Sonnet 5.5 (copilot)",
     "squad-coordinator.agent.md": null,
     "squad-cost-manager.agent.md": "Claude Haiku 5.5 (copilot)",
     "squad-data-scientist.agent.md": "Claude Sonnet 5.5 (copilot)",

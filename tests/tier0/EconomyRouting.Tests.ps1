@@ -190,4 +190,11 @@ Describe 'No floor exception and a single ranking path' {
         $script:Resolver | Should -Match ([regex]::Escape('Get-EscalationTarget -Ranked $ranked'))
         $script:Resolver | Should -Match ([regex]::Escape('if ($target -and $target -ne $suggested) { $target } else { $null }'))
     }
+
+    It 'keeps connector aligned-role failures fail-closed (missing, invalid, cyclic, and missing Member Name)' {
+        $script:Resolver | Should -Match ([regex]::Escape("connector-backed row is missing Member Name"))
+        $script:Resolver | Should -Match ([regex]::Escape('binding ''$bindingId'' is missing Aligned Role'))
+        $script:Resolver | Should -Match ([regex]::Escape('aligned role ''$alignedRole'' has no assignment class mapping'))
+        $script:Resolver | Should -Match ([regex]::Escape("cyclic Aligned Role chain at binding"))
+    }
 }

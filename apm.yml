@@ -232,6 +232,7 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-backlog-executor.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-challenger.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coach.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-connector.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-coordinator.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-cost-manager.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-data-scientist.agent.md

@@ -697,11 +697,11 @@ function Get-EstimatorFloors {
 function Get-DerivedConsumption {
     # Fills an omitted consumption block from the role class's estimator floors, the model attribution ladder, and the rate row;
     # $null with the reason recorded for the Scribe when a figure cannot be produced.
-    param([string]$Agent, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration)
+    param([string]$Agent, [string]$Role, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration)
     $class = 'bookkeeping'
     if (-not $Orchestration) {
-        $role = if ($agentRoles.ContainsKey($Agent)) { $agentRoles[$Agent] } else { '' }
-        $class = if ($role -and $RoleClassMap.ContainsKey($role)) { $RoleClassMap[$role] } else { 'implementation' }
+        $resolvedRole = if ($Role) { $Role } elseif ($agentRoles.ContainsKey($Agent)) { $agentRoles[$Agent] } else { '' }
+        $class = if ($resolvedRole -and $RoleClassMap.ContainsKey($resolvedRole)) { $RoleClassMap[$resolvedRole] } else { 'implementation' }
     }
     $floors = Get-EstimatorFloors $class
     if ($null -eq $floors) { $needsScribe.Add("$Where was omitted and the $class dispatch-size estimator row cannot be read from consumption-rates.md or its template; the Scribe composes the block."); return $null }
@@ -933,48 +933,400 @@ $rosterAgents = [System.Collections.Generic.HashSet[string]]::new([System.String
 $primaryAgents = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $agentRoles = @{}
 $ReviewRoles = @('tester', 'qa-engineer', 'challenger', 'fact-checker', 'supply-chain', 'vuln-manager', 'privacy', 'accessibility', 'risk-manager')
-$memberNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+$rowsByAgent = @{}
+$connectorBindingsByRoleMember = @{}
+$connectorBindingsByConnectorMember = @{}
+$connectorBindingsByMemberAll = @{}
+$allConnectorBindings = [System.Collections.Generic.List[object]]::new()
+$allRosterRows = [System.Collections.Generic.List[object]]::new()
 $rosterLines = [System.IO.File]::ReadAllLines($teamPath)
 $primaryHeaders = 'Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent'
-# The roster is the one table with a Role column and a primary-agent header (the template's exact header wins over a drifted
-# spelling); it ends at the first non-table line, so another table earlier or later never admits an agent.
-$rosterTables = [System.Collections.Generic.List[hashtable]]::new()
-$tableLines = $null
-foreach ($line in ($rosterLines + @(''))) {
-    if ($line -match '^\s*\|') {
-        if ($null -eq $tableLines) { $tableLines = [System.Collections.Generic.List[string]]::new() }
-        $tableLines.Add($line)
-        continue
-    }
-    if ($null -eq $tableLines) { continue }
-    $headerCells = @($tableLines[0].Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim().Trim('`').Trim() })
-    $column = -1
-    foreach ($header in $primaryHeaders) { $column = [array]::IndexOf($headerCells, $header); if ($column -ge 0) { break } }
-    if ('Role' -in $headerCells -and $column -ge 0) { $rosterTables.Add(@{ Header = $headerCells; Column = $column; Lines = $tableLines }) }
-    $tableLines = $null
+
+function Split-TableCellsLocal {
+    param([string]$Line)
+    @($Line.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim().Trim('`').Trim() })
 }
-$rosterTable = @($rosterTables | Where-Object { 'Agent Name (Primary)' -in $_.Header }) + @($rosterTables) | Select-Object -First 1
-if ($rosterTable) {
-    $primaryColumn = $rosterTable.Column
-    $alternateColumn = [array]::IndexOf($rosterTable.Header, 'Alternate Agents')
-    $memberColumn = [array]::IndexOf($rosterTable.Header, 'Member Name')
-    $roleColumn = [array]::IndexOf($rosterTable.Header, 'Role')
-    foreach ($line in ($rosterTable.Lines | Select-Object -Skip 1)) {
-        $cells = @($line.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
-        if ($cells.Count -le $primaryColumn -or $cells[$primaryColumn] -match '^[-: ]*$') { continue }
-        [void]$rosterAgents.Add($cells[$primaryColumn].Trim('`'))
-        [void]$primaryAgents.Add($cells[$primaryColumn].Trim('`'))
-        $rowRole = if ($cells.Count -gt $roleColumn) { $cells[$roleColumn].Trim('`').ToLowerInvariant() } else { '' }
-        $agentRoles[$cells[$primaryColumn].Trim('`')] = $rowRole
-        if ($memberColumn -ge 0 -and $cells.Count -gt $memberColumn -and $cells[$memberColumn]) { [void]$memberNames.Add($cells[$memberColumn]) }
-        if ($alternateColumn -ge 0 -and $cells.Count -gt $alternateColumn) {
-            foreach ($alternate in ($cells[$alternateColumn] -split '[,;]|\s/\s')) {
-                $name = $alternate.Trim().Trim('`')
-                if ($name -and $name -ne '—' -and $name -ne '-') { [void]$rosterAgents.Add($name); if (-not $agentRoles.ContainsKey($name)) { $agentRoles[$name] = $rowRole } }
+
+function Get-MarkdownTablesLocal {
+    param([string[]]$Lines)
+    $tables = [System.Collections.Generic.List[pscustomobject]]::new()
+    $tableLines = $null
+    foreach ($line in ($Lines + @(''))) {
+        if ($line -match '^\s*\|') {
+            if ($null -eq $tableLines) { $tableLines = [System.Collections.Generic.List[string]]::new() }
+            $tableLines.Add($line)
+            continue
+        }
+        if ($null -eq $tableLines) { continue }
+        $header = Split-TableCellsLocal $tableLines[0]
+        $rows = [System.Collections.Generic.List[hashtable]]::new()
+        foreach ($rowLine in ($tableLines | Select-Object -Skip 1)) {
+            if ($rowLine -match '^\s*\|\s*:?-') { continue }
+            $cells = Split-TableCellsLocal $rowLine
+            $row = @{}
+            for ($i = 0; $i -lt $header.Count; $i++) { $row[$header[$i]] = if ($i -lt $cells.Count) { $cells[$i] } else { '' } }
+            $rows.Add($row)
+        }
+        $tables.Add([pscustomobject]@{ Header = $header; Rows = $rows })
+        $tableLines = $null
+    }
+    $tables
+}
+
+function Get-RoleMemberKeyLocal {
+    param([string]$Role, [string]$MemberName)
+    return ("{0}`n{1}" -f ([string]$Role).Trim().ToLowerInvariant(), ([string]$MemberName).Trim())
+}
+
+function Get-ConnectorTargetRoleLocal {
+    param([AllowEmptyString()][string]$Target)
+    $text = ([string]$Target).Trim()
+    if ($text -match '^(?i)role:(?<role>[a-z0-9-]+)(?:/(?<member>.+))?$') {
+        return [pscustomobject]@{
+            Kind       = 'role'
+            Role       = $Matches['role'].ToLowerInvariant()
+            MemberName = if ($Matches['member']) { ([string]$Matches['member']).Trim() } else { '' }
+        }
+    }
+    if ($text -match '^(?i)coordinator:Squad Coordinator$') {
+        return [pscustomobject]@{ Kind = 'coordinator'; Role = 'coordinator'; MemberName = '' }
+    }
+    [pscustomobject]@{ Kind = 'invalid'; Role = ''; MemberName = '' }
+}
+
+function Resolve-ConnectorBindingForRowLocal {
+    param([Parameter(Mandatory)]$Row, [Parameter(Mandatory)][string]$Where)
+    $member = ([string]$Row.MemberName).Trim()
+    $role = ([string]$Row.Role).Trim().ToLowerInvariant()
+    $key = Get-RoleMemberKeyLocal -Role $role -MemberName $member
+    $matches = @(if ($connectorBindingsByRoleMember.ContainsKey($key)) { $connectorBindingsByRoleMember[$key] } else { @() })
+    if ($matches.Count -eq 0) {
+        $problems.Add("$Where.memberName '$member' on agent '$($Row.PrimaryAgent)' has no matching Connector Bindings row for role '$($Row.Role)'.")
+        return $null
+    }
+    if ($matches.Count -gt 1) {
+        $problems.Add("$Where.memberName '$member' on role '$($Row.Role)' matches $($matches.Count) Connector Bindings rows; binding identity is ambiguous.")
+        return $null
+    }
+    return $matches[0]
+}
+
+function Resolve-ConnectorBindingForMemberLocal {
+    param(
+        [Parameter(Mandatory)][string]$MemberName,
+        [AllowNull()]$ExternalProvenance,
+        [Parameter(Mandatory)][string]$Where
+    )
+    $member = ([string]$MemberName).Trim()
+    $matches = @(if ($connectorBindingsByConnectorMember.ContainsKey($member)) { $connectorBindingsByConnectorMember[$member] } else { @() })
+    if ($null -ne $ExternalProvenance -and $ExternalProvenance.Contains('bindingId')) {
+        $bindingId = ([string]$ExternalProvenance['bindingId']).Trim()
+        if ($bindingId) { $matches = @($matches | Where-Object { $_.BindingId -ceq $bindingId }) }
+    }
+    if ($matches.Count -eq 0) {
+        $problems.Add("$Where.memberName '$member' has no matching replacement Connector Bindings identity.")
+        return $null
+    }
+    if ($matches.Count -gt 1) {
+        $problems.Add("$Where.memberName '$member' matches $($matches.Count) replacement Connector Bindings rows; connector identity is ambiguous.")
+        return $null
+    }
+    return $matches[0]
+}
+
+function Resolve-RosterIdentityLocal {
+    param(
+        [string]$Agent,
+        [string]$MemberName,
+        [AllowNull()]$ExternalProvenance,
+        [string]$Where
+    )
+    $candidates = @(if ($rowsByAgent.ContainsKey($Agent)) { $rowsByAgent[$Agent] } else { @() })
+
+    $member = if ($MemberName) { $MemberName.Trim() } else { '' }
+    if ($member -and $candidates.Count -gt 0 -and $Agent -cne 'Squad Connector') {
+        $candidates = @($candidates | Where-Object { ([string]$_.MemberName).Trim() -ceq $member })
+        if ($candidates.Count -eq 0) {
+            $problems.Add("$Where.memberName '$MemberName' does not match agent '$Agent' in team.md.")
+            return $null
+        }
+    }
+
+    if ($Agent -ceq 'Squad Connector') {
+        if (-not $member) {
+            $problems.Add("$Where.memberName is required when agent is 'Squad Connector'.")
+            return $null
+        }
+        $isLegacy10Provenance = $false
+        if ($null -ne $ExternalProvenance -and $ExternalProvenance.Contains('bindingId')) {
+            $provBindingId = ([string]$ExternalProvenance['bindingId']).Trim()
+            if ($provBindingId -in @('legacy-1.0', 'none (legacy-1.0)')) {
+                $isLegacy10Provenance = $true
             }
+        }
+        if ($isLegacy10Provenance) {
+            if ([string]$ExternalProvenance['endpointKind'] -ne 'agent') {
+                $problems.Add("$Where.externalProvenance.endpointKind must be 'agent' for legacy 1.0 provenance.")
+                return $null
+            }
+            if ([string]$ExternalProvenance['roleMode'] -ne 'replace') {
+                $problems.Add("$Where.externalProvenance.roleMode must be 'replace' for legacy 1.0 provenance.")
+                return $null
+            }
+            if ([string]$ExternalProvenance['targetKind'] -ne 'role') {
+                $problems.Add("$Where.externalProvenance.targetKind must be 'role'; coordinator and Scribe cannot be connected.")
+                return $null
+            }
+            $target = Get-ConnectorTargetRoleLocal -Target ([string]$ExternalProvenance['target'])
+            if ($target.Kind -ne 'role' -or $target.Role -in @('scribe', 'coordinator', 'federation-coordinator', 'council')) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' is not a valid legacy 1.0 work-role target.")
+                return $null
+            }
+            if (-not $RoleClassMap.ContainsKey($target.Role)) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' requires a 1.1 Connector Bindings row with Aligned Role.")
+                return $null
+            }
+            $existingRoleBindings = @(
+                $allConnectorBindings | Where-Object {
+                    $bt = Get-ConnectorTargetRoleLocal -Target $_.Target
+                    ($_.RoleMode -eq 'add' -and $_.AddedRole -eq $target.Role) -or
+                    ($_.RoleMode -eq 'replace' -and $bt.Kind -eq 'role' -and $bt.Role -eq $target.Role -and (-not $target.MemberName -or -not $bt.MemberName -or $bt.MemberName -ceq $target.MemberName))
+                }
+            )
+            if ($existingRoleBindings.Count -gt 0) {
+                $problems.Add("$Where.externalProvenance.bindingId '$($ExternalProvenance['bindingId'])' cannot bypass existing Connector Bindings for role '$($target.Role)'.")
+                return $null
+            }
+            $roleRows = @($allRosterRows | Where-Object { $_.Role -eq $target.Role })
+            if ($target.MemberName) {
+                $roleRows = @($roleRows | Where-Object { ([string]$_.MemberName).Trim() -ceq $target.MemberName })
+            }
+            if ($roleRows.Count -eq 0) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' has no matching roster row in team.md.")
+                return $null
+            }
+            return [pscustomobject]@{
+                Row              = [pscustomobject]@{ Role = $target.Role; MemberName = $member; PrimaryAgent = 'Squad Connector' }
+                Role             = $target.Role
+                ClassRole        = $target.Role
+                IsPrimary        = $true
+                Binding          = $null
+                LegacyProvenance = [ordered]@{
+                    connectorId  = [string]$ExternalProvenance['connectorId']
+                    bindingId    = [string]$ExternalProvenance['bindingId']
+                    endpointKind = 'agent'
+                    roleMode     = 'replace'
+                    targetKind   = 'role'
+                    target       = [string]$ExternalProvenance['target']
+                    verification = 'external-unverified'
+                    metering     = 'external-unmetered'
+                }
+            }
+        }
+        if ($candidates.Count -gt 0) {
+            $candidates = @($candidates | Where-Object { ([string]$_.MemberName).Trim() -ceq $member })
+        }
+        $candidates = @($candidates | Where-Object { $_.PrimaryAgent -ceq 'Squad Connector' })
+        if ($candidates.Count -eq 0) {
+            $binding = Resolve-ConnectorBindingForMemberLocal -MemberName $member -ExternalProvenance $ExternalProvenance -Where $Where
+            if ($null -eq $binding) { return $null }
+            $classRole = ''
+            $role = ''
+            if ($binding.TargetKind -eq 'role') {
+                $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+                if ($target.Kind -ne 'role') {
+                    $problems.Add("$Where.externalProvenance.target '$($binding.Target)' is not a valid role target.")
+                    return $null
+                }
+                if ($target.MemberName -and $target.MemberName -ceq $member) {
+                    $problems.Add("$Where.memberName '$member' must stay distinct from the internal target member '$($target.MemberName)' for replace provenance.")
+                    return $null
+                }
+                $role = $target.Role
+                $classRole = $target.Role
+            }
+            else {
+                $problems.Add("$Where.memberName '$member' matched binding '$($binding.BindingId)' with unsupported target kind '$($binding.TargetKind)'.")
+                return $null
+            }
+            return [pscustomobject]@{
+                Row       = [pscustomobject]@{ Role = $role; MemberName = $member; PrimaryAgent = 'Squad Connector' }
+                Role      = $role
+                ClassRole = $classRole
+                IsPrimary = $true
+                Binding   = $binding
+            }
+        }
+        if ($candidates.Count -ne 1) {
+            $problems.Add("$Where.agent '$Agent' with memberName '$MemberName' matches $($candidates.Count) roster rows; connector identity must be exact.")
+            return $null
+        }
+        $row = $candidates[0]
+        $binding = Resolve-ConnectorBindingForRowLocal -Row $row -Where $Where
+        if ($null -eq $binding) { return $null }
+        $alignedRole = ([string]$binding.AlignedRole).Trim().ToLowerInvariant()
+        if (-not $alignedRole) {
+            $problems.Add("$Where.memberName '$MemberName' matched binding '$($binding.BindingId)' with no Aligned Role.")
+            return $null
+        }
+        return [pscustomobject]@{
+            Row       = $row
+            Role      = $row.Role
+            ClassRole = $alignedRole
+            IsPrimary = $row.PrimaryAgent -ceq $Agent
+            Binding   = $binding
+        }
+    }
+
+    if (-not $member -and $candidates.Count -gt 1) {
+        $problems.Add("$Where.memberName is required for agent '$Agent' because it maps to multiple roster rows.")
+        return $null
+    }
+    if ($candidates.Count -gt 1) {
+        $problems.Add("$Where.memberName '$MemberName' is ambiguous for agent '$Agent'.")
+        return $null
+    }
+
+    $row = $candidates[0]
+    return [pscustomobject]@{
+        Row       = $row
+        Role      = $row.Role
+        ClassRole = $row.Role
+        IsPrimary = $row.PrimaryAgent -ceq $Agent
+        Binding   = $null
+    }
+}
+
+$tables = @(Get-MarkdownTablesLocal -Lines $rosterLines)
+$rosterTables = @(
+    $tables | Where-Object {
+        $column = -1
+        foreach ($header in $primaryHeaders) { $column = [array]::IndexOf($_.Header, $header); if ($column -ge 0) { break } }
+        ('Role' -in $_.Header) -and ($column -ge 0)
+    }
+)
+$rosterTable = @($rosterTables | Where-Object { 'Agent Name (Primary)' -in $_.Header }) + @($rosterTables) | Select-Object -First 1
+
+$connectorHeader = @('Binding ID', 'Connector ID', 'Manifest', 'Endpoint Kind', 'Role Mode', 'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role', 'Default Execution')
+$connectorTable = @(
+    $tables | Where-Object {
+        $table = $_
+        @($connectorHeader | Where-Object { $_ -in $table.Header }).Count -eq $connectorHeader.Count
+    } | Select-Object -First 1
+)
+if ($connectorTable.Count -gt 0) {
+    foreach ($row in $connectorTable[0].Rows) {
+        $bindingId = ([string]$row['Binding ID']).Trim()
+        if (-not $bindingId -or $bindingId -in '—', '-') { continue }
+        $binding = [pscustomobject]@{
+            BindingId    = $bindingId
+            ConnectorId  = ([string]$row['Connector ID']).Trim()
+            EndpointKind = ([string]$row['Endpoint Kind']).Trim().ToLowerInvariant()
+            RoleMode     = ([string]$row['Role Mode']).Trim().ToLowerInvariant()
+            TargetKind   = ([string]$row['Target Kind']).Trim().ToLowerInvariant()
+            Target       = ([string]$row['Target']).Trim()
+            MemberName   = ([string]$row['Member Name']).Trim()
+            AddedRole    = ([string]$row['Added Role']).Trim().ToLowerInvariant()
+            AlignedRole  = ([string]$row['Aligned Role']).Trim().ToLowerInvariant()
+        }
+        $allConnectorBindings.Add($binding)
+        $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+        $protectedRoles = @('scribe', 'coordinator', 'federation-coordinator', 'council')
+        if ($binding.TargetKind -ne 'role' -or $target.Kind -ne 'role' -or $target.Role -in $protectedRoles -or $binding.AddedRole -in $protectedRoles -or $binding.AlignedRole -in $protectedRoles) {
+            $problems.Add("Connector Bindings row '$($binding.BindingId)' must target an ordinary work role; coordinator, Scribe, and council governance are protected.")
+            continue
+        }
+        if ($binding.RoleMode -eq 'replace' -and -not $binding.MemberName) {
+            $problems.Add("Connector Bindings row '$($binding.BindingId)' uses role mode 'replace' and must set a trusted Member Name.")
+            continue
+        }
+        if ($binding.RoleMode -eq 'replace' -and $binding.TargetKind -eq 'role' -and $binding.Target) {
+            $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+            if ($target.Kind -eq 'role' -and $target.MemberName -and $target.MemberName -ceq $binding.MemberName) {
+                $problems.Add("Connector Bindings row '$($binding.BindingId)' must use a trusted Member Name distinct from target member '$($target.MemberName)'.")
+                continue
+            }
+        }
+        if ($binding.MemberName) {
+            if (-not $connectorBindingsByMemberAll.ContainsKey($binding.MemberName)) { $connectorBindingsByMemberAll[$binding.MemberName] = [System.Collections.Generic.List[object]]::new() }
+            $connectorBindingsByMemberAll[$binding.MemberName].Add($binding)
+        }
+        if ($binding.RoleMode -eq 'add' -and $binding.AddedRole -and $binding.MemberName) {
+            $key = Get-RoleMemberKeyLocal -Role $binding.AddedRole -MemberName $binding.MemberName
+            if (-not $connectorBindingsByRoleMember.ContainsKey($key)) { $connectorBindingsByRoleMember[$key] = [System.Collections.Generic.List[object]]::new() }
+            $connectorBindingsByRoleMember[$key].Add($binding)
+        }
+        if ($binding.MemberName -and $binding.RoleMode -eq 'replace') {
+            if (-not $connectorBindingsByConnectorMember.ContainsKey($binding.MemberName)) { $connectorBindingsByConnectorMember[$binding.MemberName] = [System.Collections.Generic.List[object]]::new() }
+            $connectorBindingsByConnectorMember[$binding.MemberName].Add($binding)
         }
     }
 }
+
+if ($rosterTable) {
+    $primaryHeader = @($primaryHeaders | Where-Object { $_ -in $rosterTable.Header } | Select-Object -First 1)
+    $alternateHeader = @('Alternate Agents' | Where-Object { $_ -in $rosterTable.Header } | Select-Object -First 1)
+    $memberHeader = @('Member Name' | Where-Object { $_ -in $rosterTable.Header } | Select-Object -First 1)
+    foreach ($row in $rosterTable.Rows) {
+        $primaryAgent = ([string]$row[$primaryHeader]).Trim()
+        if (-not $primaryAgent -or $primaryAgent -in '—', '-') { continue }
+        $roleId = ([string]$row['Role']).Trim().ToLowerInvariant()
+        $member = if ($memberHeader) { ([string]$row[$memberHeader]).Trim() } else { '' }
+        $alternates = [System.Collections.Generic.List[string]]::new()
+        if ($alternateHeader) {
+            foreach ($alternate in (([string]$row[$alternateHeader]) -split '[,;]|\s/\s')) {
+                $name = $alternate.Trim()
+                if ($name -and $name -notin '—', '-') { $alternates.Add($name) }
+            }
+        }
+        $agentNames = [System.Collections.Generic.List[string]]::new()
+        $agentNames.Add($primaryAgent)
+        foreach ($alt in $alternates) { $agentNames.Add($alt) }
+
+        $rosterRow = [pscustomobject]@{
+            Role        = $roleId
+            MemberName  = $member
+            PrimaryAgent = $primaryAgent
+            AgentNames  = @($agentNames)
+        }
+        $allRosterRows.Add($rosterRow)
+        [void]$rosterAgents.Add($primaryAgent)
+        [void]$primaryAgents.Add($primaryAgent)
+        $agentRoles[$primaryAgent] = $roleId
+        if (-not $rowsByAgent.ContainsKey($primaryAgent)) { $rowsByAgent[$primaryAgent] = [System.Collections.Generic.List[object]]::new() }
+        $rowsByAgent[$primaryAgent].Add($rosterRow)
+
+        foreach ($alt in $alternates) {
+            [void]$rosterAgents.Add($alt)
+            if (-not $agentRoles.ContainsKey($alt)) { $agentRoles[$alt] = $roleId }
+            if (-not $rowsByAgent.ContainsKey($alt)) { $rowsByAgent[$alt] = [System.Collections.Generic.List[object]]::new() }
+            $rowsByAgent[$alt].Add($rosterRow)
+        }
+    }
+}
+
+foreach ($member in @($connectorBindingsByMemberAll.Keys)) {
+    $bindings = @($connectorBindingsByMemberAll[$member])
+    if ($bindings.Count -le 1) { continue }
+    $bindingList = @($bindings | ForEach-Object { $_.BindingId }) -join ', '
+    $problems.Add("Connector Bindings Member Name '$member' is reused by $($bindings.Count) rows ($bindingList); connector member identities must be globally unique across connector bindings.")
+}
+
+foreach ($binding in @($allConnectorBindings)) {
+    if (-not $binding.MemberName) { continue }
+    $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+    $targetRows = @()
+    if ($binding.TargetKind -eq 'role' -and $target.Kind -eq 'role') {
+        $targetRows = @($allRosterRows | Where-Object { $_.Role -eq $target.Role -and $_.PrimaryAgent -cne 'Squad Connector' })
+        if ($target.MemberName) {
+            $targetRows = @($targetRows | Where-Object { ([string]$_.MemberName).Trim() -ceq $target.MemberName })
+        }
+    }
+    if (@($targetRows | Where-Object { ([string]$_.MemberName).Trim() -and ([string]$_.MemberName).Trim() -ceq $binding.MemberName }).Count -gt 0) {
+        $problems.Add("Connector Bindings row '$($binding.BindingId)' must use a trusted Member Name distinct from targeted internal roster identities.")
+    }
+}
+
 $derivationSession = $preState.SessionModel
 if ((Get-Kind $payload['stateAdvance']) -eq 'Object' -and (Get-Kind $payload['stateAdvance']['sessionModel']) -eq 'String') { $derivationSession = Get-NodeString $payload['stateAdvance']['sessionModel'] }
 $records = [System.Collections.Generic.List[hashtable]]::new()
@@ -985,7 +1337,7 @@ else {
     foreach ($node in $recordNodes) {
         $where = "historyRecords[$index]"
         $index++
-        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity') -Where $where)) { continue }
+        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity', 'externalProvenance') -Where $where)) { continue }
         $agent = Get-TextField -Node $node -Key 'agent' -Where $where
         $request = Get-TextField -Node $node -Key 'request' -Where $where
         $deliverable = Get-TextField -Node $node -Key 'deliverable' -Where $where
@@ -1009,23 +1361,95 @@ else {
                 foreach ($key in $RoutingKeys) { $routing[$key] = Get-TextField -Node $node['routingIdentity'] -Key $key -Where "$where.routingIdentity" }
             }
         }
+        $externalProvenance = $null
+        if ($null -ne $node['externalProvenance']) {
+            $requiredProvenance = @('connectorId', 'bindingId', 'endpointKind', 'roleMode', 'targetKind', 'target', 'verification', 'metering')
+            if (Test-ObjectKeys -Node $node['externalProvenance'] -Required $requiredProvenance -Optional @() -Where "$where.externalProvenance") {
+                $externalProvenance = [ordered]@{}
+                foreach ($field in $requiredProvenance) { $externalProvenance[$field] = Get-TextField -Node $node['externalProvenance'] -Key $field -Where "$where.externalProvenance" }
+                if ($externalProvenance) {
+                    if ($externalProvenance['endpointKind'] -notin @('agent', 'orchestrator')) { $problems.Add("$where.externalProvenance.endpointKind must be 'agent' or 'orchestrator'.") }
+                    if ($externalProvenance['roleMode'] -notin @('replace', 'add')) { $problems.Add("$where.externalProvenance.roleMode must be 'replace' or 'add'.") }
+                    if ($externalProvenance['targetKind'] -ne 'role') { $problems.Add("$where.externalProvenance.targetKind must be 'role'; coordinator and Scribe cannot be connected.") }
+                    if ($externalProvenance['verification'] -ne 'external-unverified') { $problems.Add("$where.externalProvenance.verification must be 'external-unverified'.") }
+                    if ($externalProvenance['metering'] -ne 'external-unmetered') { $problems.Add("$where.externalProvenance.metering must be 'external-unmetered'.") }
+                }
+            }
+        }
         if ($null -ne $ref -or $null -ne $slot) { $needsScribe.Add("$where carries a Cost Preflight ref or slot; slot admission and the replay check need the Scribe.") }
         if ($null -eq $agent -or $null -eq $request -or $null -eq $deliverable -or $null -eq $outcome -or ($null -ne $node['consumption'] -and $null -eq $consumption)) { continue }
         if ($agent -eq $ScribeAgent) { $problems.Add("$where.agent must not be '$ScribeAgent'; its orchestration entry is written from payload.orchestration."); continue }
         if ($agent -match '[\\/:*?"<>|=;,]' -or $agent -match '^\.') { $problems.Add("$where.agent '$agent' is not a valid history file name."); continue }
-        if (-not $rosterAgents.Contains($agent)) { $needsScribe.Add("$where.agent '$agent' is not an Agent Name (Primary) or Alternate in team.md (history file names are the frontmatter name verbatim).") ; continue }
-        if (-not $primaryAgents.Contains($agent) -and -not $selectionCue) { $problems.Add("$where.agent '$agent' is an Alternate; selectionCue must name the cue that selected it.") }
-        if ($primaryAgents.Contains($agent) -and $selectionCue) { $problems.Add("$where.selectionCue is only for an Alternate; '$agent' is the Primary.") }
-        if ($memberName -and -not $memberNames.Contains($memberName)) { $problems.Add("$where.memberName '$memberName' is not a Member Name in team.md.") }
+        if (-not $rosterAgents.Contains($agent) -and $agent -ne 'Squad Connector') { $needsScribe.Add("$where.agent '$agent' is not an Agent Name (Primary) or Alternate in team.md (history file names are the frontmatter name verbatim).") ; continue }
+        if ($agent -eq 'Squad Connector' -and -not $externalProvenance) {
+            $problems.Add("$where.externalProvenance is required when agent is 'Squad Connector'.")
+            continue
+        }
+        $identity = Resolve-RosterIdentityLocal -Agent $agent -MemberName $memberName -ExternalProvenance $externalProvenance -Where $where
+        if ($null -eq $identity) { continue }
+        if (-not $identity.IsPrimary -and -not $selectionCue) { $problems.Add("$where.agent '$agent' is an Alternate; selectionCue must name the cue that selected it.") }
+        if ($identity.IsPrimary -and $selectionCue) { $problems.Add("$where.selectionCue is only for an Alternate; '$agent' is the Primary.") }
+        if ($externalProvenance -and $agent -ne 'Squad Connector') {
+            $problems.Add("$where.externalProvenance is allowed only when agent is 'Squad Connector'.")
+        }
+        if ($agent -eq 'Squad Connector') {
+            if (-not $memberName) { $problems.Add("$where.memberName is required when agent is 'Squad Connector'.") }
+            if ($externalProvenance -and $identity.Binding) {
+                foreach ($pair in @(
+                        @{ Payload = 'connectorId'; Binding = 'ConnectorId' },
+                        @{ Payload = 'bindingId'; Binding = 'BindingId' },
+                        @{ Payload = 'endpointKind'; Binding = 'EndpointKind' },
+                        @{ Payload = 'roleMode'; Binding = 'RoleMode' },
+                        @{ Payload = 'targetKind'; Binding = 'TargetKind' },
+                        @{ Payload = 'target'; Binding = 'Target' }
+                    )) {
+                    $expected = [string]$identity.Binding.($pair.Binding)
+                    $actual = [string]$externalProvenance[$pair.Payload]
+                    if ($actual -cne $expected) { $problems.Add("$where.externalProvenance.$($pair.Payload) '$actual' does not match Connector Bindings '$expected'.") }
+                }
+            }
+        }
         if ($null -eq $node['consumption']) {
-            $consumption = Get-DerivedConsumption -Agent $agent -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession
+            $consumption = Get-DerivedConsumption -Agent $agent -Role $identity.ClassRole -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession
             if ($null -eq $consumption) { continue }
         }
         Test-Attribution -Map $consumption -Where "$where.consumption" -PinAgent $agent -PassedModel $passedModel
         $deliverablePath = ($deliverable -replace '\s+\([^)]*\)\s*$', '').Trim().Trim('`')
         $deliverableSize = if ($deliverable -match '\s+\(([^)]*)\)\s*$') { $Matches[1] } else { $null }
         if ($deliverablePath -match '^(?i)(n/?a|none|inline.*|no artifact.*)$') { $problems.Add("$where.deliverable names no artifact; a stage that wrote no file did not run."); continue }
-        $records.Add(@{ Agent = $agent; Title = $(if ($title) { $title } else { $request.Substring(0, [Math]::Min(80, $request.Length)) }); Request = $request; DeliverablePath = $deliverablePath; DeliverableSize = $deliverableSize; Outcome = $outcome; MemberName = $memberName; SelectionCue = $selectionCue; Ref = $ref; Slot = $slot; Consumption = $consumption; Routing = $routing })
+        $trustedProvenance = $null
+        if ($agent -eq 'Squad Connector' -and $identity.Binding) {
+            $trustedProvenance = [ordered]@{
+                connectorId  = [string]$identity.Binding.ConnectorId
+                bindingId    = [string]$identity.Binding.BindingId
+                endpointKind = [string]$identity.Binding.EndpointKind
+                roleMode     = [string]$identity.Binding.RoleMode
+                targetKind   = [string]$identity.Binding.TargetKind
+                target       = [string]$identity.Binding.Target
+                verification = 'external-unverified'
+                metering     = 'external-unmetered'
+            }
+        }
+        elseif ($agent -eq 'Squad Connector' -and $identity.PSObject.Properties['LegacyProvenance'] -and $identity.LegacyProvenance) {
+            $trustedProvenance = $identity.LegacyProvenance
+        }
+        $renderedOutcome = if ($agent -eq 'Squad Connector') { 'external, unverified' } else { $outcome }
+        $records.Add(@{
+                Agent              = $agent
+                Title              = $(if ($title) { $title } else { $request.Substring(0, [Math]::Min(80, $request.Length)) })
+                Request            = $request
+                DeliverablePath    = $deliverablePath
+                DeliverableSize    = $deliverableSize
+                Outcome            = $renderedOutcome
+                MemberName         = $memberName
+                SelectionCue       = $selectionCue
+                Ref                = $ref
+                Slot               = $slot
+                Consumption        = $consumption
+                Routing            = $routing
+                ExternalProvenance = $trustedProvenance
+                ResolvedRole       = $identity.Role
+            })
     }
 }
 
@@ -1209,10 +1633,10 @@ foreach ($record in $records) {
 if ($problems.Count -gt 0) { Stop-Handoff 1 ("invalid payload: " + ($problems -join ' ')) }
 
 # Review-saw-final-files: no owner deliverable may change after the closing review's own deliverable.
-$reviewRecords = @($records | Where-Object { $agentRoles[$_.Agent] -in $ReviewRoles -and $_.Modified })
+$reviewRecords = @($records | Where-Object { $_.ResolvedRole -in $ReviewRoles -and $_.Modified })
 if ($reviewRecords.Count -gt 0) {
     $reviewTime = ($reviewRecords | ForEach-Object { $_.Modified } | Sort-Object | Select-Object -Last 1)
-    foreach ($record in @($records | Where-Object { $agentRoles[$_.Agent] -notin $ReviewRoles -and $_.Modified })) {
+    foreach ($record in @($records | Where-Object { $_.ResolvedRole -notin $ReviewRoles -and $_.Modified })) {
         if ($record.Modified -gt $reviewTime.AddSeconds(2)) {
             Stop-Handoff 1 "owner deliverable $($record.DeliverablePath) changed after the closing review; re-dispatch the review on the final files before the hand-off. Editing the payload does not clear this; re-dispatch the review, then rerun."
         }
@@ -1351,6 +1775,12 @@ foreach ($record in $records) {
         $lines.Add("* **Effective model** — $($record.Routing['effectiveModel'])")
         $lines.Add("* **Observed model** — $($record.Routing['observedModel'])")
         $lines.Add("* **Route rationale** — $($record.Routing['routeRationale'])")
+    }
+    if ($record.ExternalProvenance) {
+        $lines.Add('')
+        $lines.Add("* External provenance: connector=$($record.ExternalProvenance['connectorId']); binding=$($record.ExternalProvenance['bindingId']); endpoint=$($record.ExternalProvenance['endpointKind']); mode=$($record.ExternalProvenance['roleMode']); target=$($record.ExternalProvenance['target'])")
+        $lines.Add('* Verification: external, unverified')
+        $lines.Add("* External-unmetered: connector=$($record.ExternalProvenance['connectorId'])")
     }
     $entryPlans.Add(@{ Agent = $record.Agent; Heading = $heading; Lines = $lines })
 }

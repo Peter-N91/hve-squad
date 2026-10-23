@@ -1,0 +1,16 @@
+{
+  "connectorId": "acme-delivery-orchestrator-v3",
+  "schemaVersion": "1.1",
+  "transport": "file",
+  "endpointKind": "orchestrator",
+  "capabilities": [
+    "Implements an approved developer task using consumer-owned implementation and validation agents.",
+    "Returns implementation and validation reports only in the request's declared output slots."
+  ],
+  "roles": ["developer"],
+  "dropPath": ".connector-drops/acme-delivery-orchestrator-v3/",
+  "deadlineMinutesDefault": 90,
+  "retryCapDefault": 2,
+  "contact": "squad-integrations@example.com",
+  "version": "3.0.0"
+}

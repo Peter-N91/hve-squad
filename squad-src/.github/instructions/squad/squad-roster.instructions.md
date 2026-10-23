@@ -189,6 +189,10 @@ The coordinator turns a matched role into exactly one concrete agent at dispatch
 5. **Record any non-primary resolution** through the Squad Scribe, so `history/<agent>.md` reflects the agent that actually ran and the cue that selected it.
 6. **Never self-fill an absent role.** When the resolved agent is not installed, not dispatchable, or returns nothing, the coordinator stops and escalates to the user. It must not perform the role's work itself, and must not substitute a non-mapped agent to fill the gap. An absent role blocks the stage until the user installs the agent, names a substitute, or removes the role. A dispatch that returns nothing is an absent role, not an invitation to improvise.
 
+For connector setup, manual bindings, or dispatch, load the skill's
+`references/connector-role-modes.md`; it also owns consumer-defined additive
+roles and their explicit artifact roots.
+
 ## Casting Rules
 
 * Use the exact `name:` frontmatter value from the deployed agent. Names with spaces are quoted when referenced from prompt or agent frontmatter.
@@ -351,4 +355,3 @@ Power BI is deliberately absent from the `power-platform` pack. Its upstream age
 **Two adjacent Microsoft verticals were assessed and deliberately produced no pack.** Data and Power BI, and AI application engineering, both reached the verification gate with no agent surviving it: the four `power-bi-*-expert` agents fail gate step 3, and every AI-engineering candidate duplicates capability HVE Core already deploys. A pack selects roles, and a role needs a dispatchable Primary, so inventing one would have meant authoring a squad charter purely to make a pack exist — and in the AI-engineering case that charter would have claimed work `developer` already owns. Both verticals are therefore registered as skills against widened existing roles, and their surviving resources are listed in *Registered External Cast*. Revisit the pack shape only when an upstream agent in either domain passes the gate.
 
 There is no Power Platform ALM or solution-deployment role. No verified resource can perform a solution import, and a role with no resource behind it is aspirational rather than dispatchable. ALM *planning* — environment strategy, solution segmentation, managed versus unmanaged, pipeline design — sits with `pp-architect`, which advises and never executes. Should an ALM writing role ever be added, it inherits both existing write postures rather than a default: opt-in like `backlog-executor`, because a solution import is announced to everyone in the target environment the moment it lands, and preview-first like `deployer`, because the import itself is not cleanly reversible.
-

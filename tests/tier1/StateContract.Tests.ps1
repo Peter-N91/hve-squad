@@ -391,6 +391,28 @@ Describe 'SQ-07 The routing table carries its documented columns' {
     }
 }
 
+Describe 'CONN Connector-backed state resolves exact trusted identity' {
+    It 'admits only structurally valid manifest-backed binding rows' {
+        $script:Model.ConnectorBindingIssues -join '; ' |
+            Should -BeNullOrEmpty -Because 'a binding is authority only after its target, member, manifest, and unique id validate'
+    }
+
+    It 'admits historical retirement evidence only for confirmed, bounded completed entries' {
+        $script:Model.ConnectorRetirementIssues -join '; ' |
+            Should -BeNullOrEmpty -Because 'a removed registration needs an explicit Scribe-owned confirmation record, not an arbitrary historical identity'
+    }
+
+    It 'matches every connector history entry to its exact active or retired binding and provenance identity' {
+        $script:Model.ConnectorHistoryIssues -join '; ' |
+            Should -BeNullOrEmpty -Because 'Squad Connector history must resolve to one exact member and trusted provenance source'
+    }
+
+    It 'matches connector Attribution rows to the same role and external member recorded in history' {
+        $script:Model.ConnectorLedgerIssues -join '; ' |
+            Should -BeNullOrEmpty -Because 'a role-only match can price the wrong connector member while appearing fully backed'
+    }
+}
+
 Describe 'SQ-10 Dispatch history is the proof a stage ran' -Skip:(-not $ExpectDispatches) {
     It 'at least one agent history file exists' {
         $script:Model.HistoryFiles.Count | Should -BeGreaterThan 0 -Because 'no history entry means no stage happened'

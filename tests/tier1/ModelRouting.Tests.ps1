@@ -617,6 +617,19 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
             & $Script @parameters | ConvertFrom-Json
         }
 
+        function Invoke-EconomyResolverRaw {
+            param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{}, [string]$Script = $script:Resolver)
+            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-01'; AvailableModels = $script:CliEnum }
+            foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
+            try {
+                $output = (& $Script @parameters 2>&1 | Out-String)
+                [pscustomobject]@{ ExitCode = 0; Output = $output }
+            }
+            catch {
+                [pscustomobject]@{ ExitCode = 1; Output = ($_ | Out-String) }
+            }
+        }
+
         # Expected economy pick computed straight from the catalog, independent of the resolver.
         $catalogRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-catalog.md') -Raw
         $tables = @(Get-MarkdownTable -Content $catalogRaw)
@@ -796,6 +809,101 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $result = Invoke-EconomyResolver -Root $root -Script (Join-Path $plugin 'skills/squad/scripts/Resolve-SquadModelRoute.ps1')
         $result.roles[0].pin | Should -Be 'Claude Haiku 5.5'
         $result.roles[0].suggested | Should -Be (Get-ExpectedEconomyPick -Floor 'fast')
+    }
+
+    It 'classifies additive <Role> via alignedRole=<Alignment> for assignment compatibility only' -ForEach @(
+        @{ Role = 'gcp'; Alignment = 'azure-architect'; Class = 'planning' },
+        @{ Role = 'dotnet-practices'; Alignment = 'tester'; Class = 'review' },
+        @{ Role = 'data-quality'; Alignment = 'tester'; Class = 'review' }
+    ) {
+        $root = New-EconomyRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: ranked', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                "| $Role | Capability Assessor | Squad Connector | default | | .copilot-tracking/$Role/ |"
+                ''
+                '## Connector Bindings'
+                ''
+                '| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |'
+                '| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |'
+                "| capability-assessor | acme | docs/templates/connector-example/manifest.capability-assessor.1.1.json | agent | add | role | role:$Role/Capability Assessor | Capability Assessor | $Role | $Alignment | connector |"
+            ) -join "`n")
+        $entry = (Invoke-EconomyResolver -Root $root).roles[0]
+        $entry.role | Should -Be $Role
+        $entry.class | Should -Be $Class
+        $entry.classSource | Should -Be "connector-aligned: $Alignment"
+        $entry.rationale | Should -Not -Match '^economy pick:' -Because 'alignment grants class compatibility, not economy allowlist treatment'
+    }
+
+    It 'preserves legacy connector-backed rows when Connector Bindings are absent' {
+        $root = New-EconomyRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: ranked', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| gcp | GCP Assessor | Squad Connector | default | | `.copilot-tracking/gcp-assessments/` |'
+            ) -join "`n")
+        $entry = (Invoke-EconomyResolver -Root $root).roles[0]
+        $entry.role | Should -Be 'gcp'
+        $entry.classSource | Should -Not -Match 'connector-aligned'
+    }
+
+    It 'fails closed on connector alignment errors: <Case>' -ForEach @(
+        @{
+            Case    = 'missing aligned role'
+            TeamMd  = @(
+                '# Squad Roster', '', 'Model routing: ranked', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| gcp | GCP Assessor | Squad Connector | default | | out/ |'
+                ''
+                '## Connector Bindings'
+                ''
+                '| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |'
+                '| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |'
+                '| gcp-assessor | acme | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp |  | connector |'
+            ) -join "`n"
+            Match   = 'missing Aligned Role'
+        }
+        @{
+            Case    = 'invalid aligned role'
+            TeamMd  = @(
+                '# Squad Roster', '', 'Model routing: ranked', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| gcp | GCP Assessor | Squad Connector | default | | out/ |'
+                ''
+                '## Connector Bindings'
+                ''
+                '| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |'
+                '| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |'
+                '| gcp-assessor | acme | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | imaginary-role | connector |'
+            ) -join "`n"
+            Match   = 'has no assignment'
+        }
+        @{
+            Case    = 'cyclic aligned role chain'
+            TeamMd  = @(
+                '# Squad Roster', '', 'Model routing: ranked', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
+                '|------|-------------|----------------------|------------|-------|------------------|'
+                '| gcp | GCP Assessor | Squad Connector | default | | out/ |'
+                ''
+                '## Connector Bindings'
+                ''
+                '| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |'
+                '| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |'
+                '| gcp-assessor | acme | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | bridge-role | connector |'
+                '| bridge-assessor | acme | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:bridge-role/GCP Assessor | GCP Assessor | bridge-role | gcp | connector |'
+            ) -join "`n"
+            Match   = 'cyclic Aligned Role chain'
+        }
+    ) {
+        $root = New-EconomyRoot -Content $TeamMd
+        $result = Invoke-EconomyResolverRaw -Root $root -Extra @{ Mode = 'ranked' }
+        $NormalizedOutput = ($result.Output -replace '\s*\|\s*', ' ') -replace '\s+', ' '
+        $result.ExitCode | Should -Not -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'Connector alignment error'
+        $NormalizedOutput | Should -Match $Match
     }
 
     Context 'economy consent is reported, never enforced (E2)' {
