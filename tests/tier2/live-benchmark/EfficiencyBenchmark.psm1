@@ -1133,11 +1133,11 @@ function Invoke-EfficiencyParallelTrials {
         foreach ($Slot in $Slots) {
             try {
                 $Job = Start-ThreadJob -ThrottleLimit 3 -ArgumentList $ModulePath, $Context, $Slot.arm, $Slot.pair, $MaxCredits, $Owner -ScriptBlock {
-                    param($ModulePath, $Context, $Arm, $Pair, $Credits, $Owner)
+                    param($ModulePath, $Context, $Arm, $Pair, $Budget, $Owner)
                     $ErrorActionPreference = 'Stop'
                     try {
                         Import-Module $ModulePath -Force
-                        @{ run = (Invoke-EfficiencyTrial -Context $Context -Arm $Arm -Pair $Pair -MaxCredits $Credits -ProcessOwner $Owner); error = $null }
+                        @{ run = (Invoke-EfficiencyTrial -Context $Context -Arm $Arm -Pair $Pair -MaxCredits $Budget -ProcessOwner $Owner); error = $null }
                     }
                     catch { @{ run = $null; error = $_.Exception } }
                 }
