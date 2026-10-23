@@ -295,7 +295,7 @@ Describe 'Measure-SquadLedger -Write splices the derived fragment and run totals
         $state.currentRun.estCreditsTotal | Should -Be 31.71
     }
 
-    It 'leaves the frontmatter, H1, Basis note, and Cost Comparison section byte-identical' {
+    It 'preserves frontmatter, H1, Basis note, comparison context and surrounding notes' {
         $root = Initialize-WriteTestRootLocal
         $ledgerPath = Join-Path $root 'consumption.md'
         $before = Get-Content -LiteralPath $ledgerPath -Raw
@@ -305,9 +305,103 @@ Describe 'Measure-SquadLedger -Write splices the derived fragment and run totals
         $headOf = { param($text) $text.Substring(0, $text.IndexOf('## Attribution')) }
         $tailOf = { param($text) $text.Substring($text.IndexOf('## Cost Comparison')) }
         (& $headOf $after) | Should -Be (& $headOf $before)
-        (& $tailOf $after) | Should -Be (& $tailOf $before)
+        (& $tailOf $after) | Should -Be ((& $tailOf $before).Replace('$0.8854 (~88.54 AI credits)', '$0.3171 (~31.71 AI credits)'))
         $after | Should -Match '(?m)^Squad Researcher\.md — 1 block\(s\) — identities: '
         $after | Should -Match '\*\*0\.3171\*\*'
+    }
+
+    It 'finalizes stale comparison figures and savings without losing baseline assumptions or notes' {
+        $root = Initialize-WriteTestRootLocal -Fixture applied
+        $path = Join-Path $root 'consumption.md'
+        $line = 'This run consumed an estimated **$9.9999 (~999.99 AI credits)** across 1 role. Manually prompting Example Model across roughly 12 turns is estimated at **$20.00 (~2000 AI credits)**, a saving of about **50%**.'
+        $text = [regex]::Replace((Get-Content -LiteralPath $path -Raw), '(?m)^This run consumed[^\r\n]*', { $line })
+        $text += "`nOperator comparison note.`n`n## Operator Notes`n`nThis run consumed an estimated **`$7.0000 (~700.00 AI credits)** elsewhere.`n"
+        Set-Content -LiteralPath $path -Value $text -NoNewline
+        $before = (Get-FileHash -LiteralPath $path).Hash
+        $check = Invoke-Ledger -SquadRoot $root -Check
+        $check.ExitCode | Should -Be 1 -Because 'table/state reconciliation alone must not certify stale prose'
+        $check.Output | Should -Match 'failure class: ledger-only'
+        (Get-FileHash -LiteralPath $path).Hash | Should -Be $before
+        $write = Invoke-Ledger -SquadRoot $root -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $after = Get-Content -LiteralPath $path -Raw
+        $after | Should -Match ([regex]::Escape('$0.3171 (~31.71 AI credits)'))
+        $after | Should -Match ([regex]::Escape('Example Model across roughly 12 turns is estimated at **$20.00 (~2000 AI credits)**, a saving of about **98%**.'))
+        $after | Should -Match 'Operator comparison note\.'
+        $after | Should -Match ([regex]::Escape('**$7.0000 (~700.00 AI credits)** elsewhere.'))
+        (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'reports negative savings and zero baseline honestly while preserving the manual assumptions' {
+        foreach ($baseline in @('0.10', '0.00')) {
+            $root = Initialize-WriteTestRootLocal -Fixture applied
+            $path = Join-Path $root 'consumption.md'
+            $line = 'This run consumed an estimated **$0.3171 (~31.71 AI credits)**. A manual model across 12 turns is estimated at **$' + $baseline + ' (~10 AI credits)**, a saving of about **50.00%**.'
+            Set-Content -LiteralPath $path -Value ([regex]::Replace((Get-Content -LiteralPath $path -Raw), '(?m)^This run consumed[^\r\n]*', { $line })) -NoNewline
+            $write = Invoke-Ledger -SquadRoot $root -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $after = Get-Content -LiteralPath $path -Raw
+            $after | Should -Match ([regex]::Escape("manual model across 12 turns is estimated at **`$$baseline"))
+            if ($baseline -eq '0.10') { $after | Should -Match '\*\*-217\.08%\*\*' }
+            else { $after | Should -Match 'saving unavailable \(non-positive manual baseline\)' }
+            $after | Should -Not -Match 'stale — refreshed|NaN|Infinity'
+            (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
+        }
+    }
+
+    It 'replaces seed or missing comparisons with an explicit unavailable baseline and remains idempotent' {
+        foreach ($kind in @('seed', 'missing')) {
+            $root = Initialize-WriteTestRootLocal -Fixture applied
+            $path = Join-Path $root 'consumption.md'
+            $text = Get-Content -LiteralPath $path -Raw
+            if ($kind -eq 'seed') { $text = [regex]::Replace($text, '(?m)^This run consumed[^\r\n]*', 'This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** across <n> agents.') }
+            else { $text = [regex]::Replace($text, '(?s)## Cost Comparison.*$', '## Operator Notes' + "`n`nKeep this note.`n") }
+            Set-Content -LiteralPath $path -Value $text -NoNewline
+            (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 1
+            $write = Invoke-Ledger -SquadRoot $root -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $after = Get-Content -LiteralPath $path -Raw
+            $after | Should -Match ([regex]::Escape('**$0.3171 (~31.71 AI credits)**'))
+            $after | Should -Match 'manual baseline and saving unavailable'
+            $after | Should -Not -Match '<squad-cost>|<squad-credits>|<n>'
+            if ($kind -eq 'missing') { $after | Should -Match 'Keep this note\.' }
+            $hash = (Get-FileHash -LiteralPath $path).Hash
+            (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+            (Get-FileHash -LiteralPath $path).Hash | Should -Be $hash
+            (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
+        }
+    }
+
+    It 'validates comparison numbers semantically even with observed usage and never changes checked files' {
+        $root = Initialize-WriteTestRootLocal -Fixture applied
+        $path = Join-Path $root 'consumption.md'
+        $line = 'This run consumed an estimated **$0.317100 (~31.710 AI credits)**. A manual baseline is estimated at **$20.00 (~2000 AI credits)**, a saving of about **98.41%**.'
+        $text = [regex]::Replace((Get-Content -LiteralPath $path -Raw), '(?m)^This run consumed[^\r\n]*', { $line })
+        $text = $text.Replace('## Cost Comparison', "## Observed Usage (host-reported)`n`nIndependent host telemetry retained.`n`n## Cost Comparison")
+        Set-Content -LiteralPath $path -Value $text -NoNewline
+        (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
+        foreach ($mutation in @(@('$0.317100', '$0.400000'), @('31.710 AI', '39.000 AI'), @('98.41%', '90.00%'))) {
+            Set-Content -LiteralPath $path -Value $text.Replace($mutation[0], $mutation[1]) -NoNewline
+            $hashes = @(Get-FileHash -LiteralPath $path, (Join-Path $root 'state.json') | ForEach-Object Hash)
+            $check = Invoke-Ledger -SquadRoot $root -Check
+            $check.ExitCode | Should -Be 1 -Because $check.Output
+            $check.Output | Should -Match 'Cost Comparison'
+            $check.Output | Should -Match 'failure class: ledger-only'
+            @(Get-FileHash -LiteralPath $path, (Join-Path $root 'state.json') | ForEach-Object Hash) | Should -Be $hashes
+        }
+    }
+
+    It 'preserves a supplied baseline when squad figures are still template placeholders' {
+        $root = Initialize-WriteTestRootLocal -Fixture applied
+        $path = Join-Path $root 'consumption.md'
+        $line = 'This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** across <n> agents. Manually prompting Example Model across 12 turns is estimated at **$20.00 (~2000 AI credits)**, a saving of about **<savings-pct>%**.'
+        Set-Content -LiteralPath $path -Value ([regex]::Replace((Get-Content -LiteralPath $path -Raw), '(?m)^This run consumed[^\r\n]*', { $line })) -NoNewline
+        $write = Invoke-Ledger -SquadRoot $root -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $after = Get-Content -LiteralPath $path -Raw
+        $after | Should -Match ([regex]::Escape('**$0.3171 (~31.71 AI credits)** across 1 agents.'))
+        $after | Should -Match ([regex]::Escape('Example Model across 12 turns is estimated at **$20.00 (~2000 AI credits)**, a saving of about **98%**.'))
+        (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
     }
 
     It 'changes only the two currentRun values in state.json, preserving every other byte' {
@@ -589,6 +683,7 @@ $fragment
 "@
         Set-Content -LiteralPath $ledgerPath -Value $rebuilt -NoNewline
         Sync-LedgerStateLocal -SquadRoot $root
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
 
         $selfCheck = Invoke-Ledger -SquadRoot $root -Check
         $selfCheck.ExitCode | Should -Be 0 -Because "the freshly regenerated ledger must itself pass -Check before corruption: $($selfCheck.Output)"
@@ -823,6 +918,7 @@ description: "Append-only dispatch history for a single squad agent"
         $script:CompositeKeyLedgerPath = Join-Path $script:CompositeKeyRoot 'consumption.md'
         Set-Content -LiteralPath $script:CompositeKeyLedgerPath -Value $script:CompositeKeyLedgerContent -NoNewline
         Sync-LedgerStateLocal -SquadRoot $script:CompositeKeyRoot
+        (Invoke-Ledger -SquadRoot $script:CompositeKeyRoot -Write).ExitCode | Should -Be 0
 
         # Guard: the spliced-together ledger must itself pass -Check before either
         # It below relies on it, so a failure here points at the splice, not the

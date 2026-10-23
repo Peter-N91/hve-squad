@@ -143,6 +143,7 @@ Markdown histories, decisions, ledger, and state remain the compatibility contra
 | WRT-08 | The Scribe definition is less than 3,000 UTF-8 bytes and does not eagerly load the legacy procedure, schemas, or payload template | `squad-scribe.agent.md` |
 | WRT-09 | Consumption rejects auto and tier labels as actual models, without writes; label-valued session preferences remain legal metadata and derive unknown/unresolved usage when no concrete pin is available | `Write-SquadHandoff.ps1`, Test-Consumption and Get-DerivedConsumption |
 | WRT-10 | Fresh initialization accepts only absent or empty-directory-only roots, refuses file/link content, defers nonrecursive scaffold removal until publication, and preserves member no-root sentinels | `Initialize-Squad.ps1`; `references/scribe-init.md`, Run and stop |
+| WRT-11 | Ledger `-Write` finalizes estimated Cost Comparison figures transactionally for ordinary and cold writes; preserves supplied baseline/context/notes, calculates signed savings, reports zero/unknown baseline unavailable, and retains initialization n/a. Read-only `-Check` detects stale cost/credits/savings or unrecognized comparison as ledger-only even with independent host observations; equivalent numeric spellings pass. Cold Scribe never edits derived comparison figures after checking | `Measure-SquadLedger.ps1`, comparison finalization; `Write-SquadHandoff.ps1`; `references/scribe-procedure.md`, Consumption Accounting |
 
 | ID | Assertion | Rationale |
 |---|---|---|

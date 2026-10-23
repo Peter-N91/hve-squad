@@ -32,11 +32,9 @@
       4. Run `Measure-SquadLedger.ps1 -Write` (child process: it calls `exit`), refresh the
          ledger heading run id, then run `Measure-SquadLedger.ps1 -Check
          -ExpectedHistoryCounts` with counts taken before step 3. The script exits 0 only
-         when that check passes. An existing Cost Comparison keeps its manual-baseline figures;
-         this script rewrites its squad cost and credits to the new total and recomputes the saving
-         percentage from the stated baseline (a baseline below the cost marks the paragraph
-         `stale — refreshed at run end` for the Scribe). The seed placeholder is replaced by a
-         squad-figure line the Scribe completes.
+         when that check passes. The ledger helper finalizes Cost Comparison figures,
+         preserving supplied manual-baseline assumptions and deriving signed savings.
+         Without a supplied baseline it records unavailable, never invented savings.
     Appended files keep their existing bytes (BOM, line endings); entries are only appended.
     Every file is replaced through a temp file and move. On any failure after step 2 begins,
     every changed file is restored to its original bytes (a file the script created is
@@ -1534,58 +1532,13 @@ try {
         if (-not $handoffWarnings.Contains($warning)) { $handoffWarnings.Add($warning) }
     }
     $written.Add("WROTE consumption.md ($(($ledger.Text -split "`n" | Select-Object -Last 1).Trim()))")
+    if ($ledger.Text -match 'APPENDED Cost Comparison') { $written.Add('APPENDED Cost Comparison section to consumption.md') }
 
-    # The ledger helper leaves the heading run id and the Cost Comparison section as written. The seed placeholder and this script's own
-    # squad-figure line are replaced; a full comparison keeps its manual baseline and gets its squad figures and saving recomputed.
-    $afterState = [System.Text.Json.Nodes.JsonNode]::Parse((Get-FileText $statePath))
-    $cost = [double]::Parse($afterState['currentRun']['estCostUsd'].ToJsonString(), [System.Globalization.CultureInfo]::InvariantCulture)
-    $credits = [double]::Parse($afterState['currentRun']['estCreditsTotal'].ToJsonString(), [System.Globalization.CultureInfo]::InvariantCulture)
-    $agentCount = @(Get-ChildItem -LiteralPath $historyDir -Filter '*.md' -File | Where-Object { $_.BaseName -ne $ScribeAgent -and $_.Name -notmatch '^(autonomous-loop|autopilot-run)-' }).Count
+    # Only this writer knows the payload run id; state.json has no general run-id field.
     $ledgerBytes = [System.IO.File]::ReadAllBytes($consumptionPath)
     $ledgerHasBom = ($ledgerBytes.Length -ge 3 -and $ledgerBytes[0] -eq 0xEF -and $ledgerBytes[1] -eq 0xBB -and $ledgerBytes[2] -eq 0xBF)
     $ledgerText = Get-FileText $consumptionPath
     $ledgerText = [regex]::Replace($ledgerText, '(?m)^# Squad Consumption Ledger \(Run: [^)\r\n]*\)', "# Squad Consumption Ledger (Run: $runId)")
-    $comparison = 'This run consumed an estimated **${0} (~{1} AI credits)** across {2} specialized agent(s) (squad figure only; the host-reported comparison is in Observed Usage when a session log exists).' -f $cost.ToString('F4', [System.Globalization.CultureInfo]::InvariantCulture), $credits.ToString('F2', [System.Globalization.CultureInfo]::InvariantCulture), $agentCount
-    $comparisonPattern = '(?m)^(?:n/a \(initialization\)\.|This run has not yet dispatched|This run consumed an estimated \*\*\$<squad-cost>|This run consumed an estimated [^\r\n]*\(squad figure only;)[^\r\n]*'
-    $comparisonRefreshed = [regex]::IsMatch($ledgerText, $comparisonPattern)
-    if ($comparisonRefreshed) {
-        if ($agentCount -gt 0) { $ledgerText = [regex]::Replace($ledgerText, $comparisonPattern, { $comparison }) }
-    }
-    else {
-        # A full comparison keeps its manual baseline; its squad figures and the saving percentage are recomputed from the new total.
-        $invariantCulture = [System.Globalization.CultureInfo]::InvariantCulture
-        $figure = '\*\*\$[0-9][0-9,]*(?:\.\d+)? \(~[0-9][0-9,]*(?:\.\d+)? AI credits\)\*\*'
-        $fullMatch = [regex]::Match($ledgerText, "(?m)^This run consumed an estimated $figure[^\r\n]*")
-        if ($fullMatch.Success -and $ledgerText -notmatch '(?m)^#{2,3}\s+Observed Usage') {
-            $squadFigure = '**${0} (~{1} AI credits)**' -f $cost.ToString('F4', $invariantCulture), $credits.ToString('F2', $invariantCulture)
-            $line = [regex]::Replace($fullMatch.Value, "^This run consumed an estimated $figure", { param($m) "This run consumed an estimated $squadFigure" })
-            $line = $line -replace ' \(stale — refreshed at run end\)$', ''
-            $baseline = [regex]::Match($line, 'estimated at \*\*\$(?<m>[0-9][0-9,]*(?:\.\d+)?) \(~[0-9][0-9,]*(?:\.\d+)? AI credits\)\*\*(?<mid>[^*]*?)about \*\*(?<p>\d+(?:\.\d+)?)%\*\*')
-            if ($baseline.Success) {
-                $manual = [double]::Parse($baseline.Groups['m'].Value.Replace(',', ''), $invariantCulture)
-                if ($manual -gt 0 -and $manual -ge $cost) {
-                    $decimals = if ($baseline.Groups['p'].Value.Contains('.')) { $baseline.Groups['p'].Value.Split('.')[1].Length } else { 0 }
-                    $saving = (100.0 * ($manual - $cost) / $manual).ToString("F$decimals", $invariantCulture)
-                    $line = $line.Substring(0, $baseline.Groups['p'].Index) + $saving + $line.Substring($baseline.Groups['p'].Index + $baseline.Groups['p'].Length)
-                }
-                else { $line += ' (stale — refreshed at run end)' }
-            }
-            $ledgerText = $ledgerText.Substring(0, $fullMatch.Index) + $line + $ledgerText.Substring($fullMatch.Index + $fullMatch.Length)
-            $comparisonRefreshed = $true
-        }
-        elseif ($fullMatch.Success) { $comparisonRefreshed = $true }
-    }
-    if (-not $comparisonRefreshed) {
-        # No Cost Comparison section at all: append the template's section with this script's own squad-figure line.
-        $templateForComparison = [System.IO.File]::ReadAllText((Join-Path $scriptsRoot '../references/consumption.md'))
-        $estimatesNote = [regex]::Match($templateForComparison, '(?m)^> Estimates only\.[^\r\n]*').Value
-        $nl = Get-NewlineOf $ledgerText
-        $section = "## Cost Comparison (illustrative)$nl$nl$comparison$nl"
-        if ($estimatesNote) { $section += "$nl$estimatesNote$nl" }
-        $ledgerText = $ledgerText.TrimEnd() + "$nl$nl" + $section
-        $comparisonRefreshed = $true
-        $written.Add('APPENDED Cost Comparison section to consumption.md')
-    }
     $ledgerOut = [System.Text.UTF8Encoding]::new($false).GetBytes($ledgerText)
     if ($ledgerHasBom) { $ledgerOut = [byte[]](@(0xEF, 0xBB, 0xBF) + $ledgerOut) }
     Write-FileAtomic -FullPath $consumptionPath -Bytes $ledgerOut
@@ -1609,13 +1562,6 @@ try {
         if (-not $handoffWarnings.Contains($warning)) { $handoffWarnings.Add($warning) }
     }
 
-    # A comparison that still quotes a squad total other than the ledger's own is self-refuting; the hand-off does not stand.
-    $finalLedger = Get-FileText $consumptionPath
-    $quoted = [regex]::Match($finalLedger, '(?m)^This run consumed an estimated \*\*\$(?<n>[0-9][0-9,]*(?:\.\d+)?) \(~')
-    if ($quoted.Success -and $finalLedger -notmatch '(?m)^#{2,3}\s+Observed Usage') {
-        $quotedCost = [double]::Parse($quoted.Groups['n'].Value.Replace(',', ''), [System.Globalization.CultureInfo]::InvariantCulture)
-        if ([math]::Abs($quotedCost - [math]::Round($cost, 4)) -gt 0.00005) { throw "the Cost Comparison quotes `$$($quoted.Groups['n'].Value) but the ledger total is `$$($cost.ToString('F4', [System.Globalization.CultureInfo]::InvariantCulture)) (self-refuting)." }
-    }
 }
 catch {
     Stop-WithRollback 3 "write failed: $($_.Exception.Message)"
