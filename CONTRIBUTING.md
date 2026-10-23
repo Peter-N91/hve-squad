@@ -36,7 +36,7 @@ hve-squad gets better when a durable fix found in one environment reaches every 
 4. Open a pull request against the default branch.
 5. A maintainer reviews, requests changes when needed, and merges.
 
-Merging publishes the change to the rolling pre-release within minutes, so it can be installed and tested straight away (see [Testing before a release](#testing-before-a-release)). It reaches consumers pinned to a released version when a maintainer cuts the next release, which happens when the pending work is judged ready rather than on a schedule.
+Merging publishes the change to the rolling pre-release within minutes, so it can be installed and tested straight away (see [Testing before a release](#testing-before-a-release)). When the pull request updates the English and French guides, the Pages build traces its pending fragment back to the commit that introduced it and automatically adds the current pre-release badge to the affected sections. It reaches consumers pinned to a released version when a maintainer cuts the next release, which happens when the pending work is judged ready rather than on a schedule.
 
 ## Recording your change
 
@@ -170,7 +170,7 @@ The exact tag is on the [Releases page](https://github.com/Peter-N91/hve-squad/r
 * **The tag moves.** Re-run the install to pick up the newest build. It is a channel, not a fixed point, so it is for testing rather than for anything you depend on.
 * **The name can change.** The tag tracks the resolved version, so a `minor` fragment landing midweek renames the pre-release from `v0.13.4-pre` to `v0.14.0-pre` and the old one is deleted.
 
-Nothing about the preview consumes a fragment or writes to `CHANGELOG.md`. The release is assembled from the same fragments the preview rendered, so what you tested is what ships.
+Nothing about the preview consumes a fragment or writes to `CHANGELOG.md`. The documentation build uses those same pending fragments to badge sections changed by unreleased merge commits; documentation-only pull requests with `skip-changelog` are not badged. Release Prep consumes the fragments, so the next Pages build removes their badges automatically. The release is assembled from the same fragments the preview rendered, so what you tested is what ships.
 
 ## Shipping a fix without shipping everything else
 

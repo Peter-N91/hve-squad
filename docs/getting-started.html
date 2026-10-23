@@ -386,8 +386,10 @@ targets:
       <p>
         These docs follow <code>main</code>, which can be ahead of the latest stable release.
         A <strong>Pre-release only</strong> badge identifies a feature that has merged but has not
-        shipped in a stable release. The notice on every page shows both versions, and each badge
-        links here. Use stable releases for work you depend on.
+        shipped in a stable release. The site derives those badges from pending change fragments
+        and the documentation sections changed by the commits that introduced them; an official release consumes
+        the fragments and removes the badges automatically. The notice on every page shows both
+        versions, and each badge links here. Use stable releases for work you depend on.
       </p>
       <p>
         Test in a separate scratch repository with PowerShell 7+ and APM CLI <code>0.29.0</code>;
