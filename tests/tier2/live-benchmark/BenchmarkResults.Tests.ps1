@@ -3,6 +3,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Tests evidence sanitization, compatibility and stored-record comparison.
+# AI cost: none; uses synthetic observations and temporary Git repositories.
+
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1') -Force
     $SourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path

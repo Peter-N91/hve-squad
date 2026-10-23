@@ -2,6 +2,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Validates recorded studies and reduces their saved observations into comparable summaries.
+# AI cost: none; reuses recorded evidence without collecting new trials or judge responses.
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')

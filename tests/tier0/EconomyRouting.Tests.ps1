@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; checks shipped contract text, not a live economy-mode session.
+
 # Static text pins for the opt-in `routing=economy` mode (SQ-35 in
 # tests/squad-behavior-contract.md) against the built package: every place that
 # enumerates the routing modes names `economy`, the *Economy Mode* contract keeps its

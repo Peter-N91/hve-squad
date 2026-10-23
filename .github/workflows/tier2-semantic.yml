@@ -1,5 +1,8 @@
 name: Tier 2 Semantic
 
+# AI cost: none here; self-checks and rescoring reuse fixtures or saved Tier 1 runs.
+# Producing fresh Tier 1 observations is a separate, potentially paid workflow.
+
 # Scores Tier 1 runs against the golden baselines captured from the last good release.
 #
 # Tier 0 asks "is the package well-formed". Tier 1 asks "did the work actually happen".

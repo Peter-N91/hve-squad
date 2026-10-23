@@ -7,6 +7,8 @@
 .SYNOPSIS
     Drives the live benchmark matrix (levels x arms x repeats) and appends one scored row per run. Spends credits.
 .DESCRIPTION
+    AI cost: high. Defaults to 3 levels x 5 arms x 8 repeats = 120 workflow sessions,
+    plus a judge session per populated level. -Plan calls no model; -SkipJudge skips only judging.
     Arms are built from the two source directories passed in, never from branch names:
       A  -BaselineSrc,  default routing (no routing token)
       B  -CandidateSrc, default routing; must match A (default-mode regression check)

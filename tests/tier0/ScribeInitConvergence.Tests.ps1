@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; inspects init/repair contracts without launching the Scribe.
+
 # 0.18.1 hotfix: pins the Init and ledger-repair contract that stops the Scribe
 # looping on a fresh squad. GATE-38..GATE-41 in tests/squad-behavior-contract.md are
 # this file's contract IDs.

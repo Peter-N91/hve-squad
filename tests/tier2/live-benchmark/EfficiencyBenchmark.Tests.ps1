@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
+# Tests parsing, acceptance probes, budgets, scheduling and owned-process cleanup.
+# AI cost: none; fake CLIs simulate live runs, including parallel workers and failures.
+
 BeforeAll {
     Set-StrictMode -Version Latest
     $script:OriginalEfficiencyHome = $HOME

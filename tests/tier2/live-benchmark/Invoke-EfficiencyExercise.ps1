@@ -7,6 +7,9 @@
 .SYNOPSIS
     Analyzes CLI logs or explicitly launches a bounded cold-init squad exercise.
 .DESCRIPTION
+    AI cost: paid in live modes. Each trial runs init, requirements, build and a separate
+    judge under -MaxCredits. Establish collects 3 trials; Series collects 3 candidates
+    with saved controls or 6 fresh paired trials. Parallelism changes concurrency, not trial count.
     Run spends credits and requires a prepared full install and isolated environment.
     Analyze, Compare and Promote are offline. No command commits or pushes.
 .PARAMETER Mode

@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; validates routing rules without dispatching the named models.
+
 # Static, offline checks for the opt-in routing/model-override contract in
 # model-routing.md (SQ-25 through SQ-34 in squad-behavior-contract.md) and the D9
 # identity-bullet wiring into the Scribe's history-entry and state.json shapes. Every

@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; measures shipped prompt bytes without making model requests.
+
 # Legacy file byte diff against v0.18.1, plus the measured universal ordinary path.
 # Full legacy Scribe procedure is now cold, not a required default-mode read. The aggregate
 # ceiling remains fixed while documented per-file overrides permit concentrated

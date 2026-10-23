@@ -9,6 +9,7 @@
     ledger from history/*.md and consumption-rates.md, so the Scribe never hand-
     arithmetics a total again.
 .DESCRIPTION
+    AI cost: none; calculates recorded usage from local history and rates, without a model call.
     This is the D6b remedy for the AFTER benchmark regression: two of three AFTER
     runs wrote a wrong ledger cost (one of them by copying scribe-procedure.md's own
     Step 7 worked example instead of deriving the real payload's cost). This script

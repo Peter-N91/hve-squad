@@ -1,5 +1,9 @@
 name: Tier 2 Benchmark
 
+# Collects fresh release evidence against saved controls, or refreshes both arms.
+# AI cost: high; 3 paid candidate trials, or 6 with refresh_reference, each including a judge.
+# Collection policy reserves the spending ceiling before any model launch.
+
 on:
   workflow_call:
     inputs:

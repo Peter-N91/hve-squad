@@ -4,6 +4,7 @@
 .SYNOPSIS
     Publishes a fresh squad tree from confirmed JSON, only after validation.
 .DESCRIPTION
+    AI cost: none; publishes confirmed payload data without dispatching the Scribe.
     Roots containing files or links are refused, including partial initialization. Explicit roster
     refresh stays on the cold Scribe path. Payload strings are data, never commands.
 .PARAMETER PayloadPath

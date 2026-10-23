@@ -4,6 +4,8 @@
 <#
 .SYNOPSIS
 Imports explicitly selected private observations as immutable, sanitized Git evidence.
+.DESCRIPTION
+AI cost: none; exports existing trials without rerunning them or requesting a new judge.
 #>
 [CmdletBinding()]
 param(

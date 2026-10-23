@@ -9,6 +9,7 @@
     the shipped `references/consumption-rates-template.md`, so no model ever authors
     a rate table.
 .DESCRIPTION
+    AI cost: none; copies or validates the shipped rate template locally, with no pricing API call.
     `consumption-rates.md` is the only source of token rates, and the template says it
     is copied verbatim. A model asked to do that copy has instead invented rows (a
     `gpt-4o` table) or written a tier-fallback table with no per-model table at all,

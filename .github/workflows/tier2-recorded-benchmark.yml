@@ -1,5 +1,8 @@
 name: Tier 2 Recorded Benchmark
 
+# Gates publication/PRs by comparing immutable, already-recorded benchmark evidence.
+# AI cost: none; never falls back to paid collection when records are absent or incompatible.
+
 on:
   workflow_call:
     inputs:

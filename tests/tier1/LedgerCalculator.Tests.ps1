@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; local calculator checks only, despite the Tier 1 directory.
+
 # Offline, self-contained Pester coverage for the D6b routing-performance remedy's
 # deterministic ledger calculator (squad-src/.github/skills/squad/scripts/Measure-SquadLedger.ps1).
 # Like ModelRouting.Tests.ps1, this reads only shipped references/scripts and static
