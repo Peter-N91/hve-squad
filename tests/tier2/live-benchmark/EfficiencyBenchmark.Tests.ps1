@@ -4,6 +4,7 @@
 #Requires -Version 7.4
 
 BeforeAll {
+    Set-StrictMode -Version Latest
     $script:OriginalEfficiencyHome = $HOME
     $script:OriginalEfficiencyEnvironmentHome = $env:HOME
     $script:OriginalEfficiencyUserProfile = $env:USERPROFILE
@@ -893,7 +894,8 @@ exit 37
     }
     It 'refuses a live launch without explicit opt-in and isolation' {
         $Output = Join-Path $TestDrive 'blocked-launch.txt'
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 30
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 120
+        $Result.stopCause | Should -Be 'none'
         $Result.exitCode | Should -Be 1
         Get-Content ($Output + '.stderr') -Raw | Should -Match 'requires -Live'
     }
@@ -901,7 +903,8 @@ exit 37
         $Events = Join-Path $TestDrive 'analyze-events.jsonl'
         New-TestEvent 'tool.execution_start' @{ toolCallId = 'unfinished'; toolName = 'view' } | Set-Content $Events
         $Destination = Join-Path $TestDrive 'analysis'
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Analyze', '-EventsPath', $Events, '-OutputPath', $Destination) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'analysis-stdout.txt') -TimeoutSeconds 10
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Analyze', '-EventsPath', $Events, '-OutputPath', $Destination) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'analysis-stdout.txt') -TimeoutSeconds 120
+        $Result.stopCause | Should -Be 'none'
         $Result.exitCode | Should -Be 2
         (Get-Content (Join-Path $Destination 'metrics.json') -Raw | ConvertFrom-Json).complete | Should -BeFalse
         Test-Path (Join-Path $Destination 'events.jsonl') | Should -BeTrue
@@ -922,7 +925,8 @@ exit 0
 '@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
         New-Item -ItemType Directory -Path (Join-Path $Source 'scripts') -Force | Out-Null
         Set-Content (Join-Path $Source 'scripts/Build-SquadPlugin.ps1') '# offline converter fixture'
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Establish', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '120', '-MaxSeriesCredits', '360', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'establish-command.txt') -TimeoutSeconds 30 -InputText ''
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Establish', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '120', '-MaxSeriesCredits', '360', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'establish-command.txt') -TimeoutSeconds 120 -InputText ''
+        $Result.stopCause | Should -Be 'none'
         $Result.exitCode | Should -Be 2
         $LaunchError = Join-Path $Trial 'out/baseline-1-launch.jsonl.stderr'
         Test-Path -LiteralPath $LaunchError | Should -BeTrue
@@ -1181,6 +1185,7 @@ try {
 
 Describe 'Parallel native observations' -Tag 'Unit' {
     BeforeEach {
+        $BeforeJobs = @(Get-Job | ForEach-Object { $_.Id })
         $Root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $Trials = Join-Path $Root 'trials'; $Out = Join-Path $Root 'out'
         New-Item -ItemType Directory -Path $Trials, $Out | Out-Null
@@ -1215,7 +1220,6 @@ Copy-Item -LiteralPath (Join-Path $SourceRoot "$Arm-$Pair.json") -Destination (J
             $Run | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $Root "$($Run.metadata.arm)-$($Run.metadata.pair).json")
         }
         $Expected = $Fixtures[0].metadata.compatibility
-        $BeforeJobs = @(Get-Job).Id
     }
     AfterEach {
         @((Get-Job) | Where-Object Id -NotIn $BeforeJobs).Count | Should -Be 0
