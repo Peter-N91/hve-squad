@@ -1026,13 +1026,16 @@ Describe 'Write-SquadHandoff.ps1 refuses what it cannot admit or verify' {
         $again = (Get-Content -LiteralPath $path -Raw) -replace "`r`n", "`n"
         $again | Should -Match ([regex]::Escape([string]::Format([cultureinfo]::InvariantCulture, 'This run consumed an estimated **${0:F4} (~{1:F2} AI credits)**', [double]$state.currentRun.estCostUsd, [double]$state.currentRun.estCreditsTotal)))
         $state.currentRun.estCostUsd | Should -BeGreaterThan 0.3171
-        # A baseline below the squad cost cannot yield a saving: the paragraph is marked stale.
+        # A baseline below squad spend reports negative savings rather than a stale positive claim.
         $lowRoot = New-Root
         $low = $full.Replace('$20.00 (~2000 AI credits)', '$0.10 (~10 AI credits)')
         $lowText = [regex]::Replace(((Get-Content -LiteralPath (Join-Path $lowRoot 'consumption.md') -Raw) -replace "`r`n", "`n"), '(?m)^This run has not yet dispatched[^\n]*', { $low })
         [System.IO.File]::WriteAllText((Join-Path $lowRoot 'consumption.md'), $lowText, [System.Text.UTF8Encoding]::new($false))
         (Invoke-Writer -Root $lowRoot -Payload (New-Payload)).ExitCode | Should -Be 0
-        (Get-Content -LiteralPath (Join-Path $lowRoot 'consumption.md') -Raw) | Should -Match 'stale — refreshed at run end'
+        $lowAfter = Get-Content -LiteralPath (Join-Path $lowRoot 'consumption.md') -Raw
+        $lowAfter | Should -Match '\*\*-217%\*\*'
+        $lowAfter | Should -Not -Match 'stale — refreshed at run end'
+        (Invoke-LedgerCheck -Root $lowRoot -Counts 'Squad Researcher=1;Squad Scribe=1').ExitCode | Should -Be 0
 
         $seedRoot = New-Root
         (Invoke-Writer -Root $seedRoot -Payload (New-Payload)).ExitCode | Should -Be 0

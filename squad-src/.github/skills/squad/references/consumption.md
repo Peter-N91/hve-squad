@@ -63,6 +63,12 @@ This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** a
 > Estimates only. Token rates change. See `consumption-rates.md` for current rates, the dispatch-size estimator, and the calibration methodology. Token counts and iteration counts are illustrative, not guarantees.
 ````
 
+`Measure-SquadLedger.ps1 -Write` finalizes estimated Cost Comparison figures with
+the ledger and run totals. It preserves supplied baseline assumptions and notes,
+derives signed savings, and reports unavailable baselines honestly. Independent
+host observations remain separate. Run `-Check` afterward; never hand-edit derived
+comparison figures after a successful check.
+
 ## consumption-rates.md
 
 Single maintainable rate table that isolates volatile per-model token pricing from agent logic, plus the dispatch-size estimator and the calibration factor. Uses replace semantics. The Scribe seeds it from the template in [consumption-rates-template.md](consumption-rates-template.md) — a **cold** file, read only on initialization or at a Step 7.1 reseed, never on an ordinary decision or history dispatch — when the file is missing **or when the existing file does not carry the required sections** (see the Scribe's Step 7 shape check: a per-model rate table with `Input`, `Cached`, `Cache write`, and `Output` columns, a tier-fallback table, a dispatch-size estimator, and a calibration block), so a hand-edited or drifted table can never silently degrade every estimate. Because only this file holds token rates, a price change updates one table and never touches an agent prompt. Coordinators' Cost Preflight prices from the squad root's own `consumption-rates.md`, never from the template file.
