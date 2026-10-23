@@ -2,6 +2,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Validates and sanitizes saved observations, compares immutable revisions and writes reports.
+# AI cost: none; operates on existing evidence and Git objects, never launches model collection.
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:Dimensions = @('businessClarity', 'scopeFidelity', 'acceptanceCriteria', 'traceability', 'risksAndDecisions')

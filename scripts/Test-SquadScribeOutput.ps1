@@ -8,6 +8,7 @@
     Verifies a squad root's Scribe write completeness against an expectation, usable
     on any squad root (federation root or member sub-squad).
 .DESCRIPTION
+    AI cost: none; checks local Scribe output without dispatching an agent or a judge.
     This is the P00-T04 write-completeness verifier (routing-performance plan
     amendment-1, condition #39, OBJ-12). It never asserts on rule content or wording;
     it asserts only that the Scribe's turn actually happened end-to-end:

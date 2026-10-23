@@ -7,6 +7,7 @@
 .SYNOPSIS
     Runs the live benchmark harness's offline self-checks. Calls no model and needs no secret.
 .DESCRIPTION
+    AI cost: none; even launch/accounting cases use fake CLIs. Local subprocess tests can take minutes.
     Covers fixture materialisation, scheduling, per-level task validity (reference passes,
     every mutant killed, baseline fails), the scorer on synthetic workspaces, the judge
     anonymise/shuffle/de-anonymise round trip, and report generation. Needs Python with

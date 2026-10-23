@@ -3,6 +3,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Tests release collection policy, accounting and publication gates.
+# AI cost: none; collection is mocked and observations come from local fixtures.
+
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'ReleaseBenchmark.psm1') -Force
     Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1') -Force

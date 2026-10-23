@@ -2,6 +2,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Checks package structure, role declarations and shipped model metadata.
+# AI cost: none; named models are inspected as data, never dispatched.
+
 # False positive: Pester evaluates BeforeDiscovery in the discovery scope and the It
 # blocks that consume $model through -ForEach in the run scope. PSScriptAnalyzer
 # resolves neither, so it reports the assignment as unused.

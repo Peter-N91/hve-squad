@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; runs local payload writes and rollback/ledger checks against fixtures.
+
 # Behavioral coverage for the deterministic hand-off writer, squad skill
 # scripts/Write-SquadHandoff.ps1. Runs it as a child process against TestDrive copies of
 # the scribe-benchmark seed fixture, because it calls `exit`. Invokes no model.

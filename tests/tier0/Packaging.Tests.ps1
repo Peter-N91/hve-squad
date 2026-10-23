@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; inspects source and built-package contents locally.
+
 # D7 (routing-performance plan amendment-1, P04-T05) packaging-parity Tier 0 coverage.
 # Covers: (a) no dangling `.github/instructions/squad/` path prose survives in the
 # built plugin output; (b) every file named in 00-index.md's and SKILL.md's reference

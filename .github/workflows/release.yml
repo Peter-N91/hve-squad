@@ -1,5 +1,8 @@
 name: Release
 
+# Publishes the frozen candidate after the recorded-evidence gate and package checks.
+# AI cost: none; tier2-recorded-benchmark.yml compares saved observations without paid collection.
+
 # Triggers:
 #   workflow_dispatch — cuts a GitHub Release for the version in apm.yml.
 #                       If a `version` input is provided, apm.yml is bumped

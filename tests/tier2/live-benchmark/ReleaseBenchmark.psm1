@@ -2,6 +2,10 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Validates release collection policy, collects trials and checks publication evidence.
+# AI cost: Invoke-ReleaseBenchmark launches 3 paid candidate trials, or 6 with reference
+# refresh, including each trial's judge. Importing and preflight/report validation call no model.
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')

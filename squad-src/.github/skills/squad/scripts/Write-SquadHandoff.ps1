@@ -8,6 +8,7 @@
     Writes an ordinary squad hand-off (history, decision, orchestration, state advance)
     deterministically from a JSON payload, then verifies the ledger.
 .DESCRIPTION
+    AI cost: none; writes the supplied payload and runs local rate/ledger helpers, not a model.
     A hand-off that only transcribes a payload into append-only entries, a state advance,
     and a derived ledger needs no model. This script performs exactly that write, with the
     same formats `references/entry-schemas.md` defines. The coordinator runs it directly

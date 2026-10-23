@@ -7,6 +7,9 @@
 .SYNOPSIS
     Guides setup and launches the bounded efficiency benchmark unattended.
 .DESCRIPTION
+    AI cost: none in Offline mode. Other modes gate paid collection on offline checks
+    and fresh spending consent: 3 trials for Establish, 3 or 6 for Series, 6 for Complete.
+    Parallel trials share the displayed total reservation; they do not reduce the work.
     Installs and authenticates only after consent. Never reads or records tokens.
     Archive-only cleanup preserves evidence; a failed stage stops dependent work.
 .PARAMETER SourceRoot

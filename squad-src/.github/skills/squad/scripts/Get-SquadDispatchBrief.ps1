@@ -8,6 +8,7 @@
     Prints, in one read-only call, everything a coordinator otherwise discovers turn by
     turn before a dispatch and its hand-off.
 .DESCRIPTION
+    AI cost: none; reads local state and references without dispatching a model.
     Each coordinator turn resends its whole context, so every discovery turn (reading
     agent files, the rate table, the roster, the hand-off format) is paid again on every
     later turn. This script gathers those facts deterministically and prints one compact

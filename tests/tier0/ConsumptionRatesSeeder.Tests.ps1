@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; runs the deterministic seeder against local fixtures.
+
 # Behavioral coverage for the deterministic rate seeder, squad skill
 # scripts/Initialize-SquadConsumptionRates.ps1. Runs the script as a child process
 # against TestDrive roots, because it calls `exit` and would otherwise end the Pester

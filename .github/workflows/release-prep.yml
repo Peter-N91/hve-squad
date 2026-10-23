@@ -1,5 +1,7 @@
 name: Release Prep
 
+# AI cost: none; preparation dispatches release.yml's stored-record gate, not live collection.
+
 # Turns the fragments collected in .changes/unreleased/ into a release.
 #
 #   1. Invoke-ReleasePrep.ps1 resolves the new version from the highest `bump`

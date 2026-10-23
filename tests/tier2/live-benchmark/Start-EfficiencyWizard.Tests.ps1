@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
+# Tests wizard defaults, consent, setup, progress and stage coordination.
+# AI cost: none; commands are mocked or replaced with local fixture processes.
+
 BeforeAll {
     . (Join-Path $PSScriptRoot 'Start-EfficiencyWizard.ps1')
     Mock Write-Host {}

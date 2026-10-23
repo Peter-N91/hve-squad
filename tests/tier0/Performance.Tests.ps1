@@ -2,6 +2,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Checks documented routing/performance contracts and their packaged artifacts.
+# AI cost: none; assertions inspect files, not paid performance observations.
+
 # False positive: $SourceRoot is read inside the top-level BeforeAll block, which
 # PSScriptAnalyzer treats as a scope unrelated to the param block.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SourceRoot',

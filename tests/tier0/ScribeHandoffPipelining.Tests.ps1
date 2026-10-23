@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; checks pipelining contract text without running parallel agents.
+
 # P03-T02/P03-T03 (routing-performance plan, Scribe Hand-off Pipelining, Amendment 3
 # Unit U4): pins the pipelining contract text the prompt-engineer landed in Unit U3
 # against the built plugin output, and pins that the pre-pipelining sequential-only

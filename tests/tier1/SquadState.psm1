@@ -3,6 +3,7 @@
 
 # Reads a squad state tree into the model the Tier 1 contract asserts on, and can
 # generate a schema-correct fixture.
+# AI cost: none; reads or creates local state without running the squad.
 #
 # The fixture exists to prove the assertions fire, not to prove the squad works: a
 # fixture the author wrote to satisfy their own assertions is circular evidence. Its

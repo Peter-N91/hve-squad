@@ -3,6 +3,10 @@
 
 #Requires -Version 7.4
 
+# Parses evidence, enforces budgets and runs efficiency trials. Importing calls no model.
+# AI cost: Invoke-EfficiencyTrial, Invoke-EfficiencyJudge and Invoke-EfficiencyCompaction
+# launch paid CLI work; parsing, compatibility checks and reporting stay offline.
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 

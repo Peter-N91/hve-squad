@@ -6,6 +6,8 @@
 <#
 .SYNOPSIS
     Independently probes the generated task CLI in separate bounded processes.
+.DESCRIPTION
+    AI cost: none; executes the generated application locally, not the Copilot CLI.
 .PARAMETER Workspace
     Workspace containing src/task.ps1. Test stores are created outside it.
 .EXAMPLE

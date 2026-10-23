@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; checks the read-only brief using local fixture repositories.
+
 # Behavioral coverage for the read-only dispatch brief, squad skill
 # scripts/Get-SquadDispatchBrief.ps1. Runs the script as a child process against TestDrive
 # repositories, because it calls `exit`. Invokes no model.
