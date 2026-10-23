@@ -33,6 +33,7 @@ Read this index first, then only references your Skill Reference Contract names 
 | [model-catalog.md](model-catalog.md)               | Routing a dispatch to a specific model: declared capability, pricing, and host-availability precedence |
 | [model-routing.md](model-routing.md)               | Applying `routing=` (all modes): modes, the Model column, fit ranking, floors, and identity bullets |
 | [federation-templates.md](federation-templates.md) | Creating or expanding a federation: registry, meta-routing, root files    |
+| [coach-discovery.md](coach-discovery.md)           | Coach only: discover current code, documentation, entrypoints, and state without a feature-specific playbook |
 
 The Scribe reads `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` on every turn — this hot core replaced a heavier unconditional set so the common case reads less — and reads every other file above, including the three `scribe-cold-*.md` files, only when the turn's payload calls for it per the Cold-File Dispatch Table in `scribe-procedure.md`. The coordinators read `seed-templates.md` and `federation-templates.md` only to verify deliverable roots during Init or a federation change, and fill `scribe-payload-template.md` on every hand-off.
 

@@ -46,6 +46,7 @@
     <div class="container">
       <h2>Appeler le coordinateur</h2>
       <p>Adressez vos demandes dans la conversation de l'agent Squad correspondant, et non dans le terminal de votre système. Dans Copilot Harness pour VS Code, choisissez l'agent dans le sélecteur d'agents ; la CLI et l'application utilisent aussi l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
+      <p>Pas encore d'initialisation, ou vous hésitez sur la marche à suivre ? Sélectionnez l'agent de conseil <strong>Squad Coach</strong> dans VS Code, la CLI ou l'application. Il lit le code et la documentation actuels et fournit un parcours détaillé prêt à copier sans modifier l'état. Consultez <a href="getting-started.html#chat-with-the-squad-coach">le guide du Coach</a>.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
@@ -232,6 +233,26 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         bornée, les modèles et leurs tarifs sont connus, la table des tarifs est valide et le calibrage correspond à la
         révision actuelle de l'estimateur. Sinon, la squad indique <code>cannot-confirm</code> plutôt que
         de présenter une réponse optimiste.
+      </p>
+
+      <h3 id="first-capped-run">Avant la première exécution plafonnée</h3>
+      <p>
+        L'initialisation crée <code>consumption-rates.md</code> avec <code>observations: 0</code> et
+        <code>last_reconciled: never</code>. Cette calibration n'est pas éligible : un plafond positif
+        produit <code>cannot-confirm</code> avec une confiance faible, qu'une approbation ne peut pas lever.
+        Augmenter le plafond ne remplace pas les preuves manquantes.
+      </p>
+      <p>
+        La préparation exige des mesures réelles d'utilisation avant et après une exécution délibérément
+        petite, à partir du delta agrégé par utilisateur <code>ai_credits_used</code> et des crédits
+        estimés de cette exécution pour réconcilier le facteur. Une préparation sans plafond exige votre
+        approbation explicite ; isolez sa fenêtre d'utilisation et faites organiser la réconciliation
+        par le Scribe via le coordinateur, sans inventer d'observations. Vérifiez des observations positives,
+        une date de réconciliation différente de <code>never</code> et un <code>calibration_basis</code>
+        correspondant aux valeurs actuelles <code>Observed-on</code> et <code>estimator_revision</code>,
+        ainsi que les autres prérequis. Si ces mesures manquent ou si vous refusez la préparation sans
+        plafond, restez bloqué sur le travail plafonné plutôt que de supprimer silencieusement la protection.
+        Consultez l'<a href="getting-started.html#coach-cost-readiness">étape de préparation du guide de démarrage</a>.
       </p>
 
       <h3>Définir, hériter, remplacer ou supprimer un plafond</h3>
@@ -838,7 +859,7 @@ flowchart TD
         (voir ci-dessous) ; choisir une squad unique conserve le déroulement décrit ci-dessus.
       </p>
 
-      <h2>Fédération &mdash; plusieurs sous-squads dans un même dépôt</h2>
+      <h2 id="federation">Fédération &mdash; plusieurs sous-squads dans un même dépôt</h2>
       <p>
         La fédération permet à un dépôt d'héberger plusieurs squads côte à côte &mdash; par exemple une
         sous-squad <code>product</code> pour l'équipe métier et une sous-squad <code>azure</code> pour les

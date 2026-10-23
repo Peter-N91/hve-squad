@@ -91,7 +91,9 @@ A rate is a property of the model, so it belongs to the one file that lists mode
 
 ## Cost Preflight
 
-`cost-ceiling=$X` is a model-spend admission control, not a billing quote and not an Azure workload budget. Initialization is outside Cost Preflight: the confirmed bootstrap Scribe dispatch seeds the files required for estimation and is recorded as setup spend without consuming a ceiling slot. After initialization completes, the coordinator evaluates the original request before its first work child or Scribe handoff, then repeats the evaluation before every later dispatch round. Receiving and classifying the request already consumes the current coordinator turn, so the manifest includes that turn; no preflight can avoid the model call needed to read the request.
+`cost-ceiling=$X` admits estimated model spend, not billing or Azure cost. Initialization is outside Cost Preflight: the confirmed bootstrap Scribe seeds estimation files and records setup spend without a ceiling slot. Evaluate the original request before its first work child or Scribe handoff and every later round. Include the already-consumed coordinator turn in the manifest.
+
+Freshly seeded calibration is ineligible. With a positive ceiling it yields low-confidence `cannot-confirm`, never approvable. Reconcile real evidence through [Calibration](consumption-rates-template.md) before capped work.
 
 Resolve the effective ceiling before building the manifest:
 
@@ -137,13 +139,13 @@ The factor-of-three reserve matches the repository's material uncertainty band f
 
 **Pending reservation.** `pending_usd` is `0` whenever every child that has returned also has a verified Scribe hand-off, which is always the case without autopilot hand-off pipelining. Under pipelining, the round that admits stage N+1 runs after stage N's child has returned but before stage N's Scribe hand-off is dispatched, so `currentRun.estCostUsd` does not yet include stage N. For each such returned-but-unrecorded child slot, add its admitted unrounded `Projected Cost` times `reserve_multiplier` to `pending_usd`. The persisted `evaluatedSpendUsd` is `evaluated_spend_usd`, so `remainingUsd = ceilingUsd - evaluatedSpendUsd` still holds. Once that hand-off verifies, the recorded ledger figure replaces the reservation at the next round, which bounds any estimate drift to one stage. Never subtract a reservation from recorded spend or carry it into `currentRun.estCostUsd`.
 
-Cost Preflight confidence is `medium` only when all of these are true:
+Cost Preflight confidence is `medium` only when all are true:
 
 * The configured ceiling is finite and positive.
 * The manifest is complete through the selected mode boundary.
 * Every candidate model is fixed before dispatch and has a current rate row.
 * The rate table passes its shape check.
-* Calibration is eligible for the current `Observed-on` value and estimator revision.
+* Calibration meets the [seed/default eligibility conditions](consumption-rates-template.md).
 
 Otherwise confidence is `low`. The preflight never reports `high`, because future token use remains estimated even after calibration.
 

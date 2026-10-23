@@ -46,6 +46,7 @@
     <div class="container">
       <h2>Invoke the coordinator</h2>
       <p>Use the matching Squad agent's conversation for requests, not your system shell. In VS Code Copilot Harness, choose the agent from the agents dropdown; CLI and App also use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
+      <p>Not initialized yet, or unsure how to reach your goal? Select the advisory <strong>Squad Coach</strong> agent in VS Code, CLI, or App. It reads current code and documentation and provides a detailed, copy-ready runbook without changing state. See <a href="getting-started.html#chat-with-the-squad-coach">the Coach guide</a>.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
@@ -233,6 +234,25 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         bounded, models and rates are known, the rate table is valid, and calibration matches the
         current estimator revision. Otherwise the squad reports <code>cannot-confirm</code> rather than
         presenting an optimistic answer.
+      </p>
+
+      <h3 id="first-capped-run">Before the first capped run</h3>
+      <p>
+        Initialization seeds <code>consumption-rates.md</code> with <code>observations: 0</code> and
+        <code>last_reconciled: never</code>. This is not eligible calibration: a positive ceiling
+        produces low-confidence <code>cannot-confirm</code>, and approval cannot waive it.
+        A larger ceiling does not fix missing evidence.
+      </p>
+      <p>
+        Preparation requires real usage measurements before and after a deliberately small run,
+        using the per-user aggregate <code>ai_credits_used</code> delta and that run's estimated credits
+        to reconcile the factor. An uncapped preparation run requires your explicit approval; isolate
+        its usage window and have the owning coordinator arrange the Scribe's reconciliation, not
+        invented observations. Verify positive observations, a non-<code>never</code> reconciliation date,
+        and <code>calibration_basis</code> matching the current <code>Observed-on</code> and
+        <code>estimator_revision</code>, alongside the other preflight conditions. If those measurements
+        are unavailable or you decline uncapped preparation, remain blocked on capped work rather than
+        silently dropping the protection. See the <a href="getting-started.html#coach-cost-readiness">starter preparation step</a>.
       </p>
 
       <h3>Set, inherit, replace, or remove a ceiling</h3>
@@ -839,7 +859,7 @@ flowchart TD
         (see below); choosing a single squad keeps the flow above unchanged.
       </p>
 
-      <h2>Federation &mdash; several sub-squads in one repo</h2>
+      <h2 id="federation">Federation &mdash; several sub-squads in one repo</h2>
       <p>
         Federation lets one repository host more than one squad side by side &mdash; for example a
         <code>product</code> sub-squad for the business team and an <code>azure</code> sub-squad for the

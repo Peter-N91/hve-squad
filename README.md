@@ -29,6 +29,34 @@
 </p>
 <!-- markdownlint-enable MD013 MD033 -->
 
+## New here? Chat with the Squad Coach
+
+After installing HVE Squad, select the **Squad Coach** agent and describe your goal in everyday language. No initialization is needed:
+
+```text
+I need to modernize two applications owned by different teams. Help me choose the simplest setup and walk me through every step, with the commands and prompts to use.
+```
+
+The advisory-only Coach reads current installed code, entrypoint contracts, and documentation rather
+than following a frozen feature checklist. It recommends the simplest sufficient setup, identifies
+essential and optional inputs, and gives a detailed, source-cited runbook: where to act, which agent to
+select, exact messages or commands, expected outputs, approvals, and how to resume. Ask about any
+shipped capability; the Coach discovers its workflow from source without needing a charter update.
+It reads existing state but never initializes, dispatches, changes configuration, or migrates it.
+
+- **VS Code:** select **Squad Coach** from the Copilot Chat agents dropdown, then send the message.
+- **Copilot CLI:** enter `/agent`, select **Squad Coach**, then send the message.
+- **Copilot App:** select **Squad Coach**, then send the message.
+
+Agent messages are prefix-free on all three hosts. A plugin may display the agent as
+`hve-squad:squad-coach`. The Coach also helps after setup, including taking a confirmed squad into
+autopilot, using ranked models, or planning a later federation promotion; it derives the steps from
+the installed version rather than owning those execution workflows.
+
+See [Getting Started → Squad Coach](https://peter-n91.github.io/hve-squad/getting-started.html#chat-with-the-squad-coach)
+for example conversations, the topology decision guide, preparation checklists, and an end-to-end
+initialization-to-completion example.
+
 ## Documentation
 
 [![Observed efficiency benchmark: document quality, acceptance and average benchmark time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
