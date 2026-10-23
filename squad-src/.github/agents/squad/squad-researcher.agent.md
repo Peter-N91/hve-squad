@@ -53,6 +53,8 @@ Split the open questions into bounded lanes. Each lane is one investigation thre
 
 ### Step 3: Delegate Each Lane with the Full Contract
 
+Forward owning row/`squadRoot`; follow `references/delegated-worker-routing.md` for lane admission and reporting.
+
 Dispatch `RPI Researcher` once per lane. Every dispatch must carry all of the following, because the worker validates them as a precondition and returns `Needs clarification` or `Blocked` when any is missing:
 
 * The cycle number and the wave type — `Wider`, `Deeper`, or `Contrarian`.

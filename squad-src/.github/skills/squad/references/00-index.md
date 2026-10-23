@@ -32,6 +32,7 @@ Read this index first, then only references your Skill Reference Contract names 
 | [consumption-rates-template.md](consumption-rates-template.md) | Scribe only, initialization or a Step 7.1 reseed: the cold seed template for `consumption-rates.md` |
 | [model-catalog.md](model-catalog.md)               | Routing a dispatch to a specific model: declared capability, pricing, and host-availability precedence |
 | [model-routing.md](model-routing.md)               | Applying `routing=` (all modes): modes, the Model column, fit ranking, floors, and identity bullets |
+| [delegated-worker-routing.md](delegated-worker-routing.md) | Selected worker admission |
 | [federation-templates.md](federation-templates.md) | Creating or expanding a federation: registry, meta-routing, root files    |
 | [coach-discovery.md](coach-discovery.md)           | Coach only: discover current code, documentation, entrypoints, and state without a feature-specific playbook |
 
