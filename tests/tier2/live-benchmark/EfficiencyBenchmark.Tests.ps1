@@ -1170,7 +1170,9 @@ try {
     }
     It 'rejects a hanging <Probe> instead of treating the watchdog as input rejection' -ForEach @(
         @{ Probe = 'missing-title'; Needle = "if ([string]::IsNullOrWhiteSpace(`$Title))"; Replacement = "if (-not `$PSBoundParameters.ContainsKey('Title')) { while (`$true) { Start-Sleep -Milliseconds 200 } }; if ([string]::IsNullOrWhiteSpace(`$Title))" },
-        @{ Probe = 'corrupt-store-preserved'; Needle = 'try {'; Replacement = "try { if ((Test-Path -LiteralPath `$Store) -and (Get-Content -LiteralPath `$Store -Raw) -eq '{invalid-json') { while (`$true) { Start-Sleep -Milliseconds 200 } }" }
+        @{ Probe = 'corrupt-store-preserved'; Needle = 'try {'; Replacement = "try { if ((Test-Path -LiteralPath `$Store) -and (Get-Content -LiteralPath `$Store -Raw) -eq '{invalid-json') { while (`$true) { Start-Sleep -Milliseconds 200 } }" },
+        @{ Probe = 'invalid-action'; Needle = "[ValidateSet('add','list','done')][string]`$Action"; Replacement = "[ValidateScript({ if (`$_ -eq 'erase') { while (`$true) { Start-Sleep -Milliseconds 200 } }; `$true })][string]`$Action" },
+        @{ Probe = 'invalid-filter'; Needle = "[ValidateSet('all','open','done')][string]`$Status"; Replacement = "[ValidateScript({ if (`$_ -eq 'invalid') { while (`$true) { Start-Sleep -Milliseconds 200 } }; `$true })][string]`$Status" }
     ) {
         $Workspace = Join-Path $TestDrive $Probe
         New-Item -ItemType Directory -Path (Join-Path $Workspace 'src') -Force | Out-Null

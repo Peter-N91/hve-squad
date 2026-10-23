@@ -25,10 +25,25 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Script = Join-Path (Resolve-Path -LiteralPath $Workspace) 'src/task.ps1'
         if (-not (Test-Path -LiteralPath $Script -PathType Leaf)) { throw 'Missing src/task.ps1' }
         $Store = Join-Path $Root 'tasks.json'
+        # Catch binding errors before the native host performs full error formatting.
+        $ProbeCommand = @'
+try {
+    $Parameters = ConvertFrom-Json -InputObject $env:HVE_EFFICIENCY_PROBE_PARAMETERS -AsHashtable
+    & $env:HVE_EFFICIENCY_PROBE_SCRIPT @Parameters
+    if (-not $?) { exit 1 }
+}
+catch [System.Management.Automation.RuntimeException] {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}
+'@
         $Invoke = {
             param([string[]]$Options)
             $Output = Join-Path $Root ("probe-$([guid]::NewGuid()).json")
-            $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments (@('-NoProfile', '-File', $Script, '-Store', $Store) + $Options) -WorkingDirectory $Root -OutputPath $Output -TimeoutSeconds 10
+            $Parameters = @{ Store = $Store }
+            for ($Index = 0; $Index -lt $Options.Count; $Index += 2) { $Parameters[$Options[$Index].Substring(1)] = $Options[$Index + 1] }
+            $Environment = @{ HVE_EFFICIENCY_PROBE_SCRIPT = $Script; HVE_EFFICIENCY_PROBE_PARAMETERS = (ConvertTo-Json -InputObject $Parameters -Compress) }
+            $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-NonInteractive', '-Command', $ProbeCommand) -WorkingDirectory $Root -OutputPath $Output -TimeoutSeconds 10 -EnvironmentVariables $Environment -InputText ''
             $Value = $null
             if ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none') { $Value = Get-Content -LiteralPath $Output -Raw | ConvertFrom-Json -AsHashtable -NoEnumerate }
             @{ ok = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none'); rejected = ($null -ne $Result.exitCode -and $Result.exitCode -ne 0 -and $Result.stopCause -eq 'none'); value = $Value; exitCode = $Result.exitCode; stopCause = $Result.stopCause }
