@@ -3,7 +3,13 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "cheerio";
 import { localizeDiagram } from "./diagram-locales.mjs";
-import { addReleaseBadges, populateReleaseInstalls, previewBadge, readReleaseInfo } from "./docs-release.mjs";
+import {
+  addReleaseBadges,
+  createAutomaticReleaseAnnotator,
+  populateReleaseInstalls,
+  previewBadge,
+  readReleaseInfo,
+} from "./docs-release.mjs";
 
 export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const pageOrder = ["index", "getting-started", "usage", "demo", "demo-1", "demo-2", "demo-3", "demo-4", "ecosystem", "connector", "maintaining", "troubleshooting", "contributing"];
@@ -48,10 +54,10 @@ export function readLocales() {
   return locales;
 }
 
-export function readSource(slug, prefix = "") {
+export function readSource(slug, prefix = "", annotateRelease = null) {
   const sourcePath = `docs/${prefix}${slug}.html`;
   const raw = readFileSync(resolve(repositoryRoot, sourcePath), "utf8");
-  const $ = load(raw);
+  const $ = load(annotateRelease ? annotateRelease(sourcePath, raw) : raw);
   if ($("main").length !== 1) throw new Error(`${sourcePath}: expected exactly one main element.`);
   if ($("body > header.hero").length !== 1) throw new Error(`${sourcePath}: expected the original hero header.`);
   embedConnectorTemplates($);
@@ -186,13 +192,14 @@ export function enhanceContent($, englishIds, ui, rootPrefix, language = "en", s
 
 export function buildPages(locales = readLocales(), release = readReleaseInfo()) {
   const pages = [];
+  const annotateRelease = createAutomaticReleaseAnnotator(release);
   const hostLocales = JSON.parse(readFileSync(resolve(repositoryRoot, "site/host-locales.json"), "utf8"));
   for (const language of Object.keys(locales)) validateMessages(hostLocales.en, hostLocales[language], `${language}.host`);
   for (const slug of pageOrder) {
-    const english = readSource(slug);
+    const english = readSource(slug, "", annotateRelease);
     const ids = headingIds(english.$);
     for (const [language, locale] of Object.entries(locales)) {
-      const { $, sourcePath } = readSource(slug, locale.prefix);
+      const { $, sourcePath } = readSource(slug, locale.prefix, annotateRelease);
       const rootPrefix = locale.prefix ? "../" : "";
       if ($("main h2, main h3").length !== ids.length) {
         throw new Error(`${sourcePath}: expected ${ids.length} section headings to match English.`);

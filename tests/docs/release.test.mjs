@@ -6,7 +6,13 @@ import test from "node:test";
 import { load } from "cheerio";
 import { JSDOM } from "jsdom";
 import { buildPages, enhanceContent, headingIds, readLocales } from "../../scripts/docs-content.mjs";
-import { addReleaseBadges, populateReleaseInstalls, readReleaseInfo, resolveReleaseInfo } from "../../scripts/docs-release.mjs";
+import {
+  addReleaseBadges,
+  annotateReleaseSource,
+  populateReleaseInstalls,
+  readReleaseInfo,
+  resolveReleaseInfo,
+} from "../../scripts/docs-release.mjs";
 
 const economy = "20261005-routing-economy";
 const fragment = (id, bump = "patch") => ({
@@ -72,6 +78,48 @@ test("metadata reads only pending markdown files and supports a consumed fragmen
   } finally {
     rmSync(directory, { recursive: true });
   }
+});
+
+test("automatic annotations group pending content under the nearest safe section heading", () => {
+  const lines = [
+    "<body>",
+    "<nav><a href=\"usage.html\">Changed navigation</a></nav>",
+    "<header class=\"hero\">",
+    "  <h1>Guide</h1>",
+    "</header>",
+    "<main>",
+    "  <h2 id=\"stable\">Stable section</h2>",
+    "  <p>Changed stable copy.</p>",
+    "  <h2 id=\"new\">New feature</h2>",
+    "  <p>New feature detail.</p>",
+    "  <a href=\"elsewhere.html\"><h3 id=\"card\">Changed card</h3></a>",
+    "</main>",
+    "</body>",
+  ];
+  const line = text => lines.indexOf(text) + 1;
+  const annotated = annotateReleaseSource(lines.join("\n"), new Set([
+    line("<nav><a href=\"usage.html\">Changed navigation</a></nav>"),
+    line("  <p>Changed stable copy.</p>"),
+    line("  <h2 id=\"new\">New feature</h2>"),
+    line("  <p>New feature detail.</p>"),
+    line("  <a href=\"elsewhere.html\"><h3 id=\"card\">Changed card</h3></a>"),
+  ]));
+  const $ = load(annotated);
+  assert.equal($("#stable").attr("data-release-auto"), "");
+  assert.equal($("#new").attr("data-release-auto"), "");
+  assert.equal($("h1, #card").filter("[data-release-auto]").length, 0);
+});
+
+test("a documentation page added by a pending change gets one page-level annotation", () => {
+  const raw = [
+    "<body>",
+    "<header class=\"hero\"><h1>New guide</h1></header>",
+    "<main><h2>First section</h2><p>New content.</p><h2>Second section</h2></main>",
+    "</body>",
+  ].join("\n");
+  const $ = load(annotateReleaseSource(raw, new Set([2, 3]), true));
+  assert.equal($("h1[data-release-auto]").length, 1);
+  assert.equal($("h2[data-release-auto]").length, 0);
 });
 
 for (const language of ["en", "fr"]) {
@@ -189,9 +237,13 @@ test("both languages track preview renames, hotfixes and consumed feature fragme
     for (const language of ["en", "fr"]) {
       const usage = pages.find(page => page.language === language && page.slug === "usage");
       const $ = load(usage.content);
-      assert.equal($("#routing-economy .prerelease-badge").length, release.previewTag ? 1 : 0);
-      assert.equal($(".prerelease-badge").length, release.previewTag ? 6 : 0);
-      if (release.previewTag) assert($("#routing-economy .prerelease-badge").text().includes(release.previewTag));
+      assert.equal($("#model-selection-per-role .prerelease-badge").length, release.previewTag ? 1 : 0);
+      if (release.previewTag) {
+        assert($("#model-selection-per-role .prerelease-badge").text().includes(release.previewTag));
+        assert($(".prerelease-badge").length > 0);
+      } else {
+        assert.equal($(".prerelease-badge").length, 0);
+      }
       assert.equal(usage.release.stableTag, release.stableTag);
       const setup = load(pages.find(page => page.language === language && page.slug === "getting-started").content);
       assert.equal(setup("#testing-the-pre-release").length, 1);
@@ -204,7 +256,23 @@ test("both languages track preview renames, hotfixes and consumed feature fragme
   }
 });
 
+test("all currently documented pending features receive automatic pre-release badges", () => {
+  const release = readReleaseInfo();
+  assert(release.previewTag);
+  const pages = buildPages(undefined, release);
+  for (const language of ["en", "fr"]) {
+    const connector = load(pages.find(page => page.language === language && page.slug === "connector").content);
+    const gettingStarted = load(pages.find(page => page.language === language && page.slug === "getting-started").content);
+    const usage = load(pages.find(page => page.language === language && page.slug === "usage").content);
+    assert.equal(connector("h1 .prerelease-badge").length, 1);
+    assert.equal(gettingStarted("#chat-with-the-squad-coach .prerelease-badge").length, 1);
+    assert.equal(gettingStarted("#testing-the-pre-release .prerelease-badge").length, 1);
+    assert.equal(usage("#model-selection-per-role .prerelease-badge").length, 1);
+  }
+});
+
 test("fragment-only merges rebuild the published version notice", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/docs.yml", import.meta.url), "utf8");
   assert.equal(workflow.match(/- '\.changes\/unreleased\/\*\*'/g)?.length, 2);
+  assert.match(workflow, /fetch-depth:\s*0/);
 });
