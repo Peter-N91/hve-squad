@@ -48,6 +48,7 @@ Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
 
 if ($MyInvocation.InvocationName -ne '.') {
     $Out = $null
+    $ProgressPath = $null; $ProgressCompleted = 0; $ProgressStage = 'preflight'
     try {
         if ($Mode -eq 'Analyze') {
             if (-not $EventsPath -or -not $OutputPath) { throw 'Analyze requires EventsPath and a new OutputPath directory.' }
@@ -219,6 +220,8 @@ if ($MyInvocation.InvocationName -ne '.') {
         $TrialRoot = [IO.Path]::GetFullPath($TrialRoot)
         $Workspace = Join-Path $TrialRoot 'workspace'; $Out = Join-Path $TrialRoot 'out'
         New-Item -ItemType Directory -Path $Workspace, $Out | Out-Null
+        $ProgressPath = Join-Path $Out 'progress.json'
+        Write-EfficiencyProgress -Path $ProgressPath -Stage preflight -Completed 0 -Total 7
         foreach ($Directory in @('.github', '.agents', 'apm_modules')) {
             $From = Join-Path $InstallRoot $Directory
             if (Test-Path -LiteralPath $From) { Copy-Item -LiteralPath $From -Destination $Workspace -Recurse -Force }
@@ -259,7 +262,10 @@ if ($MyInvocation.InvocationName -ne '.') {
         $WorkflowRequestCeiling = if ($ObservationOnly) { [int]::MaxValue } else { [int]$Scenario.maxModelRequests - 10 }
         $WorkflowSeconds = if ($ObservationOnly) { [int]$Scenario.observationTimeoutMinutes * 60 } else { [int]$Scenario.timeoutMinutes * 60 }
         $Watch = [Diagnostics.Stopwatch]::StartNew()
+        $ProgressCompleted = 1
         foreach ($Stage in $Prompts.Keys) {
+            $ProgressStage = $Stage
+            Write-EfficiencyProgress -Path $ProgressPath -Stage $Stage -Completed $ProgressCompleted -Total 7
             $StageWatch = [Diagnostics.Stopwatch]::StartNew()
             $StageStartLine = $StartLine; $PreviousMetrics = $Metrics
             $PriorRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests } else { 0 }
@@ -322,21 +328,32 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
             $StageProcess = @{ exitCode = $Result.exitCode; stopCause = $Result.stopCause; seconds = [Math]::Round($StageWatch.Elapsed.TotalSeconds, 3); observedRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests - $PriorRequests } else { $null } }
             $Stages.Add(@{ name = $Stage; process = $StageProcess; readiness = $Readiness; attempts = @($Attempts); recovery = $Recovery; metrics = $Metrics; metricScope = 'cumulative-session'; stageTokenDelta = $Delta; passed = $StagePassed })
+            $ProgressCompleted++
             if (-not $StagePassed) {
                 $AllPassed = $false
                 if (-not $ObservationOnly -or $Result.stopCause -ne 'none' -or -not $Metrics -or -not $Metrics.credits.complete) { break }
             }
         }
+        $ProgressStage = 'acceptance'
+        Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7
         $Acceptance = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json -AsHashtable
         $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics }
+        $ProgressCompleted++
         $Judge = $null
         if (($ObservationOnly -or ($AllPassed -and $Acceptance.passed -and $Workflow.passed)) -and $Watch.Elapsed.TotalSeconds -lt $WorkflowSeconds) {
+            $ProgressStage = 'judge'
+            Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7
             $Judge = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $CliPath -Model $Model -MaxCredits $RecoveryPolicy.judgeCredits -ReviewPath ([string]$Workflow.reviewPath) -TimeoutSeconds ([Math]::Max(1, [Math]::Min(300, $WorkflowSeconds - $Watch.Elapsed.TotalSeconds))) -ObservationOnly:$ObservationOnly
+            $ProgressCompleted++
         }
+        $ProgressStage = 'report'
+        Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7
         $Run = @{ schemaVersion = $Scenario.schemaVersion; metadata = $Metadata; stages = @($Stages); metrics = $Metrics; acceptance = $Acceptance; workflow = $Workflow; judge = $Judge; completed = ($AllPassed -and $Acceptance.passed -and $Workflow.passed -and $null -ne $Judge -and $Judge.valid) }
         if ($ObservationOnly) { $Run.collection = @{ policy = 'baseline-observation-v1'; recorded = $true; stagesAttempted = $Stages.Count; judgeAvailable = ($null -ne $Judge -and $Judge.valid) } }
         $Run | ConvertTo-Json -Depth 45 | Set-Content -LiteralPath (Join-Path $Out 'run.json') -Encoding utf8NoBOM
         $Succeeded = Test-EfficiencyRun $Run -ObservationOnly:$ObservationOnly
+        $ProgressCompleted++
+        Write-EfficiencyProgress -Path $ProgressPath -Stage report -Completed $ProgressCompleted -Total 7 -Status finished
         Write-Host "Run complete: $($Run.completed). Independent checks passed: $Succeeded. Report: $(Join-Path $Out 'run.json')"
         if ($ObservationOnly) {
             $Recorded = Test-EfficiencyObservation $Run
@@ -346,6 +363,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         elseif (-not $Succeeded) { exit 2 }
     }
     catch {
+        if ($ProgressPath) { Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7 -Status failed }
         if ($Out -and (Test-Path -LiteralPath $Out)) {
             @{ schemaVersion = 'efficiency-error-v1'; outcome = 'incomplete'; reason = 'execution-or-evidence-error'; acceptedBaselineChanged = $false } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Out 'error.json') -Encoding utf8NoBOM
         }

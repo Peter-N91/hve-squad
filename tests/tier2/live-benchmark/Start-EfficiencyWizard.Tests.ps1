@@ -283,6 +283,35 @@ Describe 'Wizard remembered defaults' -Tag 'Unit' {
 }
 
 Describe 'Wizard unattended plan' -Tag 'Unit' {
+    It 'monitors every scheduled trial separately for <Case> runs' -ForEach @(
+        @{ Case = 'parallel baseline'; Mode = 'Establish'; Saved = $false; Count = 3; First = 'baseline-1' },
+        @{ Case = 'parallel candidates'; Mode = 'Series'; Saved = $true; Count = 3; First = 'candidate-1' },
+        @{ Case = 'fresh paired'; Mode = 'Series'; Saved = $false; Count = 6; First = 'baseline-1' }
+    ) {
+        $Options = @{ Mode = $Mode; TrialRoot = Join-Path $TestDrive 'progress-series' }
+        if ($Saved) { $Options.BaselineEvidencePath = 'controls.json' }
+        Mock Invoke-WizardCommand { 0 }
+        Mock Complete-WizardBenchmarkExport { @{ status = 'exported' } }
+        Invoke-WizardBenchmark $Options | Should -Be 0
+        Should -Invoke Invoke-WizardCommand -Times 1 -Exactly -ParameterFilter {
+            $ProgressPaths.Count -eq $Count -and
+            $ProgressPaths.Contains($First) -and
+            $ProgressPaths[$First] -eq (Join-Path $Options.TrialRoot "trials/$First/out/progress.json")
+        }
+    }
+    It 'preserves output and exit codes while observing a real child command' {
+        Push-Location $TestDrive
+        try {
+            $Progress = Join-Path $TestDrive 'command-progress.json'
+            $Code = Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', '"retained fixture output"; exit 7') -ProgressPaths @{ 'baseline-1' = $Progress } -InformationVariable ProgressMessages
+            $Code | Should -Be 7
+            $Logs = @(Get-ChildItem -LiteralPath $TestDrive -Filter 'wizard-stage-*.log')
+            $Logs.Count | Should -Be 1
+            Get-Content $Logs[0].FullName | Should -Be 'retained fixture output'
+            @($ProgressMessages | Where-Object { $_.MessageData.ToString() -like 'Progress*baseline-1: 0%*' }).Count | Should -Be 2
+        }
+        finally { Pop-Location }
+    }
     It 'honors command-line parallel selection without repeating the scheduling question' {
         $Source = Join-Path $TestDrive 'cli-source'; $Scratch = Join-Path $TestDrive 'cli-scratch'
         New-Item -ItemType Directory -Path (Join-Path $Source 'squad-src'), (Join-Path $Source '.git') -Force | Out-Null

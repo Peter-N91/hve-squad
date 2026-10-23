@@ -417,6 +417,11 @@ exit 0
         $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 180 -InputText ''
         $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         try {
+            $Progress = Get-Content (Join-Path $Trial 'out/progress.json') -Raw | ConvertFrom-Json
+            $Progress.completed | Should -Be (3 + $Run.stages.Count + [int]($null -ne $Run.judge))
+            $Progress.total | Should -Be 7
+            $Progress.status | Should -Be finished
+            if ($null -eq $Run.judge) { $Progress.completed | Should -BeLessThan 7 }
             if ($Outcome -like 'observe-*') {
                 $Execution.exitCode | Should -Be 0
                 $Run.collection.recorded | Should -BeTrue
@@ -483,6 +488,93 @@ exit 0
             $Run.judge | Should -BeNullOrEmpty
         }
         finally { Remove-TestEfficiencySession -SessionId $Run.metadata.sessionId }
+    }
+}
+
+Describe 'Periodic benchmark progress' -Tag 'Unit' {
+    It 'reports three independent trial snapshots and leaves pending trials at zero' {
+        $Paths = [ordered]@{}
+        foreach ($Pair in 1..3) { $Paths["baseline-$Pair"] = Join-Path $TestDrive "progress-$Pair.json" }
+        Write-EfficiencyProgress -Path $Paths['baseline-1'] -Stage init -Completed 1 -Total 7
+        Write-EfficiencyProgress -Path $Paths['baseline-2'] -Stage judge -Completed 5 -Total 7
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths $Paths -ElapsedSeconds 90
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*[[]00:01:30[]] baseline-1: 14%*init*' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-2: 71%*judge*' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-3: 0%*awaiting preflight*' }
+    }
+    It 'does not present skipped or failed work as 100 percent' {
+        $Path = Join-Path $TestDrive 'failed-progress.json'
+        Write-EfficiencyProgress -Path $Path -Stage requirements -Completed 2 -Total 7 -Status failed
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths @{ 'candidate-2' = $Path } -ElapsedSeconds 10
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*candidate-2: 28%*requirements [[]failed[]]' }
+        { Write-EfficiencyProgress -Path $Path -Stage report -Completed 8 -Total 7 } | Should -Throw '*exceed*'
+    }
+    It 'warns on malformed progress without exposing its content or interrupting work' {
+        $Path = Join-Path $TestDrive 'invalid-progress.json'
+        Set-Content -LiteralPath $Path -Value '{"private":"PRIVATE SNAPSHOT","schemaVersion":"wrong"}'
+        Mock Write-Warning -ModuleName EfficiencyBenchmark {}
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        { Write-EfficiencyProgressSummary -Paths @{ 'baseline-1' = $Path } } | Should -Not -Throw
+        Should -Invoke Write-Warning -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Message -like 'Progress unavailable*' -and $Message -notlike '*PRIVATE SNAPSHOT*' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 0
+    }
+    It 'observes a running native process periodically without contaminating its result' {
+        $Marker = Join-Path $TestDrive 'observer-stop'
+        $Timeline = [Collections.Generic.List[double]]::new()
+        $Observer = {
+            param($Seconds)
+            $Timeline.Add($Seconds)
+            if ($Timeline.Count -eq 3) { Set-Content -LiteralPath $Marker -Value 'stop' }
+            'observer-success-output-must-not-be-a-process-result'
+        }.GetNewClosure()
+        $Result = @(Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'while (-not (Test-Path -LiteralPath $env:HVE_PROGRESS_STOP)) { Start-Sleep -Milliseconds 50 }; "observed"') -EnvironmentVariables @{ HVE_PROGRESS_STOP = $Marker } -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'observer.log') -TimeoutSeconds 60 -OnProgress $Observer -ProgressIntervalSeconds 1)
+        $Result.Count | Should -Be 1
+        $Result[0].exitCode | Should -Be 0
+        $Result[0].stopCause | Should -Be none
+        $Timeline.Count | Should -BeGreaterOrEqual 4
+        Get-Content (Join-Path $TestDrive 'observer.log') | Should -Be observed
+    }
+    It 'aggregates all offline files and publishes truthful progress for <Outcome>' -ForEach @(
+        @{ Outcome = 'passed'; Exit = 0; Status = 'finished' },
+        @{ Outcome = 'failed'; Exit = 1; Status = 'failed' },
+        @{ Outcome = 'empty'; Exit = 1; Status = 'failed' }
+    ) {
+        $Directory = Join-Path $TestDrive $Outcome
+        New-Item -ItemType Directory -Path $Directory | Out-Null
+        $FakePester = Join-Path $Directory 'FakePester.psm1'
+        @'
+function New-PesterConfiguration { @{ Run = @{ Container = $null; PassThru = $false }; Output = @{ Verbosity = 'Normal' } } }
+function New-PesterContainer { param([string[]]$Path) $Path }
+function Invoke-Pester {
+    param($Configuration)
+    $Before = Get-Content -LiteralPath $env:HVE_PROGRESS_FILE -Raw | ConvertFrom-Json
+    "$($Before.completed):$([IO.Path]::GetFileName($Configuration.Run.Container))" | Add-Content -LiteralPath $env:HVE_PROGRESS_CALLS
+    $Middle = $Before.completed -eq 1
+    [pscustomobject]@{
+        FailedCount = [int]($Middle -and $env:HVE_PROGRESS_OUTCOME -eq 'failed')
+        TotalCount = $(if ($Middle -and $env:HVE_PROGRESS_OUTCOME -eq 'empty') { 0 } else { 5 })
+        Result = $(if ($Middle -and $env:HVE_PROGRESS_OUTCOME -eq 'failed') { 'Failed' } else { 'Passed' })
+    }
+}
+'@ | Set-Content -LiteralPath $FakePester
+        $Bootstrap = Join-Path $Directory 'bootstrap.ps1'
+        @'
+param($Runner, $Pester, $Progress)
+function python { $global:LASTEXITCODE = 0; 'pytest fixture' }
+& $Runner -PesterPath $Pester -ProgressPath $Progress -Output Normal
+exit $LASTEXITCODE
+'@ | Set-Content -LiteralPath $Bootstrap
+        $Progress = Join-Path $Directory 'progress.json'
+        $Calls = Join-Path $Directory 'calls.txt'
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Bootstrap, (Join-Path $PSScriptRoot 'Invoke-LiveBenchmarkTests.ps1'), $FakePester, $Progress) -EnvironmentVariables @{ HVE_PROGRESS_FILE = $Progress; HVE_PROGRESS_CALLS = $Calls; HVE_PROGRESS_OUTCOME = $Outcome } -WorkingDirectory $Directory -OutputPath (Join-Path $Directory 'runner.log') -TimeoutSeconds 60
+        $Result.exitCode | Should -Be $Exit -Because (Get-Content (Join-Path $Directory 'runner.log.stderr') -Raw)
+        Get-Content $Calls | Should -Be @('0:LiveBenchmark.Tests.ps1', '1:EfficiencyBenchmark.Tests.ps1', '2:Start-EfficiencyWizard.Tests.ps1')
+        $Snapshot = Get-Content $Progress -Raw | ConvertFrom-Json
+        $Snapshot.completed | Should -Be 3
+        $Snapshot.total | Should -Be 3
+        $Snapshot.status | Should -Be $Status
     }
 }
 

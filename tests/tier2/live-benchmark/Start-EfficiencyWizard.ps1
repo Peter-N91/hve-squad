@@ -270,10 +270,11 @@ function Invoke-WizardRunPlan {
     param([Parameter(Mandatory)][object[]]$Steps, [Parameter(Mandatory)][scriptblock]$Execute)
     $Results = [Collections.Generic.List[object]]::new()
     foreach ($Step in $Steps) {
-        Write-Host "Starting: $($Step.name)"
+        Write-Host "Starting: $($Step.name) (step $($Results.Count + 1)/$($Steps.Count); $([Math]::Floor(100.0 * $Results.Count / $Steps.Count))% of scheduled steps finished)"
         try { $Code = & $Execute $Step; if ($Code -isnot [int]) { throw 'Executor did not return one status code.' } }
         catch { $Code = 1 }
         $Results.Add(@{ stage = $Step.name; exitCode = $Code })
+        Write-Host "Finished: $($Step.name) (exit $Code; $([Math]::Floor(100.0 * $Results.Count / $Steps.Count))% of scheduled steps finished)"
         if ($Code -ne 0) {
             return @{ outcome = 'failed'; exitCode = if ($Step.kind -eq 'Offline' -or $Code -eq 2) { 2 } else { 1 }; failedStage = $Step.name; repair = Get-WizardRepair $Step.name $Code; stages = @($Results); notRun = $Steps.Count - $Results.Count; acceptedBaselineChanged = $false }
         }
@@ -286,7 +287,18 @@ function Invoke-WizardCommand {
     Runs a native setup command without collecting interactive prompts or secrets.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Command, [string[]]$Arguments = @(), [switch]$Quiet)
+    param([Parameter(Mandatory)][string]$Command, [string[]]$Arguments = @(), [switch]$Quiet, [Collections.IDictionary]$ProgressPaths)
+    if ($ProgressPaths) {
+        Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
+        $Log = Join-Path (Get-Location).Path ('wizard-stage-' + [guid]::NewGuid().ToString('N') + '.log')
+        $Observer = { param($Seconds) Write-EfficiencyProgressSummary -Paths $ProgressPaths -ElapsedSeconds $Seconds }.GetNewClosure()
+        $Process = Invoke-EfficiencyProcess -FilePath $Command -Arguments $Arguments -WorkingDirectory (Get-Location).Path -OutputPath $Log -TimeoutSeconds ([int]::MaxValue) -OnProgress $Observer
+        Get-Content -LiteralPath $Log | Out-Host
+        Get-Content -LiteralPath ($Log + '.stderr') | Out-Host
+        Write-Host "Stage output retained: $Log"
+        if ($Process.stopCause -ne 'none') { throw "Wizard child stopped: $($Process.stopCause). Inspect $Log and its .stderr file." }
+        return [int]$Process.exitCode
+    }
     $global:LASTEXITCODE = 0
     if ($Quiet) { & $Command @Arguments *> $null }
     else { & $Command @Arguments | Out-Host }
@@ -602,7 +614,8 @@ function Invoke-WizardOfflineTest {
     $OldPath = $env:PATH
     try {
         $env:PATH = $Bin + [IO.Path]::PathSeparator + $OldPath
-        Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Runner, '-PesterPath', $PesterPath, '-Output', 'Normal')
+        $Progress = Join-Path (Get-Location).Path 'offline-progress.json'
+        Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Runner, '-PesterPath', $PesterPath, '-Output', 'Normal', '-ProgressPath', $Progress) -ProgressPaths ([ordered]@{ 'Offline self-tests' = $Progress })
     }
     finally { $env:PATH = $OldPath }
 }
@@ -618,8 +631,13 @@ function Invoke-WizardBenchmark {
         if ($Options[$Key] -is [bool]) { if ($Options[$Key]) { $Arguments += "-$Key" } }
         else { $Arguments += @("-$Key", [Convert]::ToString($Options[$Key], [Globalization.CultureInfo]::InvariantCulture)) }
     }
+    $Progress = [ordered]@{}
+    $Arms = if ($Options.Mode -eq 'Establish') { @('baseline') } elseif ($Options.Contains('BaselineEvidencePath')) { @('candidate') } else { @('baseline', 'candidate') }
+    foreach ($Pair in 1..3) {
+        foreach ($Arm in $Arms) { $Progress["$Arm-$Pair"] = Join-Path $Options.TrialRoot "trials/$Arm-$Pair/out/progress.json" }
+    }
     $Code = 1
-    try { $Code = Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments $Arguments }
+    try { $Code = Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments $Arguments -ProgressPaths $Progress }
     finally { $Export = Complete-WizardBenchmarkExport -Options $Options }
     if ($Code -ne 0) { return $Code }
     if ($Export.status -ne 'exported') { return 1 }

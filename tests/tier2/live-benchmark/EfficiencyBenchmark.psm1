@@ -559,6 +559,62 @@ function Save-EfficiencyAttemptEvidence {
     [pscustomobject]@{ metrics = $Metrics; lineCount = (Get-Content -LiteralPath $Snapshot | Measure-Object -Line).Lines }
 }
 
+function Write-EfficiencyProgress {
+    <# .SYNOPSIS
+    Publishes completed harness milestones atomically, independently of quality results.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][ValidateSet('preflight', 'init', 'requirements', 'build', 'acceptance', 'judge', 'report', 'offline')][string]$Stage,
+        [ValidateRange(0, [int]::MaxValue)][int]$Completed,
+        [ValidateRange(1, [int]::MaxValue)][int]$Total,
+        [ValidateSet('running', 'finished', 'failed')][string]$Status = 'running'
+    )
+    if ($Completed -gt $Total) { throw 'Completed progress milestones exceed the planned total.' }
+    $Temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        @{ schemaVersion = 'efficiency-progress-v1'; stage = $Stage; completed = $Completed; total = $Total; status = $Status } |
+            ConvertTo-Json -Compress | Set-Content -LiteralPath $Temporary -Encoding utf8NoBOM
+        [IO.File]::Move($Temporary, [IO.Path]::GetFullPath($Path), $true)
+    }
+    finally { if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force } }
+}
+
+function Write-EfficiencyProgressSummary {
+    <# .SYNOPSIS
+    Reports independent snapshots without treating elapsed time or quality as completion.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][Collections.IDictionary]$Paths, [double]$ElapsedSeconds)
+    $Elapsed = [timespan]::FromSeconds($ElapsedSeconds).ToString('hh\:mm\:ss')
+    foreach ($Label in $Paths.Keys) {
+        $Path = $Paths[$Label]
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            Write-Host "Progress [$Elapsed] ${Label}: 0% - awaiting preflight"
+            continue
+        }
+        try {
+            $Reader = [IO.StreamReader]::new([IO.File]::Open($Path, 'Open', 'Read', ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)))
+            try { $Snapshot = $Reader.ReadToEnd() | ConvertFrom-Json -AsHashtable -ErrorAction Stop }
+            finally { $Reader.Dispose() }
+            if ($Snapshot -isnot [Collections.IDictionary] -or $Snapshot['schemaVersion'] -cne 'efficiency-progress-v1' -or
+                ($Snapshot['completed'] -isnot [int] -and $Snapshot['completed'] -isnot [long]) -or
+                ($Snapshot['total'] -isnot [int] -and $Snapshot['total'] -isnot [long]) -or
+                $Snapshot['completed'] -lt 0 -or $Snapshot['total'] -lt 1 -or $Snapshot['completed'] -gt $Snapshot['total'] -or
+                $Snapshot['stage'] -cnotmatch '^(preflight|init|requirements|build|acceptance|judge|report|offline)$' -or
+                $Snapshot['status'] -notin @('running', 'finished', 'failed')) {
+                throw [ArgumentException]::new('Invalid benchmark progress snapshot.')
+            }
+            $Percent = [Math]::Floor(100.0 * $Snapshot['completed'] / $Snapshot['total'])
+            Write-Host "Progress [$Elapsed] ${Label}: $Percent% ($($Snapshot['completed'])/$($Snapshot['total']) milestones) - $($Snapshot['stage']) [$($Snapshot['status'])]"
+        }
+        catch [ArgumentException], [IO.IOException], [UnauthorizedAccessException] {
+            Write-Warning "Progress unavailable for ${Label}; inspect $Path. Benchmark execution continues."
+        }
+    }
+}
+
 function Invoke-EfficiencyProcess {
     <# .SYNOPSIS
     Runs a subprocess with redirected streams and a watchdog; optionally watches CLI usage limits.
@@ -576,7 +632,9 @@ function Invoke-EfficiencyProcess {
         [double]$MaxCredits = 0,
         [AllowEmptyString()][string]$InputText,
         [hashtable]$EnvironmentVariables = @{},
-        [hashtable]$ProcessOwner
+        [hashtable]$ProcessOwner,
+        [scriptblock]$OnProgress,
+        [ValidateRange(1, 3600)][int]$ProgressIntervalSeconds = 30
     )
     if ($MaxCredits -gt 0 -and -not $EventsPath) { throw 'A credit-guarded process requires an events path.' }
     $Info = [Diagnostics.ProcessStartInfo]::new()
@@ -615,17 +673,24 @@ function Invoke-EfficiencyProcess {
             if (-not $InputCopy.Wait(10000)) { $StopCause = 'stdin-timeout'; $Process.Kill($true); $Process.WaitForExit() }
             else { $null = $InputCopy.GetAwaiter().GetResult(); $Process.StandardInput.Close() }
         }
+        if ($OnProgress) { $null = & $OnProgress $Watch.Elapsed.TotalSeconds }
+        $NextProgress = $Watch.Elapsed.TotalSeconds + $ProgressIntervalSeconds
         while (-not $Process.WaitForExit(250)) {
             if ($ProcessOwner -and $ProcessOwner.cancellation.IsCancellationRequested) { $StopCause = 'cancelled' }
             if ($Watch.Elapsed.TotalSeconds -gt $TimeoutSeconds) { $StopCause = 'timeout' }
             Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
             if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
             if ($StopCause -ne 'none') { $Process.Kill($true); $Process.WaitForExit(); break }
+            if ($OnProgress -and $Watch.Elapsed.TotalSeconds -ge $NextProgress) {
+                $null = & $OnProgress $Watch.Elapsed.TotalSeconds
+                $NextProgress = $Watch.Elapsed.TotalSeconds + $ProgressIntervalSeconds
+            }
         }
         $null = $OutputCopy.GetAwaiter().GetResult(); $null = $ErrorCopy.GetAwaiter().GetResult()
         Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
         if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
         if ($MaxCredits -gt 0 -and ($Monitor.credits.usageIds.Count -le $PriorCreditRecords -or $Monitor.pending.Trim())) { $StopCause = 'incomplete-credit-metering' }
+        if ($OnProgress) { $null = & $OnProgress $Watch.Elapsed.TotalSeconds }
         [pscustomobject]@{ exitCode = $Process.ExitCode; stopCause = $StopCause; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $Monitor.requestIds.Count; creditsUsed = if ($MaxCredits -gt 0) { $Monitor.credits.nanoAiu / 1e9 } else { $null }; creditCeiling = if ($MaxCredits -gt 0) { $MaxCredits } else { $null } }
     }
     finally {
@@ -1311,4 +1376,4 @@ function Invoke-EfficiencySeries {
     [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded')) { 0 } else { 2 } }
 }
 
-Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Get-EfficiencyCliLocalArguments, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Invoke-EfficiencyProcess, Invoke-EfficiencyTrial, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
+Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Get-EfficiencyCliLocalArguments, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Write-EfficiencyProgressSummary, Invoke-EfficiencyProcess, Invoke-EfficiencyTrial, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries

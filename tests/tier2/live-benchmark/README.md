@@ -93,6 +93,23 @@ Credentials and login choices are never stored. The spending authorization
 answer is saved against its configuration as a reminder only: every live run
 still requires fresh explicit isolation/spending confirmation; blank means no.
 
+During execution the wizard prints a plain-text progress snapshot every 30 seconds,
+plus snapshots at child start and finish. Each scheduled baseline/candidate trial
+has its own percentage and active phase, including all three parallel trials.
+Percentages count seven harness milestones (preflight, init, requirements, build,
+functional acceptance, judge and report), **not** model-call completion, quality
+or estimated remaining time. They can stay unchanged during a long model stage.
+Pending serial trials show zero; skipped milestones do not count as completed.
+Offline progress counts the three self-test files. Step boundaries also show the
+percentage of scheduled wizard steps finished; failed execution is labeled with
+its exit code, not presented as a passing result.
+
+Child stdout/stderr is retained in `wizard-stage-<id>.log` and its `.stderr`
+sibling under the fresh wizard run directory and displayed when that stage ends.
+Trial phase snapshots are retained as `trials/<arm>-<pair>/out/progress.json`
+inside the control/comparison directory. Progress reporting does not alter
+spending limits, trial scheduling, watchdogs or baseline promotion.
+
 Live modes accept current CLI versions advertising `--sync-session off`, or older
 versions advertising both `--no-remote` and `--no-remote-export`. The wizard no
 longer demands flags removed in CLI 1.0.103. The same policy protects workflow,
