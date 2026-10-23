@@ -421,10 +421,12 @@ exit 0
             $Progress.completed | Should -Be (3 + $Run.stages.Count + [int]($null -ne $Run.judge))
             $Progress.total | Should -Be 7
             $Progress.status | Should -Be finished
+            $Progress.independentChecksPassed | Should -BeFalse
             if ($null -eq $Run.judge) { $Progress.completed | Should -BeLessThan 7 }
             if ($Outcome -like 'observe-*') {
                 $Execution.exitCode | Should -Be 0
                 $Run.collection.recorded | Should -BeTrue
+                $Progress.recorded | Should -BeTrue
                 $Run.completed | Should -BeFalse
                 $Run.stages[1].passed | Should -BeFalse
                 $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
@@ -492,24 +494,54 @@ exit 0
 }
 
 Describe 'Periodic benchmark progress' -Tag 'Unit' {
-    It 'reports three independent trial snapshots and leaves pending trials at zero' {
+    It 'reports three independent phase counters without pretending they estimate model completion' {
         $Paths = [ordered]@{}
         foreach ($Pair in 1..3) { $Paths["baseline-$Pair"] = Join-Path $TestDrive "progress-$Pair.json" }
         Write-EfficiencyProgress -Path $Paths['baseline-1'] -Stage init -Completed 1 -Total 7
         Write-EfficiencyProgress -Path $Paths['baseline-2'] -Stage judge -Completed 5 -Total 7
         Mock Write-Host -ModuleName EfficiencyBenchmark {}
         Write-EfficiencyProgressSummary -Paths $Paths -ElapsedSeconds 90
-        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*[[]00:01:30[]] baseline-1: 14%*init*' }
-        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-2: 71%*judge*' }
-        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-3: 0%*awaiting preflight*' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*[[]00:01:30[]] baseline-1: init*1/7 milestones*' -and $Object -notmatch '\d+%' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-2: judge*5/7 milestones*' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-3: awaiting preflight*' }
     }
     It 'does not present skipped or failed work as 100 percent' {
         $Path = Join-Path $TestDrive 'failed-progress.json'
         Write-EfficiencyProgress -Path $Path -Stage requirements -Completed 2 -Total 7 -Status failed
         Mock Write-Host -ModuleName EfficiencyBenchmark {}
         Write-EfficiencyProgressSummary -Paths @{ 'candidate-2' = $Path } -ElapsedSeconds 10
-        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*candidate-2: 28%*requirements [[]failed[]]' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*candidate-2: requirements [[]failed[]]; 2/7 milestones*' -and $Object -notmatch '100%' }
         { Write-EfficiencyProgress -Path $Path -Stage report -Completed 8 -Total 7 } | Should -Throw '*exceed*'
+    }
+    It 'prints a finished observation with failed checks once while other parallel trials remain active' {
+        $Paths = [ordered]@{ 'baseline-1' = Join-Path $TestDrive 'terminal.json'; 'baseline-2' = Join-Path $TestDrive 'active.json' }
+        Write-EfficiencyProgress -Path $Paths['baseline-1'] -Stage report -Completed 7 -Total 7 -Status finished -IndependentChecksPassed $false -Recorded $true
+        Write-EfficiencyProgress -Path $Paths['baseline-2'] -Stage build -Completed 3 -Total 7
+        $Previous = @{}
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths $Paths -ElapsedSeconds 90 -PreviousSnapshots $Previous
+        Write-EfficiencyProgressSummary -Paths $Paths -ElapsedSeconds 120 -PreviousSnapshots $Previous
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-1:*independent checks failed; observation recorded*' -and $Object -notmatch '100%' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 2 -Exactly -ParameterFilter { $Object -like '*baseline-2: build [[]running[]]*' }
+    }
+    It 'reports phase duration and output activity without reading private CLI output' {
+        $Path = Join-Path $TestDrive 'activity-progress.json'
+        Write-EfficiencyProgress -Path $Path -Stage build -Completed 3 -Total 7
+        Set-Content (Join-Path $TestDrive 'build-stdout.jsonl') 'PRIVATE CLI CONTENT'
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths @{ 'baseline-3' = $Path } -ElapsedSeconds 300
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter {
+            $Object -like '*baseline-3: build*3/7 milestones*phase elapsed*CLI output*bytes; last output*ago' -and $Object -notlike '*PRIVATE CLI CONTENT*'
+        }
+    }
+    It 'accepts old snapshots without inventing their missing phase duration or result' {
+        $Path = Join-Path $TestDrive 'legacy-progress.json'
+        Set-Content $Path '{"schemaVersion":"efficiency-progress-v1","stage":"build","completed":3,"total":7,"status":"running"}'
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths @{ 'baseline-1' = $Path }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter {
+            $Object -like '*baseline-1: build [[]running[]]; 3/7 milestones finished*' -and $Object -notmatch 'phase elapsed|independent checks passed|observation recorded'
+        }
     }
     It 'warns on malformed progress without exposing its content or interrupting work' {
         $Path = Join-Path $TestDrive 'invalid-progress.json'

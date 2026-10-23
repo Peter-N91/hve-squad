@@ -569,13 +569,17 @@ function Write-EfficiencyProgress {
         [Parameter(Mandatory)][ValidateSet('preflight', 'init', 'requirements', 'build', 'acceptance', 'judge', 'report', 'offline')][string]$Stage,
         [ValidateRange(0, [int]::MaxValue)][int]$Completed,
         [ValidateRange(1, [int]::MaxValue)][int]$Total,
-        [ValidateSet('running', 'finished', 'failed')][string]$Status = 'running'
+        [ValidateSet('running', 'finished', 'failed')][string]$Status = 'running',
+        [Nullable[bool]]$IndependentChecksPassed,
+        [Nullable[bool]]$Recorded
     )
     if ($Completed -gt $Total) { throw 'Completed progress milestones exceed the planned total.' }
     $Temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
     try {
-        @{ schemaVersion = 'efficiency-progress-v1'; stage = $Stage; completed = $Completed; total = $Total; status = $Status } |
-            ConvertTo-Json -Compress | Set-Content -LiteralPath $Temporary -Encoding utf8NoBOM
+        $Snapshot = @{ schemaVersion = 'efficiency-progress-v1'; stage = $Stage; completed = $Completed; total = $Total; status = $Status; stageStartedUtc = [datetime]::UtcNow.ToString('o') }
+        if ($null -ne $IndependentChecksPassed) { $Snapshot.independentChecksPassed = $IndependentChecksPassed }
+        if ($null -ne $Recorded) { $Snapshot.recorded = $Recorded }
+        $Snapshot | ConvertTo-Json -Compress | Set-Content -LiteralPath $Temporary -Encoding utf8NoBOM
         [IO.File]::Move($Temporary, [IO.Path]::GetFullPath($Path), $true)
     }
     finally { if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force } }
@@ -586,12 +590,12 @@ function Write-EfficiencyProgressSummary {
     Reports independent snapshots without treating elapsed time or quality as completion.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][Collections.IDictionary]$Paths, [double]$ElapsedSeconds)
+    param([Parameter(Mandatory)][Collections.IDictionary]$Paths, [double]$ElapsedSeconds, [Collections.IDictionary]$PreviousSnapshots)
     $Elapsed = [timespan]::FromSeconds($ElapsedSeconds).ToString('hh\:mm\:ss')
     foreach ($Label in $Paths.Keys) {
         $Path = $Paths[$Label]
         if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-            Write-Host "Progress [$Elapsed] ${Label}: 0% - awaiting preflight"
+            Write-Host "Progress [$Elapsed] ${Label}: awaiting preflight (no milestones finished)"
             continue
         }
         try {
@@ -606,8 +610,38 @@ function Write-EfficiencyProgressSummary {
                 $Snapshot['status'] -notin @('running', 'finished', 'failed')) {
                 throw [ArgumentException]::new('Invalid benchmark progress snapshot.')
             }
-            $Percent = [Math]::Floor(100.0 * $Snapshot['completed'] / $Snapshot['total'])
-            Write-Host "Progress [$Elapsed] ${Label}: $Percent% ($($Snapshot['completed'])/$($Snapshot['total']) milestones) - $($Snapshot['stage']) [$($Snapshot['status'])]"
+            foreach ($Field in @('independentChecksPassed', 'recorded')) {
+                if ($Snapshot.Contains($Field) -and $Snapshot[$Field] -isnot [bool]) { throw [ArgumentException]::new('Invalid benchmark progress result.') }
+            }
+            $Terminal = $Snapshot['status'] -ne 'running'
+            $Signature = "$($Snapshot['stage'])/$($Snapshot['completed'])/$($Snapshot['total'])/$($Snapshot['status'])/$($Snapshot['independentChecksPassed'])/$($Snapshot['recorded'])"
+            if ($Terminal -and $null -ne $PreviousSnapshots -and $PreviousSnapshots[$Path] -ceq $Signature) { continue }
+            $Detail = "$($Snapshot['stage']) [$($Snapshot['status'])]; $($Snapshot['completed'])/$($Snapshot['total']) milestones finished"
+            if (-not $Terminal) {
+                $Started = [datetime]::MinValue
+                if ($Snapshot.Contains('stageStartedUtc')) {
+                    $Stamp = $Snapshot['stageStartedUtc']
+                    if ($Stamp -is [datetime]) { $Started = $Stamp }
+                    elseif (-not [datetime]::TryParse([string]$Stamp, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$Started)) {
+                        throw [ArgumentException]::new('Invalid benchmark phase timestamp.')
+                    }
+                    $Duration = [timespan]::FromSeconds([Math]::Max(0, ([datetime]::UtcNow - $Started.ToUniversalTime()).TotalSeconds)).ToString('hh\:mm\:ss')
+                    $Detail += "; phase elapsed $Duration (not a time/ETA percentage)"
+                }
+                $Log = Join-Path ([IO.Path]::GetDirectoryName($Path)) "$($Snapshot['stage'])-stdout.jsonl"
+                if (Test-Path -LiteralPath $Log -PathType Leaf) {
+                    $Output = Get-Item -LiteralPath $Log -ErrorAction Stop
+                    $Age = [timespan]::FromSeconds([Math]::Max(0, ([datetime]::UtcNow - $Output.LastWriteTimeUtc).TotalSeconds)).ToString('hh\:mm\:ss')
+                    $Detail += "; CLI output $($Output.Length) bytes; last output $Age ago"
+                }
+            }
+            if ($Snapshot.Contains('independentChecksPassed')) { $Detail += "; independent checks $(if ($Snapshot['independentChecksPassed']) { 'passed' } else { 'failed' })" }
+            if ($Snapshot.Contains('recorded')) { $Detail += "; observation $(if ($Snapshot['recorded']) { 'recorded' } else { 'not recorded' })" }
+            Write-Host "Progress [$Elapsed] ${Label}: $Detail"
+            if ($null -ne $PreviousSnapshots) {
+                if ($Terminal) { $PreviousSnapshots[$Path] = $Signature }
+                else { $PreviousSnapshots.Remove($Path) }
+            }
         }
         catch [ArgumentException], [IO.IOException], [UnauthorizedAccessException] {
             Write-Warning "Progress unavailable for ${Label}; inspect $Path. Benchmark execution continues."

@@ -271,6 +271,19 @@ Describe 'Requirements document quality source contracts (RQ-01..09)' -Tag 'Requ
         $guide | Should -Match 'do not rerun reviewers or authors until green'
     }
 
+    It 'RQ-10 separates required runtime scratch writes from review-only durable output' {
+        $reviewer = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-reviewer.agent.md')[0].Body
+        $script:RequirementsCoordinator | Should -Match 'Runtime reviews: pass absolute source/plan/research/report paths.+authorized workspace scratch root'
+        $script:RequirementsCoordinator | Should -Match 'permit probe files, not source edits'
+        $reviewer | Should -Match 'Review-only durable output does not prohibit transient probe files'
+        $reviewer | Should -Match 'conflicting or missing allowance is a blocker to resolve before execution'
+        $reviewer | Should -Match 'supplied implementation exists.+scratch path is inside the authorized workspace and separate from implementation/squad state'
+        $reviewer | Should -Match 'supplied absolute implementation path, never derive it from the scratch directory'
+        $reviewer | Should -Match 'without broad or outside-root cleanup'
+        $reviewer | Should -Match 'Respect a denied permission; never retry through an alternative to bypass it'
+        $reviewer | Should -Match 'denied/unexecuted probes as unverified rather than substituting the implementer'
+    }
+
     It 'RQ-09 keeps caller-required draft observation copies separate from approved publication' {
         $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
         $guide | Should -Match 'caller explicitly requires unapproved draft copies as inputs to that tester, the lead records that observation-only ordering in the plan before execution'

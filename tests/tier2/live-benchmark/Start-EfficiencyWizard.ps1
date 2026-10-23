@@ -262,6 +262,43 @@ function Get-WizardRepair {
     }
 }
 
+function Get-WizardBenchmarkSummary {
+    <# .SYNOPSIS
+    Links retained records and separates collection from quality without model calls.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][Collections.IDictionary]$Options)
+    $Out = Join-Path $Options.TrialRoot 'out'
+    $ReportPath = Join-Path $Out 'report.json'
+    $ExportPath = Join-Path $Out 'benchmark-export.json'
+    try {
+        $Report = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        $Export = Get-Content -LiteralPath $ExportPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+    }
+    catch { throw "Benchmark result evidence is missing or unreadable. Inspect $ReportPath and $ExportPath; repair offline, without paid retries." }
+    $Portable = Join-Path $Options.TrialRoot 'portable'
+    if ($Report -isnot [Collections.IDictionary] -or $Report['schemaVersion'] -cne 'efficiency-series-v1' -or
+        $Report['quality'] -isnot [Collections.IDictionary] -or $Report['quality']['checksPassed'] -isnot [bool] -or
+        $Report['regressionVerdict'] -cnotin @('passed', 'regression', 'not-evaluable') -or
+        $Export -isnot [Collections.IDictionary] -or $Export['status'] -cne 'exported' -or
+        ($Export['recordedTrials'] -isnot [int] -and $Export['recordedTrials'] -isnot [long]) -or
+        $Export['recordedTrials'] -lt 1 -or $Export['recordedTrials'] -gt 3 -or
+        $Export['publicationCommand'] -isnot [string] -or [string]::IsNullOrWhiteSpace($Export['publicationCommand']) -or
+        -not (Test-Path -LiteralPath (Join-Path $Out 'report.md') -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $Portable 'campaign-report.md') -PathType Leaf)) {
+        throw "Benchmark result evidence is incomplete or invalid. Inspect $ReportPath and $ExportPath; repair offline, without paid retries."
+    }
+    $Control = Join-Path $Out 'control-series.json'
+    @{
+        collection = 'recorded'; independentChecks = if ($Report.quality.checksPassed) { 'passed' } else { 'failed' }
+        comparison = $Report['regressionVerdict']; recordedTrials = $Export.recordedTrials
+        reportPath = Join-Path $Out 'report.md'; rawReportPath = $ReportPath
+        controlEvidencePath = if (Test-Path -LiteralPath $Control -PathType Leaf) { $Control } else { $null }
+        portableReportPath = Join-Path $Portable 'campaign-report.md'; exportManifestPath = $ExportPath
+        publication = 'local-only'; publicationCommand = $Export.publicationCommand
+    }
+}
+
 function Invoke-WizardRunPlan {
     <# .SYNOPSIS
     Executes each scheduled step once, preserving a structured fail-fast outcome.
@@ -270,16 +307,33 @@ function Invoke-WizardRunPlan {
     param([Parameter(Mandatory)][object[]]$Steps, [Parameter(Mandatory)][scriptblock]$Execute)
     $Results = [Collections.Generic.List[object]]::new()
     foreach ($Step in $Steps) {
-        Write-Host "Starting: $($Step.name) (step $($Results.Count + 1)/$($Steps.Count); $([Math]::Floor(100.0 * $Results.Count / $Steps.Count))% of scheduled steps finished)"
-        try { $Code = & $Execute $Step; if ($Code -isnot [int]) { throw 'Executor did not return one status code.' } }
-        catch { $Code = 1 }
-        $Results.Add(@{ stage = $Step.name; exitCode = $Code })
-        Write-Host "Finished: $($Step.name) (exit $Code; $([Math]::Floor(100.0 * $Results.Count / $Steps.Count))% of scheduled steps finished)"
+        Write-Host "Starting: $($Step.name) (step $($Results.Count + 1)/$($Steps.Count); step counts are not time estimates)"
+        $Code = 1; $Summary = $null; $ResultEvidenceFailed = $false
+        try {
+            $Code = & $Execute $Step
+            if ($Code -isnot [int]) { $Code = 1; throw 'Executor did not return one status code.' }
+            if ($Step.kind -eq 'Benchmark') { $Summary = Get-WizardBenchmarkSummary -Options $Step.arguments }
+        }
+        catch {
+            Write-Warning "Wizard step '$($Step.name)' failed or its result evidence could not be read. Inspect the retained stage log and out/report.json and out/benchmark-export.json."
+            if ($Code -eq 0) { $Code = 1; $ResultEvidenceFailed = $true }
+        }
+        $Entry = @{ stage = $Step.name; exitCode = $Code }
+        if ($Summary) { $Entry.benchmark = $Summary }
+        $Results.Add($Entry)
+        Write-Host "Finished: $($Step.name) (exit $Code; $($Results.Count)/$($Steps.Count) scheduled steps finished)"
+        if ($Summary) {
+            Write-Host "Collection: $($Summary.collection), $($Summary.recordedTrials) exported observations. Independent checks: $($Summary.independentChecks). Comparison: $($Summary.comparison)."
+            Write-Host "Recorded report: $($Summary.reportPath)"
+            Write-Host "Portable records: $($Summary.portableReportPath). Publication: local only, not committed to Git; offline publication command is in $($Summary.exportManifestPath)."
+        }
         if ($Code -ne 0) {
-            return @{ outcome = 'failed'; exitCode = if ($Step.kind -eq 'Offline' -or $Code -eq 2) { 2 } else { 1 }; failedStage = $Step.name; repair = Get-WizardRepair $Step.name $Code; stages = @($Results); notRun = $Steps.Count - $Results.Count; acceptedBaselineChanged = $false }
+            return @{ outcome = 'failed'; exitCode = if ($Step.kind -eq 'Offline' -or $Code -eq 2) { 2 } else { 1 }; failedStage = $Step.name; repair = if ($ResultEvidenceFailed) { 'Repair retained out/report.json, out/benchmark-export.json and portable records offline, without paid retries. Keep raw trial evidence and accepted baseline unchanged.' } else { Get-WizardRepair $Step.name $Code }; stages = @($Results); notRun = $Steps.Count - $Results.Count; acceptedBaselineChanged = $false }
         }
     }
-    @{ outcome = 'passed'; exitCode = 0; failedStage = $null; repair = $null; stages = @($Results); notRun = 0; acceptedBaselineChanged = $false }
+    $Benchmarks = @($Results | Where-Object { $_.ContainsKey('benchmark') })
+    $Findings = @($Benchmarks | Where-Object { $_.benchmark.independentChecks -ne 'passed' }).Count -gt 0
+    @{ outcome = if ($Findings) { 'completed-with-findings' } elseif ($Benchmarks.Count) { 'completed' } else { 'passed' }; exitCode = 0; failedStage = $null; repair = $null; stages = @($Results); notRun = 0; acceptedBaselineChanged = $false }
 }
 
 function Invoke-WizardCommand {
@@ -291,7 +345,8 @@ function Invoke-WizardCommand {
     if ($ProgressPaths) {
         Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
         $Log = Join-Path (Get-Location).Path ('wizard-stage-' + [guid]::NewGuid().ToString('N') + '.log')
-        $Observer = { param($Seconds) Write-EfficiencyProgressSummary -Paths $ProgressPaths -ElapsedSeconds $Seconds }.GetNewClosure()
+        $PreviousSnapshots = @{}
+        $Observer = { param($Seconds) Write-EfficiencyProgressSummary -Paths $ProgressPaths -ElapsedSeconds $Seconds -PreviousSnapshots $PreviousSnapshots }.GetNewClosure()
         $Process = Invoke-EfficiencyProcess -FilePath $Command -Arguments $Arguments -WorkingDirectory (Get-Location).Path -OutputPath $Log -TimeoutSeconds ([int]::MaxValue) -OnProgress $Observer
         Get-Content -LiteralPath $Log | Out-Host
         Get-Content -LiteralPath ($Log + '.stderr') | Out-Host
@@ -742,7 +797,8 @@ function Invoke-EfficiencyWizard {
         $Result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $Config.RunRoot 'wizard-result.json') -Encoding utf8NoBOM
         Write-Host "Wizard outcome: $($Result.outcome). Exit: $($Result.exitCode). Summary: $(Join-Path $Config.RunRoot 'wizard-result.json')"
         if ($Result.repair) { Write-Host "Stopped at $($Result.failedStage). $($Result.repair)" }
-        else { Write-Host 'Selected collection/comparison stages finished. Inspect recorded quality and failure results in control/out/report.md or comparison/out/report.md. Accepted baseline unchanged.' }
+        elseif ($Result.outcome -eq 'completed-with-findings') { Write-Host 'Collection completed and records were retained, but independent quality/readiness checks failed. This is not quality approval. Accepted baseline unchanged; do not rerun paid trials to repair reporting or publication.' }
+        else { Write-Host 'Selected stages completed; retained record paths are listed above and in the summary. Accepted baseline unchanged.' }
         $Result
     }
     catch {

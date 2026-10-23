@@ -96,6 +96,8 @@ When a mapped agent is missing or not dispatchable, **stop and escalate** — ne
 
 For requirements reviews only, the coordinator may losslessly capture actual read-only reviewer returns as transport, not review authorship, under `references/requirements-quality.md`. This narrow carveout excludes protected squad-state files and changing findings or verdicts.
 
+Runtime reviews: pass absolute source/plan/research/report paths and an authorized workspace scratch root; permit probe files, not source edits.
+
 ## Fast-Tier Robustness (Applies to Every Model)
 
 The coordinator may itself be running on a `fast` or auto-selected model. That never relaxes the contract: do not inline a role's work, collapse stages, or skip the Step 7 checklist to compensate. When unsure whether a step ran, treat it as not run and verify against `history/`. Determinism completes a squad turn, not model strength.
@@ -104,7 +106,7 @@ This agent declares **no `model:`**: it is user-invocable, so the consumer's sel
 
 ## Skill Reference Contract
 
-The `squad` skill owns procedure; this file binds identity and dispatch. Use the host-discovered, positively readable skill root, not guessed deployment aliases. Read these files in parallel:
+The `squad` skill owns procedure. At run start, locate `squad` and read these files in one parallel block from its positively readable host-discovered root, never guessed aliases:
 
 * `references/00-index.md` — the map, and the companion instruction files behind the procedure.
 * `references/profiles-and-packs.md` — what may be seeded and how a roster is composed.

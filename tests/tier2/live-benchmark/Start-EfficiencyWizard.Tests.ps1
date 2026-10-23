@@ -10,6 +10,70 @@ BeforeAll {
     function New-WizardTestConfig {
         @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 60.0; TotalCredits = 360.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = ''; ParallelTrials = $false }
     }
+    function New-WizardTestSummary {
+        @{ collection = 'recorded'; independentChecks = 'passed'; comparison = 'not-evaluable'; recordedTrials = 3; reportPath = 'fixture/report.md'; portableReportPath = 'fixture/portable/campaign-report.md'; exportManifestPath = 'fixture/benchmark-export.json' }
+    }
+    function New-WizardResultFixture {
+        param([string]$Root, [bool]$ChecksPassed = $true)
+        [void][IO.Directory]::CreateDirectory((Join-Path $Root 'out'))
+        [void][IO.Directory]::CreateDirectory((Join-Path $Root 'portable'))
+        @{ schemaVersion = 'efficiency-series-v1'; quality = @{ checksPassed = $ChecksPassed }; regressionVerdict = 'not-evaluable' } |
+            ConvertTo-Json | Set-Content (Join-Path $Root 'out/report.json')
+        @{ status = 'exported'; recordedTrials = 3; publicationCommand = "& './Export-BenchmarkResults.ps1' -ObservationOnly" } |
+            ConvertTo-Json | Set-Content (Join-Path $Root 'out/benchmark-export.json')
+        Set-Content (Join-Path $Root 'out/report.md') 'Retained findings'
+        Set-Content (Join-Path $Root 'out/control-series.json') '{}'
+        Set-Content (Join-Path $Root 'portable/campaign-report.md') 'Recorded observations, not approval'
+    }
+}
+
+Describe 'Wizard recorded collection outcomes' -Tag 'Unit' {
+    BeforeEach {
+        $script:SummaryOptions = @{ TrialRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N')) }
+    }
+    It 'links actual retained reports and saved controls without claiming Git publication' {
+        New-WizardResultFixture -Root $script:SummaryOptions.TrialRoot
+        $Summary = Get-WizardBenchmarkSummary $script:SummaryOptions
+        $Summary.collection | Should -Be recorded
+        $Summary.recordedTrials | Should -Be 3
+        $Summary.independentChecks | Should -Be passed
+        $Summary.publication | Should -Be 'local-only'
+        $Summary.publicationCommand | Should -Match '-ObservationOnly'
+        foreach ($Key in @('reportPath', 'rawReportPath', 'controlEvidencePath', 'portableReportPath', 'exportManifestPath')) {
+            Test-Path -LiteralPath $Summary[$Key] -PathType Leaf | Should -BeTrue
+        }
+    }
+    It 'retains failed quality in the serialized wizard result despite successful collection' {
+        New-WizardResultFixture -Root $script:SummaryOptions.TrialRoot -ChecksPassed $false
+        $Steps = @(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $script:SummaryOptions })
+        $Result = Invoke-WizardRunPlan -Steps $Steps -Execute { 0 }
+        $Saved = $Result | ConvertTo-Json -Depth 10 | ConvertFrom-Json -AsHashtable
+        $Saved.exitCode | Should -Be 0
+        $Saved.outcome | Should -Be 'completed-with-findings'
+        $Saved.stages[0].benchmark.independentChecks | Should -Be failed
+        $Saved.stages[0].benchmark.recordedTrials | Should -Be 3
+        $Saved.stages[0].benchmark.portableReportPath | Should -Be (Join-Path $script:SummaryOptions.TrialRoot 'portable/campaign-report.md')
+        $Saved.acceptedBaselineChanged | Should -BeFalse
+        Should -Invoke Write-Host -ParameterFilter { $Object -like '*Independent checks: failed*' } -Times 1 -Exactly
+    }
+    It 'fails explicitly on <Damage> evidence even when the child returned zero' -ForEach @(
+        @{ Damage = 'missing-report' }, @{ Damage = 'malformed-report' }, @{ Damage = 'invalid-report' }, @{ Damage = 'failed-export' }
+    ) {
+        New-WizardResultFixture -Root $script:SummaryOptions.TrialRoot
+        switch ($Damage) {
+            'missing-report' { Remove-Item -LiteralPath (Join-Path $script:SummaryOptions.TrialRoot 'out/report.json') }
+            'malformed-report' { Set-Content (Join-Path $script:SummaryOptions.TrialRoot 'out/report.json') '{"PRIVATE":"unfinished"' }
+            'invalid-report' { Set-Content (Join-Path $script:SummaryOptions.TrialRoot 'out/report.json') '{"schemaVersion":"efficiency-series-v1","quality":{"checksPassed":true}}' }
+            'failed-export' { Set-Content (Join-Path $script:SummaryOptions.TrialRoot 'out/benchmark-export.json') '{"status":"failed","recordedTrials":3}' }
+        }
+        { Get-WizardBenchmarkSummary $script:SummaryOptions } | Should -Throw '*Benchmark result evidence*offline*without paid retries*'
+        Mock Write-Warning {}
+        $Result = Invoke-WizardRunPlan -Steps @(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $script:SummaryOptions }) -Execute { 0 }
+        $Result.exitCode | Should -Be 1
+        $Result.outcome | Should -Be failed
+        $Result.repair | Should -Match 'offline, without paid retries'
+        Should -Invoke Write-Warning -Times 1 -Exactly -ParameterFilter { $Message -like '*result evidence could not be read*' -and $Message -notlike '*PRIVATE*' }
+    }
 }
 
 Describe 'Wizard offline Python provisioning' -Tag 'Unit' {
@@ -283,6 +347,7 @@ Describe 'Wizard remembered defaults' -Tag 'Unit' {
 }
 
 Describe 'Wizard unattended plan' -Tag 'Unit' {
+    BeforeEach { Mock Get-WizardBenchmarkSummary { New-WizardTestSummary } }
     It 'monitors every scheduled trial separately for <Case> runs' -ForEach @(
         @{ Case = 'parallel baseline'; Mode = 'Establish'; Saved = $false; Count = 3; First = 'baseline-1' },
         @{ Case = 'parallel candidates'; Mode = 'Series'; Saved = $true; Count = 3; First = 'candidate-1' },
@@ -308,7 +373,7 @@ Describe 'Wizard unattended plan' -Tag 'Unit' {
             $Logs = @(Get-ChildItem -LiteralPath $TestDrive -Filter 'wizard-stage-*.log')
             $Logs.Count | Should -Be 1
             Get-Content $Logs[0].FullName | Should -Be 'retained fixture output'
-            @($ProgressMessages | Where-Object { $_.MessageData.ToString() -like 'Progress*baseline-1: 0%*' }).Count | Should -Be 2
+            @($ProgressMessages | Where-Object { $_.MessageData.ToString() -like 'Progress*baseline-1: awaiting preflight*' }).Count | Should -Be 2
         }
         finally { Pop-Location }
     }
@@ -497,6 +562,7 @@ Describe 'Wizard complete coordination' -Tag 'Unit' {
         Mock Confirm-WizardAction { $true }
         Mock Invoke-WizardOfflineTest { $script:WizardCalls.Add('Offline'); 0 }
         Mock Invoke-WizardBenchmark { $script:WizardCalls.Add($Options.Mode); 0 }
+        Mock Get-WizardBenchmarkSummary { New-WizardTestSummary }
         Mock Read-WizardText { throw 'Unexpected interactive input during execution' }
     }
     It 'runs Complete end to end and writes the result without invoking a model' {
@@ -504,7 +570,7 @@ Describe 'Wizard complete coordination' -Tag 'Unit' {
         $Result.exitCode | Should -Be 0
         $script:WizardCalls -join ',' | Should -Be 'Offline,Establish,Series'
         $Saved = Get-Content (Join-Path $script:WizardConfig.RunRoot 'wizard-result.json') -Raw | ConvertFrom-Json
-        $Saved.outcome | Should -Be passed
+        $Saved.outcome | Should -Be completed
         $Saved.acceptedBaselineChanged | Should -BeFalse
         (Read-WizardDefaults).SpendingAuthorization.approved | Should -BeTrue
         Should -Invoke Read-WizardText -Times 0

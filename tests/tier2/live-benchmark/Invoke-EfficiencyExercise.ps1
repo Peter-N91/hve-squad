@@ -352,11 +352,11 @@ if ($MyInvocation.InvocationName -ne '.') {
         if ($ObservationOnly) { $Run.collection = @{ policy = 'baseline-observation-v1'; recorded = $true; stagesAttempted = $Stages.Count; judgeAvailable = ($null -ne $Judge -and $Judge.valid) } }
         $Run | ConvertTo-Json -Depth 45 | Set-Content -LiteralPath (Join-Path $Out 'run.json') -Encoding utf8NoBOM
         $Succeeded = Test-EfficiencyRun $Run -ObservationOnly:$ObservationOnly
+        $Recorded = if ($ObservationOnly) { Test-EfficiencyObservation $Run } else { $null }
         $ProgressCompleted++
-        Write-EfficiencyProgress -Path $ProgressPath -Stage report -Completed $ProgressCompleted -Total 7 -Status finished
+        Write-EfficiencyProgress -Path $ProgressPath -Stage report -Completed $ProgressCompleted -Total 7 -Status finished -IndependentChecksPassed $Succeeded -Recorded $Recorded
         Write-Host "Run complete: $($Run.completed). Independent checks passed: $Succeeded. Report: $(Join-Path $Out 'run.json')"
         if ($ObservationOnly) {
-            $Recorded = Test-EfficiencyObservation $Run
             Write-Host "Baseline observation recorded: $Recorded. Failed checks remain findings, not a passing workflow."
             if (-not $Recorded) { exit 2 }
         }

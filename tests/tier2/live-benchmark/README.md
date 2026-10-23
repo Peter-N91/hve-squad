@@ -95,20 +95,31 @@ still requires fresh explicit isolation/spending confirmation; blank means no.
 
 During execution the wizard prints a plain-text progress snapshot every 30 seconds,
 plus snapshots at child start and finish. Each scheduled baseline/candidate trial
-has its own percentage and active phase, including all three parallel trials.
-Percentages count seven harness milestones (preflight, init, requirements, build,
-functional acceptance, judge and report), **not** model-call completion, quality
-or estimated remaining time. They can stay unchanged during a long model stage.
-Pending serial trials show zero; skipped milestones do not count as completed.
-Offline progress counts the three self-test files. Step boundaries also show the
-percentage of scheduled wizard steps finished; failed execution is labeled with
-its exit code, not presented as a passing result.
+shows its active phase, phase duration, completed milestone count, and available
+CLI-output byte count/last activity, including all three parallel trials.
+The seven unequal milestones are preflight, init, requirements, build, functional
+acceptance, judge and report: they are **not** a model-completion percentage or
+time estimate. A long build can legitimately remain at 3/7; changing duration and
+output activity provide context without inventing an ETA. Pending serial trials
+say awaiting preflight. Finished/failed snapshots print once unless their result
+changes, with known independent-check and observation-recording status.
+Offline progress counts the three self-test files; wizard boundaries count
+scheduled steps. Neither count implies quality approval.
 
 Child stdout/stderr is retained in `wizard-stage-<id>.log` and its `.stderr`
 sibling under the fresh wizard run directory and displayed when that stage ends.
 Trial phase snapshots are retained as `trials/<arm>-<pair>/out/progress.json`
 inside the control/comparison directory. Progress reporting does not alter
 spending limits, trial scheduling, watchdogs or baseline promotion.
+
+`wizard-result.json` includes each benchmark stage's independent-check outcome,
+record count, report and portable-record paths, saved-control path when available,
+and offline publication command. Exit zero means the selected collection
+completed, not that the measured process passed: quality/readiness failures produce
+`completed-with-findings`, not `passed`. Missing/malformed expected result evidence
+is an execution error. Records remain local and **uncommitted to Git** until the
+printed offline export command is used in a compatible writable delivery checkout.
+Reporting/publication repairs do not require another paid run.
 
 Live modes accept current CLI versions advertising `--sync-session off`, or older
 versions advertising both `--no-remote` and `--no-remote-export`. The wizard no
