@@ -15,6 +15,8 @@
     Dedicated scratch directory outside the source checkout.
 .PARAMETER BaselineEvidencePath
     Optional saved control-series.json to recommend for Series mode.
+.PARAMETER ParallelTrials
+    Select three simultaneous observations without the execution-choice prompt.
 .EXAMPLE
     pwsh -NoProfile -File ./tests/tier2/live-benchmark/Start-EfficiencyWizard.ps1
 #>
@@ -22,7 +24,8 @@
 param(
     [string]$SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..')),
     [string]$WorkRoot = '',
-    [string]$BaselineEvidencePath = ''
+    [string]$BaselineEvidencePath = '',
+    [switch]$ParallelTrials
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -140,6 +143,10 @@ function New-WizardRunPlan {
     $NeededRuns = if ($Config.Mode -eq 'Establish' -or ($Config.Mode -eq 'Series' -and $Config.BaselineEvidencePath)) { 3 } else { 6 }
     if ($Config.TotalCredits -lt $NeededRuns * $Config.PerRunCredits) { throw 'Total credit ceiling is smaller than the scheduled run reservations.' }
     $Common = @{ InstallRoot = $Config.InstallRoot; Model = $Config.Model; MaxCredits = $Config.PerRunCredits; Live = $true; IsolatedEnvironment = $true; ObservationOnly = $true }
+    if ($Config['ParallelTrials']) {
+        if ($Config.Mode -eq 'Series' -and -not $Config.BaselineEvidencePath) { throw 'Parallel trials require three independent observations; six fresh paired trials remain serial.' }
+        $Common.ParallelTrials = $true
+    }
     if ($Config.Mode -in @('Establish', 'Complete')) {
         $Arguments = $Common.Clone(); $Arguments.Mode = 'Establish'; $Arguments.SourceRoot = $Config.BaselineSourceRoot; $Arguments.TrialRoot = Join-Path $Config.RunRoot 'control'; $Arguments.MaxSeriesCredits = 3 * $Config.PerRunCredits
         $Steps.Add(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $Arguments })
@@ -295,9 +302,11 @@ function Install-WizardPrerequisite {
         if ($LASTEXITCODE -ne 0 -or $ApmVersion -notmatch '(\d+\.\d+\.\d+)' -or [version]$Matches[1] -lt [version]'0.29.0') { throw 'APM 0.29+ is required. Upgrade through its owning package manager, then rerun.' }
         $HelpText = (& copilot --help | Out-String)
         if ($LASTEXITCODE -ne 0) { throw 'Copilot CLI help failed; repair the installed CLI.' }
-        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--no-remote', '--no-remote-export')) {
+        Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file')) {
             if (-not $HelpText.Contains($Flag)) { throw "Copilot CLI lacks $Flag. Upgrade through its owning package manager before benchmarking." }
         }
+        $null = Get-EfficiencyCliLocalArguments -HelpText $HelpText
     }
     Write-Host 'Offline tests use an isolated Python 3.12 venv and pytest 8.3.5 via pip; downloads may be required. No global Python packages are installed.'
     $Pester[0].Path
@@ -391,7 +400,7 @@ function Get-WizardConfiguration {
     Explains defaults and collects all routine decisions before launch.
     #>
     [CmdletBinding()]
-    param([string]$Source, [string]$Scratch, [string]$SavedControl = '')
+    param([string]$Source, [string]$Scratch, [string]$SavedControl = '', [switch]$ParallelTrials)
     $Source = (Resolve-Path -LiteralPath $Source).Path
     foreach ($Required in @('squad-src', 'apm.yml')) { if (-not (Test-Path -LiteralPath (Join-Path $Source $Required))) { throw "Source checkout lacks $Required." } }
     if (-not $Scratch) { $Scratch = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'hve-squad/efficiency' }
@@ -412,7 +421,7 @@ function Get-WizardConfiguration {
         Mode = $Mode; SourceRoot = $Source; WorkRoot = $Scratch; InstallRoot = Join-Path $Scratch 'install'
         RunRoot = Join-Path $Scratch ('run-' + [datetime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
         BaselineSourceRoot = $Source; CandidateSourceRoot = $Source; BaselineEvidencePath = ''; Model = 'claude-sonnet-5.5'
-        PerRunCredits = 0.0; TotalCredits = 0.0
+        PerRunCredits = 0.0; TotalCredits = 0.0; ParallelTrials = [bool]$ParallelTrials
     }
     if ($Mode -eq 'Offline') { return $Config }
     if ($Mode -eq 'Series') {
@@ -439,6 +448,12 @@ function Get-WizardConfiguration {
     $Config.PerRunCredits = Read-WizardCreditLimit 'Maximum AI credits per complete run' 100
     $Number = if ($Mode -eq 'Establish' -or ($Mode -eq 'Series' -and $Config.BaselineEvidencePath)) { 3 } else { 6 }
     $Config.TotalCredits = Read-WizardCreditLimit "Total ceiling for all $Number new runs (all reservations must fit)" ($Number * $Config.PerRunCredits)
+    if ($Config.ParallelTrials) { Write-Host 'Parallel trials selected by command-line option; all reservations and isolation/spending authorization still apply.' }
+    elseif ($Mode -ne 'Series' -or $Config.BaselineEvidencePath) {
+        Write-Host 'Execution: 1. Serial [default]; 2. Three observations in parallel (higher host load; requires matching parallel controls). Complete still runs controls before candidates.'
+        $Config.ParallelTrials = (Read-WizardChoice -Question 'Execution' -Options ([ordered]@{ '1' = 'Serial'; '2' = 'Three observations in parallel' }) -Default '1') -eq '2'
+    }
+    else { Write-Host 'Six fresh paired trials remain serial to preserve their alternating arm order.' }
     New-WizardRunPlan $Config | Out-Null
     $Config
 }
@@ -450,7 +465,7 @@ function Test-WizardCompatibility {
     [CmdletBinding()]
     param([Collections.IDictionary]$Config)
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
-    $Expected = Get-EfficiencyCompatibility -SourceRoot $Config.CandidateSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly
+    $Expected = Get-EfficiencyCompatibility -SourceRoot $Config.CandidateSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly -ParallelTrials:([bool]$Config['ParallelTrials'])
     if ($Config.BaselineEvidencePath) {
         $Controls = Get-Content -LiteralPath $Config.BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable
         $Identity = $null; $Pairs = [Collections.Generic.HashSet[int]]::new(); $Ids = [Collections.Generic.HashSet[string]]::new()
@@ -466,7 +481,7 @@ function Test-WizardCompatibility {
         }
     }
     elseif ($Config.Mode -in @('Series', 'Complete')) {
-        $Baseline = Get-EfficiencyCompatibility -SourceRoot $Config.BaselineSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly
+        $Baseline = Get-EfficiencyCompatibility -SourceRoot $Config.BaselineSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly -ParallelTrials:([bool]$Config['ParallelTrials'])
         foreach ($Key in $Expected.Keys) { if (($Baseline[$Key] | ConvertTo-Json -Depth 10 -Compress) -cne ($Expected[$Key] | ConvertTo-Json -Depth 10 -Compress)) { throw "Baseline/candidate environments differ in $Key; repair compatibility before launching." } }
     }
 }
@@ -567,12 +582,12 @@ function Invoke-EfficiencyWizard {
     Coordinates interactive setup, then executes a question-free fixed plan.
     #>
     [CmdletBinding()]
-    param([string]$Source, [string]$Scratch = '', [string]$SavedControl = '')
+    param([string]$Source, [string]$Scratch = '', [string]$SavedControl = '', [switch]$ParallelTrials)
     $Stage = 'Configuration'; $Config = $null
     $OldLocation = Get-Location
     try {
         Write-Host 'Squad efficiency benchmark wizard. No baseline is promoted by this workflow. Type q at any wizard input to cancel.'
-        $Config = Get-WizardConfiguration -Source $Source -Scratch $Scratch -SavedControl $SavedControl
+        $Config = Get-WizardConfiguration -Source $Source -Scratch $Scratch -SavedControl $SavedControl -ParallelTrials:$ParallelTrials
         $Stage = 'Prerequisite installation'
         $PesterPath = Install-WizardPrerequisite -LiveMode:($Config.Mode -ne 'Offline')
         $Stage = 'Work directory preparation'
@@ -621,6 +636,6 @@ function Invoke-EfficiencyWizard {
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    $Result = Invoke-EfficiencyWizard -Source $SourceRoot -Scratch $WorkRoot -SavedControl $BaselineEvidencePath
+    $Result = Invoke-EfficiencyWizard -Source $SourceRoot -Scratch $WorkRoot -SavedControl $BaselineEvidencePath -ParallelTrials:$ParallelTrials
     exit $Result.exitCode
 }
