@@ -13,7 +13,7 @@ BeforeAll {
     Mock Write-Host {}
     Mock Get-WizardDefaultsPath { Join-Path $TestDrive 'wizard-defaults.json' }
     function New-WizardTestConfig {
-        @{ Mode = 'Complete'; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 60.0; TotalCredits = 360.0; RunRoot = $TestDrive; BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = ''; ParallelTrials = $false }
+        @{ Mode = 'Complete'; SourceRoot = (Join-Path $TestDrive 'source'); WorkRoot = $TestDrive; InstallRoot = 'install'; Model = 'fixed-model'; PerRunCredits = 60.0; TotalCredits = 360.0; RunRoot = (Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))); BaselineSourceRoot = 'baseline'; CandidateSourceRoot = 'candidate'; BaselineEvidencePath = ''; ParallelTrials = $false }
     }
     function New-WizardTestSummary {
         @{ collection = 'recorded'; independentChecks = 'passed'; comparison = 'not-evaluable'; recordedTrials = 3; reportPath = 'fixture/report.md'; portableReportPath = 'fixture/portable/campaign-report.md'; exportManifestPath = 'fixture/benchmark-export.json' }
@@ -28,7 +28,7 @@ BeforeAll {
             ConvertTo-Json | Set-Content (Join-Path $Root 'out/benchmark-export.json')
         Set-Content (Join-Path $Root 'out/report.md') 'Retained findings'
         Set-Content (Join-Path $Root 'out/control-series.json') '{}'
-        Set-Content (Join-Path $Root 'portable/campaign-report.md') 'Recorded observations, not approval'
+        $null = Export-BenchmarkScore -SeriesId 'fixture-failure' -OutputDirectory (Join-Path $Root 'portable') -FailureReason 'fixture-unmeasured'
     }
 }
 
@@ -314,7 +314,7 @@ Describe 'Wizard source diagnosis and setup repair' -Tag 'Unit' {
     It 'checks exactly the measured roots for <Mode> with saved controls <Saved>' -ForEach @(
         @{ Mode = 'Establish'; Saved = $false; Roots = @('baseline') },
         @{ Mode = 'Series'; Saved = $true; Roots = @('candidate') },
-        @{ Mode = 'Series'; Saved = $false; Roots = @('baseline', 'candidate') },
+        @{ Mode = 'Series'; Saved = $false; Roots = @('candidate') },
         @{ Mode = 'Complete'; Saved = $false; Roots = @('baseline', 'candidate') },
         @{ Mode = 'Repair'; Saved = $false; Roots = @('baseline') }
     ) {
@@ -509,8 +509,8 @@ Describe 'Wizard local single-candidate diagnostics' -Tag 'Unit' {
         $Root = Join-Path $TestDrive 'local-test-scores'
         New-LocalDiagnosticFile $Root $Recorded
         $Summary = Get-WizardLocalSummary -Options @{ TrialRoot = $Root } -Recorded $Recorded
-        $Summary.publication | Should -Be forbidden
-        $Summary.collection | Should -Be 'not-recorded'
+        $Summary.publication | Should -Be descriptive-only
+        $Summary.collection | Should -Be 'recorded-local'
         (Get-FileHash $Path).Hash | Should -Be $Before
         Should -Invoke Write-Host -ParameterFilter { $Object -like '*Protocol/model/rubric differences*model*rubric*' } -Times 1
         Should -Invoke Write-Host -ParameterFilter { $Object -eq '| total | 20 | 20 | 0 |' } -Times 1
@@ -583,7 +583,7 @@ Describe 'Wizard recorded collection outcomes' -Tag 'Unit' {
         $Saved.outcome | Should -Be 'completed-with-findings'
         $Saved.stages[0].benchmark.independentChecks | Should -Be failed
         $Saved.stages[0].benchmark.recordedTrials | Should -Be 3
-        $Saved.stages[0].benchmark.portableReportPath | Should -Be (Join-Path $script:SummaryOptions.TrialRoot 'portable/campaign-report.md')
+        $Saved.stages[0].benchmark.portableReportPath | Should -Be (Join-Path $script:SummaryOptions.TrialRoot 'portable/report.md')
         $Saved.acceptedBaselineChanged | Should -BeFalse
         Should -Invoke Write-Host -ParameterFilter { $Object -like '*Independent checks: failed*' } -Times 1 -Exactly
     }
@@ -650,6 +650,33 @@ Describe 'Wizard offline Python provisioning' -Tag 'Unit' {
 }
 
 Describe 'Wizard portable observation finalization' -Tag 'Unit' {
+    It 'retains a candidate score before optional <Comparison> and preserves its exit' -ForEach @(
+        @{ Comparison = 'regression'; Evaluable = $true; Code = 2 },
+        @{ Comparison = 'unavailable'; Evaluable = $false; Code = 0 }
+    ) {
+        Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
+        $Root = Join-Path $TestDrive "optional-$Comparison"
+        $Source = Join-Path $TestDrive 'optional-source'
+        [void][IO.Directory]::CreateDirectory($Source)
+        [void][IO.Directory]::CreateDirectory((Join-Path $Root 'out'))
+        [void][IO.Directory]::CreateDirectory((Join-Path $Root 'trials/candidate-1/out'))
+        Set-Content (Join-Path $Root 'trials/candidate-1/out/run.json') '{}'
+        $Saved = Join-Path $TestDrive "saved-$Comparison.json"
+        @{ schemaVersion = 'efficiency-control-v1'; runs = @(@{}, @{}, @{}) } | ConvertTo-Json | Set-Content $Saved
+        $Options = @{ Mode = 'Series'; CandidateOnly = $true; TrialRoot = $Root; CandidateSourceRoot = $Source; BaselineEvidencePath = $Saved }
+        Mock Invoke-WizardCommand { 0 }
+        Mock Export-BenchmarkScore { [void][IO.Directory]::CreateDirectory($OutputDirectory); @{ score = @{ value = 80; state = 'partial' } } }
+        Mock Assert-BenchmarkRecordedIdentity {}
+        Mock Compare-EfficiencyRuns {
+            Should -Invoke Export-BenchmarkScore -Times 1 -Exactly
+            [pscustomobject]@{ evaluable = $Evaluable; eligible = $false }
+        }
+        Invoke-WizardBenchmark $Options | Should -Be $Code
+        $Manifest = Get-Content (Join-Path $Root 'out/benchmark-export.json') -Raw | ConvertFrom-Json
+        $Manifest.score.value | Should -Be 80
+        $Manifest.status | Should -Be exported
+        Test-Path (Join-Path $Root 'portable/comparison.json') | Should -BeTrue
+    }
     BeforeAll {
         Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
     }
@@ -660,17 +687,17 @@ Describe 'Wizard portable observation finalization' -Tag 'Unit' {
         [void][IO.Directory]::CreateDirectory($Source)
         [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($RunFile))
         [IO.File]::WriteAllText($RunFile, '{}')
-        Mock Export-BenchmarkCampaign {}
+        Mock Export-BenchmarkScore { @{ score = @{ value = 80; state = 'partial' } } }
         $Result = Complete-WizardBenchmarkExport @{ Mode = 'Series'; CandidateSourceRoot = $Source; TrialRoot = $Root }
         $Result.status | Should -Be 'exported'
         $Result.recordedTrials | Should -Be 1
         $Result.publicationCommand | Should -Match "run''s-evidence"
-        $Result.publicationCommand | Should -Match '-ObservationOnly.*-TrialDirectories @\('
+        $Result.publicationCommand | Should -Match '-Standalone.*-TrialDirectories @\('
         $Result.publicationCommand | Should -Not -Match '-Live|-Mode Run|copilot'
         $Tokens = $null; $Errors = $null
         [void][Management.Automation.Language.Parser]::ParseInput($Result.publicationCommand, [ref]$Tokens, [ref]$Errors)
         $Errors.Count | Should -Be 0
-        Should -Invoke Export-BenchmarkCampaign -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Export-BenchmarkScore -Times 1 -Exactly -ParameterFilter {
             $Repository -eq $Source -and $TrialDirectories.Count -eq 1 -and $OutputDirectory -eq (Join-Path $Root 'portable')
         }
         @(Get-ChildItem -LiteralPath $Source -Force).Count | Should -Be 0
@@ -679,7 +706,8 @@ Describe 'Wizard portable observation finalization' -Tag 'Unit' {
         $Options = @{ Mode = 'Series'; CandidateSourceRoot = (Join-Path $TestDrive 'source'); TrialRoot = (Join-Path $TestDrive 'failed-run') }
         $Unavailable = Complete-WizardBenchmarkExport $Options
         $Unavailable.status | Should -Be 'failed'
-        Should -Invoke Write-Host -ParameterFilter { $Object -match 'Offline export failed.*Export-BenchmarkResults.ps1' } -Times 1
+        $Unavailable.score.state | Should -Be failed
+        Test-Path (Join-Path $Options.TrialRoot 'portable/badge.svg') | Should -BeTrue
         Mock Invoke-WizardCommand { 5 }
         Mock Complete-WizardBenchmarkExport { @{ status = 'exported' } }
         Invoke-WizardBenchmark $Options | Should -Be 5
@@ -1061,19 +1089,20 @@ Describe 'Wizard unattended plan' -Tag 'Unit' {
         $Parallel = New-WizardRunPlan $Config
         $Parallel[1].arguments.ParallelTrials | Should -BeTrue
         $Parallel[2].arguments.ParallelTrials | Should -BeTrue
-        $Parallel[2].arguments.BaselineEvidencePath | Should -Be (Join-Path $TestDrive 'control/out/control-series.json')
+        $Parallel[2].arguments.BaselineEvidencePath | Should -Be (Join-Path $Config.RunRoot 'control/out/control-series.json')
         $Parallel[1].arguments.MaxSeriesCredits + $Parallel[2].arguments.MaxSeriesCredits | Should -Be 360
         $Config.Mode = 'Series'
-        { New-WizardRunPlan $Config } | Should -Throw '*six fresh*'
+        (New-WizardRunPlan $Config)[1].arguments.CandidateOnly | Should -BeTrue
     }
     It 'runs Complete as offline checks, three controls, then three saved-control candidates' {
-        $Steps = New-WizardRunPlan (New-WizardTestConfig)
+        $Config = New-WizardTestConfig
+        $Steps = New-WizardRunPlan $Config
         $Steps.Count | Should -Be 3
         $Steps[1].arguments.Mode | Should -Be Establish
         $Steps[2].arguments.Mode | Should -Be Series
         $Steps[1].arguments.ObservationOnly | Should -BeTrue
         $Steps[2].arguments.ObservationOnly | Should -BeTrue
-        $Steps[2].arguments.BaselineEvidencePath | Should -Be (Join-Path $TestDrive 'control/out/control-series.json')
+        $Steps[2].arguments.BaselineEvidencePath | Should -Be (Join-Path $Config.RunRoot 'control/out/control-series.json')
         $Steps[1].arguments.MaxSeriesCredits + $Steps[2].arguments.MaxSeriesCredits | Should -Be 360
     }
     It 'requires the full combined reservation before starting Complete' {

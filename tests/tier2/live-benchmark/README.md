@@ -149,11 +149,11 @@ the control phase before starting candidates; offline checks remain first.
 | Choice | Work and AI cost | Recommended use |
 | --- | --- | --- |
 | 1. Establish | Full offline checks + 3 paid controls; records failures, no improvement claim | First baseline or changed benchmark protocol |
-| 2. Series | Full offline checks + 3 paid candidates vs compatible controls, or 6 fresh paired trials | Measure a patch with formal benchmark evidence |
+| 2. Series | Full offline checks + 3 paid candidates; saved controls are optional comparison only | Score a committed candidate without depending on its parent |
 | 3. Complete | Full offline checks + 3 fresh paid controls + 3 paid candidates | Refresh both arms; highest total cost |
 | 4. Offline | All self-tests; no AI/login, Python/pytest setup may download packages | Thorough harness validation before formal collection |
 | 5. Offline smoke | Exactly 1 simulated candidate; no AI/login/downloads/Python; installed Git/Pester required | Fast harness editing feedback, including uncommitted changes |
-| 6. Single candidate vs saved scores | Smoke first, then 1 paid candidate workflow including judge; no benchmark export | Debug the current local changes against historical scores |
+| 6. Single candidate score | Smoke first, then 1 paid candidate workflow including judge; descriptive local score/badge, optional historical scores | Debug current local changes without requiring controls |
 | 7. Repair setup | Reviews measured changes, offers a source-only local commit, then keeps a valid install or offers archive/rebuild; no push, AI, login or benchmark runs | Recover setup before choosing 1 or 2; rebuilding packages may download dependencies |
 
 ### Repair after a local diagnostic
@@ -192,8 +192,48 @@ and 2 still perform their full checks and require fresh spending consent.
 | Uncommitted measured source | Choose 7, review the named changes and approve the source-only local commit, then 1 or 2; alternatively commit them yourself |
 | Git identity/signing/hooks fail, inputs change, or filters alter bytes | Inspect Git output/status and the named attributes/filter/EOL issue; repair the local Git configuration or source, then rerun 7; no automatic rollback or policy bypass |
 | Missing, stale or damaged prepared install | Choose 7 and consent to archive/rebuild; old evidence stays untouched |
-| Saved controls have a different runtime/model/dependency/protocol | Restore the exact environment or explicitly collect fresh controls; never edit saved evidence |
-| Parent/candidate commits have different measured protocols | Stop: these revisions cannot be formally compared by this harness; fresh trials or rebuilding dependencies do not fix this |
+| Saved controls have a different runtime/model/dependency/protocol | Candidate scoring still works; comparison is unavailable. Never edit saved evidence |
+| Parent/candidate commits have different measured protocols | Score the candidate with option 2; comparison is unavailable. Do not copy protocol files into the parent to force compatibility |
+
+### Score first; comparison is optional
+
+Choose **2** for the normal PR check. It always schedules three candidate observations,
+never six on missing or incompatible controls. Select **none** to omit historical
+comparison. Choose **3** only when you explicitly want six fresh paid observations.
+
+Every accepted real attempt retains `score/records/<id>.json`, `score/report.json`,
+`score/report.md` and `score/badge.svg` under its fresh wizard run directory.
+The final `wizard-result.json` links that score directory. Preflight and execution
+failures also retain a labeled failure score; collection failures still exit nonzero.
+Offline smoke and repair are not measurements and do not create scores.
+
+The absolute score is the median of available real document-quality grades, out
+of 100. Three grades are measured; fewer formal grades are partial. Local one-sample
+grades are measured **1/1 but descriptive only**, not a formal comparison.
+No trustworthy grade produces **0/100, measurement failed / not judged**; raw quality
+and unknown costs remain null. An actual judge grade of zero is labeled measured,
+not unjudged. Workflow failures stay visible even with a high document-quality score.
+
+To publish retained trials offline, use the printed command, or:
+
+```powershell
+./tests/tier2/live-benchmark/Export-BenchmarkResults.ps1 -Standalone `
+  -Repository . -TrialDirectories @('/evidence/trials/candidate-1', '/evidence/trials/candidate-2', '/evidence/trials/candidate-3') `
+  -SeriesId 'candidate-my-change' -SelectScore
+```
+
+This appends a sanitized `benchmark-score-v1` record under `benchmarks/efficiency/records/`.
+`-SelectScore` explicitly publishes the report/badge and updates the existing
+`current.json` pointer last; it does not promote a baseline. Omit it to leave the
+selection unchanged. Use `-Local` only for retained local diagnostics, never to
+turn working-tree results into committed formal evidence. Review and commit generated
+files through the normal PR flow. No export or reporting command spends AI credits.
+
+Hosted candidate score artifacts are independent of the strict parent-comparison
+job. That strict job retains its existing required-check behavior. The trusted
+reporter is immutable: new score-schema support is activated only after owner review
+and a pin update. Until then, legacy records remain readable and unsupported new
+records produce an explicit reporter-unavailable failure, not an invented grade.
 
 ### Compare a committed PR with its parent
 
@@ -213,13 +253,13 @@ bash "$sources/pr/tests/tier2/live-benchmark/start-efficiency-wizard.sh" \
 ```
 
 Use fresh worktree paths if these already exist. This runs the **candidate's**
-wizard/protocol. Choose **2**, enter **none** for saved controls, select
+wizard/protocol. Choose **3** for an explicitly fresh two-arm comparison, select
 `$HOME/bench/hve-squad-sources/parent` as baseline and
-`$HOME/bench/hve-squad-sources/pr` as candidate. This collects six fresh paired
-trials, after checks and your explicit isolation/spending consent. The commands
+`$HOME/bench/hve-squad-sources/pr` as candidate. This collects three controls then
+three candidates, after checks and your explicit isolation/spending consent. The commands
 above start setup only; no paid collection occurs without that consent.
 
-Both commits must support the same executing benchmark protocol; the early check
+Comparison requires both commits to support the same executing benchmark protocol; the early check
 stops otherwise. Do not copy newer protocol files into the parent worktree to
 force admission. If compatible three-control evidence already measures this exact
 parent, select that `control-series.json` instead of **none** to collect only three
@@ -229,7 +269,7 @@ repeatability, not PR improvement.
 
 ### Local diagnostics
 
-Options **5 and 6 are local diagnostics, never benchmark evidence**. The offline
+Options **5 and 6 are local diagnostics, never formal comparison evidence**. The offline
 smoke normally takes seconds, uses fake AI responses and intentionally checks
 failure handling; its success does not mean an application passed quality review.
 Run it directly without the questionnaire:
@@ -239,19 +279,20 @@ pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-LiveBenchmarkTests.ps1
 ```
 
 Option 6 still performs a complete real workflow and may take minutes/use substantial
-credits: one candidate is not one model request. It asks for a saved
-`control-series.json` containing three distinct, valid scored baseline observations,
-reads it without modification, and displays dimension medians plus the median of
-per-run totals. Invalid/missing historical scores stop before authentication or
-spending. Missing candidate scores display as unavailable, never zero. Protocol,
+credits: one candidate is not one model request. Historical
+`control-series.json` scores are optional. When valid, they are read without modification
+and displayed as dimension medians plus the median of per-run totals.
+Invalid/missing historical scores do not block scoring. Missing raw candidate quality
+stays unavailable; the separately labeled failure-outcome score is zero. Protocol,
 model and rubric differences are disclosed; deltas are descriptive only, not
 compatible comparisons, regression verdicts or evidence of improvement.
 
 Both local options allow uncommitted changes; formal modes still require measured
 files to match Git. Local live execution pins working bytes and stops on later drift.
-No `run.json`, controls, portable records or accepted baseline is produced by the
-local candidate. Its labelled `diagnostic.json` and raw failure logs stay outside
-the checkout; even renaming the diagnostic to `run.json` cannot pass export validation.
+No formal `run.json`, controls or accepted baseline is produced by the
+local candidate. Its labelled `diagnostic.json`, portable local score/badge and raw
+failure logs stay outside the checkout. Renaming the diagnostic to `run.json` cannot
+make it formal evidence.
 One-candidate modes are serial and reject `-ParallelTrials`; remembered formal
 scheduling is preserved. Use formal Establish/Series/Complete for publishable results.
 Wizard scratch paths and local diagnostics require physical checkout/output paths.
@@ -260,8 +301,8 @@ creating test output; use the target directory's physical path instead.
 
 ### Formal collection and setup
 
-Initially, Establish is recommended without saved controls; Series is recommended
-when a control file is supplied or discovered. Later runs default to the remembered
+Use Series to score a candidate whether or not controls exist. Establish remains
+available when explicit fresh controls are needed. Later runs default to the remembered
 mode; an explicitly supplied control path recommends Series. Complete is not retry-until-success.
 Selecting the same source for both arms tests repeatability, not patch improvement.
 Select separate baseline/candidate checkouts to compare an actual patch.
@@ -276,7 +317,7 @@ Isolation is not created by the wizard or by a launcher flag.
 Formal wizard live modes use **observational collection** (`-ObservationOnly`). Readiness,
 functional, review and quality failures are measured, not prerequisites for collecting
 the baseline. Feasible later stages and remaining samples still run; missing grades
-remain unavailable, never zero or invented success. `baseline-recorded` means three
+remain unavailable, never invented judge grades. `baseline-recorded` means three
 observations were saved, not that the workflow passed. Reports retain individual
 checks, independent scores, timing, tokens, requests, credits and reliability counts.
 Comparisons assess relative quality and reliability as well as efficiency; an

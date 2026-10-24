@@ -308,22 +308,24 @@ function Get-BenchmarkRawMetrics {
 }
 
 function Assert-BenchmarkSeries {
-    param([Collections.IDictionary]$Record)
+    param([Collections.IDictionary]$Record, [switch]$Standalone)
+    $Standalone = $Standalone -or $Record.schemaVersion -ceq 'benchmark-observation-series-v1'
     Assert-BenchmarkKeys $Record @('schemaVersion', 'seriesId', 'measuredRevision', 'sourceHash', 'protocol', 'provenance', 'trials')
-    if ($Record.schemaVersion -cnotin @('benchmark-series-v1', 'benchmark-series-v2') -or $Record.seriesId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$') { Stop-BenchmarkData 'series-identity' }
+    $Versions = if ($Standalone) { @('benchmark-observation-series-v1') } else { @('benchmark-series-v1', 'benchmark-series-v2') }
+    if ($Record.schemaVersion -cnotin $Versions -or $Record.seriesId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$') { Stop-BenchmarkData 'series-identity' }
     Assert-BenchmarkHash $Record.measuredRevision 40
     Assert-BenchmarkHash $Record.sourceHash
     # V1 remains readable for historical description, but cannot bind a current snapshot.
-    $Digests = @($script:ProtocolDigests | Where-Object { $Record.schemaVersion -ceq 'benchmark-series-v2' -or $_ -cne 'converterHash' })
+    $Digests = @($script:ProtocolDigests | Where-Object { $Standalone -or $Record.schemaVersion -ceq 'benchmark-series-v2' -or $_ -cne 'converterHash' })
     Assert-BenchmarkKeys $Record.protocol ($script:ProtocolLabels + $Digests + @('maxCredits', 'continuations'))
     foreach ($Key in $script:ProtocolLabels) { if ($Record.protocol[$Key] -isnot [string] -or $Record.protocol[$Key] -cnotmatch '^[A-Za-z0-9][A-Za-z0-9.+-]{0,95}$') { Stop-BenchmarkData 'protocol-label' } }
     foreach ($Key in $Digests) { Assert-BenchmarkHash $Record.protocol[$Key] }
     Assert-BenchmarkNumber $Record.protocol.maxCredits
     Assert-BenchmarkNumber $Record.protocol.continuations -Integer
-    if ($Record.protocol.evaluationPolicy -cne 'baseline-observation-v1') { Stop-BenchmarkData 'evaluation-policy' }
+    if ($Record.protocol.evaluationPolicy -cne 'baseline-observation-v1' -and (-not $Standalone -or $Record.protocol.evaluationPolicy -cne 'strict-v1')) { Stop-BenchmarkData 'evaluation-policy' }
     Assert-BenchmarkKeys $Record.provenance @('collector', 'verifierHashBasis', 'hostAttestation', 'rawSeriesHash')
-    $Collector = if ($Record.schemaVersion -ceq 'benchmark-series-v2') { 'benchmark-export-v2' } else { 'benchmark-export-v1' }
-    $VerifierBasis = if ($Record.schemaVersion -ceq 'benchmark-series-v2') { 'executing-file-verified-against-measured-git' } else { 'measured-git-revision' }
+    $Collector = if ($Standalone) { 'benchmark-score-direct-v1' } elseif ($Record.schemaVersion -ceq 'benchmark-series-v2') { 'benchmark-export-v2' } else { 'benchmark-export-v1' }
+    $VerifierBasis = if ($Standalone -or $Record.schemaVersion -ceq 'benchmark-series-v2') { 'executing-file-verified-against-measured-git' } else { 'measured-git-revision' }
     if ($Record.provenance.collector -cne $Collector -or $Record.provenance.verifierHashBasis -cne $VerifierBasis -or $Record.provenance.hostAttestation -cne 'unavailable') { Stop-BenchmarkData 'provenance-label' }
     Assert-BenchmarkHash $Record.provenance.rawSeriesHash
     if ($Record.trials -isnot [array] -or $Record.trials.Count -ne 3) { Stop-BenchmarkData 'trial-count' }
@@ -388,7 +390,7 @@ function Assert-BenchmarkHistoricalSeries {
 function Assert-BenchmarkSnapshot {
     param([string]$Repository, [string]$Commit, [Collections.IDictionary]$Record)
     Assert-BenchmarkSeries $Record
-    if ($Record.schemaVersion -cne 'benchmark-series-v2') { Stop-BenchmarkData 'unbound-execution-protocol' 'stale-record' }
+    if ($Record.schemaVersion -cnotin @('benchmark-series-v2', 'benchmark-observation-series-v1')) { Stop-BenchmarkData 'unbound-execution-protocol' 'stale-record' }
     $Ancestor = Invoke-BenchmarkGit $Repository @('merge-base', '--is-ancestor', $Record.measuredRevision, $Commit) -AllowFailure
     if ($null -eq $Ancestor) { Stop-BenchmarkData 'measured-revision-not-ancestor' 'stale-record' }
     if ((Get-BenchmarkSourceHash $Repository $Commit) -cne $Record.sourceHash -or (Get-BenchmarkSourceHash $Repository $Record.measuredRevision) -cne $Record.sourceHash) { Stop-BenchmarkData 'source-fingerprint' 'stale-record' }
@@ -401,14 +403,14 @@ function Assert-BenchmarkSnapshot {
 
 function Export-BenchmarkSeries {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Repository, [Parameter(Mandatory)][string]$ControlPath, [Parameter(Mandatory)][string[]]$TrialDirectories, [Parameter(Mandatory)][string]$SeriesId, [switch]$SelectCurrent)
+    param([Parameter(Mandatory)][string]$Repository, [string]$ControlPath, [Parameter(Mandatory)][string[]]$TrialDirectories, [Parameter(Mandatory)][string]$SeriesId, [switch]$SelectCurrent, [switch]$Standalone)
     if ($SeriesId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$' -or $TrialDirectories.Count -ne 3) { Stop-BenchmarkData 'export-selection' }
-    $Raw = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $ControlPath))
-    $Controls = ConvertFrom-BenchmarkJson $Raw 33554432
-    if ($Controls.Contains('schemaVersion')) {
+    $Raw = if ($Standalone) { [Text.Encoding]::UTF8.GetBytes((@($TrialDirectories | ForEach-Object { Get-BenchmarkDigest ([IO.File]::ReadAllBytes((Join-Path $_ 'out/run.json'))) }) -join "`n")) } else { [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $ControlPath)) }
+    $Controls = if (-not $Standalone) { ConvertFrom-BenchmarkJson $Raw 33554432 } else { $null }
+    if (-not $Standalone -and $Controls.Contains('schemaVersion')) {
         if ($Controls.schemaVersion -cne 'efficiency-control-v1' -or $Controls.runs.Count -ne 3) { Stop-BenchmarkData 'control-series-schema' }
     }
-    else {
+    elseif (-not $Standalone) {
         Assert-BenchmarkKeys $Controls @('runs')
         if ($Controls.runs.Count -ne 6) { Stop-BenchmarkData 'native-series-count' }
         $NativeIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -426,8 +428,10 @@ function Export-BenchmarkSeries {
         if ($Run.metadata.arm -cnotin @('baseline', 'candidate')) { Stop-BenchmarkData 'raw-arm' }
         if ($null -eq $SelectedArm) { $SelectedArm = $Run.metadata.arm }
         if ($SelectedArm -cne $Run.metadata.arm) { Stop-BenchmarkData 'mixed-selected-arms' }
-        $Saved = @($Controls.runs | Where-Object { $_.metadata.runId -ceq $Run.metadata.runId })
-        if ($Saved.Count -ne 1 -or (ConvertTo-BenchmarkCanonicalJson $Saved[0]) -cne (ConvertTo-BenchmarkCanonicalJson $Run)) { Stop-BenchmarkData 'raw-control-conflict' }
+        if (-not $Standalone) {
+            $Saved = @($Controls.runs | Where-Object { $_.metadata.runId -ceq $Run.metadata.runId })
+            if ($Saved.Count -ne 1 -or (ConvertTo-BenchmarkCanonicalJson $Saved[0]) -cne (ConvertTo-BenchmarkCanonicalJson $Run)) { Stop-BenchmarkData 'raw-control-conflict' }
+        }
         if (-not (Test-EfficiencyObservation $Run) -or -not $Run.judge.valid -or -not (Test-EfficiencyJudge $Run.judge.response $Run.judge.documentHashes)) { Stop-BenchmarkData 'raw-observation-or-judge' }
         $CurrentProtocol = Get-BenchmarkProtocol $Repository $Run.metadata.revision $Run.metadata.compatibility
         if ($null -eq $Protocol) { $Protocol = $CurrentProtocol; $Revision = $Run.metadata.revision; $SourceHash = $Run.metadata.sourceHash }
@@ -480,12 +484,17 @@ function Export-BenchmarkSeries {
         }
     }
     $Record = [ordered]@{
-        schemaVersion = 'benchmark-series-v2'; seriesId = $SeriesId; measuredRevision = $Revision; sourceHash = $SourceHash
+        schemaVersion = $(if ($Standalone) { 'benchmark-observation-series-v1' } else { 'benchmark-series-v2' }); seriesId = $SeriesId; measuredRevision = $Revision; sourceHash = $SourceHash
         protocol = $Protocol
-        provenance = @{ collector = 'benchmark-export-v2'; verifierHashBasis = 'executing-file-verified-against-measured-git'; hostAttestation = 'unavailable'; rawSeriesHash = Get-BenchmarkDigest $Raw }
+        provenance = @{ collector = $(if ($Standalone) { 'benchmark-score-direct-v1' } else { 'benchmark-export-v2' }); verifierHashBasis = 'executing-file-verified-against-measured-git'; hostAttestation = 'unavailable'; rawSeriesHash = Get-BenchmarkDigest $Raw }
         trials = @($Trials | Sort-Object slot)
     }
     $Head = Resolve-BenchmarkCommit $Repository 'HEAD'
+    if ($Standalone) {
+        Assert-BenchmarkSeries $Record -Standalone
+        Assert-BenchmarkScoreBinding $Repository $Head $Record
+        return $Record
+    }
     Assert-BenchmarkSnapshot $Repository $Head $Record
     $Bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-BenchmarkCanonicalJson $Record))
     if ($Bytes.Length -gt 262144) { Stop-BenchmarkData 'record-size' }
@@ -516,7 +525,7 @@ function Write-BenchmarkFile {
 }
 
 function Get-BenchmarkSelection {
-    param([string]$Repository, [string]$Commit, [string]$MissingStatus = 'missing-baseline', [switch]$Historical, [switch]$Descriptive)
+    param([string]$Repository, [string]$Commit, [string]$MissingStatus = 'missing-baseline', [switch]$Historical, [switch]$Descriptive, [switch]$ScoreOnly)
     $Bytes = Get-BenchmarkGitFile $Repository $Commit 'benchmarks/efficiency/current.json' -Optional
     if ($null -eq $Bytes) { Stop-BenchmarkData 'no-selected-record' $MissingStatus }
     $Pointer = ConvertFrom-BenchmarkJson $Bytes
@@ -527,10 +536,23 @@ function Get-BenchmarkSelection {
     $RecordBytes = Get-BenchmarkGitFile $Repository $Commit ("benchmarks/efficiency/" + $Pointer.recordPath)
     if ((Get-BenchmarkDigest $RecordBytes) -cne $Pointer.sha256) { Stop-BenchmarkData 'pointer-digest' }
     $Record = ConvertFrom-BenchmarkJson $RecordBytes
+    if ($Record.schemaVersion -ceq 'benchmark-score-v1') {
+        Assert-BenchmarkScoreRecord $Record
+        if ($Record.seriesId -cne $SeriesId) { Stop-BenchmarkData 'pointer-series' }
+        if ($ScoreOnly) { return @{ record = $Record; sha256 = $Pointer.sha256; bytes = $RecordBytes } }
+        if ($Record.kind -ne 'formal' -or $Record.score.state -ne 'measured' -or $Record.evidence.schemaVersion -cnotin @('benchmark-series-v1', 'benchmark-series-v2', 'benchmark-observation-series-v1')) {
+            Stop-BenchmarkData 'score-not-comparable' 'not-evaluable'
+        }
+        $Record = $Record.evidence
+    }
     Assert-BenchmarkSeries $Record
-    if ($Record.seriesId -cne $SeriesId) { Stop-BenchmarkData 'pointer-series' }
+    if ($Record.seriesId -cne $SeriesId) {
+        # A scored envelope retains the original immutable series identity.
+        $Original = ConvertFrom-BenchmarkJson $RecordBytes
+        if ($Original.schemaVersion -cne 'benchmark-score-v1') { Stop-BenchmarkData 'pointer-series' }
+    }
     if ($Historical -or $Descriptive) {
-        if ($Historical -and $Record.schemaVersion -cne 'benchmark-series-v2') { Stop-BenchmarkData 'unbound-execution-protocol' }
+        if ($Historical -and $Record.schemaVersion -cnotin @('benchmark-series-v2', 'benchmark-observation-series-v1')) { Stop-BenchmarkData 'unbound-execution-protocol' }
         Assert-BenchmarkHistoricalSeries $Repository $Record
         $Ancestor = Invoke-BenchmarkGit $Repository @('merge-base', '--is-ancestor', $Record.measuredRevision, $Commit) -AllowFailure
         if ($null -eq $Ancestor) { Stop-BenchmarkData 'measured-revision-not-ancestor' }
@@ -619,7 +641,7 @@ function Get-BenchmarkProtocolDifferences {
 function Compare-BenchmarkSeries {
     param([Collections.IDictionary]$Base, [Collections.IDictionary]$Head, [Collections.IDictionary]$Policy, [switch]$DeploymentComparison, [switch]$HistoricalReference)
     Assert-BenchmarkPolicy $Policy; Assert-BenchmarkSeries $Base; Assert-BenchmarkSeries $Head
-    if ($HistoricalReference -and ($Base.schemaVersion -cne 'benchmark-series-v2' -or $Head.schemaVersion -cne 'benchmark-series-v2')) { Stop-BenchmarkData 'unbound-execution-protocol' 'incompatible' }
+    if ($HistoricalReference -and ($Base.schemaVersion -cnotin @('benchmark-series-v2', 'benchmark-observation-series-v1') -or $Head.schemaVersion -cnotin @('benchmark-series-v2', 'benchmark-observation-series-v1'))) { Stop-BenchmarkData 'unbound-execution-protocol' 'incompatible' }
     $Differences = Get-BenchmarkProtocolDifferences $Base.protocol $Head.protocol -DeploymentComparison:$DeploymentComparison -HistoricalReference:$HistoricalReference
     $Before = Get-BenchmarkStatistics $Base; $After = Get-BenchmarkStatistics $Head
     $Reasons = [Collections.Generic.List[string]]::new(); $Deltas = [ordered]@{}
@@ -998,6 +1020,10 @@ function Write-BenchmarkReport {
     Write-BenchmarkFile (Join-Path $OutputDirectory 'report.json') (ConvertTo-BenchmarkCanonicalJson $Report)
     Write-BenchmarkFile (Join-Path $OutputDirectory 'report.md') (($Lines -join "`n") + "`n")
     Write-BenchmarkFile (Join-Path $OutputDirectory 'badge.svg') $Svg
+    if ($After) {
+        $Score = @{ value = $After.quality.total.median; state = 'measured'; judgedSlots = 3; expectedSlots = 3 }
+        Write-BenchmarkScoreBadge -Score $Score -Path (Join-Path $OutputDirectory 'badge.svg') -Functional $After.outcomes.functional -Completed $After.outcomes.completed -Comparison $Report.status -Timing "avg benchmark time $(Format-Duration $AverageSeconds)"
+    }
 }
 
 function Write-BenchmarkUnavailableReport {
@@ -1049,6 +1075,15 @@ function Write-BenchmarkUnavailableReport {
     Write-BenchmarkFile (Join-Path $OutputDirectory 'report.json') (ConvertTo-BenchmarkCanonicalJson $Report)
     Write-BenchmarkFile (Join-Path $OutputDirectory 'report.md') (($Lines -join "`n") + "`n")
     Write-BenchmarkFile (Join-Path $OutputDirectory 'badge.svg') "<svg xmlns=`"http://www.w3.org/2000/svg`" width=`"260`" height=`"28`" role=`"img`" aria-label=`"benchmark unavailable`"><title>benchmark unavailable</title><rect width=`"260`" height=`"28`" rx=`"4`" fill=`"#6b7280`"/><text x=`"130`" y=`"18`" text-anchor=`"middle`" fill=`"white`" font-family=`"Verdana,Arial,sans-serif`" font-size=`"12`">benchmark unavailable</text></svg>`n"
+    $Current = if ($Report.Contains('availability')) { $Report.availability['head'] } else { $null }
+    if ($Report.headStatistics -and $Current -and $Current['status'] -eq 'validated-current') {
+        $Stats = $Report.headStatistics
+        Write-BenchmarkScoreBadge -Score @{ value = $Stats.quality.total.median; state = 'measured'; judgedSlots = 3; expectedSlots = 3 } -Path (Join-Path $OutputDirectory 'badge.svg') -Functional $Stats.outcomes.functional -Completed $Stats.outcomes.completed
+    }
+    elseif ($Report.Contains('headCampaign') -and $Report.headCampaign -and $Report.Contains('availability') -and -not $Report.availability.Contains('campaign')) {
+        $Trials = @($Report.headCampaign.trials)
+        Write-BenchmarkScoreBadge -Score (Get-BenchmarkScore -Trials $Trials) -Path (Join-Path $OutputDirectory 'badge.svg') -Functional @($Trials | Where-Object { $_.outcomes.functional }).Count -Completed @($Trials | Where-Object { $_.outcomes.completed }).Count
+    }
 }
 
 function Write-BenchmarkSeriesReport {
@@ -1065,9 +1100,10 @@ function Write-BenchmarkSeriesReport {
 }
 
 function Assert-BenchmarkCampaign {
-    param([Collections.IDictionary]$Record)
+    param([Collections.IDictionary]$Record, [switch]$ScorePayload)
     Assert-BenchmarkKeys $Record @('schemaVersion', 'campaignId', 'measuredRevision', 'sourceHash', 'protocol', 'provenance', 'trials')
-    if ($Record.schemaVersion -cne 'benchmark-campaign-v1' -or $Record.campaignId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$') { Stop-BenchmarkData 'campaign-identity' }
+    $Schema = if ($ScorePayload) { 'benchmark-trials-v1' } else { 'benchmark-campaign-v1' }
+    if ($Record.schemaVersion -cne $Schema -or $Record.campaignId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$') { Stop-BenchmarkData 'campaign-identity' }
     Assert-BenchmarkHash $Record.measuredRevision 40
     Assert-BenchmarkHash $Record.sourceHash
     Assert-BenchmarkKeys $Record.protocol ($script:ProtocolLabels + $script:ProtocolDigests + @('maxCredits', 'continuations'))
@@ -1075,9 +1111,10 @@ function Assert-BenchmarkCampaign {
     foreach ($Key in $script:ProtocolDigests) { Assert-BenchmarkHash $Record.protocol[$Key] }
     Assert-BenchmarkNumber $Record.protocol.maxCredits
     Assert-BenchmarkNumber $Record.protocol.continuations -Integer
-    if ($Record.protocol.evaluationPolicy -cne 'baseline-observation-v1') { Stop-BenchmarkData 'evaluation-policy' }
+    if ($Record.protocol.evaluationPolicy -cne 'baseline-observation-v1' -and (-not $ScorePayload -or $Record.protocol.evaluationPolicy -cne 'strict-v1')) { Stop-BenchmarkData 'evaluation-policy' }
     Assert-BenchmarkKeys $Record.provenance @('collector', 'hostAttestation')
-    if ($Record.provenance.collector -cne 'benchmark-campaign-export-v1' -or $Record.provenance.hostAttestation -cne 'unavailable') { Stop-BenchmarkData 'campaign-provenance' }
+    $Collector = if ($ScorePayload) { 'benchmark-score-export-v1' } else { 'benchmark-campaign-export-v1' }
+    if ($Record.provenance.collector -cne $Collector -or $Record.provenance.hostAttestation -cne 'unavailable') { Stop-BenchmarkData 'campaign-provenance' }
     if ($Record.trials -isnot [array] -or $Record.trials.Count -lt 1 -or $Record.trials.Count -gt 3) { Stop-BenchmarkData 'campaign-trials' }
     $Ids = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $Slots = [Collections.Generic.HashSet[int]]::new()
@@ -1146,6 +1183,22 @@ function Assert-BenchmarkCampaignBinding {
 function Export-BenchmarkCampaign {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Repository, [Parameter(Mandatory)][string[]]$TrialDirectories, [Parameter(Mandatory)][string]$CampaignId, [string]$OutputDirectory = (Join-Path $Repository 'benchmarks/efficiency'))
+    $Record = Read-BenchmarkTrialEvidence -Repository $Repository -TrialDirectories $TrialDirectories -CampaignId $CampaignId
+    Assert-BenchmarkCampaignBinding $Repository (Resolve-BenchmarkCommit $Repository 'HEAD') $Record
+    $Bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-BenchmarkCanonicalJson $Record))
+    if ($Bytes.Length -gt 262144) { Stop-BenchmarkData 'record-size' }
+    [void][IO.Directory]::CreateDirectory((Join-Path $OutputDirectory 'campaigns'))
+    $File = [IO.File]::Open((Join-Path $OutputDirectory "campaigns/$CampaignId.json"), [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try { $File.Write($Bytes) } finally { $File.Dispose() }
+    Write-BenchmarkFile (Join-Path $OutputDirectory 'latest-campaign.json') (ConvertTo-BenchmarkCanonicalJson @{
+        schemaVersion = 'benchmark-campaign-pointer-v1'; campaignPath = "campaigns/$CampaignId.json"; sha256 = Get-BenchmarkDigest $Bytes
+    })
+    Write-BenchmarkCampaignReport $Record $OutputDirectory
+    $Record
+}
+
+function Read-BenchmarkTrialEvidence {
+    param([string]$Repository, [string[]]$TrialDirectories, [string]$CampaignId, [switch]$Standalone, [switch]$Local)
     if ($CampaignId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$' -or $TrialDirectories.Count -lt 1 -or $TrialDirectories.Count -gt 3) { Stop-BenchmarkData 'campaign-selection' }
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
     function Get-CampaignFileHash([string]$Path) {
@@ -1160,18 +1213,36 @@ function Export-BenchmarkCampaign {
     }
     $Trials = @(); $Protocol = $null; $Revision = $null; $SourceHash = $null; $Arm = $null
     foreach ($Directory in $TrialDirectories) {
-        $RunPath = Join-Path $Directory 'out/run.json'
+        $RunPath = Join-Path $Directory $(if ($Local) { 'out/diagnostic.json' } else { 'out/run.json' })
         $RunHash = Get-CampaignFileHash $RunPath
         $RunBytes = [IO.File]::ReadAllBytes($RunPath)
         if ((Get-BenchmarkDigest $RunBytes) -cne $RunHash) { Stop-BenchmarkData 'campaign-run-changed' }
         $Run = ConvertFrom-BenchmarkJson $RunBytes 16777216
-        if (-not (Test-EfficiencyObservation $Run)) { Stop-BenchmarkData 'raw-observation' }
+        if ($Local) {
+            if ($Run.schemaVersion -cne 'efficiency-local-test-v1' -or $Run.localDiagnostic -ne $true -or $Run.collection.recorded -ne $false) { Stop-BenchmarkData 'local-identity' }
+            if ((Get-EfficiencyTreeHash (Join-Path $Repository 'squad-src')) -cne $Run.metadata.sourceHash) { Stop-BenchmarkData 'local-source-drift' }
+            foreach ($Key in $script:ProtocolPaths.Keys) {
+                $Root = if ($Key -eq 'converterHash') { $Repository } else { [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..')) }
+                if ((Get-FileHash -LiteralPath (Join-Path $Root $script:ProtocolPaths[$Key])).Hash -ine $Run.metadata.compatibility[$Key]) { Stop-BenchmarkData 'local-protocol-drift' }
+            }
+        }
+        elseif (-not (Test-EfficiencyObservation $Run) -and (-not $Standalone -or -not (Test-EfficiencyRun $Run))) { Stop-BenchmarkData 'raw-observation' }
         if ($Run.metadata.arm -cnotin @('baseline', 'candidate')) { Stop-BenchmarkData 'raw-arm' }
-        $CurrentProtocol = Get-BenchmarkProtocol $Repository $Run.metadata.revision $Run.metadata.compatibility
+        $CurrentProtocol = if ($Local) {
+            $Compatibility = @{} + $Run.metadata.compatibility
+            foreach ($Key in $script:ProtocolPaths.Keys) {
+                $Compatibility[$Key] = Get-BenchmarkDigest (Get-BenchmarkGitFile $Repository $Run.metadata.revision $script:ProtocolPaths[$Key] 8388608)
+            }
+            $ProtocolCopy = Get-BenchmarkProtocol $Repository $Run.metadata.revision $Compatibility
+            foreach ($Key in $script:ProtocolPaths.Keys) { $ProtocolCopy[$Key] = ([string]$Run.metadata.compatibility[$Key]).ToLowerInvariant() }
+            $ProtocolCopy
+        } else { Get-BenchmarkProtocol $Repository $Run.metadata.revision $Run.metadata.compatibility }
         if ($null -eq $Protocol) { $Protocol = $CurrentProtocol; $Revision = $Run.metadata.revision; $SourceHash = $Run.metadata.sourceHash; $Arm = $Run.metadata.arm }
         if ((ConvertTo-BenchmarkCanonicalJson $CurrentProtocol) -cne (ConvertTo-BenchmarkCanonicalJson $Protocol) -or $Run.metadata.revision -cne $Revision -or $Run.metadata.sourceHash -cne $SourceHash -or $Run.metadata.arm -cne $Arm) { Stop-BenchmarkData 'mixed-series' }
-        if (($Run.stages.name | Sort-Object) -join ',' -cne 'build,init,requirements') { Stop-BenchmarkData 'stage-count' }
-        [decimal]$Wall = 0; $Stages = [ordered]@{}
+        $StageNames = @($Run.stages.name)
+        if (-not $Standalone -and ($StageNames | Sort-Object) -join ',' -cne 'build,init,requirements') { Stop-BenchmarkData 'stage-count' }
+        if ($StageNames.Count -lt 1 -or @($StageNames | Sort-Object -Unique).Count -ne $StageNames.Count -or @($StageNames | Where-Object { $_ -cnotin @('init', 'requirements', 'build') }).Count) { Stop-BenchmarkData 'stage-count' }
+        [decimal]$Wall = 0; $Stages = [ordered]@{ init = $false; requirements = $false; build = $false }
         foreach ($Stage in $Run.stages) { Assert-BenchmarkNumber $Stage.process.seconds; $Wall += [decimal]$Stage.process.seconds; $Stages[$Stage.name] = $Stage.passed }
         $Workflow = Get-BenchmarkRawMetrics $Run.metrics $Wall
         $WorkflowHash = ([string]$Run.metrics.evidence.sha256).ToLowerInvariant()
@@ -1222,20 +1293,14 @@ function Export-BenchmarkCampaign {
         }
     }
     $Record = [ordered]@{
-        schemaVersion = 'benchmark-campaign-v1'; campaignId = $CampaignId; measuredRevision = $Revision; sourceHash = $SourceHash
-        protocol = $Protocol; provenance = @{ collector = 'benchmark-campaign-export-v1'; hostAttestation = 'unavailable' }
+        schemaVersion = $(if ($Standalone) { 'benchmark-trials-v1' } else { 'benchmark-campaign-v1' }); campaignId = $CampaignId; measuredRevision = $Revision; sourceHash = $SourceHash.ToLowerInvariant()
+        protocol = $Protocol; provenance = @{ collector = $(if ($Standalone) { 'benchmark-score-export-v1' } else { 'benchmark-campaign-export-v1' }); hostAttestation = 'unavailable' }
         trials = @($Trials | Sort-Object slot)
     }
-    Assert-BenchmarkCampaignBinding $Repository (Resolve-BenchmarkCommit $Repository 'HEAD') $Record
-    $Bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-BenchmarkCanonicalJson $Record))
-    if ($Bytes.Length -gt 262144) { Stop-BenchmarkData 'record-size' }
-    [void][IO.Directory]::CreateDirectory((Join-Path $OutputDirectory 'campaigns'))
-    $File = [IO.File]::Open((Join-Path $OutputDirectory "campaigns/$CampaignId.json"), [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    try { $File.Write($Bytes) } finally { $File.Dispose() }
-    Write-BenchmarkFile (Join-Path $OutputDirectory 'latest-campaign.json') (ConvertTo-BenchmarkCanonicalJson @{
-        schemaVersion = 'benchmark-campaign-pointer-v1'; campaignPath = "campaigns/$CampaignId.json"; sha256 = Get-BenchmarkDigest $Bytes
-    })
-    Write-BenchmarkCampaignReport $Record $OutputDirectory
+    Assert-BenchmarkCampaign $Record -ScorePayload:$Standalone
+    if (-not $Local) {
+        if ((Get-BenchmarkSourceHash $Repository $Revision) -cne $Record.sourceHash) { Stop-BenchmarkData 'measured-source-mismatch' }
+    }
     $Record
 }
 
@@ -1255,6 +1320,217 @@ function Get-BenchmarkCampaignSelection {
     if ($Descriptive -and $null -eq (Invoke-BenchmarkGit $Repository @('merge-base', '--is-ancestor', $Record.measuredRevision, $Commit) -AllowFailure)) { Stop-BenchmarkData 'measured-revision-not-ancestor' 'stale-record' }
     if ($Record.campaignId -cne $Id) { Stop-BenchmarkData 'campaign-pointer-id' }
     $Record
+}
+
+function Get-BenchmarkScore {
+    param([object[]]$Trials = @(), [ValidateRange(1, 3)][int]$ExpectedSlots = 3, [string[]]$Reasons = @())
+    if ($null -eq $Trials) { $Trials = @() }
+    $Values = @(foreach ($Trial in $Trials) {
+        if ($null -ne $Trial.quality) {
+            Assert-BenchmarkKeys $Trial.quality $script:Dimensions
+            foreach ($Value in $Trial.quality.Values) { Assert-BenchmarkNumber $Value -Integer -Maximum 20 }
+            ($Trial.quality.Values | Measure-Object -Sum).Sum
+        }
+    })
+    if ($Trials.Count -gt $ExpectedSlots) { Stop-BenchmarkData 'score-slots' }
+    $Sorted = @($Values | Sort-Object)
+    $Median = if ($Sorted.Count -eq 1) { $Sorted[0] } elseif ($Sorted.Count -eq 2) { ([decimal]$Sorted[0] + [decimal]$Sorted[1]) / 2 } elseif ($Sorted.Count -eq 3) { $Sorted[1] } else { 0 }
+    @{
+        policy = 'observed-document-quality-v1'; value = $Median
+        maximum = 100; state = $(if (-not $Values.Count) { 'failed' } elseif ($Values.Count -eq $ExpectedSlots) { 'measured' } else { 'partial' })
+        judgedSlots = $Values.Count; expectedSlots = $ExpectedSlots; reasons = @($Reasons)
+    }
+}
+
+function Write-BenchmarkScoreBadge {
+    param([Collections.IDictionary]$Score, [string]$Path, [int]$Functional = 0, [int]$Completed = 0, [switch]$Local, [string]$Comparison = 'unavailable', [string]$Timing = '')
+    $Number = ([decimal]$Score.value).ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
+    $Label = if ($Score.state -eq 'failed') { "score $Number/100 | measurement failed / not judged" } else { "doc quality $Number/100 | $($Score.state) $($Score.judgedSlots)/$($Score.expectedSlots)" }
+    $Label += " | functional $Functional/$($Score.expectedSlots) | workflow $Completed/$($Score.expectedSlots)"
+    if ($Local) { $Label += ' | local single-sample' }
+    if ($Timing) { $Label += " | $Timing" }
+    $Label += " | comparison $Comparison"
+    $Color = if ($Score.state -eq 'failed') { '#b91c1c' } elseif ($Local -or $Score.state -ne 'measured' -or $Completed -lt $Score.expectedSlots -or $Comparison -eq 'regression') { '#b45309' } else { '#16723b' }
+    $Text = [Security.SecurityElement]::Escape($Label)
+    Write-BenchmarkFile $Path "<svg xmlns=`"http://www.w3.org/2000/svg`" width=`"1200`" height=`"28`" role=`"img`" aria-label=`"$Text`"><title>$Text</title><rect width=`"1200`" height=`"28`" rx=`"4`" fill=`"$Color`"/><text x=`"600`" y=`"18`" text-anchor=`"middle`" fill=`"white`" font-family=`"Verdana,Arial,sans-serif`" font-size=`"12`">$Text</text></svg>`n"
+}
+
+function Assert-BenchmarkScoreRecord {
+    param([Collections.IDictionary]$Record)
+    Assert-BenchmarkKeys $Record @('schemaVersion', 'seriesId', 'kind', 'evidence', 'score')
+    Assert-BenchmarkKeys $Record.score @('policy', 'value', 'maximum', 'state', 'judgedSlots', 'expectedSlots', 'reasons')
+    if ($Record.schemaVersion -cne 'benchmark-score-v1' -or $Record.seriesId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$' -or $Record.kind -cnotin @('formal', 'local', 'failed')) { Stop-BenchmarkData 'score-identity' }
+    $Trials = @()
+    if ($null -ne $Record.evidence) {
+        if ($Record.kind -eq 'failed') { Stop-BenchmarkData 'failed-score-evidence' }
+        if ($Record.evidence -isnot [Collections.IDictionary] -or -not $Record.evidence.Contains('schemaVersion')) { Stop-BenchmarkData 'score-evidence-shape' }
+        if ($Record.evidence.schemaVersion -in @('benchmark-series-v1', 'benchmark-series-v2', 'benchmark-observation-series-v1')) { Assert-BenchmarkSeries $Record.evidence }
+        else { Assert-BenchmarkCampaign $Record.evidence -ScorePayload:($Record.evidence.schemaVersion -ceq 'benchmark-trials-v1') }
+        $Trials = @($Record.evidence.trials)
+    }
+    elseif ($Record.kind -notin @('failed', 'local')) { Stop-BenchmarkData 'score-evidence-required' }
+    if ($Record.score.reasons -isnot [array] -or @($Record.score.reasons | Where-Object { $_ -isnot [string] -or $_ -cnotmatch '^[a-z0-9][a-z0-9/-]{0,95}$' }).Count) { Stop-BenchmarkData 'score-reason' }
+    $Expected = Get-BenchmarkScore -Trials $Trials -ExpectedSlots $(if ($Record.kind -eq 'local') { 1 } else { 3 }) -Reasons $Record.score.reasons
+    if ((ConvertTo-BenchmarkCanonicalJson $Expected) -cne (ConvertTo-BenchmarkCanonicalJson $Record.score)) { Stop-BenchmarkData 'derived-score' }
+}
+
+function Write-BenchmarkScoreReport {
+    param([Collections.IDictionary]$Record, [string]$OutputDirectory, [Collections.IDictionary]$Comparison = @{ status = 'unavailable'; reason = 'no-compatible-parent'; exitCode = 2 })
+    Assert-BenchmarkScoreRecord $Record
+    $Trials = @(if ($Record.evidence) { $Record.evidence.trials })
+    $Functional = @($Trials | Where-Object { $_.outcomes.functional }).Count
+    $Completed = @($Trials | Where-Object { $_.outcomes.completed }).Count
+    $Report = @{ schemaVersion = 'benchmark-score-report-v1'; candidate = $Record; score = $Record.score; comparison = $Comparison; functional = $Functional; completed = $Completed }
+    $Lines = @('# Benchmark score', '', "**Score: $($Record.score.value)/100** ($($Record.score.state); judged $($Record.score.judgedSlots)/$($Record.score.expectedSlots)).",
+        '', "Functional: $Functional/$($Record.score.expectedSlots). Workflow: $Completed/$($Record.score.expectedSlots).",
+        '', "Comparison: **$($Comparison.status)**. No improvement is claimed when comparison is unavailable.",
+        '', 'A failure score of zero means no trustworthy grade; missing raw quality and costs remain unknown. A measured zero is an actual judge grade. Local/single-sample and partial scores are descriptive only.',
+        '', 'Integrity hashes do not authenticate execution or approve quality.')
+    if ($Record.kind -eq 'local') { $Lines += @('', '**Local single-sample working-tree evidence; not a formal series.**') }
+    if ($Trials.Count) {
+        function Format-ScoreNumber($Value) {
+            if ($null -eq $Value) { 'unknown' } else { ([decimal]$Value).ToString('0.#######', [Globalization.CultureInfo]::InvariantCulture) }
+        }
+        $Lines += @('', '| Slot | Quality /100 | Workflow credits | Judge credits | Measured workflow seconds |',
+            '|---:|---:|---:|---:|---:|')
+        foreach ($Trial in $Trials) {
+            $Quality = if ($null -ne $Trial.quality) { ($Trial.quality.Values | Measure-Object -Sum).Sum } else { $null }
+            $JudgeCredits = if ($null -ne $Trial.judge) { $Trial.judge.credits } else { $null }
+            $Lines += "| $($Trial.slot) | $(Format-ScoreNumber $Quality) | $(Format-ScoreNumber $Trial.workflow.credits) | $(Format-ScoreNumber $JudgeCredits) | $(Format-ScoreNumber $Trial.workflow.measuredProcessWallSeconds) |"
+        }
+    }
+    if ($Record.score.reasons.Count) { $Lines += @('', 'Reasons: ' + ($Record.score.reasons -join ', ')) }
+    if ($Record.evidence) { $Lines += @('', "Measured revision: ``$($Record.evidence.measuredRevision)``.", "Source hash: ``$($Record.evidence.sourceHash)``.") }
+    Write-BenchmarkFile (Join-Path $OutputDirectory 'report.json') (ConvertTo-BenchmarkCanonicalJson $Report)
+    Write-BenchmarkFile (Join-Path $OutputDirectory 'report.md') (($Lines -join "`n") + "`n")
+    Write-BenchmarkScoreBadge -Score $Record.score -Path (Join-Path $OutputDirectory 'badge.svg') -Functional $Functional -Completed $Completed -Local:($Record.kind -eq 'local') -Comparison $Comparison.status
+}
+
+function Export-BenchmarkScore {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SeriesId, [Parameter(Mandatory)][string]$OutputDirectory,
+        [string]$Repository, [string[]]$TrialDirectories = @(), [Collections.IDictionary]$Evidence,
+        [switch]$Local, [string]$FailureReason, [switch]$SelectCurrent, [string]$SelectedCommit
+    )
+    if ($SeriesId -cnotmatch '^[a-z0-9][a-z0-9-]{0,95}$') { Stop-BenchmarkData 'score-id' }
+    if ($TrialDirectories.Count) {
+        $Evidence = Read-BenchmarkTrialEvidence -Repository $Repository -TrialDirectories $TrialDirectories -CampaignId $SeriesId -Standalone -Local:$Local
+        if (-not $Local -and $Evidence.trials.Count -eq 3 -and @($Evidence.trials | Where-Object { $null -eq $_.quality -or $null -eq $_.judge }).Count -eq 0) {
+            try { $Evidence = Export-BenchmarkSeries -Repository $Repository -TrialDirectories $TrialDirectories -SeriesId $SeriesId -Standalone }
+            catch [IO.InvalidDataException] {
+                Write-Warning "Strict observation details are unavailable ($($_.Exception.Message)); retaining validated descriptive grades."
+                if (-not $FailureReason) { $FailureReason = 'strict-detail-unavailable' }
+            }
+        }
+    }
+    if ($Evidence -and -not $Local) {
+        if ($Evidence.schemaVersion -in @('benchmark-series-v1', 'benchmark-series-v2', 'benchmark-observation-series-v1')) { Assert-BenchmarkHistoricalSeries $Repository $Evidence }
+        else {
+            Assert-BenchmarkCampaign $Evidence -ScorePayload:($Evidence.schemaVersion -ceq 'benchmark-trials-v1')
+            if ((Get-BenchmarkSourceHash $Repository $Evidence.measuredRevision) -cne $Evidence.sourceHash) { Stop-BenchmarkData 'source-fingerprint' }
+        }
+        if (-not $SelectedCommit) { $SelectedCommit = Resolve-BenchmarkCommit $Repository 'HEAD' }
+        Assert-BenchmarkScoreBinding -Repository $Repository -Commit $SelectedCommit -Evidence $Evidence
+    }
+    $Record = @{
+        schemaVersion = 'benchmark-score-v1'; seriesId = $SeriesId
+        kind = $(if ($Local) { 'local' } elseif (-not $Evidence) { 'failed' } else { 'formal' })
+        evidence = $Evidence
+        score = Get-BenchmarkScore -Trials $(if ($Evidence) { @($Evidence.trials) } else { @() }) -ExpectedSlots $(if ($Local) { 1 } else { 3 }) -Reasons @($(if ($FailureReason) { $FailureReason } elseif (-not $Evidence) { 'no-run-evidence' }))
+    }
+    Assert-BenchmarkScoreRecord $Record
+    $Text = ConvertTo-BenchmarkCanonicalJson $Record
+    if ([Text.Encoding]::UTF8.GetByteCount($Text) -gt 262144) { Stop-BenchmarkData 'record-size' }
+    $RecordPath = Join-Path $OutputDirectory "records/$SeriesId.json"
+    [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($RecordPath)))
+    if (Test-Path -LiteralPath $RecordPath) {
+        if ([IO.File]::ReadAllText($RecordPath) -cne $Text) { Stop-BenchmarkData 'immutable-score-collision' }
+    }
+    else {
+        $File = [IO.File]::Open($RecordPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try { $File.Write([Text.Encoding]::UTF8.GetBytes($Text)) } finally { $File.Dispose() }
+    }
+    $ReportDirectory = if ($SelectCurrent) { Join-Path $OutputDirectory ('.score-' + [guid]::NewGuid().ToString('N')) } else { $OutputDirectory }
+    Write-BenchmarkScoreReport $Record $ReportDirectory
+    if ($SelectCurrent) {
+        $Published = [Collections.Generic.List[object]]::new()
+        try {
+            foreach ($Name in @('report.json', 'report.md', 'badge.svg', 'current.json')) {
+                $Path = Join-Path $OutputDirectory $Name
+                $Before = if (Test-Path -LiteralPath $Path) { [IO.File]::ReadAllText($Path) } else { $null }
+                $After = if ($Name -eq 'current.json') {
+                    ConvertTo-BenchmarkCanonicalJson @{ schemaVersion = 'benchmark-pointer-v1'; recordPath = "records/$SeriesId.json"; sha256 = Get-BenchmarkDigest ([Text.Encoding]::UTF8.GetBytes($Text)) }
+                } else { [IO.File]::ReadAllText((Join-Path $ReportDirectory $Name)) }
+                Write-BenchmarkFile $Path $After
+                $Published.Add(@{ path = $Path; before = $Before; after = $After })
+            }
+        }
+        catch {
+            $PublishFailure = $_
+            for ($Index = $Published.Count - 1; $Index -ge 0; $Index--) {
+                $Item = $Published[$Index]
+                if ([IO.File]::ReadAllText($Item.path) -cne $Item.after) { Stop-BenchmarkData 'score-publication-conflict' 'operational-error' }
+                if ($null -eq $Item.before) { [IO.File]::Delete($Item.path) } else { Write-BenchmarkFile $Item.path $Item.before }
+            }
+            throw $PublishFailure
+        }
+        foreach ($Name in @('report.json', 'report.md', 'badge.svg')) { [IO.File]::Delete((Join-Path $ReportDirectory $Name)) }
+        [IO.Directory]::Delete($ReportDirectory)
+    }
+    $Record
+}
+
+function Assert-BenchmarkScoreBinding {
+    param([string]$Repository, [string]$Commit, [Collections.IDictionary]$Evidence)
+    $Revision = $Evidence.measuredRevision
+    if ($null -eq (Invoke-BenchmarkGit $Repository @('merge-base', '--is-ancestor', $Revision, $Commit) -AllowFailure)) { Stop-BenchmarkData 'measured-revision-not-ancestor' 'stale-record' }
+    foreach ($Ref in @($Revision, $Commit)) {
+        if ((Get-BenchmarkSourceHash $Repository $Ref) -cne $Evidence.sourceHash) { Stop-BenchmarkData 'source-fingerprint' 'stale-record' }
+        foreach ($Key in $script:ProtocolPaths.Keys) {
+            if (-not $Evidence.protocol.Contains($Key)) { Stop-BenchmarkData 'unbound-execution-protocol' 'stale-record' }
+            if ((Get-BenchmarkDigest (Get-BenchmarkGitFile $Repository $Ref $script:ProtocolPaths[$Key] 8388608)) -cne $Evidence.protocol[$Key]) { Stop-BenchmarkData "protocol-$Key" 'stale-record' }
+        }
+    }
+}
+
+function Write-BenchmarkCandidateReport {
+    [CmdletBinding()]
+    param([string]$Repository, [string]$HeadRef = 'HEAD', [Parameter(Mandatory)][string]$OutputDirectory, [string]$BaseRef)
+    $Id = 'score-' + [guid]::NewGuid().ToString('N')
+    try {
+        $Commit = Resolve-BenchmarkCommit $Repository $HeadRef
+        try {
+            $Selection = Get-BenchmarkSelection $Repository $Commit -MissingStatus 'missing-candidate' -ScoreOnly
+            $Evidence = $Selection.record
+        }
+        catch {
+            $SelectionFailure = $_
+            if ((Get-BenchmarkFailure $_.Exception.Message).reason -ne 'no-selected-record') { throw }
+            $Evidence = Get-BenchmarkCampaignSelection $Repository $Commit
+            if (-not $Evidence) { throw $SelectionFailure }
+        }
+        if ($Evidence.schemaVersion -eq 'benchmark-score-v1') {
+            $Record = $Evidence
+            if ($Record.kind -eq 'formal') { Assert-BenchmarkScoreBinding $Repository $Commit $Record.evidence }
+            Write-BenchmarkScoreReport $Record $OutputDirectory
+            $Text = ConvertTo-BenchmarkCanonicalJson $Record
+            Write-BenchmarkFile (Join-Path $OutputDirectory "records/$($Record.seriesId).json") $Text
+        }
+        else { $Record = Export-BenchmarkScore -SeriesId $Id -OutputDirectory $OutputDirectory -Repository $Repository -Evidence $Evidence -SelectedCommit $Commit }
+    }
+    catch [IO.InvalidDataException] {
+        $Failure = Get-BenchmarkFailure $_.Exception.Message
+        $Record = Export-BenchmarkScore -SeriesId $Id -OutputDirectory $OutputDirectory -FailureReason $Failure.reason
+        return @{ score = $Record.score; candidateOutcome = 'invalid'; exitCode = 1; comparison = @{ status = 'unavailable'; reason = $Failure.reason } }
+    }
+    $Comparison = @{ status = 'unavailable'; reason = 'parent-not-selected'; exitCode = 2 }
+    if ($BaseRef) {
+        $Strict = Compare-BranchBenchmark -Repository $Repository -BaseRef $BaseRef -HeadRef $HeadRef
+        $Comparison = @{ status = $(if ($Strict.status -in @('unchanged', 'no-regression', 'regression')) { $Strict.status } else { 'unavailable' }); reason = $Strict.reasons -join ','; exitCode = $Strict.exitCode; strict = $Strict }
+        Write-BenchmarkScoreReport $Record (Join-Path $OutputDirectory 'comparison') -Comparison $Comparison
+    }
+    @{ score = $Record.score; candidateOutcome = $Record.kind; exitCode = $(if ($Record.score.state -eq 'failed') { 1 } elseif ($Comparison.status -eq 'regression') { 3 } else { 0 }); comparison = $Comparison }
 }
 
 function Write-BenchmarkCampaignReport {
@@ -1301,6 +1577,8 @@ function Write-BenchmarkCampaignReport {
     Write-BenchmarkFile (Join-Path $OutputDirectory 'campaign-report.md') (($Lines -join "`n") + "`n")
     $Badge = if ($Complete -and $null -ne $Report.summary.qualityMedian) { 'benchmark unavailable: observational campaign' } else { 'benchmark unavailable: incomplete observational campaign' }
     Write-BenchmarkFile (Join-Path $OutputDirectory 'campaign-badge.svg') "<svg xmlns=`"http://www.w3.org/2000/svg`" width=`"600`" height=`"28`" role=`"img`" aria-label=`"$Badge`"><title>$Badge</title><rect width=`"600`" height=`"28`" rx=`"4`" fill=`"#6b7280`"/><text x=`"300`" y=`"18`" text-anchor=`"middle`" fill=`"white`" font-family=`"Verdana,Arial,sans-serif`" font-size=`"12`">$Badge</text></svg>`n"
+    Write-BenchmarkScoreBadge -Score (Get-BenchmarkScore -Trials @($Record.trials)) -Path (Join-Path $OutputDirectory 'campaign-badge.svg') -Functional @($Record.trials | Where-Object { $_.outcomes.functional }).Count -Completed @($Record.trials | Where-Object { $_.outcomes.completed }).Count
 }
 
+Export-ModuleMember -Function Get-BenchmarkScore, Assert-BenchmarkScoreRecord, Export-BenchmarkScore, Write-BenchmarkScoreReport, Write-BenchmarkCandidateReport
 Export-ModuleMember -Function Export-BenchmarkCampaign, Assert-BenchmarkCampaign, Get-BenchmarkCampaignSelection, Write-BenchmarkCampaignReport, Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit, Get-BenchmarkSelection, Assert-BenchmarkHistory, Get-BenchmarkGitFile, Invoke-BenchmarkGit, Get-BenchmarkProtocolDifferences, Assert-BenchmarkRecordedIdentity, Get-BenchmarkExecutionIdentity, Get-BenchmarkSourceStatus, Assert-BenchmarkSourceReady

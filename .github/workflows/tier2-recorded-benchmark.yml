@@ -38,6 +38,122 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  score:
+    name: Candidate score and badge (no parent required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # Update this immutable pin only after the replacement reporting bytes are reviewed.
+      - name: Checkout trusted standalone reporter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jmservera/hve-squad
+          ref: 019c894bb0430802f47d2fc513fe326bec4023d2 # standalone v1 reader activation pending owner review
+          path: .benchmark-score-engine
+          persist-credentials: false
+          fetch-depth: 1
+          submodules: false
+          lfs: false
+
+      - name: Score candidate without parent discovery
+        id: standalone
+        if: always()
+        shell: pwsh
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $output = Join-Path $PWD '.benchmark-score-public'
+          New-Item -ItemType Directory -Path $output -Force | Out-Null
+          $code = 1
+          try {
+            $eventData = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $repository = $env:GITHUB_REPOSITORY
+            $head = $env:CANDIDATE_SHA
+            if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+              $repository = $eventData.pull_request.head.repo.full_name
+              $head = $eventData.pull_request.head.sha
+            } elseif (-not $head -and $env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $eventData.inputs.head_sha) {
+              $head = $eventData.inputs.head_sha
+            } elseif (-not $head -and -not $env:RELEASE_TAG) { $head = $env:GITHUB_SHA }
+            if ($repository -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid candidate repository.' }
+            $fetchTarget = $head
+            if (-not $head -and $env:RELEASE_TAG) {
+              if ($env:RELEASE_TAG -cnotmatch '^v?[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Invalid release tag.' }
+              $fetchTarget = "refs/tags/$env:RELEASE_TAG"
+            } elseif ($head -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid candidate identity.' }
+            $objects = Join-Path $PWD '.benchmark-score-objects'
+            git init --quiet $objects
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot initialize candidate object store.' }
+            git -C $objects -c core.hooksPath=/dev/null fetch --no-tags --no-recurse-submodules -- "https://github.com/$repository.git" $fetchTarget
+            if ($LASTEXITCODE -ne 0) { throw 'Candidate fetch failed.' }
+            $actual = git -C $objects rev-parse 'FETCH_HEAD^{commit}'
+            if ($LASTEXITCODE -ne 0 -or $actual.Trim() -cnotmatch '^[0-9a-f]{40}$' -or ($head -and $actual.Trim() -cne $head)) { throw 'Candidate object mismatch.' }
+            $head = $actual.Trim()
+            $engine = Join-Path $PWD '.benchmark-score-engine'
+            $pin = git -C $engine rev-parse HEAD
+            if ($LASTEXITCODE -ne 0 -or $pin.Trim() -cne '019c894bb0430802f47d2fc513fe326bec4023d2') { throw 'Trusted reporter identity mismatch.' }
+            $reader = Import-Module (Join-Path $engine 'tests/tier2/live-benchmark/BenchmarkResults.psm1') -Force -PassThru
+            if ($reader.ExportedCommands.ContainsKey('Write-BenchmarkCandidateReport')) {
+              $result = & $reader.ExportedCommands['Write-BenchmarkCandidateReport'] -Repository $objects -HeadRef $head -OutputDirectory $output
+              $code = $result.exitCode
+            } else {
+              # The reviewed legacy reporter can still score valid legacy records without a parent.
+              # New score records require owner review and an immutable reporter-pin update.
+              $selection = & $reader.ExportedCommands['Get-BenchmarkSelection'] -Repository $objects -Commit $head -MissingStatus missing-candidate
+              & $reader.ExportedCommands['Write-BenchmarkSeriesReport'] $selection.record $output
+              New-Item -ItemType Directory -Path (Join-Path $output 'records') -Force | Out-Null
+              [IO.File]::WriteAllBytes((Join-Path $output "records/$($selection.record.seriesId).json"), $selection.bytes)
+              $code = 0
+            }
+          } catch {
+            $reason = 'candidate-or-reporter-unavailable'
+            if ($_.Exception.Message -cmatch '^(invalid-record|stale-record|missing-candidate|operational-error):([a-z0-9/-]+)$') { $reason = $Matches[2] }
+            Write-Warning "Candidate measurement unavailable or trusted reporter upgrade required ($reason); no parent dependency and no paid retry."
+            @{ schemaVersion = 'benchmark-score-v1'; seriesId = 'hosted-failure'; kind = 'failed'; evidence = $null
+              score = @{ policy = 'observed-document-quality-v1'; value = 0; maximum = 100; state = 'failed'; judgedSlots = 0; expectedSlots = 3; reasons = @($reason) } } |
+              ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $output 'report.json')
+            New-Item -ItemType Directory -Path (Join-Path $output 'records') -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $output 'report.json') -Destination (Join-Path $output 'records/hosted-failure.json')
+            '# Candidate score: 0/100 — measurement failed / not judged. Candidate evidence or reviewed standalone reporter unavailable. Comparison unavailable; no parent lookup was required.' |
+              Set-Content -LiteralPath (Join-Path $output 'report.md')
+            '<svg xmlns="http://www.w3.org/2000/svg" width="660" height="28" role="img" aria-label="score 0/100 | measurement failed / not judged"><title>score 0/100 | measurement failed / not judged</title><rect width="660" height="28" fill="#b91c1c"/><text x="10" y="18" fill="white">score 0/100 | measurement failed / not judged</text></svg>' |
+              Set-Content -LiteralPath (Join-Path $output 'badge.svg')
+          }
+          $digests = @{}
+          Get-ChildItem -LiteralPath (Join-Path $output 'records') -Filter '*.json' -File | ForEach-Object {
+            $digests["records/$($_.Name)"] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $digests | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'sha256.json')
+          @{ candidateOutcome = $(if ($code -eq 0) { 'recorded' } else { 'failed' }); persistence = 'stored'; exitCode = $code; comparison = 'unavailable'; parentRequired = $false } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'result.json')
+          "verdict=$code" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          Get-Content -LiteralPath (Join-Path $output 'report.md') -Raw | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          $global:LASTEXITCODE = 0
+
+      - name: Upload candidate score record and badge
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benchmark-candidate-score
+          path: .benchmark-score-public/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Propagate candidate result
+        if: always()
+        shell: pwsh
+        env:
+          VERDICT: ${{ steps.standalone.outputs.verdict }}
+        run: |
+          if ($env:VERDICT -cnotmatch '^[013]$') { exit 1 }
+          exit ([int]$env:VERDICT)
+
   compare:
     name: Strict stored-record comparison without paid collection
     runs-on: ubuntu-latest

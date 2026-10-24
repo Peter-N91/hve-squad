@@ -9,12 +9,13 @@
 .DESCRIPTION
     AI cost: paid in live modes. Each trial runs init, requirements, build and a separate
     judge under -MaxCredits. Establish collects 3 trials; Series collects 3 candidates
-    with saved controls or 6 fresh paired trials. Parallelism changes concurrency, not trial count.
+    with CandidateOnly needs no controls. Explicit paired collection remains available.
+    Parallelism changes concurrency, not trial count.
     Run spends credits and requires a prepared full install and isolated environment.
     Analyze, Compare and Promote are offline. No command commits or pushes.
 .PARAMETER LocalTest
     Paid single-Run diagnostic, not a benchmark. Allows uncommitted measured files,
-    rejects later working-identity drift, and writes only non-exportable diagnostic.json
+    rejects later working-identity drift, and retains diagnostic.json plus a descriptive score/badge
     beneath a fresh local-test-* directory outside both checkouts. Requires ObservationOnly.
 .PARAMETER Mode
     Analyze freezes a log; Run launches one trial; Compare and Promote gate reports.
@@ -49,6 +50,7 @@ param(
     [string]$AdmissionPath,
     [switch]$LocalTest,
     [switch]$ObservationOnly,
+    [switch]$CandidateOnly,
     [switch]$ParallelTrials
 )
 $ErrorActionPreference = 'Stop'
@@ -57,9 +59,27 @@ Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
 
 if ($MyInvocation.InvocationName -ne '.') {
     $Out = $null
+    $ScoreRoot = $null
+    $CollectionFailed = $false
     $Admission = $null; $Metadata = $null; $Stages = $null; $Attempts = $null; $Metrics = $null
     $ProgressPath = $null; $ProgressCompleted = 0; $ProgressStage = 'preflight'
     try {
+        if ($Mode -in @('Run', 'Establish', 'Series') -and $TrialRoot) {
+            $Full = [IO.Path]::GetFullPath($TrialRoot)
+            if (Test-Path -LiteralPath $Full) { throw 'TrialRoot must not exist; saved evidence is never overwritten.' }
+            $Roots = @($SourceRoot, $BaselineSourceRoot, $CandidateSourceRoot, [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))) | Where-Object { $_ }
+            foreach ($Root in $Roots) {
+                $Root = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($Root))
+                $Separator = [IO.Path]::DirectorySeparatorChar
+                if ($Full.Equals($Root, [StringComparison]::OrdinalIgnoreCase) -or $Full.StartsWith($Root + $Separator, [StringComparison]::OrdinalIgnoreCase) -or $Root.StartsWith($Full.TrimEnd($Separator) + $Separator, [StringComparison]::OrdinalIgnoreCase)) { throw 'TrialRoot must be outside source checkouts and their ancestors.' }
+            }
+            $Cursor = $Full
+            while ($Cursor) {
+                if ((Test-Path -LiteralPath $Cursor) -and ((Get-Item -LiteralPath $Cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'TrialRoot cannot traverse symbolic links.' }
+                $Cursor = [IO.Path]::GetDirectoryName($Cursor)
+            }
+            $ScoreRoot = Join-Path $Full 'score'
+        }
         if ($LocalTest -and ($Mode -ne 'Run' -or -not $ObservationOnly -or $AdmissionPath -or $ParallelTrials)) {
             throw 'LocalTest requires a single Run with ObservationOnly, without admission manifests or parallel trials.'
         }
@@ -108,14 +128,14 @@ if ($MyInvocation.InvocationName -ne '.') {
             if ($BaselineSourceRoot) { $BaselineSourceRoot = (Resolve-Path -LiteralPath $BaselineSourceRoot).Path }
             if ($CandidateSourceRoot) { $CandidateSourceRoot = (Resolve-Path -LiteralPath $CandidateSourceRoot).Path }
             if ($Mode -eq 'Establish' -and -not $BaselineSourceRoot) { throw 'Establish requires SourceRoot or BaselineSourceRoot.' }
-            if ($Mode -eq 'Series' -and (-not $CandidateSourceRoot -or (-not $BaselineSourceRoot -and -not $BaselineEvidencePath))) { throw 'Series requires CandidateSourceRoot and either BaselineSourceRoot or BaselineEvidencePath.' }
+            if ($Mode -eq 'Series' -and (-not $CandidateSourceRoot -or (-not $CandidateOnly -and -not $BaselineSourceRoot -and -not $BaselineEvidencePath))) { throw 'Series requires CandidateSourceRoot and either CandidateOnly, BaselineSourceRoot or BaselineEvidencePath.' }
             if (-not $CliPath) { $CliPath = (Get-Command copilot -ErrorAction Stop).Source }
             $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
             $InstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
-            $Saved = if ($BaselineEvidencePath) { Get-Content -LiteralPath $BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable } else { $null }
+            $Saved = if ($BaselineEvidencePath -and -not $CandidateOnly) { Get-Content -LiteralPath $BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable } else { $null }
             $IdentitySource = if ($Mode -eq 'Establish') { $BaselineSourceRoot } else { $CandidateSourceRoot }
             $Expected = Get-EfficiencyCompatibility -SourceRoot $IdentitySource -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
-            if ($Mode -eq 'Series' -and $BaselineSourceRoot) {
+            if ($Mode -eq 'Series' -and $BaselineSourceRoot -and -not $CandidateOnly) {
                 $ControlCompatibility = Get-EfficiencyCompatibility -SourceRoot $BaselineSourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
                 $Before = @($ControlCompatibility.Keys | Sort-Object | ForEach-Object { $_ + '=' + ($ControlCompatibility[$_] | ConvertTo-Json -Depth 10 -Compress) }) -join "`n"
                 $After = @($Expected.Keys | Sort-Object | ForEach-Object { $_ + '=' + ($Expected[$_] | ConvertTo-Json -Depth 10 -Compress) }) -join "`n"
@@ -124,7 +144,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
             $Admissions = @{}
             $Arms = if ($Mode -eq 'Establish') { @{ baseline = $BaselineSourceRoot } } else { @{ candidate = $CandidateSourceRoot } }
-            if ($Mode -eq 'Series' -and -not $Saved) { $Arms['baseline'] = $BaselineSourceRoot }
+            if ($Mode -eq 'Series' -and -not $Saved -and -not $CandidateOnly) { $Arms['baseline'] = $BaselineSourceRoot }
             foreach ($Key in $Arms.Keys) {
                 $Admissions[$Key] = Get-EfficiencyAdmission -SourceRoot $Arms[$Key] -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
             }
@@ -148,7 +168,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 param($TrialArm, $TrialPair, [double]$CreditCeiling)
                 Invoke-EfficiencyTrial -Context $TrialContext -Arm $TrialArm -Pair $TrialPair -MaxCredits $CreditCeiling
             }.GetNewClosure()
-            $Series = Invoke-EfficiencySeries -Kind $Mode -RunTrial $TrialRunner -TrialContext $TrialContext -PerRunCredits $MaxCredits -SeriesCredits $MaxSeriesCredits -BaselineEvidence $Saved -ExpectedCompatibility $Expected -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
+            $Series = Invoke-EfficiencySeries -Kind $Mode -RunTrial $TrialRunner -TrialContext $TrialContext -PerRunCredits $MaxCredits -SeriesCredits $MaxSeriesCredits -BaselineEvidence $Saved -ExpectedCompatibility $Expected -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials -CandidateOnly:$CandidateOnly
             foreach ($Slot in $Series.report.slots) {
                 if ($Slot.status -ne 'failed') { continue }
                 $Prefix = "$($Slot.arm)-$($Slot.pair)"
@@ -219,6 +239,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 }
                 foreach ($Evidence in $Slot.evidence) { Write-Host "Diagnostic: $(Join-Path $TrialRoot $Evidence)" }
             }
+            $CollectionFailed = $Series.exitCode -ne 0
             exit $Series.exitCode
         }
         if (-not $TrialRoot -or -not $SourceRoot -or -not $InstallRoot) { throw 'Run requires TrialRoot, SourceRoot and a prepared full InstallRoot.' }
@@ -426,18 +447,19 @@ if ($MyInvocation.InvocationName -ne '.') {
         Write-EfficiencyProgress -Path $ProgressPath -Stage report -Completed $ProgressCompleted -Total 7 -Status finished -IndependentChecksPassed $Succeeded -Recorded $(if ($LocalTest) { $false } else { $Recorded })
         Write-Host "Run complete: $($Run.completed). Independent checks passed: $Succeeded. Diagnostic/report: $ResultPath"
         if ($LocalTest) {
-            Write-Host 'LOCAL TEST ONLY: no benchmark recorded or exportable; one candidate is not evidence of improvement.'
-            if (-not $LocalExecutionComplete) { exit 2 }
+            Write-Host 'LOCAL TEST ONLY: a descriptive score/badge is retained; one candidate is not formal comparison evidence or an improvement claim.'
+            if (-not $LocalExecutionComplete) { $CollectionFailed = $true; exit 2 }
             exit 0
         }
         if ($ObservationOnly) {
             Write-Host "Baseline observation recorded: $Recorded. Failed checks remain findings, not a passing workflow."
-            if (-not $Recorded) { exit 2 }
+            if (-not $Recorded) { $CollectionFailed = $true; exit 2 }
         }
-        elseif (-not $Succeeded) { exit 2 }
+        elseif (-not $Succeeded) { $CollectionFailed = $true; exit 2 }
     }
     catch {
         $Failure = $_
+        $CollectionFailed = $true
         if ($ProgressPath) { Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7 -Status failed }
         if ($Out -and (Test-Path -LiteralPath $Out)) {
             $Reason = if ($Failure.Exception.Message -match 'execution-identity-drift|Provenance preflight failed|Local diagnostic working identity drift') { 'provenance-failure' } else { 'execution-or-evidence-error' }
@@ -445,5 +467,30 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
         Write-Error -Message $Failure.Exception.Message -ErrorAction Continue
         exit 1
+    }
+    finally {
+        if ($ScoreRoot) {
+            Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
+            $ScoreSource = if ($Mode -eq 'Series') { $CandidateSourceRoot } elseif ($Mode -eq 'Establish' -and $BaselineSourceRoot) { $BaselineSourceRoot } else { $SourceRoot }
+            $ScoreArm = if ($Mode -eq 'Establish') { 'baseline' } else { 'candidate' }
+            $Directories = @(if ($Mode -eq 'Run') {
+                if (Test-Path -LiteralPath (Join-Path $TrialRoot $(if ($LocalTest) { 'out/diagnostic.json' } else { 'out/run.json' }))) { @($TrialRoot) } else { @() }
+            } else {
+                @(foreach ($Slot in 1..3) {
+                    $Directory = Join-Path $TrialRoot "trials/$ScoreArm-$Slot"
+                    if (Test-Path -LiteralPath (Join-Path $Directory 'out/run.json')) { $Directory }
+                })
+            })
+            $Id = 'attempt-' + [guid]::NewGuid().ToString('N')
+            try {
+                $Record = Export-BenchmarkScore -Repository $ScoreSource -TrialDirectories @($Directories) -SeriesId $Id -OutputDirectory $ScoreRoot -Local:$LocalTest
+                Write-Host "Score $($Record.score.value)/100 ($($Record.score.state)); score/report/badge stored: $ScoreRoot"
+            }
+            catch {
+                $null = Export-BenchmarkScore -SeriesId ($Id + '-failed') -OutputDirectory (Join-Path $ScoreRoot 'failed') -FailureReason 'score-export-failed'
+                Write-Error -Message 'Score export failed; a failed-score diagnostic was retained. Inspect local evidence; no paid retry.' -ErrorAction Continue
+                if (-not $CollectionFailed) { exit 1 }
+            }
+        }
     }
 }

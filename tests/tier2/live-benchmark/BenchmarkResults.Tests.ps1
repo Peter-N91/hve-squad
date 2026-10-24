@@ -140,6 +140,139 @@ BeforeAll {
     }
 }
 
+Describe 'Standalone score records' {
+    It 'scores <Count> actual grades without inventing missing samples' -ForEach @(
+        @{ Count = 3; Expected = 3; State = 'measured' },
+        @{ Count = 2; Expected = 3; State = 'partial' },
+        @{ Count = 1; Expected = 1; State = 'measured' },
+        @{ Count = 0; Expected = 1; State = 'failed' }
+    ) {
+        $Trials = @(for ($Index = 0; $Index -lt $Count; $Index++) { @{ quality = @{ businessClarity = 16; scopeFidelity = 16; acceptanceCriteria = 16; traceability = 16; risksAndDecisions = 16 } } })
+        $Score = Get-BenchmarkScore -Trials $Trials -ExpectedSlots $Expected
+        $Score.value | Should -Be $(if ($Count) { 80 } else { 0 })
+        $Score.state | Should -Be $State
+        $Score.judgedSlots | Should -Be $Count
+        $Score.expectedSlots | Should -Be $Expected
+    }
+    It 'exports candidate-only evidence and a numeric badge for <Count> trials, local <Local>' -ForEach @(
+        @{ Count = 3; Local = $false }, @{ Count = 1; Local = $false }, @{ Count = 0; Local = $false }, @{ Count = 1; Local = $true }
+    ) {
+        $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
+        $Output = Join-Path $TestDrive "standalone-$Count-$Local"
+        $Directories = @($Raw.directories | Select-Object -First $Count)
+        if ($Local) {
+            Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
+            Set-Content (Join-Path $Fixture.repository 'squad-src/charter.md') 'uncommitted candidate'
+            $Run = $Raw.runs[0]; $Run.schemaVersion = 'efficiency-local-test-v1'; $Run.localDiagnostic = $true
+            $Run.collection = @{ recorded = $false; policy = 'local-diagnostic-v1' }
+            $Run.metadata.sourceHash = Get-EfficiencyTreeHash (Join-Path $Fixture.repository 'squad-src')
+            Write-TestJson (Join-Path $Directories[0] 'out/diagnostic.json') $Run
+        }
+        $Record = Export-BenchmarkScore -Repository $Fixture.repository -TrialDirectories $Directories -SeriesId "candidate-$Count" -OutputDirectory $Output -Local:$Local
+        $Record.score.judgedSlots | Should -Be $Count
+        $Record.score.value | Should -Be $(if ($Count) { 100 } else { 0 })
+        [IO.File]::ReadAllText((Join-Path $Output 'badge.svg')) | Should -Match "$($Record.score.value)/100"
+        Test-Path (Join-Path $Output "records/candidate-$Count.json") | Should -BeTrue
+        $Text = [IO.File]::ReadAllText((Join-Path $Output "records/candidate-$Count.json"))
+        $Text | Should -Not -Match 'PRIVATE|sessionId'
+        Test-Path (Join-Path $Output 'current.json') | Should -BeFalse
+        if ($Local) {
+            $Record.kind | Should -Be local
+            $Record.score.state | Should -Be measured
+            $Record.score.expectedSlots | Should -Be 1
+            [IO.File]::ReadAllText((Join-Path $Output 'badge.svg')) | Should -Match 'local single-sample'
+            Invoke-TestGit $Fixture.repository @('diff', '--cached', '--name-only') | Should -BeNullOrEmpty
+            Get-Content (Join-Path $Fixture.repository 'squad-src/charter.md') | Should -Be 'uncommitted candidate'
+        }
+    }
+    It 'keeps a valid candidate score independent of <Parent>' -ForEach @(
+        @{ Parent = ''; Status = 'unavailable' },
+        @{ Parent = 'missing-parent'; Status = 'unavailable' },
+        @{ Parent = 'valid-parent'; Status = 'unchanged' }
+        @{ Parent = 'no-record'; Status = 'unavailable' }
+        @{ Parent = 'incompatible'; Status = 'unavailable' }
+    ) {
+        $Fixture = New-TestRepository
+        $ParentCommit = $Fixture.revision
+        if ($Parent -eq 'incompatible') {
+            $Other = Copy-Value $Fixture.record; $Other.seriesId = 'other-environment'; $Other.protocol.installHash = 'f' * 64
+            $ParentCommit = Save-TestSelection $Fixture $Other
+        }
+        $Head = Save-TestSelection $Fixture $Fixture.record
+        $Base = if ($Parent -eq 'valid-parent') { $Head } elseif ($Parent -in @('no-record', 'incompatible')) { $ParentCommit } else { $Parent }
+        $Output = Join-Path $TestDrive ('report-' + [guid]::NewGuid().ToString('N'))
+        $Result = Write-BenchmarkCandidateReport -Repository $Fixture.repository -HeadRef $Head -OutputDirectory $Output -BaseRef $Base
+        $Result.score.value | Should -Be 100
+        $Result.exitCode | Should -Be 0
+        $Result.comparison.status | Should -Be $Status
+        [IO.File]::ReadAllText((Join-Path $Output 'badge.svg')) | Should -Match '100/100'
+    }
+    It 'validates score pointers and rejects <Tamper>' -ForEach @(
+        @{ Tamper = 'score' }, @{ Tamper = 'id' }, @{ Tamper = 'digest' }, @{ Tamper = 'schema' }, @{ Tamper = 'publication' }
+    ) {
+        $Fixture = New-TestRepository
+        $Root = Join-Path $Fixture.repository 'benchmarks/efficiency'
+        $Record = Export-BenchmarkScore -Repository $Fixture.repository -Evidence $Fixture.record -SeriesId 'scored' -OutputDirectory $Root -SelectCurrent
+        if ($Tamper -eq 'publication') {
+            $Before = @{}; foreach ($Name in @('report.json', 'report.md', 'badge.svg', 'current.json')) { $Before[$Name] = [IO.File]::ReadAllText((Join-Path $Root $Name)) }
+            Mock Write-BenchmarkFile -ModuleName BenchmarkResults { throw [IO.IOException]::new('fixture pointer write failed') } -ParameterFilter { $Path -like '*/current.json' }
+            { Export-BenchmarkScore -Repository $Fixture.repository -Evidence $Fixture.record -SeriesId 'publication-failure' -OutputDirectory $Root -SelectCurrent } | Should -Throw '*fixture pointer write failed*'
+            foreach ($Name in $Before.Keys) { [IO.File]::ReadAllText((Join-Path $Root $Name)) | Should -BeExactly $Before[$Name] }
+            Test-Path (Join-Path $Root 'records/publication-failure.json') | Should -BeTrue
+            return
+        }
+        if ($Tamper -eq 'score') { $Record.score.value = 1 }
+        if ($Tamper -eq 'id') { $Record.seriesId = 'wrong' }
+        if ($Tamper -eq 'schema') { $Record.schemaVersion = 'unknown-v1' }
+        if ($Tamper -ne 'digest') {
+            Write-TestJson (Join-Path $Root 'records/scored.json') $Record
+            Write-TestJson (Join-Path $Root 'current.json') @{ schemaVersion = 'benchmark-pointer-v1'; recordPath = 'records/scored.json'; sha256 = Get-BenchmarkDigest ([IO.File]::ReadAllBytes((Join-Path $Root 'records/scored.json'))) }
+        } else { Add-Content (Join-Path $Root 'records/scored.json') ' ' }
+        $Head = Save-TestCommit $Fixture.repository
+        { Get-BenchmarkSelection $Fixture.repository $Head -ScoreOnly } | Should -Throw
+        $Result = Write-BenchmarkCandidateReport -Repository $Fixture.repository -HeadRef $Head -OutputDirectory (Join-Path $TestDrive "failed-$Tamper")
+        $Result.score.state | Should -Be failed
+        $Result.score.value | Should -Be 0
+        $Result.exitCode | Should -Be 1
+    }
+    It 'retains valid quality when judge or workflow fails in <Case>' -ForEach @(
+        @{ Case = 'missing-judge'; Judged = 2; Value = 100 },
+        @{ Case = 'workflow-failed'; Judged = 3; Value = 100 },
+        @{ Case = 'judged-zero'; Judged = 3; Value = 0 }
+    ) {
+        $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
+        if ($Case -eq 'missing-judge') { $Raw.runs[0].judge = @{ valid = $false; reason = 'unavailable' } }
+        if ($Case -eq 'workflow-failed') { $Raw.runs[0].workflow.passed = $false; $Raw.runs[0].completed = $false }
+        if ($Case -eq 'judged-zero') { foreach ($Run in $Raw.runs) { foreach ($Key in @($Run.judge.response.scores.Keys)) { $Run.judge.response.scores[$Key] = 0 } } }
+        for ($Index = 0; $Index -lt 3; $Index++) { Write-TestJson (Join-Path $Raw.directories[$Index] 'out/run.json') $Raw.runs[$Index] }
+        $Output = Join-Path $TestDrive $Case
+        $Record = Export-BenchmarkScore -Repository $Fixture.repository -TrialDirectories $Raw.directories -SeriesId $Case -OutputDirectory $Output
+        $Record.score.judgedSlots | Should -Be $Judged
+        $Record.score.value | Should -Be $Value
+        if ($Case -ne 'judged-zero') { [IO.File]::ReadAllText((Join-Path $Output 'badge.svg')) | Should -Match '#b45309' }
+        else { $Record.score.state | Should -Be measured }
+    }
+    It 'retains strict regression for complete <Format> evidence wrapped as a score' -ForEach @(@{ Format = 'legacy' }, @{ Format = 'direct' }) {
+        $Fixture = New-TestRepository
+        $Base = Save-TestSelection $Fixture $Fixture.record
+        $Candidate = New-TestCandidate $Fixture.record
+        $Candidate.trials[0].quality.businessClarity = 10
+        $Candidate.trials[1].quality.businessClarity = 10
+        $Root = Join-Path $Fixture.repository 'benchmarks/efficiency'
+        if ($Format -eq 'direct') {
+            $Raw = New-TestRawEvidence @{ repository = $Fixture.repository; record = $Candidate; revision = $Fixture.revision; compatibility = $Fixture.compatibility }
+            $Scored = Export-BenchmarkScore -Repository $Fixture.repository -TrialDirectories $Raw.directories -SeriesId 'score-regression' -OutputDirectory $Root -SelectCurrent
+            $Scored.evidence.schemaVersion | Should -Be 'benchmark-observation-series-v1'
+            $Scored.evidence.provenance.collector | Should -Be 'benchmark-score-direct-v1'
+        } else { $null = Export-BenchmarkScore -Repository $Fixture.repository -Evidence $Candidate -SeriesId 'score-regression' -OutputDirectory $Root -SelectCurrent }
+        $Head = Save-TestCommit $Fixture.repository
+        $Result = Write-BenchmarkCandidateReport -Repository $Fixture.repository -HeadRef $Head -BaseRef $Base -OutputDirectory (Join-Path $TestDrive 'regression-score')
+        $Result.comparison.status | Should -Be regression
+        $Result.exitCode | Should -Be 3
+        $Result.score.value | Should -Be 90
+    }
+}
+
 Describe 'Portable benchmark history and reporting' {
     It 'preserves incomplete quality and exact known accounting without changing private evidence' {
         $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
@@ -750,11 +883,66 @@ Describe 'Hosted legacy-base report integration' {
         }
     }
     It 'runs exact hosted scripts against legacy 3504ffc and merged a64ee85 for <Case>' -ForEach @(
+        @{ Case = 'standalone-legacy'; ExpectedRenderExit = 0; CurrentCampaign = $false },
+        @{ Case = 'standalone-unreviewed-schema'; ExpectedRenderExit = 0; CurrentCampaign = $false },
+        @{ Case = 'standalone-invalid-candidate'; ExpectedRenderExit = 0; CurrentCampaign = $false },
         @{ Case = 'current-incomplete'; ExpectedRenderExit = 0; CurrentCampaign = $true },
         @{ Case = 'wrong-reporter'; ExpectedRenderExit = 1; CurrentCampaign = $false },
         @{ Case = 'changed-source'; ExpectedRenderExit = 0; CurrentCampaign = $false },
         @{ Case = 'corrupt-campaign'; ExpectedRenderExit = 0; CurrentCampaign = $false }
     ) {
+        if ($Case.StartsWith('standalone-')) {
+            $Fixture = New-TestRepository
+            $Root = $Fixture.repository
+            $Head = Save-TestSelection $Fixture $Fixture.record
+            if ($Case -eq 'standalone-unreviewed-schema') {
+                $null = Export-BenchmarkScore -Repository $Root -Evidence $Fixture.record -SeriesId 'new-schema' -OutputDirectory (Join-Path $Root 'benchmarks/efficiency') -SelectCurrent
+                $Head = Save-TestCommit $Root
+            }
+            $Engine = Join-Path $Root '.benchmark-score-engine'
+            [void](Invoke-TestGit $SourceRoot @('clone', '--quiet', '--shared', '--no-checkout', $SourceRoot, $Engine))
+            [void](Invoke-TestGit $Engine @('checkout', '--quiet', '--detach', '019c894bb0430802f47d2fc513fe326bec4023d2'))
+            $Script = Join-Path $TestDrive "$Case.ps1"
+            # Route only the fetch to fixture objects: no hosted API, parent or network.
+            $Prefix = @'
+$NativeGit = (Get-Command git -CommandType Application | Select-Object -First 1).Source
+function git {
+    if ($args -contains 'fetch') {
+        & $NativeGit -C $args[1] -c core.hooksPath=/dev/null fetch --no-tags --no-recurse-submodules -- '__REPOSITORY__' '__HEAD__'
+    } else { & $NativeGit @args }
+    $global:LASTEXITCODE = $LASTEXITCODE
+}
+'@
+            [IO.File]::WriteAllText($Script, $Prefix.Replace('__REPOSITORY__', $Root.Replace("'", "''")).Replace('__HEAD__', $Head) + "`n" + (Get-RecordedWorkflowScript 'Score candidate without parent discovery'))
+            $Names = @('CANDIDATE_SHA', 'GITHUB_EVENT_NAME', 'GITHUB_EVENT_PATH', 'GITHUB_REPOSITORY', 'GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY')
+            $Original = @{}; foreach ($Name in $Names) { $Original[$Name] = [Environment]::GetEnvironmentVariable($Name) }
+            try {
+                $env:CANDIDATE_SHA = if ($Case -eq 'standalone-invalid-candidate') { 'invalid' } else { $Head }
+                $env:GITHUB_EVENT_NAME = 'workflow_dispatch'; $env:GITHUB_REPOSITORY = 'fixture/offline'
+                $env:GITHUB_EVENT_PATH = Join-Path $TestDrive "$Case-event.json"; [IO.File]::WriteAllText($env:GITHUB_EVENT_PATH, '{}')
+                $env:GITHUB_OUTPUT = Join-Path $TestDrive "$Case-output"
+                $env:GITHUB_STEP_SUMMARY = Join-Path $TestDrive "$Case-summary"
+                Push-Location $Root
+                try {
+                    $Transcript = @(& pwsh -NoProfile -File $Script 2>&1)
+                    $LASTEXITCODE | Should -Be 0
+                    $Output = Join-Path $Root '.benchmark-score-public'
+                    $Result = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'result.json')))
+                    $Result.parentRequired | Should -BeFalse
+                    if ($Case -eq 'standalone-legacy' -and $Result.exitCode -ne 0) {
+                        throw "Hosted legacy fallback failed: $([IO.File]::ReadAllText((Join-Path $Output 'report.json'))) $($Transcript -join "`n")"
+                    }
+                    $Result.exitCode | Should -Be $(if ($Case -eq 'standalone-legacy') { 0 } else { 1 }) -Because ($Transcript -join "`n")
+                    $Badge = [IO.File]::ReadAllText((Join-Path $Output 'badge.svg'))
+                    $Badge | Should -Match $(if ($Case -eq 'standalone-legacy') { '100/100' } else { '0/100.*not judged' })
+                    $Digests = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'sha256.json')))
+                    $Digests.Count | Should -Be 1
+                    foreach ($Path in $Digests.Keys) { (Get-FileHash (Join-Path $Output $Path)).Hash.ToLowerInvariant() | Should -Be $Digests[$Path] }
+                    Test-Path (Join-Path $Output 'report.md') | Should -BeTrue
+                } finally { Pop-Location }
+            } finally { foreach ($Name in $Names) { [Environment]::SetEnvironmentVariable($Name, $Original[$Name]) } }
+            return
+        }
         $Repository = Join-Path $TestDrive "hosted-$Case"
         [void](Invoke-TestGit $SourceRoot @('clone', '--quiet', '--shared', '--no-checkout', $SourceRoot, $Repository))
         $Base = '3504ffc79c687d3da104e9a40f04e270ac13d9c0'
