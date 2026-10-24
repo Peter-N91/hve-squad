@@ -1144,7 +1144,9 @@ function Assert-EfficiencyLocalRoot {
                 $Item = Get-Item -LiteralPath $Cursor -Force -ErrorAction Stop
                 if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or -not $Item.PSIsContainer) { throw 'Local diagnostic paths cannot traverse files or links; use physical checkout and output paths.' }
             }
-            catch [System.Management.Automation.ItemNotFoundException] { }
+            catch [System.Management.Automation.ItemNotFoundException] {
+                Write-Verbose 'Local diagnostic ancestor does not exist; checking its parent.'
+            }
             $Cursor = [IO.Path]::GetDirectoryName($Cursor)
         }
     }
