@@ -129,6 +129,11 @@ Describe 'GATE-38 Init copies roster rows from the payload and never derives an 
         $headers.Count | Should -BeGreaterThan 0
         $headers[0] | Should -Be @('Binding ID', 'Connector ID', 'Manifest', 'Endpoint Kind', 'Role Mode', 'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role', 'Default Execution')
     }
+
+    It 'seed-templates.md keeps routed roster column placement self-contained for the Scribe' {
+        $seedTemplates = Get-SquadReferenceBody -Name 'seed-templates.md'
+        $seedTemplates | Should -Match ([regex]::Escape('a `Model` column between `Model Tier` and `Deliverable Root`, filled with each role''s Model ID as the coordinator resolved it'))
+    }
 }
 
 Describe 'GATE-39 Init records its orchestration block and runs ledgerCommand last' {

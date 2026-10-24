@@ -7,11 +7,11 @@
   "turns": [
     {
       "id": "init-pack",
-      "prompt": "Act as the Squad Coordinator. Initialize profile=default pack=${pack} under .copilot-tracking/squad. I explicitly accept both, choose the default member naming, and choose the in-chat approval channel with notifications disabled. Use only installed registered resources, record provenance through the Scribe, and do not dispatch specialist work or provision anything. Initialization is outside Cost Preflight: with no ceiling, preserve the exact not-requested object from entry-schemas.md with empty runId and roundId."
+      "prompt": "Act as the Squad Coordinator. Initialize profile=default pack=${pack} under .copilot-tracking/squad. I explicitly accept both, choose the default member naming, and choose the in-chat approval channel with notifications disabled. Use only installed registered resources, record provenance through the Scribe, and do not dispatch specialist work or provision anything."
     },
     {
       "id": "remove-pack",
-      "prompt": "Act as the Squad Coordinator. I confirm removal of pack=${pack}. Preserve profile-owned, other-pack, and custom roles, ordinary routes, prior decisions, histories, deliverables, and recorded spend. Stop only this pack's guidance handoff. Do not dispatch specialist work. No cost ceiling is configured; preserve the exact not-requested costPreflight object with empty runId and roundId."
+      "prompt": "Act as the Squad Coordinator. I confirm removal of pack=${pack}. Preserve profile-owned, other-pack, and custom roles, ordinary routes, prior decisions, histories, deliverables, and recorded spend. Stop only this pack's guidance handoff. Do not dispatch specialist work."
     }
   ]
 }

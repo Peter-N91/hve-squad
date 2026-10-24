@@ -1235,9 +1235,9 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       </p>
       <p>
         At each checkpoint, the squad reads the project manifests and lockfiles and uses the registered
-        <code>microsoft-foundry</code>, <code>azure-aigateway</code>, <code>use-ai-gateway</code>,
-        and <code>caira</code> to verify service, feature,
-        SDK/API, tier, and regional status separately. Missing or conflicting evidence stays
+        <code>microsoft-foundry</code>, <code>azure-aigateway</code>, and <code>use-ai-gateway</code>
+        skills to verify service, feature, SDK/API, tier, and regional status separately, and <code>caira</code>
+        only to inspect reference components for the selected stack. Missing or conflicting evidence stays
         unverified. Applying the pack never approves a preview, upgrades a dependency, installs a
         resource, or provisions Azure.
       </p>
