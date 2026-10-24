@@ -1,6 +1,6 @@
 ---
 description: "Approval-channel and contact capture at squad build time and the delivery-agnostic notification + remote-approval contract that lets unattended (VM) runs be validated from a phone"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/notifications.md'
 ---
 
 # Squad Notification Conventions

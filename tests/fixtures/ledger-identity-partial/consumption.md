@@ -32,4 +32,6 @@ developer      turns 1     100000 × 3.00 = 300000.0 / 1e6 = 0.3000
 
 ## Cost Comparison (illustrative)
 
+This run consumed an estimated **$0.6000 (~60.00 AI credits)**; manual baseline and saving unavailable.
+
 Fixture for the F3 review-fix: the C2 history-identity guard's post-write mode must fail when the Derivation records identities for only some of the touched history files.

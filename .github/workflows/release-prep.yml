@@ -1,5 +1,7 @@
 name: Release Prep
 
+# AI cost: none; preparation dispatches release.yml's stored-record gate, not live collection.
+
 # Turns the fragments collected in .changes/unreleased/ into a release.
 #
 #   1. Invoke-ReleasePrep.ps1 resolves the new version from the highest `bump`
@@ -134,7 +136,7 @@ jobs:
           NEW_VERSION: ${{ steps.prep.outputs.version }}
           REF: ${{ inputs.ref }}
         run: |
-          gh workflow run release.yml --ref main -f ref="$REF"
+          gh workflow run release.yml --ref main -f ref="$REF" -f run_benchmark=true
           echo "::notice::Triggered release.yml for v${NEW_VERSION} on ${REF}"
 
       # The fragments this run consumed are what the pre-release was rendering,

@@ -55,6 +55,7 @@ bash tests/tier2/live-benchmark/start-efficiency-wizard.sh
 
 # Optional paths are forwarded unchanged, including spaces.
 bash tests/tier2/live-benchmark/start-efficiency-wizard.sh \
+    -ParallelTrials \
     -WorkRoot "$HOME/bench/squad efficiency"
 ```
 
@@ -79,6 +80,65 @@ set initial paths. The default work root is `%LOCALAPPDATA%\hve-squad\efficiency
 (the corresponding local application-data directory on Linux), outside the checkout.
 Every launch uses a fresh `run-<timestamp>-<id>` and preserves old reports and controls.
 
+The last completed valid questionnaire is remembered in
+`.efficiency-wizard-defaults.json` at the wizard checkout root. This file and its
+atomic-write temporaries are gitignored. Both launchers reuse the saved mode,
+paths, model, credit ceilings and scheduling as question defaults; explicit
+work/control paths and `-ParallelTrials` take precedence. A changed plan raises
+the total default if needed to cover every reservation. Offline mode preserves
+your previous live answers. Cancelled or invalid questionnaires do not replace
+them, and later prerequisite/test failures do not discard completed answers.
+Delete this file to reset defaults; malformed settings stop with reset guidance.
+Credentials and login choices are never stored. The spending authorization
+answer is saved against its configuration as a reminder only: every live run
+still requires fresh explicit isolation/spending confirmation; blank means no.
+
+During execution the wizard prints a plain-text progress snapshot every 30 seconds,
+plus snapshots at child start and finish. Each scheduled baseline/candidate trial
+shows its active phase, phase duration, completed milestone count, and available
+CLI-output byte count/last activity, including all three parallel trials.
+The seven unequal milestones are preflight, init, requirements, build, functional
+acceptance, judge and report: they are **not** a model-completion percentage or
+time estimate. A long build can legitimately remain at 3/7; changing duration and
+output activity provide context without inventing an ETA. Pending serial trials
+say awaiting preflight. Finished/failed snapshots print once unless their result
+changes, with known independent-check and observation-recording status.
+Offline progress counts the three self-test files; wizard boundaries count
+scheduled steps. Neither count implies quality approval.
+
+Child stdout/stderr is retained in `wizard-stage-<id>.log` and its `.stderr`
+sibling under the fresh wizard run directory and displayed when that stage ends.
+Trial phase snapshots are retained as `trials/<arm>-<pair>/out/progress.json`
+inside the control/comparison directory. Progress reporting does not alter
+spending limits, trial scheduling, watchdogs or baseline promotion.
+
+`wizard-result.json` includes each benchmark stage's independent-check outcome,
+record count, report and portable-record paths, saved-control path when available,
+and offline publication command. Exit zero means the selected collection
+completed, not that the measured process passed: quality/readiness failures produce
+`completed-with-findings`, not `passed`. Missing/malformed expected result evidence
+is an execution error. Records remain local and **uncommitted to Git** until the
+printed offline export command is used in a compatible writable delivery checkout.
+Reporting/publication repairs do not require another paid run.
+
+Live modes accept current CLI versions advertising `--sync-session off`, or older
+versions advertising both `--no-remote` and `--no-remote-export`. The wizard no
+longer demands flags removed in CLI 1.0.103. The same policy protects workflow,
+judge and ACP launches; an unrecognized sync policy fails closed. Modern sync-off
+disables account-history upload, not incoming control: the harness creates local
+sessions and never opts into remote connection/hosting modes. This is not an OS sandbox.
+
+After the credit ceilings, choose **Serial** (initial default) or **Three observations in
+parallel**, or pass `-ParallelTrials` through either launcher to select it directly.
+The bash starter forwards this switch unchanged with quoted path arguments.
+Parallel mode starts three independent native trials, each with its
+own workspace, session, log, credit allowance and watchdog. All three allowances
+must fit before launch; failures do not retry or discard already-started siblings.
+Concurrent runs compete for host resources and service capacity. Scheduling mode
+is part of compatibility: parallel candidates require parallel controls, and older
+controls must be recollected after this protocol change. Complete still finishes
+the control phase before starting candidates; offline checks remain first.
+
 | Choice | Work after setup |
 | --- | --- |
 | Establish | Full offline self-tests, then three baseline observations, retaining failures; no improvement claim |
@@ -86,12 +146,13 @@ Every launch uses a fresh `run-<timestamp>-<id>` and preserves old reports and c
 | Complete | Full offline self-tests, three fresh controls, then three candidates against them and automatic comparison |
 | Offline | Full offline self-tests only; no GitHub/Copilot login or model requests |
 
-Establish is recommended without saved controls; Series is recommended when a
-control file is supplied or discovered. Complete is not retry-until-success.
+Initially, Establish is recommended without saved controls; Series is recommended
+when a control file is supplied or discovered. Later runs default to the remembered
+mode; an explicitly supplied control path recommends Series. Complete is not retry-until-success.
 Selecting the same source for both arms tests repeatability, not patch improvement.
 Select separate baseline/candidate checkouts to compare an actual patch.
 
-Wizard observational defaults are `claude-sonnet-5.5`, 100 AI credits per complete run, 300 total for
+Initial wizard observational defaults are `claude-sonnet-5.5`, 100 AI credits per complete run, 300 total for
 three new runs or 600 for six. These are ceilings, not cost predictions. Paths,
 model and credit ceilings can be changed. The wizard verifies the whole reservation,
 requires explicit disposable-isolation and spending confirmation, preserves the
@@ -107,6 +168,17 @@ checks, independent scores, timing, tokens, requests, credits and reliability co
 Comparisons assess relative quality and reliability as well as efficiency; an
 imperfect baseline need not first score 90. Unavailable evidence makes a comparison
 not evaluable, and observations are never automatically promoted.
+
+After each wizard collection step, offline finalization exports available
+observations into that step's external `portable/` directory and prints a
+PowerShell command to publish them in a matching writable delivery checkout.
+This also runs after collection failure, preserves the collection exit, and
+never retries paid work. Export needs PowerShell 7.5+; failures remain explicit.
+Review and commit generated evidence yourself; no files are written into the
+measured source while collecting. Direct `-Mode Run` calls still only collect
+private evidence. See [complete and incomplete export commands](../../../benchmarks/efficiency/README.md#record-and-regenerate).
+Unavailable grades/accounting are retained in a separate campaign archive,
+not accepted as a complete three-trial series.
 
 Observational workflows have no request-count cap, allow up to 1,000 native autopilot
 continuations, and use a 180-minute hung-run watchdog. They reserve 30 credits for
@@ -317,6 +389,13 @@ $LASTEXITCODE
 
 The control is frozen in `control-001/out/control-series.json`. Establishment
 creates new evidence only; it does not overwrite an accepted optimization report.
+
+Add `-ParallelTrials` to Establish, or to Series with saved controls, to overlap
+the three trials. Use the same switch when collecting those controls. Six fresh
+paired trials remain serial to preserve alternating arm order; combining that
+mode with `-ParallelTrials` is rejected before launch. Catchable cancellation
+stops owned native process trees before removing worker jobs and preserves local
+evidence; forcibly killing the entire host cannot guarantee this cleanup.
 
 ### Run a complete comparison
 
@@ -547,3 +626,11 @@ execution as that revision. Old `benchmark-series-v1` records remain available
 for historical analysis, but are explicitly `stale-record:unbound-execution-protocol`
 for current snapshot validation. The existing selected baseline therefore needs
 new, separately authorized evidence; old records and pointers are not rewritten.
+
+The Scribe verifier's pricing evaluator (v2) prices long-context blocks per block
+and applies calibration once, so its script source changed and `verifierHash`
+changed with it. That hash covers the verifier script only, not imported modules
+such as `SquadState.psm1`; module-only drift is not fingerprinted. The earlier
+83/81 series carry the old verifier hash, remain immutable, and are incompatible
+for direct strict comparison until matching new-verifier evidence is collected.
+There is no waiver and no automatic paid parent refresh.

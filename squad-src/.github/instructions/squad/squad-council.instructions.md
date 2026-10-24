@@ -1,6 +1,6 @@
 ---
 description: "Pre-implementation council protocol with parallel dispatch, most-restrictive-wins synthesis, and durable Council Verdict"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/decisions.md'
 ---
 
 # Squad Council Conventions

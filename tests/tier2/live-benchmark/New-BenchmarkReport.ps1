@@ -7,6 +7,7 @@
 .SYNOPSIS
     Turns the live benchmark results (and judge scores, when present) into a Markdown report. Offline.
 .DESCRIPTION
+    AI cost: none; summarizes saved scores without rerunning workflows or their judge.
     Reports sample statistics: median with [min, max], a seeded bootstrap interval for
     per-arm medians, and per-repeat paired differences against each arm's control
     (B and E against A, D against C, optional F against E). No significance test is computed or claimed.

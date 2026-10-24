@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # Provisions the package a consumer actually receives, for any tier to assert against.
+# AI cost: none; package builds/APM dependency downloads do not dispatch models.
 #
 # Both Tier 0 and the Tier 1 live harness need the same tree, and they need it built
 # the same way: a divergence between "the tree Tier 0 inspected" and "the tree Tier 1

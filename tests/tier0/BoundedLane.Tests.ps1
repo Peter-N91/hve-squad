@@ -146,7 +146,11 @@ Describe 'Bounded lane wording pins (RTE-38 to RTE-41)' {
     ) {
         $text = $script:HotTexts[$_]
         $text | Should -Not -BeNullOrEmpty
-        $text | Should -Not -Match '(?i)bounded lane|Route: bounded|pipeline=full|Plan-Driven Parallelism|deliverable-fan-out plan|Get-SquadDispatchBrief|blocked: not bounded' -Because "$_ is read on every default run"
+        $text | Should -Not -Match '(?i)Route: bounded|pipeline=full|Plan-Driven Parallelism|deliverable-fan-out plan|blocked: not bounded' -Because "$_ must not enable the economy lane for ordinary modes"
+        if ($text -match '(?i)bounded lane') {
+            $text | Should -Match '(?is)only.*economy|except.*economy'
+            $text | Should -Match '(?i)other modes|non-economy'
+        }
     }
 
     It 'no always-on text or the cold file permits the coordinator to author, edit, or work inline (lexical guard)' {

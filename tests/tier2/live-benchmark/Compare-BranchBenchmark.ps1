@@ -4,6 +4,8 @@
 <#
 .SYNOPSIS
 Compares immutable branch snapshots offline and always writes reports before verdict exit.
+.DESCRIPTION
+AI cost: none; compares saved evidence, not fresh model runs.
 #>
 [CmdletBinding()]
 param(

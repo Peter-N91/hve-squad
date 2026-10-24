@@ -35,7 +35,7 @@ export function readPendingChangeCommits(release, repositoryRoot = root) {
   for (const id of release.pendingChanges) {
     const path = `.changes/unreleased/${id}.md`;
     if (git(repositoryRoot, ["ls-files", "--error-unmatch", "--", path], true) === null) continue;
-    const commit = git(repositoryRoot, ["log", "-1", "--format=%H", "--diff-filter=A", "--", path]);
+    const commit = git(repositoryRoot, ["log", "--first-parent", "--no-patch", "-1", "--format=%H", "--diff-filter=A", "--", path]);
     if (!commitId.test(commit)) throw new Error(`${path}: could not resolve the commit that added this pending fragment.`);
     commits.add(commit);
   }

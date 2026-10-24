@@ -1,6 +1,6 @@
 ---
 description: "Opt-in autopilot mode: a full research→plan→implement→review pipeline that runs end-to-end with human gates only on impactful actions and final-outcome validation"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/history/autopilot-run-*.md'
 ---
 
 # Squad Autopilot Conventions
@@ -51,9 +51,9 @@ Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches t
 5. **Review.** Dispatch the `tester` role at `auto` tier against the implemented changes. Record the review outcome through the Scribe.
 6. **Final-outcome validation.** Autopilot never auto-releases. After review, the coordinator compiles the run outcome and fires a final-outcome notification to the registered user per `.github/instructions/squad/squad-notifications.instructions.md`, then waits for human validation before any release-tier action.
 
-The coordinator advances stage-to-stage by reading the prior stage's findings; it hands every stage transition to the Scribe, which records it in the autopilot-run history file and updates `state.json`.
+The coordinator advances from prior findings and persists each stage through the validated writer or cold Scribe. Ordinary handoffs in every routing mode run directly and synchronously with `Write-SquadHandoff.ps1 -Quiet`, without Scribe startup. Verify status/counts and stage/history proof; surface warnings, never auto-bypass failures. Cold summaries/verdicts/notifications retain full Scribe loading; serialize all writers with Cost Preflight per root.
 
-**One Scribe hand-off per stage — never one per pipeline.** Dispatch the stage's role and hand its findings to the Scribe; once the stage's own artifact is on disk, the next stage's dispatch must share a parallel tool-call block with that hand-off whenever the Enablement Predicate holds and no barrier applies (see *Scribe Hand-off Pipelining* in `references/operating-procedure.md`), and the stage counts as run only once its history entry is read back and verified. Batching several stages into a single hand-off is what makes the *Per-Stage Advance Checklist* below unreachable: a turn that covers research, plan, architecture, council, three fan-out deliverables, a security review, a review, and a remediation has no point at which stage N's entry can be missing, because stage N and stage N+1 are the same write. The observed failure is a run whose Scribe recorded seven turns for ten stages and whose cast left no history at all. Under autopilot `state.json` advances per stage, so its `turn` counts stages rather than human turns.
+**One validated hand-off per stage — never one per pipeline.** Dispatch the stage's role and record its findings with the ordinary writer or cold Scribe. Only for a cold Scribe dispatch, the next stage's dispatch must share a parallel tool-call block with that hand-off whenever the Enablement Predicate holds and no barrier applies (see *Scribe Hand-off Pipelining* in `references/operating-procedure.md`). Ordinary handoffs complete synchronously first. Every stage counts as run only after its artifact, history, and consumption are read back and verified. Never merge stages into an end-of-run handoff. Under autopilot `state.json` advances per stage, so its `turn` counts stages rather than human turns.
 
 ## Deliverable Fan-Out (Multi-Artifact Runs)
 

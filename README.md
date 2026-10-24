@@ -59,7 +59,12 @@ initialization-to-completion example.
 
 ## Documentation
 
-[![Observed efficiency benchmark: document quality, acceptance and average benchmark time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
+[![Latest measured campaign: comparison unavailable](benchmarks/efficiency/campaign-badge.svg)](benchmarks/efficiency/campaign-report.md)
+
+Latest measured results: **unavailable / 82 / 79**, **870.7412115 known credits**;
+the missing first grade and whole-campaign total remain unavailable.
+[Earlier complete-series observations](benchmarks/efficiency/report.md):
+[![Earlier observed efficiency benchmark](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
 
 Full documentation lives on the project site:
 
@@ -103,7 +108,8 @@ Its methodology review and measurement hardening drew on these primary sources
 These sources informed the design; they do not certify it. The current three-trial,
 single-scenario baseline is a regression-screening reference, not a representative
 agent leaderboard. Human calibration, repeated-judge agreement and broader held-out
-task studies remain future empirical work. See the [generated report](benchmarks/efficiency/report.md)
+task studies remain future empirical work. See the [latest campaign report](benchmarks/efficiency/campaign-report.md),
+the [earlier complete-series report](benchmarks/efficiency/report.md)
 for actual results and the [collection guide](tests/tier2/live-benchmark/README.md)
 for execution details.
 
@@ -260,7 +266,46 @@ Or, for a sub-squad in a federation:
 .github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/<name> -Check
 ```
 
-This script (PowerShell 7+) validates that every recorded dispatch has a consumption block, that token counts and cost derivations round-trip correctly, and that the aggregated ledger totals match the sum of all recorded history entries. The `-Check` audit is optional, never required, and is useful for post-run audits or when troubleshooting cost reporting. During a run the Scribe calls the same script with `-Write`, which rewrites the ledger sections and the two `state.json` run totals from the history files, so no model copies a derived figure by hand. Add `-SessionLog auto` (the Scribe's `ledgerCommand` already does) to also record real host-reported usage beside the estimates: the model each dispatch actually ran on, real token totals, the session's billed AI units, and a comparison with the same work run on one model without HVE Squad.
+This script (PowerShell 7+) validates that every recorded dispatch has a consumption block, that token counts and cost derivations round-trip correctly, and that the aggregated ledger totals match the sum of all recorded history entries. A separate post-run `-Check` audit is optional and useful when troubleshooting cost reporting. During a run, the deterministic handoff writer invokes `-Write` and checks the result before returning; cold Scribe operations on a single-squad or member root (including a promotion's relocated member) use the same independently resolved, trusted helper, never a supplied `ledgerCommand`, which is inert payload data that is never executed. The helper rewrites the ledger sections and the two `state.json` run totals from history, so no model copies a derived figure by hand. A federation root is not written by `-Write`; its aggregate follows the federation procedure over member ledgers. Add `-SessionLog auto` (already the handoff default) to also record real host-reported usage beside estimates when available.
+
+Ordinary handoffs use the same deterministic writer in `off`, `ranked`, `economy`,
+and `manual` routing modes. The coordinator runs
+[`Write-SquadHandoff.ps1`](squad-src/.github/skills/squad/scripts/Write-SquadHandoff.ps1)
+directly with `-SquadRoot <root> -PayloadPath <payload.json> -Quiet`, without
+starting a Scribe subagent. Quiet mode returns one JSON status line containing
+`status`, `turn`, `dispatchEntries`, `historyCounts`, and `ledgerCheck`; warnings
+remain on stderr. `ledgerCheck: ledger-only` preserves the existing tolerated
+accounting-warning behavior and is not reported as `PASS`. Nonzero exits stop the
+handoff; they are not permission to bypass validation with handwritten state.
+
+Confirmed fresh initialization can now run directly through the same staged
+initializer with `-Direct`. `Get-SquadInitContext.ps1` prepares the full payload
+from confirmed profile, packs, names and notification choices; no model retypes
+the roster or rate template. The legacy Scribe input remains supported.
+Verdicts, notifications, memory, refresh, cost-ceiling slots, promotion/expansion,
+aggregate federation autopilot and run summaries keep their cold procedure.
+Direct and Scribe writes are serialized per squad root, and completion still
+requires dispatch history, consumption blocks, and an advanced state turn.
+Existing Markdown and JSON artifact formats are unchanged; no migration is needed.
+The historical Scribe orchestration file records actual coordinator overhead and
+Scribe usage only when the Scribe ran, not a fictional model call for script execution.
+
+Both coordinators now start from compact runtime contracts. The
+`Get-SquadDispatchBrief.ps1 -AsJson` metadata path works in every routing mode;
+it does not enable Economy's bounded lane elsewhere. `New-SquadDispatchPlan.ps1`
+orders explicit dependencies into safe waves, while `Test-SquadTurnCompletion.ps1`
+checks the actual turn's files, history, accounting and state in one read-only call.
+These scripts do not launch models, choose a specialist's answer or grant approval.
+Cold instructions have artifact-specific scopes rather than all loading on any
+squad-state access.
+
+Ordinary federation-root writes use `Write-SquadFederationHandoff.ps1` with a
+pre-dispatch snapshot and verified inner proofs. It preserves append-only bytes,
+records cross-member inputs, carries prior root overhead once and sums member
+totals without changing the existing federation schema. Unsupported operations
+retain the cold path. PowerShell 7.4+ is required for the new coordinator helpers;
+hosts without it retain the full legacy procedure. Smaller prompts and offline
+script execution are not a claim about a particular live model's elapsed time.
 
 In VS Code Copilot Harness, use the agents dropdown to select the matching Squad agent. Send only
 the request text and arguments shown above; do not add a slash-command prefix.

@@ -1,217 +1,229 @@
 name: Tier 2 Benchmark
 
+# Collects fresh release evidence against saved controls, or refreshes both arms.
+# AI cost: high; 3 paid candidate trials, or 6 with refresh_reference, each including a judge.
+# Collection policy reserves the spending ceiling before any model launch.
+
 on:
   workflow_call:
     inputs:
       candidate_sha:
-        description: Immutable candidate commit to gate before release publication
-        required: false
+        description: Frozen release candidate
+        required: true
         type: string
-      release_tag:
-        description: Published stable release to compare against an earlier stable ancestor
-        required: false
+      effective_version:
+        description: Version that publication will use, including a manual override
+        required: true
         type: string
+      refresh_reference:
+        description: Explicitly replace historical comparison with six fresh paired observations
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      COPILOT_GITHUB_TOKEN:
+        required: true
+    outputs:
+      controller_sha:
+        value: ${{ jobs.collect.outputs.controller }}
+      controller_repository:
+        value: ${{ jobs.collect.outputs.controller_repository }}
+      artifact_id:
+        value: ${{ jobs.collect.outputs.artifact }}
+      manifest_digest:
+        value: ${{ jobs.collect.outputs.manifest }}
   workflow_dispatch:
-    # checkov:skip=CKV_GHA_7:Read-only report; operators supply reviewed immutable commits, validated before checkout.
+    # checkov:skip=CKV_GHA_7:Authorized paid diagnostics; optional immutable SHAs default to the selected branch and reviewed default branch.
     inputs:
       base_sha:
-        description: Authorized reviewed base commit (full SHA; not a branch name)
-        required: true
+        description: Optional reviewed default-branch controller SHA (blank freezes default branch)
+        required: false
         type: string
       head_sha:
-        description: Candidate commit in this repository (full SHA)
-        required: true
+        description: Optional candidate SHA (blank uses selected branch)
+        required: false
         type: string
+      refresh_reference:
+        description: Explicit six-observation parent refresh (never automatic)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: tier2-benchmark-${{ inputs.candidate_sha || inputs.release_tag || github.run_id }}
-  cancel-in-progress: true
+  group: tier2-benchmark-${{ inputs.candidate_sha || inputs.head_sha || github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  compare:
-    name: Branch-relative benchmark report
+  collect:
+    name: Stored parent and fresh candidate benchmark
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 360
+    outputs:
+      controller: ${{ steps.refs.outputs.controller }}
+      controller_repository: ${{ steps.refs.outputs.controller_repository }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      manifest: ${{ steps.collect.outputs.manifest }}
     steps:
-      - name: Validate immutable event identities
+      - name: Freeze reviewed controller and candidate
         id: refs
+        timeout-minutes: 5
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          INPUT_BASE: ${{ inputs.base_sha }}
+          INPUT_HEAD: ${{ inputs.candidate_sha || inputs.head_sha || github.sha }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $baseRepo = $env:GITHUB_REPOSITORY
-          $headRepo = $env:GITHUB_REPOSITORY
-          if ($baseRepo -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid repository identity.' }
-          $baseSha = $null
-          if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA) {
-            $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
-            function Get-ReleaseApi([string]$Path) {
-              $response = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$baseRepo/$Path" -Headers $headers
-              foreach ($item in $response) { $item }
-            }
-            function Resolve-ReleaseCommit([string]$Tag) {
-              $object = (Get-ReleaseApi "git/ref/tags/$([Uri]::EscapeDataString($Tag))").object
-              $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-              while ($true) {
-                if ($object.sha -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid release object identity.' }
-                if ($object.type -ceq 'commit') { return $object.sha }
-                if ($object.type -cne 'tag' -or -not $seen.Add($object.sha)) { throw 'Invalid release tag chain.' }
-                $object = (Get-ReleaseApi "git/tags/$($object.sha)").object
-              }
-            }
-            if ($env:CANDIDATE_SHA) {
-              if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA -cnotmatch '^[0-9a-f]{40}$') { throw 'One immutable candidate SHA required.' }
-              $headSha = $env:CANDIDATE_SHA
-              $release = @{ id = $null; published_at = [DateTimeOffset]::UtcNow }
-            } else {
-              $release = Get-ReleaseApi "releases/tags/$([Uri]::EscapeDataString($env:RELEASE_TAG))"
-              if ($release.draft -or $release.prerelease -or -not $release.published_at) { throw 'A published stable release is required.' }
-              $headSha = Resolve-ReleaseCommit $env:RELEASE_TAG
-            }
-            $releases = [Collections.Generic.List[object]]::new()
-            $page = 1
-            do {
-              $batch = @(Get-ReleaseApi "releases?per_page=100&page=$page")
-              foreach ($item in $batch) { $releases.Add($item) }
-              $page++
-            } while ($batch.Count -eq 100)
-            $candidates = @($releases | Where-Object {
-              -not $_.draft -and -not $_.prerelease -and $_.id -ne $release.id -and
-              $_.published_at -and [DateTimeOffset]$_.published_at -le [DateTimeOffset]$release.published_at
-            } | Sort-Object { [DateTimeOffset]$_.published_at } -Descending)
-            foreach ($candidate in $candidates) {
-              $candidateSha = Resolve-ReleaseCommit $candidate.tag_name
-              $comparison = Get-ReleaseApi "compare/$candidateSha...$headSha"
-              if ($comparison.status -cin @('ahead', 'identical')) {
-                $baseSha = $candidateSha
-                break
-              }
-            }
-          } else {
-            $eventData = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
-            $baseSha = $eventData.inputs.base_sha
-            $headSha = $eventData.inputs.head_sha
-            if (-not $baseSha) { throw 'Full base commit SHA required.' }
-          }
-          if ($headSha -cnotmatch '^[0-9a-f]{40}$') { throw 'Full commit SHA required.' }
-          if ($baseSha -and $baseSha -cnotmatch '^[0-9a-f]{40}$') { throw 'Full commit SHA required.' }
-          "base=$baseSha", "head=$headSha", "base_repository=$baseRepo", "head_repository=$headRepo" |
-            Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          "started=$([DateTimeOffset]::UtcNow.ToString('o'))" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          $metadata = (& gh api "repos/$env:GITHUB_REPOSITORY") | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve reviewed default branch.' }
+          $controllerRepository = $env:GITHUB_REPOSITORY
+          if ($metadata.fork) {
+            $controllerRepository = $metadata.parent.full_name
+            $defaultBranch = $metadata.parent.default_branch
+          } else { $defaultBranch = $metadata.default_branch }
+          if ($controllerRepository -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid controller repository.' }
+          $tip = (& gh api "repos/$controllerRepository/commits/$([Uri]::EscapeDataString($defaultBranch))" --jq '.sha').Trim()
+          if ($LASTEXITCODE -ne 0 -or $tip -cnotmatch '^[0-9a-f]{40}$') { throw 'Cannot freeze reviewed controller.' }
+          # A manual base is accepted only if it is the reviewed current tip.
+          if ($env:INPUT_BASE -and $env:INPUT_BASE -cne $tip) { throw 'Controller must be the reviewed default-branch tip.' }
+          if ($env:INPUT_HEAD -cnotmatch '^[0-9a-f]{40}$') { throw 'Candidate must be a full commit SHA.' }
+          "controller=$tip", "controller_repository=$controllerRepository", "candidate=$env:INPUT_HEAD" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
-      - name: Checkout reviewed base implementation
-        if: steps.refs.outputs.base != ''
+      - name: Checkout frozen reviewed controller
+        timeout-minutes: 10
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ steps.refs.outputs.base_repository }}
-          ref: ${{ steps.refs.outputs.base }}
+          repository: ${{ steps.refs.outputs.controller_repository }}
+          ref: ${{ steps.refs.outputs.controller }}
           fetch-depth: 0
           persist-credentials: false
           submodules: false
           lfs: false
 
-      - name: Fetch candidate objects without checkout or execution
-        if: steps.refs.outputs.base != ''
+      - name: Validate sources and read reviewed spending policy before installation
+        id: preflight
+        timeout-minutes: 5
         shell: pwsh
         env:
-          BASE_SHA: ${{ steps.refs.outputs.base }}
-          HEAD_SHA: ${{ steps.refs.outputs.head }}
-          HEAD_REPOSITORY: ${{ steps.refs.outputs.head_repository }}
+          CONTROLLER: ${{ steps.refs.outputs.controller }}
+          CANDIDATE: ${{ steps.refs.outputs.candidate }}
+          EFFECTIVE_VERSION: ${{ inputs.effective_version }}
+          REFRESH_REFERENCE: ${{ inputs.refresh_reference || false }}
         run: |
           $ErrorActionPreference = 'Stop'
-          if ((git rev-parse HEAD).Trim() -cne $env:BASE_SHA) { throw 'Base checkout identity mismatch.' }
-          git -c core.hooksPath=/dev/null fetch --no-tags --no-recurse-submodules -- "https://github.com/$($env:HEAD_REPOSITORY).git" $env:HEAD_SHA
-          if ($LASTEXITCODE -ne 0) { throw 'Candidate fetch failed.' }
-          if ((git rev-parse FETCH_HEAD).Trim() -cne $env:HEAD_SHA) { throw 'Candidate fetch identity mismatch.' }
-
-      - name: Compare or report missing baseline tooling
-        id: compare
-        shell: pwsh
-        env:
-          BASE_SHA: ${{ steps.refs.outputs.base }}
-          HEAD_SHA: ${{ steps.refs.outputs.head }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $outputRoot = Join-Path $env:RUNNER_TEMP 'efficiency-report'
-          New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
-          $helper = './tests/tier2/live-benchmark/Compare-BranchBenchmark.ps1'
-          if ($env:BASE_SHA -and (Test-Path -LiteralPath $helper -PathType Leaf)) {
-            & pwsh -NoProfile -File $helper -Repository $PWD -BaseRef $env:BASE_SHA -HeadRef $env:HEAD_SHA -OutputDirectory $outputRoot
-            $code = $LASTEXITCODE
-          } else {
-            $reason = if ($env:BASE_SHA) { 'base-comparison-tooling-unavailable' } else { 'previous-stable-release-unavailable' }
-            @{
-              schemaVersion = 'benchmark-report-v1'
-              status = 'missing-baseline'
-              exitCode = 2
-              baseCommit = $env:BASE_SHA
-              headCommit = $env:HEAD_SHA
-              reasons = @($reason)
-            } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRoot 'report.json')
-            "# Efficiency benchmark`n`n**Missing baseline/tooling (exit 2).**`n`nReason: $reason`n`nBase: $env:BASE_SHA`n`nHead: $env:HEAD_SHA`n`nNo candidate helper executed; no comparison or quality approval claimed." |
-              Set-Content -LiteralPath (Join-Path $outputRoot 'report.md')
-            '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="28" role="img" aria-label="benchmark unavailable"><rect width="220" height="28" fill="#6b7280"/><text x="10" y="18" fill="white">benchmark unavailable</text></svg>' |
-              Set-Content -LiteralPath (Join-Path $outputRoot 'badge.svg')
-            $code = 2
+          git -c core.hooksPath=/dev/null fetch --no-tags --no-recurse-submodules -- "https://github.com/$env:GITHUB_REPOSITORY.git" $env:CANDIDATE
+          if ($LASTEXITCODE -ne 0 -or (git rev-parse FETCH_HEAD).Trim() -cne $env:CANDIDATE) { throw 'Candidate fetch failed.' }
+          if (-not $env:EFFECTIVE_VERSION) {
+            $manifest = (git show "$($env:CANDIDATE):apm.yml") -join "`n"
+            if ($LASTEXITCODE -ne 0 -or $manifest -cnotmatch '(?m)^version: ([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)\r?$') { throw 'Candidate version unavailable.' }
+            $env:EFFECTIVE_VERSION = $Matches[1]
           }
-          if ($code -notin @(0, 1, 2, 3)) { $code = 1 }
-          "$code" | Set-Content -LiteralPath (Join-Path $outputRoot 'exit-code.txt')
-          "verdict=$code" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          Import-Module ./tests/tier2/live-benchmark/ReleaseBenchmark.psm1
+          $context = Get-ReleaseBenchmarkPreflight -Repository $PWD -Controller $env:CONTROLLER -Candidate $env:CANDIDATE -EffectiveVersion $env:EFFECTIVE_VERSION -RefreshReference:($env:REFRESH_REFERENCE -ceq 'true')
+          "cli=$($context.policy.cliVersion)", "version=$env:EFFECTIVE_VERSION" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
-      - name: Publish report summary
+      - name: Install the APM CLI
+        timeout-minutes: 10
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: 'true'
+          apm-version: '0.29.0'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        timeout-minutes: 5
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Install pinned CLI without automatic updates
+        timeout-minutes: 10
+        # zizmor: ignore[adhoc-packages] - exact reviewed policy pin; no floating package version.
+        shell: bash
+        env:
+          CLI_VERSION: ${{ steps.preflight.outputs.cli }}
+        run: |
+          npm install -g "@github/copilot@${CLI_VERSION}"
+          mkdir -p .benchmark-private/bin
+          COPILOT_BIN="$(command -v copilot)"
+          printf '#!/usr/bin/env bash\nexec "%s" --no-auto-update "$@"\n' "$COPILOT_BIN" > .benchmark-private/bin/copilot
+          chmod 700 .benchmark-private/bin/copilot
+
+      - name: Prepare source-bound dependency installs without Copilot credentials
+        timeout-minutes: 40
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONTROLLER: ${{ steps.refs.outputs.controller }}
+          CANDIDATE: ${{ steps.refs.outputs.candidate }}
+          EFFECTIVE_VERSION: ${{ steps.preflight.outputs.version }}
+          REFRESH_REFERENCE: ${{ inputs.refresh_reference || false }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module ./tests/tier2/live-benchmark/ReleaseBenchmark.psm1
+          Import-Module ./tests/lib/SquadInstall.psm1
+          $context = Get-ReleaseBenchmarkPreflight -Repository $PWD -Controller $env:CONTROLLER -Candidate $env:CANDIDATE -EffectiveVersion $env:EFFECTIVE_VERSION -RefreshReference:($env:REFRESH_REFERENCE -ceq 'true')
+          foreach ($arm in $context.arms) {
+            $revision = if ($arm -eq 'baseline') { $context.reference } else { $env:CANDIDATE }
+            $source = Join-Path $PWD ".benchmark-private/sources/$arm"
+            git -c core.hooksPath=/dev/null worktree add --detach $source $revision
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare frozen source.' }
+            $null = Install-SquadPackage -SourceRoot $source -Destination (Join-Path $PWD ".benchmark-private/install/$arm")
+          }
+
+      - name: Collect original candidate observations and compare in the requested mode
+        id: collect
+        shell: pwsh
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          CONTROLLER: ${{ steps.refs.outputs.controller }}
+          CANDIDATE: ${{ steps.refs.outputs.candidate }}
+          EFFECTIVE_VERSION: ${{ steps.preflight.outputs.version }}
+          STARTED: ${{ steps.refs.outputs.started }}
+          REFRESH_REFERENCE: ${{ inputs.refresh_reference || false }}
+        run: |
+          Import-Module ./tests/tier2/live-benchmark/ReleaseBenchmark.psm1
+          $report = Invoke-ReleaseBenchmark -Repository $PWD -Controller $env:CONTROLLER -Candidate $env:CANDIDATE -EffectiveVersion $env:EFFECTIVE_VERSION `
+            -InstallRoot (Join-Path $PWD '.benchmark-private/install') -CliPath (Join-Path $PWD '.benchmark-private/bin/copilot') `
+            -PrivateRoot (Join-Path $PWD '.benchmark-private/campaign') -OutputDirectory (Join-Path $PWD '.benchmark-public') `
+            -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT -RepositorySlug $env:GITHUB_REPOSITORY -Started ([DateTimeOffset]::Parse($env:STARTED)) `
+            -RefreshReference:($env:REFRESH_REFERENCE -ceq 'true')
+          $digest = (Get-FileHash .benchmark-public/identity.json).Hash.ToLowerInvariant()
+          "manifest=$digest", "verdict=$($report.exitCode)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          exit ([int]$report.exitCode)
+
+      - name: Finalize sanitized failure evidence and summary
         if: always()
         shell: pwsh
         run: |
-          $report = Join-Path $env:RUNNER_TEMP 'efficiency-report/report.md'
-          if (Test-Path -LiteralPath $report) {
-            Get-Content -LiteralPath $report -Raw | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
-          } else {
-            $outputRoot = Split-Path $report
-            New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
-            $message = '# Efficiency benchmark: operational failure before comparison. No passing result.'
-            $message | Set-Content -LiteralPath $report
-            $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          $root = Join-Path $PWD '.benchmark-public'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $path = Join-Path $root 'report.md'
+          if (-not (Test-Path -LiteralPath $path)) {
+            '# Efficiency benchmark: operational failure before collection. No passing result.' | Set-Content -LiteralPath $path
             @{ schemaVersion = 'benchmark-report-v1'; status = 'operational-error'; exitCode = 1; reasons = @('workflow-preflight-failed') } |
-              ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRoot 'report.json')
-            '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="28" role="img" aria-label="benchmark unavailable"><rect width="220" height="28" fill="#6b7280"/><text x="10" y="18" fill="white">benchmark unavailable</text></svg>' |
-              Set-Content -LiteralPath (Join-Path $outputRoot 'badge.svg')
+              ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'report.json')
           }
-
-      - name: Upload comparison and SVG
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: efficiency-comparison
-          path: ${{ runner.temp }}/efficiency-report/
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Checkout candidate metadata without a baseline
-        if: inputs.candidate_sha != '' && steps.refs.outputs.base == '' && steps.compare.outputs.verdict == '2'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ steps.refs.outputs.head }}
-          persist-credentials: false
-          submodules: false
-          lfs: false
+          Get-Content -LiteralPath $path -Raw | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Apply temporary release baseline bootstrap
         id: gate
         if: always()
         shell: pwsh
         env:
-          VERDICT: ${{ steps.compare.outputs.verdict }}
+          VERDICT: ${{ steps.collect.outputs.verdict }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          COLLECTION_REQUIRED: 'true'
         run: |
           $ErrorActionPreference = 'Stop'
           $verdict = $env:VERDICT
           if ($verdict -notmatch '^[0-3]$') { $verdict = '1' }
-          if ($verdict -eq '2' -and $env:CANDIDATE_SHA -cmatch '^[0-9a-f]{40}$') {
+          # Retained legacy stored-comparison policy; never admits a fresh collection failure.
+          if ($env:COLLECTION_REQUIRED -cne 'true' -and $verdict -eq '2' -and $env:CANDIDATE_SHA -cmatch '^[0-9a-f]{40}$') {
             $reportPath = Join-Path $env:RUNNER_TEMP 'efficiency-report/report.json'
             $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
             $bootstrapReasons = @('base-comparison-tooling-unavailable', 'previous-stable-release-unavailable')
@@ -223,7 +235,7 @@ jobs:
               $version = [version]($versions[0].Value.Substring(9).Trim())
               if ($version -le [version]'0.18.1') {
                 $verdict = '0'
-                $message = "Temporary release bootstrap: missing baseline allowed for $version (expires after v0.18.1). No benchmark approval; original report unchanged."
+                $message = "Temporary legacy bootstrap: missing baseline allowed for $version (expires after v0.18.1). No benchmark approval; original report unchanged."
                 Write-Host "::warning::$message"
                 $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
               }
@@ -231,7 +243,24 @@ jobs:
           }
           "verdict=$verdict" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
-      - name: Propagate comparison verdict
+      - name: Upload allowlisted sanitized evidence, including failures
+        id: upload
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .benchmark-public/report.json
+            .benchmark-public/report.md
+            .benchmark-public/badge.svg
+            .benchmark-public/identity.json
+            .benchmark-public/base-record.json
+            .benchmark-public/head-record.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Propagate collection and comparison verdict
         if: always()
         shell: pwsh
         env:

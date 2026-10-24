@@ -1,11 +1,11 @@
 ---
 description: "Squad state layout and mapping of squad coordination tools to HVE Core mechanisms"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/state.json'
 ---
 
 # Squad State Conventions
 
-These conventions define where squad state lives, who may change it, and how the squad's coordination tools map onto concrete HVE Core mechanisms. The Squad Coordinator reads this layout to locate roster, routing, decisions, and history; the Squad Scribe writes to it on the coordinator's behalf.
+These conventions define where squad state lives, who may change it, and how the squad's coordination tools map onto concrete HVE Core mechanisms. The coordinator reads this layout; supported ordinary writes use the validated deterministic writer directly or through Scribe, and cold writes remain Scribe-owned. Existing Markdown/state storage is unchanged.
 
 State is per-project and runtime-created. It is never packaged with the squad source — only the coordinator produces it under `.copilot-tracking/squad/` when a project first runs the squad.
 
@@ -26,21 +26,21 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 |-----------------------|----------------------------------------------------------------------------|----------------------|
 | `team.md`             | Roster of roles and the agents that fill them (see roster conventions)     | Replace via scribe   |
 | `routing.md`          | Request-pattern routing table (see routing conventions)                    | Replace via scribe   |
-| `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only via Scribe; Cost Preflight via coordinator |
+| `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only via validated writer or Scribe; Cost Preflight via coordinator |
 | `notifications.md`    | Chronological log of notifications (pings) fired and their delivery channel | Append-only          |
 | `history/<agent>.md`  | Per-agent dispatch history: requests handled, findings, outcomes           | Append-only          |
 | `history/autopilot-run-<id>.md` | Per-run autopilot pipeline summary: stages, gates, approvals     | Append-only by id    |
-| `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via Scribe; Cost Preflight compare-and-swap via coordinator |
-| `consumption.md`      | Aggregated member/model/credit ledger; carries the cost comparison line    | Replace via scribe   |
-| `consumption-rates.md`| Per-model token-rate table (USD per 1M) plus the comparison methodology    | Replace via scribe   |
+| `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via validated writer or Scribe; Cost Preflight compare-and-swap via coordinator |
+| `consumption.md`      | Aggregated member/model/credit ledger; carries the cost comparison line    | Replace via validated writer or Scribe |
+| `consumption-rates.md`| Per-model token-rate table (USD per 1M) plus the comparison methodology    | Replace via seeder or Scribe |
 
 * `decisions.md`, `notifications.md`, and the `history/<agent>.md` files are **append-only**. New entries are added to the end; prior entries are never edited or removed.
-* Init seeds `history/` as an empty directory. Each `history/<agent>.md` is created by the dispatch it records, in the same write as its first entry, because the file's presence is the proof that stage ran.
+* Init seeds only `history/Squad Scribe.md` with initialization overhead. Each role's `history/<agent>.md` is created with the dispatch it records, never pre-created as proof of a stage that did not run.
 * `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the coordinator overwrites as the squad advances. It carries the `notify` object (the captured notification contact) and the current `mode`.
 
 ### state.json Shape
 
-The Scribe seeds `state.json` on first run and overwrites it as the squad advances. Before a child dispatch, the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching Cost Preflight decision entry, and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`; this is the sole exception to Scribe-owned writes.
+The Scribe seeds `state.json`; the validated ordinary writer or cold Scribe advances it. In every routing mode, the coordinator may synchronously run `Write-SquadHandoff.ps1 -Quiet` using the minimal JSON in `references/economy-scribe.md`, without loading cold schemas or dispatching Scribe. Serialize direct writer, cold Scribe, and Cost Preflight per root. Quiet success requires one valid status/count/check object; warnings stay visible on stderr. Failure never permits unvalidated hand edits or ordinary ledger arithmetic. Before a child dispatch the coordinator may also compare-and-swap only `currentRun.costPreflight`, append its matching decision and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`.
 
 ```json
 {
@@ -196,13 +196,13 @@ Totals are computed by summing the rows, never estimated. The total row must equ
 
 ## State Ownership
 
-Only the Squad Coordinator initiates state changes, and the Squad Scribe performs every ordinary write. Initialization is outside admission. Before later work dispatch, the sole exception is the deterministic Cost Preflight transaction: while no parallel writer exists, the coordinator compares `updated`, changes only `currentRun.costPreflight` plus an exact legacy schema bump when required, appends the matching decision, and reads both back. A collision or mismatch permits no dispatch. Other cast agents never write squad state directly.
+Only the owning coordinator initiates state changes. Ordinary writes use the synchronous validated script in every routing mode; cold operations use Scribe. Cost Preflight remains the narrow coordinator-edited transaction: compare `updated`, change only `currentRun.costPreflight` plus the exact legacy schema bump, append its decision, read back, and dispatch nothing on collision or mismatch. Other cast agents never write squad state directly.
 
-This single-writer rule keeps shared state consistent across parallel dispatch: concurrent roles cannot race on the same files because every mutation funnels through the scribe. Under autopilot pipelining this still holds per squad root: at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order, and a federation applies this same per-root rule independently to each sub-squad root.
+One writer per root keeps concurrent roles from racing: serialize direct writer, cold Scribe, and Cost Preflight. Under cold autopilot pipelining, at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order. Direct ordinary handoffs run synchronously, never alongside another writer; each federation member applies this independently.
 
 ## Proof of Dispatch
 
-A `history/<agent>.md` entry is the squad's proof that a role actually ran. Because only the Scribe writes history — and only when the coordinator dispatched the agent and handed back findings — the presence of a per-agent history entry is verifiable evidence that the stage happened; its absence is evidence that it did not.
+A verified `history/<agent>.md` entry is proof of dispatch only together with its domain artifact and consumption block. The validated ordinary writer or cold Scribe writes it from actual dispatch findings. Its absence means the stage is unproven, not permission to claim it complete. `history/Squad Scribe.md` retains orchestration overhead on direct routes but does not imply a Scribe dispatch; count only actual coordinator/Scribe usage.
 
 The coordinator and the pipeline gates treat history as the gate mechanism:
 
