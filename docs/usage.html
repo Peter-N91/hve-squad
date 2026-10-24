@@ -80,7 +80,7 @@
           <code>routing=off|ranked|economy|manual</code> — how each role's model is chosen, saved in
           <code>team.md</code> until you change it. <code>off</code> (default) applies no policy;
           <code>ranked</code> picks the model that best fits each role's work among the models your
-          host offers; <code data-release-change="20261005-routing-economy">economy</code> is <code>ranked</code> with cheaper picks for five
+          host offers; <code>economy</code> is <code>ranked</code> with cheaper picks for five
           implementation roles, after your consent; <code>manual</code> asks you to pick, with
           suggestions pre-filled. See
           <a href="#model-selection-per-role">Model selection per role</a> below.
@@ -1606,7 +1606,7 @@ layouts:
           work, among the models your host offers, and shows each pick in a <code>Model</code> column
           under a <code>Model routing: ranked</code> line.
         </li>
-        <li data-release-change="20261005-routing-economy">
+        <li>
           <strong><code>economy</code></strong> — as <code>ranked</code>, except that five low-impact
           implementation roles get the cheapest model that fits their work well enough; shown under a
           <code>Model routing: economy</code> line. Opt-in, and only after you accept the trade. See
@@ -1645,7 +1645,7 @@ layouts:
         squad offers catalog models priced at or below your session model; if VS Code rejects a
         pick, you are asked again with the list VS Code reports.
       </p>
-      <p id="routing-economy" data-release-change="20261005-routing-economy">
+      <p id="routing-economy">
         <strong>Economy mode (<code>routing=economy</code>).</strong> Only these five roles change
         model: <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code>, and <code>data-scientist</code>. Each gets the cheapest catalog
@@ -1689,7 +1689,7 @@ layouts:
       <p><strong>Precedence</strong> (highest wins, per role):</p>
       <ol>
         <li><code>routing=manual</code>: the role's valid <code>Model</code> cell.</li>
-        <li><code>routing=ranked</code>: the ranked pick for that role (<code data-release-change="20261005-routing-economy">routing=economy</code>: the economy pick).</li>
+        <li><code>routing=ranked</code>: the ranked pick for that role (<code>routing=economy</code>: the economy pick).</li>
         <li>
           <code>tier=</code> (the existing static-tier input) or the seeded <code>team.md</code> Model
           Tier — today's fallback, unchanged.
@@ -1697,7 +1697,7 @@ layouts:
         <li>Omit the parameter — the no-policy default.</li>
       </ol>
       <p>
-        <strong>Dispatch copies the cell:</strong> under <code>ranked</code>, <code data-release-change="20261005-routing-economy">economy</code>, or <code>manual</code>, every
+        <strong>Dispatch copies the cell:</strong> under <code>ranked</code>, <code>economy</code>, or <code>manual</code>, every
         dispatch to a roster agent passes that row's <code>Model</code> cell exactly, except the Scribe,
         whose own model pin governs. In the plugin distribution, the <code>dispatch-guards</code> hook
         refuses a dispatch whose <code>model</code> is missing or differs from the cell, and names the
@@ -1731,7 +1731,7 @@ layouts:
       <p><strong>Examples:</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
 /squad request="implement the design" routing=ranked</code></pre>
-      <pre data-release-change="20261005-routing-economy"><code># Switch to economy; the squad states the trade and records your consent first.
+      <pre><code># Switch to economy; the squad states the trade and records your consent first.
 /squad request="update the getting-started guide" routing=economy</code></pre>
       <pre><code># Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual
