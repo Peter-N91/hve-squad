@@ -154,6 +154,70 @@ the control phase before starting candidates; offline checks remain first.
 | 4. Offline | All self-tests; no AI/login, Python/pytest setup may download packages | Thorough harness validation before formal collection |
 | 5. Offline smoke | Exactly 1 simulated candidate; no AI/login/downloads/Python; installed Git/Pester required | Fast harness editing feedback, including uncommitted changes |
 | 6. Single candidate vs saved scores | Smoke first, then 1 paid candidate workflow including judge; no benchmark export | Debug the current local changes against historical scores |
+| 7. Repair/check setup | Checks committed source/protocol, keeps a valid install or offers archive/rebuild; no AI, login or benchmark runs | Recover setup before choosing 1 or 2; rebuilding packages may download dependencies |
+
+### Repair after a local diagnostic
+
+`invalid-record:measured-source-mismatch` means the measured `squad-src/` bytes
+do not match the selected checkout's Git `HEAD`. Option 6 allows uncommitted
+changes; it does **not** damage the install or make those changes formal evidence.
+
+Review and commit the intended source changes yourself, then choose **7** to
+check setup, then **1** or **2**. Formal modes now check measured source and the
+actual executing protocol **before prerequisite setup or login**, naming the
+checkout and affected paths. Unrelated dirty files do not block collection.
+Repair cannot decide what belongs in your commit, discard changes, rewrite old
+evidence, or turn local diagnostic scores into controls.
+
+Option 7 asks only for the evidence root and source checkout. A valid install is
+kept by default. Choose rebuild only when needed: the wizard asks for fresh consent
+to archive the managed `install/` directory and prepare its replacement. Nothing
+is deleted; previous runs, controls and installation contents remain available.
+Rebuilding may download packages and change dependency hashes. A successful repair
+checks source/protocol and package layout/manifest, **not** live authorization,
+saved-control compatibility, offline-suite success or benchmark quality. Options 1
+and 2 still perform their full checks and require fresh spending consent.
+
+| Failure | Recovery |
+| --- | --- |
+| Uncommitted measured source | Review/commit the named changes; rerun 7, then 1 or 2 |
+| Missing, stale or damaged prepared install | Choose 7 and consent to archive/rebuild; old evidence stays untouched |
+| Saved controls have a different runtime/model/dependency/protocol | Restore the exact environment or explicitly collect fresh controls; never edit saved evidence |
+| Parent/candidate commits have different measured protocols | Stop: these revisions cannot be formally compared by this harness; fresh trials or rebuilding dependencies do not fix this |
+
+### Compare a committed PR with its parent
+
+Commit the intended PR changes first. Create two detached worktrees so editing the
+development checkout cannot change the measured arms. From the development
+checkout, with the intended target branch available locally:
+
+```bash
+target=origin/main  # Use the actual PR target, not an arbitrary saved baseline.
+candidate=$(git rev-parse HEAD)
+parent=$(git merge-base "$target" "$candidate")
+sources="$HOME/bench/hve-squad-sources"
+git worktree add --detach "$sources/parent" "$parent"
+git worktree add --detach "$sources/pr" "$candidate"
+bash "$sources/pr/tests/tier2/live-benchmark/start-efficiency-wizard.sh" \
+  -WorkRoot "$HOME/bench/hve-squad-evidence"
+```
+
+Use fresh worktree paths if these already exist. This runs the **candidate's**
+wizard/protocol. Choose **2**, enter **none** for saved controls, select
+`$HOME/bench/hve-squad-sources/parent` as baseline and
+`$HOME/bench/hve-squad-sources/pr` as candidate. This collects six fresh paired
+trials, after checks and your explicit isolation/spending consent. The commands
+above start setup only; no paid collection occurs without that consent.
+
+Both commits must support the same executing benchmark protocol; the early check
+stops otherwise. Do not copy newer protocol files into the parent worktree to
+force admission. If compatible three-control evidence already measures this exact
+parent, select that `control-series.json` instead of **none** to collect only three
+candidates. Fresh pairs replace stale saved controls only when both measured
+revisions are themselves protocol-compatible. Same-checkout arms measure
+repeatability, not PR improvement.
+
+### Local diagnostics
 
 Options **5 and 6 are local diagnostics, never benchmark evidence**. The offline
 smoke normally takes seconds, uses fake AI responses and intentionally checks
@@ -183,6 +247,8 @@ scheduling is preserved. Use formal Establish/Series/Complete for publishable re
 Wizard scratch paths and local diagnostics require physical checkout/output paths.
 Source and output links, including ancestor links and junctions, are rejected before
 creating test output; use the target directory's physical path instead.
+
+### Formal collection and setup
 
 Initially, Establish is recommended without saved controls; Series is recommended
 when a control file is supplied or discovered. Later runs default to the remembered

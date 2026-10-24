@@ -221,6 +221,49 @@ function Get-BenchmarkExecutionIdentity {
     $Identity
 }
 
+function Assert-BenchmarkSourceReady {
+    <# .SYNOPSIS
+    Diagnoses source and executing-protocol mismatches before setup, without CLI or AI calls.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [string]$ProtocolRepository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+    )
+    $Revision = Resolve-BenchmarkCommit $Repository 'HEAD'
+    $Source = Join-Path $Repository 'squad-src'
+    $Listing = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('ls-tree', '-r', '--name-only', $Revision, '--', 'squad-src')))
+    $Paths = @($Listing.Split("`n", [StringSplitOptions]::RemoveEmptyEntries))
+    if (-not $Paths.Count) { Stop-BenchmarkData 'empty-source-tree' }
+    if (Test-Path -LiteralPath $Source -PathType Container) {
+        $Paths += @(Get-ChildItem -LiteralPath $Source -File -Recurse -Force |
+            Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+            ForEach-Object { 'squad-src/' + [IO.Path]::GetRelativePath($Source, $_.FullName).Replace('\', '/') })
+    }
+    $Issues = [Collections.Generic.List[string]]::new()
+    foreach ($Path in $Paths | Sort-Object -Unique) {
+        $Committed = Get-BenchmarkGitFile $Repository $Revision $Path 8388608 -Optional
+        $WorkingPath = Join-Path $Repository $Path
+        if ($null -eq $Committed -or -not (Test-Path -LiteralPath $WorkingPath -PathType Leaf) -or
+            (Get-BenchmarkDigest $Committed) -cne (Get-FileHash -LiteralPath $WorkingPath -Algorithm SHA256).Hash.ToLowerInvariant()) {
+            $Issues.Add("source: $Path")
+        }
+    }
+    foreach ($Key in $script:ProtocolPaths.Keys) {
+        $Path = $script:ProtocolPaths[$Key]
+        $Root = if ($Key -eq 'converterHash') { $Repository } else { $ProtocolRepository }
+        $WorkingPath = Join-Path $Root $Path
+        $Committed = Get-BenchmarkGitFile $Repository $Revision $Path 8388608 -Optional
+        if ($null -eq $Committed -or -not (Test-Path -LiteralPath $WorkingPath -PathType Leaf) -or
+            (Get-BenchmarkDigest $Committed) -cne (Get-FileHash -LiteralPath $WorkingPath -Algorithm SHA256).Hash.ToLowerInvariant()) {
+            $Issues.Add("protocol: $Path (executing checkout: $Root)")
+        }
+    }
+    if ($Issues.Count) {
+        throw "Formal source check failed for $Repository at ${Revision}:`n$($Issues -join "`n")`nReview and commit intended measured changes before using options 1 or 2. Each selected revision must match the executing benchmark protocol. Repair (option 7) cannot commit/discard source changes or fix incompatible revisions by rebuilding dependencies. Existing evidence is unchanged."
+    }
+}
+
 function Get-BenchmarkRawMetrics {
     param([Collections.IDictionary]$Metrics, [decimal]$WallSeconds)
     if ($Metrics.complete -cne $true -or $Metrics.credits.complete -cne $true) { Stop-BenchmarkData 'incomplete-metering' }
@@ -1236,4 +1279,4 @@ function Write-BenchmarkCampaignReport {
     Write-BenchmarkFile (Join-Path $OutputDirectory 'campaign-badge.svg') "<svg xmlns=`"http://www.w3.org/2000/svg`" width=`"600`" height=`"28`" role=`"img`" aria-label=`"$Badge`"><title>$Badge</title><rect width=`"600`" height=`"28`" rx=`"4`" fill=`"#6b7280`"/><text x=`"300`" y=`"18`" text-anchor=`"middle`" fill=`"white`" font-family=`"Verdana,Arial,sans-serif`" font-size=`"12`">$Badge</text></svg>`n"
 }
 
-Export-ModuleMember -Function Export-BenchmarkCampaign, Assert-BenchmarkCampaign, Get-BenchmarkCampaignSelection, Write-BenchmarkCampaignReport, Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit, Get-BenchmarkSelection, Assert-BenchmarkHistory, Get-BenchmarkGitFile, Invoke-BenchmarkGit, Get-BenchmarkProtocolDifferences, Assert-BenchmarkRecordedIdentity, Get-BenchmarkExecutionIdentity
+Export-ModuleMember -Function Export-BenchmarkCampaign, Assert-BenchmarkCampaign, Get-BenchmarkCampaignSelection, Write-BenchmarkCampaignReport, Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit, Get-BenchmarkSelection, Assert-BenchmarkHistory, Get-BenchmarkGitFile, Invoke-BenchmarkGit, Get-BenchmarkProtocolDifferences, Assert-BenchmarkRecordedIdentity, Get-BenchmarkExecutionIdentity, Assert-BenchmarkSourceReady
