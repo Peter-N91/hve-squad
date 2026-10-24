@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-24"
 ---
 
 # Scribe Cold Section: Init, Seeding, and Repository Memory
@@ -18,13 +18,17 @@ Read this file only when the turn's payload is one of: an **initialization** pay
 
 Create `team.md` from the coordinator-confirmed roster — the chosen profile's members, not the full cast catalog — and `routing.md` from the default routing rules filtered to that roster, dropping any routing row whose role is not on the seeded team, except the council row, which is seeded on every roster because its membership is task-fit. Always include the `scribe` role. Include the `Member Name` column whenever the coordinator supplies names, leaving cells empty for unnamed roles; two rows sharing a `Role` are legal only when each has a unique `Member Name`. Seed the `Selection Cue` cell for every row, using `—` where the role has no alternates: the cast catalog is canonical in `references/roster-catalog.md`, a reference file that loads only when a role's Skill Reference Contract calls for it, so a roster listing alternates without their condition leaves the coordinator to guess which one applies. Both files use replace semantics — write them only when missing or on an explicit refresh.
 
+On initialization, write payload `packs` as one `Packs: <comma-separated names>` line beneath the H1, omitting it when empty. On refresh, absent `packs` preserves the line; an explicit empty list removes it only after confirmed removal of the last pack.
+
 **Seed the whole state tree, including both consumption files.** Init creates `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `history/`, **`consumption.md`**, and **`consumption-rates.md`** — the ledger from its own template in [consumption.md](consumption.md) at its seed state, and the rate table from the cold [consumption-rates-template.md](consumption-rates-template.md) at current rates. They are squad state like every other file here, not artifacts that appear once someone happens to write a cost. Leaving them to be created lazily by the first consumption write is how a run reaches turn nine with a populated `history/` and no ledger at all: the rate table is the only source of token rates, so a Scribe that finds it missing cannot price a dispatch, and the block it cannot write takes the history append down with it.
+
+**Initialization is outside Cost Preflight.** With no supplied ceiling, copy the exact `not-requested` object from `entry-schemas.md`: `runId` and `roundId` stay empty strings. Never put an Init, ledger, or orchestration id into those fields.
 
 **Seed `history/` with no agent file.** Init creates no file for a roster member — not even a header-only one, and not for roles it expects to dispatch later. A history file is the proof that agent ran, so pre-creating one per roster row makes an undispatched role indistinguishable from a dispatched one and leaves the ledger rewrite reading files that record nothing. Each agent file is created with its header at the moment its first entry is appended.
 
 **The one file Init does write in `history/` is `history/Squad Scribe.md`**, holding this hand-off's own `#### Consumption — Orchestration` block, because the floor records the Scribe's orchestration on every state-writing turn, Init included. Append it before Step 13, then run the payload's `ledgerCommand` as the last write, exactly as on any other hand-off; a roster refresh does the same. An Init that leaves `consumption.md` at its seed while that block sits on disk fails the coordinator's next `-Check`, and every corrective hand-off then appends another block that a hand-written ledger is always one behind.
 
-**Write the `notify` object and the Init decision, both of them.** `state.json` carries `notify` from the answer the coordinator captured; when the user declined, that is `approvalChannel: in-chat` with `enabled: false`, which is a recorded answer rather than an absent key. A run in `autonomous` or `autopilot` mode with no `notify` object has no way to reach the person its gates are waiting on. The Init decision entry records the roster's provenance — the profile plus any applied packs, or `custom` — because without it nothing in the state explains why this roster exists, and a later turn re-deriving it is guessing.
+**Write the `notify` object and the Init decision, both of them.** `state.json` carries `notify` from the answer the coordinator captured; when the user declined, that is `approvalChannel: in-chat` with `enabled: false`, which is a recorded answer rather than an absent key. A run in `autonomous` or `autopilot` mode with no `notify` object has no way to reach the person its gates are waiting on. The Init decision records provenance in literal `<profile> +<pack>` form (for example, `default +foundry`), or `custom`, as the append-only audit trail; the current active-pack state is the `team.md` `Packs:` line.
 
 **Resolve each row's `Deliverable Root` against the `squadRoot` in hand before writing it.** The lookup table in *Deliverable Roots* (`squad-roster.instructions.md`) states roots relative to `squadRoot`, so seeding a sub-squad writes `members/<name>/plans/` into the `lead` row, not `.copilot-tracking/plans/`. Copying the table's literal paths into a sub-squad roster points every role at the repository root and puts its whole run outside its own sub-squad. `docs/` and `outputs/` are the two exceptions and are written unprefixed at every root.
 

@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-24"
 ---
 
 # Seed Templates
@@ -18,7 +18,7 @@ They stay consistent with the three squad instruction files: `team.md` holds the
 
 Seeded from the confirmed profile's members plus applied-pack roles; the template below shows `full` without packs. For other profiles, write only that profile's rows, then append each applied pack's rows. `Member Name` comes from Init naming and must be unique within a shared `Role`. Each role has one Primary plus optional Alternates selected by `Selection Cue`; seed `Selection Cue` explicitly (`—` when none). `devrel`, `networking`, and `identity` remain unselectable until a backing capability exists. `gcp` is seeded only through a validated additive connector binding (`Primary=Squad Connector`, unique `Member Name`, aligned role), never from profile defaults. `backlog-executor` and opt-in external roles are seeded only when explicitly accepted.
 
-The template below is the default `routing=off` shape. When Init runs with `routing=ranked`, `routing=economy`, or `routing=manual`, add the line `Model routing: <mode>` directly beneath the H1 and a `Model` column between `Model Tier` and `Deliverable Root`, filled with each role's Model ID as the coordinator resolved it (see `model-routing.md`). `intake-validator` seeds at `default`, not `fast`: its readiness verdict gates every later stage, and a lightweight model's judgment of whether requirements are complete is the wrong place to save cost.
+The template below is the default `routing=off` shape. With active packs, add `Packs: <comma-separated names>` directly beneath the H1; omit it with none. When Init runs with `routing=ranked`, `routing=economy`, or `routing=manual`, add `Model routing: <mode>` on the next line (directly beneath the H1 when there is no `Packs:` line) and a `Model` column between `Model Tier` and `Deliverable Root`, filled with each role's Model ID as the coordinator resolved it (see `model-routing.md`). `intake-validator` seeds at `default`, not `fast`: its readiness verdict gates every later stage, and a lightweight model's judgment of whether requirements are complete is the wrong place to save cost.
 
 ```markdown
 ---

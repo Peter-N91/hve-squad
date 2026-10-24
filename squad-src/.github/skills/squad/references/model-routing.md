@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "2.0"
-  last_updated: "2026-10-23"
+  last_updated: "2026-10-24"
 ---
 
 # Squad Model Routing
@@ -27,7 +27,7 @@ metadata:
 
 Everywhere below that says `ranked`, `economy` behaves the same except for its pick.
 
-* **Where the mode lives.** A single line directly beneath `team.md`'s H1: `Model routing: ranked` or `Model routing: manual`. No line means `off`, so every roster written before this contract reads as `off` unchanged.
+* **Where the mode lives.** A single line beneath `team.md`'s H1, after the `Packs:` line when one exists: `Model routing: ranked` or `Model routing: manual`. No line means `off`, so every roster written before this contract reads as `off` unchanged.
 * **Changing it.** A `routing=` input different from the recorded mode is a roster change: before any dispatch, the coordinator hands the new mode, and the `Model` column values it resolved, to the Scribe as a roster refresh, then continues the turn under the new mode. `routing=off` removes both the line and the column; the Scribe records the removed picks in that turn's decision entry so a later switch back to `manual` can offer them as the suggestion.
 * **Legacy `models=`.** The comma-separated `models=` input is retired. When a turn still passes it, apply none of its pairs, tell the user once that per-role models now live in `team.md`'s `Model` column under `routing=manual`, and offer to switch.
 

@@ -5,12 +5,12 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-24"
 ---
 
 # Squad Reference Index
 
-Read this index first, then only references your Skill Reference Contract names or conditionally requires. Unneeded whole-file reads cost attention.
+Load only required references.
 
 ## Which file for which job
 
@@ -19,6 +19,8 @@ Read this index first, then only references your Skill Reference Contract names 
 | [profiles-and-packs.md](profiles-and-packs.md)     | Roster seeding/changes: profiles, packs, roles |
 | [roster-catalog.md](roster-catalog.md)             | Casting/upgrades, custom/external roles, pack registration/resolution |
 | [connector-role-modes.md](connector-role-modes.md) | Setup/refresh, bindings, execution; [shim transport](connector-contract.md) |
+| [foundry-blueprint.md](foundry-blueprint.md)       | `foundry` roles |
+| [foundry-platform-options.md](foundry-platform-options.md) | `foundry` platform |
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
 | [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
 | [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |

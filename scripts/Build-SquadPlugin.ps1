@@ -269,10 +269,10 @@ function Convert-AgentCitations {
     # told the coordinator its rules live under .github/instructions/squad/ in a plugin that
     # ships no such directory. Point it at the ported rules instead.
     $Content = $Content -replace `
-        'Eleven instruction files under `\.github/instructions/squad/` carry the data and rules behind that procedure', `
+        'Eleven instruction files under `\.github/instructions/squad/` carry the data and rules (?:behind that procedure|for it)', `
         'Fifteen rule files under `skills/squad/references/rules/` carry the data and rules behind that procedure'
     $Content = $Content -replace `
-        'All but `squad-floor` auto-apply through their `applyTo` pattern \*\*only where the host honors it and a squad-state path is already in context\*\* — which is why every rule that must hold unconditionally lives in the floor or in the reference files above, not in them\.', `
+        'All but `squad-floor` auto-apply through (?:their )?`applyTo`(?: pattern)? \*\*only where the host honors it and a squad-state path is already in context\*\*(?: — (?:which is why every rule that must hold unconditionally lives in the floor or in the reference files above, not in them|so every unconditional rule lives in the floor or the references above)|; unconditional rules therefore live in the floor or the reference files above)\.', `
         'In this plugin distribution they do not auto-apply at all — there is no instructions channel to apply them — so read the rule file that owns a decision before making it, and treat `rules/squad-floor.md` as unconditional.'
     $Content = $Content -replace `
         'The instruction files under `\.github/instructions/squad/` define the data behind that procedure\.', `
@@ -589,7 +589,7 @@ metadata:
 
 * **request** (required): The work for the squad this turn, from the user's own words.
 * **profile** (optional): The squad profile to seed when the project has no squad yet (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, or `product`). Selects which cast the coordinator stamps out during Init Mode.
-* **pack** (optional): One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`). A pack carries a technology vertical's specialist roles and never replaces the profile.
+* **pack** (optional): One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`, `foundry`). A pack carries specialist roles, scoped guidance, or both and never replaces the profile.
 * **discovery** (optional): The depth of the opt-in discovery gate for this turn (`quick`, `standard`, `deep`, or `skip`). When omitted, the coordinator offers it once per topic in a `product` or `full` squad and stays silent in every other profile. Ignored on an unattended run.
 * **tier** (optional): A model-tier hint (`fast` or `default`) overriding cost-first defaults for this turn.
 * **owner** (optional): A `Member Name` from `team.md` that picks a specific named member when two rows share the same role.

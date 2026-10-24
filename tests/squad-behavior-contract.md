@@ -45,6 +45,7 @@ Scribe hand-off pipelining (GATE-22 through GATE-28 below) is one more case this
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck` | no | Mutation controls proving the state contract can fail |
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SquadRoot <path>` | no | State contract against an existing squad tree |
 | `./tests/tier1/Invoke-Tier1LiveRun.ps1 -SourceRoot . -ProvisionOnly` | no | Builds every scenario workspace and stops before the first turn |
+| `./tests/tier1/Invoke-Tier1LiveRun.ps1 -SourceRoot . -Scenario pack-lifecycle -Pack foundry -ProvisionOnly` | no | Provisions the one parameterized pack lifecycle scenario without spending a request |
 | `./tests/tier1/Invoke-Tier1LiveRun.ps1 -Ref v0.16.0` | **yes** | Provisions fixtures, drives real turns, then applies the state contract |
 | `./tests/tier2/Invoke-Tier2Tests.ps1` | no | Drift controls proving the comparator can fail |
 | `./tests/tier2/Compare-SquadRun.ps1 -ObservationRoot ./tests/tier1/results` | no | Scores a completed Tier 1 run against the golden baselines |
@@ -83,6 +84,19 @@ These offline cases exercise the benchmark driver, not model behavior.
 | EFF-10 | Independent functional acceptance rejects witnessed Int32-boundary store corruption: add either safely fails with unchanged stored bytes or persists a larger integer that subsequent list/done can operate on. Authors distinguish engineering choices from mandatory scenario facts, assess all five unchanged quality dimensions and document evidence-grounded risks/decisions; implementation self-tests cover ID boundaries before closing review | `tests/tier2/live-benchmark/Test-EfficiencyTask.ps1`; `Invoke-EfficiencyExercise.ps1`, requirements/build prompts |
 | EFF-11 | Wizard live plans explicitly collect three baseline observations without requiring90points or clean workflow/state/review checks. Available documents are independently graded even after failures; missing review is disclosed and hash-bound as empty, never invented. Missing documents/grades/measurements stay unavailable. Financial or identity/compatibility errors still stop collection; legacy strict controls cannot mix with observed controls. Collection success is separate from workflow success, comparisons retain relative quality/reliability/efficiency regressions, and strict explicit promotion is unchanged | `tests/tier2/live-benchmark/EfficiencyBenchmark.psm1`, `Invoke-EfficiencyExercise.ps1`, `Start-EfficiencyWizard.ps1` |
 
+```powershell
+pwsh -Command '& .\tests\tier1\Invoke-Tier1LiveRun.ps1 -SourceRoot . -Scenario pack-lifecycle -Pack foundry -ProvisionOnly'
+```
+
+Live execution requires separate operator approval and an explicitly selected pinned model.
+Remove `-ProvisionOnly` and add `-Model <operator-selected-model>` only after that approval.
+The runner also checks the parameterized lifecycle after each turn: Init writes every pack role,
+records `+pack`, and persists `Packs:`; removal drops only pack-exclusive roles, preserves profile
+roles and the byte-identical prior decision prefix, appends the removal decision, and removes the
+active-pack line when no packs remain. The generic state contract remains the gate for the rest of
+the roster, history, deliverables, and consumption. Semantic review of guidance remains separate
+evidence.
+
 ## Verified parity evidence
 
 Checked directly while writing this plan, comparing `origin/main` (`de7feef`, 0.15.3) against the branch:
@@ -117,6 +131,21 @@ No Copilot invocation. Install the ref into a scratch directory, then inspect th
 | PKG-14 | The plugin build emits byte-identical `plugin.json` files at the distribution root and under `.github/plugin/`, and every generated hook command resolves its script through the `CLAUDE_PLUGIN_ROOT` environment variable | VS Code discovers agents through the root manifest, while CLI hooks execute from the consumer repository rather than the installed plugin directory |
 | PKG-15 | Every role named in a Squad Profiles or Squad Packs row (`squad-roster.instructions.md`, `references/profiles-and-packs.md`) resolves to a Cast Catalog row in `references/roster-catalog.md` | A profile or pack naming a role the catalog does not carry leaves the coordinator unable to cast it at runtime (Council condition C4) |
 | PKG-16 | Source-mode install tolerance validates each failed dependency/path record, including an agent and prompt sharing one package slug, and rejects unrelated or locally missing failures | `tests/lib/SquadInstall.psm1`, `Assert-TolerableInstallFailure`: only the selected overlay may explain an install failure |
+| PKG-17 | Every *Registered Packs* row in `squad-roster.instructions.md` matches its mirror in `references/profiles-and-packs.md` (roles and guidance), appears in the `squad.prompt.md` and coordinator `pack=` choices, the federation pack list, the *Pack Discovery* table, and both usage pages; every `Guidance` file exists; every pack role has a dispatchable Primary | A pack registered in one place but not the others is offered, seeded, or documented inconsistently (`PackRegistry.Tests.ps1`) |
+| PKG-18 | The generated plugin invocation offers exactly the registered packs | Plugin consumers see the same pack choices as APM consumers (`Build-SquadPlugin.Tests.ps1`) |
+
+### Registered pack acceptance
+
+Tier 0's registry-driven tests check every Registered Packs row against the canonical roster,
+the mirrored profiles reference, dispatchable cast roles, role routing, prompt and coordinator
+choices, federation conventions, the Pack Discovery table, guidance-file existence, and both usage
+documents. The plugin build suite checks the generated invocation against the same registry in the
+actual plugin output; APM installs do not contain plugin-only invocation skills. Adding a pack
+extends the table and test data rather than adding another pack-specific test.
+
+Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
+requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
+without model calls first:
 
 ### Squad Coach
 
@@ -424,10 +453,11 @@ Init with each profile and assert the seeded roster holds exactly the documented
 
 | ID | Assertion |
 |---|---|
-| PRF-20 | Applying `power-platform` adds exactly `pp-architect` and `pp-connector`; `m365-copilot` adds exactly `m365-agent-architect` and `m365-agent-integrator`; `aws` adds exactly `aws-architect` and `aws-diagnose` |
+| PRF-20 | Applying `power-platform` adds exactly `pp-architect` and `pp-connector`; `m365-copilot` adds exactly `m365-agent-architect` and `m365-agent-integrator`; `aws` adds exactly `aws-architect` and `aws-diagnose`; `foundry` adds exactly the roles in its `Adds` cell that the profile lacks (none on `full`) and records `+foundry` in the Init decision |
 | PRF-21 | `federation.md` records applied packs in `+pack` form, for example `azure +power-platform` |
 | PRF-22 | Every seeded role has a non-empty `Deliverable Root`, and no two roles at different tiers share a root in a way that makes the Artifact Gate ambiguous |
 | PRF-23 | Every seeded role's `Agent Name (Primary)` resolves to a delivered agent — the runtime counterpart of PKG-02 |
+| PRF-24 | Removing a pack removes only roles no other roster source owns; keeps profile, other-pack, and custom roles; appends a removal decision while earlier `decisions.md` content stays a byte-identical prefix; and stops that pack's guidance handoff (`profiles-and-packs.md`; `scenarios/pack-lifecycle.json`) |
 
 ## Tier 1 — Federation
 

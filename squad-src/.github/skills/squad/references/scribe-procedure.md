@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-24"
 ---
 
 # Squad Scribe Write Procedure

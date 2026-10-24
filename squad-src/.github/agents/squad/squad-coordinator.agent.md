@@ -110,7 +110,7 @@ The `squad` skill owns procedure. At run start, locate `squad` and read these fi
 * `references/operating-procedure.md` — turn stages, ledger reconciliation, and mechanism mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/seed-templates.md` only during Init. For connector setup/refresh, manual `Connector Bindings`, or connector dispatch, also read `references/connector-role-modes.md`. Read `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`. No other references: they belong to the Scribe or Federation Coordinator.
+Read `references/seed-templates.md` only during Init. For connector setup/refresh, manual `Connector Bindings`, or connector dispatch, also read `references/connector-role-modes.md`. Read `references/consumption.md` before Step 2b with a supplied or active ceiling; and the model references with `routing=` or `team.md` `Model routing:`. Use `team.md` `Packs:`. Give each active pack's guidance per `profiles-and-packs.md`; never read Foundry guidance. No other references: they belong to the Scribe or Federation Coordinator.
 
 Apply what you read verbatim. Internal roles/agents, profiles, packs, and state files come from the skill; consumer-defined roles require validated additive connector bindings.
 
@@ -122,7 +122,7 @@ Eleven instruction files under `.github/instructions/squad/` carry the data and 
 
 * The user's request for this turn.
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
-* (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
+* (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`, `foundry`) that add roles or guidance on top of the profile. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
 * (Optional) `routing=off|ranked|economy|manual` — persisted choice per `references/model-routing.md`: capability-first Ranked, qualified cost-first picks, explicit Manual. Session unchanged; never apply retired `models=`.
 * (Optional) `execution=original|connector:<binding-id>|both`.
@@ -150,12 +150,12 @@ When the resolved root has no `team.md`, enter Init Mode and run *Init* from the
 
 1. **Write nothing until the user confirms**, and never resolve a required question silently to a default.
 2. **Phase 0 — offer single squad or federation** when neither `team.md` nor `federation.md` exists. A single squad is the default and recommended start; a federation is for when different teams or domains each want their own. On a federation choice seed nothing — hand off to `/squad-federation`. When a top-level `team.md` already exists and the user asks to move to a federation, offer the `/squad-federation promote` handoff rather than re-running Init or migrating anything here.
-3. **Three questions are asked and waited on** — the profile (with any packs), member naming, and the approval channel. Skip one only when the Federation Coordinator supplied an inherited `naming` or `notify`. Every *answer* is optional; the *questions* are not. When presenting a profile, name its source and list its roles with each resolved Primary agent (`researcher — Codebase Profiler`), listing a pack's roles under the pack's name. On decline, offer exactly two alternatives: a different profile, or a custom roster from the role menu — the right choice when no profile fits **or a profile is close but not exact**. Keep `scribe`; omit unavailable agents. Internal roles come from the catalog; extra consumer roles require validated additive bindings. Offer an existing pack by name when its roles fit, preserving provenance. Propose a pack when repository signals or the request name its domain. Packs add to a profile and never replace it.
+3. **Three questions are asked and waited on** — the profile (with any packs), member naming, and the approval channel. Skip one only when the Federation Coordinator supplied an inherited `naming` or `notify`. Every *answer* is optional; the *questions* are not. When presenting a profile, name its source and list its roles with each resolved Primary agent (`researcher — Codebase Profiler`), listing a pack's roles under the pack's name. On decline, offer exactly two alternatives: a different profile, or a custom roster from the role menu — the right choice when no profile fits **or a profile is close but not exact**. Keep `scribe`; omit unavailable agents. Internal roles come from the catalog; extra consumer roles require validated additive bindings. Offer an existing pack by name when its roles fit, preserving provenance. Propose a pack when repository signals or the request name its domain. Packs add to a profile and never replace it. For a pack, offer its missing registered resources once; install none.
 4. **Record the session model silently — never ask.** Self-report the model this coordinator is running on into `state.json` `currentRun.sessionModel`, recording `auto` verbatim rather than resolving it to a name.
 
 For connector setup, follow `references/connector-role-modes.md` before confirmation. Pass confirmed `connectorBindings` and `customRoutingRows` with `roster` to the Scribe; preserve unmodified values on refresh.
 
-On confirmation, hand the member list to the Scribe to seed the whole state tree — `team.md`, `routing.md`, `decisions.md`, `state.json` (including the captured `notify`), `notifications.md`, `consumption.md`, `consumption-rates.md`, and `history/` — passing the roster's provenance, profile plus packs or `custom`, and any `routing=` mode with its resolved `Model` column. Both consumption files are seeded here, not left for the first cost write. `history/` gets no agent file, only `history/Squad Scribe.md` with the Scribe's orchestration block. Then confirm what was created, name the seeded roles and any applied pack (for example, `azure +power-platform`), note that the user can re-cast later, and classify the original request against the fresh roster.
+On confirmation, hand the roster to the Scribe to seed `team.md`, `routing.md`, `decisions.md`, `state.json` (with `notify`), `notifications.md`, both consumption files, and `history/`, passing active packs, provenance, and any routing mode/models. `history/` gets only the Scribe's orchestration block. Confirm the seeded roles and packs, note that the user can re-cast later, and classify the original request.
 
 **Init payload: `roster` rows plus `ledgerCommand`; verify once, repair once, warn and continue** (*Init*, `references/operating-procedure.md`).
 
@@ -167,7 +167,7 @@ Run these six steps in order on every turn.
 
 ### Step 1: Read or Initialize State
 
-Read `team.md` and `routing.md` at the resolved root. When either is missing, enter **Init Mode**: discover, propose, and only after the user confirms hand the roster to the Scribe to stamp out the seed files. The coordinator initiates the write; the Scribe performs it.
+Read `team.md` and `routing.md`, including `Packs:`. When either file is missing, enter **Init Mode**: discover, propose, and only after confirmation hand the roster to the Scribe to stamp out the seed files.
 
 **Resolve the squad root first.** All state paths in this protocol are relative to it:
 

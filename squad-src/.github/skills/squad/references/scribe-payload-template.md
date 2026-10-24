@@ -1,16 +1,16 @@
 ---
 name: squad-scribe-payload-template
-description: "The single payload template both the Squad Coordinator and Squad Federation Coordinator fill when handing state to the Squad Scribe. Byte-stable instructions first, volatile per-dispatch data last, for cache-stable prefixing. Read always."
+description: "Coordinator-to-Scribe payload with a byte-stable instruction prefix and volatile dispatch tail. Read always."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-24"
 ---
 
 # Scribe Payload Template
 
-This is the one payload shape both coordinators fill at hand-off. Filling it in this section order keeps a host's prompt cache warm: the fixed text at the top never changes, so only the tail needs re-encoding.
+Both coordinators fill this payload at hand-off. Its fixed prefix keeps host prompt caches warm; only the volatile tail changes.
 
 **Ordering is prose-only and cache-stable, never a JSON-field reorder.** Every JSON object below — most importantly the ten-field `#### Consumption` block — keeps the exact field order fixed in [entry-schemas.md](entry-schemas.md) and [scribe-procedure.md](scribe-procedure.md) Non-Negotiable Rules regardless of where the object sits in this template. Only the section-to-section prose order is chosen for cache stability.
 
@@ -60,6 +60,7 @@ Everything below this line changes turn to turn and is appended after the stable
 payloadType: <decision|history|initialization|memory|Council Verdict|autonomous-loop summary|autopilot-run summary|Intake Readiness Verdict|promotion|expansion|Discovery Verdict>
 squadRoot: <resolved path>
 roster: <initialization/roster refresh only: confirmed team.md rows verbatim; never derive agent names>
+packs: <initialization/roster refresh only: active pack names; omit on refresh to preserve the line; [] only after removing the last pack>
 connectorBindings: <confirmed rows; omit on refresh to preserve>
 customRoutingRows: <confirmed rows; omit on refresh to preserve>
 runId: <id>

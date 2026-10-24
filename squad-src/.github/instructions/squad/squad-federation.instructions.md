@@ -22,6 +22,8 @@ Two consequences matter before anyone builds a federation to solve a capability 
 
 Federate when the sub-squads own genuinely separate outcomes — a business team's discovery work beside an architecture team's infrastructure build, or Watch Mode giving each triggering event its own sub-squad and its own pull request. Do not federate to obtain a role.
 
+Registered packs are `power-platform`, `m365-copilot`, `aws`, and `foundry`; Foundry is normally `profile=azure pack=foundry`.
+
 ## Squad Root (`squadRoot`)
 
 A squad's state lives under a **squad root**. The root is parameterized:
@@ -178,7 +180,7 @@ The registry is the durable list of sub-squads the Federation Coordinator can ro
 | Column      | Meaning                                                                                              |
 |-------------|------------------------------------------------------------------------------------------------------|
 | Sub-squad   | Unique name, lower-kebab-case (for example, `product`, `azure`); also the `members/<name>/` directory |
-| Profile     | The profile the sub-squad was seeded from (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`) or `custom`, followed by any applied packs in `+pack` form (for example, `azure +power-platform`) |
+| Profile     | The profile the sub-squad was seeded from (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`) or `custom`, followed by any registered packs in `+pack` form (for example, `azure +foundry`) |
 | Kind        | `in-repo` (state under `members/<name>/`) — `repo` is reserved for the deferred multi-repo federation |
 | Location    | `members/<name>/` for an `in-repo` sub-squad                                                          |
 | Owner       | Optional human or team label (for example, `business-team`, `architects`)                            |
