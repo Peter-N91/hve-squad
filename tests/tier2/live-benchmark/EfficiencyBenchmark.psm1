@@ -1361,6 +1361,7 @@ function Invoke-EfficiencySeries {
         [Collections.IDictionary]$ExpectedCompatibility,
         [switch]$ObservationOnly,
         [switch]$ParallelTrials,
+        [switch]$CandidateOnly,
         [hashtable]$TrialContext
     )
     foreach ($Limit in @($PerRunCredits, $SeriesCredits)) { if ([double]::IsNaN($Limit) -or [double]::IsInfinity($Limit) -or $Limit -le 0) { throw 'Finite positive per-run and series credit bounds are required.' } }
@@ -1370,7 +1371,7 @@ function Invoke-EfficiencySeries {
     }
     $Runs = [Collections.Generic.List[object]]::new()
     $Slots = [Collections.Generic.List[object]]::new()
-    if ($BaselineEvidence) {
+    if ($BaselineEvidence -and -not $CandidateOnly) {
         if ($Kind -ne 'Series' -or $BaselineEvidence['schemaVersion'] -ne 'efficiency-control-v1' -or @($BaselineEvidence['runs']).Count -ne 3 -or -not $ExpectedCompatibility) { throw 'Invalid saved control evidence.' }
         $Pairs = [Collections.Generic.HashSet[int]]::new(); $Ids = [Collections.Generic.HashSet[string]]::new(); $ControlSource = $null
         $Expected = @($ExpectedCompatibility.Keys | Sort-Object | ForEach-Object { $_ + '=' + ($ExpectedCompatibility[$_] | ConvertTo-Json -Depth 10 -Compress) }) -join "`n"
@@ -1385,7 +1386,7 @@ function Invoke-EfficiencySeries {
         }
     }
     if ($Kind -eq 'Establish') { foreach ($Pair in 1..3) { $Slots.Add(@{ arm = 'baseline'; pair = $Pair; status = 'not-run' }) } }
-    elseif ($BaselineEvidence) { foreach ($Pair in 1..3) { $Slots.Add(@{ arm = 'candidate'; pair = $Pair; status = 'not-run' }) } }
+    elseif ($BaselineEvidence -or $CandidateOnly) { foreach ($Pair in 1..3) { $Slots.Add(@{ arm = 'candidate'; pair = $Pair; status = 'not-run' }) } }
     else {
         foreach ($Pair in 1..3) {
             $Order = if ($Pair -eq 2) { @('candidate', 'baseline') } else { @('baseline', 'candidate') }
@@ -1453,6 +1454,9 @@ function Invoke-EfficiencySeries {
         $Outcome = if ($ObservationOnly) { 'baseline-recorded' } else { 'baseline-established' }
         $Message = if ($ObservationOnly) { 'baseline observations recorded, including failed checks; no previous comparison available' } else { 'baseline established; no previous comparison available' }
     }
+    elseif (-not $Failed -and $CandidateOnly) {
+        $Outcome = 'candidate-recorded'; $Message = 'candidate observations recorded; parent comparison is optional'
+    }
     elseif (-not $Failed) {
         try {
             $Comparison = Compare-EfficiencyRuns -Runs @($Runs) -ObservationOnly:$ObservationOnly
@@ -1463,19 +1467,19 @@ function Invoke-EfficiencySeries {
     }
     $Report = [ordered]@{
         schemaVersion = 'efficiency-series-v1'; kind = $Kind; outcome = $Outcome; message = $Message
-        previousComparisonAvailable = ($Kind -eq 'Series'); regressionVerdict = if ($Comparison) { $Outcome } else { 'not-evaluable' }
+        previousComparisonAvailable = ($Kind -eq 'Series' -and -not $CandidateOnly); regressionVerdict = if ($Comparison) { $Outcome } else { 'not-evaluable' }
         quality = @{ floor = 90; checksPassed = (-not $Failed -and @($Runs | Where-Object { -not (Test-EfficiencyRun $_ -ObservationOnly:$ObservationOnly) }).Count -eq 0); scores = @($Runs | ForEach-Object { if ($_['judge'] -and $_['judge']['valid'] -and $_['judge']['response']) { @{ arm = $_.metadata.arm; pair = $_.metadata.pair; dimensions = $_.judge.response.scores; total = ($_.judge.response.scores.Values | Measure-Object -Sum).Sum } } }) }
         collectionPolicy = if ($ObservationOnly) { 'baseline-observation-v1' } else { 'strict-v1' }
         trialScheduling = if ($ParallelTrials) { 'parallel-three-v1' } else { 'serial-v1' }
         reliability = @{ samples = $Runs.Count; workflowCompleted = @($Runs | Where-Object { $_['completed'] }).Count; independentChecksPassed = @($Runs | Where-Object { Test-EfficiencyRun $_ -ObservationOnly:$ObservationOnly }).Count }
         efficiency = if ($Comparison) { $Comparison.metrics } else { $null }
         pairwiseDeltas = if ($Comparison) { $Comparison.pairs } else { $null }
-        comparison = $Comparison; slots = @($Slots); reusedControlRuns = if ($BaselineEvidence) { 3 } else { 0 }
+        comparison = $Comparison; slots = @($Slots); reusedControlRuns = if ($BaselineEvidence -and -not $CandidateOnly) { 3 } else { 0 }
         trials = @($Runs | ForEach-Object { ConvertTo-EfficiencyRunSummary $_ })
         limits = @{ perRunCredits = $PerRunCredits; seriesCredits = $SeriesCredits; reservedCredits = $Reserved; outerRetries = 0 }
         acceptedBaselineChanged = $false
     }
-    [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded')) { 0 } else { 2 } }
+    [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded', 'candidate-recorded')) { 0 } else { 2 } }
 }
 
 Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Get-EfficiencyCliLocalArguments, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Write-EfficiencyProgressSummary, Invoke-EfficiencyProcess, Invoke-EfficiencyTrial, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Get-EfficiencyAdmission, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries

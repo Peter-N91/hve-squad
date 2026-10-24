@@ -10,15 +10,32 @@ AI cost: none; exports existing trials without rerunning them or requesting a ne
 [CmdletBinding()]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Complete')][string]$ControlPath,
-    [Parameter(Mandatory)][string[]]$TrialDirectories,
+    [string[]]$TrialDirectories = @(),
     [Parameter(Mandatory)][string]$SeriesId,
     [string]$Repository = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path,
     [Parameter(ParameterSetName = 'Complete')][switch]$SelectCurrent,
     [Parameter(Mandatory, ParameterSetName = 'Observation')][switch]$ObservationOnly,
-    [Parameter(ParameterSetName = 'Observation')][string]$OutputDirectory
+    [Parameter(Mandatory, ParameterSetName = 'Standalone')][switch]$Standalone,
+    [Parameter(ParameterSetName = 'Standalone')][switch]$Local,
+    [Parameter(ParameterSetName = 'Standalone')][string]$FailureReason,
+    [Parameter(ParameterSetName = 'Standalone')][switch]$SelectScore,
+    [string]$OutputDirectory
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1') -Force
+if ($Standalone) {
+    if (-not $OutputDirectory) { $OutputDirectory = Join-Path $Repository 'benchmarks/efficiency' }
+    try {
+        $Record = Export-BenchmarkScore -Repository $Repository -TrialDirectories $TrialDirectories -SeriesId $SeriesId -OutputDirectory $OutputDirectory -Local:$Local -FailureReason $FailureReason -SelectCurrent:$SelectScore
+        Write-Output "Score $($Record.score.value)/100 ($($Record.score.state), judged $($Record.score.judgedSlots)/$($Record.score.expectedSlots)); files stored: $OutputDirectory. Comparison unavailable unless explicitly requested."
+    }
+    catch {
+        $Failure = $_
+        $null = Export-BenchmarkScore -SeriesId ('failed-' + [guid]::NewGuid().ToString('N')) -OutputDirectory (Join-Path $OutputDirectory 'failed') -FailureReason 'score-export-failed'
+        throw $Failure
+    }
+    return
+}
 if ($ObservationOnly) {
     $Options = @{ Repository = $Repository; TrialDirectories = $TrialDirectories; CampaignId = $SeriesId }
     if ($OutputDirectory) { $Options.OutputDirectory = $OutputDirectory }

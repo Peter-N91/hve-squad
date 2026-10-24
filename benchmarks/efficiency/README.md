@@ -31,6 +31,34 @@ The strict comparison remains non-evaluable: the historical parent's changed
 exercise protocol is incompatible and was not waived. These observations
 establish neither a quality improvement nor Requirements readiness.
 
+## New candidate scoring
+
+The wizard's **Series (2)** collects three candidates without requiring parent
+scores. It retains an absolute score, immutable `benchmark-score-v1` record,
+Markdown/JSON report and numeric badge before any optional comparison.
+**Complete (3)** explicitly collects six observations; missing controls never
+silently doubles the Series cost.
+
+Scores use the existing document-quality rubric. Three valid grades produce the
+same median /100; fewer formal grades are labeled partial. A local sample is
+descriptive 1/1, not a formal series. No trustworthy grade produces a visibly
+failed **0/100, not judged** outcome while raw quality stays unknown. This differs
+from an actual measured judge grade of zero. Functional/workflow failures remain
+separate and prevent approval-green styling.
+
+Use the wizard's printed offline `Export-BenchmarkResults.ps1 -Standalone`
+command to append sanitized records here. Explicit `-SelectScore` updates the
+existing `current.json` selection after report/badge publication; no baseline
+is promoted. Local/partial/failed evidence remains ineligible for strict comparison.
+Missing or incompatible parent data means **comparison unavailable**, not
+no-regression. The explicit strict comparator and required hosted gate are unchanged.
+
+The independent hosted candidate artifact includes record hashes, reports and a
+badge even when parent discovery fails. New-schema reporter activation is pending
+owner review and an immutable trusted reporter-pin update; candidate code is never
+executed as a reporting fallback. The historical records and numbers below have
+not been rewritten by this feature.
+
 ## Earlier complete comparison record
 
 [![Earlier complete-series observations](badge.svg)](report.md)

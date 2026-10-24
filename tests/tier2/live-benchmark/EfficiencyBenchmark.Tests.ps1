@@ -1319,11 +1319,14 @@ Describe 'Live execution allocation preflight' -Tag 'Unit' {
         Set-Content $Cli "Set-Content '$Marker' 'unexpected invocation'; exit 39"
         $Trial = Join-Path $TestDrive "$RunMode-undersized"
         $Output = Join-Path $TestDrive "$RunMode-preflight.txt"
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', $RunMode, '-SourceRoot', $TestDrive, '-InstallRoot', $TestDrive, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '100', '-MaxSeriesCredits', '600', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 30
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', $RunMode, '-SourceRoot', (Join-Path $TestDrive 'source'), '-InstallRoot', $TestDrive, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '100', '-MaxSeriesCredits', '600', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 30
         $Result.exitCode | Should -Be 1
         Get-Content ($Output + '.stderr') -Raw | Should -Match 'at least 120'
         Test-Path $Marker | Should -BeFalse
-        Test-Path $Trial | Should -BeFalse
+        $Score = Get-Content (Join-Path $Trial 'score/report.json') -Raw | ConvertFrom-Json
+        $Score.score.value | Should -Be 0
+        $Score.score.state | Should -Be failed
+        Test-Path (Join-Path $Trial 'score/badge.svg') | Should -BeTrue
     }
 }
 
@@ -1581,6 +1584,18 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
             $script:SeriesCalls.Add("$Arm-$Pair")
             @(New-TestRuns | Where-Object { $_.metadata.arm -eq $Arm -and $_.metadata.pair -eq $Pair })[0]
         }
+    }
+    It 'collects only three candidates with <History> optional control data' -ForEach @(
+        @{ History = 'none' }, @{ History = 'incompatible' }
+    ) {
+        $Controls = if ($History -eq 'incompatible') { @{ schemaVersion = 'unknown'; runs = @() } } else { $null }
+        $Result = Invoke-EfficiencySeries -Kind Series -RunTrial $script:Trial -CandidateOnly -BaselineEvidence $Controls -PerRunCredits 10 -SeriesCredits 30
+        $Result.exitCode | Should -Be 0
+        $Result.report.outcome | Should -Be candidate-recorded
+        $Result.report.previousComparisonAvailable | Should -BeFalse
+        $Result.report.reusedControlRuns | Should -Be 0
+        $Result.controls | Should -BeNullOrEmpty
+        $script:SeriesCalls -join ',' | Should -Be 'candidate-1,candidate-2,candidate-3'
     }
     It 'establishes exactly three controls with no invented improvement or prior score' {
         $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial $script:Trial -PerRunCredits 10 -SeriesCredits 30
