@@ -884,8 +884,9 @@ Describe 'Hosted legacy-base report integration' {
     }
     It 'runs exact hosted scripts against legacy 3504ffc and merged a64ee85 for <Case>' -ForEach @(
         @{ Case = 'standalone-legacy'; ExpectedRenderExit = 0; CurrentCampaign = $false },
-        @{ Case = 'standalone-unreviewed-schema'; ExpectedRenderExit = 0; CurrentCampaign = $false },
+        @{ Case = 'standalone-reviewed-score'; ExpectedRenderExit = 0; CurrentCampaign = $false },
         @{ Case = 'standalone-invalid-candidate'; ExpectedRenderExit = 0; CurrentCampaign = $false },
+        @{ Case = 'standalone-wrong-reporter'; ExpectedRenderExit = 0; CurrentCampaign = $false },
         @{ Case = 'current-incomplete'; ExpectedRenderExit = 0; CurrentCampaign = $true },
         @{ Case = 'wrong-reporter'; ExpectedRenderExit = 1; CurrentCampaign = $false },
         @{ Case = 'changed-source'; ExpectedRenderExit = 0; CurrentCampaign = $false },
@@ -895,13 +896,14 @@ Describe 'Hosted legacy-base report integration' {
             $Fixture = New-TestRepository
             $Root = $Fixture.repository
             $Head = Save-TestSelection $Fixture $Fixture.record
-            if ($Case -eq 'standalone-unreviewed-schema') {
+            if ($Case -eq 'standalone-reviewed-score') {
                 $null = Export-BenchmarkScore -Repository $Root -Evidence $Fixture.record -SeriesId 'new-schema' -OutputDirectory (Join-Path $Root 'benchmarks/efficiency') -SelectCurrent
                 $Head = Save-TestCommit $Root
             }
             $Engine = Join-Path $Root '.benchmark-score-engine'
             [void](Invoke-TestGit $SourceRoot @('clone', '--quiet', '--shared', '--no-checkout', $SourceRoot, $Engine))
-            [void](Invoke-TestGit $Engine @('checkout', '--quiet', '--detach', '019c894bb0430802f47d2fc513fe326bec4023d2'))
+            $Reporter = if ($Case -eq 'standalone-wrong-reporter') { '019c894bb0430802f47d2fc513fe326bec4023d2' } else { '8a0233d3c55ff18f056d02bb5623dcea52991ec8' }
+            [void](Invoke-TestGit $Engine @('checkout', '--quiet', '--detach', $Reporter))
             $Script = Join-Path $TestDrive "$Case.ps1"
             # Route only the fetch to fixture objects: no hosted API, parent or network.
             $Prefix = @'
@@ -929,15 +931,23 @@ function git {
                     $Output = Join-Path $Root '.benchmark-score-public'
                     $Result = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'result.json')))
                     $Result.parentRequired | Should -BeFalse
-                    if ($Case -eq 'standalone-legacy' -and $Result.exitCode -ne 0) {
-                        throw "Hosted legacy fallback failed: $([IO.File]::ReadAllText((Join-Path $Output 'report.json'))) $($Transcript -join "`n")"
+                    $Scored = $Case -in @('standalone-legacy', 'standalone-reviewed-score')
+                    if ($Scored -and $Result.exitCode -ne 0) {
+                        throw "Hosted candidate scoring failed: $([IO.File]::ReadAllText((Join-Path $Output 'report.json'))) $($Transcript -join "`n")"
                     }
-                    $Result.exitCode | Should -Be $(if ($Case -eq 'standalone-legacy') { 0 } else { 1 }) -Because ($Transcript -join "`n")
+                    $Result.exitCode | Should -Be $(if ($Scored) { 0 } else { 1 }) -Because ($Transcript -join "`n")
                     $Badge = [IO.File]::ReadAllText((Join-Path $Output 'badge.svg'))
-                    $Badge | Should -Match $(if ($Case -eq 'standalone-legacy') { '100/100' } else { '0/100.*not judged' })
+                    $Badge | Should -Match $(if ($Scored) { '100/100' } else { '0/100.*not judged' })
                     $Digests = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $Output 'sha256.json')))
                     $Digests.Count | Should -Be 1
                     foreach ($Path in $Digests.Keys) { (Get-FileHash (Join-Path $Output $Path)).Hash.ToLowerInvariant() | Should -Be $Digests[$Path] }
+                    if ($Case -eq 'standalone-reviewed-score') {
+                        $StoredPath = Join-Path $Output 'records/new-schema.json'
+                        $Stored = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($StoredPath))
+                        $Stored.schemaVersion | Should -Be 'benchmark-score-v1'
+                        $Stored.score.value | Should -Be 100
+                        (Get-FileHash $StoredPath).Hash | Should -Be (Get-FileHash (Join-Path $Root 'benchmarks/efficiency/records/new-schema.json')).Hash
+                    }
                     Test-Path (Join-Path $Output 'report.md') | Should -BeTrue
                 } finally { Pop-Location }
             } finally { foreach ($Name in $Names) { [Environment]::SetEnvironmentVariable($Name, $Original[$Name]) } }

@@ -50,7 +50,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jmservera/hve-squad
-          ref: 019c894bb0430802f47d2fc513fe326bec4023d2 # standalone v1 reader activation pending owner review
+          ref: 8a0233d3c55ff18f056d02bb5623dcea52991ec8 # reviewed standalone v1 reader
           path: .benchmark-score-engine
           persist-credentials: false
           fetch-depth: 1
@@ -96,7 +96,7 @@ jobs:
             $head = $actual.Trim()
             $engine = Join-Path $PWD '.benchmark-score-engine'
             $pin = git -C $engine rev-parse HEAD
-            if ($LASTEXITCODE -ne 0 -or $pin.Trim() -cne '019c894bb0430802f47d2fc513fe326bec4023d2') { throw 'Trusted reporter identity mismatch.' }
+            if ($LASTEXITCODE -ne 0 -or $pin.Trim() -cne '8a0233d3c55ff18f056d02bb5623dcea52991ec8') { throw 'Trusted reporter identity mismatch.' }
             $reader = Import-Module (Join-Path $engine 'tests/tier2/live-benchmark/BenchmarkResults.psm1') -Force -PassThru
             if ($reader.ExportedCommands.ContainsKey('Write-BenchmarkCandidateReport')) {
               $result = & $reader.ExportedCommands['Write-BenchmarkCandidateReport'] -Repository $objects -HeadRef $head -OutputDirectory $output
