@@ -219,66 +219,111 @@ is separate from non-regression, product acceptance and strict promotion.
 Three independent series samples are unpaired screening evidence, not
 statistical significance or a guarantee of causality.
 
-## GitHub Actions and bootstrap
+## Automatic release collection
 
-The read-only **Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) runs
-manually or as a **pre-publication gate in the Release workflow**, never on PRs
-or rolling previews. Standalone manual comparisons retain explicit base
-and head commit SHAs. Release runs freeze the candidate commit and select the
-most recently published stable release that is an ancestor of that commit,
-not a hardcoded branch or a newer unrelated hotfix.
-Annotated tags are peeled to commits. No earlier stable ancestor means an
-explicit missing-baseline result (exit 2), not a passing self-comparison.
+**Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) now collects evidence
+automatically before publication. No operator-run local benchmark or newly
+committed candidate record is required. Release Prep explicitly enables this
+gate; release-triggering pushes also require it. There is no paid PR, ordinary
+push, schedule or rolling-preview trigger. A standalone authorized manual
+diagnostic also collects: blank `head_sha` freezes the selected branch and blank
+`base_sha` freezes the reviewed default-branch tip (the upstream parent's default
+branch when running from a fork). An explicit base must equal
+that tip, never an arbitrary candidate controller.
 
-The Release workflow requires comparison success **before any version bump,
-tag push or GitHub Release creation**, including draft creation. Regressions,
-missing/stale/incompatible evidence and operational errors block publication;
-Tier 0 still applies. The release uses the same frozen candidate that was compared,
-not a moving branch. Version and self-reference manifest edits do not change the
-measured Squad source or benchmark protocol.
+The frozen reviewed controller reads its `current.json`, validates the pointer,
+digest and v2 record at that record's historical `measuredRevision`, and requires
+that revision to be the controller's ancestor. Historical source need not equal
+today's controller source. Every controller-owned historical record blob must
+remain unchanged in the candidate if present in their shared history. Records
+added only on the controller after the candidate branched need not be copied
+into the candidate before measuring it; conflicting copies are still rejected.
+Before spending, all seven canonical evaluator
+paths must equal the executing controller bytes at **both** measured revisions.
+Each arm is prepared from its own frozen dependency manifest; actual dependency
+pins are never ignored or rewritten to make two installations look identical.
+The fresh release comparison explicitly measures the complete deployments,
+including dependency changes. It preserves both actual installation hashes and
+manifest digests. Only installation identity may differ; every other protocol
+field must agree. Ordinary stored-record comparisons remain strict.
 
-Manual **Release** runs expose a boolean **`run_benchmark`**, currently default
-**false**. A human with release-dispatch permission can check it to require the
-comparison, or leave it unchecked to bypass only this gate. **Release Prep**
-does not expose or forward this input; its downstream manual Release dispatch
-inherits the Release workflow's default, so currently skips the benchmark.
-The skipped gate and warning are recorded in the run summary;
-other release checks remain mandatory. Push-triggered releases cannot use that
-manual bypass.
+GitHub has no private raw controls behind the portable baseline, so each campaign
+collects fresh controls: baseline-1, candidate-1, baseline-2, candidate-2,
+baseline-3, candidate-3. All six use the existing native `Run -ObservationOnly`
+and process/metering helpers, two source-bound dependency installations and the
+same actual runner PowerShell version. Source arms are detached worktrees at the
+real frozen revisions; no artificial identity commits are created.
 
-A temporary release bootstrap exception applies through **v0.18.1 inclusive**:
-when the frozen candidate's `apm.yml` declares a stable version no higher than
-0.18.1, a missing previous stable release or missing trusted base comparator
-emits a warning but permits the release gate. The original missing-baseline
-report remains unchanged; no benchmark approval is claimed. This exception
-applies only to the pre-publication release caller, not standalone comparisons,
-and expires from v0.18.2. Stale/incompatible evidence, missing candidate records,
-regressions and operational failures still block.
-No post-publication benchmark trigger remains. Direct publication outside the
-Release workflow is not controlled by this gate.
+### Spending and failure policy
 
-This compares existing immutable records; it does **not** run agents or spend
-model requests. Fresh compatible records must be collected separately. In
-particular, historical v1 records cannot satisfy the current v2 protocol gate.
+The reviewed controller owns `collection-policy.json`: initially **1000 credits
+per trial**, **6000 per six-trial campaign**, model `claude-sonnet-5.5`, exact
+Copilot CLI package `1.0.101-0`, and a **330-minute** campaign deadline inside a
+360-minute job. Future reviewed policies may lower the finite ceilings; the
+native minimum is 60 credits per observation and the total must reserve six
+trials. The CLI is installed exactly and wrapped with `--no-auto-update`.
+APM is pinned to 0.29.0. No model credential is exposed during preparation or
+offline PR self-checks; only collection receives `COPILOT_GITHUB_TOKEN`.
 
-The workflow publishes the full report in
-the run Summary and uploads Markdown, JSON and SVG even when comparison fails.
-It calls no paid model, uses no model secrets and executes the selected **base**
-comparator/dependencies; head contents are Git blobs/JSON, not executable code.
-Actions are SHA-pinned and checkout credentials are not persisted.
+Each original slot is validated before the next launch. Final cumulative
+workflow accounting is counted once and the separately metered judge is added
+once; their combined actual credits must fit the trial reservation and campaign
+ceiling. Missing meters, budget stops, infrastructure failures and deadline
+expiry stop further launches. Failed slots retain independently validated known
+workflow/judge spending in `creditsKnown`. `accountingComplete` identifies whether
+all launched-slot consumption is known; `creditsUsed` is null when the total is
+unknown, and the report labels known spending as a lower bound. Complete metered
+overruns remain visible even though they fail the gate. Publication requires
+complete accounting for all six slots. Product-only failed checks remain false and are
+retained for comparison, not retried for a better score. The native 10%
+improvement screen is **not** the release gate: direct `Compare-BenchmarkSeries`
+applies the unchanged non-regression thresholds with the explicit deployment
+comparison scope. A difference cannot be attributed to prompts alone when the
+installed dependencies also changed.
 
-The reviewed workflow YAML/bootstrap is itself the controller trust root.
-A PR editing it is review-required infrastructure, not independently
-authenticated evidence. Manual dispatch requires authorized reviewed base and
-candidate **full commit SHAs** in this repository; never choose an unreviewed
-base merely because it is called base. Fork identity does not grant code trust.
+The deadline starts when the job freezes identities, includes preparation, and
+leaves up to 30 minutes for controlled failure finalization. A six-trial
+campaign that cannot finish in that window fails; timeout never approves it.
+Abrupt runner loss or job cancellation can still prevent artifact upload.
 
-When the base lacks the helper or selected record, the bootstrap explicitly
-reports missing baseline/tooling and fails; it never runs a head helper.
-Never bypass existing required checks. Workflow registration and automatic
-release orchestration requires the workflow on the default branch; a change delivered
-only on an integration branch may need that merge before manual dispatch is
-available. Use the local report in the meantime, not a fabricated Actions run.
+### Evidence and publication
+
+The trusted exporter reads the untouched six raw Run objects and original
+documents, exporting each arm from its own HEAD-correct source worktree.
+It creates two immutable sanitized v2 records. A full `benchmark-report-v1`
+comparison is rendered with `Write-BenchmarkReport`, not the observation-only
+renderer. Operational failures initialize a non-passing report before collection.
+
+Only six allowlisted files can be uploaded: `base-record.json`, `head-record.json`,
+`report.json`, `report.md`, `badge.svg`, and `identity.json`. Failed attempts may
+have only the available failure envelope/identity; raw sessions, launcher logs,
+documents and judge explanations are never artifacts. Reports survive regression
+and controlled collection failure as a 30-day Actions artifact.
+
+Before publication, Release downloads the exact current-run artifact ID and
+validates the identity digest, workflow run/attempt/repository, frozen controller,
+historical reference, candidate, both policy digests, record/report digests,
+effective version and actual comparison verdict/accounting. A manual version
+override is frozen **before** spending. Before pushing the tag, validation permits
+only version/self-pin manifest transformations since measurement: all other
+product/evaluator/dependency bytes must remain unchanged. The manifest then records
+the final tag commit. Successful releases automatically attach all six sanitized
+files, including drafts; Tier 0 remains mandatory.
+
+Manual **Release** retains its explicit boolean `run_benchmark`, currently
+default **true**, and warns when explicitly bypassed. Release Prep explicitly passes
+`run_benchmark=true`; push releases cannot bypass. The bounded legacy stored-report
+bootstrap (through stable 0.18.1) is retained but disabled for this fresh-collection
+path. **No collection, accounting, compatibility or comparison failure can use
+bootstrap approval.** Direct publication outside Release is not governed here.
+An already-existing release tag is detected before any paid collection, so
+dependency-sync pushes and reruns for that version do not purchase another campaign.
+
+Controller/workflow/policy changes require review on the default branch before
+they can be used. Hashes bind integrity and identity, not authenticated execution,
+model entitlement, calibrated quality or statistical significance. Offline tests
+mock the paid process boundary while exercising real Git, export, comparison and
+publication checks; they do not claim a hosted paid campaign succeeded.
 
 ## Reproduce the original environment
 

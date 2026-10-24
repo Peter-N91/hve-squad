@@ -1,0 +1,474 @@
+#Requires -Modules Pester
+#Requires -Version 7.5
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+
+BeforeAll {
+    Import-Module (Join-Path $PSScriptRoot 'ReleaseBenchmark.psm1') -Force
+    Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1') -Force
+    $SourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
+    $Prototype = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $SourceRoot 'benchmarks/efficiency/records/run-20261021-102320-92ef357d.json')))
+    $ProtocolFiles = @(
+        'tests/tier2/live-benchmark/efficiency-scenario.json', 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1',
+        'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1', 'tests/lib/SquadInstall.psm1',
+        'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1', 'scripts/Test-SquadScribeOutput.ps1', 'scripts/Build-SquadPlugin.ps1'
+    )
+    function Copy-Value($Value) { ConvertFrom-BenchmarkJson ([Text.Encoding]::UTF8.GetBytes((ConvertTo-BenchmarkCanonicalJson $Value))) }
+    function Write-Json($Path, $Value) {
+        [void][IO.Directory]::CreateDirectory((Split-Path $Path))
+        [IO.File]::WriteAllText($Path, (ConvertTo-BenchmarkCanonicalJson $Value))
+    }
+    function Invoke-FixtureGit($Repo, [string[]]$GitArgs) {
+        $Text = @(& git -c core.hooksPath=/dev/null -C $Repo @GitArgs 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw "Fixture git: $($Text -join ' ')" }
+        $Text -join "`n"
+    }
+    function Commit($Repo) {
+        $null = Invoke-FixtureGit $Repo @('add', '.')
+        $null = Invoke-FixtureGit $Repo @('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture')
+        Invoke-FixtureGit $Repo @('rev-parse', 'HEAD')
+    }
+    function Save-Selection($F) {
+        $Path = Join-Path $F.repo 'benchmarks/efficiency/records/reference.json'
+        Write-Json $Path $F.record
+        Write-Json (Join-Path $F.repo 'benchmarks/efficiency/current.json') @{
+            schemaVersion = 'benchmark-pointer-v1'; recordPath = 'records/reference.json'
+            sha256 = Get-BenchmarkDigest ([IO.File]::ReadAllBytes($Path))
+        }
+    }
+    function New-Fixture {
+        $Root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $Repo = Join-Path $Root 'repo'
+        [void][IO.Directory]::CreateDirectory($Repo)
+        $null = Invoke-FixtureGit $Repo @('init', '-q', '-b', 'hotfix')
+        foreach ($Path in $ProtocolFiles + @('apm.yml', 'benchmarks/efficiency/policy.json', 'benchmarks/efficiency/collection-policy.json')) {
+            $To = Join-Path $Repo $Path
+            [void][IO.Directory]::CreateDirectory((Split-Path $To))
+            Copy-Item -LiteralPath (Join-Path $SourceRoot $Path) -Destination $To
+        }
+        [void][IO.Directory]::CreateDirectory((Join-Path $Repo 'squad-src'))
+        Set-Content (Join-Path $Repo 'squad-src/fixture.md') 'reference'
+        $Revision = Commit $Repo
+        $Record = Copy-Value $Prototype
+        $Record.seriesId = 'reference'; $Record.measuredRevision = $Revision
+        $Record.sourceHash = Get-BenchmarkSourceHash $Repo $Revision
+        $Compatibility = Copy-Value $Record.protocol
+        $Compatibility.Remove('cliVersion'); $Compatibility.Remove('roleModelPolicyHash'); $Compatibility.Remove('disabledMcpServersHash')
+        $Compatibility.cli = "GitHub Copilot CLI 1.0.101-0. Run 'copilot update' to check for updates."
+        $Compatibility.roleModelPolicy = ''; $Compatibility.disabledMcpServers = ''
+        $Compatibility.maxCredits = 1000
+        $HashFields = @('scenarioHash', 'parserHash', 'exerciseHash', 'preparationHash', 'graderHash', 'verifierHash', 'converterHash')
+        for ($I = 0; $I -lt 7; $I++) { $Compatibility[$HashFields[$I]] = (Get-FileHash (Join-Path $Repo $ProtocolFiles[$I])).Hash }
+        $Record.protocol = Get-BenchmarkProtocol $Repo $Revision $Compatibility
+        $F = @{ root = $Root; repo = $Repo; reference = $Revision; record = $Record; compatibility = $Compatibility }
+        Save-Selection $F
+        Set-Content (Join-Path $Repo 'squad-src/fixture.md') 'candidate'
+        $F.controller = Commit $Repo
+        $F.candidate = $F.controller
+        $F.output = Join-Path $Root 'public'; $F.private = Join-Path $Root 'private'
+        $F.cli = Join-Path $Root 'cli.ps1'
+        Set-Content $F.cli "'GitHub Copilot CLI 1.0.101-0. Run update to check for updates.'"
+        $F
+    }
+    function New-RawRun($F, $Arm, $Pair, $TrialPath) {
+        $Trial = $F.record.trials[$Pair - 1]
+        $Hashes = @{}
+        foreach ($Name in @('brd', 'prd', 'closingReview')) {
+            $Path = Join-Path $TrialPath ("workspace/" + $(if ($Name -eq 'closingReview') { 'review.md' } else { "docs/requirements/$Name.md" }))
+            [void][IO.Directory]::CreateDirectory((Split-Path $Path))
+            Set-Content $Path 'PRIVATE SENTINEL document'
+            $Hashes[$Name] = (Get-FileHash $Path).Hash
+        }
+        $Metrics = @{
+            complete = $true; credits = @{ complete = $true; used = 100 }; modelRequests = 10; toolCalls = 10
+            totals = @{ inputTokens = 100; outputTokens = 100; cacheReadTokens = 0; cacheWriteTokens = 0 }
+            coverage = @{ inputTokens = 1; outputTokens = 1; cacheReadTokens = 1; cacheWriteTokens = 1 }
+            counts = @{ usage = 1; failures = 0 }; elapsedMs = 1000
+            evidence = @{ sha256 = ('a' * 64) }; dispatches = @{ 'BRD Quality Reviewer' = 1; 'PRD Quality Reviewer' = 1 }
+        }
+        $JudgeMetrics = Copy-Value $Metrics; $JudgeMetrics.toolCalls = 0
+        $Stages = @(foreach ($Name in @('init', 'requirements', 'build')) {
+            $Checks = @{}
+            foreach ($Key in $Trial.outcomes.Keys | Where-Object { $_.StartsWith("$Name/") }) { $Checks[$Key.Substring($Name.Length + 1)] = $true }
+            @{ name = $Name; passed = $true; process = @{ exitCode = 0; stopCause = 'none'; seconds = 1 }; readiness = @{ checks = $Checks }; attempts = @() }
+        })
+        $WorkflowChecks = @{}
+        foreach ($Key in $Trial.outcomes.Keys | Where-Object { $_.StartsWith('workflow/') }) { $WorkflowChecks[$Key.Substring(9)] = $true }
+        $Evidence = @{}; foreach ($Dimension in $Trial.quality.Keys) { $Evidence[$Dimension] = 'PRIVATE SENTINEL explanation' }
+        $Revision = if ($Arm -eq 'baseline') { $F.reference } else { $F.candidate }
+        @{
+            metadata = @{ runId = [guid]::NewGuid().ToString(); arm = $Arm; pair = $Pair; revision = $Revision
+                sourceHash = Get-BenchmarkSourceHash $F.repo $Revision; compatibility = $(if ($Arm -eq 'candidate' -and $F.ContainsKey('candidateCompatibility')) { $F.candidateCompatibility } else { $F.compatibility }); started = '2026-10-21T00:00:00Z' }
+            collection = @{ recorded = $true; policy = 'baseline-observation-v1' }
+            metrics = $Metrics; stages = $Stages; completed = $true
+            acceptance = @{ passed = $true; checks = @($Trial.outcomes.Keys | Where-Object { $_.StartsWith('functional/') } | ForEach-Object { @{ name = $_.Substring(11); passed = $true } }) }
+            workflow = @{ passed = $true; checks = $WorkflowChecks; reviewPath = 'review.md' }
+            judge = @{ valid = $true; documentHashes = $Hashes; response = @{ scores = @{ businessClarity = 20; scopeFidelity = 20; acceptanceCriteria = 20; traceability = 20; risksAndDecisions = 20 }; evidence = $Evidence; criticalHighFindings = 0; documentHashes = $Hashes }
+                metrics = $JudgeMetrics; process = @{ exitCode = 0; stopCause = 'none'; seconds = 1 } }
+        }
+    }
+    function Invoke-Campaign($F, [DateTimeOffset]$Started = [DateTimeOffset]::UtcNow) {
+        Invoke-ReleaseBenchmark -Repository $F.repo -Controller $F.controller -Candidate $F.candidate -EffectiveVersion '0.19.0' `
+            -InstallRoot $F.root -CliPath $F.cli -PrivateRoot $F.private -OutputDirectory $F.output `
+            -RunId 123 -RunAttempt 2 -RepositorySlug 'owner/repo' -Started $Started
+    }
+    function Publication-Args($F) {
+        @{
+            Repository = $F.repo; OutputDirectory = $F.output; Controller = $F.controller; Candidate = $F.candidate
+            EffectiveVersion = '0.19.0'; RunId = '123'; RunAttempt = '2'; RepositorySlug = 'owner/repo'
+            ManifestDigest = (Get-FileHash (Join-Path $F.output 'identity.json')).Hash.ToLowerInvariant()
+        }
+    }
+}
+
+Describe 'Automatic release collection and publication' {
+    BeforeEach {
+        $script:F = New-Fixture
+        $script:Launches = [Collections.Generic.List[string]]::new()
+        $script:MutateRun = $null
+        $script:ChildMode = 'normal'
+        Mock Get-EfficiencyCompatibility -ModuleName ReleaseBenchmark {
+            param($SourceRoot)
+            if ($SourceRoot.EndsWith('candidate') -and $script:F.ContainsKey('candidateCompatibility')) { $script:F.candidateCompatibility }
+            else { $script:F.compatibility }
+        }
+        Mock Invoke-EfficiencyProcess -ModuleName ReleaseBenchmark {
+            param($Arguments, $OutputPath)
+            $Arm = $Arguments[[array]::IndexOf($Arguments, '-Arm') + 1]
+            $Pair = [int]$Arguments[[array]::IndexOf($Arguments, '-Pair') + 1]
+            $TrialPath = $Arguments[[array]::IndexOf($Arguments, '-TrialRoot') + 1]
+            $script:Launches.Add("$Arm-$Pair")
+            [IO.File]::WriteAllText($OutputPath, 'PRIVATE SENTINEL raw log')
+            if ($script:ChildMode -eq 'throw') { throw 'collection-private:PRIVATE-SENTINEL' }
+            if ($script:ChildMode -ne 'missing') {
+                $Run = New-RawRun $script:F $Arm $Pair $TrialPath
+                if ($script:MutateRun) { & $script:MutateRun $Run $TrialPath }
+                Write-Json (Join-Path $TrialPath 'out/run.json') $Run
+            }
+            [pscustomobject]@{ exitCode = $(if ($script:ChildMode -eq 'exit') { 1 } else { 0 }); stopCause = $(if ($script:ChildMode -eq 'timeout') { 'timeout' } else { 'none' }) }
+        }
+    }
+
+    It 'accepts configurable lower ceilings and rejects invalid numeric, reservation and runtime policy values' {
+        $Path = Join-Path $F.repo 'benchmarks/efficiency/collection-policy.json'
+        $Policy = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($Path))
+        $Policy.perTrialCredits = 60; $Policy.campaignCredits = 360
+        Write-Json $Path $Policy; $Sha = Commit $F.repo
+        (Get-CollectionPolicy $F.repo $Sha).policy.perTrialCredits | Should -Be 60
+        foreach ($Change in @(@{ perTrialCredits = 59 }, @{ campaignCredits = 359 }, @{ campaignTimeoutMinutes = 331 }, @{ model = 'floating model' }, @{ cliVersion = 'latest' }, @{ perTrialCredits = '1000' })) {
+            $Bad = Copy-Value $Policy
+            foreach ($Key in $Change.Keys) { $Bad[$Key] = $Change[$Key] }
+            Write-Json $Path $Bad; $Sha = Commit $F.repo
+            { Get-CollectionPolicy $F.repo $Sha } | Should -Throw '*collection-policy*'
+        }
+        foreach ($Value in @([double]::NaN, [double]::PositiveInfinity, -1, $true)) {
+            # JSON itself cannot represent NaN/Infinity as numeric values.
+            $Bad = Copy-Value $Policy; $Bad.perTrialCredits = $Value
+            Write-Json $Path $Bad; $Sha = Commit $F.repo
+            { Get-CollectionPolicy $F.repo $Sha } | Should -Throw
+        }
+    }
+
+    It 'freezes a validated historical reference despite changed controller source and no candidate record' {
+        $Context = Get-ReleaseBenchmarkPreflight $F.repo $F.controller $F.candidate '0.19.0'
+        $Context.reference | Should -Be $F.reference
+        $Context.reference | Should -Not -Be $F.controller
+        $Context.effectiveVersion | Should -Be '0.19.0'
+        (Get-ReleaseBenchmarkPreflight $F.repo $F.controller $F.reference '0.19.0').reference | Should -Be $F.reference
+        $Launches.Count | Should -Be 0
+    }
+
+    It 'rejects corrupt pointers, v1, altered historical protocol and non-ancestor references before spending' {
+        foreach ($Kind in @('digest', 'path', 'v1', 'protocol', 'history')) {
+            $F = New-Fixture
+            if ($Kind -eq 'digest' -or $Kind -eq 'path') {
+                $Path = Join-Path $F.repo 'benchmarks/efficiency/current.json'
+                $Pointer = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes($Path))
+                if ($Kind -eq 'digest') { $Pointer.sha256 = '0' * 64 } else { $Pointer.recordPath = '../unsafe.json' }
+                Write-Json $Path $Pointer
+            } else {
+                if ($Kind -eq 'v1') {
+                    $F.record.schemaVersion = 'benchmark-series-v1'; $F.record.protocol.Remove('converterHash')
+                    $F.record.provenance.collector = 'benchmark-export-v1'; $F.record.provenance.verifierHashBasis = 'measured-git-revision'
+                }
+                if ($Kind -eq 'protocol') { $F.record.protocol.parserHash = '0' * 64 }
+                if ($Kind -eq 'history') {
+                    $null = Invoke-FixtureGit $F.repo @('checkout', '--orphan', 'untrusted')
+                    $Unrelated = Commit $F.repo
+                    $null = Invoke-FixtureGit $F.repo @('checkout', 'hotfix')
+                    $F.record.measuredRevision = $Unrelated
+                    $F.record.sourceHash = Get-BenchmarkSourceHash $F.repo $Unrelated
+                }
+                Save-Selection $F
+            }
+            $F.controller = Commit $F.repo; $F.candidate = $F.controller
+            { Get-ReleaseBenchmarkPreflight $F.repo $F.controller $F.candidate '0.19.0' } | Should -Throw
+        }
+        $Launches.Count | Should -Be 0
+    }
+
+    It 'rejects modifications and deletions of immutable controller history without requiring new selected records' {
+        foreach ($Delete in @($false, $true)) {
+            $F = New-Fixture
+            $Path = Join-Path $F.repo 'benchmarks/efficiency/records/reference.json'
+            if ($Delete) { Remove-Item $Path } else { Add-Content $Path ' ' }
+            $F.candidate = Commit $F.repo
+            $null = Invoke-FixtureGit $F.repo @('checkout', '--detach', $F.controller)
+            { Get-ReleaseBenchmarkPreflight $F.repo $F.controller $F.candidate '0.19.0' } | Should -Throw '*historical-record-modified*'
+        }
+        $Launches.Count | Should -Be 0
+    }
+
+    It 'checks every executing protocol path against both measured revisions before spending' {
+        foreach ($Path in $ProtocolFiles) {
+            $F = New-Fixture
+            Add-Content (Join-Path $F.repo $Path) 'changed protocol'
+            $F.candidate = Commit $F.repo
+            $null = Invoke-FixtureGit $F.repo @('checkout', '--detach', $F.controller)
+            { Get-ReleaseBenchmarkPreflight $F.repo $F.controller $F.candidate '0.19.0' } | Should -Throw "*collection-protocol:$Path*"
+        }
+        $Launches.Count | Should -Be 0
+    }
+
+    It 'measures source-bound dependency changes with real install identities while default comparisons remain strict' {
+        $Path = Join-Path $F.repo 'apm.yml'
+        $Text = [IO.File]::ReadAllText($Path) -replace '(?m)^version: .+$', 'version: 0.19.0'
+        $Text = $Text -replace '(?m)(Peter-N91/hve-squad/squad-src/[^\r\n#]+)$', '$1#v0.19.0'
+        [IO.File]::WriteAllText($Path, $Text)
+        $F.candidate = Commit $F.repo
+        $null = Invoke-FixtureGit $F.repo @('checkout', '--detach', $F.controller)
+        (Get-ReleaseBenchmarkPreflight $F.repo $F.controller $F.candidate '0.19.0').reference | Should -Be $F.reference
+        $null = Invoke-FixtureGit $F.repo @('checkout', '--detach', $F.candidate)
+        [IO.File]::WriteAllText($Path, ($Text.Replace('2405521970b85b11fdccf042ae661652d3f9a303', ('a' * 40))))
+        $F.candidate = Commit $F.repo
+        $null = Invoke-FixtureGit $F.repo @('checkout', '--detach', $F.controller)
+        $Context = Get-ReleaseBenchmarkPreflight $F.repo $F.controller $F.candidate '0.19.0'
+        $Context.referenceManifestHash | Should -Not -Be $Context.candidateManifestHash
+        $F.candidateCompatibility = Copy-Value $F.compatibility
+        $F.candidateCompatibility.installHash = 'b' * 64
+        $Report = Invoke-Campaign $F
+        $Report.exitCode | Should -Be 0
+        $Base = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'base-record.json')))
+        $Head = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'head-record.json')))
+        $Policy = ConvertFrom-BenchmarkJson (Get-BenchmarkGitFile $F.repo $F.controller 'benchmarks/efficiency/policy.json')
+        $Base.protocol.installHash | Should -Not -Be $Head.protocol.installHash
+        { Compare-BenchmarkSeries $Base $Head $Policy } | Should -Throw '*compatibility-installHash*'
+        $null = Invoke-FixtureGit $F.repo @('checkout', '--detach', $F.candidate)
+        $PublicationParams = Publication-Args $F
+        (Assert-ReleaseBenchmarkPublication @PublicationParams).comparisonScope | Should -Be 'fresh-paired-deployments'
+        $Launches.Count | Should -Be 6
+    }
+
+    It 'collects original six slots once, exports distinct HEAD-correct arms and validates exact publication handoff' {
+        $Report = Invoke-Campaign $F
+        $Report.exitCode | Should -Be 0
+        ($Launches -join ',') | Should -Be 'baseline-1,candidate-1,baseline-2,candidate-2,baseline-3,candidate-3'
+        $Report.baseRecord.measuredRevision | Should -Be $F.reference
+        $Report.headRecord.measuredRevision | Should -Be $F.candidate
+        $Report.baseRecord.sourceHash | Should -Not -Be $Report.headRecord.sourceHash
+        $PublicationParams = Publication-Args $F
+        $Identity = Assert-ReleaseBenchmarkPublication @PublicationParams
+        $Identity.creditsUsed | Should -Be 1200
+        $Identity.creditsKnown | Should -Be 1200
+        $Identity.accountingComplete | Should -BeTrue
+        @($Identity.slots | Where-Object { -not $_.accountingComplete }).Count | Should -Be 0
+        foreach ($Arm in @('baseline', 'candidate')) {
+            (Invoke-FixtureGit (Join-Path $F.private $Arm) @('rev-parse', 'HEAD')) | Should -Be $(if ($Arm -eq 'baseline') { $F.reference } else { $F.candidate })
+        }
+    }
+
+    It 'rejects a wrong export HEAD without rewriting either measured source or the original raw runs' {
+        (Invoke-Campaign $F).exitCode | Should -Be 0
+        $RawPath = Join-Path $F.private 'series-evidence.json'
+        $Before = (Get-FileHash $RawPath).Hash
+        $Directories = @(1..3 | ForEach-Object { Join-Path $F.private "trials/baseline-$_" })
+        { Export-BenchmarkSeries -Repository (Join-Path $F.private 'candidate') -ControlPath $RawPath -TrialDirectories $Directories -SeriesId wrong-head } |
+            Should -Throw '*source-fingerprint*'
+        (Get-FileHash $RawPath).Hash | Should -Be $Before
+        (Invoke-FixtureGit (Join-Path $F.private 'baseline') @('rev-parse', 'HEAD')) | Should -Be $F.reference
+        (Invoke-FixtureGit (Join-Path $F.private 'candidate') @('rev-parse', 'HEAD')) | Should -Be $F.candidate
+    }
+
+    It 'blocks a changed actual CLI or incompatible shared runtime before launching a paid child' {
+        Set-Content $F.cli "'GitHub Copilot CLI 9.9.9. Run update to check for updates.'"
+        (Invoke-Campaign $F).reasons | Should -Contain 'collection-cli-version'
+        $Launches.Count | Should -Be 0
+        $script:F = New-Fixture
+        Mock Get-EfficiencyCompatibility -ModuleName ReleaseBenchmark {
+            param($SourceRoot)
+            $Value = Copy-Value $script:F.compatibility
+            if ($SourceRoot.EndsWith('candidate')) { $Value.powershell = '99.0.0' }
+            $Value
+        }
+        (Invoke-Campaign $F).reasons | Should -Contain 'collection-environment-incompatible'
+        $Launches.Count | Should -Be 0
+    }
+
+    It 'preserves product-only failures and does not turn the native improvement screen into a release gate' {
+        $script:MutateRun = {
+            param($Run)
+            $Run.acceptance.checks[0].passed = $false; $Run.acceptance.passed = $false; $Run.completed = $false
+        }
+        $Report = Invoke-Campaign $F
+        $Report.status | Should -Be 'no-regression'
+        $Report.improvementScreen | Should -BeFalse
+        $Report.headStatistics.outcomes.functional | Should -Be 0
+        $Raw = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.private 'series-evidence.json'))) 33554432
+        @($Raw.runs | Where-Object completed).Count | Should -Be 0
+        $Launches.Count | Should -Be 6
+    }
+
+    It 'renders an actual regression as exit three in JSON, Markdown and SVG and blocks publication' {
+        $script:MutateRun = { param($Run) if ($Run.metadata.arm -eq 'candidate') { $Run.metrics.modelRequests = 50 } }
+        $Report = Invoke-Campaign $F
+        $Report.exitCode | Should -Be 3
+        (Get-Content (Join-Path $F.output 'report.json') -Raw) | Should -Match '"status":"regression"'
+        (Get-Content (Join-Path $F.output 'report.md') -Raw) | Should -Match 'Regression detected'
+        (Get-Content (Join-Path $F.output 'badge.svg') -Raw) | Should -Match '#b45309'
+        $PublicationParams = Publication-Args $F
+        { Assert-ReleaseBenchmarkPublication @PublicationParams } | Should -Throw '*publication-verdict*'
+    }
+
+    It 'stops before a second launch on budget, infrastructure, incomplete accounting or combined workflow plus judge overrun' {
+        foreach ($Kind in @('credit-limit', 'request-limit', 'timeout', 'meter', 'judge', 'overrun', 'negative', 'nonnumeric', 'missing-judge', 'invalid-number')) {
+            $script:F = New-Fixture
+            $script:MutateRun = {
+                param($Run)
+                if ($Kind -eq 'meter') { $Run.metrics.credits.complete = $false }
+                elseif ($Kind -eq 'judge') { $Run.judge.metrics.credits.complete = $false }
+                elseif ($Kind -eq 'overrun') { $Run.metrics.credits.used = 950; $Run.judge.metrics.credits.used = 100 }
+                elseif ($Kind -eq 'negative') { $Run.metrics.credits.used = -1 }
+                elseif ($Kind -eq 'nonnumeric') { $Run.metrics.credits.used = 'PRIVATE SENTINEL' }
+                elseif ($Kind -eq 'missing-judge') { $Run.judge = $null }
+                elseif ($Kind -eq 'invalid-number') { $Run.metrics.credits.used = [double]::PositiveInfinity }
+                else { $Run.stages[0].process.stopCause = $Kind }
+            }
+            $Launches.Clear()
+            (Invoke-Campaign $F).exitCode | Should -Be 1
+            $Launches.Count | Should -Be 1
+            (Get-Content (Join-Path $F.output 'identity.json') -Raw) | Should -Not -Match 'PRIVATE SENTINEL'
+            $Identity = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'identity.json')))
+            $Identity.slots[0].status | Should -Be 'failed'
+            if ($Kind -in @('meter', 'judge', 'negative', 'nonnumeric', 'missing-judge', 'invalid-number')) {
+                $Identity.accountingComplete | Should -BeFalse
+                $Identity.creditsUsed | Should -BeNullOrEmpty
+                $Identity.creditsKnown | Should -Be 100
+                $Identity.slots[0].credits | Should -BeNullOrEmpty
+                (Get-Content (Join-Path $F.output 'report.md') -Raw) | Should -Match 'lower bound; total unknown'
+            } else {
+                $Expected = if ($Kind -eq 'overrun') { 1050 } else { 200 }
+                $Identity.accountingComplete | Should -BeTrue
+                $Identity.creditsUsed | Should -Be $Expected
+                $Identity.creditsKnown | Should -Be $Expected
+                $Identity.slots[0].credits | Should -Be $Expected
+            }
+        }
+    }
+
+    It 'stops child-without-evidence, nonzero infrastructure exit and controlled deadline without inventing records' {
+        foreach ($Mode in @('missing', 'exit', 'timeout', 'throw')) {
+            $script:F = New-Fixture; $script:ChildMode = $Mode; $Launches.Clear()
+            (Invoke-Campaign $F).exitCode | Should -Be 1
+            $Launches.Count | Should -Be 1
+            $Identity = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'identity.json')))
+            if ($Mode -eq 'exit') {
+                $Identity.accountingComplete | Should -BeTrue
+                $Identity.creditsUsed | Should -Be 200
+            } else {
+                $Identity.accountingComplete | Should -BeFalse
+                $Identity.creditsUsed | Should -BeNullOrEmpty
+                $Identity.creditsKnown | Should -Be $(if ($Mode -eq 'timeout') { 200 } else { 0 })
+            }
+            Test-Path (Join-Path $F.output 'head-record.json') | Should -BeFalse
+            foreach ($File in Get-ChildItem $F.output -File) { (Get-Content $File.FullName -Raw) | Should -Not -Match 'PRIVATE.SENTINEL' }
+        }
+        $script:F = New-Fixture; $Launches.Clear(); $script:ChildMode = 'normal'
+        $script:MutateRun = { param($Run) if ($Run.metadata.arm -eq 'candidate') { $Run.judge.metrics.credits.complete = $false } }
+        (Invoke-Campaign $F).exitCode | Should -Be 1
+        $Launches.Count | Should -Be 2
+        $Identity = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'identity.json')))
+        $Identity.creditsKnown | Should -Be 300
+        $Identity.creditsUsed | Should -BeNullOrEmpty
+        $Identity.accountingComplete | Should -BeFalse
+    }
+
+    It 'initializes safe non-passing reports before a deadline and launches no child after expiration' {
+        $Report = Invoke-Campaign $F ([DateTimeOffset]::UtcNow.AddMinutes(-331))
+        $Report.reasons | Should -Contain 'collection-deadline'
+        $Launches.Count | Should -Be 0
+        foreach ($File in @('report.json', 'report.md', 'badge.svg', 'identity.json')) { Test-Path (Join-Path $F.output $File) | Should -BeTrue }
+        $script:F = New-Fixture
+        $Report = Invoke-ReleaseBenchmark -Repository $F.repo -Controller $F.controller -Candidate 'PRIVATE SENTINEL' `
+            -EffectiveVersion 'PRIVATE SENTINEL' -RunId 'PRIVATE SENTINEL' -RunAttempt 2 -RepositorySlug 'PRIVATE SENTINEL' `
+            -InstallRoot $F.root -CliPath $F.cli -PrivateRoot $F.private -OutputDirectory $F.output
+        $Report.exitCode | Should -Be 1
+        foreach ($File in Get-ChildItem $F.output -File) { (Get-Content $File.FullName -Raw) | Should -Not -Match 'PRIVATE SENTINEL' }
+    }
+
+    It 'retains a sanitized failure envelope on export rejection and never stages raw diagnostics or documents' {
+        $script:MutateRun = { param($Run, $Path) Add-Content (Join-Path $Path 'workspace/docs/requirements/brd.md') 'tampered PRIVATE SENTINEL' }
+        $Report = Invoke-Campaign $F
+        $Report.exitCode | Should -Be 1
+        $Report.reasons | Should -Contain 'collection-export-failed'
+        $Launches.Count | Should -Be 6
+        foreach ($File in Get-ChildItem $F.output -File) { (Get-Content $File.FullName -Raw) | Should -Not -Match 'PRIVATE SENTINEL' }
+    }
+
+    It 'rejects wrong campaign, controller, candidate, version, reference and record digests at publication' {
+        (Invoke-Campaign $F).exitCode | Should -Be 0
+        foreach ($Key in @('RunId', 'RunAttempt', 'Controller', 'Candidate', 'EffectiveVersion', 'RepositorySlug', 'ManifestDigest')) {
+            $PublicationParams = Publication-Args $F; $PublicationParams[$Key] = 'wrong'
+            { Assert-ReleaseBenchmarkPublication @PublicationParams } | Should -Throw '*publication-*'
+        }
+        $Path = Join-Path $F.output 'identity.json'
+        $Original = [IO.File]::ReadAllBytes($Path)
+        foreach ($Key in @('reference', 'historicalRecordDigest', 'collectionPolicyHash', 'comparisonPolicyHash', 'baseRecordDigest', 'headRecordDigest', 'reportDigest', 'creditsKnown', 'creditsUsed', 'accountingComplete')) {
+            $Identity = ConvertFrom-BenchmarkJson $Original; $Identity[$Key] = '0' * 64; Write-Json $Path $Identity
+            $PublicationParams = Publication-Args $F
+            { Assert-ReleaseBenchmarkPublication @PublicationParams } | Should -Throw '*publication-*'
+        }
+        $Identity = ConvertFrom-BenchmarkJson $Original; $Identity.slots[0].accountingComplete = $false; Write-Json $Path $Identity
+        $PublicationParams = Publication-Args $F
+        { Assert-ReleaseBenchmarkPublication @PublicationParams } | Should -Throw '*publication-accounting*'
+    }
+
+    It 'binds a hotfix version override and exact self-pin-only final tag, rejecting product or dependency mutations' {
+        (Invoke-Campaign $F).exitCode | Should -Be 0
+        $PublicationParams = Publication-Args $F
+        $Path = Join-Path $F.repo 'apm.yml'
+        $Before = [IO.File]::ReadAllText($Path)
+        [IO.File]::WriteAllText($Path, (($Before -replace '(?m)^version: .+$', 'version: 0.19.0') -replace '(?m)(Peter-N91/hve-squad/squad-src/[^\r\n#]+)$', '$1#v0.19.0'))
+        $Final = Commit $F.repo
+        (Assert-ReleaseBenchmarkPublication @PublicationParams -BindFinalCommit).finalTagCommit | Should -Be $Final
+        $Identity = ConvertFrom-BenchmarkJson ([IO.File]::ReadAllBytes((Join-Path $F.output 'identity.json')))
+        $Identity.finalTagCommit = $null; Write-Json (Join-Path $F.output 'identity.json') $Identity
+        $PublicationParams = Publication-Args $F
+        Add-Content (Join-Path $F.repo 'squad-src/fixture.md') 'wrong product'
+        $null = Commit $F.repo
+        { Assert-ReleaseBenchmarkPublication @PublicationParams -BindFinalCommit } | Should -Throw '*publication-product-changed*'
+        $null = Invoke-FixtureGit $F.repo @('reset', '--hard', $Final)
+        Add-Content $Path 'dependencies-changed: true'
+        $null = Commit $F.repo
+        { Assert-ReleaseBenchmarkPublication @PublicationParams -BindFinalCommit } | Should -Throw '*publication-dependencies-changed*'
+    }
+
+    It 'isolates credentials, forbids PR or ordinary-push paid triggers, allowlists artifacts and wires release prep and publication' {
+        $Workflow = Get-Content (Join-Path $SourceRoot '.github/workflows/tier2-benchmark.yml') -Raw
+        $Workflow | Should -Not -Match '(?m)^  (pull_request|push|pull_request_target):'
+        ([regex]::Matches($Workflow, 'COPILOT_GITHUB_TOKEN: \$\{\{ secrets.COPILOT_GITHUB_TOKEN \}\}')).Count | Should -Be 1
+        $Workflow | Should -Match 'timeout-minutes: 360'
+        $Workflow | Should -Match 'cancel-in-progress: false'
+        $Workflow | Should -Match '\-\-no-auto-update'
+        $Workflow | Should -Not -Match 'path:.*private|recorded-observation'
+        $Workflow | Should -Match "COLLECTION_REQUIRED: 'true'"
+        $Release = Get-Content (Join-Path $SourceRoot '.github/workflows/release.yml') -Raw
+        $Release | Should -Match 'artifact-ids: \$\{\{ needs.benchmark.outputs.artifact_id \}\}'
+        $Release | Should -Match 'effective_version: \$\{\{ needs.candidate.outputs.version \}\}'
+        $Release | Should -Match 'BindFinalCommit'
+        $Release | Should -Match 'ARGS\+=\(\.benchmark-public/report.json'
+        $Release | Should -Match 'inputs.run_benchmark == false'
+        $Release | Should -Match "needs.candidate.outputs.tag_exists == 'false'"
+        $Release | Should -Match 'Skip paid collection when release tag already exists'
+        (Get-Content (Join-Path $SourceRoot '.github/workflows/release-prep.yml') -Raw) | Should -Match '-f run_benchmark=true'
+    }
+}
