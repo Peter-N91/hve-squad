@@ -574,6 +574,61 @@ metadata:
 
 Do not dispatch `Squad Coach`: it is a user-only agent (`disable-model-invocation: true`). This skill prepares a manual handoff; it neither impersonates the Coach nor applies its recommendations.
 '@
+        'squad-connector-builder'  = @'
+---
+name: squad-connector-builder
+description: "Starts the Squad Connector Builder to interactively scaffold a validated connector or create editable contract-compatible templates with a removable runner and runbook."
+license: MIT
+metadata:
+  authors: "Peter-N91/hve-squad"
+---
+
+# Squad Connector Builder
+
+## Inputs
+
+* **request** (optional): What the user wants to connect and any known connector values.
+* **mode** (optional): `interactive` or `template`.
+* **destination** (optional): Existing repository root to scaffold.
+
+## Flow
+
+1. Dispatch the supplied values to `Squad Connector Builder`; do not ask again for values already present.
+2. Let the builder gather missing decisions, preview the plan, invoke the packaged deterministic scripts, and validate configured manifests.
+3. Return its generated paths, placeholders, prerequisites, runner invocation, registration handoff, and safe-rerun guidance. Never pass credentials.
+
+## Invocation
+
+Dispatch this request to the `Squad Connector Builder` agent. The skill does not render files itself.
+'@
+        'squad-external-agent-builder' = @'
+---
+name: squad-external-agent-builder
+description: "Starts the Squad External Agent Builder to create a standalone agent or multi-agent orchestrator, or adapt an existing implementation, for HVE Squad interoperability."
+license: MIT
+metadata:
+  authors: "Peter-N91/hve-squad"
+---
+
+# Squad External Agent Builder
+
+## Inputs
+
+* **request** (optional): Capabilities, environment, responsibilities, skills, and known integration details.
+* **action** (optional): `create` or `adapt`.
+* **kind** (optional): `agent` or `orchestrator`.
+* **destination** (optional): Existing repository root to scaffold.
+
+## Flow
+
+1. Dispatch supplied values to `Squad External Agent Builder` and ask only for missing decisions.
+2. Let the builder reuse suitable skills, preserve an adapted implementation, preview the plan, and invoke deterministic scaffolding and validation.
+3. Return generated paths, TODOs, direct-test and adapter steps, and the end-to-end runbook. Never pass credentials.
+
+## Invocation
+
+Dispatch this request to the `Squad External Agent Builder` agent. The skill does not render files itself.
+'@
         'squad-run'                = @'
 ---
 name: squad-run
@@ -842,14 +897,31 @@ Perform this as a direct file-write action — it is a mechanical copy-and-rewri
 '@
     }
 
-    $coachAgent = 'squad-src/.github/agents/squad/squad-coach.agent.md'
-    $coachPrompt = 'squad-src/.github/prompts/squad/squad-coach.prompt.md'
     $agents = @(Get-SourceFileList -Source $Source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/agents/squad')
     $prompts = @(Get-SourceFileList -Source $Source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/prompts/squad')
-    if ($coachAgent -notin $agents -or $coachPrompt -notin $prompts) {
-        $skills.Remove('squad-coach')
+    $conditionalEntrypoints = @(
+        @{
+            Skill  = 'squad-coach'
+            Agent  = 'squad-src/.github/agents/squad/squad-coach.agent.md'
+            Prompt = 'squad-src/.github/prompts/squad/squad-coach.prompt.md'
+        }
+        @{
+            Skill  = 'squad-connector-builder'
+            Agent  = 'squad-src/.github/agents/squad/squad-connector-builder.agent.md'
+            Prompt = 'squad-src/.github/prompts/squad/squad-connector-builder.prompt.md'
+        }
+        @{
+            Skill  = 'squad-external-agent-builder'
+            Agent  = 'squad-src/.github/agents/squad/squad-external-agent-builder.agent.md'
+            Prompt = 'squad-src/.github/prompts/squad/squad-external-agent-builder.prompt.md'
+        }
+    )
+    foreach ($entrypoint in $conditionalEntrypoints) {
+        if ($entrypoint.Agent -notin $agents -or $entrypoint.Prompt -notin $prompts) {
+            $skills.Remove($entrypoint.Skill)
+        }
     }
-    else {
+    if ($skills.Contains('squad-coach')) {
         $skills['squad-run'] += @'
 
 

@@ -33,6 +33,7 @@ Read [references/00-index.md](references/00-index.md) first, then only files you
 |---------------------------------------------------------------|--------------------------------------------------------------------------------|
 | [00-index.md](references/00-index.md)                         | Which file to read for which job, and the companion instruction files          |
 | [profiles-and-packs.md](references/profiles-and-packs.md)     | Squad profiles and add-on packs                                                |
+| [builder-workflows.md](references/builder-workflows.md)       | Connector and external endpoint builder decisions and scripted scaffolding     |
 | [foundry-blueprint.md](references/foundry-blueprint.md)       | `foundry` role owners/evidence                                                  |
 | [foundry-platform-options.md](references/foundry-platform-options.md) | `foundry` platform choices                                         |
 | [operating-procedure.md](references/operating-procedure.md)   | Init, Route, ledger reconciliation, Decide, Handoff, tool-to-mechanism mapping |
