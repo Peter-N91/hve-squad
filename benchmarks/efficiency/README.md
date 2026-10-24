@@ -54,9 +54,11 @@ Missing or incompatible parent data means **comparison unavailable**, not
 no-regression. The explicit strict comparator and required hosted gate are unchanged.
 
 The independent hosted candidate artifact includes record hashes, reports and a
-badge even when parent discovery fails. New-schema reporter activation is pending
-owner review and an immutable trusted reporter-pin update; candidate code is never
-executed as a reporting fallback. The historical records and numbers below have
+badge even when parent discovery fails. Its owner-reviewed reporter is pinned to
+`8a0233d3c55ff18f056d02bb5623dcea52991ec8` and reads both standalone score and
+legacy records; candidate code is never executed as a reporting fallback.
+Unavailable or invalid candidate evidence produces explicit failed-zero diagnostics,
+not an invented measured grade. The historical records and numbers below have
 not been rewritten by this feature.
 
 ## Earlier complete comparison record

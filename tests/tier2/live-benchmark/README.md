@@ -231,9 +231,11 @@ files through the normal PR flow. No export or reporting command spends AI credi
 
 Hosted candidate score artifacts are independent of the strict parent-comparison
 job. That strict job retains its existing required-check behavior. The trusted
-reporter is immutable: new score-schema support is activated only after owner review
-and a pin update. Until then, legacy records remain readable and unsupported new
-records produce an explicit reporter-unavailable failure, not an invented grade.
+reporter is pinned to owner-reviewed `8a0233d3c55ff18f056d02bb5623dcea52991ec8`,
+supporting standalone score and legacy records without parent discovery.
+Unavailable or invalid candidate evidence retains explicit failed-zero diagnostics
+and a nonzero exit, not an invented measured grade. The separate strict reporter
+and gate are unchanged.
 
 ### Compare a committed PR with its parent
 
