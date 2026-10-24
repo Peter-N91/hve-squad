@@ -60,7 +60,7 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
                 $body | Should -Match 'Write-SquadHandoff\.ps1 -Quiet'
                 $body | Should -Match 'directly'
                 $body | Should -Match 'synchronously'
-                $body | Should -Match 'minimal.*JSON'
+                $body | Should -Match '(?s)minimal.*JSON'
             }
             $script:OperatingProcedureBody | Should -Match 'direct ordinary route above runs synchronously and does not use Scribe pipelining'
             $script:GatesAndModesBody | Should -Match 'remaining pipelining predicate applies only when a cold Scribe dispatch is actually needed'
@@ -92,7 +92,7 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $pointerSentence = ($pointerLine[0] -split '`state\.json`')[0].TrimEnd()
             $pointerSentence.Length | Should -BeLessOrEqual 200 -Because 'R-8/Condition 2 caps the coordinator pointer at 200 chars so PKG-04 headroom is not spent restating the contract inline'
             $pointerLine[0] | Should -Match ([regex]::Escape('For cold Scribe dispatches only, pipeline per references/gates-and-modes.md'))
-            $pointerLine[0] | Should -Match 'Ordinary handoffs run synchronously through the validated writer'
+            $script:Coordinator.Body | Should -Match 'Ordinary handoffs run synchronously through the validated writer'
         }
 
         It 'the pointer''s targets exist: both named sections are present in their reference files' {
@@ -140,7 +140,8 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $script:OperatingProcedureBody | Should -Match ([regex]::Escape('Dispatching stage N''s Scribe alone and waiting for it is a defect while the predicate holds'))
             $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('the next stage''s dispatch must share a parallel tool-call block with that hand-off whenever the Enablement Predicate holds'))
             $federationCoordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
-            $federationCoordinator.Body | Should -Match ([regex]::Escape('under autopilot, only cold Scribe dispatches pipeline per references/gates-and-modes.md'))
+            $federationCoordinator.Body | Should -Match 'references/coordinator-runtime\.md'
+            (Get-SquadReferenceBody 'coordinator-runtime.md') | Should -Match 'For cold Scribe dispatches only, pipeline per references/gates-and-modes\.md'
         }
 
         It 'the Scribe ignores legacy ledgerCommand text and invokes the trusted helper instead of hand-writing the ledger' {
@@ -226,7 +227,7 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
         }
 
         It 'keeps "state.json advances per stage" verbatim' {
-            $script:Coordinator.Body | Should -Match ([regex]::Escape('`state.json` advances per stage'))
+            (Get-SquadReferenceBody 'coordinator-runtime.md') | Should -Match 'Test-SquadTurnCompletion\.ps1'
             $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('`state.json` advances per stage'))
             $script:GatesAndModesBody | Should -Match ([regex]::Escape('`state.json` advances per stage'))
         }

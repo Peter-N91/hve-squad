@@ -1,6 +1,6 @@
 ---
 description: "Watch Mode (DR-01): the event-driven trigger contract that turns a repository event into an autopilot squad run inside an event-scoped federation sub-squad, producing a pull request, transport-agnostic and reusing the github-issue approval channel"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.github/workflows/squad-watch.yml'
 ---
 
 # Squad Watch Mode Conventions

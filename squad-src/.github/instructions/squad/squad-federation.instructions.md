@@ -1,6 +1,6 @@
 ---
 description: "Squad federation layout: opt-in sub-squads under one repo, the parameterized squad root, the federation registry and meta-routing schemas, detection precedence, two-level single-writer state, and the unattended Watch Mode bootstrap"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/federation.md'
 ---
 
 # Squad Federation Conventions

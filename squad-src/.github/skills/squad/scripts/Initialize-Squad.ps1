@@ -11,6 +11,9 @@
     JSON input described in references/scribe-init.md.
 .PARAMETER RepoRoot
     Consumer repository boundary; defaults to the current directory.
+.PARAMETER Direct
+    Confirmed coordinator execution. Records coordinator usage only; it is not a
+    Scribe dispatch. The legacy Scribe invocation remains the default.
 .EXAMPLE
     ./Initialize-Squad.ps1 -PayloadPath /tmp/init.json -RepoRoot .
 .NOTES
@@ -19,7 +22,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$PayloadPath,
-    [string]$RepoRoot = (Get-Location).ProviderPath
+    [string]$RepoRoot = (Get-Location).ProviderPath,
+    [switch]$Direct
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -139,7 +143,7 @@ function Write-Seed {
 }
 
 function Get-InitUsage {
-    param([string]$SessionModel, [string]$ScribeTier)
+    param([string]$SessionModel, [string]$ScribeTier, [string[]]$Actors = @('coordinator', 'scribe'))
     . (Join-Path $PSScriptRoot 'Initialize-SquadConsumptionRates.ps1') -SquadRoot '.'
     $Tables = @(Get-MarkdownTableLocal -Content (Get-TemplateSeedBlock -Path (Join-Path $PSScriptRoot '../references/consumption-rates-template.md')))
     $Floors = @($Tables | Where-Object { 'Dispatch class' -in $_.Header } | ForEach-Object { $_.Rows } | Where-Object { $_['Dispatch class'] -eq 'Scribe state write' })
@@ -153,7 +157,7 @@ function Get-InitUsage {
     $Gross = $Turns * ($Base + $Growth * ($Turns - 1) / 2.0)
     $ModelRows = @($Tables | Where-Object { 'Model (as routed)' -in $_.Header } | ForEach-Object { $_.Rows })
     $FallbackRows = @($Tables | Where-Object { 'Priced as' -in $_.Header } | ForEach-Object { $_.Rows })
-    foreach ($Actor in @('coordinator', 'scribe')) {
+    foreach ($Actor in $Actors) {
         $ConcreteSession = $Actor -eq 'coordinator' -and $SessionModel.Trim() -notin @('', 'auto', 'fast', 'default', 'extended', 'unknown')
         $Model = if ($ConcreteSession) { $SessionModel } else { 'unknown' }
         $ModelKey = ($Model.Trim() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-').ToLowerInvariant()
@@ -277,13 +281,25 @@ if ($MyInvocation.InvocationName -ne '.') {
             '| ' + (($Columns | ForEach-Object { $Row[$_] }) -join ' | ') + ' |'
         }
         if ('scribe' -notin $Roles -or @($Payload.roster | Where-Object { $_.Role -eq 'scribe' -and $_['Agent Name (Primary)'] -eq 'Squad Scribe' }).Count -ne 1) { throw 'Confirmed Squad Scribe roster row required.' }
+        if ($Direct) {
+            Import-Module (Join-Path $PSScriptRoot 'SquadCoordinator.psm1') -Force
+            $AgentIndex = Get-SquadAgentIndex $Repository
+            foreach ($Row in $Payload.roster) {
+                $Primary = $Row['Agent Name (Primary)']
+                if (-not $AgentIndex.ContainsKey($Primary) -or -not $AgentIndex[$Primary].dispatchable) {
+                    throw "Confirmed Primary '$Primary' is not installed and dispatchable."
+                }
+            }
+        }
         if ($Payload.Contains('usage') -and ($Payload.usage -isnot [array] -or $Payload.usage.Count -eq 0)) { throw 'Supplied usage must be a nonempty array.' }
         $SuppliedActors = @(if ($Payload.Contains('usage')) { $Payload.usage | Where-Object { $_ -is [System.Collections.IDictionary] } | ForEach-Object { $_['actor'] } })
-        $EstimatedActors = @('coordinator', 'scribe' | Where-Object { $_ -notin $SuppliedActors })
+        $RequiredActors = @(if ($Direct) { 'coordinator' } else { 'coordinator'; 'scribe' })
+        if (@($SuppliedActors | Where-Object { $_ -notin $RequiredActors }).Count) { throw 'Direct initialization cannot record a Scribe actor.' }
+        $EstimatedActors = @($RequiredActors | Where-Object { $_ -notin $SuppliedActors })
         $UsageEstimated = $EstimatedActors.Count -gt 0
         if ($UsageEstimated) {
             $ScribeRow = @($Payload.roster | Where-Object { $_.Role -eq 'scribe' })[0]
-            $Derived = @(Get-InitUsage -SessionModel $State.currentRun.sessionModel -ScribeTier $ScribeRow['Model Tier'] | Where-Object { $_.actor -in $EstimatedActors })
+            $Derived = @(Get-InitUsage -SessionModel $State.currentRun.sessionModel -ScribeTier $ScribeRow['Model Tier'] -Actors $RequiredActors | Where-Object { $_.actor -in $EstimatedActors })
             $Payload.usage = @(@(if ($Payload.Contains('usage')) { $Payload.usage }) + $Derived)
         }
         $ConsumptionKeys = @('model', 'model_source', 'priced_as', 'model_tier', 'internal_turns', 'input_tokens', 'cached_tokens', 'cache_write_tokens', 'output_tokens', 'basis')
@@ -291,7 +307,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Actors = @()
         foreach ($Usage in $Payload.usage) {
             Assert-ObjectKey $Usage @('actor', 'consumption')
-            if ($Usage.actor -notin @('coordinator', 'scribe') -or $Usage.actor -in $Actors) { throw 'Usage actor must be coordinator or scribe, once each.' }
+            if ($Usage.actor -notin $RequiredActors -or $Usage.actor -in $Actors) { throw 'Usage must identify an actual setup actor, once each.' }
             $Actors += $Usage.actor
             Assert-ObjectKey $Usage.consumption $ConsumptionKeys
             $Block = [ordered]@{}
@@ -353,7 +369,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
         [System.IO.Directory]::Move($Stage, $Root)
         $Stage = $null
-        [ordered]@{ status = 'PASS'; squadRoot = $Root; rosterCheck = 'PASS'; ledgerCheck = 'PASS'; historyEntries = $Payload.usage.Count; notificationsDefaulted = $NotifyDefaulted; warnings = $Warnings } | ConvertTo-Json -Compress
+        [ordered]@{ status = 'PASS'; verified = $true; turn = 1; squadRoot = $Root; rosterCheck = 'PASS'; ledgerCheck = 'PASS'; historyEntries = $Payload.usage.Count; actors = $RequiredActors; notificationsDefaulted = $NotifyDefaulted; warnings = $Warnings } | ConvertTo-Json -Compress
         exit 0
     }
     catch {

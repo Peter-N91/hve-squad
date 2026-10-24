@@ -1,6 +1,6 @@
 ---
 description: "Squad routing rules mapping request patterns to roles, autonomy tiers, and parallel eligibility"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/routing.md'
 ---
 
 # Squad Routing Conventions

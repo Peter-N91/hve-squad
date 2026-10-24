@@ -1,6 +1,6 @@
 ---
 name: squad
-description: 'Operating procedure for the HVE Core Squad Coordinator: initialize squad state from seed templates, route requests to a cast of deployed HVE Core agents in parallel, record decisions and history through the Squad Scribe, and synthesize a response. Use when running, initializing, or maintaining a squad under .copilot-tracking/squad/.'
+description: 'Run or initialize a squad with deterministic scripts, native HVE agent dispatch, gated persistence and verified state. Use when operating .copilot-tracking/squad/.'
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -14,7 +14,8 @@ metadata:
 
 The user-invocable Squad Coordinator dispatches HVE Core agents and persists roster, routing, decisions, and history under `.copilot-tracking/squad/`; every squad verb reuses an existing HVE Core mechanism.
 
-This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. The procedure lives in the reference files listed under [Procedure](#procedure) below; the eleven companion instruction files that auto-apply when squad state is touched are catalogued in [references/00-index.md](references/00-index.md).
+Compact contracts and scripts own routine coordination; cold procedures preserve
+compatibility. Instructions use artifact-specific scopes, not all squad state.
 
 ## Prerequisites
 
@@ -25,12 +26,24 @@ This skill packages the coordinator's operating procedure and the seed templates
 
 ## Procedure
 
-The coordinator runs four stages each turn: **init**, **route**, **decide**, and **handoff**. In every routing mode it may execute the validated ordinary writer synchronously with `-Quiet`, without a Scribe dispatch. Cold operations remain Scribe-owned. Serialize both routes with Cost Preflight per root; retain existing Markdown/state storage and completion proof.
+The stages are **init**, **route**, **decide**, **handoff**. Scripts prepare Init,
+schedule dependencies, persist supported state and verify completion. Native
+agents do specialist work; cold Scribe handles unsupported writes. Schemas and gates remain.
 
-Read [references/00-index.md](references/00-index.md) first, then only files your Skill Reference Contract names or conditionally requires.
+For Squad Coordinator start at [coordinator-runtime.md](references/coordinator-runtime.md);
+for Federation Coordinator start at [federation-runtime.md](references/federation-runtime.md).
+Read [coordinator-init.md](references/coordinator-init.md) only when seeding.
+Other roles follow their own Skill Reference Contract; [00-index.md](references/00-index.md)
+is an on-demand map, not a mandatory coordinator startup read.
 
 | Reference                                                     | Covers                                                                         |
 |---------------------------------------------------------------|--------------------------------------------------------------------------------|
+| [coordinator-runtime.md](references/coordinator-runtime.md) | Compact single/member turn contract and script entrypoints |
+| [coordinator-init.md](references/coordinator-init.md) | Confirmed choices to deterministic staged initialization |
+| [federation-runtime.md](references/federation-runtime.md) | Compact meta-routing, dependencies, root persistence and proof |
+| [state-write-contract.md](references/state-write-contract.md) | Cold manual/no-runtime schema and accounting detail |
+| [coordinator-legacy.md](references/coordinator-legacy.md) | Full no-runtime single-squad fallback |
+| [federation-coordinator-legacy.md](references/federation-coordinator-legacy.md) | Full no-runtime federation fallback |
 | [00-index.md](references/00-index.md)                         | Which file to read for which job, and the companion instruction files          |
 | [profiles-and-packs.md](references/profiles-and-packs.md)     | Squad profiles and add-on packs                                                |
 | [foundry-blueprint.md](references/foundry-blueprint.md)       | `foundry` role owners/evidence                                                  |

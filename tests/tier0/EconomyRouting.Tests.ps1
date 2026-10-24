@@ -65,8 +65,9 @@ Describe 'Every routing-mode enumeration names economy (SQ-35)' {
     }
 
     It 'the coordinator routing input and the federation pass-through list economy' {
-        $script:Coordinator.Body | Should -Match ([regex]::Escape('`routing=off|ranked|economy|manual`'))
-        $script:FederationCoordinator.Body | Should -Match ([regex]::Escape('`routing` (`off`, `ranked`, `economy`, or `manual`'))
+        $script:Coordinator.Body | Should -Match 'references/coordinator-runtime\.md'
+        $script:FederationCoordinator.Body | Should -Match 'references/federation-runtime\.md'
+        (Get-EconomyFileText (Join-Path $script:Model.SquadSkillRoot 'references/model-routing.md')) | Should -Match ([regex]::Escape('`routing=off|ranked|economy|manual`'))
     }
 
     It 'the roster instructions and the Route step read the persisted economy line' {
@@ -185,8 +186,8 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
 Describe 'The ordinary writer is universal while economy consent and routing remain scoped' {
     It 'does not gate ordinary handoffs or rate seeding on economy mode' {
         $script:OrdinaryWriter | Should -Match '\*\*off, ranked, economy, and manual\*\*'
-        $script:OrdinaryWriter | Should -Match 'no economy flag or `handoff` marker is required'
-        $script:OrdinaryWriter | Should -Match 'no exit 7 routing guard'
+        $script:OrdinaryWriter | Should -Match 'no marker required'
+        $script:OrdinaryWriter | Should -Match 'no exit 7 guard'
         $script:EconomySection | Should -Match 'retained `-Mode` parameter does not affect rates'
         $script:EconomySection | Should -Match 'Only under economy, the writer warns for missing consent'
         $script:EconomySection | Should -Match 'these rules do not apply to other modes'

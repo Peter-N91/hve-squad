@@ -186,6 +186,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Source') {
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'SquadBuilder.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'CoordinatorRuntime.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
 }
 
 $config = New-PesterConfiguration

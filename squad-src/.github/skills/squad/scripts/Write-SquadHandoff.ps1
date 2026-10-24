@@ -60,13 +60,18 @@
       since (optional ISO time: the dispatch start; a parallel wave passes it),
       decision {title, rationale, adrNoted} (optional),
       historyRecords [ {agent, title?, request, deliverable, outcome, memberName?,
-        selectionCue? (required for an Alternate agent), passedModel? (required with
+        selectionCue? (required for an Alternate agent), reportedModel? (actual host/
+        worker identity), internalToolCalls? (nonnegative reported count), passedModel? (required with
         cli-pinned and must equal model), costPreflightRef?/costPreflightSlot? (refused:
         a ceiling slot needs the Scribe), consumption? {ten fields}, routingIdentity?{
         requestedModel, effectiveModel, observedModel, routeRationale}} ] (may be empty),
       orchestration? {request?, outcome?, passedModel?, consumption? {ten fields}},
       stateAdvance {activeRoles[], openEscalationsRaised[]?, openEscalationsResolved[]?,
         sessionModel?, modelOverrides?}.
+
+    Actual reportedModel outranks the requested model and predicted pin. Internal
+    tool-call facts raise estimator turns without model arithmetic; supplied blocks
+    must agree with these stronger facts. Neither field changes the stored ten-key schema.
 
     Derived consumption (a record's `consumption`, or `orchestration.consumption`, omitted
     entirely; a supplied block is never altered): the five token fields are the estimator
@@ -740,7 +745,7 @@ function Test-Attribution {
         }
     }
     # A passedModel that repeats the recorded model is redundant, not evidence of a passed override.
-    if ($Map['model_source'] -ne 'cli-pinned' -and $PassedModel -and (ConvertFrom-ModelPin $PassedModel) -ne (ConvertFrom-ModelPin $Map['model'])) { $problems.Add("$Where passedModel '$PassedModel' differs from model '$($Map['model'])'; a passed override is model_source cli-pinned.") }
+    if ($Map['model_source'] -notin @('cli-pinned', 'dispatch-reported') -and $PassedModel -and (ConvertFrom-ModelPin $PassedModel) -ne (ConvertFrom-ModelPin $Map['model'])) { $problems.Add("$Where passedModel '$PassedModel' differs from model '$($Map['model'])'; a passed override is model_source cli-pinned.") }
     switch ($Map['model_source']) {
         'cli-pinned' {
             if (-not $PassedModel) { $problems.Add("$Where.model_source cli-pinned needs the dispatch's passedModel recorded in the payload.") }
@@ -784,7 +789,7 @@ function Get-EstimatorFloors {
 function Get-DerivedConsumption {
     # Fills an omitted consumption block from the role class's estimator floors, the model attribution ladder, and the rate row;
     # $null with the reason recorded for the Scribe when a figure cannot be produced.
-    param([string]$Agent, [string]$Role, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration)
+    param([string]$Agent, [string]$Role, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration, [string]$ReportedModel, [long]$InternalToolCalls = 0)
     $class = 'bookkeeping'
     if (-not $Orchestration) {
         $resolvedRole = if ($Role) { $Role } elseif ($agentRoles.ContainsKey($Agent)) { $agentRoles[$Agent] } else { '' }
@@ -794,7 +799,8 @@ function Get-DerivedConsumption {
     if ($null -eq $floors) { $needsScribe.Add("$Where was omitted and the $class dispatch-size estimator row cannot be read from consumption-rates.md or its template; the Scribe composes the block."); return $null }
     if ($SessionModel -and (Test-ModelLabel $SessionModel)) { $SessionModel = '' }
     if ($PassedModel -and (Test-ModelLabel $PassedModel)) { $problems.Add("$Where passedModel '$PassedModel' is a routing label, not an actual model."); return $null }
-    if ($Orchestration) {
+    if ($ReportedModel) { $model = $ReportedModel; $source = 'dispatch-reported' }
+    elseif ($Orchestration) {
         if ($SessionModel) { $model = $SessionModel; $source = 'session-inherited' } else { $model = 'unknown'; $source = 'unresolved' }
     }
     elseif ($PassedModel) { $model = $PassedModel; $source = 'cli-pinned' }
@@ -815,19 +821,20 @@ function Get-DerivedConsumption {
     $pricedRow = @($RateRows | Where-Object { $_.Name -eq $priced }) | Select-Object -First 1
     $writesCache = ($pricedRow -and $pricedRow.CacheWrite -gt 0)
     $tokenFactor = if ((ConvertFrom-ModelPin $model) -eq 'hydrafusion-max') { 0.35 } else { 1.0 }
-    $average = $floors.Base + $floors.Growth * ($floors.Turns - 1) / 2.0
-    $gross = $floors.Turns * $average * $tokenFactor
+    $turns = [Math]::Max([long]$floors.Turns, $InternalToolCalls)
+    $average = $floors.Base + $floors.Growth * ($turns - 1) / 2.0
+    $gross = $turns * $average * $tokenFactor
     return [ordered]@{
         model              = $model
         model_source       = $source
         priced_as          = $priced
         model_tier         = $tier
-        internal_turns     = [long]$floors.Turns
+        internal_turns     = $turns
         input_tokens       = [long][Math]::Round($gross * 0.20)
         cached_tokens      = [long][Math]::Round($gross * 0.80)
-        cache_write_tokens = $(if ($writesCache) { [long][Math]::Round(($floors.Base + $floors.Growth * ($floors.Turns - 1)) * $tokenFactor) } else { 0L })
-        output_tokens      = [long][Math]::Round($floors.Turns * $floors.Output)
-        basis              = 'estimated'
+        cache_write_tokens = $(if ($writesCache) { [long][Math]::Round(($floors.Base + $floors.Growth * ($turns - 1)) * $tokenFactor) } else { 0L })
+        output_tokens      = [long][Math]::Round($turns * $floors.Output)
+        basis              = $(if ($model -eq 'unknown') { 'tier-default' } else { 'estimated' })
     }
 }
 
@@ -843,6 +850,9 @@ function Get-ChildWarnings {
             $warning = $Matches['message'].Trim()
         }
         elseif ($line -match '^\s*WARN(?:ING)?(?::|\s+)(?<message>.+)$') {
+            $warning = "WARN: $($Matches['message'].Trim())"
+        }
+        elseif ($line -match '(?:^|:\s+)WARN:\s*(?<message>.+)$') {
             $warning = "WARN: $($Matches['message'].Trim())"
         }
         if ($warning -and -not $warnings.Contains($warning)) { $warnings.Add($warning) }
@@ -1477,7 +1487,7 @@ else {
     foreach ($node in $recordNodes) {
         $where = "historyRecords[$index]"
         $index++
-        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity', 'externalProvenance') -Where $where)) { continue }
+        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'reportedModel', 'internalToolCalls', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity', 'externalProvenance') -Where $where)) { continue }
         $agent = Get-TextField -Node $node -Key 'agent' -Where $where
         $request = Get-TextField -Node $node -Key 'request' -Where $where
         $deliverable = Get-TextField -Node $node -Key 'deliverable' -Where $where
@@ -1486,10 +1496,16 @@ else {
         $memberName = Get-TextField -Node $node -Key 'memberName' -Where $where -Optional
         $selectionCue = Get-TextField -Node $node -Key 'selectionCue' -Where $where -Optional
         $passedModel = Get-TextField -Node $node -Key 'passedModel' -Where $where -Optional
+        $reportedModel = Get-TextField -Node $node -Key 'reportedModel' -Where $where -Optional
+        $internalToolCalls = if ($null -ne $node['internalToolCalls']) { Get-NodeInt -Node $node['internalToolCalls'] } else { 0L }
+        if ($null -ne $node['internalToolCalls'] -and ($null -eq $internalToolCalls -or $internalToolCalls -lt 0)) { $problems.Add("$where.internalToolCalls must be a nonnegative integer."); $internalToolCalls = 0L }
+        if ($reportedModel -and ((Test-ModelLabel $reportedModel) -or $reportedModel -eq 'unknown')) { $problems.Add("$where.reportedModel must be an actual host/worker-reported model, not a routing label or unknown.") }
         $ref = Get-TextField -Node $node -Key 'costPreflightRef' -Where $where -Optional
         $slot = Get-TextField -Node $node -Key 'costPreflightSlot' -Where $where -Optional
         $consumption = $null
         if ($null -ne $node['consumption']) { $consumption = Test-Consumption -Node $node['consumption'] -Where "$where.consumption" }
+        if ($consumption -and $reportedModel -and ((ConvertFrom-ModelPin $consumption.model) -ne (ConvertFrom-ModelPin $reportedModel) -or $consumption.model_source -ne 'dispatch-reported')) { $problems.Add("$where.consumption contradicts stronger reportedModel evidence.") }
+        if ($consumption -and $consumption.internal_turns -lt $internalToolCalls) { $problems.Add("$where.consumption internal_turns is below the reported tool-call count.") }
         if ($consumption -and $consumption['model_source'] -eq 'cli-pinned' -and -not $passedModel) {
             $passedModel = $consumption['model']
             $handoffWarnings.Add("WARN $where.passedModel omitted; recorded as the cli-pinned model '$passedModel'")
@@ -1550,7 +1566,7 @@ else {
             }
         }
         if ($null -eq $node['consumption']) {
-            $consumption = Get-DerivedConsumption -Agent $agent -Role $identity.ClassRole -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession
+            $consumption = Get-DerivedConsumption -Agent $agent -Role $identity.ClassRole -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession -ReportedModel $reportedModel -InternalToolCalls $internalToolCalls
             if ($null -eq $consumption) { continue }
         }
         Test-Attribution -Map $consumption -Where "$where.consumption" -PinAgent $agent -PassedModel $passedModel

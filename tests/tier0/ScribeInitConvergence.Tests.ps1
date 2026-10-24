@@ -34,7 +34,7 @@ BeforeAll {
         Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot "references/$Name") -Raw
     }
 
-    $script:Coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
+    $script:Coordinator = Get-SquadReferenceBody -Name 'coordinator-legacy.md'
     $script:ScribeHot = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0].Body
     $script:Scribe = Get-SquadReferenceBody -Name 'scribe-cold-charter.md'
     $script:InitCold = Get-SquadReferenceBody -Name 'scribe-cold-init-and-seeding.md'
@@ -115,7 +115,7 @@ Describe 'GATE-38 Init copies roster rows from the payload and never derives an 
         $script:Coordinator | Should -Match 'never for fresh Init or `Initialize-Squad`'
         $script:Coordinator | Should -Match 'dispatch the actual Squad Scribe via `task`/`runSubagent`'
         $script:Coordinator | Should -Match 'only the child runs the helper and returns its validated status'
-        (Get-SquadReferenceBody 'operating-procedure.md') | Should -Match 'never the coordinator running the helper or `Initialize-Squad` directly'
+        (Get-SquadReferenceBody 'coordinator-init.md') | Should -Match 'Initialize-Squad\.ps1.+-Direct'
         $script:Coordinator | Should -Match 'ordinary direct-writer orchestration stays in Scribe history without inventing a Scribe actor'
         $script:Coordinator | Should -Match 'Set `stateAdvance.activeRoles` to actually dispatched agents, or `\[\]` when none; running the script never makes Scribe an active actor'
     }
@@ -257,8 +257,9 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Result = Invoke-InitPayload $Payload $Repository
         $Result.ExitCode | Should -Be 0 -Because $Result.Output
         $Root = Join-Path $Repository $Payload.squadRoot
-        $State = Get-Content -LiteralPath (Join-Path $Root 'state.json') -Raw | ConvertFrom-Json
-        $Started = [DateTimeOffset]::new($State.updated)
+        $StateDocument = [System.Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText((Join-Path $Root 'state.json')))
+        try { $Started = $StateDocument.RootElement.GetProperty('updated').GetDateTimeOffset() }
+        finally { $StateDocument.Dispose() }
         $Started.ToUnixTimeSeconds() | Should -BeGreaterOrEqual $Before.ToUnixTimeSeconds()
         $Started.ToUnixTimeSeconds() | Should -BeLessOrEqual ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
         $Artifact = Join-Path $Repository 'research.md'
@@ -544,9 +545,13 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
             'file' { Set-Content -LiteralPath (Join-Path $Root 'state.json') -Value '{}' }
             'link' {
                 New-Item -ItemType Directory -Path (Join-Path $Repository 'target') -Force | Out-Null
-                New-Item -ItemType SymbolicLink -Path (Join-Path $Root 'sub/link') -Target (Join-Path $Repository 'target') | Out-Null
+                try { New-Item -ItemType SymbolicLink -Path (Join-Path $Root 'sub/link') -Target (Join-Path $Repository 'target') -ErrorAction Stop | Out-Null }
+                catch [UnauthorizedAccessException] { Set-ItResult -Skipped -Because 'Symbolic-link creation requires an unavailable OS privilege.'; return }
             }
-            'dangling' { New-Item -ItemType SymbolicLink -Path (Join-Path $Root 'sub/link') -Target (Join-Path $Repository 'missing') | Out-Null }
+            'dangling' {
+                try { New-Item -ItemType SymbolicLink -Path (Join-Path $Root 'sub/link') -Target (Join-Path $Repository 'missing') -ErrorAction Stop | Out-Null }
+                catch [UnauthorizedAccessException] { Set-ItResult -Skipped -Because 'Symbolic-link creation requires an unavailable OS privilege.'; return }
+            }
         }
         $Payload = Get-InitPayload
         if ($Kind -eq 'invalid') { $Payload.roster[0]['Model Tier'] = 'bogus' }
@@ -670,7 +675,8 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Result.ExitCode | Should -Be 0 -Because $Result.Output
         $LinkedRepository = Join-Path $TestDrive 'linked'
         New-Item -ItemType Directory -Path $LinkedRepository | Out-Null
-        New-Item -ItemType SymbolicLink -Path (Join-Path $LinkedRepository '.copilot-tracking') -Target $Repository | Out-Null
+        try { New-Item -ItemType SymbolicLink -Path (Join-Path $LinkedRepository '.copilot-tracking') -Target $Repository -ErrorAction Stop | Out-Null }
+        catch [UnauthorizedAccessException] { Set-ItResult -Skipped -Because 'Symbolic-link creation requires an unavailable OS privilege.'; return }
         $Result = Invoke-InitPayload (Get-InitPayload) $LinkedRepository
         $Result.ExitCode | Should -Not -Be 0
         $Result.Output | Should -Match 'Linked path refused'
@@ -700,7 +706,7 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Brief | Should -Match 'Optional `usage`'
         $Brief | Should -Match 'documented estimates, not measured tokens or'
         $Brief | Should -Match 'cold path for omitted usage'
-        $script:ScribeHot | Should -Match 'no full reference reads, manual accounting audit, or extra file rereads'
+        $script:ScribeHot | Should -Match 'no extra reads or accounting audit'
     }
 
     It 'seeds routing off without a Model column and retains supplied unnamed members' {

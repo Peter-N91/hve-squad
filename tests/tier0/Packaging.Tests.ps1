@@ -213,9 +213,9 @@ BeforeAll {
     }
 
     # Measure the ordinary read set and keep the legacy cold surface budget too.
-    $indexText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/00-index.md') -Raw
-    $hotCoreSentence = [regex]::Match($indexText, 'The ordinary hot path reads only (.+?);')
-    $script:ScribeHotCoreReferenceFiles = @([regex]::Matches($hotCoreSentence.Groups[1].Value, '`([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value })
+    $scribeText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw
+    $ordinarySection = [regex]::Match($scribeText, '(?s)## Ordinary handoff.*?(?=\r?\n## )')
+    $script:ScribeHotCoreReferenceFiles = @([regex]::Matches($ordinarySection.Value, '`references/([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
     $script:ScribeHotCoreFiles = @(
         'squad-src/.github/agents/squad/squad-scribe.agent.md'
     ) + @($script:ScribeHotCoreReferenceFiles | ForEach-Object { "squad-src/.github/skills/squad/references/$_" })

@@ -1,6 +1,6 @@
 ---
 description: "Pre-work intake gate that validates requirement and input artifacts for completeness and clarity before planning or implementation, with a bounded auto-remediation loop and a durable Intake Readiness Verdict"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/decisions.md'
 ---
 
 # Squad Intake Gate Conventions

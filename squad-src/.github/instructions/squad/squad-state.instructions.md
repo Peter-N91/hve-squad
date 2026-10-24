@@ -1,6 +1,6 @@
 ---
 description: "Squad state layout and mapping of squad coordination tools to HVE Core mechanisms"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/state.json'
 ---
 
 # Squad State Conventions
