@@ -165,7 +165,7 @@ After confirming the proposed team, send the work request separately in the same
 request="add input validation to the login form"
 ```
 
-Add an optional model-spend ceiling when you want a conservative forecast before work starts:
+Add an optional model-spend ceiling when you want exact consumed-to-date accounting plus a conservative reservation for the actual next dispatch wave:
 
 ```text
 request="add input validation to the login form" cost-ceiling=10
@@ -174,8 +174,8 @@ request="add input validation to the login form" cost-ceiling=10
 Within the same run, omitting the argument preserves an active ceiling. Use
 `cost-ceiling=unset` to remove it explicitly. See
 [Cost admission control](https://peter-n91.github.io/hve-squad/usage.html#cost-admission-control)
-for estimation, approval, stopping, and federation behavior. Fresh-squad initialization is outside
-admission. Ordinary federation routing applies the ceiling independently to each selected sub-squad;
+for exact metering, reservation, approval, stopping, and federation behavior. Fresh-squad initialization is outside
+admission. Complete host usage records are deduplicated in native credits; lagging checkpoints are diagnostics only. Ordinary federation routing applies the ceiling independently to each selected sub-squad;
 only untargeted federation autopilot uses one aggregate federation ceiling.
 
 ### Choosing models per role (`routing=`)
@@ -192,6 +192,8 @@ only untargeted federation autopilot uses one aggregate federation ceiling.
 | `manual` | You pick, once, with suggestions pre-filled | `Model routing: manual` and a `Model` column holding your picks |
 
 **Ranked is capability-first; Economy is cost-first after qualification.** Policy `squad-capability-v3` uses a common versioned comparison panel, selected by independent snapshot-wide coverage, never scores, prices or host availability (`references/model-scoring.md`). Implementation retains SciCode/Terminal-Bench and a visibly reduced SciCode panel. Economy requires each full-panel percentile to reach `0.50`, or reduced SciCode to reach `0.75`, then selects the lowest known Blended price. Confidence and cost only break genuine Ranked capability ties. The 90-day safeguard applies to genuine verification, not publication age; result, acquisition, verification and generation dates stay distinct, and legacy unknowns are not silently refreshed. Reports expose panels and precise exclusions; unsupported comparisons fall back explicitly. Modes may agree. A `fast` floor is a minimum, not a frontier ceiling. Coordinators keep the selected session model, and the Scribe keeps its pin.
+
+The compact discovery brief no longer ranks the whole roster. `New-SquadDispatchPlan.ps1` receives the real selected units and host model list, resolves only those roles, and returns the active-mode transition or changed cells. `Set-SquadModelRouting.ps1` applies it through an exact `team.md` hash check, so first activation and refresh of ranked, economy, or manual routing do not spend a Scribe model turn.
 
 **How manual picks are made.** When you switch to `routing=manual`, whether at squad creation or later, the coordinator asks before dispatching anything:
 
@@ -249,7 +251,7 @@ The squad records which model routing requested, which model actually ran (if th
 
 **Important notes:**
 
-- **Estimates, not bills** — Token counts and cost figures are estimated from a dispatch-size model, not from runtime telemetry. Premium-request multipliers and long-context pricing come from the catalog and are estimates. See `squad-src/.github/skills/squad/references/model-catalog.md` and `consumption-rates.md` for methodology.
+- **Exact per-role tokens and credits** — Complete native usage records carry the active `agentId`, four billed token categories, and nano-AIU. The ledger rolls nested workers into their top-level role, combines coordinator/Scribe as orchestration, and replaces estimates only when every row reconciles to the exact session total. Estimates remain solely as a visible fallback and for future Cost Preflight reservations, which cannot be exact before execution.
 - **Availability sources** — The catalog cites three GitHub official documentation pages (fetched at catalog build time): Supported AI models, Models and pricing, and AI model comparison. URLs are listed in the catalog header.
 
 **Optional ledger check:**
@@ -266,7 +268,7 @@ Or, for a sub-squad in a federation:
 .github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/<name> -Check
 ```
 
-This script (PowerShell 7+) validates that every recorded dispatch has a consumption block, that token counts and cost derivations round-trip correctly, and that the aggregated ledger totals match the sum of all recorded history entries. A separate post-run `-Check` audit is optional and useful when troubleshooting cost reporting. During a run, the deterministic handoff writer invokes `-Write` and checks the result before returning; cold Scribe operations on a single-squad or member root (including a promotion's relocated member) use the same independently resolved, trusted helper, never a supplied `ledgerCommand`, which is inert payload data that is never executed. The helper rewrites the ledger sections and the two `state.json` run totals from history, so no model copies a derived figure by hand. A federation root is not written by `-Write`; its aggregate follows the federation procedure over member ledgers. Add `-SessionLog auto` (already the handoff default) to also record real host-reported usage beside estimates when available.
+This script (PowerShell 7+) validates history integrity and the persisted ledger. With `-SessionLog auto` (the handoff default), it writes exact per-role uncached input, cache-read, cache-write, output, USD, and AI-credit rows from complete native records; nested subagents accrue to their owning role, and the native row sum must equal the session total. It removes the former duplicate Observed Usage section and drives Cost Comparison from the same exact snapshot. If identity or coverage is incomplete, it leaves the estimator visibly in place. The two historical `state.json` estimator fields receive whichever basis the ledger actually used. A federation root is not written by `-Write`; its aggregate follows the federation procedure over member ledgers.
 
 Ordinary handoffs use the same deterministic writer in `off`, `ranked`, `economy`,
 and `manual` routing modes. The coordinator runs
@@ -282,7 +284,7 @@ Confirmed fresh initialization can now run directly through the same staged
 initializer with `-Direct`. `Get-SquadInitContext.ps1` prepares the full payload
 from confirmed profile, packs, names and notification choices; no model retypes
 the roster or rate template. The legacy Scribe input remains supported.
-Verdicts, notifications, memory, refresh, cost-ceiling slots, promotion/expansion,
+Verdicts, notifications, memory, `routing=off` or roster refresh, promotion/expansion,
 aggregate federation autopilot and run summaries keep their cold procedure.
 Direct and Scribe writes are serialized per squad root, and completion still
 requires dispatch history, consumption blocks, and an advanced state turn.

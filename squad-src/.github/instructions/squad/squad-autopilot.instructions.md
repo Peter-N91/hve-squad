@@ -139,11 +139,11 @@ A single qualifying trigger is enough to fire the gate, no matter how many other
 
 ### Cost Preflight in Autopilot
 
-Before research and before every later dispatch round, apply the *Cost Preflight Procedure* in the `squad` skill's `references/gates-and-modes.md`. The initial manifest includes every applicable intake and both remediation attempts, Research, Plan, council, conservative pre-Plan deliverable fan-out, implementation validation cycles, Review, final validation, and coordinator/Scribe orchestration. Once Plan identifies exact fan-out, replace the conservative set and recalculate.
+Before research and before every later dispatch round, apply the *Cost Preflight Procedure* in the `squad` skill's `references/gates-and-modes.md`. Each round prices only the actual next dispatch wave plus the coordinator lookup and is recalculated after the previous wave.
 
-Only a persisted `within-ceiling` or valid `approved-over-ceiling` round permits its named next slots. `over-ceiling` offers stop or bounded proceed; explicit proceed runs sequential child-plus-Scribe units until accumulated estimated spend reaches the ceiling. `cannot-confirm` remains non-admitting, and changed or expanded demand requires a new approval.
+Only a persisted `within-ceiling` or valid `approved-over-ceiling` round permits its named next slots. `over-ceiling` offers stop or bounded proceed; explicit proceed runs sequential units until exact used plus pending reservations reaches the ceiling. `cannot-confirm` remains non-admitting, and a changed or expanded next wave requires a new approval.
 
-A Cost Preflight round is never issued in the same parallel block as a Scribe hand-off. A configured cost ceiling no longer disables Scribe hand-off pipelining: the round admitting stage N+1 runs between blocks and counts stage N's unrecorded spend as a pending reservation, per the Enablement Predicate in `references/gates-and-modes.md`. An `approved-over-ceiling` round still runs one sequential child-plus-Scribe unit at a time.
+A Cost Preflight round is never issued in the same parallel block as a Scribe hand-off. A configured cost ceiling no longer disables Scribe hand-off pipelining: the round admitting stage N+1 runs between blocks and keeps stage N's admitted reservation pending until complete native usage records replace it, per the Enablement Predicate in `references/gates-and-modes.md`. An `approved-over-ceiling` round still runs one sequential unit at a time.
 
 ## What Autopilot Does Not Do
 

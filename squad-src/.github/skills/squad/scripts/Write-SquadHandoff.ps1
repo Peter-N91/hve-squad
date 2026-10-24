@@ -54,8 +54,8 @@
       historyRecords [ {agent, title?, request, deliverable, outcome, memberName?,
         selectionCue? (required for an Alternate agent), reportedModel? (actual host/
         worker identity), internalToolCalls? (nonnegative reported count), passedModel? (required with
-        cli-pinned and must equal model), costPreflightRef?/costPreflightSlot? (refused:
-        a ceiling slot needs the Scribe), consumption? {ten fields}, routingIdentity?{
+        cli-pinned and must equal model), costPreflightRef?/costPreflightSlot? (required
+        together under an active ceiling), consumption? {ten fields}, routingIdentity?{
         requestedModel, effectiveModel, observedModel, routeRationale}} ] (may be empty),
       orchestration? {request?, outcome?, passedModel?, consumption? {ten fields}},
       stateAdvance {activeRoles[], openEscalationsRaised[]?, openEscalationsResolved[]?,
@@ -100,8 +100,8 @@
 
     Exit codes: 0 written and verified (or snapshot unchanged); 1 validation or usage
     error, nothing written (correct the one field named and rerun once); 2 the Scribe composes
-    this hand-off itself (unsupported payload or state: cost ceiling here or at the federation
-    root, ceiling slot fields, federation root, legacy schema, agent not on the roster,
+    this hand-off itself (unsupported payload or state: aggregate federation ceiling,
+    federation root, legacy schema, agent not on the roster,
     secret-like text, unseeded ledger, a consumption.md with some but not all ledger headings,
     an omitted block the estimator cannot derive), nothing
     written; 3 write or ledger failure, files restored (or unreadable input, nothing
@@ -382,6 +382,51 @@ function Get-NodeString {
     param($Node)
     if ((Get-Kind $Node) -ne 'String') { return $null }
     return $Node.GetValue[string]()
+}
+
+function Get-EntryFieldLocal {
+    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Name)
+    $match = [regex]::Match($Text, '(?m)^\* ' + [regex]::Escape($Name) + ':[ \t]*(?<value>[^\r\n]*)')
+    if ($match.Success) { return $match.Groups['value'].Value.Trim().Trim('`') }
+    return ''
+}
+
+function Get-CostDecisionLocal {
+    param(
+        [Parameter(Mandatory)][string]$Reference,
+        [Parameter(Mandatory)][string]$DecisionsPath
+    )
+    if ($Reference -notmatch '^decisions\.md#(?<anchor>[a-z0-9][a-z0-9_-]*)$') {
+        throw "Cost Preflight Ref '$Reference' must target decisions.md at this squad root."
+    }
+    $anchor = $Matches.anchor
+    $sections = @(
+        foreach ($section in [regex]::Matches([IO.File]::ReadAllText($DecisionsPath), '(?ms)^## (?<heading>[^\r\n]+)\r?\n(?<body>.*?)(?=^## |\z)')) {
+            $slug = ($section.Groups['heading'].Value.ToLowerInvariant() -replace '[^\p{L}\p{Nd}_ -]', '') -replace ' ', '-'
+            if ($slug -ceq $anchor) { $section }
+        }
+    )
+    if ($sections.Count -ne 1) { throw "Cost Preflight Ref '$Reference' is missing or ambiguous." }
+    $sections[0]
+}
+
+function Get-ExistingAdmissionUseCountLocal {
+    param(
+        [Parameter(Mandatory)][string]$HistoryDirectory,
+        [Parameter(Mandatory)][string]$Reference,
+        [Parameter(Mandatory)][string]$Slot
+    )
+    $count = 0
+    foreach ($file in Get-ChildItem -LiteralPath $HistoryDirectory -File -Filter '*.md') {
+        foreach ($entry in [regex]::Matches([IO.File]::ReadAllText($file.FullName), '(?ms)^### (?<heading>[^\r\n]+)\r?\n(?<body>.*?)(?=^### |\z)')) {
+            $body = $entry.Groups['body'].Value
+            if ((Get-EntryFieldLocal $body 'Cost Preflight Ref') -ceq $Reference -and
+                (Get-EntryFieldLocal $body 'Cost Preflight Slot') -ceq $Slot) {
+                $count++
+            }
+        }
+    }
+    $count
 }
 
 function Get-NodeInt {
@@ -1438,7 +1483,7 @@ else {
                 }
             }
         }
-        if ($null -ne $ref -or $null -ne $slot) { $needsScribe.Add("$where carries a Cost Preflight ref or slot; slot admission and the replay check need the Scribe.") }
+        if (($null -eq $ref) -ne ($null -eq $slot)) { $problems.Add("$where must supply costPreflightRef and costPreflightSlot together.") }
         if ($null -eq $agent -or $null -eq $request -or $null -eq $deliverable -or $null -eq $outcome -or ($null -ne $node['consumption'] -and $null -eq $consumption)) { continue }
         if ($agent -eq $ScribeAgent) { $problems.Add("$where.agent must not be '$ScribeAgent'; its orchestration entry is written from payload.orchestration."); continue }
         if ($agent -match '[\\/:*?"<>|=;,]' -or $agent -match '^\.') { $problems.Add("$where.agent '$agent' is not a valid history file name."); continue }
@@ -1604,8 +1649,43 @@ foreach ($key in @('sessionModel', 'modelOverrides', 'estCostUsd', 'estCreditsTo
     if ($null -eq $run[$key]) { Stop-Handoff 2 "state.json currentRun lacks '$key'; the Squad Scribe repairs state." }
 }
 $preflight = $run['costPreflight']
-if ($null -ne $preflight['ceilingUsd'] -or (Get-NodeString $preflight['decision']) -ne 'not-requested') {
-    Stop-Handoff 2 'a cost ceiling is configured; a ceiling-admitted hand-off (slot and replay checks) needs the Squad Scribe.'
+$preflightDecision = Get-NodeString $preflight['decision']
+$ceilingActive = $null -ne $preflight['ceilingUsd'] -or $preflightDecision -ne 'not-requested'
+$seenAdmissionSlots = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($record in $records) {
+    if ($ceilingActive) {
+        if (-not $record.Ref -or -not $record.Slot) {
+            Stop-Handoff 1 "an active ceiling requires Cost Preflight Ref and Slot for '$($record.Agent)'."
+        }
+        if ($preflightDecision -notin @('within-ceiling', 'approved-over-ceiling')) {
+            Stop-Handoff 1 "current Cost Preflight decision '$preflightDecision' does not admit a dispatch."
+        }
+        $costDecisionSection = Get-CostDecisionLocal -Reference $record.Ref -DecisionsPath $decisionsPath
+        $heading = $costDecisionSection.Groups['heading'].Value
+        $headingPattern = '^Cost Preflight \S+ ' + [regex]::Escape($runId) + ' ' + [regex]::Escape((Get-NodeString $preflight['roundId'])) + '$'
+        if ($heading -notmatch $headingPattern) {
+            Stop-Handoff 1 "Cost Preflight Ref for '$($record.Agent)' does not match the active run and round."
+        }
+        $decisionBody = $costDecisionSection.Groups['body'].Value
+        $recordedDecision = Get-EntryFieldLocal $decisionBody 'Decision'
+        if ($recordedDecision -cne $preflightDecision -or $recordedDecision -notin @('within-ceiling', 'approved-over-ceiling')) {
+            Stop-Handoff 1 "Cost Preflight Ref for '$($record.Agent)' is not the active admitting decision."
+        }
+        $permitted = @((Get-EntryFieldLocal $decisionBody 'Permitted Next Dispatch Set') -split ',\s*' | ForEach-Object { $_.Trim('`') } | Where-Object { $_ })
+        if ($record.Slot -cnotin $permitted) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' is not permitted by '$($record.Ref)'."
+        }
+        $identity = $record.Ref + ':' + $record.Slot
+        if (-not $seenAdmissionSlots.Add($identity)) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' is duplicated in this payload."
+        }
+        if ((Get-ExistingAdmissionUseCountLocal -HistoryDirectory $historyDir -Reference $record.Ref -Slot $record.Slot) -ne 0) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' was already consumed."
+        }
+    }
+    elseif ($record.Ref -or $record.Slot) {
+        Stop-Handoff 1 "Cost Preflight Ref/Slot was supplied for '$($record.Agent)' but no ceiling is active."
+    }
 }
 $stateTurn = Get-NodeInt $state['turn']
 if ($null -eq $stateTurn -or $turn -ne ($stateTurn + 1)) { Stop-Handoff 1 "payload.turn $turn must equal state.json turn + 1 ($stateTurn + 1); a replayed or stale payload writes nothing." }

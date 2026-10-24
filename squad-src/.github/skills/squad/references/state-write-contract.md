@@ -22,7 +22,7 @@ All squad state lives under a **squad root**: `.copilot-tracking/squad/` for a s
 
 | Path                   | Purpose                                     | Write semantics    |
 |------------------------|---------------------------------------------|--------------------|
-| `team.md`              | Roster of roles and the agents filling them | Replace via Scribe |
+| `team.md`              | Roster, routing mode, and role Model cells | Replace via Scribe; selected Model-cell refresh via hash-bound script |
 | `routing.md`           | Request-pattern routing table               | Replace via Scribe |
 | `decisions.md`         | Squad decisions and their rationale         | Append-only; Cost Preflight via coordinator |
 | `notifications.md`     | Notifications fired and their channel       | Append-only        |
@@ -40,6 +40,13 @@ Detection precedence: `federation.md` present means federation; otherwise `team.
 ## The Squad Scribe Is the Single Writer
 
 The **Squad Scribe** owns cold state writes; supported ordinary writes use `Write-SquadHandoff.ps1 -Quiet` synchronously, directly by the coordinator or by Scribe, in every routing mode. Read the small `references/economy-scribe.md` contract; no hand-authored ordinary arithmetic or validation bypass. Confirmed initialization remains outside Cost Preflight. Before later work, with no parallel writer, the coordinator may append a Cost Preflight decision and compare-and-swap only `currentRun.costPreflight`, plus the exact legacy `schemaVersion` bump (`1.3` → `1.4`, federation `1.2` → `1.3`). Compare prior `updated`, preserve other fields, read back, and dispatch nothing on collision, partial write, or mismatch.
+
+Active routing activation/refresh is deterministic: `New-SquadDispatchPlan.ps1`
+resolves only actual selected units and binds the transition to the exact
+`team.md` SHA-256. `Set-SquadModelRouting.ps1` verifies the old mode/source cells,
+adds or changes the active mode/Model column, writes selected cells and economy
+consent when supplied, then reads back. It never changes roster membership,
+routing rows, or `state.json`; `routing=off` remains cold.
 
 Every unsupported operation cold-loads the full Scribe charter/procedure/schema/payload. After admission Scribe preserves the preflight object and links each child to its admitted run/round/slot. Never overlap direct writer, cold Scribe, or Cost Preflight at one root. For cold autopilot handoffs, never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order and verify before the next. A direct ordinary handoff is synchronous, not pipelined.
 

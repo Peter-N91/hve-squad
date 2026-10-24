@@ -113,8 +113,8 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
         It 'a configured cost ceiling keeps pipelining available through a pending reservation' {
             $script:GatesAndModesBody | Should -Match ([regex]::Escape('A configured cost ceiling does not disable pipelining'))
             $script:GatesAndModesBody | Should -Match ([regex]::Escape('the active Cost Preflight round is not `approved-over-ceiling`'))
-            $script:GatesAndModesBody | Should -Match ([regex]::Escape('Evaluated spend is `currentRun.estCostUsd` plus any pending reservation'))
-            $script:ConsumptionReferenceBody | Should -Match ([regex]::Escape('evaluated_spend_usd = currentRun.estCostUsd + pending_usd'))
+            $script:GatesAndModesBody | Should -Match ([regex]::Escape('keeps stage N''s admitted reservation pending until complete native usage records replace it'))
+            $script:ConsumptionReferenceBody | Should -Match ([regex]::Escape('evaluated_spend_usd = exact_used_usd + pending_usd'))
             $script:ConsumptionReferenceBody | Should -Match ([regex]::Escape('remaining_usd       = max(0, ceiling_usd - evaluated_spend_usd)'))
             $script:ConsumptionReferenceBody | Should -Match ([regex]::Escape('**Pending reservation.**'))
             $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('A configured cost ceiling no longer disables Scribe hand-off pipelining'))
@@ -131,8 +131,8 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
         }
 
         It 'orders each pipelined step so the Cost Preflight round never overlaps a Scribe write' {
-            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('run the Cost Preflight round admitting stage N+1, counting stage N as a pending reservation'))
-            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('The preflight transaction therefore never overlaps a Scribe write'))
+            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('preflights N+1 while retaining N''s reservation until exact usage appears'))
+            $script:OperatingProcedureBody | Should -Match ([regex]::Escape('Preflight never overlaps Scribe'))
         }
 
         It 'makes the pipelined block mandatory, not optional, in both coordinators and the autopilot instructions' {

@@ -78,6 +78,8 @@ param(
 
     [string[]]$Role = @(),
 
+    [System.Collections.IDictionary]$ManualModels,
+
     [datetime]$AsOf = (Get-Date),
 
     [string]$BenchmarksPath,
@@ -607,6 +609,18 @@ $catalog = Get-CatalogLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'm
 $classMap = Get-RoleClassMapLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-routing.md')
 $roster = Get-RosterLocal -Path $teamPath
 $effectiveMode = if ($Mode) { $Mode } else { $roster.Mode }
+$manualSelections = if ($null -ne $ManualModels) { $ManualModels } else { [ordered]@{} }
+if ($manualSelections.Count -gt 0 -and $effectiveMode -ne 'manual') {
+    throw 'ManualModels may be supplied only when the effective routing mode is manual.'
+}
+foreach ($key in $manualSelections.Keys) {
+    if ($key -isnot [string] -or $key -cnotmatch '^[a-z][a-z0-9-]*$' -or $manualSelections[$key] -isnot [string]) {
+        throw 'ManualModels must map lower-kebab-case role IDs to model ID strings.'
+    }
+    if ($key -cnotin @($roster.Rows | ForEach-Object { $_['Role'] })) {
+        throw "ManualModels names a role that is not on the roster: $key"
+    }
+}
 $usesBenchmarkRanking = $effectiveMode -in @('ranked', 'economy', 'manual')
 $logsBenchmarkWarnings = $effectiveMode -in @('ranked', 'economy')
 $modelIds = @($catalog.Fit | ForEach-Object Id)
@@ -782,7 +796,10 @@ $results = foreach ($row in $roster.Rows) {
     }
     $suggested = Get-AdvertisedModelIdLocal -CatalogId $suggestedCatalogId -AdvertisedIdByCanonical $advertisedIdByCanonical
 
-    $cell = if ($roster.HasModel) { ([string]$row['Model']).Trim() } else { '' }
+    $cellSource = if ($manualSelections.Contains($roleId)) { 'supplied' } else { 'persisted' }
+    $cell = if ($cellSource -eq 'supplied') { ([string]$manualSelections[$roleId]).Trim() }
+    elseif ($roster.HasModel) { ([string]$row['Model']).Trim() }
+    else { '' }
     $cellId = $cell.ToLowerInvariant()
     $canonicalCell = ConvertTo-CanonicalModelIdLocal -Value $cell
     $cellStatus = 'empty'
@@ -869,6 +886,7 @@ $results = foreach ($row in $roster.Rows) {
         suggested   = $suggested
         rationale   = $rationale
         modelCell   = $cell
+        modelCellSource = $cellSource
         cellStatus  = $cellStatus
         resolved    = $resolved
         selectionObjective = $objective

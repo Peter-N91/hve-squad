@@ -19,7 +19,7 @@ Applies in **off, ranked, economy, and manual**; no marker required. Consent/Rou
 Closed keys. Required `runId`, `historyRecords`, `stateAdvance.activeRoles`; omitted `turn`/`timestamp`/`mode`/consumption derive. `mode` is top-level; `route` needs `decision`.
 
 * Optional `decision`: `{title: string,rationale: string,adrNoted: boolean}`.
-* `historyRecords[]`: required agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Use the roster-exact agent and a real file. Alternate needs its cue; ceiling slots need Scribe. `reportedModel` is actual host/worker identity and outranks pins/requests; tool counts raise estimator floors. Supplied consumption must agree. Economy needs routingIdentity.
+* `historyRecords[]`: agent/request/deliverable/outcome required; title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity optional. Use the exact roster agent and a real file; Alternate needs its cue. Ceiling ref/slot are paired and admission/replay checked. `reportedModel` outranks pins/requests; tool counts raise floors. Supplied consumption must agree. Economy needs routingIdentity.
 * consumption keys: model/model_source/priced_as/model_tier/internal_turns/input_tokens/cached_tokens/cache_write_tokens/output_tokens/basis.
 * routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
 * Optional orchestration: request/outcome/passedModel/consumption (same keys): actual coordinator usage only, never fictional Scribe tokens; add Scribe's actual overhead if it ran.

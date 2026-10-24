@@ -99,3 +99,5 @@ Cost Preflight remains the narrow coordinator-owned compare-and-swap transaction
 Preserve admission run/round/Decision Ref/slot identities, consume a permitted
 slot once, and dispatch nothing after collision, partial write, `cannot-confirm`,
 or an already-reached ceiling. A script receipt never grants approval.
+Active routing activation/refresh uses the hash-bound plan/writer in
+`coordinator-runtime.md`; `routing=off`, roster, routing rows, and state stay cold.

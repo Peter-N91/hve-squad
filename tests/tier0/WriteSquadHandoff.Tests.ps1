@@ -95,6 +95,35 @@ BeforeAll {
         $payload
     }
 
+    function Enable-CostPreflight {
+        param([Parameter(Mandatory)][string]$Root, [string]$Slot = 'slot-1')
+        $statePath = Join-Path $Root 'state.json'
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        $state.currentRun.costPreflight.runId = 'rp-fixture-01'
+        $state.currentRun.costPreflight.roundId = 'round-1'
+        $state.currentRun.costPreflight.ceilingUsd = 5
+        $state.currentRun.costPreflight.evaluatedSpendUsd = 0.5
+        $state.currentRun.costPreflight.remainingUsd = 4.5
+        $state.currentRun.costPreflight.plannedDispatches = 1
+        $state.currentRun.costPreflight.projectedCostUsd = 1
+        $state.currentRun.costPreflight.reserveMultiplier = 3
+        $state.currentRun.costPreflight.admissionCostUsd = 3
+        $state.currentRun.costPreflight.confidence = 'medium'
+        $state.currentRun.costPreflight.basis = 'host-exact+estimated-reservation'
+        $state.currentRun.costPreflight.decision = 'within-ceiling'
+        $state.currentRun.costPreflight.reason = 'Fixture admission.'
+        $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
+        $entry = @(
+            '## Cost Preflight 2026-09-27T09:55:00Z rp-fixture-01 round-1'
+            ''
+            '* Permitted Next Dispatch Set: `' + $Slot + '`'
+            '* Decision: within-ceiling'
+            '* Reason: Fixture admission.'
+        ) -join "`n"
+        Add-Content -LiteralPath (Join-Path $Root 'decisions.md') -Value "`n$entry`n" -Encoding utf8NoBOM
+        'decisions.md#cost-preflight-2026-09-27t095500z-rp-fixture-01-round-1'
+    }
+
     function Invoke-Writer {
         param([string]$Root, $Payload, [switch]$Quiet, [string]$Writer = $script:Writer)
         $json = $Payload | ConvertTo-Json -Depth 8
@@ -218,7 +247,7 @@ Describe 'Write-SquadHandoff.ps1 writes an ordinary hand-off and verifies the le
         }
     }
 
-    It 'sends payloads it cannot validate to the Scribe without writing: slug agent, ceiling, federation, secret-like text' {
+    It 'sends payloads it cannot validate to the Scribe without writing: slug agent, federation, secret-like text' {
         $slug = New-Payload
         $slug.historyRecords[0].agent = 'squad-researcher'
         $secret = New-Payload
@@ -237,7 +266,7 @@ Describe 'Write-SquadHandoff.ps1 writes an ordinary hand-off and verifies the le
         $state.currentRun.costPreflight.decision = 'within-ceiling'
         $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
         $before = Get-TreeHash $ceilingRoot
-        (Invoke-Writer -Root $ceilingRoot -Payload (New-Payload)).ExitCode | Should -Be 2
+        (Invoke-Writer -Root $ceilingRoot -Payload (New-Payload)).ExitCode | Should -Be 1
         Get-TreeHash $ceilingRoot | Should -Be $before
 
         $federationRoot = New-Root
@@ -805,14 +834,30 @@ Describe 'Write-SquadHandoff.ps1 deliverable snapshot' {
     }
 }
 
-Describe 'Write-SquadHandoff.ps1 refuses what it cannot admit or verify' {
-    It 'sends a Cost Preflight ref or slot, or a federation ceiling above a sub-squad root, to the Scribe unchanged' {
+Describe 'Write-SquadHandoff.ps1 enforces deterministic Cost Preflight slots' {
+    It 'writes one admitted slot and rejects its replay without changing files' {
+        $refRoot = New-Root
+        $reference = Enable-CostPreflight -Root $refRoot
+        $payload = New-Payload
+        $payload.historyRecords[0].costPreflightRef = $reference
+        $payload.historyRecords[0].costPreflightSlot = 'slot-1'
+        $written = Invoke-Writer -Root $refRoot -Payload $payload
+        $written.ExitCode | Should -Be 0 -Because $written.Output
+        $history = Get-Content -LiteralPath (Join-Path $refRoot 'history/Squad Researcher.md') -Raw
+        $history | Should -Match ([regex]::Escape("* Cost Preflight Ref: ``$reference``"))
+        $history | Should -Match '\* Cost Preflight Slot: slot-1'
+        $before = Get-TreeHash $refRoot
+        (Invoke-Writer -Root $refRoot -Payload $payload).ExitCode | Should -Be 1
+        Get-TreeHash $refRoot | Should -Be $before
+    }
+
+    It 'rejects a slot without an active matching decision and still sends an aggregate federation ceiling to the Scribe' {
         $refRoot = New-Root
         $payload = New-Payload
         $payload.historyRecords[0].costPreflightRef = 'decisions.md#cost-preflight-x'
         $payload.historyRecords[0].costPreflightSlot = 'slot-1'
         $before = Get-TreeHash $refRoot
-        (Invoke-Writer -Root $refRoot -Payload $payload).ExitCode | Should -Be 2
+        (Invoke-Writer -Root $refRoot -Payload $payload).ExitCode | Should -Be 1
         Get-TreeHash $refRoot | Should -Be $before
 
         $memberRoot = New-Root -Member

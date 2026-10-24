@@ -28,12 +28,13 @@ BeforeAll {
             [string]$Decision = 'within-ceiling',
             [string]$RunId = 'run-1',
             [string]$RoundId = 'round-1',
-            [object]$Ceiling = 5
+            [object]$Ceiling = 5,
+            [string]$Basis = 'calibrated'
         )
         if ($Decision -eq 'not-requested') {
             return '{"runId":"","roundId":"","ceilingUsd":null,"evaluatedSpendUsd":0,"remainingUsd":null,"plannedDispatches":0,"projectedCostUsd":0,"reserveMultiplier":3.0,"admissionCostUsd":0,"confidence":"not-applicable","basis":"not-requested","decision":"not-requested","reason":"No cost ceiling configured."}'
         }
-        '{"runId":"' + $RunId + '","roundId":"' + $RoundId + '","ceilingUsd":' + $Ceiling + ',"evaluatedSpendUsd":0.5,"remainingUsd":4.5,"plannedDispatches":3,"projectedCostUsd":1.25,"reserveMultiplier":3.0,"admissionCostUsd":3.75,"confidence":"medium","basis":"calibrated","decision":"' + $Decision + '","reason":"Fits."}'
+        '{"runId":"' + $RunId + '","roundId":"' + $RoundId + '","ceilingUsd":' + $Ceiling + ',"evaluatedSpendUsd":0.5,"remainingUsd":4.5,"plannedDispatches":3,"projectedCostUsd":1.25,"reserveMultiplier":3.0,"admissionCostUsd":3.75,"confidence":"medium","basis":"' + $Basis + '","decision":"' + $Decision + '","reason":"Fits."}'
     }
 
     function New-DecisionText {
@@ -88,30 +89,22 @@ BeforeAll {
     }
 }
 
-Describe 'Set-SquadCostPreflight.ps1 runs only under Model routing: economy (G2)' {
-    It 'refuses with exit 7 and leaves both files untouched when team.md records <Case>' -ForEach @(
+Describe 'Set-SquadCostPreflight.ps1 is routing-mode independent' {
+    It 'writes the same transaction when team.md records <Case>' -ForEach @(
         @{ Case = 'Model routing: ranked'; Line = 'Model routing: ranked' }
+        @{ Case = 'Model routing: manual'; Line = 'Model routing: manual' }
+        @{ Case = 'Model routing: economy'; Line = 'Model routing: economy' }
         @{ Case = 'no Model routing line'; Line = '' }
     ) {
         $root = New-SquadFixture -RoutingLine $Line
-        $before = Get-Bytes -Root $root
         $result = Invoke-Preflight -Arguments @('-SquadRoot', $root, '-ExpectedUpdated', '2026-10-03T18:00:00Z', '-PreflightJson', (New-PreflightJson), '-DecisionText', (New-DecisionText))
-        $result.ExitCode | Should -Be 7 -Because $result.Output
-        $result.Output | Should -Match 'economy-only'
-        Assert-Untouched -Root $root -Before $before
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Read-State -Root $root).currentRun.costPreflight.decision | Should -Be 'within-ceiling'
     }
 
-    It 'refuses with exit 7 when the squad root has no team.md' {
+    It 'does not require team.md because routing does not change the transaction' {
         $root = New-SquadFixture
         Remove-Item -LiteralPath (Join-Path $root 'team.md')
-        $before = Get-Bytes -Root $root
-        $result = Invoke-Preflight -Arguments @('-SquadRoot', $root, '-ExpectedUpdated', '2026-10-03T18:00:00Z', '-PreflightJson', (New-PreflightJson), '-DecisionText', (New-DecisionText))
-        $result.ExitCode | Should -Be 7 -Because $result.Output
-        Assert-Untouched -Root $root -Before $before
-    }
-
-    It 'writes the transaction when team.md records Model routing: economy' {
-        $root = New-SquadFixture
         $result = Invoke-Preflight -Arguments @('-SquadRoot', $root, '-ExpectedUpdated', '2026-10-03T18:00:00Z', '-PreflightJson', (New-PreflightJson), '-DecisionText', (New-DecisionText))
         $result.ExitCode | Should -Be 0 -Because $result.Output
     }
@@ -139,6 +132,22 @@ Describe 'Set-SquadCostPreflight.ps1 writes the transaction' {
         $decisions = [System.IO.File]::ReadAllText((Join-Path $root 'decisions.md'))
         ([regex]::Matches($decisions, '(?m)^## Cost Preflight ')).Count | Should -Be 1
         $decisions.StartsWith([System.Text.Encoding]::UTF8.GetString($before.Decisions)) | Should -BeTrue
+    }
+
+    It 'accepts the exact-usage plus next-wave reservation basis' {
+        $root = New-SquadFixture -RoutingLine 'Model routing: ranked'
+        $json = New-PreflightJson -Basis 'host-exact+estimated-reservation'
+        $result = Invoke-Preflight -Arguments @('-SquadRoot', $root, '-ExpectedUpdated', '2026-10-03T18:00:00Z', '-PreflightJson', $json, '-DecisionText', (New-DecisionText))
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Read-State -Root $root).currentRun.costPreflight.basis | Should -Be 'host-exact+estimated-reservation'
+    }
+
+    It 'continues to accept the legacy host-observed basis on persisted records' {
+        $root = New-SquadFixture -RoutingLine 'Model routing: ranked'
+        $json = New-PreflightJson -Basis 'host-observed+estimated-reservation'
+        $result = Invoke-Preflight -Arguments @('-SquadRoot', $root, '-ExpectedUpdated', '2026-10-03T18:00:00Z', '-PreflightJson', $json, '-DecisionText', (New-DecisionText))
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Read-State -Root $root).currentRun.costPreflight.basis | Should -Be 'host-observed+estimated-reservation'
     }
 
     It 'preserves every other state value, including trigger, models, totals, and notify' {

@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-payload-template
-description: "Cold Scribe payload template for both coordinators: refresh, verdicts, memory, notifications, ceiling slots, federation, summaries. Ordinary writes use economy-scribe.md."
+description: "Cold Scribe payload template for both coordinators: roster/mode refresh, verdicts, memory, notifications, federation, and summaries. Ordinary writes use economy-scribe.md."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"

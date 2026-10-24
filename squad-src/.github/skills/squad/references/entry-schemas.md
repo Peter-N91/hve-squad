@@ -169,6 +169,16 @@ Machine-readable squad status. Uses replace semantics. The Scribe owns ordinary 
 }
 ```
 
+Cost Preflight `basis` is `not-requested`, legacy `estimated` / `calibrated`,
+legacy `host-observed+estimated-reservation`, or
+`host-exact+estimated-reservation`. The last value means
+`evaluatedSpendUsd` came from complete native host records plus pending admitted
+reservations while `projectedCostUsd` remains the actual next-wave estimate.
+
+`currentRun.estCostUsd` and `estCreditsTotal` are legacy names. Their values follow
+the ledger `basis`: exact-native after full role reconciliation, estimated
+otherwise.
+
 `currentRun.modelOverrides` is always present as a key — it is never omitted — and its value is `{}` unless the user volunteered a model for a role this run; a populated map (`{"<role or agent>": "<id>"}`) records that declaration. Routed ids live in `team.md`'s `Model` column instead — see [model-routing.md](model-routing.md).
 
 Watch Mode runs additionally carry an optional, additive `trigger` object recording the event that started the run; interactive, autonomous, and autopilot runs omit it. See `.github/instructions/squad/squad-watch-mode.instructions.md`.

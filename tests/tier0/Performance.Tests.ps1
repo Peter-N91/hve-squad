@@ -402,7 +402,11 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
             }
             @{
                 Before = '* **`observed_credits`** when the run''s actual `ai_credits_used` delta is available. Never estimate that figure.'
-                After  = '**Always include a consumption payload.** Apply the *Model Attribution* ladder: capture the host-reported `AgentName(model-id)` first (rung 1), otherwise use a resolved pin or session model, and never invent one (`unknown` plus the roster tier is preferable). Re-report the self-reported `sessionModel` every turn; include volunteered `modelOverrides` without prompting. `model_tier` is a preference, not actual usage. Include estimator signals (internal calls, files and approximate size, artifacts, findings length). Record actual coordinator usage and Scribe usage only when dispatched; never invent Scribe tokens. Reconcile actual `ai_credits_used` deltas only through cold Scribe''s Consumption Accounting item 9; never add unsupported `observed_credits` to an ordinary writer payload.'
+                After  = '**Always include a consumption payload.** Apply the *Model Attribution* ladder: capture the host-reported `AgentName(model-id)` first (rung 1), otherwise use a resolved pin or session model, and never invent one (`unknown` plus the roster tier is preferable). Re-report the self-reported `sessionModel` every turn; include volunteered `modelOverrides` without prompting. `model_tier` is a preference, not actual usage. Include estimator signals (internal calls, files and approximate size, artifacts, findings length) because they remain the fallback and future-reservation basis. Record coordinator/Scribe estimates only when their work occurred; the trusted ledger helper replaces them with native exact usage when host attribution reconciles. Legacy `observed_credits` calibration is cold-Scribe fallback-only.'
+            }
+            @{
+                Before = '**Pending reservation.** `pending_usd` is `0` whenever every child that has returned also has a verified Scribe hand-off, which is always the case without autopilot hand-off pipelining. Under pipelining, the round that admits stage N+1 runs after stage N''s child has returned but before stage N''s Scribe hand-off is dispatched, so `currentRun.estCostUsd` does not yet include stage N. For each such returned-but-unrecorded child slot, add its admitted unrounded `Projected Cost` times `reserve_multiplier` to `pending_usd`. The persisted `evaluatedSpendUsd` is `evaluated_spend_usd`, so `remainingUsd = ceilingUsd - evaluatedSpendUsd` still holds. Once that hand-off verifies, the recorded ledger figure replaces the reservation at the next round, which bounds any estimate drift to one stage. Never subtract a reservation from recorded spend or carry it into `currentRun.estCostUsd`.'
+                After  = '**Pending reservation.** `pending_usd` is the still-running or returned-but-not-yet-metered admitted work. Keep it until complete usage records for that unit appear, then drop the reservation because exact host spend has replaced it. Never add an already-metered reservation twice.'
             }
         )
         foreach ($migration in $approvedMigrations) {
@@ -417,11 +421,18 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
     It 'keeps baseline named headings or their explicitly approved successors present' {
         $baselineHeadings = @($script:Baseline.correctnessInventory.headingCounts.PSObject.Properties.Name)
         $currentHeadings = @($script:Measured.correctnessInventory.headingCounts.PSObject.Properties.Name)
-        $before = 'Step 5: Hand State to the Squad Scribe'
-        $after = 'Step 5: Persist State Through the Validated Writer'
-        $baselineHeadings | Should -Contain $before -Because 'the heading migration must remain tied to the captured BEFORE baseline'
-        $currentHeadings | Should -Contain $after -Because 'the replacement heading identifies the validated ordinary-writer contract'
-        $missing = @($baselineHeadings | Where-Object { $_ -notin $currentHeadings -and $_ -ne $before })
+        $migrations = @(
+            @{ Before = 'Step 5: Hand State to the Squad Scribe'; After = 'Step 5: Persist State Through the Validated Writer' }
+            @{ Before = 'Planned-dispatch manifest'; After = 'Actual next-wave reservation' }
+            @{ Before = 'Comparison methodology (token terms)'; After = 'Comparison methodology' }
+            @{ Before = 'Observed usage (host-reported)'; After = 'Exact native role usage' }
+        )
+        foreach ($migration in $migrations) {
+            $baselineHeadings | Should -Contain $migration.Before -Because 'the heading migration must remain tied to the captured BEFORE baseline'
+            $currentHeadings | Should -Contain $migration.After -Because 'the replacement heading identifies the approved contract'
+        }
+        $migratedHeadings = @($migrations | ForEach-Object Before)
+        $missing = @($baselineHeadings | Where-Object { $_ -notin $currentHeadings -and $_ -notin $migratedHeadings })
         $missing.Count | Should -Be 0 -Because "these headings existed in the BEFORE baseline and are absent from the current tree: $($missing -join ' | ')"
     }
 }
