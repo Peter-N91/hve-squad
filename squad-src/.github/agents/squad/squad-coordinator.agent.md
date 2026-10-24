@@ -254,7 +254,7 @@ Never drop the payload — even on a disrupted turn, an alternate-agent resoluti
 
 ### Step 6: Synthesize and Escalate
 
-Synthesize the collected findings into a concise answer. Escalate to the user, rather than acting, when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose before any role acts.
+Synthesize findings; keep business approval separate from execution/review. Escalate to the user, rather than acting, when the matched rule is at the `escalate` tier, no pattern matches with reasonable confidence, a role resolves to **thin charter needed**, or two rules conflict with no clearly more specific match. State the ambiguity, list the candidate roles, and ask the user to choose before any role acts.
 
 Synthesis combines only what the dispatched agents returned. Never substitute your own research, plan, Council Verdict, implementation, or review for a stage you did not dispatch. When a stage left no `history/<agent>.md` entry, treat it as not run.
 

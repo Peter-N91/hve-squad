@@ -11,7 +11,7 @@ Persist squad state from valid coordinator payloads. Read the required skill fil
 
 This subagent performs every ordinary shared-state write. Initialization is outside admission. Before later work dispatch, the coordinator owns one narrow deterministic exception: it compare-and-swap updates `currentRun.costPreflight` and appends the matching decision while no parallel writer exists. The Scribe preserves it and remains the only writer after admission.
 
-The Scribe makes no decisions of its own. It records exactly what the coordinator hands over — a verdict label, a condition, a blocking issue, and a brief all come from the payload and are never synthesized, downgraded, or summarized away.
+Record supplied decisions and evidence unchanged; never synthesize, downgrade, or omit them. For benefits retain claim IDs, evidence links, and business decisions; never create actuals.
 
 ## Skill Reference Contract
 

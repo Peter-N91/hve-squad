@@ -108,7 +108,6 @@ The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` un
 | Testability     | pass/fail    | <list-or-none>   | <list-or-none>    |
 | Consistency     | pass/fail    | <list-or-none>   | <list-or-none>    |
 | Scope Boundaries| pass/fail    | <list-or-none>   | <list-or-none>    |
-
 ### Clarifying Questions
 
 * <question for the user; empty when verdict is Ready>
@@ -130,7 +129,7 @@ Required fields:
 * The `Verdict` value is one of exactly `Ready`, `Ready-With-Gaps`, or `Not-Ready`.
 * Blocking and non-blocking gaps carry artifact attribution inline when more than one input is in scope (for example, `(prd.md) no acceptance criteria`).
 
-The schema is the contract: any Scribe write that omits one of these sections fails the intake protocol and the coordinator escalates rather than proceeding.
+ID/hypothesis/beneficiary/category; baseline/target; measurement owner; evidence; decision owner/status/ref; see business-value-measurement.md.
 
 ## Verdict Anchor and Decision Ref
 
