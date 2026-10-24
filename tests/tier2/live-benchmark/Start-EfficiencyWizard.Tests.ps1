@@ -30,6 +30,148 @@ BeforeAll {
     }
 }
 
+Describe 'Wizard local single-candidate diagnostics' -Tag 'Unit' {
+    BeforeAll {
+        function New-LocalScoreFile {
+            $Path = Join-Path $TestDrive "scores-$([guid]::NewGuid().ToString('N')).json"
+            $Names = @('businessClarity', 'scopeFidelity', 'acceptanceCriteria', 'traceability', 'risksAndDecisions')
+            $Runs = @(foreach ($Pair in 1..3) {
+                $Scores = @{}; $Evidence = @{}
+                foreach ($Name in $Names) { $Scores[$Name] = 0; $Evidence[$Name] = 'synthetic evidence' }
+                $Scores[$Names[$Pair - 1]] = 20
+                $Hashes = @{ brd = 'a' * 64; prd = 'b' * 64; closingReview = 'c' * 64 }
+                @{ metadata = @{ arm = 'baseline'; pair = $Pair; runId = "saved-$Pair"; revision = 'historical'; compatibility = @{ model = 'old'; rubric = 'old' } }
+                    judge = @{ valid = $true; documentHashes = $Hashes; response = @{ scores = $Scores; evidence = $Evidence; criticalHighFindings = 0; documentHashes = $Hashes } } }
+            })
+            @{ schemaVersion = 'efficiency-control-v1'; runs = $Runs } | ConvertTo-Json -Depth 12 | Set-Content $Path
+            $Path
+        }
+        function New-LocalDiagnosticFile($Root, $Recorded, [bool]$JudgeAvailable = $true) {
+            [void][IO.Directory]::CreateDirectory((Join-Path $Root 'out'))
+            @{ schemaVersion = 'efficiency-local-test-v1'; localDiagnostic = $true
+                metadata = @{ compatibility = @{ model = 'new'; rubric = 'new' } }
+                collection = @{ recorded = $false }
+                diagnostic = @{ executionComplete = $true; independentChecksPassed = $false; judgeAvailable = $JudgeAvailable }
+                judge = if ($JudgeAvailable) { $Recorded.runs[0].judge } else { $null }
+            } | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $Root 'out/diagnostic.json')
+        }
+    }
+    It 'runs <LocalMode> with one candidate, fresh consent and no formal export paths' -ForEach @(
+        @{ LocalMode = 'OfflineSmoke' }, @{ LocalMode = 'LocalCompare' }
+    ) {
+        $Config = New-WizardTestConfig; $Config.Mode = $LocalMode
+        $Config.WorkRoot = Join-Path $TestDrive 'work'; $Config.RunRoot = Join-Path $Config.WorkRoot "local-test-$LocalMode"
+        $Config.BaselineEvidencePath = New-LocalScoreFile
+        $Config.RecordedScores = Read-WizardRecordedScores $Config.BaselineEvidencePath
+        $Steps = New-WizardRunPlan $Config
+        $Steps[0].kind | Should -Be OfflineSmoke
+        if ($LocalMode -eq 'LocalCompare') {
+            $Steps.Count | Should -Be 2
+            $Steps[1].arguments.Mode | Should -Be Run
+            $Steps[1].arguments.Arm | Should -Be candidate
+            $Steps[1].arguments.LocalTest | Should -BeTrue
+            $Steps[1].arguments.ContainsKey('MaxSeriesCredits') | Should -BeFalse
+        } else { $Steps.Count | Should -Be 1 }
+        Mock Get-WizardConfiguration { $Config }.GetNewClosure()
+        Mock Get-WizardSmokePrerequisite { 'installed-pester' }
+        Mock Install-WizardPrerequisite { 'installed-pester' }
+        Mock Connect-WizardGitHub {}
+        Mock Initialize-WizardInstall {}
+        Mock Confirm-WizardAction { $true }
+        Mock Save-WizardDefaults {}
+        Mock Invoke-WizardSingleCandidateSmoke { 0 }
+        Mock Invoke-WizardLocalCandidate { 0 }
+        Mock Get-WizardLocalSummary { @{ executionComplete = $true; independentChecks = 'failed'; judgeAvailable = $false; diagnosticPath = 'local diagnostic'; collection = 'not-recorded'; publication = 'forbidden' } }
+        Mock Test-WizardCompatibility { throw 'Formal preflight forbidden' }
+        Mock Invoke-WizardOfflineTest { throw 'Full offline suite forbidden' }
+        Mock Invoke-WizardBenchmark { throw 'Formal benchmark forbidden' }
+        Mock Complete-WizardBenchmarkExport { throw 'Export forbidden' }
+        Mock Get-WizardBenchmarkSummary { throw 'Formal summary forbidden' }
+        $Result = Invoke-EfficiencyWizard -Source $PSScriptRoot
+        $Result.exitCode | Should -Be 0
+        $Result.outcome | Should -Be $(if ($LocalMode -eq 'LocalCompare') { 'completed-with-findings' } else { 'passed' })
+        Should -Invoke Invoke-WizardSingleCandidateSmoke -Times 1 -Exactly
+        Should -Invoke Invoke-WizardLocalCandidate -Times $(if ($LocalMode -eq 'LocalCompare') { 1 } else { 0 }) -Exactly
+        Should -Invoke Connect-WizardGitHub -Times $(if ($LocalMode -eq 'LocalCompare') { 1 } else { 0 }) -Exactly
+        Should -Invoke Install-WizardPrerequisite -Times $(if ($LocalMode -eq 'LocalCompare') { 1 } else { 0 }) -Exactly
+        Should -Invoke Complete-WizardBenchmarkExport -Times 0 -Exactly
+        if ($LocalMode -eq 'LocalCompare') {
+            Should -Invoke Confirm-WizardAction -Times 1 -Exactly -ParameterFilter { $Question -like '*authorize the displayed bounded spending*' }
+        }
+    }
+    It 'rejects <Damage> historical scores before candidate dispatch' -ForEach @(
+        @{ Damage = 'string-score' }, @{ Damage = 'out-of-range' }, @{ Damage = 'wrong-dimension' }, @{ Damage = 'duplicate-pair' }
+    ) {
+        $Path = New-LocalScoreFile
+        $Control = Get-Content $Path -Raw | ConvertFrom-Json -AsHashtable
+        switch ($Damage) {
+            'string-score' { $Control.runs[0].judge.response.scores.businessClarity = '20' }
+            'out-of-range' { $Control.runs[0].judge.response.scores.businessClarity = 21 }
+            'wrong-dimension' { $Control.runs[0].judge.response.scores.Remove('businessClarity'); $Control.runs[0].judge.response.scores.extra = 20 }
+            'duplicate-pair' { $Control.runs[1].metadata.pair = 1 }
+        }
+        $Control | ConvertTo-Json -Depth 12 | Set-Content $Path
+        Mock Invoke-WizardLocalCandidate { throw 'Must not launch' }
+        { Read-WizardRecordedScores $Path } | Should -Throw
+        Should -Invoke Invoke-WizardLocalCandidate -Times 0 -Exactly
+    }
+    It 'uses median totals, accepts historical protocol differences read-only and prints descriptive deltas' {
+        $Path = New-LocalScoreFile; $Before = (Get-FileHash $Path).Hash
+        $Recorded = Read-WizardRecordedScores $Path
+        $Recorded.medians.total | Should -Be 20
+        ($Recorded.medians.Values | Select-Object -First 5 | Measure-Object -Sum).Sum | Should -Be 0
+        $Root = Join-Path $TestDrive 'local-test-scores'
+        New-LocalDiagnosticFile $Root $Recorded
+        $Summary = Get-WizardLocalSummary -Options @{ TrialRoot = $Root } -Recorded $Recorded
+        $Summary.publication | Should -Be forbidden
+        $Summary.collection | Should -Be 'not-recorded'
+        (Get-FileHash $Path).Hash | Should -Be $Before
+        Should -Invoke Write-Host -ParameterFilter { $Object -like '*Protocol/model/rubric differences*model*rubric*' } -Times 1
+        Should -Invoke Write-Host -ParameterFilter { $Object -eq '| total | 20 | 20 | 0 |' } -Times 1
+    }
+    It 'shows an unavailable candidate judge as findings rather than zero or a passed quality result' {
+        $Recorded = Read-WizardRecordedScores (New-LocalScoreFile)
+        $Root = Join-Path $TestDrive 'local-test-unavailable'
+        New-LocalDiagnosticFile $Root $Recorded $false
+        $Summary = Get-WizardLocalSummary -Options @{ TrialRoot = $Root } -Recorded $Recorded
+        $Summary.judgeAvailable | Should -BeFalse
+        $Summary.independentChecks | Should -Be failed
+        Should -Invoke Write-Host -ParameterFilter { $Object -eq '| total | 20 | unavailable | unavailable |' } -Times 1
+    }
+    It 'passes one local Run to the child and never invokes export' {
+        Mock Invoke-WizardCommand { 0 }
+        Mock Complete-WizardBenchmarkExport { throw 'Forbidden' }
+        $Config = New-WizardTestConfig; $Config.Mode = 'LocalCompare'
+        $Step = (New-WizardRunPlan $Config)[1]
+        Invoke-WizardLocalCandidate -Options $Step.arguments | Should -Be 0
+        Should -Invoke Invoke-WizardCommand -Times 1 -Exactly -ParameterFilter { $Arguments -contains '-LocalTest' -and $Arguments -contains 'candidate' -and $Arguments -contains 'Run' -and $Arguments -notcontains 'Series' }
+        Should -Invoke Complete-WizardBenchmarkExport -Times 0 -Exactly
+    }
+    It 'fails missing installed <Missing> without installers, Python or login' -ForEach @(
+        @{ Missing = 'Git' }, @{ Missing = 'Pester' }
+    ) {
+        Mock Get-Command { if ($Missing -eq 'Pester') { @{ Source = 'git' } } } -ParameterFilter { $Name -eq 'git' }
+        Mock Get-Module { @() } -ParameterFilter { $ListAvailable -and $Name -eq 'Pester' }
+        Mock Install-WizardPrerequisite { throw 'No installer' }
+        Mock Get-WizardPython { throw 'No Python' }
+        Mock Connect-WizardGitHub { throw 'No login' }
+        { Get-WizardSmokePrerequisite } | Should -Throw "*$Missing*"
+        Should -Invoke Install-WizardPrerequisite -Times 0 -Exactly
+        Should -Invoke Get-WizardPython -Times 0 -Exactly
+        Should -Invoke Connect-WizardGitHub -Times 0 -Exactly
+    }
+    It 'remembers local answers without discarding formal parallel defaults and rejects explicit parallel local work' {
+        $Config = New-WizardTestConfig; $Config.Mode = 'OfflineSmoke'; $Config.WorkRoot = $TestDrive
+        Save-WizardDefaults -Config $Config -Previous @{ ParallelTrials = $true; Model = 'remembered' }
+        $Saved = Read-WizardDefaults
+        $Saved.Mode | Should -Be OfflineSmoke
+        $Saved.ParallelTrials | Should -BeTrue
+        $Saved.Model | Should -Be remembered
+        $Config.Mode = 'LocalCompare'; $Config.ParallelTrials = $true
+        { New-WizardRunPlan $Config } | Should -Throw '*one candidate*'
+    }
+}
+
 Describe 'Wizard recorded collection outcomes' -Tag 'Unit' {
     BeforeEach {
         $script:SummaryOptions = @{ TrialRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N')) }
@@ -234,6 +376,19 @@ Describe 'Wizard decisions and guards' -Tag 'Unit' {
         { Assert-WizardScratchPath ([IO.Path]::GetPathRoot($Source)) $Source } | Should -Throw
         Assert-WizardScratchPath (Join-Path $TestDrive 'scratch') $Source | Should -Be (Join-Path $TestDrive 'scratch')
     }
+    It 'refuses a source <AliasShape> alias before creating wizard output' -ForEach @(
+        @{ AliasShape = 'leaf' }, @{ AliasShape = 'ancestor' }
+    ) {
+        $Target = Join-Path $TestDrive "physical-source-$AliasShape"
+        $PhysicalSource = if ($AliasShape -eq 'ancestor') { Join-Path $Target 'nested-source' } else { $Target }
+        [void][IO.Directory]::CreateDirectory($PhysicalSource)
+        $Alias = Join-Path $TestDrive "source-alias-$AliasShape"
+        $null = New-Item -ItemType $(if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }) -Path $Alias -Target $Target
+        $Source = if ($AliasShape -eq 'ancestor') { Join-Path $Alias 'nested-source' } else { $Alias }
+        $Path = Join-Path $PhysicalSource 'wizard-scratch'
+        { Assert-WizardScratchPath $Path $Source } | Should -Throw '*physical*'
+        Test-Path -LiteralPath $Path | Should -BeFalse
+    }
 }
 
 Describe 'Wizard remembered defaults' -Tag 'Unit' {
@@ -351,6 +506,119 @@ Describe 'Wizard remembered defaults' -Tag 'Unit' {
         Mock Set-Content { throw [IO.IOException]::new('Fixture write failure') } -ParameterFilter { $LiteralPath -like '*wizard-defaults.json.*.tmp' }
         { Save-WizardDefaults -Config $script:MemoryConfig } | Should -Throw '*write failure*'
         (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
+    }
+}
+
+Describe 'Wizard remembered setup answers' -Tag 'Unit' {
+    BeforeEach {
+        $script:SetupDefaultsPath = Join-Path $TestDrive ([guid]::NewGuid().ToString('N') + '.json')
+        $script:SetupAnswers = [Collections.Generic.Queue[string]]::new()
+        $script:SetupPrompts = [Collections.Generic.List[string]]::new()
+        Mock Get-WizardDefaultsPath { $script:SetupDefaultsPath }
+        Mock Test-Path { $false } -ParameterFilter { $Path -like 'Env:*' }
+        Mock Invoke-WizardCommand { 0 }
+        Mock Read-Host {
+            $script:SetupPrompts.Add($Prompt)
+            $script:SetupAnswers.Dequeue()
+        }
+    }
+    It 'remembers Copilot method <Choice> and uses it on the next invocation' -ForEach @(
+        @{ Choice = '1'; Arguments = 'login' },
+        @{ Choice = '2'; Arguments = '' },
+        @{ Choice = '3'; Arguments = 'login --with-token' }
+    ) {
+        $script:SetupAnswers.Enqueue($Choice)
+        if ($Choice -ne '2') { $script:SetupAnswers.Enqueue('yes') }
+        $script:SetupAnswers.Enqueue('')
+        if ($Choice -ne '2') { $script:SetupAnswers.Enqueue('yes') }
+        Connect-WizardGitHub
+        Connect-WizardGitHub
+        (Read-WizardDefaults).PromptAnswers.CopilotAuthorization | Should -Be $Choice
+        $Choices = @($script:SetupPrompts | Where-Object { $_ -like 'Choice *' })
+        $Choices[1] | Should -Match "\[$Choice\]"
+        if ($Choice -eq '2') {
+            Should -Invoke Invoke-WizardCommand -Times 0 -Exactly -ParameterFilter { $Command -eq 'copilot' }
+        }
+        else {
+            $ExpectedArguments = $Arguments
+            Should -Invoke Invoke-WizardCommand -Times 2 -Exactly -ParameterFilter { $Command -eq 'copilot' -and ($Arguments -join ' ') -eq $ExpectedArguments }
+        }
+    }
+    It 'reuses the last clean-install answer after checking the prepared install again' {
+        $Source = Join-Path $TestDrive 'setup-source'
+        New-Item -ItemType Directory -Path $Source -Force | Out-Null
+        Set-Content (Join-Path $Source 'apm.yml') 'name: fixture'
+        $Install = Join-Path $TestDrive 'setup-install'
+        Mock Test-WizardInstall { $true }
+        $script:SetupAnswers.Enqueue('y')
+        $script:SetupAnswers.Enqueue('')
+        Initialize-WizardInstall -Path $Install -ManagedRoot $TestDrive -Source $Source
+        Initialize-WizardInstall -Path $Install -ManagedRoot $TestDrive -Source $Source
+        (Read-WizardDefaults).PromptAnswers.ReusePreparedInstall | Should -BeTrue
+        $script:SetupPrompts[1] | Should -Match '\[yes\]'
+        Should -Invoke Test-WizardInstall -Times 2 -Exactly
+    }
+    It 'remembers <MemoryKey> without reusing its authorization on blank input' -ForEach @(
+        @{ MemoryKey = 'ArchiveInstall' },
+        @{ MemoryKey = 'Launch' }
+    ) {
+        $script:SetupAnswers.Enqueue('yes')
+        $script:SetupAnswers.Enqueue('')
+        Confirm-WizardAction 'Protected action?' -MemoryKey $MemoryKey | Should -BeTrue
+        (Read-WizardDefaults).PromptAnswers[$MemoryKey] | Should -BeTrue
+        Confirm-WizardAction 'Protected action?' -MemoryKey $MemoryKey | Should -BeFalse
+        (Read-WizardDefaults).PromptAnswers[$MemoryKey] | Should -BeFalse
+        $script:SetupPrompts[1] | Should -Match '\[no\]'
+        Should -Invoke Write-Host -Times 1 -Exactly -ParameterFilter { $Object -like 'Previous answer*yes*Fresh confirmation*' }
+    }
+    It 'requires fresh authentication even when login methods and prior approval are remembered' {
+        Mock Read-Host { '' }
+        foreach ($Choice in @('1', '3')) {
+            Save-WizardDefaults -Previous (Read-WizardDefaults) -Answers @{ CopilotAuthorization = $Choice; CopilotLogin = $true }
+            { Connect-WizardGitHub } | Should -Throw '*Copilot sign-in declined*'
+            (Read-WizardDefaults).PromptAnswers.CopilotAuthorization | Should -Be $Choice
+            (Read-WizardDefaults).PromptAnswers.CopilotLogin | Should -BeFalse
+        }
+        Should -Invoke Invoke-WizardCommand -Times 0 -Exactly -ParameterFilter { $Command -eq 'copilot' }
+    }
+    It 'retains failed-login preferences across configuration, spending and Offline saves' {
+        $Config = New-WizardTestConfig
+        $Config.WorkRoot = Join-Path $TestDrive 'setup-work'
+        Save-WizardDefaults -Config $Config -SpendingAuthorized $true
+        $Hash = (Read-WizardDefaults).SpendingAuthorization.planHash
+        $script:SetupAnswers.Enqueue('3')
+        $script:SetupAnswers.Enqueue('yes')
+        Mock Invoke-WizardCommand { if ($Command -eq 'copilot') { 1 } else { 0 } }
+        { Connect-WizardGitHub } | Should -Throw '*Copilot login failed*'
+        Save-WizardDefaults -Config $Config -Previous (Read-WizardDefaults) -SpendingAuthorized $true
+        (Read-WizardDefaults).SpendingAuthorization.planHash | Should -Be $Hash
+        Save-WizardDefaults -Config @{ Mode = 'Offline'; WorkRoot = $Config.WorkRoot } -Previous (Read-WizardDefaults)
+        $Saved = Read-WizardDefaults
+        $Saved.PromptAnswers.CopilotAuthorization | Should -Be '3'
+        $Saved.PromptAnswers.CopilotLogin | Should -BeTrue
+        $Saved.SpendingAuthorization.planHash | Should -Be $Hash
+    }
+    It 'does not overwrite the last answer when later choice input is invalid or cancelled' {
+        Save-WizardDefaults -Answers @{ CopilotAuthorization = '2' }
+        $Before = (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash
+        $script:SetupAnswers.Enqueue('invalid')
+        $script:SetupAnswers.Enqueue('q')
+        { Connect-WizardGitHub } | Should -Throw '*cancelled*'
+        (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
+        Should -Invoke Invoke-WizardCommand -Times 0 -Exactly -ParameterFilter { $Command -eq 'copilot' }
+    }
+    It 'rejects invalid remembered setup data: <Case>' -ForEach @(
+        @{ Case = 'login enum'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","PromptAnswers":{"CopilotAuthorization":"4"}}' },
+        @{ Case = 'confirmation type'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","PromptAnswers":{"ReusePreparedInstall":"yes"}}' },
+        @{ Case = 'unrecognized key'; Json = '{"schemaVersion":"efficiency-wizard-defaults-v1","PromptAnswers":{"Token":"not-a-credential"}}' }
+    ) {
+        Save-WizardDefaults -Answers @{ CopilotAuthorization = '2' }
+        $Before = (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash
+        $InvalidAnswers = (ConvertFrom-Json -InputObject $Json -AsHashtable).PromptAnswers
+        { Save-WizardDefaults -Previous (Read-WizardDefaults) -Answers $InvalidAnswers } | Should -Throw '*invalid*'
+        (Get-FileHash -LiteralPath (Get-WizardDefaultsPath)).Hash | Should -Be $Before
+        Set-Content -LiteralPath (Get-WizardDefaultsPath) -Value $Json
+        { Read-WizardDefaults } | Should -Throw '*Remove this file to reset*'
     }
 }
 

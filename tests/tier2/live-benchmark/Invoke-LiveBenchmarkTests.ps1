@@ -18,6 +18,9 @@
     Optional path to a Pester 5 module manifest to import instead of the installed one.
 .PARAMETER ProgressPath
     Optional atomic progress snapshot for the wizard's periodic observer.
+.PARAMETER SingleCandidate
+    Runs exactly one fake local candidate, without Python/pytest, authentication or AI.
+    Requires installed Git/Pester; private fixture outputs are temporary, not benchmark evidence.
 .EXAMPLE
     ./Invoke-LiveBenchmarkTests.ps1
 #>
@@ -26,11 +29,25 @@ param(
     [ValidateSet('None', 'Normal', 'Detailed', 'Diagnostic')]
     [string]$Output = 'Detailed',
     [string]$PesterPath,
-    [string]$ProgressPath
+    [string]$ProgressPath,
+    [switch]$SingleCandidate
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($SingleCandidate) {
+    # AI cost: none; exactly one fake candidate, no Python, login or benchmark publication.
+    if ($PesterPath) { Import-Module $PesterPath -Force } else { Import-Module Pester -MinimumVersion 5.7.1 -Force }
+    $config = New-PesterConfiguration
+    $config.Run.Container = New-PesterContainer -Path (Join-Path $PSScriptRoot 'EfficiencyBenchmark.Tests.ps1') -Data @{ SingleCandidate = $true }
+    $config.Filter.FullName = 'Efficiency recovery end to end*'
+    $config.Run.PassThru = $true
+    $config.Output.Verbosity = $Output
+    $result = Invoke-Pester -Configuration $config
+    if ($result.Result -ne 'Passed' -or $result.PassedCount -ne 1 -or $result.FailedCount -ne 0 -or $result.SkippedCount -ne 0) { exit 1 }
+    exit 0
+}
 
 $pytestCheck = & python -m pytest --version 2>&1
 if ($LASTEXITCODE -ne 0) {

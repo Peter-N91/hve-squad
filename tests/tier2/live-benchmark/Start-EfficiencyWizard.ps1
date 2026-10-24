@@ -7,13 +7,14 @@
 .SYNOPSIS
     Guides setup and launches the bounded efficiency benchmark unattended.
 .DESCRIPTION
-    AI cost: none in Offline mode. Other modes gate paid collection on offline checks
+    AI cost: none in Offline/OfflineSmoke. LocalCompare runs one paid diagnostic;
+    it cannot record/export a benchmark. Formal modes gate paid collection on offline checks
     and fresh spending consent: 3 trials for Establish, 3 or 6 for Series, 6 for Complete.
     Parallel trials share the displayed total reservation; they do not reduce the work.
     Installs and authenticates only after consent. Never reads or records tokens.
     Archive-only cleanup preserves evidence; a failed stage stops dependent work.
 .PARAMETER SourceRoot
-    Source checkout holding squad-src and apm.yml.
+    Physical source checkout holding squad-src and apm.yml; source ancestors cannot be links.
 .PARAMETER WorkRoot
     Dedicated scratch directory outside the source checkout.
 .PARAMETER BaselineEvidencePath
@@ -34,6 +35,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $script:WizardDefaultsFields = @('Mode', 'WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'BaselineEvidencePath', 'Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')
+$script:WizardConfirmationFields = @('CreateWorkRoot', 'ReusePreparedInstall', 'PreparePackage', 'ArchiveInstall', 'GitHubLogin', 'CopilotLogin', 'InstallPester', 'Installgit', 'Installpython', 'Installgh', 'Installcopilot', 'Installapm', 'Launch')
 
 function Get-WizardDefaultsPath {
     <# .SYNOPSIS
@@ -42,6 +44,21 @@ function Get-WizardDefaultsPath {
     [CmdletBinding()]
     param()
     [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../.efficiency-wizard-defaults.json'))
+}
+
+function Assert-WizardPromptAnswers {
+    <# .SYNOPSIS
+    Allows only login-method choices and known boolean setup answers.
+    #>
+    [CmdletBinding()]
+    param([object]$Answers, [string]$Invalid)
+    if ($Answers -isnot [Collections.IDictionary]) { throw $Invalid }
+    foreach ($Key in $Answers.Keys) {
+        if ($Key -eq 'CopilotAuthorization') {
+            if ($Answers[$Key] -isnot [string] -or $Answers[$Key] -notin @('1', '2', '3')) { throw $Invalid }
+        }
+        elseif ($Key -notin $script:WizardConfirmationFields -or $Answers[$Key] -isnot [bool]) { throw $Invalid }
+    }
 }
 
 function Read-WizardDefaults {
@@ -55,12 +72,12 @@ function Read-WizardDefaults {
     try { $Defaults = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable }
     catch [ArgumentException] { throw $Invalid }
     if ($Defaults -isnot [Collections.IDictionary] -or $Defaults['schemaVersion'] -cne 'efficiency-wizard-defaults-v1') { throw $Invalid }
-    $Allowed = @('schemaVersion', 'SpendingAuthorization') + $script:WizardDefaultsFields
+    $Allowed = @('schemaVersion', 'SpendingAuthorization', 'PromptAnswers') + $script:WizardDefaultsFields
     foreach ($Key in $Defaults.Keys) { if ($Key -notin $Allowed) { throw $Invalid } }
     foreach ($Key in @('WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'Model', 'BaselineEvidencePath')) {
         if ($Defaults.Contains($Key) -and ($Defaults[$Key] -isnot [string] -or ($Key -ne 'BaselineEvidencePath' -and [string]::IsNullOrWhiteSpace($Defaults[$Key])))) { throw $Invalid }
     }
-    if ($Defaults.Contains('Mode') -and $Defaults['Mode'] -notin @('Establish', 'Series', 'Complete', 'Offline')) { throw $Invalid }
+    if ($Defaults.Contains('Mode') -and $Defaults['Mode'] -notin @('Establish', 'Series', 'Complete', 'Offline', 'OfflineSmoke', 'LocalCompare')) { throw $Invalid }
     foreach ($Key in @('PerRunCredits', 'TotalCredits')) {
         if ($Defaults.Contains($Key)) {
             $Value = $Defaults[$Key]
@@ -68,6 +85,9 @@ function Read-WizardDefaults {
         }
     }
     if ($Defaults.Contains('ParallelTrials') -and $Defaults['ParallelTrials'] -isnot [bool]) { throw $Invalid }
+    if ($Defaults.Contains('PromptAnswers')) {
+        Assert-WizardPromptAnswers -Answers $Defaults['PromptAnswers'] -Invalid $Invalid
+    }
     if ($Defaults.Contains('SpendingAuthorization')) {
         $Authorization = $Defaults['SpendingAuthorization']
         if ($Authorization -isnot [Collections.IDictionary] -or $Authorization['approved'] -isnot [bool] -or $Authorization['planHash'] -cnotmatch '^[0-9a-f]{64}$' -or @($Authorization.Keys | Where-Object { $_ -notin @('approved', 'planHash') }).Count) { throw $Invalid }
@@ -92,19 +112,32 @@ function Save-WizardDefaults {
     Atomically remembers answered fields, never credentials or reusable consent.
     #>
     [CmdletBinding()]
-    param([Collections.IDictionary]$Config, [Collections.IDictionary]$Previous = @{}, [bool]$SpendingAuthorized, [string]$Path = (Get-WizardDefaultsPath))
+    param([Collections.IDictionary]$Config, [Collections.IDictionary]$Previous = @{}, [bool]$SpendingAuthorized, [Collections.IDictionary]$Answers = @{}, [string]$Path = (Get-WizardDefaultsPath))
+    Assert-WizardPromptAnswers -Answers $Answers -Invalid 'Wizard prompt answers are invalid; no defaults were saved.'
     $Defaults = @{ schemaVersion = 'efficiency-wizard-defaults-v1' }
-    foreach ($Key in @($script:WizardDefaultsFields) + 'SpendingAuthorization') {
+    foreach ($Key in @($script:WizardDefaultsFields) + @('SpendingAuthorization', 'PromptAnswers')) {
         if ($Previous.Contains($Key)) { $Defaults[$Key] = $Previous[$Key] }
     }
-    $Answered = @('Mode', 'WorkRoot')
-    if ($Config.Mode -ne 'Offline') {
-        $Answered += @('Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')
-        if ($Config.Mode -eq 'Series') { $Answered += 'BaselineEvidencePath' }
-        if ($Config.Mode -in @('Establish', 'Complete') -or ($Config.Mode -eq 'Series' -and -not $Config.BaselineEvidencePath)) { $Answered += 'BaselineSourceRoot' }
-        if ($Config.Mode -in @('Series', 'Complete')) { $Answered += 'CandidateSourceRoot' }
+    $Answered = @()
+    if ($Config) {
+        $Answered = @('Mode', 'WorkRoot')
+        if ($Config.Mode -notin @('Offline', 'OfflineSmoke')) {
+            $Answered += @('Model', 'PerRunCredits')
+            if ($Config.Mode -ne 'LocalCompare') { $Answered += @('TotalCredits', 'ParallelTrials') }
+            if ($Config.Mode -in @('Series', 'LocalCompare')) { $Answered += 'BaselineEvidencePath' }
+            if ($Config.Mode -in @('Establish', 'Complete') -or ($Config.Mode -eq 'Series' -and -not $Config.BaselineEvidencePath)) { $Answered += 'BaselineSourceRoot' }
+            if ($Config.Mode -in @('Series', 'Complete', 'LocalCompare')) { $Answered += 'CandidateSourceRoot' }
+        }
     }
     foreach ($Key in $Answered) { $Defaults[$Key] = $Config[$Key] }
+    if ($Answers.Count) {
+        $Remembered = @{}
+        if ($Defaults.ContainsKey('PromptAnswers')) {
+            foreach ($Key in $Defaults.PromptAnswers.Keys) { $Remembered[$Key] = $Defaults.PromptAnswers[$Key] }
+        }
+        foreach ($Key in $Answers.Keys) { $Remembered[$Key] = $Answers[$Key] }
+        $Defaults.PromptAnswers = $Remembered
+    }
     if ($PSBoundParameters.ContainsKey('SpendingAuthorized')) {
         $Defaults.SpendingAuthorization = @{ approved = $SpendingAuthorized; planHash = Get-WizardSpendingPlanHash $Config }
     }
@@ -134,12 +167,19 @@ function Read-WizardChoice {
     Explains choices and validates a bounded number of nonsecret answers.
     #>
     [CmdletBinding()]
-    param([string]$Question, [Collections.IDictionary]$Options, [string]$Default)
+    param([string]$Question, [Collections.IDictionary]$Options, [string]$Default, [ValidateSet('CopilotAuthorization')][string]$MemoryKey)
+    if ($MemoryKey) {
+        $Defaults = Read-WizardDefaults
+        if ($Defaults['PromptAnswers'] -and $Defaults['PromptAnswers'].Contains($MemoryKey)) { $Default = $Defaults['PromptAnswers'][$MemoryKey] }
+    }
     Write-Host $Question
-    foreach ($Key in $Options.Keys) { Write-Host "  $Key. $($Options[$Key])$(if ($Key -eq $Default) { ' [recommended]' })" }
+    foreach ($Key in $Options.Keys) { Write-Host "  $Key. $($Options[$Key])$(if ($Key -eq $Default) { ' [default]' })" }
     foreach ($Attempt in 1..3) {
         $Answer = Read-WizardText -Question 'Choice' -Default $Default -Required
-        if ($Options.Contains($Answer)) { return $Answer }
+        if ($Options.Contains($Answer)) {
+            if ($MemoryKey) { Save-WizardDefaults -Previous (Read-WizardDefaults) -Answers @{ $MemoryKey = $Answer } }
+            return $Answer
+        }
         Write-Host 'Choose a listed option.'
     }
     throw 'Too many invalid choices; no work launched.'
@@ -147,19 +187,28 @@ function Read-WizardChoice {
 
 function Confirm-WizardAction {
     <# .SYNOPSIS
-    Requires an affirmative answer before a setup mutation or launch.
+    Remembers setup answers without reusing mutation or launch consent.
     #>
     [CmdletBinding()]
-    param([string]$Question)
-    while ($true) {
-        $Answer = Read-WizardText -Question "$Question (yes/no; y/n accepted)" -Default 'no'
-        switch ($Answer.Trim().ToLowerInvariant()) {
-            'yes' { return $true }
-            'y' { return $true }
-            'no' { return $false }
-            'n' { return $false }
-            default { Write-Host 'Please enter yes/y or no/n, or q to cancel. Blank means no.' }
+    param([string]$Question, [ValidateScript({ $_ -in $script:WizardConfirmationFields })][string]$MemoryKey)
+    $Default = 'no'
+    if ($MemoryKey) {
+        $Defaults = Read-WizardDefaults
+        if ($Defaults['PromptAnswers'] -and $Defaults['PromptAnswers'].Contains($MemoryKey)) {
+            $PreviousAnswer = if ($Defaults['PromptAnswers'][$MemoryKey]) { 'yes' } else { 'no' }
+            if ($MemoryKey -eq 'ReusePreparedInstall') { $Default = $PreviousAnswer }
+            else { Write-Host "Previous answer to '${Question}': $PreviousAnswer. Fresh confirmation is still required; blank means no." }
         }
+    }
+    while ($true) {
+        $Answer = (Read-WizardText -Question "$Question (yes/no; y/n accepted)" -Default $Default).Trim().ToLowerInvariant()
+        if ($Answer -notin @('yes', 'y', 'no', 'n')) {
+            Write-Host "Please enter yes/y or no/n, or q to cancel. Blank means $Default."
+            continue
+        }
+        $Confirmed = $Answer -in @('yes', 'y')
+        if ($MemoryKey) { Save-WizardDefaults -Previous (Read-WizardDefaults) -Answers @{ $MemoryKey = $Confirmed } }
+        return $Confirmed
     }
 }
 
@@ -169,14 +218,16 @@ function Get-WizardMode {
     #>
     [CmdletBinding()]
     param([switch]$HasBaseline, [string]$DefaultMode = '')
-    $Modes = @{ '1' = 'Establish'; '2' = 'Series'; '3' = 'Complete'; '4' = 'Offline' }
+    $Modes = @{ '1' = 'Establish'; '2' = 'Series'; '3' = 'Complete'; '4' = 'Offline'; '5' = 'OfflineSmoke'; '6' = 'LocalCompare' }
     $Default = if ($HasBaseline) { '2' } else { '1' }
     foreach ($Key in $Modes.Keys) { if ($Modes[$Key] -eq $DefaultMode) { $Default = $Key } }
     $Choice = Read-WizardChoice -Question 'What should run?' -Default $Default -Options ([ordered]@{
-        '1' = 'Establish: all offline checks, then three baseline observations, retaining failures; no improvement claim.'
-        '2' = 'Series: all offline checks, then three candidates against compatible saved controls, or six fresh paired trials.'
-        '3' = 'Complete: all offline checks, establish three fresh controls, then run three candidates and compare.'
-        '4' = 'Offline: all benchmark self-tests only; no model requests, login or accepted-baseline changes.'
+        '1' = 'Establish (formal): all offline checks + 3 paid controls. Recommended for a first baseline or changed protocol; records failures, makes no improvement claim.'
+        '2' = 'Series (formal): all offline checks + 3 paid candidates against compatible controls, or 6 fresh paired runs. Recommended to measure a patch; produces benchmark evidence.'
+        '3' = 'Complete (formal): all offline checks + 3 fresh paid controls + 3 paid candidates. Recommended when both arms need fresh evidence; highest total cost.'
+        '4' = 'Offline (full): all benchmark self-tests, possibly several minutes and Python/pytest provisioning. Recommended before formal collection; no login or AI requests.'
+        '5' = 'Offline smoke (local): 1 simulated candidate using a fake CLI, usually seconds. Recommended while editing the harness; no AI, login, downloads or benchmark records.'
+        '6' = 'Single candidate vs saved scores (local): smoke first, then 1 PAID workflow including judge. Recommended to debug uncommitted changes; descriptive comparison only, no benchmark records/exports.'
     })
     $Modes[$Choice]
 }
@@ -203,15 +254,17 @@ function Assert-WizardScratchPath {
     $SourceFull = [IO.Path]::GetFullPath($Source).TrimEnd([IO.Path]::DirectorySeparatorChar)
     $Separator = [string][IO.Path]::DirectorySeparatorChar
     if (-not $Full -or $Full -eq [IO.Path]::GetPathRoot($Full).TrimEnd([IO.Path]::DirectorySeparatorChar) -or $Full.Equals($SourceFull, [StringComparison]::OrdinalIgnoreCase) -or $Full.StartsWith($SourceFull + $Separator, [StringComparison]::OrdinalIgnoreCase) -or $SourceFull.StartsWith($Full + $Separator, [StringComparison]::OrdinalIgnoreCase)) { throw 'Scratch paths must be dedicated directories outside the source checkout, not its ancestors or a filesystem root.' }
-    $Current = $Full
-    while ($Current) {
-        if (Test-Path -LiteralPath $Current) {
-            $Item = Get-Item -LiteralPath $Current -Force
-            if (-not $Item.PSIsContainer -or ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Scratch paths cannot traverse files, junctions or symbolic links.' }
+    foreach ($Directory in @($Full, $SourceFull)) {
+        $Current = $Directory
+        while ($Current) {
+            if (Test-Path -LiteralPath $Current) {
+                $Item = Get-Item -LiteralPath $Current -Force
+                if (-not $Item.PSIsContainer -or ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Scratch/source paths cannot traverse files, junctions or symbolic links; use physical checkout and output paths.' }
+            }
+            $Parent = [IO.Path]::GetDirectoryName($Current)
+            if ($Parent -eq $Current) { break }
+            $Current = $Parent
         }
-        $Parent = [IO.Path]::GetDirectoryName($Current)
-        if ($Parent -eq $Current) { break }
-        $Current = $Parent
     }
     $Full
 }
@@ -224,6 +277,21 @@ function New-WizardRunPlan {
     [CmdletBinding()]
     param([Parameter(Mandatory)][Collections.IDictionary]$Config)
     $Steps = [Collections.Generic.List[object]]::new()
+    if ($Config.Mode -in @('OfflineSmoke', 'LocalCompare')) {
+        $Steps.Add(@{ name = 'Offline single-candidate smoke'; kind = 'OfflineSmoke'; arguments = @{} })
+        if ($Config.Mode -eq 'LocalCompare') {
+            if (-not [double]::IsFinite($Config.PerRunCredits) -or $Config.PerRunCredits -le 0 -or $Config.TotalCredits -lt $Config.PerRunCredits) { throw 'One finite positive candidate credit reservation is required.' }
+            if ($Config['ParallelTrials']) { throw 'Local tests run exactly one candidate; parallel trials are not supported.' }
+            Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+            $null = Get-EfficiencyRecoveryPolicy -MaxCredits $Config.PerRunCredits -ObservationOnly
+            $Steps.Add(@{ name = 'Local candidate diagnostic'; kind = 'LocalCandidate'; arguments = @{
+                Mode = 'Run'; Arm = 'candidate'; SourceRoot = $Config.CandidateSourceRoot; InstallRoot = $Config.InstallRoot
+                TrialRoot = Join-Path $Config.RunRoot 'local-test-candidate'; Model = $Config.Model; MaxCredits = $Config.PerRunCredits
+                Live = $true; IsolatedEnvironment = $true; ObservationOnly = $true; LocalTest = $true
+            }; savedScores = $Config['RecordedScores'] })
+        }
+        return ,@($Steps)
+    }
     $Steps.Add(@{ name = 'Offline self-tests'; kind = 'Offline'; arguments = @{} })
     if ($Config.Mode -eq 'Offline') { return ,@($Steps) }
     foreach ($Limit in @($Config.PerRunCredits, $Config.TotalCredits)) { if ([double]$Limit -le 0 -or [double]::IsNaN([double]$Limit) -or [double]::IsInfinity([double]$Limit)) { throw 'Finite positive credit ceilings are required.' } }
@@ -258,6 +326,7 @@ function Get-WizardRepair {
     [CmdletBinding()]
     param([string]$Stage, [int]$ExitCode = 1)
     switch -Regex ($Stage) {
+        'Offline smoke|single-candidate|local candidate' { 'Inspect local diagnostic.json, error.json and retained stderr. Local tests never export benchmark records. Offline smoke needs installed Git/Pester only, not Python or login; repair execution/accounting failures before any paid attempt.'; break }
         'auth|login' { 'Complete gh auth login --web and copilot login in your terminal. Check organization SSO, Copilot entitlement and overriding token environment variables. Never paste a token into the wizard.'; break }
         'install|prerequisite' { 'Check the package manager output, trusted TLS/proxy configuration and PATH. Open a fresh PowerShell 7.4+ terminal after an OS install. Ask the package owner to perform any required administrator installation; no automatic elevation is attempted.'; break }
         'Offline' { 'Repair the failed Pester assertions or provision Python/pytest using a trusted package feed. Fix proxy/certificate trust for TLS errors; do not disable verification. Rerun the offline self-tests before any paid work.'; break }
@@ -320,16 +389,26 @@ function Invoke-WizardRunPlan {
                 $Summary = Get-WizardBenchmarkSummary -Options $Step.arguments
                 $ResultEvidenceFailed = $false
             }
+            elseif ($Step.kind -eq 'LocalCandidate') {
+                $Summary = Get-WizardLocalSummary -Options $Step.arguments -Recorded $Step.savedScores
+                if (-not $Summary.executionComplete -and $Code -eq 0) { $Code = 1 }
+            }
         }
         catch {
             Write-Warning "Wizard step '$($Step.name)' failed or its result evidence could not be read. Inspect the retained stage log and out/report.json and out/benchmark-export.json."
             if ($Code -eq 0) { $Code = 1 }
         }
         $Entry = @{ stage = $Step.name; exitCode = $Code }
-        if ($Summary) { $Entry.benchmark = $Summary }
+        if ($Summary) {
+            if ($Step.kind -eq 'LocalCandidate') { $Entry.diagnostic = $Summary }
+            else { $Entry.benchmark = $Summary }
+        }
         $Results.Add($Entry)
         Write-Host "Finished: $($Step.name) (exit $Code; $($Results.Count)/$($Steps.Count) scheduled steps finished)"
-        if ($Summary) {
+        if ($Summary -and $Step.kind -eq 'LocalCandidate') {
+            Write-Host "Diagnostic only, not recorded/exportable. Independent checks: $($Summary.independentChecks); judge available: $($Summary.judgeAvailable). Logs: $($Summary.diagnosticPath)"
+        }
+        elseif ($Summary) {
             Write-Host "Collection: $($Summary.collection), $($Summary.recordedTrials) exported observations. Independent checks: $($Summary.independentChecks). Comparison: $($Summary.comparison)."
             Write-Host "Recorded report: $($Summary.reportPath)"
             Write-Host "Portable records: $($Summary.portableReportPath). Publication: local only, not committed to Git; offline publication command is in $($Summary.exportManifestPath)."
@@ -339,8 +418,9 @@ function Invoke-WizardRunPlan {
         }
     }
     $Benchmarks = @($Results | Where-Object { $_.ContainsKey('benchmark') })
-    $Findings = @($Benchmarks | Where-Object { $_.benchmark.independentChecks -ne 'passed' }).Count -gt 0
-    @{ outcome = if ($Findings) { 'completed-with-findings' } elseif ($Benchmarks.Count) { 'completed' } else { 'passed' }; exitCode = 0; failedStage = $null; repair = $null; stages = @($Results); notRun = 0; acceptedBaselineChanged = $false }
+    $Diagnostics = @($Results | Where-Object { $_.ContainsKey('diagnostic') })
+    $Findings = @($Benchmarks | Where-Object { $_.benchmark.independentChecks -ne 'passed' }).Count -gt 0 -or @($Diagnostics | Where-Object { $_.diagnostic.independentChecks -ne 'passed' }).Count -gt 0
+    @{ outcome = if ($Findings) { 'completed-with-findings' } elseif ($Benchmarks.Count -or $Diagnostics.Count) { 'completed' } else { 'passed' }; exitCode = 0; failedStage = $null; repair = $null; stages = @($Results); notRun = 0; acceptedBaselineChanged = $false }
 }
 
 function Invoke-WizardCommand {
@@ -410,7 +490,7 @@ function Install-WizardTool {
         throw "$Name is missing. On Ubuntu/non-Windows, install it using $Reference, reopen the terminal and rerun. No sudo, downloaded script, or Windows installer was executed."
     }
     Write-Host "$Name is missing. Proposed install: winget install --id $PackageId --exact --source winget --scope user"
-    if (-not (Confirm-WizardAction "Install $Name for this user?")) { throw [OperationCanceledException]::new("Installation declined: $Name") }
+    if (-not (Confirm-WizardAction "Install $Name for this user?" -MemoryKey "Install$Name")) { throw [OperationCanceledException]::new("Installation declined: $Name") }
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw 'WinGet is unavailable. Install Microsoft App Installer from the Microsoft Store, then restart this wizard. No installer was downloaded or executed.' }
     $Code = Invoke-WizardCommand -Command 'winget' -Arguments @('install', '--id', $PackageId, '--exact', '--source', 'winget', '--scope', 'user', '--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements')
     if ($Code -ne 0) { throw "Installation failed for $Name (exit $Code). Use the package owner's supported installer or ask an administrator; this wizard does not elevate or retry." }
@@ -437,9 +517,9 @@ function Install-WizardPrerequisite {
     Repairs the tools needed by the chosen workload, without authenticating Offline mode.
     #>
     [CmdletBinding()]
-    param([switch]$LiveMode)
+    param([switch]$LiveMode, [switch]$SkipPython)
     Install-WizardTool -Name git -PackageId 'Git.Git'
-    if (-not (Get-WizardPython)) {
+    if (-not $SkipPython -and -not (Get-WizardPython)) {
         Install-WizardTool -Name python -PackageId 'Python.Python.3.12'
         if (-not (Get-WizardPython)) { throw 'Python 3.12 is required. Install it and expose python3.12, python3 or python on PATH, then rerun.' }
     }
@@ -450,7 +530,7 @@ function Install-WizardPrerequisite {
     }
     $Pester = @(Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.7.1') | Sort-Object Version -Descending | Select-Object -First 1)
     if (-not $Pester.Count) {
-        if (-not (Confirm-WizardAction 'Install Pester 5.7.1 in CurrentUser scope from PSGallery?')) { throw [OperationCanceledException]::new('Pester installation declined.') }
+        if (-not (Confirm-WizardAction 'Install Pester 5.7.1 in CurrentUser scope from PSGallery?' -MemoryKey InstallPester)) { throw [OperationCanceledException]::new('Pester installation declined.') }
         Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Repository PSGallery -Force -ErrorAction Stop
         $Pester = @(Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.7.1') | Sort-Object Version -Descending | Select-Object -First 1)
         if (-not $Pester.Count) { throw 'Pester remains unavailable after installation; repair PowerShell module discovery.' }
@@ -468,7 +548,7 @@ function Install-WizardPrerequisite {
         }
         $null = Get-EfficiencyCliLocalArguments -HelpText $HelpText
     }
-    Write-Host 'Offline tests use an isolated Python 3.12 venv and pytest 8.3.5 via pip; downloads may be required. No global Python packages are installed.'
+    if (-not $SkipPython) { Write-Host 'Offline tests use an isolated Python 3.12 venv and pytest 8.3.5 via pip; downloads may be required. No global Python packages are installed.' }
     $Pester[0].Path
 }
 
@@ -483,13 +563,13 @@ function Connect-WizardGitHub {
     }
     Write-Host 'OAuth obtains and stores credentials through native CLIs. Review permissions in the browser; no additional scopes or PATs are silently created.'
     if ((Invoke-WizardCommand gh @('auth', 'status', '--hostname', 'github.com') -Quiet) -ne 0) {
-        if (-not (Confirm-WizardAction 'Run gh auth login --hostname github.com --web?')) { throw [OperationCanceledException]::new('GitHub sign-in declined.') }
+        if (-not (Confirm-WizardAction 'Run gh auth login --hostname github.com --web?' -MemoryKey GitHubLogin)) { throw [OperationCanceledException]::new('GitHub sign-in declined.') }
         if ((Invoke-WizardCommand gh @('auth', 'login', '--hostname', 'github.com', '--web')) -ne 0 -or (Invoke-WizardCommand gh @('auth', 'status', '--hostname', 'github.com') -Quiet) -ne 0) { throw 'GitHub authentication did not succeed; complete browser/SSO approval in gh.' }
     }
     $Present = @('COPILOT_GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN') | Where-Object { Test-Path "Env:$_" }
     if ($Present) { Write-Host "Credential environment variables are set: $($Present -join ', '). Their values are not read. They can override stored OAuth; the wizard will not clear them." }
     Write-Host 'A GitHub login does not prove Copilot entitlement. Copilot may fall back to gh OAuth, but organization policy, token validity and model access are verified only by the later bounded live run.'
-    $Choice = Read-WizardChoice -Question 'Copilot authorization' -Default '1' -Options ([ordered]@{
+    $Choice = Read-WizardChoice -Question 'Copilot authorization' -Default '1' -MemoryKey CopilotAuthorization -Options ([ordered]@{
         '1' = 'Run copilot login now (native browser/device OAuth).'
         '2' = 'Use existing Copilot/GitHub CLI authorization or supported environment credentials; not live-verified here.'
         '3' = 'Enter an existing fine-grained PAT directly into copilot login --with-token, never into the wizard.'
@@ -497,6 +577,7 @@ function Connect-WizardGitHub {
     if ($Choice -eq '2') { return }
     if ($Choice -eq '3') { Write-Host 'Create a user-owned fine-grained PAT with Copilot Requests at https://github.com/settings/personal-access-tokens/new. Classic ghp_ PATs are unsupported. Organization approval cannot be bypassed.' }
     $Arguments = if ($Choice -eq '3') { @('login', '--with-token') } else { @('login') }
+    if (-not (Confirm-WizardAction "Run copilot $($Arguments -join ' ') now?" -MemoryKey CopilotLogin)) { throw [OperationCanceledException]::new('Copilot sign-in declined.') }
     if ((Invoke-WizardCommand copilot $Arguments) -ne 0) { throw 'Copilot login failed. Check SSO, account policy and overriding token environment variables in your terminal.' }
 }
 
@@ -525,7 +606,7 @@ function Move-WizardInstallArchive {
     $Root = Assert-WizardScratchPath $ManagedRoot $Source
     $Full = Assert-WizardScratchPath $Path $Source
     if (-not $Full.StartsWith($Root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or $Full -ne (Join-Path $Root 'install')) { throw 'Only the managed install directory can be archived; choose a fresh WorkRoot instead.' }
-    if (-not (Confirm-WizardAction "Archive stale install $Full (ensure no other run is using it), preserving all contents?")) { throw [OperationCanceledException]::new('Archive declined; existing files preserved.') }
+    if (-not (Confirm-WizardAction "Archive stale install $Full (ensure no other run is using it), preserving all contents?" -MemoryKey ArchiveInstall)) { throw [OperationCanceledException]::new('Archive declined; existing files preserved.') }
     $Destination = Join-Path $Root ('install-archive-' + [guid]::NewGuid())
     if ($PSCmdlet.ShouldProcess($Full, 'Archive managed install')) { Move-Item -LiteralPath $Full -Destination $Destination -ErrorAction Stop }
     $Destination
@@ -544,11 +625,11 @@ function Initialize-WizardInstall {
         try { $MatchesManifest = (Get-Content -LiteralPath $Receipt -Raw | ConvertFrom-Json).manifestHash -ceq $ManifestHash } catch { $MatchesManifest = $false }
     }
     if ((Test-WizardInstall $Path) -and $MatchesManifest) {
-        if (-not (Confirm-WizardAction "Reuse clean prepared install ${Path}?")) { throw [OperationCanceledException]::new('Install reuse declined; choose a new WorkRoot.') }
+        if (-not (Confirm-WizardAction "Reuse clean prepared install ${Path}?" -MemoryKey ReusePreparedInstall)) { throw [OperationCanceledException]::new('Install reuse declined; choose a new WorkRoot.') }
         return
     }
     if (Test-Path -LiteralPath $Path) { Move-WizardInstallArchive -Path $Path -ManagedRoot $ManagedRoot -Source $Source | Out-Null }
-    if (-not (Confirm-WizardAction "Prepare the full pinned squad/hve-core package from $Source into $Path (network access and package trust prompts may be needed)?")) { throw [OperationCanceledException]::new('Package preparation declined.') }
+    if (-not (Confirm-WizardAction "Prepare the full pinned squad/hve-core package from $Source into $Path (network access and package trust prompts may be needed)?" -MemoryKey PreparePackage)) { throw [OperationCanceledException]::new('Package preparation declined.') }
     Import-Module (Join-Path $PSScriptRoot '../../lib/SquadInstall.psm1') -Force
     Install-SquadPackage -Destination $Path -SourceRoot $Source | Out-Null
     if (-not (Test-WizardInstall $Path)) { throw 'Prepared package is incomplete or contains runtime state. Inspect install.log; keep the evidence and choose a fresh WorkRoot after repair.' }
@@ -580,7 +661,13 @@ function Get-WizardConfiguration {
     $DefaultModel = if ($Defaults['Model']) { $Defaults['Model'] } else { 'claude-sonnet-5.5' }
     $DefaultCredits = if ($Defaults['PerRunCredits']) { [double]$Defaults['PerRunCredits'] } else { 100.0 }
     $ScenarioDefaults = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
-    Write-Host "Defaults: offline self-tests first; model $DefaultModel; $DefaultCredits AI credits per run (ceiling, not predicted cost); three observations; no outer retries or request-count cap; $($ScenarioDefaults.observationTimeoutMinutes)-minute hung-run watchdog; quality/readiness failures are recorded, not collection gates; no automatic promotion."
+    if ($Mode -in @('OfflineSmoke', 'LocalCompare')) {
+        if ($ParallelTrials) { throw 'Local tests run exactly one candidate; remove -ParallelTrials.' }
+        Write-Host 'LOCAL TEST ONLY: uncommitted changes are allowed. No benchmark, controls or portable records are produced; diagnostic logs stay outside the checkout. No quality/improvement approval.'
+        if ($Mode -eq 'OfflineSmoke') { Write-Host 'One fake candidate exercises harness behavior, not AI output quality. Uses installed Git/Pester only; no installation or Python.' }
+        else { Write-Host "One real candidate includes initialization, requirements, build and judge; it may still take minutes and use up to $DefaultCredits AI credits unless changed below. Saved scores are descriptive historical context, not compatible benchmark controls." }
+    }
+    else { Write-Host "Defaults: offline self-tests first; model $DefaultModel; $DefaultCredits AI credits per run (ceiling, not predicted cost); three observations; no outer retries or request-count cap; $($ScenarioDefaults.observationTimeoutMinutes)-minute hung-run watchdog; quality/readiness failures are recorded, not collection gates; no automatic promotion." }
     Write-Host 'Isolation is NOT created by the wizard. Live modes require a disposable OS-isolated environment, restricted credentials and no sensitive source data. Fresh run directories preserve previous evidence.'
     $Scratch = Assert-WizardScratchPath (Read-WizardText -Question 'Dedicated work/evidence root outside the checkout' -Default $Scratch -Required) $Source
     $Config = @{
@@ -589,7 +676,24 @@ function Get-WizardConfiguration {
         BaselineSourceRoot = $Source; CandidateSourceRoot = $Source; BaselineEvidencePath = ''; Model = $DefaultModel
         PerRunCredits = 0.0; TotalCredits = 0.0; ParallelTrials = [bool]$ParallelTrials
     }
-    if ($Mode -eq 'Offline') { Save-WizardDefaults -Config $Config -Previous $Defaults; return $Config }
+    if ($Mode -in @('OfflineSmoke', 'LocalCompare')) {
+        $Config.RunRoot = Join-Path $Scratch ('local-test-' + [guid]::NewGuid().ToString('N'))
+        $Config.ParallelTrials = $false
+    }
+    if ($Mode -in @('Offline', 'OfflineSmoke')) { Save-WizardDefaults -Config $Config -Previous $Defaults; return $Config }
+    if ($Mode -eq 'LocalCompare') {
+        $Config.CandidateSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Local candidate checkout (uncommitted changes allowed)' -Default $(if ($Defaults['CandidateSourceRoot']) { $Defaults['CandidateSourceRoot'] } else { $Source }) -Required)).Path
+        foreach ($Required in @('squad-src', 'apm.yml', '.git')) { if (-not (Test-Path -LiteralPath (Join-Path $Config.CandidateSourceRoot $Required))) { throw "Candidate checkout lacks $Required." } }
+        Assert-WizardScratchPath $Scratch $Config.CandidateSourceRoot | Out-Null
+        $Config.BaselineEvidencePath = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Saved control-series.json for read-only score comparison' -Default $SavedControl -Required)).Path
+        $Config.RecordedScores = Read-WizardRecordedScores -Path $Config.BaselineEvidencePath
+        $Config.Model = Read-WizardText -Question 'Local candidate/judge model (different recorded model will be disclosed)' -Default $DefaultModel -Required
+        $Config.PerRunCredits = Read-WizardCreditLimit 'Maximum AI credits for the ONE complete candidate including judge' $DefaultCredits
+        $Config.TotalCredits = $Config.PerRunCredits
+        New-WizardRunPlan $Config | Out-Null
+        Save-WizardDefaults -Config $Config -Previous $Defaults
+        return $Config
+    }
     if ($Mode -eq 'Series') {
         $Default = if ($SavedControl) { $SavedControl } else { 'none' }
         $Answer = Read-WizardText -Question 'Saved control-series.json path, or none for six fresh paired trials' -Default $Default -Required
@@ -628,6 +732,104 @@ function Get-WizardConfiguration {
     $Config
 }
 
+function Get-WizardSmokePrerequisite {
+    <# .SYNOPSIS
+    Checks installed-only offline tools; never installs, logs in or dispatches AI.
+    #>
+    [CmdletBinding()]
+    param()
+    if (-not (Get-Command git -CommandType Application -ErrorAction SilentlyContinue)) { throw 'Offline smoke needs installed Git; install it separately, then retry. Nothing was installed.' }
+    $Pester = @(Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.7.1') | Sort-Object Version -Descending | Select-Object -First 1)
+    if (-not $Pester.Count) { throw 'Offline smoke needs installed Pester 5.7.1+; install it separately, then retry. No downloads were attempted.' }
+    $Pester[0].Path
+}
+
+function Read-WizardRecordedScores {
+    <# .SYNOPSIS
+    Reads three historical scores without repairing provenance or changing recorded bytes; no AI.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path)
+    Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+    $Control = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
+    if ($Control['schemaVersion'] -ne 'efficiency-control-v1' -or @($Control['runs']).Count -ne 3) { throw 'Local comparison needs a saved control-series.json containing three scored baseline observations.' }
+    $Pairs = [Collections.Generic.HashSet[int]]::new(); $Ids = [Collections.Generic.HashSet[string]]::new()
+    $Dimensions = @('businessClarity', 'scopeFidelity', 'acceptanceCriteria', 'traceability', 'risksAndDecisions')
+    foreach ($Run in $Control.runs) {
+        if ($Run['metadata'] -isnot [Collections.IDictionary] -or $Run.metadata['arm'] -ne 'baseline' -or
+            $Run.metadata['pair'] -notin @(1, 2, 3) -or -not $Pairs.Add([int]$Run.metadata.pair) -or
+            [string]::IsNullOrWhiteSpace([string]$Run.metadata['runId']) -or -not $Ids.Add([string]$Run.metadata.runId)) { throw 'Saved score observations need distinct baseline run IDs and pairs 1, 2, 3.' }
+        if ($Run['judge'] -isnot [Collections.IDictionary] -or $Run.judge['valid'] -isnot [bool] -or -not $Run.judge.valid -or
+            $Run.judge['response'] -isnot [Collections.IDictionary] -or $Run.judge['documentHashes'] -isnot [Collections.IDictionary] -or
+            -not (Test-EfficiencyJudge -Response $Run.judge.response -DocumentHashes $Run.judge.documentHashes)) { throw 'Saved scores need available valid judge responses; unavailable or invalid scores cannot be compared.' }
+        foreach ($Name in @('brd', 'prd', 'closingReview')) {
+            if ($Run.judge.documentHashes[$Name] -cnotmatch '^[0-9a-fA-F]{64}$') { throw 'Saved scores need document hashes for BRD, PRD and closing review.' }
+        }
+    }
+    $Medians = [ordered]@{}
+    foreach ($Dimension in $Dimensions) { $Medians[$Dimension] = @($Control.runs | ForEach-Object { $_.judge.response.scores[$Dimension] } | Sort-Object)[1] }
+    $Medians['total'] = @($Control.runs | ForEach-Object { ($_.judge.response.scores.Values | Measure-Object -Sum).Sum } | Sort-Object)[1]
+    @{ path = [IO.Path]::GetFullPath($Path); sha256 = (Get-FileHash -LiteralPath $Path).Hash; runs = $Control.runs; medians = $Medians }
+}
+
+function Get-WizardLocalSummary {
+    <# .SYNOPSIS
+    Displays one diagnostic against historical medians without export or improvement claims.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Options, [Collections.IDictionary]$Recorded)
+    $Path = Join-Path $Options.TrialRoot 'out/diagnostic.json'
+    $Run = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
+    if ($Run['schemaVersion'] -ne 'efficiency-local-test-v1' -or $Run['localDiagnostic'] -ne $true -or
+        $Run['diagnostic'] -isnot [Collections.IDictionary] -or $Run['collection']['recorded'] -ne $false) { throw 'Local diagnostic result is missing its non-publishable identity.' }
+    foreach ($Key in @('executionComplete', 'independentChecksPassed', 'judgeAvailable')) { if ($Run.diagnostic[$Key] -isnot [bool]) { throw 'Local diagnostic outcome is invalid.' } }
+    $Available = $Run.diagnostic.judgeAvailable -and $Run['judge'] -and $Run.judge['response'] -and $Run.judge['documentHashes'] -and
+        (Test-EfficiencyJudge -Response $Run.judge.response -DocumentHashes $Run.judge.documentHashes)
+    Write-Host 'LOCAL DIAGNOSTIC ONLY: one candidate vs three historical score medians; not a regression verdict, compatible series or evidence of improvement.'
+    Write-Host "Historical input: $($Recorded.path); SHA256: $($Recorded.sha256). Missing provenance is unknown, never repaired."
+    $Differences = [Collections.Generic.HashSet[string]]::new()
+    foreach ($Baseline in $Recorded.runs) {
+        $Before = $Baseline.metadata['compatibility']; $After = $Run['metadata']['compatibility']
+        if (-not $Before -or -not $After) { $null = $Differences.Add('compatibility unavailable'); continue }
+        foreach ($Key in @($Before.Keys) + @($After.Keys) | Sort-Object -Unique) {
+            if (-not $Before.Contains($Key) -or -not $After.Contains($Key) -or ($Before[$Key] | ConvertTo-Json -Depth 10 -Compress) -cne ($After[$Key] | ConvertTo-Json -Depth 10 -Compress)) { $null = $Differences.Add($Key) }
+        }
+    }
+    Write-Host "Protocol/model/rubric differences or unknowns: $(if ($Differences.Count) { (@($Differences) | Sort-Object) -join ', ' } else { 'none detected; still only one diagnostic sample' })."
+    Write-Host '| Dimension | Historical median | Candidate | Delta |'
+    Write-Host '|---|---:|---:|---:|'
+    foreach ($Name in $Recorded.medians.Keys) {
+        $Value = if (-not $Available) { $null } elseif ($Name -eq 'total') { ($Run.judge.response.scores.Values | Measure-Object -Sum).Sum } else { $Run.judge.response.scores[$Name] }
+        Write-Host "| $Name | $($Recorded.medians[$Name]) | $(if ($null -eq $Value) { 'unavailable' } else { $Value }) | $(if ($null -eq $Value) { 'unavailable' } else { $Value - $Recorded.medians[$Name] }) |"
+    }
+    @{ collection = 'not-recorded'; publication = 'forbidden'; executionComplete = $Run.diagnostic.executionComplete
+        independentChecks = if ($Run.diagnostic.independentChecksPassed -and $Available) { 'passed' } else { 'failed' }
+        judgeAvailable = [bool]$Available; diagnosticPath = $Path }
+}
+
+function Invoke-WizardSingleCandidateSmoke {
+    <# .SYNOPSIS
+    Runs exactly one fake candidate with installed tools; no Python, models or benchmark records.
+    #>
+    [CmdletBinding()]
+    param([string]$PesterPath)
+    Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-LiveBenchmarkTests.ps1'), '-SingleCandidate', '-PesterPath', $PesterPath, '-Output', 'Normal')
+}
+
+function Invoke-WizardLocalCandidate {
+    <# .SYNOPSIS
+    Runs ONE paid workflow/judge with diagnostics only; never calls benchmark export.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Options)
+    $Arguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'))
+    foreach ($Key in $Options.Keys) {
+        if ($Options[$Key] -is [bool]) { if ($Options[$Key]) { $Arguments += "-$Key" } }
+        else { $Arguments += @("-$Key", [Convert]::ToString($Options[$Key], [Globalization.CultureInfo]::InvariantCulture)) }
+    }
+    Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments $Arguments -ProgressPaths ([ordered]@{ 'local-candidate' = Join-Path $Options.TrialRoot 'out/progress.json' })
+}
+
 function Test-WizardCompatibility {
     <# .SYNOPSIS
     Checks model/dependency identity and saved-control integrity without launching a model.
@@ -635,13 +837,18 @@ function Test-WizardCompatibility {
     [CmdletBinding()]
     param([Collections.IDictionary]$Config)
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
-    $Expected = Get-EfficiencyCompatibility -SourceRoot $Config.CandidateSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly -ParallelTrials:([bool]$Config['ParallelTrials'])
+    Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1') -Force
+    $Source = if ($Config.Mode -eq 'Establish') { $Config.BaselineSourceRoot } else { $Config.CandidateSourceRoot }
+    $Admission = Get-EfficiencyAdmission -SourceRoot $Source -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly -ParallelTrials:([bool]$Config['ParallelTrials'])
+    $Expected = $Admission.compatibility
     if ($Config.BaselineEvidencePath) {
         $Controls = Get-Content -LiteralPath $Config.BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable
         $Identity = $null; $Pairs = [Collections.Generic.HashSet[int]]::new(); $Ids = [Collections.Generic.HashSet[string]]::new()
         if ($Controls['schemaVersion'] -ne 'efficiency-control-v1' -or @($Controls['runs']).Count -ne 3) { throw 'Saved controls are incomplete.' }
         foreach ($Run in $Controls['runs']) {
             if (-not (Test-EfficiencyObservation $Run) -or $Run.metadata.arm -ne 'baseline' -or $Run.metadata.pair -notin @(1, 2, 3) -or -not $Pairs.Add([int]$Run.metadata.pair) -or -not $Ids.Add([string]$Run.metadata.runId)) { throw 'Saved observations are unmetered, incomplete, duplicated or incorrectly paired.' }
+            $HistoryRepository = if ($Config.BaselineSourceRoot) { $Config.BaselineSourceRoot } else { $Config.CandidateSourceRoot }
+            Assert-BenchmarkRecordedIdentity -Repository $HistoryRepository -Run $Run
             $Current = $Run.metadata.revision + ':' + $Run.metadata.sourceHash
             if ($Identity -and $Identity -cne $Current) { throw 'Saved controls mix different source revisions.' }
             $Identity = $Current
@@ -651,7 +858,8 @@ function Test-WizardCompatibility {
         }
     }
     elseif ($Config.Mode -in @('Series', 'Complete')) {
-        $Baseline = Get-EfficiencyCompatibility -SourceRoot $Config.BaselineSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly -ParallelTrials:([bool]$Config['ParallelTrials'])
+        $BaselineAdmission = Get-EfficiencyAdmission -SourceRoot $Config.BaselineSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly -ParallelTrials:([bool]$Config['ParallelTrials'])
+        $Baseline = $BaselineAdmission.compatibility
         foreach ($Key in $Expected.Keys) { if (($Baseline[$Key] | ConvertTo-Json -Depth 10 -Compress) -cne ($Expected[$Key] | ConvertTo-Json -Depth 10 -Compress)) { throw "Baseline/candidate environments differ in $Key; repair compatibility before launching." } }
     }
 }
@@ -764,21 +972,31 @@ function Invoke-EfficiencyWizard {
     try {
         Write-Host 'Squad efficiency benchmark wizard. No baseline is promoted by this workflow. Type q at any wizard input to cancel.'
         $Config = Get-WizardConfiguration -Source $Source -Scratch $Scratch -SavedControl $SavedControl -ParallelTrials:$ParallelTrials
+        $LocalMode = $Config.Mode -in @('OfflineSmoke', 'LocalCompare')
         $Stage = 'Prerequisite installation'
-        $PesterPath = Install-WizardPrerequisite -LiveMode:($Config.Mode -ne 'Offline')
+        $PesterPath = if ($Config.Mode -eq 'OfflineSmoke') { Get-WizardSmokePrerequisite } else { Install-WizardPrerequisite -LiveMode:($Config.Mode -ne 'Offline') -SkipPython:($Config.Mode -eq 'LocalCompare') }
         $Stage = 'Work directory preparation'
         if (-not (Test-Path -LiteralPath $Config.WorkRoot)) {
-            if (-not (Confirm-WizardAction "Create dedicated work root $($Config.WorkRoot)?")) { throw [OperationCanceledException]::new('Work directory creation declined.') }
+            if (-not (Confirm-WizardAction "Create dedicated work root $($Config.WorkRoot)?" -MemoryKey CreateWorkRoot)) { throw [OperationCanceledException]::new('Work directory creation declined.') }
             New-Item -ItemType Directory -Path $Config.WorkRoot | Out-Null
         }
         if (Test-Path -LiteralPath $Config.RunRoot) { throw 'Fresh run directory already exists; restart to obtain a new path.' }
-        if ($Config.Mode -ne 'Offline') {
+        if ($Config.Mode -notin @('Offline', 'OfflineSmoke')) {
+            if ($Config.Mode -eq 'LocalCompare') {
+                $Config.RecordedScores = Read-WizardRecordedScores -Path $Config.BaselineEvidencePath
+                Write-Host "Read-only historical scores: $($Config.RecordedScores.path); SHA256: $($Config.RecordedScores.sha256). Baseline IDs: $($Config.RecordedScores.runs.metadata.runId -join ', ')."
+                foreach ($RecordedRun in $Config.RecordedScores.runs) {
+                    Write-Host "Historical revision: $($RecordedRun.metadata['revision']); model/rubric: $(if ($RecordedRun.metadata['compatibility']) { $RecordedRun.metadata.compatibility['model']; $RecordedRun.metadata.compatibility['rubric'] } else { 'unknown' }). Candidate model/rubric: $($Config.Model)/$((Get-Content (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json).rubricVersion)."
+                }
+                Write-Host 'Source/protocol may differ, including uncommitted changes; provenance is not certified. Any score delta is descriptive only; one sample cannot support a regression/improvement claim.'
+            }
             $Stage = 'Authentication'
             Connect-WizardGitHub
             $Stage = 'Prepared package installation'
-            Initialize-WizardInstall -Path $Config.InstallRoot -ManagedRoot $Config.WorkRoot -Source $Config.BaselineSourceRoot
+            $InstallSource = if ($Config.Mode -eq 'LocalCompare') { $Config.CandidateSourceRoot } else { $Config.BaselineSourceRoot }
+            Initialize-WizardInstall -Path $Config.InstallRoot -ManagedRoot $Config.WorkRoot -Source $InstallSource
             $Stage = 'Compatibility preflight'
-            Test-WizardCompatibility $Config
+            if ($Config.Mode -ne 'LocalCompare') { Test-WizardCompatibility $Config }
             Write-Host "Mode: $($Config.Mode); model: $($Config.Model); per-run ceiling: $($Config.PerRunCredits) credits; total ceiling: $($Config.TotalCredits) credits. Reports: $($Config.RunRoot)"
             $Defaults = Read-WizardDefaults
             $Authorization = $Defaults['SpendingAuthorization']
@@ -790,20 +1008,24 @@ function Invoke-EfficiencyWizard {
             if (-not $Authorized) { throw [OperationCanceledException]::new('Isolation/spending authorization declined.') }
         }
         else { Write-Host "Mode: Offline. No login/model requests. Reports: $($Config.RunRoot)" }
-        if (-not (Confirm-WizardAction 'Provision isolated Python/pytest if needed and run the selected plan unattended (retain quality failures; stop for execution/accounting errors)?')) { throw [OperationCanceledException]::new('Launch declined.') }
+        $LaunchQuestion = if ($LocalMode) { 'Run the one-candidate local test plan (no benchmark records or exports; real AI spending only for LocalCompare)?' } else { 'Provision isolated Python/pytest if needed and run the selected plan unattended (retain quality failures; stop for execution/accounting errors)?' }
+        if (-not (Confirm-WizardAction $LaunchQuestion -MemoryKey Launch)) { throw [OperationCanceledException]::new('Launch declined.') }
         New-Item -ItemType Directory -Path $Config.RunRoot | Out-Null
         Set-Location $Config.RunRoot
         $Stage = 'Unattended execution'
         $Steps = New-WizardRunPlan $Config
         $Executor = {
             param($Step)
-            if ($Step.kind -eq 'Offline') { Invoke-WizardOfflineTest -PesterPath $PesterPath }
+            if ($Step.kind -eq 'OfflineSmoke') { Invoke-WizardSingleCandidateSmoke -PesterPath $PesterPath }
+            elseif ($Step.kind -eq 'LocalCandidate') { Invoke-WizardLocalCandidate -Options $Step.arguments }
+            elseif ($Step.kind -eq 'Offline') { Invoke-WizardOfflineTest -PesterPath $PesterPath }
             else { Invoke-WizardBenchmark -Options $Step.arguments }
         }
         $Result = Invoke-WizardRunPlan -Steps $Steps -Execute $Executor
         $Result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $Config.RunRoot 'wizard-result.json') -Encoding utf8NoBOM
         Write-Host "Wizard outcome: $($Result.outcome). Exit: $($Result.exitCode). Summary: $(Join-Path $Config.RunRoot 'wizard-result.json')"
         if ($Result.repair) { Write-Host "Stopped at $($Result.failedStage). $($Result.repair)" }
+        elseif ($LocalMode) { Write-Host 'Local testing finished. No benchmark/control/portable records were created or promoted. Review diagnostic findings above; this is not quality approval.' }
         elseif ($Result.outcome -eq 'completed-with-findings') { Write-Host 'Collection completed and records were retained, but independent quality/readiness checks failed. This is not quality approval. Accepted baseline unchanged; do not rerun paid trials to repair reporting or publication.' }
         else { Write-Host 'Selected stages completed; retained record paths are listed above and in the summary. Accepted baseline unchanged.' }
         $Result

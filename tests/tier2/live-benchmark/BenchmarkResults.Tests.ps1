@@ -426,6 +426,71 @@ Describe 'Portable benchmark history and reporting' {
         { Export-BenchmarkSeries -Repository $Fixture.repository -ControlPath $Raw.control -TrialDirectories $Raw.directories -SeriesId bad-execution } |
             Should -Throw '*measured-protocol-mismatch*'
     }
+    It 'admits an identical executing protocol from a separate clean checkout despite unrelated dirt' {
+        $Fixture = New-TestRepository
+        [IO.File]::WriteAllText((Join-Path $Fixture.repository 'notes.txt'), 'unmeasured change')
+        $Pin = Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Fixture.compatibility -SourceHash $Fixture.record.sourceHash
+        $Pin.revision | Should -Be $Fixture.revision
+        $Pin.sourceHash | Should -Be $Fixture.record.sourceHash
+        { Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Fixture.compatibility -SourceHash $Fixture.record.sourceHash -ExpectedIdentity $Pin } | Should -Not -Throw
+    }
+    It 'rejects the measured <Digest> mismatch before a paid launch' -ForEach @(
+        @{ Digest = 'scenarioHash' }, @{ Digest = 'parserHash' }, @{ Digest = 'exerciseHash' },
+        @{ Digest = 'preparationHash' }, @{ Digest = 'graderHash' }, @{ Digest = 'verifierHash' }, @{ Digest = 'converterHash' }
+    ) {
+        $Fixture = New-TestRepository
+        $Compatibility = Copy-Value $Fixture.compatibility
+        $Compatibility[$Digest] = '0' * 64
+        $Launches = [Collections.Generic.List[string]]::new()
+        {
+            $null = Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Compatibility -SourceHash $Fixture.record.sourceHash
+            $Launches.Add('paid')
+        } | Should -Throw '*measured-protocol-mismatch*'
+        $Launches.Count | Should -Be 0
+    }
+    It 'rejects tracked and untracked measured source changes without requiring a clean worktree globally' {
+        $Fixture = New-TestRepository
+        Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+        foreach ($Name in @('charter.md', 'extra.md')) {
+            [IO.File]::WriteAllText((Join-Path $Fixture.repository "squad-src/$Name"), 'changed')
+            $Hash = Get-EfficiencyTreeHash (Join-Path $Fixture.repository 'squad-src')
+            { Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Fixture.compatibility -SourceHash $Hash } | Should -Throw '*measured-source-mismatch*'
+        }
+    }
+    It 'rejects movement of the pinned revision, source or installed identity' {
+        $Fixture = New-TestRepository
+        $Pin = Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Fixture.compatibility -SourceHash $Fixture.record.sourceHash
+        $Changed = Copy-Value $Fixture.compatibility; $Changed.installHash = '0' * 64
+        { Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Changed -SourceHash $Fixture.record.sourceHash -ExpectedIdentity $Pin } | Should -Throw '*execution-identity-drift*'
+        { Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Fixture.compatibility -SourceHash ('0' * 64) -ExpectedIdentity $Pin } | Should -Throw '*execution-identity-drift*'
+        [IO.File]::WriteAllText((Join-Path $Fixture.repository 'notes.txt'), 'new commit')
+        $null = Save-TestCommit $Fixture.repository
+        { Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Fixture.compatibility -SourceHash $Fixture.record.sourceHash -ExpectedIdentity $Pin } | Should -Throw '*execution-identity-drift*'
+    }
+    It 'requires retained controls to bind to their own available committed objects' {
+        $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
+        { Assert-BenchmarkRecordedIdentity -Repository $Fixture.repository -Run $Raw.runs[0] } | Should -Not -Throw
+        $Bad = Copy-Value $Raw.runs[0]; $Bad.metadata.compatibility.graderHash = '0' * 64
+        { Assert-BenchmarkRecordedIdentity -Repository $Fixture.repository -Run $Bad } | Should -Throw '*measured-protocol-mismatch*'
+        $Bad = Copy-Value $Raw.runs[0]; $Bad.metadata.sourceHash = '0' * 64
+        { Assert-BenchmarkRecordedIdentity -Repository $Fixture.repository -Run $Bad } | Should -Throw '*measured-source-mismatch*'
+        $Bad.metadata.revision = '1' * 40
+        { Assert-BenchmarkRecordedIdentity -Repository $Fixture.repository -Run $Bad } | Should -Throw
+    }
+    It 'refuses a local diagnostic renamed to run.json in the <Exporter> exporter' -ForEach @(
+        @{ Exporter = 'series' }, @{ Exporter = 'campaign' }
+    ) {
+        $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
+        $Raw.runs[0].localDiagnostic = $true
+        $Raw.runs[0] | ConvertTo-Json -Depth 45 | Set-Content -LiteralPath (Join-Path $Raw.directories[0] 'out/run.json')
+        Write-TestJson $Raw.control @{ schemaVersion = 'efficiency-control-v1'; runs = $Raw.runs }
+        if ($Exporter -eq 'series') {
+            { Export-BenchmarkSeries -Repository $Fixture.repository -ControlPath $Raw.control -TrialDirectories $Raw.directories -SeriesId 'local-must-not-export' } | Should -Throw '*raw-observation*'
+        }
+        else {
+            { Export-BenchmarkCampaign -Repository $Fixture.repository -TrialDirectories $Raw.directories -CampaignId 'local-must-not-export' } | Should -Throw '*raw-observation*'
+        }
+    }
     It 'reads legacy records historically but explicitly refuses them as current snapshot evidence' {
         $Fixture = New-TestRepository
         $Legacy = Copy-Value $Fixture.record

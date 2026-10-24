@@ -30,6 +30,8 @@ if ($MyInvocation.InvocationName -ne '.') {
         # Catch binding errors before the native host performs full error formatting.
         $ProbeCommand = @'
 try {
+    # Avoid cold automatic module discovery consuming the application's watchdog.
+    Import-Module Microsoft.PowerShell.Management, Microsoft.PowerShell.Utility -ErrorAction Stop
     $Parameters = ConvertFrom-Json -InputObject $env:HVE_EFFICIENCY_PROBE_PARAMETERS -AsHashtable
     & $env:HVE_EFFICIENCY_PROBE_SCRIPT @Parameters
     if (-not $?) { exit 1 }

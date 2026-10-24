@@ -78,7 +78,8 @@ installation and model-backed execution are not part of that validation.
 Optional `-WorkRoot 'C:\bench\efficiency'` and `-BaselineEvidencePath '<control-series.json>'`
 set initial paths. The default work root is `%LOCALAPPDATA%\hve-squad\efficiency`
 (the corresponding local application-data directory on Linux), outside the checkout.
-Every launch uses a fresh `run-<timestamp>-<id>` and preserves old reports and controls.
+Formal launches use a fresh `run-<timestamp>-<id>` and preserve old reports and controls.
+Local smoke/comparison launches use separate `local-test-<id>` directories.
 
 The last completed valid questionnaire is remembered in
 `.efficiency-wizard-defaults.json` at the wizard checkout root. This file and its
@@ -89,9 +90,15 @@ the total default if needed to cover every reservation. Offline mode preserves
 your previous live answers. Cancelled or invalid questionnaires do not replace
 them, and later prerequisite/test failures do not discard completed answers.
 Delete this file to reset defaults; malformed settings stop with reset guidance.
-Credentials and login choices are never stored. The spending authorization
-answer is saved against its configuration as a reminder only: every live run
-still requires fresh explicit isolation/spending confirmation; blank means no.
+The Copilot login method and later setup answers are saved immediately, even if
+a later login or preparation step fails. The next run defaults to the last login
+method and clean-install reuse answer; install validity is still checked.
+Credentials and tokens are never stored. Remembered login methods do not
+authorize authentication: browser/PAT login still requires fresh confirmation.
+Installation, archival and launch answers are reminders only; those confirmations
+still default to no. The spending authorization answer is also saved against its
+configuration as a reminder only: every live run still requires fresh explicit
+isolation/spending confirmation; blank means no.
 
 During execution the wizard prints a plain-text progress snapshot every 30 seconds,
 plus snapshots at child start and finish. Each scheduled baseline/candidate trial
@@ -139,12 +146,43 @@ is part of compatibility: parallel candidates require parallel controls, and old
 controls must be recollected after this protocol change. Complete still finishes
 the control phase before starting candidates; offline checks remain first.
 
-| Choice | Work after setup |
-| --- | --- |
-| Establish | Full offline self-tests, then three baseline observations, retaining failures; no improvement claim |
-| Series | Full offline self-tests, then three candidates using compatible saved controls, or six fresh paired trials |
-| Complete | Full offline self-tests, three fresh controls, then three candidates against them and automatic comparison |
-| Offline | Full offline self-tests only; no GitHub/Copilot login or model requests |
+| Choice | Work and AI cost | Recommended use |
+| --- | --- | --- |
+| 1. Establish | Full offline checks + 3 paid controls; records failures, no improvement claim | First baseline or changed benchmark protocol |
+| 2. Series | Full offline checks + 3 paid candidates vs compatible controls, or 6 fresh paired trials | Measure a patch with formal benchmark evidence |
+| 3. Complete | Full offline checks + 3 fresh paid controls + 3 paid candidates | Refresh both arms; highest total cost |
+| 4. Offline | All self-tests; no AI/login, Python/pytest setup may download packages | Thorough harness validation before formal collection |
+| 5. Offline smoke | Exactly 1 simulated candidate; no AI/login/downloads/Python; installed Git/Pester required | Fast harness editing feedback, including uncommitted changes |
+| 6. Single candidate vs saved scores | Smoke first, then 1 paid candidate workflow including judge; no benchmark export | Debug the current local changes against historical scores |
+
+Options **5 and 6 are local diagnostics, never benchmark evidence**. The offline
+smoke normally takes seconds, uses fake AI responses and intentionally checks
+failure handling; its success does not mean an application passed quality review.
+Run it directly without the questionnaire:
+
+```powershell
+pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-LiveBenchmarkTests.ps1 -SingleCandidate -Output Normal
+```
+
+Option 6 still performs a complete real workflow and may take minutes/use substantial
+credits: one candidate is not one model request. It asks for a saved
+`control-series.json` containing three distinct, valid scored baseline observations,
+reads it without modification, and displays dimension medians plus the median of
+per-run totals. Invalid/missing historical scores stop before authentication or
+spending. Missing candidate scores display as unavailable, never zero. Protocol,
+model and rubric differences are disclosed; deltas are descriptive only, not
+compatible comparisons, regression verdicts or evidence of improvement.
+
+Both local options allow uncommitted changes; formal modes still require measured
+files to match Git. Local live execution pins working bytes and stops on later drift.
+No `run.json`, controls, portable records or accepted baseline is produced by the
+local candidate. Its labelled `diagnostic.json` and raw failure logs stay outside
+the checkout; even renaming the diagnostic to `run.json` cannot pass export validation.
+One-candidate modes are serial and reject `-ParallelTrials`; remembered formal
+scheduling is preserved. Use formal Establish/Series/Complete for publishable results.
+Wizard scratch paths and local diagnostics require physical checkout/output paths.
+Source and output links, including ancestor links and junctions, are rejected before
+creating test output; use the target directory's physical path instead.
 
 Initially, Establish is recommended without saved controls; Series is recommended
 when a control file is supplied or discovered. Later runs default to the remembered
@@ -159,7 +197,7 @@ requires explicit disposable-isolation and spending confirmation, preserves the
 financial and isolation protections, and never automatically promotes a baseline.
 Isolation is not created by the wizard or by a launcher flag.
 
-Wizard live modes use **observational collection** (`-ObservationOnly`). Readiness,
+Formal wizard live modes use **observational collection** (`-ObservationOnly`). Readiness,
 functional, review and quality failures are measured, not prerequisites for collecting
 the baseline. Feasible later stages and remaining samples still run; missing grades
 remain unavailable, never zero or invented success. `baseline-recorded` means three
@@ -169,7 +207,7 @@ Comparisons assess relative quality and reliability as well as efficiency; an
 imperfect baseline need not first score 90. Unavailable evidence makes a comparison
 not evaluable, and observations are never automatically promoted.
 
-After each wizard collection step, offline finalization exports available
+After each formal wizard collection step, offline finalization exports available
 observations into that step's external `portable/` directory and prints a
 PowerShell command to publish them in a matching writable delivery checkout.
 This also runs after collection failure, preserves the collection exit, and
@@ -255,6 +293,30 @@ independent document judging. Routine decisions come from the frozen
 The direct exercise CLI remains **strict by default** unless `-ObservationOnly`
 is supplied. The strict readiness, recovery, quality and promotion rules below
 are unchanged; observational collection records their failures separately.
+
+Live preflight uses the offline export validator (PowerShell 7.5+) before any
+model launch. The executing protocol files and selected `squad-src/` must match
+their recorded Git revision; unrelated local edits are allowed. Commit intended
+measured changes before collection, including local grader fixes. Both source
+arms need revisions containing the same executing benchmark protocol. Saved
+controls must bind to their original commits in the baseline repository, or the
+candidate repository when no baseline checkout is supplied; missing objects stop
+without fetching. Serial and parallel children receive the original admission
+pin and recheck it before each paid stage/recovery/judge call. Drift stops further
+work and retains known stages, attempts and accounting in `out/error.json` as
+`provenance-failure`, not a passing/exportable observation. This is point-in-time
+validation, not a filesystem freeze or cancellation of already-running calls.
+
+The fixture supplies synthetic KPI baseline, target, measurement window and
+decision ownership; these are planning inputs, not achieved production results.
+Expected unapproved draft labels alone are not content defects. Blocked canonical
+gates, false approval and unresolved critical/high findings still count. Draft
+copies authorize no governed handoff; observation mode's contract prototype is a
+separately authorized synthetic task. The v2 rubric/scenario is incompatible with
+older controls: preserve them as historical evidence, never relabel their revision.
+Runtime reviewers receive the validated literal-path brief from
+`Get-SquadRuntimeReviewBrief.ps1`; its checks do not certify native permission
+behavior, and denied probes remain unverified failures.
 
 In strict mode, each stage must pass both process/telemetry checks and stage-readiness checks
 before the next stage launches. Initialization requires nonempty shared state,

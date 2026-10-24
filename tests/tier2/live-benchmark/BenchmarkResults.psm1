@@ -181,6 +181,46 @@ function Get-BenchmarkProtocol {
     $Protocol
 }
 
+function Assert-BenchmarkRecordedIdentity {
+    <# .SYNOPSIS
+    Checks retained source/protocol provenance offline; never fetches or repairs evidence.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Repository, [Parameter(Mandatory)][Collections.IDictionary]$Run)
+    $null = Get-BenchmarkProtocol $Repository $Run.metadata.revision $Run.metadata.compatibility
+    if ((Get-BenchmarkSourceHash $Repository $Run.metadata.revision) -cne $Run.metadata.sourceHash.ToLowerInvariant()) {
+        Stop-BenchmarkData 'measured-source-mismatch'
+    }
+}
+
+function Get-BenchmarkExecutionIdentity {
+    <# .SYNOPSIS
+    Binds freshly measured executing bytes to Git before spending; unrelated dirt is allowed.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [Parameter(Mandatory)][Collections.IDictionary]$Compatibility,
+        [Parameter(Mandatory)][string]$SourceHash,
+        [AllowNull()][Collections.IDictionary]$ExpectedIdentity
+    )
+    $Repository = (Resolve-Path -LiteralPath $Repository).Path
+    $Revision = Resolve-BenchmarkCommit $Repository 'HEAD'
+    $Identity = [ordered]@{ repository = $Repository; revision = $Revision; sourceHash = $SourceHash.ToLowerInvariant(); compatibility = $Compatibility }
+    if ($ExpectedIdentity -and (ConvertTo-BenchmarkCanonicalJson $Identity) -cne (ConvertTo-BenchmarkCanonicalJson $ExpectedIdentity)) {
+        $Failure = [IO.InvalidDataException]::new('invalid-record:execution-identity-drift. Stop collection; freeze the admitted source/protocol before any further paid work.')
+        $Failure.Data['observedIdentity'] = $Identity
+        throw $Failure
+    }
+    try {
+        Assert-BenchmarkRecordedIdentity -Repository $Repository -Run @{ metadata = $Identity }
+    }
+    catch {
+        throw [IO.InvalidDataException]::new("Provenance preflight failed: $($_.Exception.Message). Commit the intended measured source/protocol and use a frozen checkout before paid collection; do not relabel retained evidence.", $_.Exception)
+    }
+    $Identity
+}
+
 function Get-BenchmarkRawMetrics {
     param([Collections.IDictionary]$Metrics, [decimal]$WallSeconds)
     if ($Metrics.complete -cne $true -or $Metrics.credits.complete -cne $true) { Stop-BenchmarkData 'incomplete-metering' }
@@ -1196,4 +1236,4 @@ function Write-BenchmarkCampaignReport {
     Write-BenchmarkFile (Join-Path $OutputDirectory 'campaign-badge.svg') "<svg xmlns=`"http://www.w3.org/2000/svg`" width=`"600`" height=`"28`" role=`"img`" aria-label=`"$Badge`"><title>$Badge</title><rect width=`"600`" height=`"28`" rx=`"4`" fill=`"#6b7280`"/><text x=`"300`" y=`"18`" text-anchor=`"middle`" fill=`"white`" font-family=`"Verdana,Arial,sans-serif`" font-size=`"12`">$Badge</text></svg>`n"
 }
 
-Export-ModuleMember -Function Export-BenchmarkCampaign, Assert-BenchmarkCampaign, Get-BenchmarkCampaignSelection, Write-BenchmarkCampaignReport, Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit, Get-BenchmarkSelection, Assert-BenchmarkHistory, Get-BenchmarkGitFile, Invoke-BenchmarkGit, Get-BenchmarkProtocolDifferences
+Export-ModuleMember -Function Export-BenchmarkCampaign, Assert-BenchmarkCampaign, Get-BenchmarkCampaignSelection, Write-BenchmarkCampaignReport, Export-BenchmarkSeries, Compare-BranchBenchmark, Write-BenchmarkReport, Write-BenchmarkSeriesReport, Assert-BenchmarkSeries, Assert-BenchmarkHistoricalSeries, Compare-BenchmarkSeries, ConvertTo-BenchmarkCanonicalJson, ConvertFrom-BenchmarkJson, Get-BenchmarkDigest, Get-BenchmarkSourceHash, Get-BenchmarkProtocol, Get-BenchmarkRawMetrics, Resolve-BenchmarkCommit, Get-BenchmarkSelection, Assert-BenchmarkHistory, Get-BenchmarkGitFile, Invoke-BenchmarkGit, Get-BenchmarkProtocolDifferences, Assert-BenchmarkRecordedIdentity, Get-BenchmarkExecutionIdentity

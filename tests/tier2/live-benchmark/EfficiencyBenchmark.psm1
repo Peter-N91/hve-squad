@@ -905,6 +905,7 @@ function Invoke-EfficiencyJudge {
     $Session = [guid]::NewGuid().ToString()
     $Events = Join-Path $HOME ".copilot/session-state/$Session/events.jsonl"
     $Prompt += ' Also count unresolved critical/high findings from closingReview. Copy ALL documentHashes, including closingReview. Do not count findings explicitly resolved by the closing review.'
+    $Prompt += ' The scenario authoritatively supplies synthetic planning facts; never treat its KPI baseline or target as measured production results. Expected draft/unapproved labels and unavailable human sign-off alone are not content defects. Still count genuinely missing required facts, unjustified deferral of explicitly delegated engineering decisions, false approval claims, blocked canonical gates and unresolved critical/high findings. Neither author dispositions nor draft copies clear those gates. Judge actual final-artifact traceability and test evidence without inventing execution.'
     $LocalArguments = @(Get-EfficiencyCliLocalArguments -HelpText (& $CliPath --help | Out-String))
     $Arguments = @('--model', $Model, '--session-id', $Session, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--available-tools', 'view', '--deny-tool', 'view', '--output-format', 'json', '--usage-output-file', (Join-Path $Out 'judge-usage.json')) + $LocalArguments
     $Executable = $CliPath
@@ -1118,12 +1119,68 @@ function Get-EfficiencyCompatibility {
     }
 }
 
+function Assert-EfficiencyLocalRoot {
+    <# .SYNOPSIS
+    Keeps non-publishable diagnostic logs outside selected and executing checkouts; no AI.
+    #>
+    [CmdletBinding()]
+    param([string]$Path, [string[]]$Sources)
+    $Full = [IO.Path]::GetFullPath($Path)
+    if ([IO.Path]::GetFileName($Full) -notlike 'local-test-*') { throw 'Local diagnostics require a fresh local-test-* directory outside the checkout.' }
+    $Comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $Directories = @($Full)
+    foreach ($Source in $Sources) {
+        $Root = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($Source))
+        $Separator = [IO.Path]::DirectorySeparatorChar
+        if ($Full.Equals($Root, $Comparison) -or $Full.StartsWith($Root + $Separator, $Comparison) -or $Root.StartsWith($Full + $Separator, $Comparison)) {
+            throw 'Local diagnostic output must not overlap a source checkout.'
+        }
+        $Directories += $Root
+    }
+    foreach ($Directory in $Directories) {
+        $Cursor = $Directory
+        while ($Cursor) {
+            try {
+                $Item = Get-Item -LiteralPath $Cursor -Force -ErrorAction Stop
+                if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or -not $Item.PSIsContainer) { throw 'Local diagnostic paths cannot traverse files or links; use physical checkout and output paths.' }
+            }
+            catch [System.Management.Automation.ItemNotFoundException] { }
+            $Cursor = [IO.Path]::GetDirectoryName($Cursor)
+        }
+    }
+    if (Test-Path -LiteralPath $Full) { throw 'Local diagnostic output already exists; use a fresh directory.' }
+    $Full
+}
+
+Export-ModuleMember -Function Assert-EfficiencyLocalRoot
+
+function Get-EfficiencyAdmission {
+    <# .SYNOPSIS
+    Rechecks current source, executing protocol and installed identity without model calls.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SourceRoot,
+        [Parameter(Mandatory)][string]$InstallRoot,
+        [Parameter(Mandatory)][string]$CliPath,
+        [Parameter(Mandatory)][string]$Model,
+        [Parameter(Mandatory)][double]$MaxCredits,
+        [switch]$ObservationOnly,
+        [switch]$ParallelTrials,
+        [AllowNull()][Collections.IDictionary]$ExpectedIdentity
+    )
+    Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1') -Force
+    $Compatibility = Get-EfficiencyCompatibility -SourceRoot $SourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
+    Get-BenchmarkExecutionIdentity -Repository $SourceRoot -Compatibility $Compatibility -SourceHash (Get-EfficiencyTreeHash (Join-Path $SourceRoot 'squad-src')) -ExpectedIdentity $ExpectedIdentity
+}
+
 function Test-EfficiencyRun {
     <# .SYNOPSIS
     Checks complete independent run evidence without trusting a completed flag alone.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][Collections.IDictionary]$Run, [switch]$ObservationOnly)
+    if ($Run['localDiagnostic'] -eq $true -or $Run['schemaVersion'] -eq 'efficiency-local-test-v1') { return $false }
     try {
         if (-not $Run.completed -or -not $Run.acceptance.passed -or -not $Run.workflow.passed -or -not $Run.metrics.complete -or -not $Run.judge.valid -or -not $Run.judge.metrics.complete) { return $false }
         if (@($Run.stages).Count -ne 3 -or @($Run.stages | Where-Object { -not $_.passed }).Count -gt 0) { return $false }
@@ -1163,6 +1220,7 @@ function Test-EfficiencyObservation {
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][Collections.IDictionary]$Run)
+    if ($Run['localDiagnostic'] -eq $true -or $Run['schemaVersion'] -eq 'efficiency-local-test-v1') { return $false }
     try {
         if (-not $Run['collection']['recorded'] -or $Run['collection']['policy'] -ne 'baseline-observation-v1' -or $Run['metadata']['compatibility']['evaluationPolicy'] -ne 'baseline-observation-v1') { return $false }
         if (-not $Run['metadata']['runId'] -or -not $Run['metadata']['sourceHash'] -or -not $Run['metadata']['revision'] -or -not $Run['metrics'].credits['complete']) { return $false }
@@ -1198,6 +1256,7 @@ function Invoke-EfficiencyTrial {
     $Arguments = @('-NoProfile', '-File', $Context.EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $Context.SourcePaths[$Arm], '-InstallRoot', $Context.InstallRoot, '-Arm', $Arm, '-Pair', [string]$Pair, '-Model', $Context.Model, '-CliPath', $Context.CliPath, '-MaxCredits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
     if ($Context.ObservationOnly) { $Arguments += '-ObservationOnly' }
     if ($Context.ParallelTrials) { $Arguments += '-ParallelTrials' }
+    if ($Context.ContainsKey('AdmissionPath')) { $Arguments += @('-AdmissionPath', $Context.AdmissionPath) }
     $LaunchPath = Join-Path $Context.Out "$Arm-$Pair-launch.jsonl"
     try {
         $Scenario = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
@@ -1207,6 +1266,11 @@ function Invoke-EfficiencyTrial {
         if ($Process.stopCause -ne 'none' -or -not (Test-Path -LiteralPath $EvidencePath)) {
             $Failure = [InvalidOperationException]::new('Trial did not finish with run evidence; inspect its retained launch stderr.')
             $Failure.Data['efficiencyCategory'] = 'child-exited-without-run-evidence'
+            $ErrorPath = Join-Path $TrialPath 'out/error.json'
+            if (Test-Path -LiteralPath $ErrorPath -PathType Leaf) {
+                $Diagnostic = Get-Content -LiteralPath $ErrorPath -Raw | ConvertFrom-Json -AsHashtable
+                if ($Diagnostic['reason'] -eq 'provenance-failure') { $Failure.Data['efficiencyCategory'] = 'provenance-failure' }
+            }
             $Failure.Data['efficiencyExitCode'] = [int]$Process.exitCode
             $Failure.Data['efficiencyStopCause'] = [string]$Process.stopCause
             throw $Failure
@@ -1374,8 +1438,8 @@ function Invoke-EfficiencySeries {
         catch {
             $Slot.status = 'failed'; $Slot['reason'] = 'trial-error-or-missing-evidence'
             $Slot['errorType'] = $_.Exception.GetType().Name
-            if ($_.Exception.Data['efficiencyCategory'] -eq 'child-exited-without-run-evidence') {
-                $Slot['reason'] = 'child-exited-without-run-evidence'
+            if ($_.Exception.Data['efficiencyCategory'] -in @('child-exited-without-run-evidence', 'provenance-failure')) {
+                $Slot['reason'] = $_.Exception.Data['efficiencyCategory']
                 $Slot['childExitCode'] = [int]$_.Exception.Data['efficiencyExitCode']
                 $Cause = [string]$_.Exception.Data['efficiencyStopCause']
                 $Slot['stopCause'] = if ($Cause -in @('none', 'timeout', 'cancelled', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' }
@@ -1414,4 +1478,4 @@ function Invoke-EfficiencySeries {
     [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded')) { 0 } else { 2 } }
 }
 
-Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Get-EfficiencyCliLocalArguments, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Write-EfficiencyProgressSummary, Invoke-EfficiencyProcess, Invoke-EfficiencyTrial, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
+Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Get-EfficiencyCliLocalArguments, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Write-EfficiencyProgressSummary, Invoke-EfficiencyProcess, Invoke-EfficiencyTrial, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Get-EfficiencyAdmission, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
