@@ -154,7 +154,7 @@ the control phase before starting candidates; offline checks remain first.
 | 4. Offline | All self-tests; no AI/login, Python/pytest setup may download packages | Thorough harness validation before formal collection |
 | 5. Offline smoke | Exactly 1 simulated candidate; no AI/login/downloads/Python; installed Git/Pester required | Fast harness editing feedback, including uncommitted changes |
 | 6. Single candidate vs saved scores | Smoke first, then 1 paid candidate workflow including judge; no benchmark export | Debug the current local changes against historical scores |
-| 7. Repair/check setup | Checks committed source/protocol, keeps a valid install or offers archive/rebuild; no AI, login or benchmark runs | Recover setup before choosing 1 or 2; rebuilding packages may download dependencies |
+| 7. Repair setup | Reviews measured changes, offers a source-only local commit, then keeps a valid install or offers archive/rebuild; no push, AI, login or benchmark runs | Recover setup before choosing 1 or 2; rebuilding packages may download dependencies |
 
 ### Repair after a local diagnostic
 
@@ -162,12 +162,21 @@ the control phase before starting candidates; offline checks remain first.
 do not match the selected checkout's Git `HEAD`. Option 6 allows uncommitted
 changes; it does **not** damage the install or make those changes formal evidence.
 
-Review and commit the intended source changes yourself, then choose **7** to
-check setup, then **1** or **2**. Formal modes now check measured source and the
-actual executing protocol **before prerequisite setup or login**, naming the
-checkout and affected paths. Unrelated dirty files do not block collection.
-Repair cannot decide what belongs in your commit, discard changes, rewrite old
-evidence, or turn local diagnostic scores into controls.
+Choose **7**, review the exact measured paths, and explicitly approve a
+**source-only local commit** if they contain the changes you intend to measure.
+Blank means no: declining leaves source, index and HEAD unchanged. The commit
+includes the complete current contents of those paths, including deletions and
+untracked/ignored additions, not just staged hunks. Unrelated staged and unstaged
+work is preserved. Normal Git identity, signing and hooks apply; nothing is pushed.
+Then choose **1** or **2**. Already committed source needs no new commit.
+
+Formal modes still check measured source and the actual executing protocol
+**before prerequisite setup or login**. Repair verifies the approved bytes and
+commit scope before declaring success. Changed inputs, failed hooks/signing, or
+byte-changing Git attributes/filters/EOL conversion stop repair with diagnostics;
+it does not bypass Git policy, reset files or automatically retry a commit.
+Any commit or hook effects already produced are retained for inspection.
+Repair never rewrites old evidence or turns diagnostic scores into controls.
 
 Option 7 asks only for the evidence root and source checkout. A valid install is
 kept by default. Choose rebuild only when needed: the wizard asks for fresh consent
@@ -180,7 +189,8 @@ and 2 still perform their full checks and require fresh spending consent.
 
 | Failure | Recovery |
 | --- | --- |
-| Uncommitted measured source | Review/commit the named changes; rerun 7, then 1 or 2 |
+| Uncommitted measured source | Choose 7, review the named changes and approve the source-only local commit, then 1 or 2; alternatively commit them yourself |
+| Git identity/signing/hooks fail, inputs change, or filters alter bytes | Inspect Git output/status and the named attributes/filter/EOL issue; repair the local Git configuration or source, then rerun 7; no automatic rollback or policy bypass |
 | Missing, stale or damaged prepared install | Choose 7 and consent to archive/rebuild; old evidence stays untouched |
 | Saved controls have a different runtime/model/dependency/protocol | Restore the exact environment or explicitly collect fresh controls; never edit saved evidence |
 | Parent/candidate commits have different measured protocols | Stop: these revisions cannot be formally compared by this harness; fresh trials or rebuilding dependencies do not fix this |
