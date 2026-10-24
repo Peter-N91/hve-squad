@@ -21,6 +21,7 @@
         <a href="usage.html" class="active">Utilisation</a>
         <a href="demo.html">Démonstration</a>
         <a href="ecosystem.html">Écosystème</a>
+        <a href="connector.html">Connecteur</a>
         <a href="maintaining.html">Maintenance</a>
         <a href="troubleshooting.html">Dépannage</a>
         <a href="contributing.html">Contribuer</a>
@@ -45,18 +46,16 @@
   <main class="content">
     <div class="container">
       <h2>Appeler le coordinateur</h2>
-      <p>Adressez vos demandes Squad dans la conversation du coordinateur, et non dans le terminal de votre système. VS Code appelle des prompts ; la CLI et l'application utilisent l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
+      <p>Adressez vos demandes dans la conversation de l'agent Squad correspondant, et non dans le terminal de votre système. Dans Copilot Harness pour VS Code, choisissez l'agent dans le sélecteur d'agents ; la CLI et l'application utilisent aussi l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
+      <p>Pas encore d'initialisation, ou vous hésitez sur la marche à suivre ? Sélectionnez l'agent de conseil <strong>Squad Coach</strong> dans VS Code, la CLI ou l'application. Il lit le code et la documentation actuels et fournit un parcours détaillé prêt à copier sans modifier l'état. Consultez <a href="getting-started.html#chat-with-the-squad-coach">le guide du Coach</a>.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
         <p>
-          <strong>Deux entrées nommées <code>squad</code> dans VS Code ?</strong> Le sélecteur <code>/</code> de VS Code répertorie
-          les prompts et les skills, et le package en fournit un de chaque. Choisissez le
-          <strong>prompt</strong> — décrit comme <em>« Transmet une demande au Squad Coordinator… »</em> —
-          pour réellement exécuter la squad. Le <strong>skill</strong> — <em>« Procédure de fonctionnement du HVE
-          Core Squad Coordinator… »</em> — charge uniquement la procédure de la squad dans l'agent avec lequel
-          vous discutez déjà ; le coordinateur et ses sous-agents la chargent eux-mêmes, vous avez donc rarement
-          besoin de la sélectionner.
+          <strong>Vous utilisez Copilot Harness pour VS Code ?</strong> Sélectionnez <strong>Squad Coordinator</strong>
+          dans le sélecteur d'agents et envoyez le texte de la demande affiché dans l'onglet VS Code sélectionné
+          sans le préfixe <code>/squad</code>. Chaque onglet d'environnement nomme l'agent correspondant pour les
+          workflows de fédération, de document, de rapport de gouvernance et d'apprentissage.
         </p>
       </div>
 
@@ -81,7 +80,7 @@
           <code>routing=off|ranked|economy|manual</code> — la méthode de sélection du modèle de chaque rôle, enregistrée dans
           <code>team.md</code> jusqu'à ce que vous la changiez. <code>off</code> (par défaut) n'applique aucune politique ;
           <code>ranked</code> choisit le modèle le mieux adapté au travail de chaque rôle parmi ceux
-          que propose votre hôte ; <code>economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
+          que propose votre hôte ; <code data-release-change="20261005-routing-economy">economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
           rôles d'implémentation, après votre accord ; <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir
           <a href="#model-selection-per-role">Sélection du modèle par rôle</a> ci-dessous.
         </li>
@@ -235,6 +234,26 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         bornée, les modèles et leurs tarifs sont connus, la table des tarifs est valide et le calibrage correspond à la
         révision actuelle de l'estimateur. Sinon, la squad indique <code>cannot-confirm</code> plutôt que
         de présenter une réponse optimiste.
+      </p>
+
+      <h3 id="first-capped-run">Avant la première exécution plafonnée</h3>
+      <p>
+        L'initialisation crée <code>consumption-rates.md</code> avec <code>observations: 0</code> et
+        <code>last_reconciled: never</code>. Cette calibration n'est pas éligible : un plafond positif
+        produit <code>cannot-confirm</code> avec une confiance faible, qu'une approbation ne peut pas lever.
+        Augmenter le plafond ne remplace pas les preuves manquantes.
+      </p>
+      <p>
+        La préparation exige des mesures réelles d'utilisation avant et après une exécution délibérément
+        petite, à partir du delta agrégé par utilisateur <code>ai_credits_used</code> et des crédits
+        estimés de cette exécution pour réconcilier le facteur. Une préparation sans plafond exige votre
+        approbation explicite ; isolez sa fenêtre d'utilisation et faites organiser la réconciliation
+        par le Scribe via le coordinateur, sans inventer d'observations. Vérifiez des observations positives,
+        une date de réconciliation différente de <code>never</code> et un <code>calibration_basis</code>
+        correspondant aux valeurs actuelles <code>Observed-on</code> et <code>estimator_revision</code>,
+        ainsi que les autres prérequis. Si ces mesures manquent ou si vous refusez la préparation sans
+        plafond, restez bloqué sur le travail plafonné plutôt que de supprimer silencieusement la protection.
+        Consultez l'<a href="getting-started.html#coach-cost-readiness">étape de préparation du guide de démarrage</a>.
       </p>
 
       <h3>Définir, hériter, remplacer ou supprimer un plafond</h3>
@@ -841,7 +860,7 @@ flowchart TD
         (voir ci-dessous) ; choisir une squad unique conserve le déroulement décrit ci-dessus.
       </p>
 
-      <h2>Fédération &mdash; plusieurs sous-squads dans un même dépôt</h2>
+      <h2 id="federation">Fédération &mdash; plusieurs sous-squads dans un même dépôt</h2>
       <p>
         La fédération permet à un dépôt d'héberger plusieurs squads côte à côte &mdash; par exemple une
         sous-squad <code>product</code> pour l'équipe métier et une sous-squad <code>azure</code> pour les
@@ -1130,7 +1149,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
-          <tr><td><code>foundry</code></td><td>researcher, lead, developer, tester, architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
+          <tr><td><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
         </tbody>
       </table>
       <p>
@@ -1168,13 +1187,36 @@ flowchart TD
         rôle que ce pack apporterait. Foundry réutilise les rôles existants et les oriente vers des compétences Microsoft et Azure
         enregistrées, au lieu de copier dans la squad une documentation produit qui évolue rapidement.
       </p>
+      <h3>Installer les compétences du pack Foundry</h3>
+      <p>
+        Lorsque vous appliquez <code>foundry</code>, le coordinateur regroupe dans un seul message
+        toutes les compétences enregistrées manquantes et leurs prérequis. N'installez que les
+        capacités utiles au projet ; rien n'est installé automatiquement. Le catalogue reste la
+        source de vérité pour ces commandes.
+      </p>
+      <pre><code># Microsoft Foundry and APIM AI Gateway skills
+apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
+apm install microsoft/azure-skills/skills/azure-aigateway --target copilot
+
+# Consume an existing AI Gateway from GitHub Copilot CLI
+copilot plugin marketplace add Azure/ai-gateway
+copilot plugin install ai-gateway@azure
+
+# Inspect selected CAIRA reference components
+npx skills add github.com/microsoft/CAIRA/skills</code></pre>
+      <p>
+        Le chemin plugin exige GitHub Copilot CLI avec la prise en charge des plugins ; CAIRA exige
+        Node.js et <code>npx</code>. Les workflows Foundry et gateway peuvent aussi nécessiter Azure
+        CLI, un compte ou projet Azure et une gateway existante. L'authentification de déploiement
+        reste exclusivement OIDC.
+      </p>
       <h3>Consignes de projet Microsoft Foundry</h3>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
-        <code>foundry</code> ajoute des consignes et douze rôles existants dédupliqués, dont les quatre rôles
-        de la colonne méthodologique déjà présents dans chaque profil, sans créer de nouvel
-        agent spécialiste, outil ou dépendance. Le <code>researcher</code> rassemble les preuves de capacité
+        <code>foundry</code> ajoute jusqu'à huit rôles spécialistes existants ; les quatre rôles du
+        socle méthodologique reçoivent également les consignes. Il ne crée aucun nouvel agent
+        spécialiste, outil ou dépendance. Le <code>researcher</code> rassemble les preuves de capacité
         et de compatibilité SDK/API ; le <code>lead</code> assemble le
         <a href="https://github.com/Peter-N91/hve-squad/blob/main/squad-src/.github/skills/squad/references/foundry-blueprint.md">blueprint Foundry canonique en sept blocs</a>.
         L'<code>architect</code> effectue une revue indépendante de la conception intégrée, le
@@ -1188,7 +1230,7 @@ flowchart TD
       </p>
       <p>
         L'activation exige une décision Init ou apply acceptée pour cette squad. Le profil <code>full</code>
-        contient déjà les douze rôles, mais n'active pas les consignes Foundry. Les demandes génériques sur
+        contient déjà les huit rôles spécialistes, mais n'active pas les consignes Foundry. Les demandes génériques sur
         l'IA, les agents ou MCP ne l'activent pas non plus ; Microsoft 365 Copilot et Copilot Studio
         conservent leurs packs. Vous pouvez appliquer Foundry plus tard ou le réappliquer sans dupliquer les
         membres. Son retrait désactive la transmission de ses consignes tout en préservant les rôles du
@@ -1197,8 +1239,8 @@ flowchart TD
       </p>
       <p>
         À chaque jalon, la squad lit les manifestes et fichiers de verrouillage du projet et utilise
-        <code>microsoft-foundry</code>, <code>azure-aigateway</code>, <code>use-ai-gateway</code>,
-        et le plugin Microsoft Foundry officiel pour vérifier séparément le service, la
+        <code>microsoft-foundry</code>, <code>azure-aigateway</code>, <code>use-ai-gateway</code>
+        et <code>caira</code> pour vérifier séparément le service, la
         fonctionnalité, le SDK ou l'API, le niveau et la région. Une preuve absente ou contradictoire
         reste non vérifiée. Le pack n'approuve aucune préversion, ne met à niveau aucune dépendance,
         n'installe aucune ressource et ne provisionne pas Azure.
@@ -1215,13 +1257,13 @@ flowchart TD
           <tr><th>Bloc</th><th>Question de décision</th><th>Responsable et transmission</th></tr>
         </thead>
         <tbody>
-          <tr><td>Expérience</td><td>Comment présenter citations, abstention, accessibilité et confirmation du ticket ?</td><td>designer et accessibility transmettent les exigences à developer</td></tr>
+          <tr><td>Expérience</td><td>Comment présenter citations, abstention, accessibilité et confirmation du ticket ?</td><td>developer est responsable ; designer et accessibility sont proposés pour un canal destiné aux utilisateurs</td></tr>
           <tr><td>Orchestration</td><td>Quelle transition d'état conserve l'approbation humaine avant la création du ticket ?</td><td>lead et architect transmettent la frontière du workflow à developer</td></tr>
           <tr><td>Outils et actions</td><td>Comment appliquer autorisation, nouvelles tentatives et réversibilité ?</td><td>developer rédige le contrat soumis à security</td></tr>
-          <tr><td>Données et ancrage</td><td>Quels documents chaque employé peut-il récupérer, conserver et citer ?</td><td>data-scientist et privacy transmettent les règles au développement et à l'évaluation</td></tr>
-          <tr><td>Modèles</td><td>Quel modèle et quel déploiement actuels satisfont qualité, région, latence, localisation et coût ?</td><td>azure-architect et cost-manager transmettent les candidats vérifiés à prompt-engineer</td></tr>
-          <tr><td>Évaluation et sécurité</td><td>Quels tests prouvent ancrage, abstention et exécution autorisée des outils ?</td><td>prompt-engineer conçoit ; QA installée exécute ; tester, security et RAI examinent</td></tr>
-          <tr><td>Opérations</td><td>Quelles traces expurgées, alertes, limites budgétaires et procédures de retour sont requises ?</td><td>observability, performance et cost-manager transmettent les critères aux opérations</td></tr>
+          <tr><td>Données et ancrage</td><td>Quels documents chaque employé peut-il récupérer, conserver et citer ?</td><td>developer et security sont responsables ; data-scientist et privacy sont proposés pour les données de récupération ou réglementées</td></tr>
+          <tr><td>Modèles</td><td>Quel modèle et quel déploiement actuels satisfont qualité, région, latence, localisation et coût ?</td><td>azure-architect et cost-manager transmettent les candidats vérifiés à prompt-engineer ; experimenter est proposé pour les comparaisons</td></tr>
+          <tr><td>Évaluation et sécurité</td><td>Quels tests prouvent ancrage, abstention et exécution autorisée des outils ?</td><td>prompt-engineer, security, RAI et tester sont responsables ; QA installée est proposée pour écrire et exécuter les tests</td></tr>
+          <tr><td>Opérations</td><td>Quelles traces expurgées, alertes, limites budgétaires et procédures de retour sont requises ?</td><td>observability, cost-manager et deployer sont responsables ; performance, azure-diagnose et asbuilt-author sont proposés si nécessaire</td></tr>
         </tbody>
       </table>
       <p>
@@ -1569,7 +1611,7 @@ layouts:
           de chaque rôle parmi ceux proposés par votre hôte, et affiche chaque choix dans une colonne <code>Model</code>
           sous une ligne <code>Model routing: ranked</code>.
         </li>
-        <li>
+        <li data-release-change="20261005-routing-economy">
           <strong><code>economy</code></strong> — comme <code>ranked</code>, sauf que cinq rôles d'implémentation
           à faible impact reçoivent le modèle le moins cher suffisamment adapté à leur travail ; affiché sous une ligne
           <code>Model routing: economy</code>. Sur option, et seulement après que vous avez accepté le compromis. Voir
@@ -1583,15 +1625,21 @@ layouts:
       <p>
         <strong>Comment les choix classés sont établis.</strong> Chaque rôle correspond à une classe de mission
         (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
-        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Le catalogue des modèles attribue
-        à chaque modèle une note de 0 à 3 pour chaque classe. La squad choisit d'abord la meilleure adéquation, puis le coût
-        pondéré le plus bas, puis la génération la plus récente au sein de la même famille de modèles. Elle ne départage jamais les ex æquo
-        par le nom du modèle. Les rôles eux-mêmes et l'agent derrière chacun sont répertoriés dans
-        <code>references/roster-catalog.md</code> du skill squad. Sur Copilot CLI, l'équipe initialisée utilise, par exemple,
-        <code>researcher</code> → <code>claude-opus-5.5</code>, <code>lead</code> →
-        <code>gpt-5.6-sol</code>, <code>developer</code> → <code>gpt-5.3-codex</code>,
-        <code>intake-validator</code> → <code>claude-sonnet-5.5</code> et <code>scribe</code> →
-        <code>claude-haiku-4.5</code>.
+        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Ranked donne la
+        <strong>priorité à la capacité</strong> : un panel versionné commun permet la même
+        comparaison des percentiles pour tous les candidats. La couverture indépendante de
+        l'instantané choisit le panel, jamais les scores, le prix ou la disponibilité sur l'hôte.
+        L'implémentation conserve le panel complet SciCode/Terminal-Bench et un panel SciCode
+        réduit, clairement signalé. La confiance, puis le coût, départagent les capacités égales.
+        Le délai de 90 jours concerne la vérification, pas l'âge de publication ; l'acquisition
+        et la génération ne prouvent pas cette vérification. Le rapport expose la couverture
+        et les exclusions précises. Sans comparaison défendable, le repli sur l'adéquation
+        déclarée est explicite, sans inventer de supériorité mesurée.
+        <code>references/model-scoring.md</code> décrit les poids, la couverture minimale et les limites ;
+        <code>references/roster-catalog.md</code> répertorie les rôles et les agents.
+        Les choix dépendent de l'instantané, pas du nom des modèles. Le seuil <code>fast</code>
+        admet aussi les modèles de pointe. Les coordinateurs conservent le modèle de session
+        sélectionné, et le Scribe conserve son modèle explicitement épinglé.
       </p>
       <p>
         <strong>Comment les choix manuels sont établis.</strong> Lorsque vous passez à <code>routing=manual</code>,
@@ -1603,17 +1651,26 @@ layouts:
         squad propose donc des modèles du catalogue dont le prix est inférieur ou égal à celui du modèle de votre session ; si VS Code refuse un
         choix, la question vous est reposée avec la liste signalée par VS Code.
       </p>
-      <p id="routing-economy">
+      <p id="routing-economy" data-release-change="20261005-routing-economy">
         <strong>Mode economy (<code>routing=economy</code>).</strong> Seuls ces cinq rôles changent de
         modèle : <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code> et <code>data-scientist</code>. Chacun reçoit le modèle du catalogue le
-        moins cher dont l'adéquation au travail d'implémentation est d'au moins 2, dans le respect du seuil minimal
-        <code>Model Tier</code> du rôle ; tous les autres rôles, dont <code>product-owner</code>,
+        moins cher disposant de preuves indépendantes vérifiées suffisantes : un percentile
+        d'au moins <code>0.50</code> sur chaque évaluation du panel complet, ou <code>0.75</code>
+        sur le panel SciCode explicitement réduit, selon des règles de qualification versionnées
+        distinctes et dans le respect du seuil minimal <code>Model Tier</code> du rôle. Ce minimum de politique
+        ne garantit pas la réussite : une capacité ou une confiance supérieure ne justifie
+        jamais un prix Blended connu plus élevé. À prix égal, la capacité prime ; un prix absent
+        ne signifie jamais gratuit. Sans candidat qualifié, le script explique son repli sur
+        Ranked. Tous les autres rôles, dont <code>product-owner</code>,
         <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
         <code>backlog-executor</code> et tous les rôles de revue, de conseil, d'intake, de recherche, de planification et
         de tenue des registres, gardent leur choix <code>ranked</code>. Après un verdict <code>Fail</code>, une
         observation critique ou élevée, ou un responsable bloqué, ce responsable est relancé une seule fois sur son choix
-        <code>ranked</code>, puis la revue est refaite.
+        <code>ranked</code> fondé sur la capacité, puis la revue est refaite. Le Scribe enregistre
+        cette cellule Model avant le nouveau lancement ; un choix plus cher sous plafond exige
+        un nouveau Cost Preflight. Si les deux choix sont identiques, aucune escalade vers un
+        modèle mieux classé n'est possible.
       </p>
       <p>
         <strong>Accord.</strong> La première fois que vous passez à <code>economy</code>, avant tout
@@ -1640,7 +1697,7 @@ layouts:
       <p><strong>Ordre de priorité</strong> (le plus élevé l'emporte, pour chaque rôle) :</p>
       <ol>
         <li><code>routing=manual</code> : la cellule <code>Model</code> valide du rôle.</li>
-        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code>routing=economy</code> : le choix economy).</li>
+        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code data-release-change="20261005-routing-economy">routing=economy</code> : le choix economy).</li>
         <li>
           <code>tier=</code> (le paramètre de niveau statique existant) ou le niveau de modèle initialisé dans <code>team.md</code>
           — le mécanisme de repli actuel, inchangé.
@@ -1648,7 +1705,7 @@ layouts:
         <li>Omettre le paramètre — le comportement par défaut sans politique.</li>
       </ol>
       <p>
-        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code>economy</code> ou <code>manual</code>, chaque
+        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code data-release-change="20261005-routing-economy">economy</code> ou <code>manual</code>, chaque
         lancement d'un agent de l'équipe transmet exactement la cellule <code>Model</code> de sa ligne, sauf pour le Scribe,
         dont le propre modèle fixé prévaut. Dans la distribution plugin, le hook <code>dispatch-guards</code>
         refuse un lancement dont le <code>model</code> manque ou diffère de la cellule, et indique la
@@ -1681,12 +1738,10 @@ layouts:
       </p>
       <p><strong>Exemples :</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
-/squad request="implement the design" routing=ranked
-
-# Switch to economy; the squad states the trade and records your consent first.
-/squad request="update the getting-started guide" routing=economy
-
-# Switch to manual selection; you are asked for the models before the request runs.
+/squad request="implement the design" routing=ranked</code></pre>
+      <pre data-release-change="20261005-routing-economy"><code># Switch to economy; the squad states the trade and records your consent first.
+/squad request="update the getting-started guide" routing=economy</code></pre>
+      <pre><code># Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual
 
 # Return to the default; the Model column is removed.
@@ -1758,40 +1813,41 @@ layouts:
 
       <h2>Exécuter sur d'autres hôtes</h2>
       <p>
-        La squad fournit à la fois des prompts et des agents. <strong>Les fichiers de prompt sont une fonctionnalité de VS Code</strong> —
-        GitHub Copilot CLI et l'application GitHub Copilot ne les lisent jamais. Chaque point d'entrée de la squad
-        existe donc aussi sous forme d'<strong>agent</strong>, et sélectionner l'agent est la seule
-        méthode d'appel qui fonctionne partout.
+        La squad fournit à la fois des prompts et des agents. <strong>Copilot Harness pour VS Code,
+        GitHub Copilot CLI et l'application GitHub Copilot exécutent tous les workflows Squad au moyen
+        d'agents invocables par l'utilisateur.</strong> Les fichiers de prompt restent une solution de
+        remplacement dans VS Code, mais sélectionner l'agent associé évite un appel intermédiaire et
+        constitue la méthode d'appel qui fonctionne partout.
       </p>
 
       <table data-host-reference>
         <thead>
-          <tr><th>Point d'entrée</th><th>VS Code</th><th>Copilot CLI et application Copilot</th></tr>
+          <tr><th>Point d'entrée</th><th>Copilot Harness pour VS Code</th><th>Copilot CLI et application Copilot</th></tr>
         </thead>
         <tbody>
           <tr>
             <td>Exécuter une squad</td>
-            <td><code>/squad request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Coordinator</strong></td>
             <td>sélectionner l'agent <strong>Squad Coordinator</strong></td>
           </tr>
           <tr>
             <td>Exécuter une fédération</td>
-            <td><code>/squad-federation request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Federation Coordinator</strong></td>
             <td>sélectionner l'agent <strong>Squad Federation Coordinator</strong></td>
           </tr>
           <tr>
             <td>Rechercher et exporter</td>
-            <td><code>/squad-document request="…"</code></td>
+            <td>sélectionner l'agent <strong>Squad Document</strong></td>
             <td>sélectionner l'agent <strong>Squad Document</strong></td>
           </tr>
           <tr>
             <td>Tableau de bord de gouvernance</td>
-            <td><code>/squad-governance-report</code></td>
+            <td>sélectionner l'agent <strong>Squad Governance Report</strong></td>
             <td>sélectionner l'agent <strong>Squad Governance Report</strong></td>
           </tr>
           <tr>
             <td>Partager un enseignement</td>
-            <td><code>/squad-learn</code></td>
+            <td>sélectionner l'agent <strong>Squad Learn</strong></td>
             <td>sélectionner l'agent <strong>Squad Learn</strong></td>
           </tr>
         </tbody>

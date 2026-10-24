@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-07"
+  last_updated: "2026-10-24"
 ---
 
 # Foundry Project Blueprint
@@ -14,23 +14,25 @@ Use this reference only for an accepted `foundry` pack at the resolved squad roo
 
 ## Ownership and Dispatch
 
-The coordinator reads this section to select owners and pass scoped reference pointers, not to research or author the blueprint. `researcher` gathers evidence, `azure-architect` interprets platform constraints, and `lead` assembles an integrated blueprint in its existing plan deliverable. Other owners return artifacts under their existing authorized roots. Missing roles follow the ordinary offer/install/confirmation path; do not substitute an owner silently.
+The `lead` reads this section and, in the plan's deliverable list, names each block's owner, the reference section to pass, and the expected artifact. The coordinator dispatches from that list as for any plan and does not read this reference itself. `researcher` gathers evidence, `azure-architect` interprets platform constraints, and `lead` assembles the integrated blueprint in its existing plan deliverable. Other owners return artifacts under their existing authorized roots. Missing roles follow the ordinary offer/install/confirmation path; do not substitute an owner silently.
 
-| Block | Existing owners | Artifact and receiving owner |
-|---|---|---|
-| Experience | `designer`, `accessibility`, `developer` | Journey, channel and accessibility requirements to development and accessibility assessment |
-| Orchestration | `lead`, `architect`, `developer` | Agent/workflow and state decisions to development; integrated design to independent architecture review |
-| Tools and Actions | `developer`, `security`, `azure-architect` | Tool contracts, identity and approval boundaries to development and security review |
-| Grounding and Data | `data-scientist`, `privacy`, `developer` | Source, retrieval and access/lifecycle plan to development, privacy and evaluation |
-| Models | `azure-architect`, `cost-manager`, `experimenter` when needed | Evidence-backed candidate comparison to architecture and evaluation |
-| Evaluation and Safety | `prompt-engineer`, `security`, `rai`, installed `qa-engineer`, `tester` | Evaluation design to approved QA execution; implementation and results to final review |
-| Operations | `observability`, `performance`, `azure-diagnose`, `cost-manager`; `deployer` and `asbuilt-author` when needed | Instrumentation, operating limits and runbook to development; approved deployment to operations |
+| Block | Primary owners | Offered when needed | Artifact and receiving owner |
+|---|---|---|---|
+| Experience | `developer` | `designer`, `accessibility` for a user-facing UI or channel design | Journey, channel and accessibility requirements to development and accessibility assessment |
+| Orchestration | `lead`, `architect`, `developer` | — | Agent/workflow and state decisions to development; integrated design to independent architecture review |
+| Tools and Actions | `developer`, `security`, `azure-architect` | — | Tool contracts, identity and approval boundaries to development and security review |
+| Grounding and Data | `developer`, `security` | `data-scientist` for retrieval and evaluation data; `privacy` for personal or regulated data | Source, retrieval and access/lifecycle plan to development, privacy and evaluation |
+| Models | `azure-architect`, `cost-manager` | `experimenter` for model-comparison experiments | Evidence-backed candidate comparison to architecture and evaluation |
+| Evaluation and Safety | `prompt-engineer`, `security`, `rai`, `tester` | `qa-engineer` (opt-in) to write and run tests | Evaluation design to approved QA execution; implementation and results to final review |
+| Operations | `observability`, `cost-manager`, `deployer` | `performance` for SLOs and load; `azure-diagnose` for incidents; `asbuilt-author` for as-built docs | Instrumentation, operating limits and runbook to development; approved deployment to operations |
 
-Pack membership names the always-present `researcher`, `lead`, `developer`, and `tester` so they receive this guidance, then adds `architect`, `azure-architect`, `deployer`, `prompt-engineer`, `security`, `rai`, `observability`, and `cost-manager` when the profile does not already own them. Deduplication keeps one row per role. Applying the pack does not dispatch all twelve. Request other owners only when needed and pass them scoped decision inputs rather than this whole reference unless another active pack names them. `architect` independently reviews the integrated design and participates in council review without replacing `azure-architect` as the Azure design author. `prompt-engineer` uses the existing `evaluation-design` skill; in a squad run, `qa-engineer` writes/runs tests and `tester` performs the final implementation-versus-blueprint review. Offer absent QA through the registered installation path, never install it automatically.
+Pack membership adds the eight specialists `architect`, `azure-architect`, `deployer`, `prompt-engineer`, `security`, `rai`, `observability`, and `cost-manager` when the profile does not already own them. The coordinator also passes scoped guidance to the methodology spine (`researcher`, `lead`, `developer`, `tester`) when the request or approved plan touches the Foundry workload. Deduplication keeps one row per role. Applying the pack dispatches neither all eight specialists nor all four spine roles. Request other owners only when needed and pass them the plan's scoped decision inputs rather than this whole reference unless another active pack names them. `architect` independently reviews the integrated design and participates in council review without replacing `azure-architect` as the Azure design author. `prompt-engineer` uses the existing `evaluation-design` skill; in a squad run, `qa-engineer` writes/runs tests and `tester` performs the final implementation-versus-blueprint review. Offer absent QA through the registered installation path, never install it automatically.
 
 `developer` authors and configures the application or agent, while `deployer` owns only the approved environment deployment. When a deployment includes a Microsoft Foundry hosted agent or related Foundry workload, `deployer` follows the registered `microsoft-foundry` skill behind its existing dry-run and Impactful-Action Gate. It does not select the feature, model, SDK, API, region, or gateway during deployment. Those approved decisions and their evidence arrive from the blueprint.
 
-Each dispatch carries: resolved squad root, accepted pack provenance, requested block, input artifact paths, relevant reference section, evidence pointer, expected output, receiving owner and action boundary. Preserve the specialist's governing skills, permissions, autonomy tiers, council gates and cost rules. The complete seven-block output is required for an integrated blueprint, not every focused specialist answer.
+Each dispatch carries: resolved squad root, accepted pack provenance, requested block, input artifact paths, the plan's relevant reference-section pointer, the Evidence and Compatibility Contract pointer, evidence pointer, expected output, receiving owner and action boundary. Pass only those sections unless the role is `lead` assembling the integrated blueprint. Preserve the specialist's governing skills, permissions, autonomy tiers, council gates and cost rules. The complete seven-block output is required for an integrated blueprint, not every focused specialist answer.
+
+**Known gap:** agent identity has no dispatchable owner in the current cast. The catalog's `identity` role remains unselectable, and the earlier `entra-agent-user` candidate was not registered. Record identity-specific work as unresolved expertise and route the smallest evidence-gathering question to `researcher`; do not imply the pack closes the gap.
 
 ## Customer Intake
 
@@ -97,14 +99,15 @@ Preserve prior decisions. Append a change-impact summary with:
 
 For existing projects, inspect manifests and lockfiles before advising an upgrade. Compare the installed baseline with official release notes and migration guidance. A newer SDK is a candidate, not an instruction to upgrade. After explicit approval, the implementation/test owners provide build, smoke-test and relevant evaluation evidence before labeling compatibility `tested`. A feature moving to GA does not silently change the customer's approved architecture.
 
-## Reusing External Capabilities
+## Registered Foundry Skills
 
-Prefer verified vendor-official resources, then official GitHub marketplace resources, then a justified community fallback. Apply the roster's existing verification gate, collision check, tier and blocklist rules before registration. Installed upstream skills never replace the owners above.
+Use only resources registered in *Registered External Cast* (`roster-catalog.md`), which stays the source for install commands and prerequisites. Proposing a new resource is a maintainer change through the verification gate, never a run-time action. Installed upstream skills never replace the owners above.
 
-| Candidate skill | Potential use | Boundary |
-|---|---|---|
-| `microsoft-foundry` | Approved agent, model, evaluation, troubleshooting and hosted-agent deployment workflows | Optional; inspect prerequisites and setup behavior before activation; installation or resource mutation needs authorization and deployer actions remain gated |
-| `azure-aigateway` | Implement a selected APIM option | Not a prerequisite to planning or a reason to select APIM |
-| `caira` | Inspect relevant reference components for the selected stack | Select and adapt only needed components after scenario confirmation; no automatic deployment or full-stack copying |
+| Skill | Registered for | Use | Boundary |
+|---|---|---|---|
+| `microsoft-foundry` | `developer`, `deployer` | Approved agent, model, evaluation, troubleshooting and hosted-agent deployment workflows | Inspect prerequisites and setup behavior before activation; installation or resource mutation needs authorization, and `deployer` actions stay behind the Impactful-Action Gate |
+| `use-ai-gateway` | `developer` | Consume an existing, selected AI Gateway from the application | Needs an existing gateway; never a reason to create one |
+| `azure-aigateway` | `azure-architect` | Configure a selected APIM AI gateway option | Not a prerequisite to planning or a reason to select APIM |
+| `caira` | `developer` | Inspect relevant reference components for the selected stack | Select and adapt only needed components after scenario confirmation; no automatic deployment or full-stack copying |
 
-First check for capabilities already installed, including the existing Agent Framework, Semantic Kernel and evaluation guidance. When the pack is applied and a candidate skill is absent, offer its installation through the registered path in the roster catalog, as for the other opt-in external roles, and install nothing without the user's agreement. These skills are candidates, not new dependency declarations or proof that a resource passed the gate. Planning must remain useful without them. Do not activate a skill that runs dependency setup merely to answer a design question.
+First check for capabilities already installed, including the existing Agent Framework, Semantic Kernel and evaluation guidance. When the pack is applied, offer every missing registered Foundry skill and its prerequisites in one message through the catalog's registered path, as for the other opt-in external roles, and install nothing without the user's agreement. Planning must remain useful without them. Do not activate a skill that runs dependency setup merely to answer a design question.

@@ -156,10 +156,13 @@ explains that split and records the suite's known gaps.
 
 Releases are cut by hand when the pending work is judged ready, so merging is no longer the moment a change reaches consumers. What merging does reach is the **rolling pre-release**: one GitHub pre-release, rebuilt on every merge to the default branch, tagged with the version the pending fragments currently resolve to.
 
-Install it into a scratch project to try the merged batch before it ships:
+Use [Install and test the pre-release](https://peter-n91.github.io/hve-squad/getting-started.html#testing-the-pre-release)
+for the current stable and pre-release numbers, exact install command, testing steps,
+and return-to-stable command. Install into a scratch project to try the merged batch
+before it ships. In this example, replace `vX.Y.z-pre` with the current rolling tag:
 
 ```powershell
-apm install "Peter-N91/hve-squad#v0.14.0-pre" --target copilot
+apm install "Peter-N91/hve-squad#vX.Y.z-pre" --target copilot
 ```
 
 The exact tag is on the [Releases page](https://github.com/Peter-N91/hve-squad/releases), marked as a pre-release. Two things follow from how it is built:
@@ -242,4 +245,4 @@ Not every learning belongs in the public package. When a learning is specific to
 
 The sanitization discipline does not change. Complete the [sanitization checklist](#sanitize-before-you-propose) for every entry, then open a pull request against your organization's private tenant-learnings repository rather than this one. The reviewer gate there serves the same purpose the maintainer review serves upstream: the defense against poisoning, leakage, and context drift. See [Shared learnings](docs/templates/shared-learnings.md) for the tenant-internal private-dependency mechanism and the `squad-learnings-tenant` scaffold.
 
-The `/squad-learn` command automates this promotion. It drafts a sanitized candidate from consumer-local squad memory, lets you choose the target (the upstream package or your organization's tenant-internal repository), and opens the pull request, with a human approving that pull request in both cases.
+The **Squad Learn** agent automates this promotion. It drafts a sanitized candidate from consumer-local squad memory, lets you choose the target (the upstream package or your organization's tenant-internal repository), and opens the pull request, with a human approving that pull request in both cases.

@@ -1,0 +1,241 @@
+name: Tier 2 Benchmark
+
+on:
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Immutable candidate commit to gate before release publication
+        required: false
+        type: string
+      release_tag:
+        description: Published stable release to compare against an earlier stable ancestor
+        required: false
+        type: string
+  workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Read-only report; operators supply reviewed immutable commits, validated before checkout.
+    inputs:
+      base_sha:
+        description: Authorized reviewed base commit (full SHA; not a branch name)
+        required: true
+        type: string
+      head_sha:
+        description: Candidate commit in this repository (full SHA)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tier2-benchmark-${{ inputs.candidate_sha || inputs.release_tag || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: Branch-relative benchmark report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate immutable event identities
+        id: refs
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $baseRepo = $env:GITHUB_REPOSITORY
+          $headRepo = $env:GITHUB_REPOSITORY
+          if ($baseRepo -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid repository identity.' }
+          $baseSha = $null
+          if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA) {
+            $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
+            function Get-ReleaseApi([string]$Path) {
+              $response = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$baseRepo/$Path" -Headers $headers
+              foreach ($item in $response) { $item }
+            }
+            function Resolve-ReleaseCommit([string]$Tag) {
+              $object = (Get-ReleaseApi "git/ref/tags/$([Uri]::EscapeDataString($Tag))").object
+              $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+              while ($true) {
+                if ($object.sha -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid release object identity.' }
+                if ($object.type -ceq 'commit') { return $object.sha }
+                if ($object.type -cne 'tag' -or -not $seen.Add($object.sha)) { throw 'Invalid release tag chain.' }
+                $object = (Get-ReleaseApi "git/tags/$($object.sha)").object
+              }
+            }
+            if ($env:CANDIDATE_SHA) {
+              if ($env:RELEASE_TAG -or $env:CANDIDATE_SHA -cnotmatch '^[0-9a-f]{40}$') { throw 'One immutable candidate SHA required.' }
+              $headSha = $env:CANDIDATE_SHA
+              $release = @{ id = $null; published_at = [DateTimeOffset]::UtcNow }
+            } else {
+              $release = Get-ReleaseApi "releases/tags/$([Uri]::EscapeDataString($env:RELEASE_TAG))"
+              if ($release.draft -or $release.prerelease -or -not $release.published_at) { throw 'A published stable release is required.' }
+              $headSha = Resolve-ReleaseCommit $env:RELEASE_TAG
+            }
+            $releases = [Collections.Generic.List[object]]::new()
+            $page = 1
+            do {
+              $batch = @(Get-ReleaseApi "releases?per_page=100&page=$page")
+              foreach ($item in $batch) { $releases.Add($item) }
+              $page++
+            } while ($batch.Count -eq 100)
+            $candidates = @($releases | Where-Object {
+              -not $_.draft -and -not $_.prerelease -and $_.id -ne $release.id -and
+              $_.published_at -and [DateTimeOffset]$_.published_at -le [DateTimeOffset]$release.published_at
+            } | Sort-Object { [DateTimeOffset]$_.published_at } -Descending)
+            foreach ($candidate in $candidates) {
+              $candidateSha = Resolve-ReleaseCommit $candidate.tag_name
+              $comparison = Get-ReleaseApi "compare/$candidateSha...$headSha"
+              if ($comparison.status -cin @('ahead', 'identical')) {
+                $baseSha = $candidateSha
+                break
+              }
+            }
+          } else {
+            $eventData = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $baseSha = $eventData.inputs.base_sha
+            $headSha = $eventData.inputs.head_sha
+            if (-not $baseSha) { throw 'Full base commit SHA required.' }
+          }
+          if ($headSha -cnotmatch '^[0-9a-f]{40}$') { throw 'Full commit SHA required.' }
+          if ($baseSha -and $baseSha -cnotmatch '^[0-9a-f]{40}$') { throw 'Full commit SHA required.' }
+          "base=$baseSha", "head=$headSha", "base_repository=$baseRepo", "head_repository=$headRepo" |
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Checkout reviewed base implementation
+        if: steps.refs.outputs.base != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.refs.outputs.base_repository }}
+          ref: ${{ steps.refs.outputs.base }}
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Fetch candidate objects without checkout or execution
+        if: steps.refs.outputs.base != ''
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ steps.refs.outputs.base }}
+          HEAD_SHA: ${{ steps.refs.outputs.head }}
+          HEAD_REPOSITORY: ${{ steps.refs.outputs.head_repository }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -cne $env:BASE_SHA) { throw 'Base checkout identity mismatch.' }
+          git -c core.hooksPath=/dev/null fetch --no-tags --no-recurse-submodules -- "https://github.com/$($env:HEAD_REPOSITORY).git" $env:HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate fetch failed.' }
+          if ((git rev-parse FETCH_HEAD).Trim() -cne $env:HEAD_SHA) { throw 'Candidate fetch identity mismatch.' }
+
+      - name: Compare or report missing baseline tooling
+        id: compare
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ steps.refs.outputs.base }}
+          HEAD_SHA: ${{ steps.refs.outputs.head }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputRoot = Join-Path $env:RUNNER_TEMP 'efficiency-report'
+          New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
+          $helper = './tests/tier2/live-benchmark/Compare-BranchBenchmark.ps1'
+          if ($env:BASE_SHA -and (Test-Path -LiteralPath $helper -PathType Leaf)) {
+            & pwsh -NoProfile -File $helper -Repository $PWD -BaseRef $env:BASE_SHA -HeadRef $env:HEAD_SHA -OutputDirectory $outputRoot
+            $code = $LASTEXITCODE
+          } else {
+            $reason = if ($env:BASE_SHA) { 'base-comparison-tooling-unavailable' } else { 'previous-stable-release-unavailable' }
+            @{
+              schemaVersion = 'benchmark-report-v1'
+              status = 'missing-baseline'
+              exitCode = 2
+              baseCommit = $env:BASE_SHA
+              headCommit = $env:HEAD_SHA
+              reasons = @($reason)
+            } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRoot 'report.json')
+            "# Efficiency benchmark`n`n**Missing baseline/tooling (exit 2).**`n`nReason: $reason`n`nBase: $env:BASE_SHA`n`nHead: $env:HEAD_SHA`n`nNo candidate helper executed; no comparison or quality approval claimed." |
+              Set-Content -LiteralPath (Join-Path $outputRoot 'report.md')
+            '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="28" role="img" aria-label="benchmark unavailable"><rect width="220" height="28" fill="#6b7280"/><text x="10" y="18" fill="white">benchmark unavailable</text></svg>' |
+              Set-Content -LiteralPath (Join-Path $outputRoot 'badge.svg')
+            $code = 2
+          }
+          if ($code -notin @(0, 1, 2, 3)) { $code = 1 }
+          "$code" | Set-Content -LiteralPath (Join-Path $outputRoot 'exit-code.txt')
+          "verdict=$code" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Publish report summary
+        if: always()
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'efficiency-report/report.md'
+          if (Test-Path -LiteralPath $report) {
+            Get-Content -LiteralPath $report -Raw | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          } else {
+            $outputRoot = Split-Path $report
+            New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
+            $message = '# Efficiency benchmark: operational failure before comparison. No passing result.'
+            $message | Set-Content -LiteralPath $report
+            $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+            @{ schemaVersion = 'benchmark-report-v1'; status = 'operational-error'; exitCode = 1; reasons = @('workflow-preflight-failed') } |
+              ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRoot 'report.json')
+            '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="28" role="img" aria-label="benchmark unavailable"><rect width="220" height="28" fill="#6b7280"/><text x="10" y="18" fill="white">benchmark unavailable</text></svg>' |
+              Set-Content -LiteralPath (Join-Path $outputRoot 'badge.svg')
+          }
+
+      - name: Upload comparison and SVG
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: efficiency-comparison
+          path: ${{ runner.temp }}/efficiency-report/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Checkout candidate metadata without a baseline
+        if: inputs.candidate_sha != '' && steps.refs.outputs.base == '' && steps.compare.outputs.verdict == '2'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.refs.outputs.head }}
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Apply temporary release baseline bootstrap
+        id: gate
+        if: always()
+        shell: pwsh
+        env:
+          VERDICT: ${{ steps.compare.outputs.verdict }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $verdict = $env:VERDICT
+          if ($verdict -notmatch '^[0-3]$') { $verdict = '1' }
+          if ($verdict -eq '2' -and $env:CANDIDATE_SHA -cmatch '^[0-9a-f]{40}$') {
+            $reportPath = Join-Path $env:RUNNER_TEMP 'efficiency-report/report.json'
+            $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+            $bootstrapReasons = @('base-comparison-tooling-unavailable', 'previous-stable-release-unavailable')
+            if ($report.status -ceq 'missing-baseline' -and @($report.reasons).Count -eq 1 -and $report.reasons[0] -cin $bootstrapReasons) {
+              $manifest = git show "$($env:CANDIDATE_SHA):apm.yml"
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot read frozen candidate version.' }
+              $versions = [regex]::Matches(($manifest -join "`n"), '(?m)^version: (0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\r?$')
+              if ($versions.Count -ne 1) { throw 'One stable candidate version required for baseline bootstrap.' }
+              $version = [version]($versions[0].Value.Substring(9).Trim())
+              if ($version -le [version]'0.18.1') {
+                $verdict = '0'
+                $message = "Temporary release bootstrap: missing baseline allowed for $version (expires after v0.18.1). No benchmark approval; original report unchanged."
+                Write-Host "::warning::$message"
+                $message | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+              }
+            }
+          }
+          "verdict=$verdict" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Propagate comparison verdict
+        if: always()
+        shell: pwsh
+        env:
+          VERDICT: ${{ steps.gate.outputs.verdict }}
+        run: |
+          if ($env:VERDICT -notmatch '^[0-3]$') { exit 1 }
+          exit ([int]$env:VERDICT)

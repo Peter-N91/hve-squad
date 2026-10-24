@@ -1,0 +1,10 @@
+{
+  "taskId": "task-2026-10-11-0001",
+  "connectorId": "acme-coordinator-v2",
+  "role": "developer",
+  "deliverableRoot": ".copilot-tracking/squad/members/consumer-interop/changes",
+  "task": "Add input validation for the negative-amount case in the invoice total calculator and record a change note describing the fix.",
+  "deadline": "2026-10-11T18:00:00Z",
+  "retryCap": 3,
+  "createdAt": "2026-10-11T16:00:00Z"
+}

@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-12"
+  last_updated: "2026-10-24"
 ---
 
 # Foundry Platform Options
@@ -37,6 +37,13 @@ Ask:
 
 Use the registered `microsoft-foundry` skill for current product guidance, and verify Foundry Local on Azure Local against current Microsoft Learn documentation. Record unknown or conflicting claims as unverified with the smallest next check.
 
+Frame Azure Local as a distinct deployment option, not a cloud-equivalent checkbox:
+
+* **Applicable scenarios:** on-premises or edge workloads with a documented need for local inference or retrieval, constrained connectivity, data-locality requirements, or a supported disconnected operating model.
+* **Prerequisites:** a supported Azure Local and Arc-enabled Kubernetes baseline, compatible hardware and capacity, identity and network design, and the control-plane, model-download, update, management, and telemetry connectivity required by the selected version.
+* **Limitations:** never assume parity with Foundry Agent Service, cloud model availability, managed tools, regions, engines, scaling, or operations. Name the missing capability and fallback for the selected workload.
+* **Preview status:** verify the service and each selected feature separately. A preview dependency requires the customer's explicit acceptance, owner, limitations, and supported fallback before production planning continues.
+
 ## SDK and API Questions
 
 Ask:
@@ -48,3 +55,5 @@ Ask:
 * What changes between planning, implementation, deployment, and acceptance checkpoints?
 
 Do not copy a latest-version number into this reference. Read the manifest and lockfile, then verify that baseline against official release and migration guidance at the checkpoint. A newer version is evidence to assess, not permission to upgrade.
+
+Use `microsoft-foundry` for current Foundry service and SDK workflows, `azure-aigateway` for a selected APIM configuration, `use-ai-gateway` to consume an existing gateway, and `caira` only to inspect reference components for an already selected stack.

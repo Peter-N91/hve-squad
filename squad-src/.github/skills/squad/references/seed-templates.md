@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-24"
 ---
 
 # Seed Templates
@@ -16,9 +16,9 @@ They stay consistent with the three squad instruction files: `team.md` holds the
 
 ## team.md
 
-Seeded from the confirmed profile's members plus the roles of every applied pack; the template below shows the `full` profile with no pack applied. For other profiles, only the profile's rows are written, and each applied pack appends its own roles to them. The `Member Name` column is populated from the Init Mode naming step: it may be empty for roles the user chose not to name, and it must be unique within a `Role` when two rows share the same role. The role-to-agent relationship is many-to-many: each role names one **Primary** agent the coordinator dispatches by default plus optional **Alternate** agents it resolves to per the row's `Selection Cue`. **Seed the `Selection Cue` cell with the row's condition, and `—` when the role has no alternates**, because the full cast catalog is canonical in `references/roster-catalog.md`, a reference file that loads only when a role's Skill Reference Contract calls for it: a roster that lists alternates without saying when they apply invites the coordinator to pick the one that sounds closest, which swaps a role's methodology silently. The `devrel`, `networking`, `gcp`, and `identity` roles have no deployed HVE Core agent and no backing skill, so they stay unselectable until one exists. The opt-in `backlog-executor` role is absent from every profile and is appended to `team.md` only when the user accepts the coordinator's offer to add it. Pack roles such as `pp-architect` and `pp-connector` are likewise absent from every profile template and are appended only when a pack is applied, and `qa-engineer` and `release-engineer` are absent for the related reason that their Primaries are registered opt-in external agents — a registered-but-uninstalled role is never seeded.
+Seeded from the confirmed profile's members plus applied-pack roles; the template below shows `full` without packs. For other profiles, write only that profile's rows, then append each applied pack's rows. `Member Name` comes from Init naming and must be unique within a shared `Role`. Each role has one Primary plus optional Alternates selected by `Selection Cue`; seed `Selection Cue` explicitly (`—` when none). `devrel`, `networking`, and `identity` remain unselectable until a backing capability exists. `gcp` is seeded only through a validated additive connector binding (`Primary=Squad Connector`, unique `Member Name`, aligned role), never from profile defaults. `backlog-executor` and opt-in external roles are seeded only when explicitly accepted.
 
-The template below is the default `routing=off` shape. When Init runs with `routing=ranked`, `routing=economy`, or `routing=manual`, add the line `Model routing: <mode>` directly beneath the H1 and a `Model` column between `Model Tier` and `Deliverable Root`, filled with each role's Model ID as the coordinator resolved it (see `model-routing.md`). `intake-validator` seeds at `default`, not `fast`: its readiness verdict gates every later stage, and a lightweight model's judgment of whether requirements are complete is the wrong place to save cost.
+The template below is the default `routing=off` shape. With active packs, add `Packs: <comma-separated names>` beneath the H1; omit it with none. Put any `Model routing: <mode>` line after `Packs:`, then add the `Model` column as defined in `model-routing.md`. `intake-validator` seeds at `default`, not `fast`: its readiness verdict gates every later stage, and a lightweight model's judgment of whether requirements are complete is the wrong place to save cost.
 
 ```markdown
 ---
@@ -66,6 +66,17 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 | scribe          |             | Squad Scribe                 | —                                                      | —                                                                                                       | runSubagent / task | fast                    | (squad state)                         |
 | devrel          |             | —                            | —                                                      | —                                                                                                       | —                  | — (no backing skill)    | —                                     |
 ```
+
+When connector role modes are configured, append this optional section after `## Members`; omit it entirely when empty:
+
+```markdown
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+|------------|--------------|----------|---------------|-----------|-------------|--------|-------------|------------|--------------|-------------------|
+```
+
+`Connector Bindings` is roster-owned authority (`connector-role-modes.md`), not an `Alternate Agents` rewrite.
 
 ## routing.md
 

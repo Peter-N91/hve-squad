@@ -5,14 +5,14 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-24"
 ---
 
 # Squad Operating Procedure
 
 ## Overview
 
-The squad is a user-invocable Squad Coordinator that dispatches a reusable cast of deployed HVE Core agents in parallel and persists roster, routing, decisions, and per-agent history under `.copilot-tracking/squad/`. There is no separate runtime: every squad verb is a thin convention over an existing HVE Core mechanism.
+The user-invocable Squad Coordinator dispatches HVE Core agents and persists roster, routing, decisions, and history under `.copilot-tracking/squad/`; every squad verb reuses an existing HVE Core mechanism.
 
 This skill packages the coordinator's operating procedure and the seed templates it stamps out on first run. The procedure lives in the reference files listed under [Procedure](#procedure) below; the eleven companion instruction files that auto-apply when squad state is touched are catalogued in [references/00-index.md](references/00-index.md).
 
@@ -20,7 +20,7 @@ This skill packages the coordinator's operating procedure and the seed templates
 
 * A `runSubagent` or `task` tool is available so the coordinator can dispatch `user-invocable: false` agents.
 * The deployed HVE Core cast exists (System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier, PowerPoint Subagent) plus the squad-owned charters (Squad Scribe, Squad Researcher, Squad Lead, Squad Implementor, Squad Reviewer, Squad Challenger, Squad Technical Writer, Squad Prompt Engineer).
-* Every roster Primary resolves to an installed agent that does **not** set `disable-model-invocation: true`; the coordinator's Step 1b roster-resolution precheck confirms this before any dispatch.
+* Each selected work endpoint resolves to an installed, dispatchable agent. Step 1b checks `Squad Connector` for a connector default; its consumer endpoint runs externally.
 * The memory tool is available for durable per-agent notes under `/memories/repo/`.
 
 ## Procedure
@@ -33,8 +33,8 @@ Read [references/00-index.md](references/00-index.md) first, then only files you
 |---------------------------------------------------------------|--------------------------------------------------------------------------------|
 | [00-index.md](references/00-index.md)                         | Which file to read for which job, and the companion instruction files          |
 | [profiles-and-packs.md](references/profiles-and-packs.md)     | Squad profiles and add-on packs                                                |
-| [foundry-blueprint.md](references/foundry-blueprint.md) | Foundry handoffs |
-| [foundry-platform-options.md](references/foundry-platform-options.md) | Gateway and Azure Local |
+| [foundry-blueprint.md](references/foundry-blueprint.md)       | `foundry` role owners/evidence                                                  |
+| [foundry-platform-options.md](references/foundry-platform-options.md) | `foundry` platform choices                                         |
 | [operating-procedure.md](references/operating-procedure.md)   | Init, Route, ledger reconciliation, Decide, Handoff, tool-to-mechanism mapping |
 | [gates-and-modes.md](references/gates-and-modes.md)           | Discovery, intake, council, implementation gates; autopilot and autonomy modes |
 | [federation.md](references/federation.md)                     | Federation layout, detection precedence, and federation modes                  |
@@ -48,7 +48,9 @@ Read [references/00-index.md](references/00-index.md) first, then only files you
 | [consumption.md](references/consumption.md)                   | Consumption ledger templates, the cost estimator, and Cost Preflight           |
 | [consumption-rates-template.md](references/consumption-rates-template.md) | Cold seed template for consumption-rates.md: rate tables, tier fallback, calibration |
 | [model-catalog.md](references/model-catalog.md)               | Declared model capability, pricing, and host-availability precedence           |
-| [model-routing.md](references/model-routing.md)               | Opt-in model routing: off, ranked, economy, and manual modes, the team.md Model column, fit ranking, floors, and identity-bullet contract |
+| [model-benchmarks.md](references/model-benchmarks.md)         | Pinned benchmark knowledge base, source versions, and provenance for `ranked`  |
+| [model-routing.md](references/model-routing.md)               | Opt-in modes, Model cells, capability-first ranking, floors, and identity bullets |
+| [model-scoring.md](references/model-scoring.md) | Cold scoring methodology: policy changes or evidence audit only |
 | [economy-mode.md](references/economy-mode.md)                 | Only under `Model routing: economy`: consent, role allowlist, economy pick, one escalation |
 | [federation-templates.md](references/federation-templates.md) | Federation-root seed templates                                                 |
 

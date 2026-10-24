@@ -27,6 +27,11 @@
     (tests/tier1/benchmark/Invoke-PipeliningBenchmark.ps1), which is opt-in and spends
     a live BEFORE/AFTER comparison rather than running as part of this scenario matrix.
 
+    A scenario carrying `connectorResumeIntegrity` may also attach a deterministic
+    consumer response after an awaiting turn. The harness then verifies the request
+    and snapshot stayed byte-identical and reads machine-generated CLI dispatch events
+    to prove the request and resume used Squad Connector, followed by Squad Scribe.
+
     The assertions never read the run's prose. They read files. See
     tests/squad-behavior-contract.md.
 .PARAMETER Ref
@@ -34,7 +39,7 @@
 .PARAMETER SourceRoot
     Repository root to install from and overlay, for testing a branch.
 .PARAMETER Scenario
-    Scenario ids to run. Defaults to every scenario in scenarios/ except the parameterized
+    Scenario file names (without `.json`) to run. Defaults to every scenario in scenarios/ except the parameterized
     pack-lifecycle scenario, which is opt-in and runs only when named together with -Pack.
 .PARAMETER Pack
     Registered pack name substituted into the parameterized pack-lifecycle scenario.
@@ -89,7 +94,94 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-Import-Module (Join-Path $PSScriptRoot 'SquadRun.psm1') -Force
+Import-Module (Join-Path -Path $PSScriptRoot -ChildPath 'SquadRun.psm1') -Force
+Import-Module (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'tier0', 'SquadPackage.psm1') -Force
+
+function Get-RegisteredPackData {
+    param([Parameter(Mandatory)][string]$Body)
+
+    $packs = @{}
+    foreach ($cells in (Get-MarkdownTableRows -Body $Body -HeaderCell 'Pack')) {
+        $name = $cells[1].Trim().Trim('`')
+        if (-not $name) { continue }
+        $packs[$name] = @(
+            $cells[2] -split ',' |
+                ForEach-Object { $_.Trim().Trim('`') } |
+                Where-Object { $_ }
+        )
+    }
+
+    $profiles = @{}
+    foreach ($cells in (Get-MarkdownTableRows -Body $Body -HeaderCell 'Profile')) {
+        $name = $cells[1].Trim().Trim('`')
+        if (-not $name) { continue }
+        $profiles[$name] = @(
+            $cells[2] -split ',' |
+                ForEach-Object { $_.Trim().Trim('`') } |
+                Where-Object { $_ }
+        )
+    }
+
+    [pscustomobject]@{ Packs = $packs; Profiles = $profiles }
+}
+
+function Get-PackRegistryBody {
+    param(
+        [Parameter(Mandatory)][ValidateSet('Source', 'Ref')][string]$Mode,
+        [string]$SourceRoot,
+        [string]$Ref
+    )
+
+    $relativePath = 'squad-src/.github/instructions/squad/squad-roster.instructions.md'
+    if ($Mode -eq 'Source') {
+        return Get-Content -LiteralPath (Join-Path $SourceRoot $relativePath) -Raw
+    }
+
+    $repoRoot = (Resolve-Path -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath '..')).Path
+    $refPath = '{0}:{1}' -f $Ref, $relativePath
+    $content = @(& git -C $repoRoot show $refPath 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot read the Registered Packs table from ref '$Ref'. Fetch the ref before running the live harness."
+    }
+    $content -join "`n"
+}
+
+function Get-TeamRoleId {
+    param([Parameter(Mandatory)][string]$Body)
+
+    @(
+        Get-MarkdownTableRows -Body $Body -HeaderCell 'Role' |
+            ForEach-Object { $_[1].Trim().Trim('`') } |
+            Where-Object { $_ } |
+            Sort-Object -Unique
+    )
+}
+
+function Get-TeamPackId {
+    param([Parameter(Mandatory)][string]$Body)
+
+    $match = [regex]::Match($Body, '(?m)^Packs:\s*(?<Packs>[^\r\n]+)\s*$')
+    if (-not $match.Success) { return @() }
+    @(
+        $match.Groups['Packs'].Value -split ',' |
+            ForEach-Object { $_.Trim().Trim('`') } |
+            Where-Object { $_ } |
+            Sort-Object -Unique
+    )
+}
+
+function Test-BytePrefix {
+    param(
+        [Parameter(Mandatory)][byte[]]$Prefix,
+        [Parameter(Mandatory)][byte[]]$Value
+    )
+
+    if ($Value.Length -lt $Prefix.Length) { return $false }
+    for ($i = 0; $i -lt $Prefix.Length; $i++) {
+        if ($Prefix[$i] -ne $Value[$i]) { return $false }
+    }
+    $true
+}
 
 # Everything except the turns themselves is free, and a first live run that dies on a
 # provisioning bug after paying for three turns is the waste worth avoiding.
@@ -131,6 +223,15 @@ if ($Pack -and $Pack -notmatch '^[a-z0-9-]+$') {
     throw 'Pack must be a lowercase kebab-case identifier.'
 }
 
+$packRegistry = $null
+if ($Pack) {
+    $registryBody = Get-PackRegistryBody -Mode $PSCmdlet.ParameterSetName -SourceRoot $SourceRoot -Ref $Ref
+    $packRegistry = Get-RegisteredPackData -Body $registryBody
+    if (-not $packRegistry.Packs.ContainsKey($Pack)) {
+        throw "Pack '$Pack' is not registered. Available: $(@($packRegistry.Packs.Keys | Sort-Object) -join ', ')"
+    }
+}
+
 $fixtureRoot = Join-Path $PSScriptRoot '..' 'fixtures'
 $contractRunner = Join-Path $PSScriptRoot 'Invoke-Tier1Tests.ps1'
 $summary = @()
@@ -154,7 +255,10 @@ foreach ($file in $scenarioFiles) {
 
         $failures = @()
         $turnLog = @()
+        $turnEvidence = @{}
+        $connectorConsumerRecord = $null
         $answer = ''
+        $packLifecycleState = $null
 
         try {
             $install = if ($PSCmdlet.ParameterSetName -eq 'Source') {
@@ -187,15 +291,21 @@ foreach ($file in $scenarioFiles) {
             else {
                 foreach ($turn in $definition.turns) {
                     $transcript = Join-Path $attemptRoot "turn-$($turn.id).log"
+                    $captureDispatchEvents = $turn.PSObject.Properties.Name -contains 'captureDispatchEvents' -and [bool]$turn.captureDispatchEvents
+                    $logDir = if ($captureDispatchEvents) { Join-Path $attemptRoot "turn-$($turn.id)-logs" } else { '' }
                     $result = Invoke-SquadTurn -Workspace $install.Root -Prompt $turn.prompt -Model $Model `
-                        -TranscriptPath $transcript -TimeoutMinutes $TimeoutMinutes
+                        -TranscriptPath $transcript -LogDir $logDir -CaptureDispatchEvents:$captureDispatchEvents `
+                        -TimeoutMinutes $TimeoutMinutes
 
                     $turnLog += [pscustomobject]@{
                         id       = $turn.id
                         exitCode = $result.ExitCode
                         timedOut = $result.TimedOut
                         seconds  = $result.Seconds
+                        transcript = $transcript
+                        logDir   = $logDir
                     }
+                    $turnEvidence[[string]$turn.id] = [pscustomobject]@{ Transcript = $transcript; LogDir = $logDir }
                     $answer = $result.Answer
 
                     Write-Host "  turn '$($turn.id)': exit $($result.ExitCode) in $($result.Seconds)s" -ForegroundColor DarkGray
@@ -204,6 +314,109 @@ foreach ($file in $scenarioFiles) {
                     elseif ($result.ExitCode -ne 0) { $failures += "turn '$($turn.id)' exited $($result.ExitCode): $($result.ErrorLog)" }
 
                     # A turn that never ran cannot leave the state the next turn assumes.
+                    if ($failures) { break }
+
+                    if ($turn.PSObject.Properties.Name -contains 'connectorConsumer') {
+                        $consumer = $turn.connectorConsumer
+                        $connectorConsumerRecord = Publish-ConnectorConsumerResult -Workspace $install.Root `
+                            -ConnectorId ([string]$consumer.connectorId) `
+                            -ArtifactPath ([string]$consumer.artifactPath) `
+                            -ArtifactContent ([string]$consumer.artifactContent) `
+                            -Narrative ([string]$consumer.narrative)
+                        $connectorConsumerRecord | ConvertTo-Json -Depth 8 |
+                            Set-Content -LiteralPath (Join-Path $attemptRoot 'connector-consumer.json') -Encoding utf8NoBOM
+                    }
+
+                    if ($file.BaseName -eq 'pack-lifecycle') {
+                        $turnRoots = @(
+                            Get-Item -Path (Join-Path $install.Root $definition.squadRootGlob) -ErrorAction SilentlyContinue |
+                                Where-Object { $_.PSIsContainer }
+                        )
+                        if ($turnRoots.Count -ne 1) {
+                            $failures += "turn '$($turn.id)' expected one squad root, found $($turnRoots.Count)"
+                        }
+                        else {
+                            $root = $turnRoots[0].FullName
+                            $teamPath = Join-Path $root 'team.md'
+                            $decisionsPath = Join-Path $root 'decisions.md'
+                            if (-not (Test-Path -LiteralPath $teamPath -PathType Leaf) -or
+                                -not (Test-Path -LiteralPath $decisionsPath -PathType Leaf)) {
+                                $failures += "turn '$($turn.id)' did not produce team.md and decisions.md"
+                            }
+                            else {
+                                $teamBody = Get-Content -LiteralPath $teamPath -Raw
+                                $teamRoles = @(Get-TeamRoleId -Body $teamBody)
+
+                                if ($turn.id -eq 'init-pack') {
+                                    foreach ($role in @($packRegistry.Packs[$Pack])) {
+                                        if ($role -notin $teamRoles) {
+                                            $failures += "init-pack did not seed pack role '$role'"
+                                        }
+                                    }
+
+                                    $activePacks = @(Get-TeamPackId -Body $teamBody)
+                                    if ($Pack -notin $activePacks) {
+                                        $failures += "init-pack did not persist 'Packs: $Pack' in team.md"
+                                    }
+
+                                    $decisionsBody = Get-Content -LiteralPath $decisionsPath -Raw
+                                    $escapedPack = [regex]::Escape($Pack)
+                                    if ($decisionsBody -notmatch "(?m)\+$escapedPack(?:\b|$)") {
+                                        $failures += "init-pack decision did not record '+$Pack'"
+                                    }
+
+                                    $profileRoles = @($packRegistry.Profiles['default'])
+                                    $packLifecycleState = @{
+                                        DecisionBytes = [IO.File]::ReadAllBytes($decisionsPath)
+                                        PackOnlyRoles = @($packRegistry.Packs[$Pack] | Where-Object { $_ -notin $profileRoles })
+                                        ProfileRoles  = $profileRoles
+                                    }
+                                }
+                                elseif ($turn.id -eq 'remove-pack') {
+                                    if (-not $packLifecycleState) {
+                                        $failures += 'remove-pack has no captured init-pack state'
+                                    }
+                                    else {
+                                        foreach ($role in @($packLifecycleState.PackOnlyRoles)) {
+                                            if ($role -in $teamRoles) {
+                                                $failures += "remove-pack kept pack-exclusive role '$role'"
+                                            }
+                                        }
+                                        foreach ($role in @($packLifecycleState.ProfileRoles)) {
+                                            if ($role -notin $teamRoles) {
+                                                $failures += "remove-pack dropped profile role '$role'"
+                                            }
+                                        }
+
+                                        if ($teamBody -match '(?m)^Packs:') {
+                                            $failures += 'remove-pack kept a Packs: line after removing the scenario''s only pack'
+                                        }
+
+                                        $afterBytes = [IO.File]::ReadAllBytes($decisionsPath)
+                                        if (-not (Test-BytePrefix -Prefix $packLifecycleState.DecisionBytes -Value $afterBytes)) {
+                                            $failures += 'remove-pack changed earlier decisions.md bytes instead of appending'
+                                        }
+                                        elseif ($afterBytes.Length -eq $packLifecycleState.DecisionBytes.Length) {
+                                            $failures += 'remove-pack did not append a decision'
+                                        }
+                                        else {
+                                            $append = [Text.Encoding]::UTF8.GetString(
+                                                $afterBytes,
+                                                $packLifecycleState.DecisionBytes.Length,
+                                                $afterBytes.Length - $packLifecycleState.DecisionBytes.Length
+                                            )
+                                            $escapedPack = [regex]::Escape($Pack)
+                                            $removalPattern = "(?is)(?:\bremov(?:e|ed|al)\b.*\b$escapedPack\b|\b$escapedPack\b.*\bremov(?:e|ed|al)\b)"
+                                            if ($append -notmatch $removalPattern) {
+                                                $failures += "remove-pack did not append a removal decision for '$Pack'"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if ($failures) { break }
                 }
 
@@ -269,6 +482,50 @@ foreach ($file in $scenarioFiles) {
 
                         if ($integrityResult.FailedCount -gt 0 -or $integrityResult.TotalCount -eq 0) {
                             $failures += "pipelining integrity checks failed for '$name' ($($integrityResult.FailedCount) of $($integrityResult.TotalCount))"
+                        }
+                    }
+
+                    if ($definition.PSObject.Properties.Name -contains 'connectorResumeIntegrity') {
+                        if (-not $connectorConsumerRecord) {
+                            $failures += "connector resume integrity has no consumer record for '$name'"
+                        }
+                        else {
+                            $integrity = $definition.connectorResumeIntegrity
+                            $requestTurn = $turnEvidence[[string]$integrity.requestTurn]
+                            $resumeTurn = $turnEvidence[[string]$integrity.resumeTurn]
+                            if (-not $requestTurn -or -not $resumeTurn) {
+                                $failures += "connector resume integrity could not resolve request/resume turn evidence for '$name'"
+                            }
+                            else {
+                                $resumeRunner = Join-Path $PSScriptRoot 'ConnectorResumeIntegrity.Tests.ps1'
+                                $resumeConfig = New-PesterConfiguration
+                                $resumeConfig.Run.Container = New-PesterContainer -Path $resumeRunner -Data @{
+                                    WorkspaceRoot     = $install.Root
+                                    SquadRoot         = $root
+                                    RequestTranscript = $requestTurn.Transcript
+                                    RequestLogDir     = $requestTurn.LogDir
+                                    ResumeTranscript  = $resumeTurn.Transcript
+                                    ResumeLogDir      = $resumeTurn.LogDir
+                                    RequestPath       = $connectorConsumerRecord.RequestPath
+                                    RequestHash       = $connectorConsumerRecord.RequestHash
+                                    SnapshotPath      = $connectorConsumerRecord.SnapshotPath
+                                    SnapshotHash      = $connectorConsumerRecord.SnapshotHash
+                                    ResultPath        = $connectorConsumerRecord.ResultPath
+                                    TaskId            = $connectorConsumerRecord.TaskId
+                                    Artifact          = [string]$integrity.artifact
+                                    ConnectorAgent    = [string]$integrity.connectorAgent
+                                    ScribeAgent       = [string]$integrity.scribeAgent
+                                }
+                                $resumeConfig.Run.PassThru = $true
+                                $resumeConfig.Output.Verbosity = 'Detailed'
+                                $resumeConfig.TestResult.Enabled = $true
+                                $resumeConfig.TestResult.OutputPath = Join-Path $attemptRoot "connector-resume-integrity-$name.xml"
+
+                                $resumeResult = Invoke-Pester -Configuration $resumeConfig
+                                if ($resumeResult.FailedCount -gt 0 -or $resumeResult.TotalCount -eq 0) {
+                                    $failures += "connector resume integrity checks failed for '$name' ($($resumeResult.FailedCount) of $($resumeResult.TotalCount))"
+                                }
+                            }
                         }
                     }
                 }

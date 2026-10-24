@@ -253,6 +253,20 @@ function Test-LedgerBand {
     return ([math]::Abs($Actual - $Expected) -le [math]::Max($Floor, [math]::Abs($Expected) * $Tolerance))
 }
 
+function ConvertTo-RateModelKey {
+    <#
+    .SYNOPSIS
+        Normalizes model spelling using the ledger writer's existing key rules.
+    .PARAMETER Value
+        Recorded model id or display-name rate key; version punctuation is preserved.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyString()][string]$Value)
+    $Text = ($Value -replace '`', '' -replace '\((copilot|preview)\)', '').Trim().ToLowerInvariant()
+    ($Text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
+}
+
 if (-not $model.Ledger) {
     Add-Check -Name 'consumption.md ledger total reconciles with blocks' -Passed $false -Detail 'consumption.md is empty or missing'
 }
@@ -282,6 +296,13 @@ else {
         $unpriced = [System.Collections.Generic.List[string]]::new()
         foreach ($block in $model.Blocks) {
             $rate = if ($block.Fields['priced_as']) { $model.Rates[[string]$block.Fields['priced_as']] }
+            if (-not $rate) {
+                $RateKey = ConvertTo-RateModelKey ([string]$block.Fields['priced_as'])
+                if ($RateKey) {
+                    $MatchingKeys = @($model.Rates.Keys | Where-Object { (ConvertTo-RateModelKey $_) -eq $RateKey })
+                    if ($MatchingKeys.Count -eq 1) { $rate = $model.Rates[$MatchingKeys[0]] }
+                }
+            }
             if (-not $rate) { $unpriced.Add("$($block.Source):$($block.Fields['priced_as'])"); continue }
             $expectedCost += (([double]$block.Fields['input_tokens'] * $rate.input) + ([double]$block.Fields['cached_tokens'] * $rate.cached) +
                 ([double]$block.Fields['cache_write_tokens'] * $rate.cache_write) + ([double]$block.Fields['output_tokens'] * $rate.output)) / 1e6

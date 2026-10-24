@@ -21,6 +21,7 @@
         <a href="usage.html" class="active">Usage</a>
         <a href="demo.html">Demo</a>
         <a href="ecosystem.html">Ecosystem</a>
+        <a href="connector.html">Connector</a>
         <a href="maintaining.html">Maintaining</a>
         <a href="troubleshooting.html">Troubleshooting</a>
         <a href="contributing.html">Contributing</a>
@@ -45,18 +46,16 @@
   <main class="content">
     <div class="container">
       <h2>Invoke the coordinator</h2>
-      <p>Use the coordinator's conversation for Squad requests, not your system shell. VS Code invokes prompts; CLI and App use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
+      <p>Use the matching Squad agent's conversation for requests, not your system shell. In VS Code Copilot Harness, choose the agent from the agents dropdown; CLI and App also use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
+      <p>Not initialized yet, or unsure how to reach your goal? Select the advisory <strong>Squad Coach</strong> agent in VS Code, CLI, or App. It reads current code and documentation and provides a detailed, copy-ready runbook without changing state. See <a href="getting-started.html#chat-with-the-squad-coach">the Coach guide</a>.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
         <p>
-          <strong>Two entries named <code>squad</code> in VS Code?</strong> The VS Code <code>/</code> picker lists
-          both prompts and skills, and the package ships one of each. Pick the
-          <strong>prompt</strong> — described as <em>"Hands a request to the Squad Coordinator…"</em> —
-          to actually run the squad. The <strong>skill</strong> — <em>"Operating procedure for the HVE
-          Core Squad Coordinator…"</em> — only loads the squad procedure into whatever agent you are
-          already talking to; the coordinator and its subagents load it on their own, so you rarely
-          need to select it yourself.
+          <strong>Using VS Code Copilot Harness?</strong> Select <strong>Squad Coordinator</strong> from the
+          agents dropdown and send the request text shown in the selected VS Code tab without the
+          <code>/squad</code> prefix. Each host tab names the matching agent for federation, document,
+          governance-report, and learning workflows.
         </p>
       </div>
 
@@ -81,7 +80,7 @@
           <code>routing=off|ranked|economy|manual</code> — how each role's model is chosen, saved in
           <code>team.md</code> until you change it. <code>off</code> (default) applies no policy;
           <code>ranked</code> picks the model that best fits each role's work among the models your
-          host offers; <code>economy</code> is <code>ranked</code> with cheaper picks for five
+          host offers; <code data-release-change="20261005-routing-economy">economy</code> is <code>ranked</code> with cheaper picks for five
           implementation roles, after your consent; <code>manual</code> asks you to pick, with
           suggestions pre-filled. See
           <a href="#model-selection-per-role">Model selection per role</a> below.
@@ -236,6 +235,25 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         bounded, models and rates are known, the rate table is valid, and calibration matches the
         current estimator revision. Otherwise the squad reports <code>cannot-confirm</code> rather than
         presenting an optimistic answer.
+      </p>
+
+      <h3 id="first-capped-run">Before the first capped run</h3>
+      <p>
+        Initialization seeds <code>consumption-rates.md</code> with <code>observations: 0</code> and
+        <code>last_reconciled: never</code>. This is not eligible calibration: a positive ceiling
+        produces low-confidence <code>cannot-confirm</code>, and approval cannot waive it.
+        A larger ceiling does not fix missing evidence.
+      </p>
+      <p>
+        Preparation requires real usage measurements before and after a deliberately small run,
+        using the per-user aggregate <code>ai_credits_used</code> delta and that run's estimated credits
+        to reconcile the factor. An uncapped preparation run requires your explicit approval; isolate
+        its usage window and have the owning coordinator arrange the Scribe's reconciliation, not
+        invented observations. Verify positive observations, a non-<code>never</code> reconciliation date,
+        and <code>calibration_basis</code> matching the current <code>Observed-on</code> and
+        <code>estimator_revision</code>, alongside the other preflight conditions. If those measurements
+        are unavailable or you decline uncapped preparation, remain blocked on capped work rather than
+        silently dropping the protection. See the <a href="getting-started.html#coach-cost-readiness">starter preparation step</a>.
       </p>
 
       <h3>Set, inherit, replace, or remove a ceiling</h3>
@@ -842,7 +860,7 @@ flowchart TD
         (see below); choosing a single squad keeps the flow above unchanged.
       </p>
 
-      <h2>Federation &mdash; several sub-squads in one repo</h2>
+      <h2 id="federation">Federation &mdash; several sub-squads in one repo</h2>
       <p>
         Federation lets one repository host more than one squad side by side &mdash; for example a
         <code>product</code> sub-squad for the business team and an <code>azure</code> sub-squad for the
@@ -1131,7 +1149,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>The project is built on Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>The project is built on Microsoft 365 Copilot &mdash; declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>The project is built on AWS &mdash; Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage</td></tr>
-          <tr><td><code>foundry</code></td><td>researcher, lead, developer, tester, architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Microsoft Foundry project planning, independent review, and gated deployment with a seven-block blueprint, source evidence, and SDK/API revalidation; reuses existing roles</td></tr>
+          <tr><td><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Microsoft Foundry project planning, independent review, and gated deployment with a seven-block blueprint, source evidence, and SDK/API revalidation; reuses existing roles</td></tr>
         </tbody>
       </table>
       <p>
@@ -1169,13 +1187,34 @@ flowchart TD
         role the pack would provide. Foundry reuses existing roles and points them to registered upstream
         Microsoft and Azure skills instead of copying changing product documentation into the squad.
       </p>
+      <h3>Install the Foundry pack's skills</h3>
+      <p>
+        When you apply <code>foundry</code>, the coordinator reports all missing registered skills and
+        prerequisites in one message. Install only the capabilities the project needs; nothing is
+        installed automatically. The catalog remains the source of truth for these commands.
+      </p>
+      <pre><code># Microsoft Foundry and APIM AI Gateway skills
+apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
+apm install microsoft/azure-skills/skills/azure-aigateway --target copilot
+
+# Consume an existing AI Gateway from GitHub Copilot CLI
+copilot plugin marketplace add Azure/ai-gateway
+copilot plugin install ai-gateway@azure
+
+# Inspect selected CAIRA reference components
+npx skills add github.com/microsoft/CAIRA/skills</code></pre>
+      <p>
+        The plugin path needs GitHub Copilot CLI with plugin support; CAIRA needs Node.js and
+        <code>npx</code>. Foundry and gateway workflows may also need Azure CLI access, an Azure
+        account or project, and an existing gateway. Deployment authentication remains OIDC-only.
+      </p>
       <h3>Microsoft Foundry project guidance</h3>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
-        <code>foundry</code> adds guidance and a deduplicated set of twelve existing roles, including the
-        four methodology-spine roles already present in every profile, not a new
-        specialist agent, tool, or dependency. The <code>researcher</code> owns capability and
+        <code>foundry</code> adds up to eight existing specialist roles; the four methodology-spine
+        roles receive the guidance too. It adds no new specialist agent, tool, or dependency.
+        The <code>researcher</code> owns capability and
         SDK/API evidence; the <code>lead</code> integrates the
         <a href="https://github.com/Peter-N91/hve-squad/blob/main/squad-src/.github/skills/squad/references/foundry-blueprint.md">canonical seven-block Foundry blueprint</a>.
         The <code>architect</code> independently reviews the integrated design, the
@@ -1188,7 +1227,7 @@ flowchart TD
       </p>
       <p>
         Activation requires your accepted Init or apply decision for that squad. The <code>full</code>
-        profile already has all twelve roles but does not activate Foundry guidance. Generic AI, agent,
+        profile already has all eight specialist roles but does not activate Foundry guidance. Generic AI, agent,
         or MCP requests do not activate it either; Microsoft 365 Copilot and Copilot Studio keep
         their existing packs. You can apply Foundry later or reapply it without duplicate members.
         Removal disables its guidance handoff while preserving profile,
@@ -1197,7 +1236,7 @@ flowchart TD
       <p>
         At each checkpoint, the squad reads the project manifests and lockfiles and uses the registered
         <code>microsoft-foundry</code>, <code>azure-aigateway</code>, <code>use-ai-gateway</code>,
-        and official Microsoft Foundry plugin resources to verify service, feature,
+        and <code>caira</code> to verify service, feature,
         SDK/API, tier, and regional status separately. Missing or conflicting evidence stays
         unverified. Applying the pack never approves a preview, upgrades a dependency, installs a
         resource, or provisions Azure.
@@ -1214,13 +1253,13 @@ flowchart TD
           <tr><th>Block</th><th>Decision question</th><th>Owner and handoff</th></tr>
         </thead>
         <tbody>
-          <tr><td>Experience</td><td>How are citations, abstention, accessibility, and ticket confirmation presented?</td><td>designer and accessibility hand requirements to developer</td></tr>
+          <tr><td>Experience</td><td>How are citations, abstention, accessibility, and ticket confirmation presented?</td><td>developer owns the block; designer and accessibility are offered for a user-facing channel</td></tr>
           <tr><td>Orchestration</td><td>Which state transition persists human approval before ticket creation?</td><td>lead and architect hand the workflow boundary to developer</td></tr>
           <tr><td>Tools and Actions</td><td>How are caller authorization, retries, and reversible ticket submission enforced?</td><td>developer drafts the contract for security review</td></tr>
-          <tr><td>Grounding and Data</td><td>Which documents may each employee retrieve, retain, and cite?</td><td>data-scientist and privacy hand source and lifecycle rules to development and evaluation</td></tr>
-          <tr><td>Models</td><td>Which current model and deployment meet quality, region, latency, locality, and cost constraints?</td><td>azure-architect and cost-manager hand verified candidates to prompt-engineer</td></tr>
-          <tr><td>Evaluation and Safety</td><td>Which tests prove grounded answers, appropriate abstention, and authorized tool execution?</td><td>prompt-engineer designs evaluation; installed QA executes; tester, security, and RAI review</td></tr>
-          <tr><td>Operations</td><td>Which redacted traces, alerts, budgets, rollback, and incident ownership are required?</td><td>observability, performance, and cost-manager hand criteria to development and operations</td></tr>
+          <tr><td>Grounding and Data</td><td>Which documents may each employee retrieve, retain, and cite?</td><td>developer and security own the block; data-scientist and privacy are offered when retrieval data or regulated data requires them</td></tr>
+          <tr><td>Models</td><td>Which current model and deployment meet quality, region, latency, locality, and cost constraints?</td><td>azure-architect and cost-manager hand verified candidates to prompt-engineer; experimenter is offered for comparison experiments</td></tr>
+          <tr><td>Evaluation and Safety</td><td>Which tests prove grounded answers, appropriate abstention, and authorized tool execution?</td><td>prompt-engineer, security, RAI, and tester own the block; installed QA is offered to write and run tests</td></tr>
+          <tr><td>Operations</td><td>Which redacted traces, alerts, budgets, rollback, and incident ownership are required?</td><td>observability, cost-manager, and deployer own the block; performance, azure-diagnose, and asbuilt-author are offered when needed</td></tr>
         </tbody>
       </table>
       <p>
@@ -1567,7 +1606,7 @@ layouts:
           work, among the models your host offers, and shows each pick in a <code>Model</code> column
           under a <code>Model routing: ranked</code> line.
         </li>
-        <li>
+        <li data-release-change="20261005-routing-economy">
           <strong><code>economy</code></strong> — as <code>ranked</code>, except that five low-impact
           implementation roles get the cheapest model that fits their work well enough; shown under a
           <code>Model routing: economy</code> line. Opt-in, and only after you accept the trade. See
@@ -1581,15 +1620,20 @@ layouts:
       <p>
         <strong>How ranked picks are made.</strong> Each role maps to an assignment class
         (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
-        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). The model catalog scores
-        every model 0–3 for each class, and the squad picks the highest fit, then the lowest blended
-        cost, then the newest generation of the same model family. It never breaks a tie by a
-        model's name. The roles themselves, and the agent behind each one, are listed in the squad
-        skill's <code>references/roster-catalog.md</code>. On the Copilot CLI the seeded roster resolves to, for example,
-        <code>researcher</code> → <code>claude-opus-5.5</code>, <code>lead</code> →
-        <code>gpt-5.6-sol</code>, <code>developer</code> → <code>gpt-5.3-codex</code>,
-        <code>intake-validator</code> → <code>claude-sonnet-5.5</code>, and <code>scribe</code> →
-        <code>claude-haiku-4.5</code>.
+        <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Ranked is
+        <strong>capability-first</strong>: one versioned panel supports the same benchmark-specific
+        percentile comparison for every candidate, not a fit-bucket price race. Snapshot-wide
+        evidence coverage selects the panel, never scores, price or host availability.
+        Implementation retains the full SciCode/Terminal-Bench panel and a labeled reduced
+        SciCode panel. Confidence and then cost break genuine capability ties. The 90-day
+        safeguard expires verification, not older publication dates; acquisition and snapshot
+        generation never establish verification. Reports expose exact coverage and exclusions.
+        Unsupported comparisons receive an explicit declared-fit fallback, not a superiority claim.
+        <code>references/model-scoring.md</code> documents the weights, minimum coverage, and
+        limitations; <code>references/roster-catalog.md</code> lists the roles and agents.
+        Picks are snapshot-relative, not promises about today's model names. A <code>fast</code>
+        floor admits frontier candidates too. Coordinators keep the selected session model,
+        and the Scribe keeps its explicit pin.
       </p>
       <p>
         <strong>How manual picks are made.</strong> When you switch to <code>routing=manual</code>,
@@ -1601,17 +1645,24 @@ layouts:
         squad offers catalog models priced at or below your session model; if VS Code rejects a
         pick, you are asked again with the list VS Code reports.
       </p>
-      <p id="routing-economy">
+      <p id="routing-economy" data-release-change="20261005-routing-economy">
         <strong>Economy mode (<code>routing=economy</code>).</strong> Only these five roles change
         model: <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code>, and <code>data-scientist</code>. Each gets the cheapest catalog
-        model with a fit of 2 or better for implementation work, within the role's own
-        <code>Model Tier</code> floor; every other role, including <code>product-owner</code>,
+        model with sufficient verified independent evidence: at least <code>0.50</code> on
+        each full-panel primary, or <code>0.75</code> on the explicitly reduced SciCode
+        panel, under distinct versioned qualification rules and within the role's own
+        <code>Model Tier</code> floor. This is a policy minimum, not a guarantee of task success:
+        once it is met, extra capability or confidence never overrides a lower known Blended
+        price. Equal prices use capability first; missing prices are never free. With no
+        qualified candidate, the helper explains its Ranked fallback. Every other role, including <code>product-owner</code>,
         <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
         <code>backlog-executor</code>, and every review, council, intake, research, planning, and
         bookkeeping role, keeps its <code>ranked</code> pick. After a <code>Fail</code> verdict, a
         Critical or High finding, or a blocked owner, that owner is re-dispatched once on its
-        <code>ranked</code> pick, then reviewed again.
+        capability-first <code>ranked</code> pick, then reviewed again. The Scribe persists that
+        Model cell before redispatch; a costlier pick under a ceiling needs a new Cost Preflight.
+        If both picks coincide, no higher-ranked escalation target exists.
       </p>
       <p>
         <strong>Consent.</strong> The first time you switch to <code>economy</code>, before any
@@ -1638,7 +1689,7 @@ layouts:
       <p><strong>Precedence</strong> (highest wins, per role):</p>
       <ol>
         <li><code>routing=manual</code>: the role's valid <code>Model</code> cell.</li>
-        <li><code>routing=ranked</code>: the ranked pick for that role (<code>routing=economy</code>: the economy pick).</li>
+        <li><code>routing=ranked</code>: the ranked pick for that role (<code data-release-change="20261005-routing-economy">routing=economy</code>: the economy pick).</li>
         <li>
           <code>tier=</code> (the existing static-tier input) or the seeded <code>team.md</code> Model
           Tier — today's fallback, unchanged.
@@ -1646,7 +1697,7 @@ layouts:
         <li>Omit the parameter — the no-policy default.</li>
       </ol>
       <p>
-        <strong>Dispatch copies the cell:</strong> under <code>ranked</code>, <code>economy</code>, or <code>manual</code>, every
+        <strong>Dispatch copies the cell:</strong> under <code>ranked</code>, <code data-release-change="20261005-routing-economy">economy</code>, or <code>manual</code>, every
         dispatch to a roster agent passes that row's <code>Model</code> cell exactly, except the Scribe,
         whose own model pin governs. In the plugin distribution, the <code>dispatch-guards</code> hook
         refuses a dispatch whose <code>model</code> is missing or differs from the cell, and names the
@@ -1679,12 +1730,10 @@ layouts:
       </p>
       <p><strong>Examples:</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
-/squad request="implement the design" routing=ranked
-
-# Switch to economy; the squad states the trade and records your consent first.
-/squad request="update the getting-started guide" routing=economy
-
-# Switch to manual selection; you are asked for the models before the request runs.
+/squad request="implement the design" routing=ranked</code></pre>
+      <pre data-release-change="20261005-routing-economy"><code># Switch to economy; the squad states the trade and records your consent first.
+/squad request="update the getting-started guide" routing=economy</code></pre>
+      <pre><code># Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual
 
 # Return to the default; the Model column is removed.
@@ -1756,40 +1805,40 @@ layouts:
 
       <h2>Running on other hosts</h2>
       <p>
-        The squad ships both prompts and agents. <strong>Prompt files are a VS Code feature</strong> —
-        GitHub Copilot CLI and the GitHub Copilot app never read them. Every squad entry point
-        therefore also exists as an <strong>agent</strong>, and selecting the agent is the one
-        invocation model that works everywhere.
+        The squad ships both prompts and agents. <strong>VS Code Copilot Harness, GitHub Copilot CLI,
+        and the GitHub Copilot app all run Squad workflows through user-invocable agents.</strong>
+        Prompt files remain an alternative in VS Code, but selecting the mapped agent avoids an
+        intermediary call and is the invocation model that works everywhere.
       </p>
 
       <table data-host-reference>
         <thead>
-          <tr><th>Entry point</th><th>VS Code</th><th>Copilot CLI and Copilot app</th></tr>
+          <tr><th>Entry point</th><th>VS Code Copilot Harness</th><th>Copilot CLI and Copilot app</th></tr>
         </thead>
         <tbody>
           <tr>
             <td>Run a squad</td>
-            <td><code>/squad request="…"</code></td>
+            <td>select the <strong>Squad Coordinator</strong> agent</td>
             <td>select the <strong>Squad Coordinator</strong> agent</td>
           </tr>
           <tr>
             <td>Run a federation</td>
-            <td><code>/squad-federation request="…"</code></td>
+            <td>select the <strong>Squad Federation Coordinator</strong> agent</td>
             <td>select the <strong>Squad Federation Coordinator</strong> agent</td>
           </tr>
           <tr>
             <td>Search and export</td>
-            <td><code>/squad-document request="…"</code></td>
+            <td>select the <strong>Squad Document</strong> agent</td>
             <td>select the <strong>Squad Document</strong> agent</td>
           </tr>
           <tr>
             <td>Governance dashboard</td>
-            <td><code>/squad-governance-report</code></td>
+            <td>select the <strong>Squad Governance Report</strong> agent</td>
             <td>select the <strong>Squad Governance Report</strong> agent</td>
           </tr>
           <tr>
             <td>Promote a learning</td>
-            <td><code>/squad-learn</code></td>
+            <td>select the <strong>Squad Learn</strong> agent</td>
             <td>select the <strong>Squad Learn</strong> agent</td>
           </tr>
         </tbody>

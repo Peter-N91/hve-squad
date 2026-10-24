@@ -85,6 +85,19 @@ BeforeAll {
             ''
         ) -join "`n"
     }
+
+    function Get-MarkdownHeadersLocal {
+        param([Parameter(Mandatory)][string]$Content)
+        $headers = [System.Collections.Generic.List[object]]::new()
+        $lines = $Content -split '\r?\n'
+        for ($i = 0; $i -lt ($lines.Count - 1); $i++) {
+            if ($lines[$i].TrimStart().StartsWith('|') -and $lines[$i + 1] -match '^\s*\|[\s:|-]+\|\s*$') {
+                $header = $lines[$i].Trim().Trim('|') -split '\|' | ForEach-Object { $_.Trim() }
+                $headers.Add($header)
+            }
+        }
+        $headers.ToArray()
+    }
 }
 
 Describe 'GATE-38 Init copies roster rows from the payload and never derives an agent name' {
@@ -103,7 +116,18 @@ Describe 'GATE-38 Init copies roster rows from the payload and never derives an 
 
     It 'the coordinator fills roster with the resolved catalog rows' {
         $script:Coordinator | Should -Match 'Init payload: `roster` rows plus `ledgerCommand`'
-        $script:OperatingProcedure | Should -Match ([regex]::Escape('**The Init payload carries the roster rows, not just role ids.**'))
+        $script:OperatingProcedure | Should -Match ([regex]::Escape('**The Init payload carries full roster shape, not just role ids.**'))
+    }
+
+    It 'Init carries connector-bindings convergence: copy the section when provided and preserve refresh edits unless explicitly changed' {
+        $script:InitCold | Should -Match ([regex]::Escape('If payload `connectorBindings` is present and non-empty, also write `## Connector Bindings` with the exact seed-template header; omit the section entirely when empty or absent.'))
+        $script:InitCold | Should -Match ([regex]::Escape('Apply the same preserve rule to existing `connectorBindings` rows and custom routing rows: keep them as-is unless the payload explicitly edits or removes them.'))
+    }
+
+    It 'seed-templates.md publishes the canonical Connector Bindings header including Member Name' {
+        $headers = @(Get-MarkdownHeadersLocal -Content (Get-SquadReferenceBody -Name 'seed-templates.md') | Where-Object { $_ -contains 'Binding ID' })
+        $headers.Count | Should -BeGreaterThan 0
+        $headers[0] | Should -Be @('Binding ID', 'Connector ID', 'Manifest', 'Endpoint Kind', 'Role Mode', 'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role', 'Default Execution')
     }
 }
 

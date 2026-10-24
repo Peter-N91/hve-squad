@@ -5,7 +5,7 @@ applyTo: '**/.copilot-tracking/squad/**'
 
 # Squad Roster Conventions
 
-These conventions define the squad roster: the durable list of roles the Squad Coordinator can dispatch and the HVE Core agent that fills each role. The coordinator reads the roster at the start of every turn to decide who is available, how to invoke them, and which model tier to prefer.
+The roster binds dispatchable roles to HVE Core agents. At each turn, the coordinator reads it for availability, invocation, and preferred model tier.
 
 The roster is data, not behavior. It records identities and invocation details. Routing logic lives in `squad-routing.instructions.md`, and persistence rules live in `squad-state.instructions.md`.
 
@@ -39,6 +39,8 @@ The `Agent Name (Primary)` column holds exactly one agent; the role always has a
 
 <!-- <example-roster> -->
 ```markdown
+Ranked floors are minimums, not ceilings; copy resolver rationale and preserve Scribe/session exceptions.
+
 ## Members
 
 | Role          | Member Name | Agent Name (Primary)   | Alternate Agents                              | Selection Cue                                                             | Invocation         | Model Tier | Deliverable Root           |
@@ -189,6 +191,10 @@ The coordinator turns a matched role into exactly one concrete agent at dispatch
 5. **Record any non-primary resolution** through the Squad Scribe, so `history/<agent>.md` reflects the agent that actually ran and the cue that selected it.
 6. **Never self-fill an absent role.** When the resolved agent is not installed, not dispatchable, or returns nothing, the coordinator stops and escalates to the user. It must not perform the role's work itself, and must not substitute a non-mapped agent to fill the gap. An absent role blocks the stage until the user installs the agent, names a substitute, or removes the role. A dispatch that returns nothing is an absent role, not an invitation to improvise.
 
+For connector setup, manual bindings, or dispatch, load the skill's
+`references/connector-role-modes.md`; it also owns consumer-defined additive
+roles and their explicit artifact roots.
+
 ## Casting Rules
 
 * Use the exact `name:` frontmatter value from the deployed agent. Names with spaces are quoted when referenced from prompt or agent frontmatter.
@@ -304,8 +310,8 @@ A compliance-plus-Power-Platform project is therefore `profile=compliance pack=p
 * **A pack never introduces a role that duplicates work an existing role already owns.** Check the catalog first and widen the existing role instead — the same rule that gave the incident lifecycle to `azure-diagnose` rather than to a second `sre` role. Two roles claiming one phase is worse than a missing role, and that stays true across packs.
 * **Exactly one profile, zero or more packs.** A pack is never chosen *instead of* a profile, because a pack carries no methodology spine and cannot research, plan, implement, and review on its own.
 * **A pack's roles obey every rule a profile's roles obey.** In particular, a role whose registered external resource is not installed is offered with its `Install or Entry` command rather than seeded, per *Building a Custom Roster* below.
-* **The Scribe records the roster's provenance when it seeds.** A roster is a profile plus zero or more packs, or `custom`, and that is written into the Init decision in `decisions.md`; in a federation it is also the `Profile` column of the `federation.md` registry, in `azure +power-platform` form. A pack applied later is recorded the same way, as a decision, exactly like an added opt-in role.
-* **A pack can be applied to a roster that already exists**, and it is offered rather than assumed. When a request matches the routing pattern of a role that belongs to a registered pack the roster does not carry — or names the pack's domain plainly, which is the same signal arriving in words rather than keywords — the coordinator escalates and proposes applying the pack, naming its roles, what they would add, and the install command for any registered resource that is not yet present. This is the same offer the coordinator already makes for `intake-validator` and for an opt-in role, one level up: a group of roles instead of one. On acceptance the Scribe appends the pack's roles to `team.md`, their rows to `routing.md`, and a decision recording the applied pack; on decline the coordinator reports what it cannot do rather than substituting a role that cannot do the work.
+* **The Scribe records active packs and roster provenance when it seeds.** A roster is a profile plus zero or more packs, or `custom`. Write active packs on the `team.md` `Packs:` line, and write the Init decision and federation `Profile` column in literal `profile +pack` form (for example, `default +foundry` or `azure +power-platform`). A pack applied later updates the `Packs:` line and appends a decision, exactly like an added opt-in role.
+* **A pack can be applied to a roster that already exists**, and it is offered rather than assumed. When a request matches the routing pattern of a role that belongs to a registered pack the roster does not carry — or names the pack's domain plainly, which is the same signal arriving in words rather than keywords — the coordinator escalates and proposes applying the pack, naming its roles, what they would add, and the install command for any registered resource that is not yet present. This is the same offer the coordinator already makes for `intake-validator` and for an opt-in role, one level up: a group of roles instead of one. For `foundry`, collect all missing registered Foundry skills and their prerequisites into one offer rather than prompting once per skill. On acceptance the Scribe appends the pack's roles to `team.md`, updates `Packs:`, appends their rows to `routing.md`, and records the applied pack in a decision; on decline the coordinator reports what it cannot do rather than substituting a role that cannot do the work. Nothing is installed automatically.
 
 #### Removing a Pack
 
@@ -319,19 +325,20 @@ Four rules keep a removal honest:
 * **Keep the spend visible.** `consumption.md` mirrors roster order and recomputes the run total, so silently dropping a removed member's row would understate what the project actually spent. Keep the row and mark it removed; the run total stays truthful and the per-dispatch blocks in `history/<agent>.md` remain the durable evidence behind it.
 * **Leave the work where it is.** Deliverables a removed role already wrote stay on disk. Removing a role withdraws it from future dispatch; it does not retract what it produced.
 * **Removal is not an uninstall.** The pack's registered external resources stay installed and stay registered in the *External Cast*. Re-applying the pack later reseeds the roles with no reinstall, and a consumer who wants the disk space back uninstalls the resource deliberately, as a separate act.
+* **Keep active-pack state current.** Remove the pack from `team.md` `Packs:` in the same Scribe write; remove the line entirely when no packs remain. The appended removal decision preserves the audit trail.
 
 Removing a single role follows the same four rules. A pack is only the convenient way to name several at once.
 
 #### Registered Packs
 
-Optional `Guidance` files go only to the accepted pack's roles, per `references/profiles-and-packs.md`; blank means roles only. Accepted decisions establish activation, never role presence. Removal stops guidance without removing roles another roster source owns.
+Optional `Guidance` files go only to the accepted pack's roles and the methodology spine, per `references/profiles-and-packs.md`; blank means roles only. The `team.md` `Packs:` line establishes current activation, while accepted decisions preserve its audit trail. Guidance is passed only for work that touches the pack and is scoped to the relevant section. Removal stops guidance without removing roles another roster source owns.
 
 | Pack             | Adds (roles)               | Guidance | Choose when the project is…                                                                          | Arrival                                                                                                       |
 |------------------|----------------------------|----------|-------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | `power-platform` | pp-architect, pp-connector |          | Built on Power Platform — Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio        | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
 | `m365-copilot`   | m365-agent-architect, m365-agent-integrator |          | Built on Microsoft 365 Copilot — declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
 | `aws`            | aws-architect, aws-diagnose |          | Built on AWS — Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
-| `foundry`        | researcher, lead, developer, tester, architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. Reuses existing roles and registered external skills; adds no replacement agent |
+| `foundry`        | architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. Reuses existing roles and registered external skills; adds no replacement agent |
 
 **AWS is a pack while `azure` is a profile, and that asymmetry is deliberate.** `azure` predates the pack mechanism and stays a profile by the decision recorded in *Profile or Pack*: this repository's work is intrinsically Azure-shaped, so an Azure squad behaves as the dominant team shape rather than as an addition to one. AWS is new capability, so the three tests govern it, and all three say pack — it carries no methodology spine, it is not incoherent alongside any profile, and it answers "what is it built on". The practical consequence is the one the tests intend: a multi-cloud project takes `profile=azure` plus `pack=aws` and gets both, where two competing profiles would have forced a false choice. An AWS-only project takes whichever profile matches its *work* — usually `architecture` or `default` — plus the pack. Carrying the `aws` pack says the squad can reason about AWS; it does not imply general multi-cloud capability, and it says nothing at all about Google Cloud, which has no coverage anywhere (see the `gcp` row in the *Cast Catalog*).
 
