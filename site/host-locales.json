@@ -9,6 +9,8 @@
     "agents": {
       "/squad": "Squad Coordinator",
       "/squad-coach": "Squad Coach",
+      "/squad-connector-builder": "Squad Connector Builder",
+      "/squad-external-agent-builder": "Squad External Agent Builder",
       "/squad-federation": "Squad Federation Coordinator",
       "/squad-document": "Squad Document",
       "/squad-governance-report": "Squad Governance Report",
@@ -22,6 +24,8 @@
     "defaultRequests": {
       "/squad": "Initialize the squad.",
       "/squad-coach": "Help me choose the simplest HVE Squad setup for my goal.",
+      "/squad-connector-builder": "Help me scaffold a Squad Connector.",
+      "/squad-external-agent-builder": "Help me create or adapt an external agent for HVE Squad.",
       "/squad-federation": "Initialize the federation.",
       "/squad-governance-report": "Generate the governance report with default settings.",
       "/squad-learn": "Help me propose a shared learning."
@@ -37,6 +41,8 @@
     "agents": {
       "/squad": "Squad Coordinator",
       "/squad-coach": "Squad Coach",
+      "/squad-connector-builder": "Squad Connector Builder",
+      "/squad-external-agent-builder": "Squad External Agent Builder",
       "/squad-federation": "Squad Federation Coordinator",
       "/squad-document": "Squad Document",
       "/squad-governance-report": "Squad Governance Report",
@@ -50,6 +56,8 @@
     "defaultRequests": {
       "/squad": "Initialise la squad.",
       "/squad-coach": "Aide-moi à choisir la configuration HVE Squad la plus simple pour mon objectif.",
+      "/squad-connector-builder": "Aide-moi à préparer un Squad Connector.",
+      "/squad-external-agent-builder": "Aide-moi à créer ou adapter un agent externe pour HVE Squad.",
       "/squad-federation": "Initialise la fédération.",
       "/squad-governance-report": "Génère le rapport de gouvernance avec les paramètres par défaut.",
       "/squad-learn": "Aide-moi à proposer un apprentissage partagé."

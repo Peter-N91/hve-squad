@@ -35,7 +35,8 @@ and download links. A [Markdown companion](./CONSUMER-GUIDE.md) is also availabl
 | [Agent request](./delegation-request.agent.1.1.sample.json) and [agent result](./result-envelope.agent.1.1.sample.json) | A 1.1 single-agent exchange without optional `outputs` |
 
 These charters are source-only starters. Replace their example organization skill
-names and configure your own runner; HVE does not install or execute them.
+names and configure your own runner; HVE does not install or execute them. The
+user-invocable builders can scaffold a removable runner and runbook when present.
 
 ## Legacy 1.0 worked example (filled in)
 
