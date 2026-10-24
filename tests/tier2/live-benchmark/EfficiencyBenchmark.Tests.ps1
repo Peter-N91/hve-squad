@@ -3,11 +3,29 @@
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
+# Tests parsing, acceptance probes, budgets, scheduling and owned-process cleanup.
+# AI cost: none; fake CLIs simulate live runs, including parallel workers and failures.
+
 BeforeAll {
+    Set-StrictMode -Version Latest
+    $script:OriginalEfficiencyHome = $HOME
+    $script:OriginalEfficiencyEnvironmentHome = $env:HOME
+    $script:OriginalEfficiencyUserProfile = $env:USERPROFILE
+    $FixtureHome = Join-Path $TestDrive 'fixture-home'
+    New-Item -ItemType Directory -Path $FixtureHome | Out-Null
+    Set-Variable -Name HOME -Value $FixtureHome -Scope Global -Force
+    $env:HOME = $FixtureHome
+    $env:USERPROFILE = $FixtureHome
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+    function Remove-TestEfficiencySession {
+        param([Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')][string]$SessionId)
+        $Path = Join-Path $HOME ".copilot/session-state/$SessionId"
+        if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Recurse -Force }
+    }
     function Get-FakeEfficiencyAcpText {
         @'
 $ErrorActionPreference='Stop'
+if ($args -contains '--help') { '--acp --sync-session[=<on|off>]'; return }
 $Mode=$env:HVE_FAKE_ACP_MODE
 while($null -ne ($Line=[Console]::In.ReadLine())) {
     Add-Content -LiteralPath $env:HVE_FAKE_ACP_TRACE -Value $Line
@@ -68,6 +86,31 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
                 $Run
             }
         }
+    }
+}
+
+AfterAll {
+    Set-Variable -Name HOME -Value $script:OriginalEfficiencyHome -Scope Global -Force
+    $env:HOME = $script:OriginalEfficiencyEnvironmentHome
+    $env:USERPROFILE = $script:OriginalEfficiencyUserProfile
+}
+
+Describe 'Efficiency local CLI policy' -Tag 'Unit' {
+    It 'selects explicit modern or complete legacy sync protection' {
+        @(Get-EfficiencyCliLocalArguments '--sync-session[=<on|off>] --no-remote --no-remote-export') -join ' ' | Should -Be '--sync-session off'
+        @(Get-EfficiencyCliLocalArguments '--no-remote --no-remote-export') -join ' ' | Should -Be '--no-remote --no-remote-export'
+    }
+    It 'fails closed for missing, partial or similarly named policies' {
+        foreach ($Help in @('--version', '--no-remote', '--sync-session-extra --no-remote-export')) {
+            { Get-EfficiencyCliLocalArguments $Help } | Should -Throw '*sync*'
+        }
+    }
+    It 'rejects missing or malformed cleanup identity without touching session roots' {
+        $Sentinel = Join-Path $HOME '.copilot/session-state/preserve.txt'
+        New-Item -ItemType Directory -Path (Split-Path $Sentinel -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $Sentinel -Value 'preserve'
+        foreach ($Id in @('', '..', 'invalid')) { { Remove-TestEfficiencySession -SessionId $Id } | Should -Throw }
+        Get-Content -LiteralPath $Sentinel | Should -Be 'preserve'
     }
 }
 
@@ -292,7 +335,7 @@ Describe 'Efficiency native compaction boundary' -Tag 'Unit' {
         Set-Content -LiteralPath $Cli -Value $script:FakeAcpText -Encoding utf8NoBOM
         @(New-TestUsage; New-TestEvent 'session.compaction_complete' @{}) | Set-Content $Events
         $Session = [guid]::NewGuid().ToString()
-        $Result = Invoke-EfficiencyCompaction -CliPath $Cli -SessionId $Session -Workspace $TestDrive -EventsPath $Events -OutputPath $Output -UsagePath (Join-Path $TestDrive "$Mode-usage.json") -MaxCredits $(if($Mode -eq 'credit-limit'){1}else{10}) -Model fake -TimeoutSeconds $(if($Mode -eq 'timeout'){1}else{10}) -MaxRequests $(if($Mode -eq 'success'){990}else{10}) -EnvironmentVariables @{HVE_FAKE_ACP_MODE=$Mode;HVE_FAKE_ACP_EVENTS=$Events;HVE_FAKE_ACP_TRACE=$Trace}
+        $Result = Invoke-EfficiencyCompaction -CliPath $Cli -SessionId $Session -Workspace $TestDrive -EventsPath $Events -OutputPath $Output -UsagePath (Join-Path $TestDrive "$Mode-usage.json") -MaxCredits $(if($Mode -eq 'credit-limit'){1}else{10}) -Model fake -TimeoutSeconds $(if($Mode -eq 'timeout'){1}else{20}) -MaxRequests $(if($Mode -eq 'success'){990}else{10}) -EnvironmentVariables @{HVE_FAKE_ACP_MODE=$Mode;HVE_FAKE_ACP_EVENTS=$Events;HVE_FAKE_ACP_TRACE=$Trace}
         $Result.stopCause | Should -Be $Expected
         $Result.succeeded | Should -Be ($Mode -eq 'success')
         ($Result | ConvertTo-Json -Depth 10) | Should -Not -Match 'PRIVATE REPLAY|PRIVATE PROTOCOL DIAGNOSTIC'
@@ -325,7 +368,8 @@ Describe 'Efficiency recovery end to end' -Tag 'Unit' {
         $Fake = @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-recovery-cli'; exit 0 }
-if ($args -contains '--help') { '--acp --session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+if ($args -contains '--help') { '--acp --session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --sync-session[=<on|off>] --add-dir'; exit 0 }
+if ($args -contains '--no-remote' -or $args -contains '--no-remote-export' -or $args[[array]::IndexOf($args,'--sync-session')+1] -ne 'off') { throw 'Removed or missing local-only CLI policy' }
 if ($args -contains '--acp') {
     $env:HVE_FAKE_ACP_MODE='success'
     $env:HVE_FAKE_ACP_TRACE=Join-Path $PWD 'acp-trace.jsonl'
@@ -339,7 +383,7 @@ $Kind=if($Prompt -match 'Initialization only;'){'init'}elseif($Prompt -match 'Im
 $Ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1]
 if(-not (Test-Path 'initial-credit-limit.txt')){Set-Content 'initial-credit-limit.txt' $Ceiling}
 $EffectiveCeiling=[double](Get-Content 'initial-credit-limit.txt')
-@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
+@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first');boundaryValidation=$Prompt.Contains('test persisted Int32 and Int64 ID boundaries and data preservation');orderedHandoffs=$Prompt.Contains('finish and verify the preceding author/reviewer handoff synchronously');observationPolicy=$Prompt.Contains('without repeated remediation merely to reach a benchmark threshold')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
 if($EffectiveCeiling -lt 750){exit 38}
 $SessionRoot=Join-Path $HOME ".copilot/session-state/$Session"
 New-Item -ItemType Directory -Path $SessionRoot -Force|Out-Null
@@ -373,16 +417,25 @@ exit 0
         Set-Content -LiteralPath $Cli -Value ($Fake.Replace('__ACP__',$Acp).Replace('__FIXTURE__',$Fixture).Replace('__OUTCOME__',$Outcome)) -Encoding utf8NoBOM
         $Arguments = @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'),'-Mode','Run','-SourceRoot',$Source,'-InstallRoot',$Install,'-CliPath',$Cli,'-TrialRoot',$Trial,'-MaxCredits','1000','-Live','-IsolatedEnvironment')
         if ($Outcome -like 'observe-*') { $Arguments += '-ObservationOnly' }
-        $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 90 -InputText ''
+        $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 180 -InputText ''
         $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         try {
+            $Progress = Get-Content (Join-Path $Trial 'out/progress.json') -Raw | ConvertFrom-Json
+            $Progress.completed | Should -Be (3 + $Run.stages.Count + [int]($null -ne $Run.judge))
+            $Progress.total | Should -Be 7
+            $Progress.status | Should -Be finished
+            $Progress.independentChecksPassed | Should -BeFalse
+            if ($null -eq $Run.judge) { $Progress.completed | Should -BeLessThan 7 }
             if ($Outcome -like 'observe-*') {
                 $Execution.exitCode | Should -Be 0
                 $Run.collection.recorded | Should -BeTrue
+                $Progress.recorded | Should -BeTrue
                 $Run.completed | Should -BeFalse
                 $Run.stages[1].passed | Should -BeFalse
                 $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
                 @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(970)
+                ($Calls | Where-Object kind -EQ 'requirements').orderedHandoffs | Should -BeTrue
+                @($Calls | Where-Object { -not $_.observationPolicy }).Count | Should -Be 0
                 if ($Outcome -eq 'observe-credit-limit') {
                     $Run.stages.Count | Should -Be 2
                     $Run.stages[1].process.stopCause | Should -Be 'credit-limit'
@@ -392,6 +445,7 @@ exit 0
                     $Run.stages.name -join ',' | Should -Be 'init,requirements,build'
                     $Calls.kind -join ',' | Should -Be 'init,requirements,build'
                     $Run.stages[2].process.exitCode | Should -Be 37
+                    ($Calls | Where-Object kind -EQ 'build').boundaryValidation | Should -BeTrue
                 }
                 $Run.judge.valid | Should -BeFalse
                 $Run.judge.reason | Should -Be 'missing-or-oversized-document'
@@ -419,6 +473,10 @@ exit 0
             foreach($Prefix in @('requirements','requirements-compaction','requirements-continuation')) { Test-Path (Join-Path $Trial "out/$Prefix-events.jsonl") | Should -BeTrue }
             Get-Content (Join-Path $Trial 'out/requirements-stdout.jsonl') -Raw | Should -Match '127666'
             $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            ($Calls | Where-Object kind -EQ 'requirements').orderedHandoffs | Should -BeTrue
+            if ($Outcome -eq 'recovered') {
+                ($Calls | Where-Object kind -EQ 'build').boundaryValidation | Should -BeTrue
+            }
             @($Calls.session | Sort-Object -Unique).Count | Should -Be 1
             ($Calls | Where-Object kind -EQ continuation).resumeOnly | Should -BeTrue
             @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(750)
@@ -434,7 +492,124 @@ exit 0
             $Run.completed | Should -BeFalse
             $Run.judge | Should -BeNullOrEmpty
         }
-        finally { Remove-Item (Join-Path $HOME ".copilot/session-state/$($Run.metadata.sessionId)") -Recurse -Force }
+        finally { Remove-TestEfficiencySession -SessionId $Run.metadata.sessionId }
+    }
+}
+
+Describe 'Periodic benchmark progress' -Tag 'Unit' {
+    It 'reports three independent phase counters without pretending they estimate model completion' {
+        $Paths = [ordered]@{}
+        foreach ($Pair in 1..3) { $Paths["baseline-$Pair"] = Join-Path $TestDrive "progress-$Pair.json" }
+        Write-EfficiencyProgress -Path $Paths['baseline-1'] -Stage init -Completed 1 -Total 7
+        Write-EfficiencyProgress -Path $Paths['baseline-2'] -Stage judge -Completed 5 -Total 7
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths $Paths -ElapsedSeconds 90
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*[[]00:01:30[]] baseline-1: init*1/7 milestones*' -and $Object -notmatch '\d+%' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-2: judge*5/7 milestones*' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-3: awaiting preflight*' }
+    }
+    It 'does not present skipped or failed work as 100 percent' {
+        $Path = Join-Path $TestDrive 'failed-progress.json'
+        Write-EfficiencyProgress -Path $Path -Stage requirements -Completed 2 -Total 7 -Status failed
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths @{ 'candidate-2' = $Path } -ElapsedSeconds 10
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*candidate-2: requirements [[]failed[]]; 2/7 milestones*' -and $Object -notmatch '100%' }
+        { Write-EfficiencyProgress -Path $Path -Stage report -Completed 8 -Total 7 } | Should -Throw '*exceed*'
+    }
+    It 'prints a finished observation with failed checks once while other parallel trials remain active' {
+        $Paths = [ordered]@{ 'baseline-1' = Join-Path $TestDrive 'terminal.json'; 'baseline-2' = Join-Path $TestDrive 'active.json' }
+        Write-EfficiencyProgress -Path $Paths['baseline-1'] -Stage report -Completed 7 -Total 7 -Status finished -IndependentChecksPassed $false -Recorded $true
+        Write-EfficiencyProgress -Path $Paths['baseline-2'] -Stage build -Completed 3 -Total 7
+        $Previous = @{}
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths $Paths -ElapsedSeconds 90 -PreviousSnapshots $Previous
+        Write-EfficiencyProgressSummary -Paths $Paths -ElapsedSeconds 120 -PreviousSnapshots $Previous
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Object -like '*baseline-1:*independent checks failed; observation recorded*' -and $Object -notmatch '100%' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 2 -Exactly -ParameterFilter { $Object -like '*baseline-2: build [[]running[]]*' }
+    }
+    It 'reports phase duration and output activity without reading private CLI output' {
+        $Path = Join-Path $TestDrive 'activity-progress.json'
+        Write-EfficiencyProgress -Path $Path -Stage build -Completed 3 -Total 7
+        Set-Content (Join-Path $TestDrive 'build-stdout.jsonl') 'PRIVATE CLI CONTENT'
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths @{ 'baseline-3' = $Path } -ElapsedSeconds 300
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter {
+            $Object -like '*baseline-3: build*3/7 milestones*phase elapsed*CLI output*bytes; last output*ago' -and $Object -notlike '*PRIVATE CLI CONTENT*'
+        }
+    }
+    It 'accepts old snapshots without inventing their missing phase duration or result' {
+        $Path = Join-Path $TestDrive 'legacy-progress.json'
+        Set-Content $Path '{"schemaVersion":"efficiency-progress-v1","stage":"build","completed":3,"total":7,"status":"running"}'
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        Write-EfficiencyProgressSummary -Paths @{ 'baseline-1' = $Path }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter {
+            $Object -like '*baseline-1: build [[]running[]]; 3/7 milestones finished*' -and $Object -notmatch 'phase elapsed|independent checks passed|observation recorded'
+        }
+    }
+    It 'warns on malformed progress without exposing its content or interrupting work' {
+        $Path = Join-Path $TestDrive 'invalid-progress.json'
+        Set-Content -LiteralPath $Path -Value '{"private":"PRIVATE SNAPSHOT","schemaVersion":"wrong"}'
+        Mock Write-Warning -ModuleName EfficiencyBenchmark {}
+        Mock Write-Host -ModuleName EfficiencyBenchmark {}
+        { Write-EfficiencyProgressSummary -Paths @{ 'baseline-1' = $Path } } | Should -Not -Throw
+        Should -Invoke Write-Warning -ModuleName EfficiencyBenchmark -Times 1 -Exactly -ParameterFilter { $Message -like 'Progress unavailable*' -and $Message -notlike '*PRIVATE SNAPSHOT*' }
+        Should -Invoke Write-Host -ModuleName EfficiencyBenchmark -Times 0
+    }
+    It 'observes a running native process periodically without contaminating its result' {
+        $Marker = Join-Path $TestDrive 'observer-stop'
+        $Timeline = [Collections.Generic.List[double]]::new()
+        $Observer = {
+            param($Seconds)
+            $Timeline.Add($Seconds)
+            if ($Timeline.Count -eq 3) { Set-Content -LiteralPath $Marker -Value 'stop' }
+            'observer-success-output-must-not-be-a-process-result'
+        }.GetNewClosure()
+        $Result = @(Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'while (-not (Test-Path -LiteralPath $env:HVE_PROGRESS_STOP)) { Start-Sleep -Milliseconds 50 }; "observed"') -EnvironmentVariables @{ HVE_PROGRESS_STOP = $Marker } -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'observer.log') -TimeoutSeconds 60 -OnProgress $Observer -ProgressIntervalSeconds 1)
+        $Result.Count | Should -Be 1
+        $Result[0].exitCode | Should -Be 0
+        $Result[0].stopCause | Should -Be none
+        $Timeline.Count | Should -BeGreaterOrEqual 4
+        Get-Content (Join-Path $TestDrive 'observer.log') | Should -Be observed
+    }
+    It 'aggregates all offline files and publishes truthful progress for <Outcome>' -ForEach @(
+        @{ Outcome = 'passed'; Exit = 0; Status = 'finished' },
+        @{ Outcome = 'failed'; Exit = 1; Status = 'failed' },
+        @{ Outcome = 'empty'; Exit = 1; Status = 'failed' }
+    ) {
+        $Directory = Join-Path $TestDrive $Outcome
+        New-Item -ItemType Directory -Path $Directory | Out-Null
+        $FakePester = Join-Path $Directory 'FakePester.psm1'
+        @'
+function New-PesterConfiguration { @{ Run = @{ Container = $null; PassThru = $false }; Output = @{ Verbosity = 'Normal' } } }
+function New-PesterContainer { param([string[]]$Path) $Path }
+function Invoke-Pester {
+    param($Configuration)
+    $Before = Get-Content -LiteralPath $env:HVE_PROGRESS_FILE -Raw | ConvertFrom-Json
+    "$($Before.completed):$([IO.Path]::GetFileName($Configuration.Run.Container))" | Add-Content -LiteralPath $env:HVE_PROGRESS_CALLS
+    $Middle = $Before.completed -eq 1
+    [pscustomobject]@{
+        FailedCount = [int]($Middle -and $env:HVE_PROGRESS_OUTCOME -eq 'failed')
+        TotalCount = $(if ($Middle -and $env:HVE_PROGRESS_OUTCOME -eq 'empty') { 0 } else { 5 })
+        Result = $(if ($Middle -and $env:HVE_PROGRESS_OUTCOME -eq 'failed') { 'Failed' } else { 'Passed' })
+    }
+}
+'@ | Set-Content -LiteralPath $FakePester
+        $Bootstrap = Join-Path $Directory 'bootstrap.ps1'
+        @'
+param($Runner, $Pester, $Progress)
+function python { $global:LASTEXITCODE = 0; 'pytest fixture' }
+& $Runner -PesterPath $Pester -ProgressPath $Progress -Output Normal
+exit $LASTEXITCODE
+'@ | Set-Content -LiteralPath $Bootstrap
+        $Progress = Join-Path $Directory 'progress.json'
+        $Calls = Join-Path $Directory 'calls.txt'
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Bootstrap, (Join-Path $PSScriptRoot 'Invoke-LiveBenchmarkTests.ps1'), $FakePester, $Progress) -EnvironmentVariables @{ HVE_PROGRESS_FILE = $Progress; HVE_PROGRESS_CALLS = $Calls; HVE_PROGRESS_OUTCOME = $Outcome } -WorkingDirectory $Directory -OutputPath (Join-Path $Directory 'runner.log') -TimeoutSeconds 60
+        $Result.exitCode | Should -Be $Exit -Because (Get-Content (Join-Path $Directory 'runner.log.stderr') -Raw)
+        Get-Content $Calls | Should -Be @('0:LiveBenchmark.Tests.ps1', '1:EfficiencyBenchmark.Tests.ps1', '2:Start-EfficiencyWizard.Tests.ps1')
+        $Snapshot = Get-Content $Progress -Raw | ConvertFrom-Json
+        $Snapshot.completed | Should -Be 3
+        $Snapshot.total | Should -Be 3
+        $Snapshot.status | Should -Be $Status
     }
 }
 
@@ -465,9 +640,14 @@ Set-Content -LiteralPath ($Events+'.started') -Value 'started'
 if($Case -eq 'replay'){$Replay=@(Get-Content -LiteralPath $Events);$Replay|Add-Content -LiteralPath $Events}
 if($Case -notin @('no-records','no-fresh-records')){Add-Content -LiteralPath $Events -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Encoded)))}
 Start-Sleep -Milliseconds ([int]$Delay)
+Set-Content -LiteralPath ($Events+'.finished') -Value 'finished'
 '@ | Set-Content -LiteralPath $Cli
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',$Cli,$Events,$Encoded,[string]$Delay,$Case) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-credit-output.txt") -EventsPath $Events -StartLine $(if($Prior){1}else{0}) -MaxCredits 2 -TimeoutSeconds 10
         $Result.stopCause | Should -Be $Expected
+        if ($Delay -gt 0) {
+            Test-Path -LiteralPath ($Events + '.started') | Should -BeTrue
+            Test-Path -LiteralPath ($Events + '.finished') | Should -BeFalse
+        }
         if ($Expected -eq 'credit-limit') {
             $Result.creditsUsed | Should -Be 2.2
             $Marker = $Events + '.started'
@@ -480,7 +660,6 @@ Start-Sleep -Milliseconds ([int]$Delay)
             $Result.creditsUsed | Should -Be 1.5
             (Measure-EfficiencyEvents $Events).credits.used | Should -Be 1.5
         }
-        if ($Delay -gt 0) { $Result.seconds | Should -BeLessThan 3 }
     }
     It 'keeps judge credit accounting separate from the workflow' {
         $Workspace = Join-Path $TestDrive 'judge-workspace'; $Out = Join-Path $TestDrive 'judge-out'
@@ -488,6 +667,7 @@ Start-Sleep -Milliseconds ([int]$Delay)
         foreach ($Name in @('brd','prd','review')) { Set-Content -LiteralPath (Join-Path $Workspace "docs/requirements/$Name.md") -Value 'synthetic document' }
         $Cli = Join-Path $TestDrive 'judge-credit-cli.ps1'
         @'
+if ($args -contains '--help') { '--sync-session[=<on|off>]'; return }
 $InputPrompt=[Console]::In.ReadToEnd()
 $Payload=($InputPrompt -split "`n`n",2)[1]|ConvertFrom-Json -AsHashtable
 $Session=$args[[array]::IndexOf($args,'--session-id')+1]
@@ -511,7 +691,7 @@ $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHas
             $Judge.process.creditCeiling | Should -Be 250
             $Judge.metrics.credits.used | Should -Be 1
         }
-        finally { Remove-Item -LiteralPath (Join-Path $HOME ".copilot/session-state/$($Call.session)") -Recurse -Force }
+        finally { Remove-TestEfficiencySession -SessionId $Call.session }
         $Policy = Get-EfficiencyRecoveryPolicy -MaxCredits 1000 -ObservationOnly
         $Out = Join-Path $TestDrive 'judge-observation-out'
         New-Item -ItemType Directory -Path $Out | Out-Null
@@ -527,7 +707,7 @@ $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHas
             $Judge.documentHashes.closingReview | Should -Be ([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]]@())))
             (Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits 250 -ReviewPath '').valid | Should -BeFalse
         }
-        finally { Remove-Item -LiteralPath (Join-Path $HOME ".copilot/session-state/$($Call.session)") -Recurse -Force }
+        finally { Remove-TestEfficiencySession -SessionId $Call.session }
     }
     It 'sets repository-hook opt-in only for the child process' {
         $Previous = [Environment]::GetEnvironmentVariable('GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS', 'Process')
@@ -596,6 +776,11 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
     }
     It 'accepts initialized state without demanding implementation roles' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init).passed | Should -BeTrue
+        $script:StageMetrics.dispatches.Remove('Squad Scribe')
+        $Direct = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init
+        $Direct.checks['scribeHistory'] | Should -BeFalse
+        $Direct.passed | Should -BeFalse
+        $script:StageMetrics.dispatches['Squad Scribe'] = 1
         Set-Content (Join-Path $script:StageSquad 'history/Squad Scribe.md') '# Squad Scribe History'
         $Malformed = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init
         $Malformed.checks['stateVerifier'] | Should -BeTrue
@@ -681,6 +866,7 @@ Describe 'Efficiency quality and comparison gates' -Tag 'Unit' {
         $Cli = Join-Path $TestDrive 'fake-judge-cli.ps1'
         @'
 $ErrorActionPreference = 'Stop'
+if ($args -contains '--help') { '--sync-session[=<on|off>]'; return }
 $InputPrompt = [Console]::In.ReadToEnd()
 @{ arguments = @($args); inputPrompt = $InputPrompt } | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath (Join-Path $PWD 'judge-argv.json') -Encoding utf8NoBOM
 exit 37
@@ -714,9 +900,12 @@ exit 37
         foreach ($BroadPermission in @('--allow-all', '--yolo', '--allow-all-tools', '--allow-all-paths', '--allow-all-urls')) {
             $Arguments | Should -Not -Contain $BroadPermission
         }
-        foreach ($PreservedOption in @('--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export')) {
+        foreach ($PreservedOption in @('--no-custom-instructions', '--disable-builtin-mcps', '--sync-session')) {
             $Arguments | Should -Contain $PreservedOption
         }
+        $Arguments[[array]::IndexOf($Arguments, '--sync-session') + 1] | Should -Be 'off'
+        $Arguments | Should -Not -Contain '--no-remote'
+        $Arguments | Should -Not -Contain '--no-remote-export'
     }
 
     It 'requires three pairs and includes independently metered judge work' {
@@ -832,7 +1021,8 @@ exit 37
     }
     It 'refuses a live launch without explicit opt-in and isolation' {
         $Output = Join-Path $TestDrive 'blocked-launch.txt'
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 10
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Run') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 120
+        $Result.stopCause | Should -Be 'none'
         $Result.exitCode | Should -Be 1
         Get-Content ($Output + '.stderr') -Raw | Should -Match 'requires -Live'
     }
@@ -840,7 +1030,8 @@ exit 37
         $Events = Join-Path $TestDrive 'analyze-events.jsonl'
         New-TestEvent 'tool.execution_start' @{ toolCallId = 'unfinished'; toolName = 'view' } | Set-Content $Events
         $Destination = Join-Path $TestDrive 'analysis'
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Analyze', '-EventsPath', $Events, '-OutputPath', $Destination) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'analysis-stdout.txt') -TimeoutSeconds 10
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Analyze', '-EventsPath', $Events, '-OutputPath', $Destination) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'analysis-stdout.txt') -TimeoutSeconds 120
+        $Result.stopCause | Should -Be 'none'
         $Result.exitCode | Should -Be 2
         (Get-Content (Join-Path $Destination 'metrics.json') -Raw | ConvertFrom-Json).complete | Should -BeFalse
         Test-Path (Join-Path $Destination 'events.jsonl') | Should -BeTrue
@@ -861,7 +1052,8 @@ exit 0
 '@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
         New-Item -ItemType Directory -Path (Join-Path $Source 'scripts') -Force | Out-Null
         Set-Content (Join-Path $Source 'scripts/Build-SquadPlugin.ps1') '# offline converter fixture'
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Establish', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '120', '-MaxSeriesCredits', '360', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'establish-command.txt') -TimeoutSeconds 30 -InputText ''
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', 'Establish', '-SourceRoot', $Source, '-InstallRoot', $Install, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '120', '-MaxSeriesCredits', '360', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'establish-command.txt') -TimeoutSeconds 120 -InputText ''
+        $Result.stopCause | Should -Be 'none'
         $Result.exitCode | Should -Be 2
         $LaunchError = Join-Path $Trial 'out/baseline-1-launch.jsonl.stderr'
         Test-Path -LiteralPath $LaunchError | Should -BeTrue
@@ -906,7 +1098,7 @@ exit 0
             @(Get-Content (Join-Path $Trial 'workspace/stage-launches.txt')).Count | Should -Be 1
             $Run.judge | Should -BeNullOrEmpty
         }
-        finally { Remove-Item (Join-Path $HOME ".copilot/session-state/$($Run.metadata.sessionId)") -Recurse -Force }
+        finally { Remove-TestEfficiencySession -SessionId $Run.metadata.sessionId }
     }
     It 'passes the full init prompt and options as valid argv elements to the CLI process' {
         $Install = Join-Path $TestDrive 'argv-install'; $Trial = Join-Path $TestDrive 'argv-run'
@@ -995,7 +1187,7 @@ Describe 'Live execution allocation preflight' -Tag 'Unit' {
         Set-Content $Cli "Set-Content '$Marker' 'unexpected invocation'; exit 39"
         $Trial = Join-Path $TestDrive "$RunMode-undersized"
         $Output = Join-Path $TestDrive "$RunMode-preflight.txt"
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', $RunMode, '-SourceRoot', $TestDrive, '-InstallRoot', $TestDrive, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '100', '-MaxSeriesCredits', '600', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 20
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'), '-Mode', $RunMode, '-SourceRoot', $TestDrive, '-InstallRoot', $TestDrive, '-CliPath', $Cli, '-TrialRoot', $Trial, '-MaxCredits', '100', '-MaxSeriesCredits', '600', '-Live', '-IsolatedEnvironment') -WorkingDirectory $TestDrive -OutputPath $Output -TimeoutSeconds 30
         $Result.exitCode | Should -Be 1
         Get-Content ($Output + '.stderr') -Raw | Should -Match 'at least 120'
         Test-Path $Marker | Should -BeFalse
@@ -1027,6 +1219,9 @@ Describe 'Executing compatibility inputs' -Tag 'Unit' {
             Import-Module (Join-Path $Executing 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1') -Force
             $Arguments = @{ SourceRoot = $Selected; InstallRoot = $Install; CliPath = $Cli; Model = 'fake'; MaxCredits = 120 }
             $Before = Get-EfficiencyCompatibility @Arguments
+            $Concurrent = Get-EfficiencyCompatibility @Arguments -ParallelTrials
+            $Concurrent.trialScheduling | Should -Be 'parallel-three-v1'
+            $Concurrent.hostProfile | Should -Not -Be $Before.hostProfile
             $Before.converterHash | Should -Be (Get-FileHash (Join-Path $Selected 'scripts/Build-SquadPlugin.ps1')).Hash
             $Before.verifierHash | Should -Be (Get-FileHash (Join-Path $Executing 'scripts/Test-SquadScribeOutput.ps1')).Hash
             $SourceHash = Get-EfficiencyTreeHash (Join-Path $Selected 'squad-src')
@@ -1089,11 +1284,22 @@ try {
         @($Rejected.checks | Where-Object { -not $_.passed }).name | Should -Be 'id-boundary-preserves-store'
         Set-Content -LiteralPath $Path -Value $Source.Replace($CapacityGuard, '$Maximum=[long]$Maximum').Replace('[int]$Id', '[long]$Id') -Encoding utf8NoBOM
         $Wider = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
+        $Wider.passed | Should -BeFalse
+        @($Wider.checks | Where-Object { -not $_.passed }).name | Should -Be 'id-boundary-preserves-store'
+        $GuardedWider = $Source.Replace($CapacityGuard, '$Maximum=[long]$Maximum; if ($Maximum -eq [long]::MaxValue) {throw "id-capacity"}').Replace('[int]$Id', '[long]$Id')
+        Set-Content -LiteralPath $Path -Value $GuardedWider -Encoding utf8NoBOM
+        $Wider = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
         $Wider.passed | Should -BeTrue -Because (@($Wider.checks | Where-Object { -not $_.passed } | ForEach-Object name) -join ', ')
+        Set-Content -LiteralPath $Path -Value $GuardedWider.Replace('throw "id-capacity"', '$Maximum=0') -Encoding utf8NoBOM
+        $Wrapped = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json
+        $Wrapped.passed | Should -BeFalse
+        @($Wrapped.checks | Where-Object { -not $_.passed }).name | Should -Be 'id-boundary-preserves-store'
     }
     It 'rejects a hanging <Probe> instead of treating the watchdog as input rejection' -ForEach @(
         @{ Probe = 'missing-title'; Needle = "if ([string]::IsNullOrWhiteSpace(`$Title))"; Replacement = "if (-not `$PSBoundParameters.ContainsKey('Title')) { while (`$true) { Start-Sleep -Milliseconds 200 } }; if ([string]::IsNullOrWhiteSpace(`$Title))" },
-        @{ Probe = 'corrupt-store-preserved'; Needle = 'try {'; Replacement = "try { if ((Test-Path -LiteralPath `$Store) -and (Get-Content -LiteralPath `$Store -Raw) -eq '{invalid-json') { while (`$true) { Start-Sleep -Milliseconds 200 } }" }
+        @{ Probe = 'corrupt-store-preserved'; Needle = 'try {'; Replacement = "try { if ((Test-Path -LiteralPath `$Store) -and (Get-Content -LiteralPath `$Store -Raw) -eq '{invalid-json') { while (`$true) { Start-Sleep -Milliseconds 200 } }" },
+        @{ Probe = 'invalid-action'; Needle = "[ValidateSet('add','list','done')][string]`$Action"; Replacement = "[ValidateScript({ if (`$_ -eq 'erase') { while (`$true) { Start-Sleep -Milliseconds 200 } }; `$true })][string]`$Action" },
+        @{ Probe = 'invalid-filter'; Needle = "[ValidateSet('all','open','done')][string]`$Status"; Replacement = "[ValidateScript({ if (`$_ -eq 'invalid') { while (`$true) { Start-Sleep -Milliseconds 200 } }; `$true })][string]`$Status" }
     ) {
         $Workspace = Join-Path $TestDrive $Probe
         New-Item -ItemType Directory -Path (Join-Path $Workspace 'src') -Force | Out-Null
@@ -1103,6 +1309,131 @@ try {
         $Result.checks.Count | Should -Be 13
         $Result.passed | Should -BeFalse
         @($Result.checks | Where-Object { -not $_.passed }).name | Should -Be $Probe
+    }
+}
+
+Describe 'Parallel native observations' -Tag 'Unit' {
+    BeforeEach {
+        $BeforeJobs = @(Get-Job | ForEach-Object { $_.Id })
+        $Root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $Trials = Join-Path $Root 'trials'; $Out = Join-Path $Root 'out'
+        New-Item -ItemType Directory -Path $Trials, $Out | Out-Null
+        $Entry = Join-Path $Root 'fake-entry.ps1'
+        @'
+param($Mode,$TrialRoot,$SourceRoot,$InstallRoot,$Arm,$Pair,$Model,$CliPath,$MaxCredits,[switch]$Live,[switch]$IsolatedEnvironment,[switch]$ObservationOnly,[switch]$ParallelTrials)
+$ErrorActionPreference='Stop'
+if (-not $ParallelTrials -or -not $ObservationOnly -or [double]$MaxCredits -ne 10) { throw 'Incorrect native trial arguments' }
+Set-Content -LiteralPath (Join-Path $SourceRoot "$Arm-$Pair.started") -Value $PID
+$Watch=[Diagnostics.Stopwatch]::StartNew()
+while (@(Get-ChildItem -LiteralPath $SourceRoot -Filter '*.started').Count -ne 3) {
+    if ($Watch.Elapsed.TotalSeconds -gt 20) { throw 'Workers did not overlap' }
+    Start-Sleep -Milliseconds 50
+}
+if (Test-Path -LiteralPath (Join-Path $SourceRoot "$Pair.hang")) {
+    $Info=[Diagnostics.ProcessStartInfo]::new((Get-Command pwsh).Source)
+    $Info.UseShellExecute=$false
+    foreach($Value in @('-NoProfile','-Command','Start-Sleep -Seconds 60')) { $Info.ArgumentList.Add($Value) }
+    $Child=[Diagnostics.Process]::Start($Info)
+    Set-Content -LiteralPath (Join-Path $SourceRoot "$Pair.descendant") -Value $Child.Id
+    $Child.WaitForExit()
+}
+if (Test-Path -LiteralPath (Join-Path $SourceRoot "$Pair.missing")) { [Console]::Error.WriteLine('PRIVATE WORKER ERROR'); exit 41 }
+$Out=Join-Path $TrialRoot 'out'
+New-Item -ItemType Directory -Path $Out | Out-Null
+Copy-Item -LiteralPath (Join-Path $SourceRoot "$Arm-$Pair.json") -Destination (Join-Path $Out 'run.json')
+'@ | Set-Content -LiteralPath $Entry
+        $Context = @{ EntryScript = $Entry; Trials = $Trials; Out = $Out; SourcePaths = @{ baseline = $Root; candidate = $Root }; InstallRoot = $Root; Model = 'fake'; CliPath = $Entry; ObservationOnly = $true; ParallelTrials = $true }
+        $Fixtures = @(New-TestRuns -ObservationOnly)
+        foreach ($Run in $Fixtures) {
+            $Run.metadata.compatibility.trialScheduling = 'parallel-three-v1'
+            $Run | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $Root "$($Run.metadata.arm)-$($Run.metadata.pair).json")
+        }
+        $Expected = $Fixtures[0].metadata.compatibility
+    }
+    AfterEach {
+        @((Get-Job) | Where-Object Id -NotIn $BeforeJobs).Count | Should -Be 0
+    }
+    It 'overlaps all three native starts and retains deterministic <Case> outcomes' -ForEach @(
+        @{ Case = 'valid' }, @{ Case = 'missing' }, @{ Case = 'identity' }
+    ) {
+        if ($Case -eq 'missing') {
+            Set-Content (Join-Path $Root '1.missing') 'fail'
+            $Fixtures[2].completed = $false
+            $Fixtures[2].acceptance.passed = $false
+            $Fixtures[2] | ConvertTo-Json -Depth 30 | Set-Content (Join-Path $Root 'baseline-3.json')
+        }
+        if ($Case -eq 'identity') {
+            $Fixtures[1].metadata.runId = $Fixtures[0].metadata.runId
+            $Fixtures[1] | ConvertTo-Json -Depth 30 | Set-Content (Join-Path $Root 'baseline-2.json')
+        }
+        $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial { throw 'Serial callback must not execute' } -TrialContext $Context -ParallelTrials -ObservationOnly -ExpectedCompatibility $Expected -PerRunCredits 10 -SeriesCredits 30
+        @((Get-ChildItem -LiteralPath $Root -Filter '*.started')).Count | Should -Be 3
+        $Result.report.slots.pair -join ',' | Should -Be '1,2,3'
+        $Result.report.limits.reservedCredits | Should -Be 30
+        $Result.report.limits.outerRetries | Should -Be 0
+        $Result.report.acceptedBaselineChanged | Should -BeFalse
+        if ($Case -eq 'valid') {
+            $Result.exitCode | Should -Be 0
+            $Result.controls.runs.Count | Should -Be 3
+        }
+        else {
+            $Result.exitCode | Should -Be 2
+            $Result.controls | Should -BeNullOrEmpty
+            $Result.runs.Count | Should -Be 2
+            $Result.report | ConvertTo-Json -Depth 30 | Should -Not -Match 'PRIVATE WORKER ERROR'
+            if ($Case -eq 'missing') {
+                $Result.report.slots[0].childExitCode | Should -Be 41
+                $Result.report.slots[2].reason | Should -Be 'run-failed-independent-checks'
+            }
+        }
+    }
+    It 'refuses underfunding, incompatible scheduling and fresh six-pair parallelism before launch' {
+        { Invoke-EfficiencySeries -Kind Establish -RunTrial {} -TrialContext $Context -ParallelTrials -ExpectedCompatibility $Expected -PerRunCredits 10 -SeriesCredits 29 } | Should -Throw '*ceiling*'
+        { Invoke-EfficiencySeries -Kind Series -RunTrial {} -TrialContext $Context -ParallelTrials -ExpectedCompatibility $Expected -PerRunCredits 10 -SeriesCredits 60 } | Should -Throw '*three*'
+        $Controls = @{ schemaVersion = 'efficiency-control-v1'; runs = @($Fixtures | Where-Object { $_.metadata.arm -eq 'baseline' }) }
+        foreach ($Run in $Controls.runs) { $Run.metadata.compatibility.trialScheduling = 'serial-v1' }
+        $ParallelExpected = $Expected.Clone(); $ParallelExpected.trialScheduling = 'parallel-three-v1'
+        { Invoke-EfficiencySeries -Kind Series -RunTrial {} -TrialContext $Context -ParallelTrials -ObservationOnly -BaselineEvidence $Controls -ExpectedCompatibility $ParallelExpected -PerRunCredits 10 -SeriesCredits 30 } | Should -Throw '*compatibility*'
+        @(Get-ChildItem -LiteralPath $Root -Filter '*.started').Count | Should -Be 0
+    }
+    It 'cleans owned native trees on collector <Interruption> while preserving completed evidence and unrelated work' -ForEach @(
+        @{ Interruption = 'exception' }, @{ Interruption = 'deadline' }
+    ) {
+        Set-Content (Join-Path $Root '2.hang') 'hang'
+        Set-Content (Join-Path $Root '3.hang') 'hang'
+        $Sentinel = Start-Job { Start-Sleep -Seconds 60 }
+        try {
+            Mock Wait-Job -ModuleName EfficiencyBenchmark {
+                $Watch = [Diagnostics.Stopwatch]::StartNew()
+                while (@(Get-ChildItem -LiteralPath $Root -Filter '*.descendant').Count -ne 2 -or $Job[0].State -ne 'Completed') {
+                    if ($Watch.Elapsed.TotalSeconds -gt 30) { throw 'Fixture did not start' }
+                    Start-Sleep -Milliseconds 50
+                }
+                if ($Interruption -eq 'exception') { throw 'Controlled collection interruption' }
+            } -ParameterFilter { $Timeout -gt 5 }
+            if ($Interruption -eq 'exception') {
+                { Invoke-EfficiencySeries -Kind Establish -RunTrial {} -TrialContext $Context -ParallelTrials -ObservationOnly -ExpectedCompatibility $Expected -PerRunCredits 10 -SeriesCredits 30 } | Should -Throw '*Controlled collection interruption*'
+            }
+            else {
+                $Result = Invoke-EfficiencySeries -Kind Establish -RunTrial {} -TrialContext $Context -ParallelTrials -ObservationOnly -ExpectedCompatibility $Expected -PerRunCredits 10 -SeriesCredits 30
+                $Result.exitCode | Should -Be 2
+                $Result.controls | Should -BeNullOrEmpty
+                $Result.runs.Count | Should -Be 1
+                $Result.report.slots.status -join ',' | Should -Be 'completed,failed,failed'
+            }
+            Test-Path (Join-Path $Trials 'baseline-1/out/run.json') | Should -BeTrue
+            $Sentinel.State | Should -BeIn @('Running', 'NotStarted')
+            $Ids = @(Get-ChildItem -LiteralPath $Root -Filter '*.started') + @(Get-ChildItem -LiteralPath $Root -Filter '*.descendant')
+            $Ids.Count | Should -Be 5
+            foreach ($Marker in $Ids) {
+                $Process = Get-Process -Id ([int](Get-Content -LiteralPath $Marker)) -ErrorAction SilentlyContinue
+                if ($Process) {
+                    try { $Process.HasExited | Should -BeTrue }
+                    finally { $Process.Dispose() }
+                }
+            }
+        }
+        finally { Stop-Job -Job $Sentinel; Remove-Job -Job $Sentinel -Force }
     }
 }
 

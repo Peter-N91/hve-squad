@@ -3,6 +3,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Tests study schemas and aggregation against saved and mutated observations.
+# AI cost: none; no new workflow or judge session is collected.
+
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1') -Force
     Import-Module (Join-Path $PSScriptRoot 'BenchmarkStudy.psm1') -Force

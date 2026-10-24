@@ -157,6 +157,17 @@
 
       <h2 id="autopilot-hand-off-pipelining">Chevauchement des transmissions en mode autopilot</h2>
       <p>
+        Les transmissions ordinaires utilisent désormais <code>Write-SquadHandoff.ps1 -Quiet</code>
+        de manière synchrone, directement depuis le coordinateur dans tous les modes de routage, sans
+        lancer de sous-agent Scribe. Le résultat JSON sur une ligne indique le tour, le nombre d'entrées
+        d'historique et le contrôle du registre ; les avertissements restent sur stderr. Un code de sortie
+        non nul arrête la transmission. Les formats de l'historique, des décisions, du registre et de
+        l'état ne changent pas. L'initialisation, les verdicts, les notifications, la mémoire, les créneaux
+        de plafond de coût, les changements à la racine d'une fédération et les résumés utilisent encore
+        la procédure spécialisée du Scribe. Les deux chemins d'écriture restent sérialisés par racine.
+        Les règles de chevauchement ci-dessous concernent ces transmissions au Scribe, pas les écritures directes ordinaires.
+      </p>
+      <p>
         En <code>mode=autopilot</code>, le coordinateur lance simultanément la transmission au Scribe de l'étape N et
         le rôle de l'étape N+1, sous forme de deux appels dans un même bloc d'appels d'outils parallèles, lorsqu'aucune barrière
         ne s'applique et que trois conditions sont réunies : l'artefact propre à l'étape N est confirmé sur
@@ -182,7 +193,7 @@
         <li>Après l'échec de vérification d'une transmission en chevauchement (exécutée parallèlement à un rôle) pendant cette exécution ; l'échec d'une transmission exécutée seule est corrigé sans désactiver le chevauchement</li>
       </ul>
       <p>
-        Lorsque le chevauchement est désactivé, le coordinateur lance la transmission au Scribe de l'étape N, attend
+        Pour une transmission spécialisée au Scribe lorsque le chevauchement est désactivé, le coordinateur lance la transmission de l'étape N, attend
         qu'elle soit terminée et vérifiée, puis lance l'étape N+1 — exactement comme dans les versions précédentes.
         Lorsque le chevauchement est actif, l'étape N+1 commence pendant la transmission de l'étape N, mais l'étape
         N+2 ne commence qu'après le retour de cette transmission et la réussite de sa vérification.

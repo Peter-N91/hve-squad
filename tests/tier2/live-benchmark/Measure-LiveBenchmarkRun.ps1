@@ -6,6 +6,8 @@
 <#
 .SYNOPSIS
     Scores one finished live benchmark run and prints its results row. Offline.
+.DESCRIPTION
+    AI cost: none; runs local scoring/probes against saved output, not a model judge.
 .PARAMETER TrialRoot
     The run directory Invoke-LiveBenchmarkRun.ps1 wrote.
 .PARAMETER Csv

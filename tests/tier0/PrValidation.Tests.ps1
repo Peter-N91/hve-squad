@@ -2,6 +2,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Checks PR/release workflow safeguards and change-fragment policy.
+# AI cost: none; validates source files without starting CI or a benchmark campaign.
+
 param(
     [Parameter(Mandatory)]
     [string]$SourceRoot

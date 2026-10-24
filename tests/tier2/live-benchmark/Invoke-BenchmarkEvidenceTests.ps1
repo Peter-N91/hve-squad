@@ -7,7 +7,7 @@
 .SYNOPSIS
     Runs offline export, comparison, reporting and study-validation self-checks.
 .DESCRIPTION
-    Invokes no model and needs no Python, credentials or network access.
+    AI cost: none; invokes no model and needs no Python, credentials or network access.
     Separate from the PowerShell 7.4 live-harness runner because evidence modules
     require PowerShell 7.5. Also invoked by the Tier 2 comparator CI self-check.
 #>
@@ -25,6 +25,7 @@ $config = New-PesterConfiguration
 $config.Run.Container = New-PesterContainer -Path @(
     (Join-Path $PSScriptRoot '../../lib/SquadInstall.Tests.ps1'),
     (Join-Path $PSScriptRoot 'BenchmarkResults.Tests.ps1'),
+    (Join-Path $PSScriptRoot 'ReleaseBenchmark.Tests.ps1'),
     (Join-Path $PSScriptRoot 'BenchmarkStudy.Tests.ps1')
 )
 $config.Run.PassThru = $true

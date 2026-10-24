@@ -3,6 +3,10 @@
 
 #Requires -Version 7.4
 
+# Parses evidence, enforces budgets and runs efficiency trials. Importing calls no model.
+# AI cost: Invoke-EfficiencyTrial, Invoke-EfficiencyJudge and Invoke-EfficiencyCompaction
+# launch paid CLI work; parsing, compatibility checks and reporting stay offline.
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -406,6 +410,19 @@ function Update-EfficiencyCompactionMonitor {
     if ($Context.requests -ge $MaxRequests) { $Context.reason = 'request-limit'; throw 'Stage request ceiling reached.' }
 }
 
+function Get-EfficiencyCliLocalArguments {
+    <# .SYNOPSIS
+    Selects the advertised explicit session-sync protection without obsolete CLI flags.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$HelpText)
+    if ($HelpText -match '(?<![\w-])--sync-session(?=[\s=\[]|$)') { return @('--sync-session', 'off') }
+    if ($HelpText -match '(?<![\w-])--no-remote(?=[\s,]|$)' -and $HelpText -match '(?<![\w-])--no-remote-export(?=[\s,]|$)') {
+        return @('--no-remote', '--no-remote-export')
+    }
+    throw 'Copilot CLI must advertise --sync-session or both legacy --no-remote and --no-remote-export flags; cannot enforce sync-off policy.'
+}
+
 function Invoke-EfficiencyCompaction {
     <# .SYNOPSIS
     Compacts an existing session through advertised ACP control, requiring fresh metered proof.
@@ -421,7 +438,8 @@ function Invoke-EfficiencyCompaction {
         [hashtable]$EnvironmentVariables = @{}
     )
     $Info = [Diagnostics.ProcessStartInfo]::new()
-    $Arguments = @('--acp', '--model', $Model, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--available-tools', 'view,glob,grep', '--deny-tool', 'shell(*)', '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+    $LocalArguments = @(Get-EfficiencyCliLocalArguments -HelpText (& $CliPath --help | Out-String))
+    $Arguments = @('--acp', '--model', $Model, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--available-tools', 'view,glob,grep', '--deny-tool', 'shell(*)', '--no-ask-user', '--disable-builtin-mcps', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN') + $LocalArguments
     foreach ($Server in $DisabledServers) { $Arguments += @('--disable-mcp-server', $Server) }
     $Info.FileName = $CliPath
     if ($CliPath.EndsWith('.ps1')) { $Info.FileName = (Get-Command pwsh).Source; $Arguments = @('-NoProfile', '-File', $CliPath) + $Arguments }
@@ -545,6 +563,96 @@ function Save-EfficiencyAttemptEvidence {
     [pscustomobject]@{ metrics = $Metrics; lineCount = (Get-Content -LiteralPath $Snapshot | Measure-Object -Line).Lines }
 }
 
+function Write-EfficiencyProgress {
+    <# .SYNOPSIS
+    Publishes completed harness milestones atomically, independently of quality results.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][ValidateSet('preflight', 'init', 'requirements', 'build', 'acceptance', 'judge', 'report', 'offline')][string]$Stage,
+        [ValidateRange(0, [int]::MaxValue)][int]$Completed,
+        [ValidateRange(1, [int]::MaxValue)][int]$Total,
+        [ValidateSet('running', 'finished', 'failed')][string]$Status = 'running',
+        [Nullable[bool]]$IndependentChecksPassed,
+        [Nullable[bool]]$Recorded
+    )
+    if ($Completed -gt $Total) { throw 'Completed progress milestones exceed the planned total.' }
+    $Temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        $Snapshot = @{ schemaVersion = 'efficiency-progress-v1'; stage = $Stage; completed = $Completed; total = $Total; status = $Status; stageStartedUtc = [datetime]::UtcNow.ToString('o') }
+        if ($null -ne $IndependentChecksPassed) { $Snapshot.independentChecksPassed = $IndependentChecksPassed }
+        if ($null -ne $Recorded) { $Snapshot.recorded = $Recorded }
+        $Snapshot | ConvertTo-Json -Compress | Set-Content -LiteralPath $Temporary -Encoding utf8NoBOM
+        [IO.File]::Move($Temporary, [IO.Path]::GetFullPath($Path), $true)
+    }
+    finally { if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force } }
+}
+
+function Write-EfficiencyProgressSummary {
+    <# .SYNOPSIS
+    Reports independent snapshots without treating elapsed time or quality as completion.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][Collections.IDictionary]$Paths, [double]$ElapsedSeconds, [Collections.IDictionary]$PreviousSnapshots)
+    $Elapsed = [timespan]::FromSeconds($ElapsedSeconds).ToString('hh\:mm\:ss')
+    foreach ($Label in $Paths.Keys) {
+        $Path = $Paths[$Label]
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            Write-Host "Progress [$Elapsed] ${Label}: awaiting preflight (no milestones finished)"
+            continue
+        }
+        try {
+            $Reader = [IO.StreamReader]::new([IO.File]::Open($Path, 'Open', 'Read', ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)))
+            try { $Snapshot = $Reader.ReadToEnd() | ConvertFrom-Json -AsHashtable -ErrorAction Stop }
+            finally { $Reader.Dispose() }
+            if ($Snapshot -isnot [Collections.IDictionary] -or $Snapshot['schemaVersion'] -cne 'efficiency-progress-v1' -or
+                ($Snapshot['completed'] -isnot [int] -and $Snapshot['completed'] -isnot [long]) -or
+                ($Snapshot['total'] -isnot [int] -and $Snapshot['total'] -isnot [long]) -or
+                $Snapshot['completed'] -lt 0 -or $Snapshot['total'] -lt 1 -or $Snapshot['completed'] -gt $Snapshot['total'] -or
+                $Snapshot['stage'] -cnotmatch '^(preflight|init|requirements|build|acceptance|judge|report|offline)$' -or
+                $Snapshot['status'] -notin @('running', 'finished', 'failed')) {
+                throw [ArgumentException]::new('Invalid benchmark progress snapshot.')
+            }
+            foreach ($Field in @('independentChecksPassed', 'recorded')) {
+                if ($Snapshot.Contains($Field) -and $Snapshot[$Field] -isnot [bool]) { throw [ArgumentException]::new('Invalid benchmark progress result.') }
+            }
+            $Terminal = $Snapshot['status'] -ne 'running'
+            $Signature = "$($Snapshot['stage'])/$($Snapshot['completed'])/$($Snapshot['total'])/$($Snapshot['status'])/$($Snapshot['independentChecksPassed'])/$($Snapshot['recorded'])"
+            if ($Terminal -and $null -ne $PreviousSnapshots -and $PreviousSnapshots[$Path] -ceq $Signature) { continue }
+            $Detail = "$($Snapshot['stage']) [$($Snapshot['status'])]; $($Snapshot['completed'])/$($Snapshot['total']) milestones finished"
+            if (-not $Terminal) {
+                $Started = [datetime]::MinValue
+                if ($Snapshot.Contains('stageStartedUtc')) {
+                    $Stamp = $Snapshot['stageStartedUtc']
+                    if ($Stamp -is [datetime]) { $Started = $Stamp }
+                    elseif (-not [datetime]::TryParse([string]$Stamp, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$Started)) {
+                        throw [ArgumentException]::new('Invalid benchmark phase timestamp.')
+                    }
+                    $Duration = [timespan]::FromSeconds([Math]::Max(0, ([datetime]::UtcNow - $Started.ToUniversalTime()).TotalSeconds)).ToString('hh\:mm\:ss')
+                    $Detail += "; phase elapsed $Duration (not a time/ETA percentage)"
+                }
+                $Log = Join-Path ([IO.Path]::GetDirectoryName($Path)) "$($Snapshot['stage'])-stdout.jsonl"
+                if (Test-Path -LiteralPath $Log -PathType Leaf) {
+                    $Output = Get-Item -LiteralPath $Log -ErrorAction Stop
+                    $Age = [timespan]::FromSeconds([Math]::Max(0, ([datetime]::UtcNow - $Output.LastWriteTimeUtc).TotalSeconds)).ToString('hh\:mm\:ss')
+                    $Detail += "; CLI output $($Output.Length) bytes; last output $Age ago"
+                }
+            }
+            if ($Snapshot.Contains('independentChecksPassed')) { $Detail += "; independent checks $(if ($Snapshot['independentChecksPassed']) { 'passed' } else { 'failed' })" }
+            if ($Snapshot.Contains('recorded')) { $Detail += "; observation $(if ($Snapshot['recorded']) { 'recorded' } else { 'not recorded' })" }
+            Write-Host "Progress [$Elapsed] ${Label}: $Detail"
+            if ($null -ne $PreviousSnapshots) {
+                if ($Terminal) { $PreviousSnapshots[$Path] = $Signature }
+                else { $PreviousSnapshots.Remove($Path) }
+            }
+        }
+        catch [ArgumentException], [IO.IOException], [UnauthorizedAccessException] {
+            Write-Warning "Progress unavailable for ${Label}; inspect $Path. Benchmark execution continues."
+        }
+    }
+}
+
 function Invoke-EfficiencyProcess {
     <# .SYNOPSIS
     Runs a subprocess with redirected streams and a watchdog; optionally watches CLI usage limits.
@@ -561,7 +669,10 @@ function Invoke-EfficiencyProcess {
         [int]$StartLine = 0,
         [double]$MaxCredits = 0,
         [AllowEmptyString()][string]$InputText,
-        [hashtable]$EnvironmentVariables = @{}
+        [hashtable]$EnvironmentVariables = @{},
+        [hashtable]$ProcessOwner,
+        [scriptblock]$OnProgress,
+        [ValidateRange(1, 3600)][int]$ProgressIntervalSeconds = 30
     )
     if ($MaxCredits -gt 0 -and -not $EventsPath) { throw 'A credit-guarded process requires an events path.' }
     $Info = [Diagnostics.ProcessStartInfo]::new()
@@ -585,8 +696,14 @@ function Invoke-EfficiencyProcess {
             return [pscustomobject]@{ exitCode = -1; stopCause = $Monitor.reason; seconds = 0; observedRequests = 0; creditsUsed = $Monitor.credits.nanoAiu / 1e9; creditCeiling = $MaxCredits }
         }
         $PriorCreditRecords = $Monitor.credits.usageIds.Count
-        if (-not $Process.Start()) { throw 'Subprocess failed to start.' }
-        $Started = $true
+        if ($ProcessOwner) { [Threading.Monitor]::Enter($ProcessOwner.lock) }
+        try {
+            if ($ProcessOwner -and $ProcessOwner.cancellation.IsCancellationRequested) { throw [OperationCanceledException]::new('Trial collection cancelled before process start.') }
+            if (-not $Process.Start()) { throw 'Subprocess failed to start.' }
+            $Started = $true
+            if ($ProcessOwner) { $ProcessOwner.processes.Add($Process) }
+        }
+        finally { if ($ProcessOwner) { [Threading.Monitor]::Exit($ProcessOwner.lock) } }
         $OutputCopy = $Process.StandardOutput.BaseStream.CopyToAsync($OutputStream)
         $ErrorCopy = $Process.StandardError.BaseStream.CopyToAsync($ErrorStream)
         if ($Info.RedirectStandardInput) {
@@ -594,22 +711,35 @@ function Invoke-EfficiencyProcess {
             if (-not $InputCopy.Wait(10000)) { $StopCause = 'stdin-timeout'; $Process.Kill($true); $Process.WaitForExit() }
             else { $null = $InputCopy.GetAwaiter().GetResult(); $Process.StandardInput.Close() }
         }
+        if ($OnProgress) { $null = & $OnProgress $Watch.Elapsed.TotalSeconds }
+        $NextProgress = $Watch.Elapsed.TotalSeconds + $ProgressIntervalSeconds
         while (-not $Process.WaitForExit(250)) {
+            if ($ProcessOwner -and $ProcessOwner.cancellation.IsCancellationRequested) { $StopCause = 'cancelled' }
             if ($Watch.Elapsed.TotalSeconds -gt $TimeoutSeconds) { $StopCause = 'timeout' }
             Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
             if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
             if ($StopCause -ne 'none') { $Process.Kill($true); $Process.WaitForExit(); break }
+            if ($OnProgress -and $Watch.Elapsed.TotalSeconds -ge $NextProgress) {
+                $null = & $OnProgress $Watch.Elapsed.TotalSeconds
+                $NextProgress = $Watch.Elapsed.TotalSeconds + $ProgressIntervalSeconds
+            }
         }
         $null = $OutputCopy.GetAwaiter().GetResult(); $null = $ErrorCopy.GetAwaiter().GetResult()
         Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
         if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
         if ($MaxCredits -gt 0 -and ($Monitor.credits.usageIds.Count -le $PriorCreditRecords -or $Monitor.pending.Trim())) { $StopCause = 'incomplete-credit-metering' }
+        if ($OnProgress) { $null = & $OnProgress $Watch.Elapsed.TotalSeconds }
         [pscustomobject]@{ exitCode = $Process.ExitCode; stopCause = $StopCause; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $Monitor.requestIds.Count; creditsUsed = if ($MaxCredits -gt 0) { $Monitor.credits.nanoAiu / 1e9 } else { $null }; creditCeiling = if ($MaxCredits -gt 0) { $MaxCredits } else { $null } }
     }
     finally {
         if ($Monitor.reader) { $Monitor.reader.Dispose() }
-        if ($Started -and -not $Process.HasExited) { $Process.Kill($true) }
-        $OutputStream.Dispose(); $ErrorStream.Dispose(); $Process.Dispose()
+        if ($ProcessOwner) { [Threading.Monitor]::Enter($ProcessOwner.lock) }
+        try {
+            if ($Started -and -not $Process.HasExited) { $Process.Kill($true); $Process.WaitForExit() }
+            if ($ProcessOwner) { $null = $ProcessOwner.processes.Remove($Process) }
+            $OutputStream.Dispose(); $ErrorStream.Dispose(); $Process.Dispose()
+        }
+        finally { if ($ProcessOwner) { [Threading.Monitor]::Exit($ProcessOwner.lock) } }
     }
 }
 
@@ -775,7 +905,8 @@ function Invoke-EfficiencyJudge {
     $Session = [guid]::NewGuid().ToString()
     $Events = Join-Path $HOME ".copilot/session-state/$Session/events.jsonl"
     $Prompt += ' Also count unresolved critical/high findings from closingReview. Copy ALL documentHashes, including closingReview. Do not count findings explicitly resolved by the closing review.'
-    $Arguments = @('--model', $Model, '--session-id', $Session, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--available-tools', 'view', '--deny-tool', 'view', '--output-format', 'json', '--usage-output-file', (Join-Path $Out 'judge-usage.json'))
+    $LocalArguments = @(Get-EfficiencyCliLocalArguments -HelpText (& $CliPath --help | Out-String))
+    $Arguments = @('--model', $Model, '--session-id', $Session, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--available-tools', 'view', '--deny-tool', 'view', '--output-format', 'json', '--usage-output-file', (Join-Path $Out 'judge-usage.json')) + $LocalArguments
     $Executable = $CliPath
     if ($CliPath.EndsWith('.ps1')) { $Executable = (Get-Command pwsh).Source; $Arguments = @('-NoProfile', '-File', $CliPath) + $Arguments }
     $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $Arguments -WorkingDirectory $Out -OutputPath (Join-Path $Out 'judge-stdout.jsonl') -TimeoutSeconds $TimeoutSeconds -EventsPath $Events -MaxRequests 10 -MaxCredits $MaxCredits -InputText ($Prompt + "`n`n" + $Payload)
@@ -954,7 +1085,7 @@ function Get-EfficiencyCompatibility {
     Resolves the same frozen compatibility identity before a trial or saved-control reuse.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$SourceRoot, [Parameter(Mandatory)][string]$InstallRoot, [Parameter(Mandatory)][string]$CliPath, [Parameter(Mandatory)][string]$Model, [Parameter(Mandatory)][double]$MaxCredits, [switch]$ObservationOnly)
+    param([Parameter(Mandatory)][string]$SourceRoot, [Parameter(Mandatory)][string]$InstallRoot, [Parameter(Mandatory)][string]$CliPath, [Parameter(Mandatory)][string]$Model, [Parameter(Mandatory)][double]$MaxCredits, [switch]$ObservationOnly, [switch]$ParallelTrials)
     Import-Module (Join-Path $PSScriptRoot 'LiveBenchmark.psm1') -Force
     $ScenarioPath = Join-Path $PSScriptRoot 'efficiency-scenario.json'
     $Scenario = Get-Content -LiteralPath $ScenarioPath -Raw | ConvertFrom-Json -AsHashtable
@@ -968,7 +1099,8 @@ function Get-EfficiencyCompatibility {
     }
     [ordered]@{
         schema = $Scenario.schemaVersion; rubric = $Scenario.rubricVersion
-        hostProfile = 'native-cli-references'
+        hostProfile = if ($ParallelTrials) { 'native-cli-references-parallel-three-v1' } else { 'native-cli-references' }
+        trialScheduling = if ($ParallelTrials) { 'parallel-three-v1' } else { 'serial-v1' }
         scenarioHash = (Get-FileHash -LiteralPath $ScenarioPath).Hash
         parserHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')).Hash
         exerciseHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1')).Hash
@@ -1050,6 +1182,107 @@ function Test-EfficiencyObservation {
     catch { return $false }
 }
 
+function Invoke-EfficiencyTrial {
+    <# .SYNOPSIS
+    Launches one isolated native trial and retains its launch and run evidence.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][ValidateSet('baseline', 'candidate')][string]$Arm,
+        [Parameter(Mandatory)][ValidateRange(1, 3)][int]$Pair,
+        [Parameter(Mandatory)][double]$MaxCredits,
+        [hashtable]$ProcessOwner
+    )
+    $TrialPath = Join-Path $Context.Trials "$Arm-$Pair"
+    $Arguments = @('-NoProfile', '-File', $Context.EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $Context.SourcePaths[$Arm], '-InstallRoot', $Context.InstallRoot, '-Arm', $Arm, '-Pair', [string]$Pair, '-Model', $Context.Model, '-CliPath', $Context.CliPath, '-MaxCredits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
+    if ($Context.ObservationOnly) { $Arguments += '-ObservationOnly' }
+    if ($Context.ParallelTrials) { $Arguments += '-ParallelTrials' }
+    $LaunchPath = Join-Path $Context.Out "$Arm-$Pair-launch.jsonl"
+    try {
+        $Scenario = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
+        $Seconds = if ($Context.ObservationOnly) { [int]$Scenario.observationTimeoutMinutes * 60 + 120 } else { 2820 }
+        $Process = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Context.Trials -OutputPath $LaunchPath -TimeoutSeconds $Seconds -ProcessOwner $ProcessOwner
+        $EvidencePath = Join-Path $TrialPath 'out/run.json'
+        if ($Process.stopCause -ne 'none' -or -not (Test-Path -LiteralPath $EvidencePath)) {
+            $Failure = [InvalidOperationException]::new('Trial did not finish with run evidence; inspect its retained launch stderr.')
+            $Failure.Data['efficiencyCategory'] = 'child-exited-without-run-evidence'
+            $Failure.Data['efficiencyExitCode'] = [int]$Process.exitCode
+            $Failure.Data['efficiencyStopCause'] = [string]$Process.stopCause
+            throw $Failure
+        }
+        Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json -AsHashtable
+    }
+    catch {
+        ($_ | Out-String) + "`n" + $_.ScriptStackTrace | Set-Content -LiteralPath ($LaunchPath + '.exception.txt') -Encoding utf8NoBOM
+        throw
+    }
+}
+
+function Invoke-EfficiencyParallelTrials {
+    <# .SYNOPSIS
+    Drains three native trial workers, retaining errors without cancelling ordinary siblings.
+    #>
+    [CmdletBinding()]
+    param([object[]]$Slots, [hashtable]$Context, [double]$MaxCredits)
+    $Owner = @{ lock = [object]::new(); cancellation = [Threading.CancellationTokenSource]::new(); processes = [Collections.Generic.List[Diagnostics.Process]]::new() }
+    $Workers = [Collections.Generic.List[object]]::new()
+    $Results = @{}
+    $CancelledSlots = [Collections.Generic.HashSet[string]]::new()
+    $ModulePath = Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1'
+    $Scenario = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
+    $Timeout = if ($Context.ObservationOnly) { [int]$Scenario.observationTimeoutMinutes * 60 + 180 } else { 2880 }
+    try {
+        foreach ($Slot in $Slots) {
+            try {
+                $Job = Start-ThreadJob -ThrottleLimit 3 -ArgumentList $ModulePath, $Context, $Slot.arm, $Slot.pair, $MaxCredits, $Owner -ScriptBlock {
+                    param($ModulePath, $Context, $Arm, $Pair, $Budget, $Owner)
+                    $ErrorActionPreference = 'Stop'
+                    try {
+                        Import-Module $ModulePath -Force
+                        @{ run = (Invoke-EfficiencyTrial -Context $Context -Arm $Arm -Pair $Pair -MaxCredits $Budget -ProcessOwner $Owner); error = $null }
+                    }
+                    catch { @{ run = $null; error = $_.Exception } }
+                }
+                $Workers.Add(@{ key = "$($Slot.arm)-$($Slot.pair)"; job = $Job })
+            }
+            catch { $Results["$($Slot.arm)-$($Slot.pair)"] = @{ run = $null; error = $_.Exception }; break }
+        }
+        if ($Workers.Count) {
+            $null = Wait-Job -Job @($Workers | ForEach-Object { $_.job }) -Timeout $Timeout
+            foreach ($Worker in $Workers) {
+                if ($Worker.job.State -notin @('Completed', 'Failed', 'Stopped')) { $null = $CancelledSlots.Add($Worker.key) }
+            }
+        }
+    }
+    finally {
+        [Threading.Monitor]::Enter($Owner.lock)
+        try { $Owner.cancellation.Cancel() }
+        finally { [Threading.Monitor]::Exit($Owner.lock) }
+        if ($Workers.Count) { $null = Wait-Job -Job @($Workers | ForEach-Object { $_.job }) -Timeout 5 }
+        [Threading.Monitor]::Enter($Owner.lock)
+        try {
+            foreach ($Process in $Owner.processes) {
+                if (-not $Process.HasExited) { $Process.Kill($true); $Process.WaitForExit() }
+            }
+        }
+        finally { [Threading.Monitor]::Exit($Owner.lock) }
+        foreach ($Worker in $Workers) {
+            try {
+                if ($Worker.job.State -notin @('Completed', 'Failed', 'Stopped')) { Stop-Job -Job $Worker.job }
+                $Envelope = @(Receive-Job -Job $Worker.job -ErrorAction Stop)
+                if ($Envelope.Count -ne 1 -or $Envelope[0] -isnot [Collections.IDictionary]) { throw 'Trial worker did not return one result envelope.' }
+                if ($CancelledSlots.Contains($Worker.key)) { throw [OperationCanceledException]::new('Trial worker exceeded the collection deadline.') }
+                $Results[$Worker.key] = $Envelope[0]
+            }
+            catch { $Results[$Worker.key] = @{ run = $null; error = $_.Exception } }
+            finally { Remove-Job -Job $Worker.job -Force }
+        }
+        $Owner.cancellation.Dispose()
+    }
+    $Results
+}
+
 function Invoke-EfficiencySeries {
     <# .SYNOPSIS
     Executes a fixed one-scenario series once per slot with explicit credit reservations.
@@ -1062,9 +1295,15 @@ function Invoke-EfficiencySeries {
         [Parameter(Mandatory)][double]$SeriesCredits,
         [Collections.IDictionary]$BaselineEvidence,
         [Collections.IDictionary]$ExpectedCompatibility,
-        [switch]$ObservationOnly
+        [switch]$ObservationOnly,
+        [switch]$ParallelTrials,
+        [hashtable]$TrialContext
     )
     foreach ($Limit in @($PerRunCredits, $SeriesCredits)) { if ([double]::IsNaN($Limit) -or [double]::IsInfinity($Limit) -or $Limit -le 0) { throw 'Finite positive per-run and series credit bounds are required.' } }
+    $Scheduling = if ($ParallelTrials) { 'parallel-three-v1' } else { 'serial-v1' }
+    if (($ParallelTrials -and (-not $ExpectedCompatibility -or $ExpectedCompatibility['trialScheduling'] -ne $Scheduling)) -or ($ExpectedCompatibility -and $ExpectedCompatibility.Contains('trialScheduling') -and $ExpectedCompatibility['trialScheduling'] -ne $Scheduling)) {
+        throw 'Trial scheduling differs from expected compatibility.'
+    }
     $Runs = [Collections.Generic.List[object]]::new()
     $Slots = [Collections.Generic.List[object]]::new()
     if ($BaselineEvidence) {
@@ -1091,14 +1330,22 @@ function Invoke-EfficiencySeries {
     }
     $Reserved = $Slots.Count * $PerRunCredits
     if ($Reserved -gt $SeriesCredits) { throw 'Series credit ceiling is below the planned per-run reservations.' }
+    if ($ParallelTrials -and ($Slots.Count -ne 3 -or -not $TrialContext)) { throw 'Parallel trials require exactly three independent slots and a native TrialContext; six fresh paired trials remain serial.' }
+    $ParallelResults = if ($ParallelTrials) { Invoke-EfficiencyParallelTrials -Slots @($Slots) -Context $TrialContext -MaxCredits $PerRunCredits } else { $null }
     $Failed = $false
     $NewIds = [Collections.Generic.HashSet[string]]::new()
     foreach ($ExistingRun in $Runs) { $NewIds.Add([string]$ExistingRun.metadata.runId) | Out-Null }
     $ArmSources = @{}
     foreach ($Slot in $Slots) {
-        if ($Failed) { continue }
+        if ($Failed -and -not $ParallelTrials) { continue }
+        if ($ParallelTrials -and -not $ParallelResults.ContainsKey("$($Slot.arm)-$($Slot.pair)")) { $Failed = $true; continue }
         try {
-            $Run = & $RunTrial $Slot.arm $Slot.pair $PerRunCredits
+            if ($ParallelTrials) {
+                $Envelope = $ParallelResults["$($Slot.arm)-$($Slot.pair)"]
+                if ($Envelope.error) { throw $Envelope.error }
+                $Run = $Envelope.run
+            }
+            else { $Run = & $RunTrial $Slot.arm $Slot.pair $PerRunCredits }
             if ($Run -isnot [Collections.IDictionary]) { throw 'Trial did not return structured evidence.' }
             if ($ObservationOnly -and -not (Test-EfficiencyObservation $Run)) { throw 'Trial observation is missing identity, policy or complete credit evidence.' }
             if ($Run.metadata.arm -ne $Slot.arm -or $Run.metadata.pair -ne $Slot.pair) { throw 'Trial identity does not match its scheduled slot.' }
@@ -1121,7 +1368,7 @@ function Invoke-EfficiencySeries {
                     $ReadinessChecks = if ($_['readiness']) { $_['readiness']['checks'] } else { $null }
                     @{ name = $_['name']; exitCode = [int]$_['process']['exitCode']; stopCause = if ($Cause -in @('none', 'timeout', 'request-limit', 'credit-limit', 'incomplete-credit-metering', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' }; failedChecks = @(if ($ReadinessChecks) { $ReadinessChecks.Keys | Where-Object { -not $ReadinessChecks[$_] } | Sort-Object }); recovery = $_['recovery'] }
                 })
-                $Failed = -not ($ObservationOnly -and (Test-EfficiencyObservation $Run))
+                $Failed = $Failed -or -not ($ObservationOnly -and (Test-EfficiencyObservation $Run))
             }
         }
         catch {
@@ -1131,7 +1378,7 @@ function Invoke-EfficiencySeries {
                 $Slot['reason'] = 'child-exited-without-run-evidence'
                 $Slot['childExitCode'] = [int]$_.Exception.Data['efficiencyExitCode']
                 $Cause = [string]$_.Exception.Data['efficiencyStopCause']
-                $Slot['stopCause'] = if ($Cause -in @('none', 'timeout', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' }
+                $Slot['stopCause'] = if ($Cause -in @('none', 'timeout', 'cancelled', 'request-limit', 'unexpected-question', 'stdin-timeout')) { $Cause } else { 'unknown' }
             }
             $Failed = $true
         }
@@ -1155,6 +1402,7 @@ function Invoke-EfficiencySeries {
         previousComparisonAvailable = ($Kind -eq 'Series'); regressionVerdict = if ($Comparison) { $Outcome } else { 'not-evaluable' }
         quality = @{ floor = 90; checksPassed = (-not $Failed -and @($Runs | Where-Object { -not (Test-EfficiencyRun $_ -ObservationOnly:$ObservationOnly) }).Count -eq 0); scores = @($Runs | ForEach-Object { if ($_['judge'] -and $_['judge']['valid'] -and $_['judge']['response']) { @{ arm = $_.metadata.arm; pair = $_.metadata.pair; dimensions = $_.judge.response.scores; total = ($_.judge.response.scores.Values | Measure-Object -Sum).Sum } } }) }
         collectionPolicy = if ($ObservationOnly) { 'baseline-observation-v1' } else { 'strict-v1' }
+        trialScheduling = if ($ParallelTrials) { 'parallel-three-v1' } else { 'serial-v1' }
         reliability = @{ samples = $Runs.Count; workflowCompleted = @($Runs | Where-Object { $_['completed'] }).Count; independentChecksPassed = @($Runs | Where-Object { Test-EfficiencyRun $_ -ObservationOnly:$ObservationOnly }).Count }
         efficiency = if ($Comparison) { $Comparison.metrics } else { $null }
         pairwiseDeltas = if ($Comparison) { $Comparison.pairs } else { $null }
@@ -1166,4 +1414,4 @@ function Invoke-EfficiencySeries {
     [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded')) { 0 } else { 2 } }
 }
 
-Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
+Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Get-EfficiencyCliLocalArguments, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Write-EfficiencyProgressSummary, Invoke-EfficiencyProcess, Invoke-EfficiencyTrial, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries

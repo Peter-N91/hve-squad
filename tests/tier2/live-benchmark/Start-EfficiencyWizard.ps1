@@ -7,6 +7,9 @@
 .SYNOPSIS
     Guides setup and launches the bounded efficiency benchmark unattended.
 .DESCRIPTION
+    AI cost: none in Offline mode. Other modes gate paid collection on offline checks
+    and fresh spending consent: 3 trials for Establish, 3 or 6 for Series, 6 for Complete.
+    Parallel trials share the displayed total reservation; they do not reduce the work.
     Installs and authenticates only after consent. Never reads or records tokens.
     Archive-only cleanup preserves evidence; a failed stage stops dependent work.
 .PARAMETER SourceRoot
@@ -15,6 +18,8 @@
     Dedicated scratch directory outside the source checkout.
 .PARAMETER BaselineEvidencePath
     Optional saved control-series.json to recommend for Series mode.
+.PARAMETER ParallelTrials
+    Select three simultaneous observations without the execution-choice prompt.
 .EXAMPLE
     pwsh -NoProfile -File ./tests/tier2/live-benchmark/Start-EfficiencyWizard.ps1
 #>
@@ -22,10 +27,94 @@
 param(
     [string]$SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..')),
     [string]$WorkRoot = '',
-    [string]$BaselineEvidencePath = ''
+    [string]$BaselineEvidencePath = '',
+    [switch]$ParallelTrials
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+$script:WizardDefaultsFields = @('Mode', 'WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'BaselineEvidencePath', 'Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')
+
+function Get-WizardDefaultsPath {
+    <# .SYNOPSIS
+    Locates per-checkout nonsecret settings, independent of the evidence root.
+    #>
+    [CmdletBinding()]
+    param()
+    [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../.efficiency-wizard-defaults.json'))
+}
+
+function Read-WizardDefaults {
+    <# .SYNOPSIS
+    Reads only recognized settings and rejects invalid memory with reset guidance.
+    #>
+    [CmdletBinding()]
+    param([string]$Path = (Get-WizardDefaultsPath))
+    if (-not (Test-Path -LiteralPath $Path)) { return @{} }
+    $Invalid = "Saved wizard defaults are invalid: $Path. Remove this file to reset them."
+    try { $Defaults = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable }
+    catch [ArgumentException] { throw $Invalid }
+    if ($Defaults -isnot [Collections.IDictionary] -or $Defaults['schemaVersion'] -cne 'efficiency-wizard-defaults-v1') { throw $Invalid }
+    $Allowed = @('schemaVersion', 'SpendingAuthorization') + $script:WizardDefaultsFields
+    foreach ($Key in $Defaults.Keys) { if ($Key -notin $Allowed) { throw $Invalid } }
+    foreach ($Key in @('WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'Model', 'BaselineEvidencePath')) {
+        if ($Defaults.Contains($Key) -and ($Defaults[$Key] -isnot [string] -or ($Key -ne 'BaselineEvidencePath' -and [string]::IsNullOrWhiteSpace($Defaults[$Key])))) { throw $Invalid }
+    }
+    if ($Defaults.Contains('Mode') -and $Defaults['Mode'] -notin @('Establish', 'Series', 'Complete', 'Offline')) { throw $Invalid }
+    foreach ($Key in @('PerRunCredits', 'TotalCredits')) {
+        if ($Defaults.Contains($Key)) {
+            $Value = $Defaults[$Key]
+            if (($Value -isnot [int] -and $Value -isnot [long] -and $Value -isnot [double]) -or -not [double]::IsFinite([double]$Value) -or $Value -le 0) { throw $Invalid }
+        }
+    }
+    if ($Defaults.Contains('ParallelTrials') -and $Defaults['ParallelTrials'] -isnot [bool]) { throw $Invalid }
+    if ($Defaults.Contains('SpendingAuthorization')) {
+        $Authorization = $Defaults['SpendingAuthorization']
+        if ($Authorization -isnot [Collections.IDictionary] -or $Authorization['approved'] -isnot [bool] -or $Authorization['planHash'] -cnotmatch '^[0-9a-f]{64}$' -or @($Authorization.Keys | Where-Object { $_ -notin @('approved', 'planHash') }).Count) { throw $Invalid }
+    }
+    $Defaults
+}
+
+function Get-WizardSpendingPlanHash {
+    <# .SYNOPSIS
+    Identifies the spending configuration without binding a fresh run directory.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Config)
+    $Identity = [ordered]@{}
+    foreach ($Key in $script:WizardDefaultsFields) { $Identity[$Key] = $Config[$Key] }
+    $Json = ConvertTo-Json -InputObject $Identity -Compress
+    [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Json))).ToLowerInvariant()
+}
+
+function Save-WizardDefaults {
+    <# .SYNOPSIS
+    Atomically remembers answered fields, never credentials or reusable consent.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Config, [Collections.IDictionary]$Previous = @{}, [bool]$SpendingAuthorized, [string]$Path = (Get-WizardDefaultsPath))
+    $Defaults = @{ schemaVersion = 'efficiency-wizard-defaults-v1' }
+    foreach ($Key in @($script:WizardDefaultsFields) + 'SpendingAuthorization') {
+        if ($Previous.Contains($Key)) { $Defaults[$Key] = $Previous[$Key] }
+    }
+    $Answered = @('Mode', 'WorkRoot')
+    if ($Config.Mode -ne 'Offline') {
+        $Answered += @('Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')
+        if ($Config.Mode -eq 'Series') { $Answered += 'BaselineEvidencePath' }
+        if ($Config.Mode -in @('Establish', 'Complete') -or ($Config.Mode -eq 'Series' -and -not $Config.BaselineEvidencePath)) { $Answered += 'BaselineSourceRoot' }
+        if ($Config.Mode -in @('Series', 'Complete')) { $Answered += 'CandidateSourceRoot' }
+    }
+    foreach ($Key in $Answered) { $Defaults[$Key] = $Config[$Key] }
+    if ($PSBoundParameters.ContainsKey('SpendingAuthorized')) {
+        $Defaults.SpendingAuthorization = @{ approved = $SpendingAuthorized; planHash = Get-WizardSpendingPlanHash $Config }
+    }
+    $Temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        $Defaults | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Temporary -Encoding utf8NoBOM
+        [IO.File]::Move($Temporary, [IO.Path]::GetFullPath($Path), $true)
+    }
+    finally { if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Force } }
+}
 
 function Read-WizardText {
     <# .SYNOPSIS
@@ -76,17 +165,20 @@ function Confirm-WizardAction {
 
 function Get-WizardMode {
     <# .SYNOPSIS
-    Recommends Establish without controls, or Series when controls were supplied.
+    Reuses the last mode, otherwise recommends Establish or Series from controls.
     #>
     [CmdletBinding()]
-    param([switch]$HasBaseline)
-    $Choice = Read-WizardChoice -Question 'What should run?' -Default $(if ($HasBaseline) { '2' } else { '1' }) -Options ([ordered]@{
+    param([switch]$HasBaseline, [string]$DefaultMode = '')
+    $Modes = @{ '1' = 'Establish'; '2' = 'Series'; '3' = 'Complete'; '4' = 'Offline' }
+    $Default = if ($HasBaseline) { '2' } else { '1' }
+    foreach ($Key in $Modes.Keys) { if ($Modes[$Key] -eq $DefaultMode) { $Default = $Key } }
+    $Choice = Read-WizardChoice -Question 'What should run?' -Default $Default -Options ([ordered]@{
         '1' = 'Establish: all offline checks, then three baseline observations, retaining failures; no improvement claim.'
         '2' = 'Series: all offline checks, then three candidates against compatible saved controls, or six fresh paired trials.'
         '3' = 'Complete: all offline checks, establish three fresh controls, then run three candidates and compare.'
         '4' = 'Offline: all benchmark self-tests only; no model requests, login or accepted-baseline changes.'
     })
-    @{ '1' = 'Establish'; '2' = 'Series'; '3' = 'Complete'; '4' = 'Offline' }[$Choice]
+    $Modes[$Choice]
 }
 
 function Read-WizardCreditLimit {
@@ -140,6 +232,10 @@ function New-WizardRunPlan {
     $NeededRuns = if ($Config.Mode -eq 'Establish' -or ($Config.Mode -eq 'Series' -and $Config.BaselineEvidencePath)) { 3 } else { 6 }
     if ($Config.TotalCredits -lt $NeededRuns * $Config.PerRunCredits) { throw 'Total credit ceiling is smaller than the scheduled run reservations.' }
     $Common = @{ InstallRoot = $Config.InstallRoot; Model = $Config.Model; MaxCredits = $Config.PerRunCredits; Live = $true; IsolatedEnvironment = $true; ObservationOnly = $true }
+    if ($Config['ParallelTrials']) {
+        if ($Config.Mode -eq 'Series' -and -not $Config.BaselineEvidencePath) { throw 'Parallel trials require three independent observations; six fresh paired trials remain serial.' }
+        $Common.ParallelTrials = $true
+    }
     if ($Config.Mode -in @('Establish', 'Complete')) {
         $Arguments = $Common.Clone(); $Arguments.Mode = 'Establish'; $Arguments.SourceRoot = $Config.BaselineSourceRoot; $Arguments.TrialRoot = Join-Path $Config.RunRoot 'control'; $Arguments.MaxSeriesCredits = 3 * $Config.PerRunCredits
         $Steps.Add(@{ name = 'Establish controls'; kind = 'Benchmark'; arguments = $Arguments })
@@ -169,6 +265,43 @@ function Get-WizardRepair {
     }
 }
 
+function Get-WizardBenchmarkSummary {
+    <# .SYNOPSIS
+    Links retained records and separates collection from quality without model calls.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][Collections.IDictionary]$Options)
+    $Out = Join-Path $Options.TrialRoot 'out'
+    $ReportPath = Join-Path $Out 'report.json'
+    $ExportPath = Join-Path $Out 'benchmark-export.json'
+    try {
+        $Report = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        $Export = Get-Content -LiteralPath $ExportPath -Raw -ErrorAction Stop | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+    }
+    catch { throw "Benchmark result evidence is missing or unreadable. Inspect $ReportPath and $ExportPath; repair offline, without paid retries." }
+    $Portable = Join-Path $Options.TrialRoot 'portable'
+    if ($Report -isnot [Collections.IDictionary] -or $Report['schemaVersion'] -cne 'efficiency-series-v1' -or
+        $Report['quality'] -isnot [Collections.IDictionary] -or $Report['quality']['checksPassed'] -isnot [bool] -or
+        $Report['regressionVerdict'] -cnotin @('passed', 'regression', 'not-evaluable') -or
+        $Export -isnot [Collections.IDictionary] -or $Export['status'] -cne 'exported' -or
+        ($Export['recordedTrials'] -isnot [int] -and $Export['recordedTrials'] -isnot [long]) -or
+        $Export['recordedTrials'] -lt 1 -or $Export['recordedTrials'] -gt 3 -or
+        $Export['publicationCommand'] -isnot [string] -or [string]::IsNullOrWhiteSpace($Export['publicationCommand']) -or
+        -not (Test-Path -LiteralPath (Join-Path $Out 'report.md') -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $Portable 'campaign-report.md') -PathType Leaf)) {
+        throw "Benchmark result evidence is incomplete or invalid. Inspect $ReportPath and $ExportPath; repair offline, without paid retries."
+    }
+    $Control = Join-Path $Out 'control-series.json'
+    @{
+        collection = 'recorded'; independentChecks = if ($Report.quality.checksPassed) { 'passed' } else { 'failed' }
+        comparison = $Report['regressionVerdict']; recordedTrials = $Export.recordedTrials
+        reportPath = Join-Path $Out 'report.md'; rawReportPath = $ReportPath
+        controlEvidencePath = if (Test-Path -LiteralPath $Control -PathType Leaf) { $Control } else { $null }
+        portableReportPath = Join-Path $Portable 'campaign-report.md'; exportManifestPath = $ExportPath
+        publication = 'local-only'; publicationCommand = $Export.publicationCommand
+    }
+}
+
 function Invoke-WizardRunPlan {
     <# .SYNOPSIS
     Executes each scheduled step once, preserving a structured fail-fast outcome.
@@ -177,15 +310,37 @@ function Invoke-WizardRunPlan {
     param([Parameter(Mandatory)][object[]]$Steps, [Parameter(Mandatory)][scriptblock]$Execute)
     $Results = [Collections.Generic.List[object]]::new()
     foreach ($Step in $Steps) {
-        Write-Host "Starting: $($Step.name)"
-        try { $Code = & $Execute $Step; if ($Code -isnot [int]) { throw 'Executor did not return one status code.' } }
-        catch { $Code = 1 }
-        $Results.Add(@{ stage = $Step.name; exitCode = $Code })
+        Write-Host "Starting: $($Step.name) (step $($Results.Count + 1)/$($Steps.Count); step counts are not time estimates)"
+        $Code = 1; $Summary = $null; $ResultEvidenceFailed = $false
+        try {
+            $Code = & $Execute $Step
+            if ($Code -isnot [int]) { $Code = 1; throw 'Executor did not return one status code.' }
+            if ($Step.kind -eq 'Benchmark') {
+                $ResultEvidenceFailed = $true
+                $Summary = Get-WizardBenchmarkSummary -Options $Step.arguments
+                $ResultEvidenceFailed = $false
+            }
+        }
+        catch {
+            Write-Warning "Wizard step '$($Step.name)' failed or its result evidence could not be read. Inspect the retained stage log and out/report.json and out/benchmark-export.json."
+            if ($Code -eq 0) { $Code = 1 }
+        }
+        $Entry = @{ stage = $Step.name; exitCode = $Code }
+        if ($Summary) { $Entry.benchmark = $Summary }
+        $Results.Add($Entry)
+        Write-Host "Finished: $($Step.name) (exit $Code; $($Results.Count)/$($Steps.Count) scheduled steps finished)"
+        if ($Summary) {
+            Write-Host "Collection: $($Summary.collection), $($Summary.recordedTrials) exported observations. Independent checks: $($Summary.independentChecks). Comparison: $($Summary.comparison)."
+            Write-Host "Recorded report: $($Summary.reportPath)"
+            Write-Host "Portable records: $($Summary.portableReportPath). Publication: local only, not committed to Git; offline publication command is in $($Summary.exportManifestPath)."
+        }
         if ($Code -ne 0) {
-            return @{ outcome = 'failed'; exitCode = if ($Step.kind -eq 'Offline' -or $Code -eq 2) { 2 } else { 1 }; failedStage = $Step.name; repair = Get-WizardRepair $Step.name $Code; stages = @($Results); notRun = $Steps.Count - $Results.Count; acceptedBaselineChanged = $false }
+            return @{ outcome = 'failed'; exitCode = if ($Step.kind -eq 'Offline' -or $Code -eq 2) { 2 } else { 1 }; failedStage = $Step.name; repair = if ($ResultEvidenceFailed) { 'Repair retained out/report.json, out/benchmark-export.json and portable records offline, without paid retries. Keep raw trial evidence and accepted baseline unchanged.' } else { Get-WizardRepair $Step.name $Code }; stages = @($Results); notRun = $Steps.Count - $Results.Count; acceptedBaselineChanged = $false }
         }
     }
-    @{ outcome = 'passed'; exitCode = 0; failedStage = $null; repair = $null; stages = @($Results); notRun = 0; acceptedBaselineChanged = $false }
+    $Benchmarks = @($Results | Where-Object { $_.ContainsKey('benchmark') })
+    $Findings = @($Benchmarks | Where-Object { $_.benchmark.independentChecks -ne 'passed' }).Count -gt 0
+    @{ outcome = if ($Findings) { 'completed-with-findings' } elseif ($Benchmarks.Count) { 'completed' } else { 'passed' }; exitCode = 0; failedStage = $null; repair = $null; stages = @($Results); notRun = 0; acceptedBaselineChanged = $false }
 }
 
 function Invoke-WizardCommand {
@@ -193,7 +348,19 @@ function Invoke-WizardCommand {
     Runs a native setup command without collecting interactive prompts or secrets.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Command, [string[]]$Arguments = @(), [switch]$Quiet)
+    param([Parameter(Mandatory)][string]$Command, [string[]]$Arguments = @(), [switch]$Quiet, [Collections.IDictionary]$ProgressPaths)
+    if ($ProgressPaths) {
+        Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
+        $Log = Join-Path (Get-Location).Path ('wizard-stage-' + [guid]::NewGuid().ToString('N') + '.log')
+        $PreviousSnapshots = @{}
+        $Observer = { param($Seconds) Write-EfficiencyProgressSummary -Paths $ProgressPaths -ElapsedSeconds $Seconds -PreviousSnapshots $PreviousSnapshots }.GetNewClosure()
+        $Process = Invoke-EfficiencyProcess -FilePath $Command -Arguments $Arguments -WorkingDirectory (Get-Location).Path -OutputPath $Log -TimeoutSeconds ([int]::MaxValue) -OnProgress $Observer
+        Get-Content -LiteralPath $Log | Out-Host
+        Get-Content -LiteralPath ($Log + '.stderr') | Out-Host
+        Write-Host "Stage output retained: $Log"
+        if ($Process.stopCause -ne 'none') { throw "Wizard child stopped: $($Process.stopCause). Inspect $Log and its .stderr file." }
+        return [int]$Process.exitCode
+    }
     $global:LASTEXITCODE = 0
     if ($Quiet) { & $Command @Arguments *> $null }
     else { & $Command @Arguments | Out-Host }
@@ -295,9 +462,11 @@ function Install-WizardPrerequisite {
         if ($LASTEXITCODE -ne 0 -or $ApmVersion -notmatch '(\d+\.\d+\.\d+)' -or [version]$Matches[1] -lt [version]'0.29.0') { throw 'APM 0.29+ is required. Upgrade through its owning package manager, then rerun.' }
         $HelpText = (& copilot --help | Out-String)
         if ($LASTEXITCODE -ne 0) { throw 'Copilot CLI help failed; repair the installed CLI.' }
-        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--no-remote', '--no-remote-export')) {
+        Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file')) {
             if (-not $HelpText.Contains($Flag)) { throw "Copilot CLI lacks $Flag. Upgrade through its owning package manager before benchmarking." }
         }
+        $null = Get-EfficiencyCliLocalArguments -HelpText $HelpText
     }
     Write-Host 'Offline tests use an isolated Python 3.12 venv and pytest 8.3.5 via pip; downloads may be required. No global Python packages are installed.'
     $Pester[0].Path
@@ -391,30 +560,36 @@ function Get-WizardConfiguration {
     Explains defaults and collects all routine decisions before launch.
     #>
     [CmdletBinding()]
-    param([string]$Source, [string]$Scratch, [string]$SavedControl = '')
+    param([string]$Source, [string]$Scratch, [string]$SavedControl = '', [switch]$ParallelTrials)
     $Source = (Resolve-Path -LiteralPath $Source).Path
     foreach ($Required in @('squad-src', 'apm.yml')) { if (-not (Test-Path -LiteralPath (Join-Path $Source $Required))) { throw "Source checkout lacks $Required." } }
+    $Defaults = Read-WizardDefaults
+    $ExplicitControl = [bool]$SavedControl
+    if (-not $Scratch -and $Defaults['WorkRoot']) { $Scratch = $Defaults['WorkRoot'] }
     if (-not $Scratch) { $Scratch = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'hve-squad/efficiency' }
     $Scratch = Assert-WizardScratchPath $Scratch $Source
-    if (-not $SavedControl -and (Test-Path -LiteralPath $Scratch)) {
+    if (-not $SavedControl -and $Defaults.Contains('BaselineEvidencePath')) { $SavedControl = $Defaults['BaselineEvidencePath'] }
+    if (-not $SavedControl -and -not $Defaults.Contains('BaselineEvidencePath') -and (Test-Path -LiteralPath $Scratch)) {
         $Previous = @(Get-ChildItem -LiteralPath $Scratch -Directory -Filter 'run-*' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 20)
         foreach ($Directory in $Previous) {
             $Path = Join-Path $Directory.FullName 'control/out/control-series.json'
             if (Test-Path -LiteralPath $Path -PathType Leaf) { $SavedControl = $Path; break }
         }
     }
-    $Mode = Get-WizardMode -HasBaseline:([bool]$SavedControl)
+    $Mode = Get-WizardMode -HasBaseline:([bool]$SavedControl) -DefaultMode $(if ($ExplicitControl) { 'Series' } else { $Defaults['Mode'] })
+    $DefaultModel = if ($Defaults['Model']) { $Defaults['Model'] } else { 'claude-sonnet-5.5' }
+    $DefaultCredits = if ($Defaults['PerRunCredits']) { [double]$Defaults['PerRunCredits'] } else { 100.0 }
     $ScenarioDefaults = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
-    Write-Host "Defaults: offline self-tests first; model claude-sonnet-5.5; 100 AI credits per run (ceiling, not predicted cost); three observations; no outer retries or request-count cap; $($ScenarioDefaults.observationTimeoutMinutes)-minute hung-run watchdog; quality/readiness failures are recorded, not collection gates; no automatic promotion."
+    Write-Host "Defaults: offline self-tests first; model $DefaultModel; $DefaultCredits AI credits per run (ceiling, not predicted cost); three observations; no outer retries or request-count cap; $($ScenarioDefaults.observationTimeoutMinutes)-minute hung-run watchdog; quality/readiness failures are recorded, not collection gates; no automatic promotion."
     Write-Host 'Isolation is NOT created by the wizard. Live modes require a disposable OS-isolated environment, restricted credentials and no sensitive source data. Fresh run directories preserve previous evidence.'
     $Scratch = Assert-WizardScratchPath (Read-WizardText -Question 'Dedicated work/evidence root outside the checkout' -Default $Scratch -Required) $Source
     $Config = @{
         Mode = $Mode; SourceRoot = $Source; WorkRoot = $Scratch; InstallRoot = Join-Path $Scratch 'install'
         RunRoot = Join-Path $Scratch ('run-' + [datetime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-        BaselineSourceRoot = $Source; CandidateSourceRoot = $Source; BaselineEvidencePath = ''; Model = 'claude-sonnet-5.5'
-        PerRunCredits = 0.0; TotalCredits = 0.0
+        BaselineSourceRoot = $Source; CandidateSourceRoot = $Source; BaselineEvidencePath = ''; Model = $DefaultModel
+        PerRunCredits = 0.0; TotalCredits = 0.0; ParallelTrials = [bool]$ParallelTrials
     }
-    if ($Mode -eq 'Offline') { return $Config }
+    if ($Mode -eq 'Offline') { Save-WizardDefaults -Config $Config -Previous $Defaults; return $Config }
     if ($Mode -eq 'Series') {
         $Default = if ($SavedControl) { $SavedControl } else { 'none' }
         $Answer = Read-WizardText -Question 'Saved control-series.json path, or none for six fresh paired trials' -Default $Default -Required
@@ -425,10 +600,12 @@ function Get-WizardConfiguration {
         }
     }
     if ($Mode -in @('Establish', 'Complete') -or ($Mode -eq 'Series' -and -not $Config.BaselineEvidencePath)) {
-        $Config.BaselineSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Baseline source checkout' -Default $Source -Required)).Path
+        $DefaultSource = if ($Defaults['BaselineSourceRoot']) { $Defaults['BaselineSourceRoot'] } else { $Source }
+        $Config.BaselineSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Baseline source checkout' -Default $DefaultSource -Required)).Path
     }
     if ($Mode -in @('Series', 'Complete')) {
-        $Config.CandidateSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Candidate source checkout' -Default $Source -Required)).Path
+        $DefaultSource = if ($Defaults['CandidateSourceRoot']) { $Defaults['CandidateSourceRoot'] } else { $Source }
+        $Config.CandidateSourceRoot = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Candidate source checkout' -Default $DefaultSource -Required)).Path
         if (-not $Config.BaselineEvidencePath -and $Config.BaselineSourceRoot -eq $Config.CandidateSourceRoot) { Write-Host 'Both arms use the same checkout. This is a repeatability exercise, not a patch-improvement claim; it may correctly fail the 10% improvement gate.' }
     }
     foreach ($Checkout in @($Config.BaselineSourceRoot, $Config.CandidateSourceRoot) | Sort-Object -Unique) {
@@ -436,10 +613,18 @@ function Get-WizardConfiguration {
         Assert-WizardScratchPath $Scratch $Checkout | Out-Null
     }
     $Config.Model = Read-WizardText -Question 'Coordinator/judge model (must match saved controls)' -Default $Config.Model -Required
-    $Config.PerRunCredits = Read-WizardCreditLimit 'Maximum AI credits per complete run' 100
+    $Config.PerRunCredits = Read-WizardCreditLimit 'Maximum AI credits per complete run' $DefaultCredits
     $Number = if ($Mode -eq 'Establish' -or ($Mode -eq 'Series' -and $Config.BaselineEvidencePath)) { 3 } else { 6 }
-    $Config.TotalCredits = Read-WizardCreditLimit "Total ceiling for all $Number new runs (all reservations must fit)" ($Number * $Config.PerRunCredits)
+    $DefaultTotal = [Math]::Max([double]$Defaults['TotalCredits'], $Number * $Config.PerRunCredits)
+    $Config.TotalCredits = Read-WizardCreditLimit "Total ceiling for all $Number new runs (all reservations must fit)" $DefaultTotal
+    if ($Config.ParallelTrials) { Write-Host 'Parallel trials selected by command-line option; all reservations and isolation/spending authorization still apply.' }
+    elseif ($Mode -ne 'Series' -or $Config.BaselineEvidencePath) {
+        Write-Host 'Execution: serial or three observations in parallel (higher host load; requires matching parallel controls). Complete still runs controls before candidates.'
+        $Config.ParallelTrials = (Read-WizardChoice -Question 'Execution' -Options ([ordered]@{ '1' = 'Serial'; '2' = 'Three observations in parallel' }) -Default $(if ($Defaults['ParallelTrials']) { '2' } else { '1' })) -eq '2'
+    }
+    else { Write-Host 'Six fresh paired trials remain serial to preserve their alternating arm order.' }
     New-WizardRunPlan $Config | Out-Null
+    Save-WizardDefaults -Config $Config -Previous $Defaults
     $Config
 }
 
@@ -450,7 +635,7 @@ function Test-WizardCompatibility {
     [CmdletBinding()]
     param([Collections.IDictionary]$Config)
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
-    $Expected = Get-EfficiencyCompatibility -SourceRoot $Config.CandidateSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly
+    $Expected = Get-EfficiencyCompatibility -SourceRoot $Config.CandidateSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly -ParallelTrials:([bool]$Config['ParallelTrials'])
     if ($Config.BaselineEvidencePath) {
         $Controls = Get-Content -LiteralPath $Config.BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable
         $Identity = $null; $Pairs = [Collections.Generic.HashSet[int]]::new(); $Ids = [Collections.Generic.HashSet[string]]::new()
@@ -466,7 +651,7 @@ function Test-WizardCompatibility {
         }
     }
     elseif ($Config.Mode -in @('Series', 'Complete')) {
-        $Baseline = Get-EfficiencyCompatibility -SourceRoot $Config.BaselineSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly
+        $Baseline = Get-EfficiencyCompatibility -SourceRoot $Config.BaselineSourceRoot -InstallRoot $Config.InstallRoot -CliPath (Get-Command copilot).Source -Model $Config.Model -MaxCredits $Config.PerRunCredits -ObservationOnly -ParallelTrials:([bool]$Config['ParallelTrials'])
         foreach ($Key in $Expected.Keys) { if (($Baseline[$Key] | ConvertTo-Json -Depth 10 -Compress) -cne ($Expected[$Key] | ConvertTo-Json -Depth 10 -Compress)) { throw "Baseline/candidate environments differ in $Key; repair compatibility before launching." } }
     }
 }
@@ -491,7 +676,8 @@ function Invoke-WizardOfflineTest {
     $OldPath = $env:PATH
     try {
         $env:PATH = $Bin + [IO.Path]::PathSeparator + $OldPath
-        Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Runner, '-PesterPath', $PesterPath, '-Output', 'Normal')
+        $Progress = Join-Path (Get-Location).Path 'offline-progress.json'
+        Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Runner, '-PesterPath', $PesterPath, '-Output', 'Normal', '-ProgressPath', $Progress) -ProgressPaths ([ordered]@{ 'Offline self-tests' = $Progress })
     }
     finally { $env:PATH = $OldPath }
 }
@@ -507,7 +693,64 @@ function Invoke-WizardBenchmark {
         if ($Options[$Key] -is [bool]) { if ($Options[$Key]) { $Arguments += "-$Key" } }
         else { $Arguments += @("-$Key", [Convert]::ToString($Options[$Key], [Globalization.CultureInfo]::InvariantCulture)) }
     }
-    Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments $Arguments
+    $Progress = [ordered]@{}
+    $Arms = if ($Options.Mode -eq 'Establish') { @('baseline') } elseif ($Options.Contains('BaselineEvidencePath')) { @('candidate') } else { @('baseline', 'candidate') }
+    foreach ($Pair in 1..3) {
+        foreach ($Arm in $Arms) { $Progress["$Arm-$Pair"] = Join-Path $Options.TrialRoot "trials/$Arm-$Pair/out/progress.json" }
+    }
+    $Code = 1
+    try { $Code = Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments $Arguments -ProgressPaths $Progress }
+    finally { $Export = Complete-WizardBenchmarkExport -Options $Options }
+    if ($Code -ne 0) { return $Code }
+    if ($Export.status -ne 'exported') { return 1 }
+    return 0
+}
+
+function Complete-WizardBenchmarkExport {
+    <# .SYNOPSIS
+    Finalizes available observations offline without writing into measured source.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Options)
+    $Arm = if ($Options.Mode -eq 'Establish') { 'baseline' } else { 'candidate' }
+    $Source = if ($Arm -eq 'candidate') { $Options.CandidateSourceRoot } else { $Options.SourceRoot }
+    $Directories = @(foreach ($Slot in 1..3) {
+        $Directory = Join-Path $Options.TrialRoot "trials/$Arm-$Slot"
+        if (Test-Path -LiteralPath (Join-Path $Directory 'out/run.json') -PathType Leaf) { $Directory }
+    })
+    $Id = 'observed-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+    $Destination = Join-Path $Options.TrialRoot 'portable'
+    $Result = @{ status = 'unavailable'; recordedTrials = $Directories.Count; outputDirectory = $Destination; publicationCommand = $null; reason = 'no-run-evidence' }
+    if ($Directories.Count) {
+        function Quote-WizardExport([string]$Value) { "'" + $Value.Replace("'", "''") + "'" }
+        $Path = Join-Path $PSScriptRoot 'Export-BenchmarkResults.ps1'
+        $TrialArguments = (@($Directories | ForEach-Object { Quote-WizardExport $_ })) -join ', '
+        $Result.publicationCommand = "& $(Quote-WizardExport $Path) -ObservationOnly -Repository $(Quote-WizardExport $Source) -TrialDirectories @($TrialArguments) -SeriesId '$Id'"
+    }
+    try {
+        if ($Directories.Count -eq 0) { throw 'No run.json files exist. Inspect retained child diagnostics; no observation can be exported.' }
+        $Source = [IO.Path]::GetFullPath($Source)
+        $Destination = Assert-WizardScratchPath $Destination $Source
+        Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
+        $null = Export-BenchmarkCampaign -Repository $Source -TrialDirectories $Directories -CampaignId $Id -OutputDirectory $Destination
+        $Result.status = 'exported'; $Result.reason = 'observational-campaign-not-comparable'
+        Write-Host "Portable observations: $Destination. No measured source files were changed. To publish offline, run this in PowerShell 7.5+ from the writable delivery checkout, review and commit the generated files:"
+        Write-Host $Result.publicationCommand
+        Write-Host 'Use -Repository for the intended delivery checkout if the measured source is frozen. Source/protocol identity must still match. Missing quality/accounting stays unavailable; current.json is not selected.'
+    }
+    catch {
+        $Result.status = 'failed'; $Result.reason = 'offline-export-failed'
+        Write-Host 'Offline export failed. Retain all evidence. In PowerShell 7.5+, run Export-BenchmarkResults.ps1 -ObservationOnly -Repository <delivery-checkout> -TrialDirectories <available-trial-directories> -SeriesId <new-id>. Inspect source/protocol, evidence files and document hashes; do not rerun paid trials to repair export.'
+        if ($_.Exception.Message -cmatch '^(invalid-record|stale-record|operational-error):[A-Za-z0-9/-]+$') {
+            $Result.reason = $_.Exception.Message
+            Write-Host "Export diagnostic: $($Result.reason)"
+        }
+        if ($Result.publicationCommand) { Write-Host $Result.publicationCommand }
+    }
+    if (Test-Path -LiteralPath (Join-Path $Options.TrialRoot 'out') -PathType Container) {
+        $Result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $Options.TrialRoot 'out/benchmark-export.json') -Encoding utf8NoBOM
+    }
+    $Result
 }
 
 function Invoke-EfficiencyWizard {
@@ -515,12 +758,12 @@ function Invoke-EfficiencyWizard {
     Coordinates interactive setup, then executes a question-free fixed plan.
     #>
     [CmdletBinding()]
-    param([string]$Source, [string]$Scratch = '', [string]$SavedControl = '')
+    param([string]$Source, [string]$Scratch = '', [string]$SavedControl = '', [switch]$ParallelTrials)
     $Stage = 'Configuration'; $Config = $null
     $OldLocation = Get-Location
     try {
         Write-Host 'Squad efficiency benchmark wizard. No baseline is promoted by this workflow. Type q at any wizard input to cancel.'
-        $Config = Get-WizardConfiguration -Source $Source -Scratch $Scratch -SavedControl $SavedControl
+        $Config = Get-WizardConfiguration -Source $Source -Scratch $Scratch -SavedControl $SavedControl -ParallelTrials:$ParallelTrials
         $Stage = 'Prerequisite installation'
         $PesterPath = Install-WizardPrerequisite -LiveMode:($Config.Mode -ne 'Offline')
         $Stage = 'Work directory preparation'
@@ -537,7 +780,14 @@ function Invoke-EfficiencyWizard {
             $Stage = 'Compatibility preflight'
             Test-WizardCompatibility $Config
             Write-Host "Mode: $($Config.Mode); model: $($Config.Model); per-run ceiling: $($Config.PerRunCredits) credits; total ceiling: $($Config.TotalCredits) credits. Reports: $($Config.RunRoot)"
-            if (-not (Confirm-WizardAction 'I confirm this is a disposable OS-isolated environment with restricted credentials and no sensitive data, and authorize the displayed bounded spending after offline checks pass')) { throw [OperationCanceledException]::new('Isolation/spending authorization declined.') }
+            $Defaults = Read-WizardDefaults
+            $Authorization = $Defaults['SpendingAuthorization']
+            if ($Authorization -and $Authorization['planHash'] -ceq (Get-WizardSpendingPlanHash $Config)) {
+                Write-Host "Previous spending authorization for this configuration: $(if ($Authorization['approved']) { 'yes' } else { 'no' }). Fresh confirmation is still required; blank means no."
+            }
+            $Authorized = Confirm-WizardAction 'I confirm this is a disposable OS-isolated environment with restricted credentials and no sensitive data, and authorize the displayed bounded spending after offline checks pass'
+            Save-WizardDefaults -Config $Config -Previous $Defaults -SpendingAuthorized $Authorized
+            if (-not $Authorized) { throw [OperationCanceledException]::new('Isolation/spending authorization declined.') }
         }
         else { Write-Host "Mode: Offline. No login/model requests. Reports: $($Config.RunRoot)" }
         if (-not (Confirm-WizardAction 'Provision isolated Python/pytest if needed and run the selected plan unattended (retain quality failures; stop for execution/accounting errors)?')) { throw [OperationCanceledException]::new('Launch declined.') }
@@ -554,7 +804,8 @@ function Invoke-EfficiencyWizard {
         $Result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $Config.RunRoot 'wizard-result.json') -Encoding utf8NoBOM
         Write-Host "Wizard outcome: $($Result.outcome). Exit: $($Result.exitCode). Summary: $(Join-Path $Config.RunRoot 'wizard-result.json')"
         if ($Result.repair) { Write-Host "Stopped at $($Result.failedStage). $($Result.repair)" }
-        else { Write-Host 'Selected collection/comparison stages finished. Inspect recorded quality and failure results in control/out/report.md or comparison/out/report.md. Accepted baseline unchanged.' }
+        elseif ($Result.outcome -eq 'completed-with-findings') { Write-Host 'Collection completed and records were retained, but independent quality/readiness checks failed. This is not quality approval. Accepted baseline unchanged; do not rerun paid trials to repair reporting or publication.' }
+        else { Write-Host 'Selected stages completed; retained record paths are listed above and in the summary. Accepted baseline unchanged.' }
         $Result
     }
     catch {
@@ -569,6 +820,6 @@ function Invoke-EfficiencyWizard {
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    $Result = Invoke-EfficiencyWizard -Source $SourceRoot -Scratch $WorkRoot -SavedControl $BaselineEvidencePath
+    $Result = Invoke-EfficiencyWizard -Source $SourceRoot -Scratch $WorkRoot -SavedControl $BaselineEvidencePath -ParallelTrials:$ParallelTrials
     exit $Result.exitCode
 }
