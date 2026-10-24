@@ -368,6 +368,25 @@ Describe 'Efficiency native compaction boundary' -Tag 'Unit' {
 }
 
 Describe 'Local diagnostic output admission' -Tag 'Unit' {
+    It 'reports missing ancestors verbosely without creating diagnostic output' {
+        $Source = Join-Path $TestDrive 'diagnostic-source'
+        [void][IO.Directory]::CreateDirectory($Source)
+        $MissingParent = Join-Path $TestDrive 'missing-output-parent/another'
+        $Path = Join-Path $MissingParent 'local-test-fresh'
+        $Records = @(Assert-EfficiencyLocalRoot -Path $Path -Sources @($Source) -Verbose 4>&1)
+        $Output = @($Records | Where-Object { $_ -isnot [Management.Automation.VerboseRecord] })
+        $Output | Should -HaveCount 1
+        $Output[0] | Should -Be ([IO.Path]::GetFullPath($Path))
+        $Messages = @($Records | Where-Object { $_ -is [Management.Automation.VerboseRecord] } | ForEach-Object { $_.Message })
+        $Messages | Should -Contain 'Local diagnostic ancestor does not exist; checking its parent.'
+        Test-Path -LiteralPath (Join-Path $TestDrive 'missing-output-parent') | Should -BeFalse
+    }
+    It 'propagates unexpected ancestor probe errors' {
+        Mock Get-Item -ModuleName EfficiencyBenchmark { throw [UnauthorizedAccessException]::new('probe access denied') }
+        $Path = Join-Path $TestDrive 'local-test-denied'
+        { Assert-EfficiencyLocalRoot -Path $Path -Sources @() } | Should -Throw '*probe access denied*'
+        Test-Path -LiteralPath $Path | Should -BeFalse
+    }
     It 'refuses a source <AliasShape> alias before creating diagnostic output' -ForEach @(
         @{ AliasShape = 'leaf' }, @{ AliasShape = 'ancestor' }
     ) {
