@@ -7,7 +7,7 @@
 .SYNOPSIS
     Guides setup and launches the bounded efficiency benchmark unattended.
 .DESCRIPTION
-    AI cost: none in Offline/OfflineSmoke. LocalCompare runs one paid diagnostic;
+    AI cost: none in Offline/OfflineSmoke/Repair. LocalCompare runs one paid diagnostic;
     it cannot record/export a benchmark. Formal modes gate paid collection on offline checks
     and fresh spending consent: 3 trials for Establish, 3 or 6 for Series, 6 for Complete.
     Parallel trials share the displayed total reservation; they do not reduce the work.
@@ -35,7 +35,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $script:WizardDefaultsFields = @('Mode', 'WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'BaselineEvidencePath', 'Model', 'PerRunCredits', 'TotalCredits', 'ParallelTrials')
-$script:WizardConfirmationFields = @('CreateWorkRoot', 'ReusePreparedInstall', 'PreparePackage', 'ArchiveInstall', 'GitHubLogin', 'CopilotLogin', 'InstallPester', 'Installgit', 'Installpython', 'Installgh', 'Installcopilot', 'Installapm', 'Launch')
+$script:WizardConfirmationFields = @('CreateWorkRoot', 'ReusePreparedInstall', 'RebuildInstall', 'PreparePackage', 'ArchiveInstall', 'GitHubLogin', 'CopilotLogin', 'InstallPester', 'Installgit', 'Installpython', 'Installgh', 'Installcopilot', 'Installapm', 'Launch')
 
 function Get-WizardDefaultsPath {
     <# .SYNOPSIS
@@ -77,7 +77,7 @@ function Read-WizardDefaults {
     foreach ($Key in @('WorkRoot', 'BaselineSourceRoot', 'CandidateSourceRoot', 'Model', 'BaselineEvidencePath')) {
         if ($Defaults.Contains($Key) -and ($Defaults[$Key] -isnot [string] -or ($Key -ne 'BaselineEvidencePath' -and [string]::IsNullOrWhiteSpace($Defaults[$Key])))) { throw $Invalid }
     }
-    if ($Defaults.Contains('Mode') -and $Defaults['Mode'] -notin @('Establish', 'Series', 'Complete', 'Offline', 'OfflineSmoke', 'LocalCompare')) { throw $Invalid }
+    if ($Defaults.Contains('Mode') -and $Defaults['Mode'] -notin @('Establish', 'Series', 'Complete', 'Offline', 'OfflineSmoke', 'LocalCompare', 'Repair')) { throw $Invalid }
     foreach ($Key in @('PerRunCredits', 'TotalCredits')) {
         if ($Defaults.Contains($Key)) {
             $Value = $Defaults[$Key]
@@ -121,7 +121,7 @@ function Save-WizardDefaults {
     $Answered = @()
     if ($Config) {
         $Answered = @('Mode', 'WorkRoot')
-        if ($Config.Mode -notin @('Offline', 'OfflineSmoke')) {
+        if ($Config.Mode -notin @('Offline', 'OfflineSmoke', 'Repair')) {
             $Answered += @('Model', 'PerRunCredits')
             if ($Config.Mode -ne 'LocalCompare') { $Answered += @('TotalCredits', 'ParallelTrials') }
             if ($Config.Mode -in @('Series', 'LocalCompare')) { $Answered += 'BaselineEvidencePath' }
@@ -218,7 +218,7 @@ function Get-WizardMode {
     #>
     [CmdletBinding()]
     param([switch]$HasBaseline, [string]$DefaultMode = '')
-    $Modes = @{ '1' = 'Establish'; '2' = 'Series'; '3' = 'Complete'; '4' = 'Offline'; '5' = 'OfflineSmoke'; '6' = 'LocalCompare' }
+    $Modes = @{ '1' = 'Establish'; '2' = 'Series'; '3' = 'Complete'; '4' = 'Offline'; '5' = 'OfflineSmoke'; '6' = 'LocalCompare'; '7' = 'Repair' }
     $Default = if ($HasBaseline) { '2' } else { '1' }
     foreach ($Key in $Modes.Keys) { if ($Modes[$Key] -eq $DefaultMode) { $Default = $Key } }
     $Choice = Read-WizardChoice -Question 'What should run?' -Default $Default -Options ([ordered]@{
@@ -228,6 +228,7 @@ function Get-WizardMode {
         '4' = 'Offline (full): all benchmark self-tests, possibly several minutes and Python/pytest provisioning. Recommended before formal collection; no login or AI requests.'
         '5' = 'Offline smoke (local): 1 simulated candidate using a fake CLI, usually seconds. Recommended while editing the harness; no AI, login, downloads or benchmark records.'
         '6' = 'Single candidate vs saved scores (local): smoke first, then 1 PAID workflow including judge. Recommended to debug uncommitted changes; descriptive comparison only, no benchmark records/exports.'
+        '7' = 'Repair/check setup: identify uncommitted measured files and check/rebuild the prepared install. No AI, login or benchmark runs; package rebuild may download dependencies. Then rerun 1 or 2.'
     })
     $Modes[$Choice]
 }
@@ -326,6 +327,9 @@ function Get-WizardRepair {
     [CmdletBinding()]
     param([string]$Stage, [int]$ExitCode = 1)
     switch -Regex ($Stage) {
+        'Source preflight' { 'Review the listed source/protocol paths and commit intended measured changes. Do not reset, auto-commit or relabel evidence. Both measured revisions must match the executing protocol; rebuilding dependencies cannot fix that mismatch. Rerun 7 to check setup, then 1 or 2.'; break }
+        'Compatibility preflight' { 'Source checks passed, but runtime/dependencies or saved controls are incompatible. Use 7 to inspect setup; rebuild only a stale install. For incompatible saved controls, select Series with none only when both source revisions support the same executing protocol. Preserve old evidence; no automatic paid retry.'; break }
+        'Prepared package repair' { 'Inspect the managed install and any install-archive-* directory; archived contents and previous benchmark runs are preserved. Resolve the package/preparation error and rerun 7. No benchmark collection or paid retry is needed for setup repair.'; break }
         'Offline smoke|single-candidate|local candidate' { 'Inspect local diagnostic.json, error.json and retained stderr. Local tests never export benchmark records. Offline smoke needs installed Git/Pester only, not Python or login; repair execution/accounting failures before any paid attempt.'; break }
         'auth|login' { 'Complete gh auth login --web and copilot login in your terminal. Check organization SSO, Copilot entitlement and overriding token environment variables. Never paste a token into the wizard.'; break }
         'install|prerequisite' { 'Check the package manager output, trusted TLS/proxy configuration and PATH. Open a fresh PowerShell 7.4+ terminal after an OS install. Ask the package owner to perform any required administrator installation; no automatic elevation is attempted.'; break }
@@ -617,7 +621,8 @@ function Initialize-WizardInstall {
     Reuses a clean compatible prepared install or creates one after explicit consent.
     #>
     [CmdletBinding()]
-    param([string]$Path, [string]$ManagedRoot, [string]$Source)
+    param([string]$Path, [string]$ManagedRoot, [string]$Source, [switch]$Repair)
+    $null = Assert-WizardScratchPath $Path $Source
     $ManifestHash = (Get-FileHash -LiteralPath (Join-Path $Source 'apm.yml')).Hash
     $Receipt = Join-Path $Path 'wizard-install.json'
     $MatchesManifest = $true
@@ -625,9 +630,18 @@ function Initialize-WizardInstall {
         try { $MatchesManifest = (Get-Content -LiteralPath $Receipt -Raw | ConvertFrom-Json).manifestHash -ceq $ManifestHash } catch { $MatchesManifest = $false }
     }
     if ((Test-WizardInstall $Path) -and $MatchesManifest) {
-        if (-not (Confirm-WizardAction "Reuse clean prepared install ${Path}?" -MemoryKey ReusePreparedInstall)) { throw [OperationCanceledException]::new('Install reuse declined; choose a new WorkRoot.') }
-        return
+        if ($Repair) {
+            if (-not (Confirm-WizardAction "Install layout and manifest are valid. Rebuild $Path anyway (may invalidate saved-control compatibility)?" -MemoryKey RebuildInstall)) {
+                Write-Host 'Keeping the prepared install unchanged.'
+                return
+            }
+        }
+        else {
+            if (-not (Confirm-WizardAction "Reuse clean prepared install ${Path}?" -MemoryKey ReusePreparedInstall)) { throw [OperationCanceledException]::new('Install reuse declined; choose a new WorkRoot.') }
+            return
+        }
     }
+    if ([IO.Path]::GetFullPath($Path) -ne (Join-Path (Assert-WizardScratchPath $ManagedRoot $Source) 'install')) { throw 'Only the managed install directory can be prepared.' }
     if (Test-Path -LiteralPath $Path) { Move-WizardInstallArchive -Path $Path -ManagedRoot $ManagedRoot -Source $Source | Out-Null }
     if (-not (Confirm-WizardAction "Prepare the full pinned squad/hve-core package from $Source into $Path (network access and package trust prompts may be needed)?" -MemoryKey PreparePackage)) { throw [OperationCanceledException]::new('Package preparation declined.') }
     Import-Module (Join-Path $PSScriptRoot '../../lib/SquadInstall.psm1') -Force
@@ -658,6 +672,16 @@ function Get-WizardConfiguration {
         }
     }
     $Mode = Get-WizardMode -HasBaseline:([bool]$SavedControl) -DefaultMode $(if ($ExplicitControl) { 'Series' } else { $Defaults['Mode'] })
+    if ($Mode -eq 'Repair') {
+        Write-Host 'Setup repair only: no AI, login, Python setup or benchmark runs. Source changes must be reviewed and committed by you; existing evidence is never rewritten. Package preparation may require network access.'
+        $Scratch = Assert-WizardScratchPath (Read-WizardText -Question 'Dedicated work/evidence root outside the checkout' -Default $Scratch -Required) $Source
+        $RepairSource = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Source checkout to check/prepare (commit intended measured changes first)' -Default $Source -Required)).Path
+        foreach ($Required in @('squad-src', 'apm.yml', '.git')) { if (-not (Test-Path -LiteralPath (Join-Path $RepairSource $Required))) { throw "Source checkout lacks $Required." } }
+        $null = Assert-WizardScratchPath $Scratch $RepairSource
+        $Config = @{ Mode = 'Repair'; SourceRoot = $RepairSource; WorkRoot = $Scratch; InstallRoot = Join-Path $Scratch 'install'; RunRoot = $null; BaselineSourceRoot = $RepairSource }
+        Save-WizardDefaults -Config $Config -Previous $Defaults
+        return $Config
+    }
     $DefaultModel = if ($Defaults['Model']) { $Defaults['Model'] } else { 'claude-sonnet-5.5' }
     $DefaultCredits = if ($Defaults['PerRunCredits']) { [double]$Defaults['PerRunCredits'] } else { 100.0 }
     $ScenarioDefaults = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
@@ -864,6 +888,21 @@ function Test-WizardCompatibility {
     }
 }
 
+function Test-WizardSource {
+    <# .SYNOPSIS
+    Checks only measured arms against Git and the executing protocol, before setup.
+    #>
+    [CmdletBinding()]
+    param([Collections.IDictionary]$Config)
+    Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
+    $Sources = if ($Config.Mode -in @('Establish', 'Repair')) { @($Config.BaselineSourceRoot) }
+    elseif ($Config.Mode -eq 'Series' -and $Config.BaselineEvidencePath) { @($Config.CandidateSourceRoot) }
+    else { @($Config.BaselineSourceRoot, $Config.CandidateSourceRoot) }
+    foreach ($Checkout in $Sources | Sort-Object -Unique) {
+        Assert-BenchmarkSourceReady -Repository $Checkout
+    }
+}
+
 function Invoke-WizardOfflineTest {
     <# .SYNOPSIS
     Runs all existing and new benchmark tests in an isolated pinned Python environment.
@@ -973,6 +1012,20 @@ function Invoke-EfficiencyWizard {
         Write-Host 'Squad efficiency benchmark wizard. No baseline is promoted by this workflow. Type q at any wizard input to cancel.'
         $Config = Get-WizardConfiguration -Source $Source -Scratch $Scratch -SavedControl $SavedControl -ParallelTrials:$ParallelTrials
         $LocalMode = $Config.Mode -in @('OfflineSmoke', 'LocalCompare')
+        if ($Config.Mode -in @('Establish', 'Series', 'Complete', 'Repair')) {
+            $Stage = 'Source preflight'
+            Test-WizardSource $Config
+        }
+        if ($Config.Mode -eq 'Repair') {
+            $Stage = 'Prepared package repair'
+            if (-not (Test-Path -LiteralPath $Config.WorkRoot)) {
+                if (-not (Confirm-WizardAction "Create dedicated work root $($Config.WorkRoot)?" -MemoryKey CreateWorkRoot)) { throw [OperationCanceledException]::new('Work directory creation declined.') }
+                New-Item -ItemType Directory -Path $Config.WorkRoot | Out-Null
+            }
+            Initialize-WizardInstall -Path $Config.InstallRoot -ManagedRoot $Config.WorkRoot -Source $Config.SourceRoot -Repair
+            Write-Host 'Setup check/repair finished. Rerun option 1 to establish controls or option 2 to compare a committed PR with compatible parent controls. Full runtime/control compatibility and offline tests are checked there before paid collection. No benchmark evidence was changed.'
+            return @{ outcome = 'setup-ready'; exitCode = 0; acceptedBaselineChanged = $false }
+        }
         $Stage = 'Prerequisite installation'
         $PesterPath = if ($Config.Mode -eq 'OfflineSmoke') { Get-WizardSmokePrerequisite } else { Install-WizardPrerequisite -LiveMode:($Config.Mode -ne 'Offline') -SkipPython:($Config.Mode -eq 'LocalCompare') }
         $Stage = 'Work directory preparation'
@@ -1035,7 +1088,7 @@ function Invoke-EfficiencyWizard {
         $Result = @{ outcome = if ($Cancelled) { 'cancelled' } else { 'failed' }; exitCode = if ($Cancelled) { 3 } else { 1 }; failedStage = $Stage; repair = Get-WizardRepair $Stage; acceptedBaselineChanged = $false }
         Write-Host "Wizard stopped at $Stage. $($_.Exception.Message)"
         Write-Host $Result.repair
-        if ($Config -and (Test-Path -LiteralPath $Config.RunRoot)) { $Result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Config.RunRoot 'wizard-result.json') -Encoding utf8NoBOM }
+        if ($Config -and $Config.RunRoot -and (Test-Path -LiteralPath $Config.RunRoot)) { $Result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Config.RunRoot 'wizard-result.json') -Encoding utf8NoBOM }
         $Result
     }
     finally { Set-Location $OldLocation }

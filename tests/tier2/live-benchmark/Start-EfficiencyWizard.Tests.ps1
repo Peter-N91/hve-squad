@@ -8,6 +8,8 @@
 
 BeforeAll {
     . (Join-Path $PSScriptRoot 'Start-EfficiencyWizard.ps1')
+    Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
+    Import-Module (Join-Path $PSScriptRoot '../../lib/SquadInstall.psm1')
     Mock Write-Host {}
     Mock Get-WizardDefaultsPath { Join-Path $TestDrive 'wizard-defaults.json' }
     function New-WizardTestConfig {
@@ -27,6 +29,160 @@ BeforeAll {
         Set-Content (Join-Path $Root 'out/report.md') 'Retained findings'
         Set-Content (Join-Path $Root 'out/control-series.json') '{}'
         Set-Content (Join-Path $Root 'portable/campaign-report.md') 'Recorded observations, not approval'
+    }
+}
+
+Describe 'Wizard source diagnosis and setup repair' -Tag 'Unit' {
+    BeforeAll {
+        function New-RepairSource {
+            $Root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            [void][IO.Directory]::CreateDirectory((Join-Path $Root 'squad-src'))
+            Set-Content (Join-Path $Root 'squad-src/source.md') 'committed source'
+            Set-Content (Join-Path $Root 'apm.yml') 'name: fixture'
+            foreach ($Path in @('tests/tier2/live-benchmark/efficiency-scenario.json', 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1',
+                    'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1', 'tests/lib/SquadInstall.psm1',
+                    'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1', 'scripts/Test-SquadScribeOutput.ps1', 'scripts/Build-SquadPlugin.ps1')) {
+                $Target = Join-Path $Root $Path
+                [void][IO.Directory]::CreateDirectory((Split-Path $Target -Parent))
+                Set-Content $Target 'committed protocol'
+            }
+            & git -C $Root init --quiet
+            & git -C $Root add --all
+            & git -C $Root -c user.name=Fixture -c user.email=fixture@example.invalid -c core.hooksPath=/dev/null commit --quiet -m fixture
+            if ($LASTEXITCODE -ne 0) { throw 'Fixture commit failed.' }
+            $Root
+        }
+    }
+    It 'names <Change> measured source without changing Git or evidence' -ForEach @(
+        @{ Change = 'modified' }, @{ Change = 'deleted' }, @{ Change = 'untracked' }, @{ Change = 'ignored' }
+    ) {
+        $Root = New-RepairSource
+        $Head = & git -C $Root rev-parse HEAD
+        $Path = 'squad-src/source.md'
+        if ($Change -eq 'modified') { Set-Content (Join-Path $Root $Path) 'working changes' }
+        elseif ($Change -eq 'deleted') { Remove-Item (Join-Path $Root $Path) }
+        else {
+            $Path = 'squad-src/added.md'
+            if ($Change -eq 'ignored') { Set-Content (Join-Path $Root '.git/info/exclude') 'added.md' }
+            Set-Content (Join-Path $Root $Path) 'new source'
+        }
+        { Assert-BenchmarkSourceReady -Repository $Root -ProtocolRepository $Root } | Should -Throw "*source: $Path*"
+        (& git -C $Root rev-parse HEAD) | Should -Be $Head
+    }
+    It 'allows unrelated dirt in a compatible checkout' {
+        $Root = New-RepairSource
+        Set-Content (Join-Path $Root 'notes.txt') 'unrelated'
+        { Assert-BenchmarkSourceReady -Repository $Root -ProtocolRepository $Root } | Should -Not -Throw
+    }
+    It 'compares actual executing protocol bytes rather than only checking checkout cleanliness' {
+        $Measured = New-RepairSource; $Executing = New-RepairSource
+        Set-Content (Join-Path $Executing 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1') 'new protocol'
+        { Assert-BenchmarkSourceReady -Repository $Measured -ProtocolRepository $Executing } |
+            Should -Throw '*protocol: tests/tier2/live-benchmark/EfficiencyBenchmark.psm1*'
+        (& git -C $Measured status --porcelain) | Should -BeNullOrEmpty
+    }
+    It 'checks exactly the measured roots for <Mode> with saved controls <Saved>' -ForEach @(
+        @{ Mode = 'Establish'; Saved = $false; Roots = @('baseline') },
+        @{ Mode = 'Series'; Saved = $true; Roots = @('candidate') },
+        @{ Mode = 'Series'; Saved = $false; Roots = @('baseline', 'candidate') },
+        @{ Mode = 'Complete'; Saved = $false; Roots = @('baseline', 'candidate') },
+        @{ Mode = 'Repair'; Saved = $false; Roots = @('baseline') }
+    ) {
+        $Config = New-WizardTestConfig; $Config.Mode = $Mode
+        if ($Saved) { $Config.BaselineEvidencePath = 'controls.json' }
+        Mock Assert-BenchmarkSourceReady {}
+        Test-WizardSource $Config
+        Should -Invoke Assert-BenchmarkSourceReady -Times $Roots.Count -Exactly
+        foreach ($Root in $Roots) { Should -Invoke Assert-BenchmarkSourceReady -Times 1 -Exactly -ParameterFilter { $Repository -eq $Root } }
+    }
+    It 'stops <Mode> before setup or login when a measured arm fails source preflight' -ForEach @(
+        @{ Mode = 'Establish' }, @{ Mode = 'Series' }, @{ Mode = 'Complete' }, @{ Mode = 'Repair' }
+    ) {
+        $Config = New-WizardTestConfig; $Config.Mode = $Mode
+        Mock Get-WizardConfiguration { $Config }.GetNewClosure()
+        Mock Test-WizardSource { throw 'Formal source check failed: source: squad-src/source.md' }
+        Mock Install-WizardPrerequisite { throw 'Unexpected prerequisite work' }
+        Mock Connect-WizardGitHub { throw 'Unexpected login' }
+        Mock Initialize-WizardInstall { throw 'Unexpected installation' }
+        $Result = Invoke-EfficiencyWizard -Source 'fixture'
+        $Result.exitCode | Should -Be 1
+        $Result.failedStage | Should -Be 'Source preflight'
+        Should -Invoke Install-WizardPrerequisite -Times 0
+        Should -Invoke Connect-WizardGitHub -Times 0
+        Should -Invoke Initialize-WizardInstall -Times 0
+    }
+    It 'returns from repair without login, tests, collection or spending authorization' {
+        $Root = New-RepairSource
+        $Work = Join-Path $TestDrive 'repair-work'; [void][IO.Directory]::CreateDirectory($Work)
+        $Config = @{ Mode = 'Repair'; SourceRoot = $Root; BaselineSourceRoot = $Root; WorkRoot = $Work; InstallRoot = Join-Path $Work 'install'; RunRoot = $null }
+        Mock Get-WizardConfiguration { $Config }.GetNewClosure()
+        Mock Test-WizardSource {}
+        Mock Initialize-WizardInstall {}
+        Mock Connect-WizardGitHub { throw 'Unexpected login' }
+        Mock Install-WizardPrerequisite { throw 'Unexpected prerequisites' }
+        Mock Invoke-WizardOfflineTest { throw 'Unexpected tests' }
+        Mock Invoke-WizardBenchmark { throw 'Unexpected collection' }
+        Mock Confirm-WizardAction { throw 'Unexpected authorization' }
+        $Result = Invoke-EfficiencyWizard -Source $Root
+        $Result.outcome | Should -Be 'setup-ready'
+        $Result.exitCode | Should -Be 0
+        Should -Invoke Initialize-WizardInstall -Times 1 -Exactly -ParameterFilter { $Repair }
+        Test-Path (Join-Path $Work 'wizard-result.json') | Should -BeFalse
+    }
+    It 'remembers Repair without replacing live defaults or asking for credits or models' {
+        $Root = New-RepairSource
+        $Work = Join-Path $TestDrive 'repair-defaults'
+        $Live = New-WizardTestConfig; $Live.WorkRoot = $Work
+        Save-WizardDefaults -Config $Live -SpendingAuthorized $true
+        $Before = Read-WizardDefaults
+        Mock Get-WizardMode { 'Repair' }
+        Mock Read-WizardText { $Default }
+        Mock Read-WizardCreditLimit { throw 'Unexpected credits' }
+        $Config = Get-WizardConfiguration -Source $Root -Scratch $Work
+        $Config.Mode | Should -Be 'Repair'
+        $After = Read-WizardDefaults
+        $After.Model | Should -Be $Before.Model
+        $After.PerRunCredits | Should -Be $Before.PerRunCredits
+        $After.SpendingAuthorization.planHash | Should -Be $Before.SpendingAuthorization.planHash
+        Should -Invoke Read-WizardText -Times 2 -Exactly
+    }
+    It 'preserves a valid install by default without asking to reuse or prepare it' {
+        $Root = New-RepairSource; $Work = Join-Path $TestDrive 'keep-work'; $Install = Join-Path $Work 'install'
+        [void][IO.Directory]::CreateDirectory($Install)
+        Set-Content (Join-Path $Install 'keep.txt') 'keep'
+        Mock Test-WizardInstall { $true }
+        Mock Confirm-WizardAction { $false }
+        Mock Move-WizardInstallArchive { throw 'Unexpected archive' }
+        Initialize-WizardInstall -Path $Install -ManagedRoot $Work -Source $Root -Repair
+        Get-Content (Join-Path $Install 'keep.txt') | Should -Be 'keep'
+        Should -Invoke Confirm-WizardAction -Times 1 -Exactly -ParameterFilter { $MemoryKey -eq 'RebuildInstall' }
+        Should -Invoke Move-WizardInstallArchive -Times 0
+    }
+    It 'archives <State> installs only after consent, leaving old evidence intact' -ForEach @(
+        @{ State = 'stale'; Consent = $true }, @{ State = 'valid'; Consent = $true }, @{ State = 'stale'; Consent = $false }
+    ) {
+        $Root = New-RepairSource; $Work = Join-Path $TestDrive "rebuild-$State-$Consent"; $Install = Join-Path $Work 'install'
+        [void][IO.Directory]::CreateDirectory($Install)
+        Set-Content (Join-Path $Install 'keep.txt') 'old install'
+        Set-Content (Join-Path $Work 'control-series.json') 'retained evidence'
+        if ($State -eq 'stale') { '{"manifestHash":"stale"}' | Set-Content (Join-Path $Install 'wizard-install.json') }
+        Mock Test-WizardInstall { $true }
+        Mock Confirm-WizardAction { $Consent }.GetNewClosure()
+        Mock Import-Module {}
+        Mock Install-SquadPackage { [void][IO.Directory]::CreateDirectory($Destination) }
+        if ($Consent) {
+            Initialize-WizardInstall -Path $Install -ManagedRoot $Work -Source $Root -Repair
+            $Archives = @(Get-ChildItem $Work -Directory -Filter 'install-archive-*')
+            $Archives.Count | Should -Be 1
+            Get-Content (Join-Path $Archives[0].FullName 'keep.txt') | Should -Be 'old install'
+            Should -Invoke Install-SquadPackage -Times 1 -Exactly
+        }
+        else {
+            { Initialize-WizardInstall -Path $Install -ManagedRoot $Work -Source $Root -Repair } | Should -Throw '*Archive declined*'
+            Get-Content (Join-Path $Install 'keep.txt') | Should -Be 'old install'
+            Should -Invoke Install-SquadPackage -Times 0
+        }
+        Get-Content (Join-Path $Work 'control-series.json') | Should -Be 'retained evidence'
     }
 }
 
@@ -480,6 +636,7 @@ Describe 'Wizard remembered defaults' -Tag 'Unit' {
     }
     It 'retains completed answers when a later prerequisite fails' {
         Save-WizardDefaults -Config $script:MemoryConfig
+        Mock Test-WizardSource {}
         Mock Read-WizardText { if ($Question -like 'Coordinator*') { 'retry-model' } else { $Default } }
         Mock Install-WizardPrerequisite { throw 'Fixture prerequisite failure' }
         Mock Confirm-WizardAction { throw 'No authorization should be requested yet' }
@@ -834,6 +991,7 @@ Describe 'Wizard complete coordination' -Tag 'Unit' {
         Mock Install-WizardPrerequisite { 'mock-pester.psd1' }
         Mock Connect-WizardGitHub {}
         Mock Initialize-WizardInstall {}
+        Mock Test-WizardSource {}
         Mock Test-WizardCompatibility {}
         Mock Confirm-WizardAction { $true }
         Mock Invoke-WizardOfflineTest { $script:WizardCalls.Add('Offline'); 0 }
