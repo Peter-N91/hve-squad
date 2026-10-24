@@ -1053,8 +1053,8 @@ function Invoke-WizardBenchmark {
     try { $Code = Invoke-WizardCommand -Command (Get-Command pwsh).Source -Arguments $Arguments -ProgressPaths $Progress }
     finally { $Export = Complete-WizardBenchmarkExport -Options $Options }
     if ($Code -ne 0) { return $Code }
-    if ($Export.status -ne 'exported') { return 1 }
     if ($Export['comparison'] -and $Export.comparison.evaluable -and -not $Export.comparison.eligible) { return 2 }
+    if ($Export.status -ne 'exported') { return 1 }
     return 0
 }
 
@@ -1087,18 +1087,39 @@ function Complete-WizardBenchmarkExport {
         $Result.score = $ScoreRecord.score
         $Result.status = if ($Directories.Count) { 'exported' } else { 'failed' }; $Result.reason = 'standalone-score-recorded'
         if ($Options['BaselineEvidencePath'] -and $Options['CandidateOnly']) {
+            $ComparisonStage = 'setup'
             try {
                 Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
-                $Saved = Get-Content -LiteralPath $Options.BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable
-                if ($Saved['schemaVersion'] -ne 'efficiency-control-v1' -or @($Saved['runs']).Count -ne 3) { throw 'Invalid saved controls.' }
-                foreach ($Control in $Saved.runs) { Assert-BenchmarkRecordedIdentity -Repository $Source -Run $Control }
+                $ComparisonStage = 'history-read'
+                $SavedText = Get-Content -LiteralPath $Options.BaselineEvidencePath -Raw
+                $ComparisonStage = 'history-parse'
+                $Saved = $SavedText | ConvertFrom-Json -AsHashtable
+                $ComparisonStage = 'history-admission'
+                if ($Saved -isnot [Collections.IDictionary] -or $Saved['schemaVersion'] -ne 'efficiency-control-v1' -or @($Saved['runs']).Count -ne 3) { throw [IO.InvalidDataException]::new('invalid-record:saved-controls') }
+                foreach ($Control in $Saved.runs) {
+                    if ($Control -isnot [Collections.IDictionary] -or $Control.Count -eq 0 -or (-not (Test-EfficiencyObservation $Control) -and -not (Test-EfficiencyRun $Control))) { throw [IO.InvalidDataException]::new('invalid-record:saved-control-run') }
+                    Assert-BenchmarkRecordedIdentity -Repository $Source -Run $Control
+                }
+                $ComparisonStage = 'evaluation'
                 $Candidates = @($Directories | ForEach-Object { Get-Content -LiteralPath (Join-Path $_ 'out/run.json') -Raw | ConvertFrom-Json -AsHashtable })
                 $Result.comparison = Compare-EfficiencyRuns -Runs (@($Saved.runs) + $Candidates) -ObservationOnly
+                $ComparisonStage = 'publication'
                 $Result.comparison | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $Destination 'comparison.json') -Encoding utf8NoBOM
             }
             catch {
-                $Result.comparison = @{ evaluable = $false; eligible = $false; reason = 'saved-controls-missing-or-incompatible' }
-                Write-Warning 'Saved-control comparison unavailable; candidate score, records and badge are retained unchanged.'
+                $HistoryUnavailable =
+                    ($ComparisonStage -eq 'history-read' -and ($_.Exception -is [Management.Automation.ItemNotFoundException] -or $_.Exception -is [Management.Automation.DriveNotFoundException])) -or
+                    ($ComparisonStage -eq 'history-parse' -and $_.Exception -is [ArgumentException]) -or
+                    ($ComparisonStage -eq 'history-admission' -and $_.Exception -is [IO.InvalidDataException] -and $_.Exception.Message -cmatch '^(?:invalid-record:[a-z0-9/-]+|stale-record:[a-z0-9/-]+|operational-error:git-operation)$')
+                if ($HistoryUnavailable) {
+                    $Result.comparison = @{ evaluable = $false; eligible = $false; reason = 'saved-controls-missing-or-incompatible' }
+                    Write-Warning 'Saved-control comparison unavailable; candidate score, records and badge are retained unchanged.'
+                }
+                else {
+                    $Result.status = 'failed'; $Result.reason = "comparison-$ComparisonStage-failed"
+                    if (-not $Result['comparison']) { $Result.comparison = @{ evaluable = $false; eligible = $false; reason = $Result.reason } }
+                    Write-Warning "Optional comparison failed ($($Result.reason)); any computed verdict and the candidate score are retained."
+                }
             }
         }
         Write-Host "Portable observations: $Destination. No measured source files were changed. To publish offline, run this in PowerShell 7.5+ from the writable delivery checkout, review and commit the generated files:"

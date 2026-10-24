@@ -651,8 +651,19 @@ Describe 'Wizard offline Python provisioning' -Tag 'Unit' {
 
 Describe 'Wizard portable observation finalization' -Tag 'Unit' {
     It 'retains a candidate score before optional <Comparison> and preserves its exit' -ForEach @(
-        @{ Comparison = 'regression'; Evaluable = $true; Code = 2 },
-        @{ Comparison = 'unavailable'; Evaluable = $false; Code = 0 }
+        @{ Comparison = 'regression'; Evaluable = $true; Eligible = $false; Fault = 'none'; ChildCode = 0; Code = 2 },
+        @{ Comparison = 'unavailable'; Evaluable = $false; Eligible = $false; Fault = 'none'; ChildCode = 0; Code = 0 },
+        @{ Comparison = 'regression-write-failure'; Evaluable = $true; Eligible = $false; Fault = 'publication'; ChildCode = 0; Code = 2 },
+        @{ Comparison = 'non-regression-write-failure'; Evaluable = $true; Eligible = $true; Fault = 'publication'; ChildCode = 0; Code = 1 },
+        @{ Comparison = 'prior-child-failure'; Evaluable = $true; Eligible = $false; Fault = 'publication'; ChildCode = 1; Code = 1 },
+        @{ Comparison = 'evaluation-failure'; Evaluable = $false; Eligible = $false; Fault = 'evaluation'; ChildCode = 0; Code = 1 },
+        @{ Comparison = 'missing-history'; Evaluable = $false; Eligible = $false; Fault = 'missing'; ChildCode = 0; Code = 0 },
+        @{ Comparison = 'malformed-history'; Evaluable = $false; Eligible = $false; Fault = 'malformed'; ChildCode = 0; Code = 0 },
+        @{ Comparison = 'malformed-run'; Evaluable = $false; Eligible = $false; Fault = 'malformed-run'; ChildCode = 0; Code = 0 },
+        @{ Comparison = 'incompatible-history'; Evaluable = $false; Eligible = $false; Fault = 'incompatible'; ChildCode = 0; Code = 0 },
+        @{ Comparison = 'missing-history-objects'; Evaluable = $false; Eligible = $false; Fault = 'missing-objects'; ChildCode = 0; Code = 0 },
+        @{ Comparison = 'setup-failure'; Evaluable = $false; Eligible = $false; Fault = 'setup'; ChildCode = 0; Code = 1 },
+        @{ Comparison = 'admission-failure'; Evaluable = $false; Eligible = $false; Fault = 'admission'; ChildCode = 0; Code = 1 }
     ) {
         Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
         $Root = Join-Path $TestDrive "optional-$Comparison"
@@ -662,20 +673,48 @@ Describe 'Wizard portable observation finalization' -Tag 'Unit' {
         [void][IO.Directory]::CreateDirectory((Join-Path $Root 'trials/candidate-1/out'))
         Set-Content (Join-Path $Root 'trials/candidate-1/out/run.json') '{}'
         $Saved = Join-Path $TestDrive "saved-$Comparison.json"
-        @{ schemaVersion = 'efficiency-control-v1'; runs = @(@{}, @{}, @{}) } | ConvertTo-Json | Set-Content $Saved
+        if ($Fault -eq 'malformed') { Set-Content $Saved '{' }
+        elseif ($Fault -ne 'missing') {
+            $Controls = if ($Fault -eq 'malformed-run') { @(@{}, @{}, @{}) } else { @(@{ fixture = $true }, @{ fixture = $true }, @{ fixture = $true }) }
+            @{ schemaVersion = 'efficiency-control-v1'; runs = $Controls } | ConvertTo-Json | Set-Content $Saved
+        }
         $Options = @{ Mode = 'Series'; CandidateOnly = $true; TrialRoot = $Root; CandidateSourceRoot = $Source; BaselineEvidencePath = $Saved }
-        Mock Invoke-WizardCommand { 0 }
+        Mock Invoke-WizardCommand { $ChildCode }
         Mock Export-BenchmarkScore { [void][IO.Directory]::CreateDirectory($OutputDirectory); @{ score = @{ value = 80; state = 'partial' } } }
-        Mock Assert-BenchmarkRecordedIdentity {}
+        Mock Test-EfficiencyObservation { $true }
+        Mock Assert-BenchmarkRecordedIdentity {
+            if ($Fault -eq 'incompatible') { throw [IO.InvalidDataException]::new('invalid-record:measured-source-mismatch') }
+            if ($Fault -eq 'missing-objects') { throw [IO.InvalidDataException]::new('operational-error:git-operation') }
+            if ($Fault -eq 'admission') { throw [IO.IOException]::new('fixture admission failed') }
+        }
+        if ($Fault -eq 'setup') {
+            Mock Import-Module { throw [IO.IOException]::new('fixture setup failed') } -ParameterFilter { $Name -like '*/EfficiencyBenchmark.psm1' }
+        }
+        if ($Fault -eq 'publication') {
+            Mock Set-Content { throw [IO.IOException]::new('fixture comparison write denied') } -ParameterFilter { $LiteralPath -like '*/comparison.json' }
+        }
         Mock Compare-EfficiencyRuns {
             Should -Invoke Export-BenchmarkScore -Times 1 -Exactly
-            [pscustomobject]@{ evaluable = $Evaluable; eligible = $false }
+            if ($Fault -eq 'evaluation') { throw [IO.IOException]::new('fixture evaluation failed') }
+            [pscustomobject]@{ evaluable = $Evaluable; eligible = $Eligible; verdict = $Comparison }
         }
         Invoke-WizardBenchmark $Options | Should -Be $Code
+        Should -Invoke Export-BenchmarkScore -Times 1 -Exactly
+        $Compared = $Fault -in @('none', 'publication', 'evaluation')
+        Should -Invoke Compare-EfficiencyRuns -Times $(if ($Compared) { 1 } else { 0 }) -Exactly
         $Manifest = Get-Content (Join-Path $Root 'out/benchmark-export.json') -Raw | ConvertFrom-Json
         $Manifest.score.value | Should -Be 80
-        $Manifest.status | Should -Be exported
-        Test-Path (Join-Path $Root 'portable/comparison.json') | Should -BeTrue
+        $OperationalFailure = $Fault -in @('publication', 'evaluation', 'setup', 'admission')
+        $Manifest.status | Should -Be $(if ($OperationalFailure) { 'failed' } else { 'exported' })
+        $Manifest.comparison.evaluable | Should -Be $Evaluable
+        $Manifest.comparison.eligible | Should -Be $Eligible
+        if ($Compared -and $Fault -ne 'evaluation') { $Manifest.comparison.verdict | Should -BeExactly $Comparison }
+        if ($OperationalFailure) {
+            $FailureStage = if ($Fault -eq 'admission') { 'history-admission' } else { $Fault }
+            $Manifest.reason | Should -BeExactly "comparison-$FailureStage-failed"
+        }
+        elseif ($Fault -ne 'none') { $Manifest.comparison.reason | Should -BeExactly 'saved-controls-missing-or-incompatible' }
+        Test-Path (Join-Path $Root 'portable/comparison.json') | Should -Be ($Fault -eq 'none')
     }
     BeforeAll {
         Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
