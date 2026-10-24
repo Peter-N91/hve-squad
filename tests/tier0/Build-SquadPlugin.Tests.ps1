@@ -77,6 +77,36 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         Get-Content -LiteralPath $agentPath -Raw | Should -Match 'disable-model-invocation: true'
     }
 
+    It 'ships both user-invocable builders with their invocation and deterministic runtime' {
+        $expected = @(
+            @{
+                Slug = 'squad-connector-builder'
+                Name = 'Squad Connector Builder'
+            }
+            @{
+                Slug = 'squad-external-agent-builder'
+                Name = 'Squad External Agent Builder'
+            }
+        )
+        foreach ($builder in $expected) {
+            $agentPath = Join-Path $script:OutputRoot "agents/squad/$($builder.Slug).agent.md"
+            Test-Path -LiteralPath $agentPath -PathType Leaf | Should -BeTrue
+            Get-Content -LiteralPath $agentPath -Raw | Should -Match '(?m)^user-invocable:\s*true\s*$'
+            $invocationPath = Join-Path $script:OutputRoot "skills/squad/invocations/$($builder.Slug)/SKILL.md"
+            Test-Path -LiteralPath $invocationPath -PathType Leaf | Should -BeTrue
+            Get-Content -LiteralPath $invocationPath -Raw |
+                Should -Match "Dispatch this request to the ``$([regex]::Escape($builder.Name))`` agent"
+        }
+        foreach ($path in @(
+                'skills/squad/scripts/New-SquadConnector.ps1',
+                'skills/squad/scripts/New-SquadExternalEndpoint.ps1',
+                'skills/squad/scripts/Test-SquadConnectorManifest.ps1',
+                'skills/squad/templates/builders/connector-runner.template.ps1'
+            )) {
+            Test-Path -LiteralPath (Join-Path $script:OutputRoot $path) -PathType Leaf | Should -BeTrue
+        }
+    }
+
     It 'does not advertise the Coach when the selected source lacks its <Missing> artifact' -ForEach @(
         @{ Missing = 'agent'; Present = 'prompts/squad/squad-coach.prompt.md' }
         @{ Missing = 'prompt'; Present = 'agents/squad/squad-coach.agent.md' }
