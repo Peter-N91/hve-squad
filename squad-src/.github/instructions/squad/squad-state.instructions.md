@@ -24,7 +24,7 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 
 | Path                  | Purpose                                                                    | Write Semantics      |
 |-----------------------|----------------------------------------------------------------------------|----------------------|
-| `team.md`             | Roster of roles and the agents that fill them (see roster conventions)     | Replace via scribe   |
+| `team.md`             | Roster, routing mode, agents, and active-policy Model cells                 | Replace via Scribe; selected Model-cell refresh via validated script |
 | `routing.md`          | Request-pattern routing table (see routing conventions)                    | Replace via scribe   |
 | `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only via validated writer or Scribe; Cost Preflight via coordinator |
 | `notifications.md`    | Chronological log of notifications (pings) fired and their delivery channel | Append-only          |
@@ -40,7 +40,7 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 
 ### state.json Shape
 
-The Scribe seeds `state.json`; the validated ordinary writer or cold Scribe advances it. In every routing mode, the coordinator may synchronously run `Write-SquadHandoff.ps1 -Quiet` using the minimal JSON in `references/economy-scribe.md`, without loading cold schemas or dispatching Scribe. Serialize direct writer, cold Scribe, and Cost Preflight per root. Quiet success requires one valid status/count/check object; warnings stay visible on stderr. Failure never permits unvalidated hand edits or ordinary ledger arithmetic. Before a child dispatch the coordinator may also compare-and-swap only `currentRun.costPreflight`, append its matching decision and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`.
+The Scribe seeds `state.json`; the validated ordinary writer or cold Scribe advances it. In every routing mode, the coordinator may synchronously run `Write-SquadHandoff.ps1 -Quiet` using the minimal JSON in `references/economy-scribe.md`, without loading cold schemas or dispatching Scribe. It may also apply an actual-plan, hash-bound Model-cell refresh through `Set-SquadModelRouting.ps1`; that transaction changes only selected `team.md` cells plus its decision. Serialize direct writer, routing refresh, cold Scribe, and Cost Preflight per root. Quiet success requires one valid status/count/check object; warnings stay visible on stderr. Failure never permits unvalidated hand edits or ordinary ledger arithmetic. Before a child dispatch the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching decision and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`.
 
 ```json
 {
@@ -83,7 +83,7 @@ The Scribe seeds `state.json`; the validated ordinary writer or cold Scribe adva
 }
 ```
 
-The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`). The `currentRun` object holds estimated run totals plus the latest compact Cost Preflight decision. The full planned-demand table and permitted dispatch set live in the matching `decisions.md` entry rather than as JSON scratch data.
+The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`). The `currentRun` object holds ledger totals plus the latest compact Cost Preflight decision; that decision's `evaluatedSpendUsd` is exact host usage plus pending reservations when its basis is `host-exact+estimated-reservation` (the older `host-observed+estimated-reservation` spelling remains readable). The exact next-wave rows and permitted dispatch set live in the matching `decisions.md` entry rather than as JSON scratch data.
 
 Cost-ceiling omission is stateful only inside one run. When the latest Cost Preflight `runId` matches the active run id, an omitted argument preserves its finite positive `ceilingUsd`. The literal `cost-ceiling=unset` replaces the compact object with the exact `not-requested` shape above while preserving `estCostUsd` and `estCreditsTotal`. A new run id with no supplied ceiling also starts from that `not-requested` shape; a ceiling never carries across run ids.
 
@@ -126,7 +126,7 @@ est_credits  = est_cost_usd / 0.01
 
 ### Calibration
 
-Estimates that are never checked stay wrong. `consumption-rates.md` carries a `calibration_factor` — the running mean of `observed_credits / estimated_credits` across reconciled runs, clamped to 0.25-10.0 — that multiplies every cost estimate. When the coordinator supplies an `observed_credits` figure (the per-user aggregate `ai_credits_used` delta read from the Copilot usage-metrics REST API across the run), the Scribe folds that run's ratio into the mean and stamps the calibration block. Until at least one run has been reconciled the factor stays at 1.00 and the ledger carries an "uncalibrated" note.
+Estimates are fallback and future-reservation inputs, not completed-work authority when native attribution is available. `consumption-rates.md` retains a `calibration_factor` — the running mean of legacy `observed_credits / estimated_credits`, clamped to 0.25-10.0 — only for that fallback. Exact-native ledger rows and ceiling consumption are never calibrated or scaled. Until a fallback estimate has eligible reconciliation evidence, the factor stays at 1.00 and the fallback carries an "uncalibrated" note.
 
 Every numeric output carries an "estimated, not billed" disclaimer. These values support run planning and cost comparison, not invoicing.
 
@@ -196,9 +196,9 @@ Totals are computed by summing the rows, never estimated. The total row must equ
 
 ## State Ownership
 
-Only the owning coordinator initiates state changes. Ordinary writes use the synchronous validated script in every routing mode; cold operations use Scribe. Cost Preflight remains the narrow coordinator-edited transaction: compare `updated`, change only `currentRun.costPreflight` plus the exact legacy schema bump, append its decision, read back, and dispatch nothing on collision or mismatch. Other cast agents never write squad state directly.
+Only the owning coordinator initiates state changes. Ordinary writes use the synchronous validated script in every routing mode; routine active-policy Model-cell refresh uses the hash-bound routing writer; cold operations use Scribe. Cost Preflight remains the narrow coordinator-edited state transaction: compare `updated`, change only `currentRun.costPreflight` plus the exact legacy schema bump, append its decision, read back, and dispatch nothing on collision or mismatch. Other cast agents never write squad state directly.
 
-One writer per root keeps concurrent roles from racing: serialize direct writer, cold Scribe, and Cost Preflight. Under cold autopilot pipelining, at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order. Direct ordinary handoffs run synchronously, never alongside another writer; each federation member applies this independently.
+One writer per root keeps concurrent roles from racing: serialize direct writer, routing refresh, cold Scribe, and Cost Preflight. Under cold autopilot pipelining, at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order. Direct ordinary handoffs and routing refreshes run synchronously, never alongside another writer; each federation member applies this independently.
 
 ## Proof of Dispatch
 

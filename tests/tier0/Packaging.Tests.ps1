@@ -260,6 +260,19 @@ Describe 'Shared scoring is delivered with the plugin runtime (SQ-33c)' {
     }
 }
 
+Describe 'Exact usage and routing transactions ship with the runtime' {
+    It 'delivers <Name> unchanged beside the coordinator scripts' -ForEach @(
+        @{ Name = 'SquadUsage.psm1' }
+        @{ Name = 'Get-SquadUsage.ps1' }
+        @{ Name = 'Set-SquadModelRouting.ps1' }
+    ) {
+        $source = Join-Path $script:SourceRootResolved "squad-src/.github/skills/squad/scripts/$Name"
+        $delivered = Join-Path $script:PluginOutputRoot "skills/squad/scripts/$Name"
+        Test-Path -LiteralPath $delivered -PathType Leaf | Should -BeTrue
+        (Get-FileHash -LiteralPath $delivered).Hash | Should -Be (Get-FileHash -LiteralPath $source).Hash
+    }
+}
+
 Describe 'D7-2 Plugin output has no dangling instructions/squad path prose' {
     It 'contains zero literal ".github/instructions/squad/" references anywhere in the built output' {
         $script:DanglingPathHits.Count | Should -Be 0 -Because (

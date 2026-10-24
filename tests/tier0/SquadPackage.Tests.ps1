@@ -559,7 +559,7 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
             $route = [regex]::Match($Procedure, '(?ms)^## Route\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
             $contract = [regex]::Match($Coordinator, '(?ms)^## Skill Reference Contract\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
             $routePattern = (
-                '(?ms)^1\. Read `team\.md` and `routing\.md`\..*?^2\. Match the request against the routing table;.*?^4\. For `team\.md` `Model routing: ranked\|economy\|manual` or `routing=`, resolve ids per `references/model-routing\.md`.*?^' +
+                '(?ms)^1\. Read state/routing once with `Get-SquadDispatchBrief\.ps1`; JSON defers model scoring\..*?^2\. Match the request against the routing table;.*?^4\. For `team\.md` `Model routing: ranked\|economy\|manual` or `routing=`, send actual units/host models to `New-SquadDispatchPlan\.ps1`.*?^' +
                 [regex]::Escape($script:ProgressRoutePointer) + '\r?\n6\. Dispatch all parallel-eligible roles'
             )
             return (
@@ -611,7 +611,7 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
     It 'preserves cost-first tiers, per-turn override, routed modes, and off behavior' {
         $script:ProgressProcedure | Should -Match '`fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`'
         $script:ProgressProcedure | Should -Match 'user tier hints override per-role defaults for this turn'
-        $script:ProgressProcedure | Should -Match 'For `team.md` `Model routing: ranked\|economy\|manual` or `routing=`, resolve ids per `references/model-routing.md`'
+        $script:ProgressProcedure | Should -Match 'For `team.md` `Model routing: ranked\|economy\|manual` or `routing=`, send actual units/host models to `New-SquadDispatchPlan\.ps1`'
         $script:ProgressProcedure | Should -Match '`off` keeps cost-first selection'
     }
 

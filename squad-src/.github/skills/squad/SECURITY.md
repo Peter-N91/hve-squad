@@ -3,7 +3,7 @@ title: Squad Skill Security Model
 description: STRIDE model for local squad routing, connector file exchanges, and state persistence.
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-23
+ms.date: 2026-10-24
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
@@ -15,8 +15,10 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `Resolve-SquadConnectorHistory.ps1`,
 `Resolve-SquadModelRoute.ps1`, its shared `ModelBenchmarkScoring.ps1`,
 `Get-SquadDispatchBrief.ps1`,
+`New-SquadDispatchPlan.ps1`, `Set-SquadModelRouting.ps1`,
 `Write-SquadHandoff.ps1`, `Measure-SquadLedger.ps1`,
-`Set-SquadCostPreflight.ps1`, and `Initialize-SquadConsumptionRates.ps1`.
+the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`, and
+`Initialize-SquadConsumptionRates.ps1`.
 The two buckets below cover configuration/dispatch and file exchange/persistence.
 Each enumerates all six STRIDE categories. Agent instructions are procedural
 controls, not a sandbox or a substitute for host filesystem permissions.
@@ -31,10 +33,10 @@ controls, not a sandbox or a substitute for host filesystem permissions.
 
 | Surface | Current controls | Residual boundary |
 |---|---|---|
-| Routing and registration | Explicit roster bindings, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
+| Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell refresh, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
 | Offline capability evidence | Exact model/configuration checks, explicit verification dates, common versioned panels, digest validation and visible fallback | Curated verification facts and source hashes are not authenticated measurement signatures. |
 | External file exchange | Closed schemas, request/result identity matching, output allowlists, structural path containment | A matching envelope does not authenticate its author. |
-| Persistence | Scribe payload validation, binding-matched provenance, distinct member accounting, ledger checks | History is local and editable by principals with repository write access. |
+| Persistence | Scribe payload validation, hash/CAS routing and preflight transactions, binding-matched provenance, distinct member accounting, ledger checks | History is local and editable by principals with repository write access. |
 | Domain execution | Consumer-owned adapter; no connector command execution | Host permissions and consumer automation govern actual source changes. |
 
 Ratings are qualitative under the assumption that an external producer can
@@ -59,6 +61,10 @@ Different filesystem permissions or unattended policies change the risk.
 * The coordinator classifies work and retains governance and admission.
 * Connector/model resolvers and the dispatch brief read roster, manifests,
   packaged model metadata, and local availability information.
+* The dispatch planner resolves only selected role units. Its routing writer may
+  add/change an active mode, Model column/cells, and supplied economy consent under
+  the exact team hash; roster membership, routing rows, `routing=off`, and state
+  remain outside its authority.
 * The shared benchmark scorer validates pinned evidence and recalculates
   verification expiry offline. The repository's maintainer-only
   `Sync-ModelBenchmarks.ps1` acquires original-source evidence; dispatch never
@@ -73,9 +79,12 @@ Different filesystem permissions or unattended policies change the risk.
   reject in both readers. It cannot register a removed endpoint or authorize
   later work.
 * The consumer's adapter runs its own agents or workflow outside this package.
-* The handoff writer, ledger calculator, preflight helper, and rate seeder write
-  their declared local state/output files. The ledger can read local host usage
-  logs for accounting; those logs are not connector identity evidence.
+* The handoff writer, routing writer, ledger calculator, preflight helper, and
+  rate seeder write their declared local state/output files. `SquadUsage.psm1`
+  streams local host usage logs, deduplicates complete accounting identities,
+  exposes native per-top-level-agent token categories and credits, and rolls nested
+  agents up through host parent identities. It never emits prompts, responses, tool
+  arguments, or raw log lines; those logs are not connector identity evidence.
 
 ### Data Flow
 
@@ -84,7 +93,7 @@ flowchart TD
   subgraph Operator["Operator-controlled host"]
     Config["Roster, manifests, pinned evidence, installed scripts"]
     Shell["Coordinator and resolver helpers"]
-    Scribe["Handoff, preflight, rates, ledger"]
+    Scribe["Handoff, routing refresh, preflight, rates, ledger"]
   end
   subgraph Exchange["Untrusted producer boundary"]
     Mailbox["Request and result files"]
@@ -139,7 +148,7 @@ flowchart TD
 | A2 | Declared reports and authorized source worktree | No undeclared overwrite or cross-squad write |
 | A3 | Task/binding/member identity | Results stay attached to the intended request and squad. |
 | A4 | History and accounting | External work stays unverified and unmetered; shim spend remains attributable. |
-| A5 | Local inputs and host usage records | No unintended credential or raw-log disclosure |
+| A5 | Local inputs and host usage records | Expose only accounting identity, agent/model labels, token categories, and credits; no prompts, responses, tool arguments, credentials, or raw-log disclosure |
 
 ## Adversaries
 
@@ -168,6 +177,10 @@ digests. Acquisition and genuine verification remain separate from publication
 and generation dates. These checks constrain a curated record's use; they do
 not authenticate its publisher or make operator-supplied verification facts
 cryptographic proof. Protect the pinned evidence and review refreshes as code.
+Model refresh additionally requires the exact planned `team.md` hash, unchanged
+source cells, one unambiguous roster row per role, and a safe lowercase model id.
+Cost admission never trusts a lagging checkpoint as exact spend: native usage
+records require complete status and stable host accounting identities.
 
 ### Repudiation
 
@@ -176,18 +189,24 @@ configuration. They are not a signed record of who authored that configuration.
 Pending identity hashes include the external member and owning roster, so a
 rename or cross-squad resume cannot silently relabel a result. Retirement records
 retain historical attribution only while the trusted local record remains intact.
+Routing refresh and Cost Preflight decisions record their selected roles/slots and
+inputs, but remain local append-only evidence rather than signed audit events.
 
 ### Information Disclosure
 
 Dispatch metadata and bounded inputs reach the selected endpoint. Limit those
 inputs and output roots to the approved task. Required skill names are local
 consumer configuration; manifests intentionally contain no credentials.
+Usage parsing returns aggregate accounting fields and never writes raw event
+content into squad state; host-log access and retention remain deployment concerns.
 
 ### Denial of Service
 
 Unknown bindings and ambiguous execution stop or request clarification.
 Unattended ambiguity fails closed. Invalid configuration can therefore block
 work deliberately; it must not cause an inline substitute.
+Incomplete or malformed native metering also blocks capped dispatch. Usage logs are
+streamed rather than loaded whole, but very large local logs still consume host I/O.
 
 ### Elevation of Privilege
 

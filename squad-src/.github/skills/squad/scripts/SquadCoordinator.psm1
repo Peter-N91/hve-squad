@@ -400,6 +400,142 @@ function New-SquadOrchestrationConsumption {
     }
 }
 
+function ConvertTo-SquadModelKey {
+    param([AllowEmptyString()][AllowNull()][string]$Value)
+    if (-not $Value) { return '' }
+    $key = ($Value.Trim().Trim('`') -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-').ToLowerInvariant()
+    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    $key
+}
+
+function Get-SquadRoleClassMap {
+    param([string]$Path = (Join-Path $script:SkillRoot 'references' 'model-routing.md'))
+    $section = Get-SquadReferenceSection -Path $Path -Heading '## Assignment Classes'
+    $map = @{}
+    foreach ($line in ($section -split '\r?\n')) {
+        $match = [regex]::Match($line, '^\|\s*`(?<class>[a-z]+)`\s*\|(?<roles>.*)\|\s*$')
+        if (-not $match.Success) { continue }
+        foreach ($role in [regex]::Matches($match.Groups['roles'].Value, '`([a-z][a-z0-9-]*)`')) {
+            if (-not $map.ContainsKey($role.Groups[1].Value)) {
+                $map[$role.Groups[1].Value] = $match.Groups['class'].Value
+            }
+        }
+    }
+    $map
+}
+
+function Get-SquadDispatchReservation {
+    <#
+    .SYNOPSIS
+        Prices one future dispatch from its actual role class and resolved model.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$RatesPath,
+        [Parameter(Mandatory)][string]$Model,
+        [ValidateSet('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping', 'coordinator')]
+        [string]$AssignmentClass = 'implementation',
+        [string]$DispatchClass,
+        [ValidateRange(1, 1000)][int]$Count = 1
+    )
+
+    $tables = @(Read-SquadTables $RatesPath)
+    $modelTables = @($tables | Where-Object { 'Model (as routed)' -in $_.Header -and 'Model ID' -in $_.Header })
+    $floorTables = @($tables | Where-Object { 'Dispatch class' -in $_.Header -and 'Internal turns' -in $_.Header })
+    if ($modelTables.Count -ne 1 -or $floorTables.Count -ne 1) { throw 'Missing or ambiguous model-rate or dispatch-class table.' }
+
+    if (-not $DispatchClass) {
+        $DispatchClass = switch ($AssignmentClass) {
+            'research' { 'Research / file survey' }
+            'planning' { 'Plan / synthesis' }
+            'implementation' { 'Implement / edit loop' }
+            'review' { 'Review / verification' }
+            'intake' { 'Review / verification' }
+            'council' { 'Council member opinion' }
+            'bookkeeping' { 'Scribe state write' }
+            'coordinator' { 'Lookup / single-file read' }
+        }
+    }
+
+    $floor = @($floorTables[0].Rows | Where-Object { $_['Dispatch class'] -eq $DispatchClass })
+    if ($floor.Count -ne 1) { throw "No unique dispatch estimator row for '$DispatchClass'." }
+    $numbers = @()
+    foreach ($field in @('Internal turns', 'Base context', 'Growth/turn', 'Output/turn')) {
+        $value = 0L
+        if (-not [long]::TryParse(($floor[0][$field] -replace ',', ''), [ref]$value) -or $value -le 0) {
+            throw "Invalid '$field' in dispatch estimator row '$DispatchClass'."
+        }
+        $numbers += $value
+    }
+    $turns, $base, $growth, $outputPerTurn = $numbers
+
+    $modelKey = ConvertTo-SquadModelKey $Model
+    if (-not $modelKey -or $modelKey -in @('auto', 'unknown', 'fast', 'default', 'extended')) {
+        throw "A concrete priced model is required for '$DispatchClass'; got '$Model'."
+    }
+    $modelRows = @($modelTables[0].Rows | Where-Object {
+            $modelKey -in @(
+                (ConvertTo-SquadModelKey $_['Model ID']),
+                (ConvertTo-SquadModelKey $_['Model (as routed)'])
+            )
+        })
+    if ($modelRows.Count -ne 1) { throw "No unique rate row for model '$Model'." }
+    $rate = $modelRows[0]
+
+    $threshold = $null
+    $thresholdMatch = [regex]::Match([string]$rate['LC Threshold'], '(?<value>\d+(?:\.\d+)?)K')
+    if ($thresholdMatch.Success) {
+        $threshold = [double]$thresholdMatch.Groups['value'].Value * 1000.0
+    }
+    $largestContext = $base + $growth * ($turns - 1)
+    $longContext = $null -ne $threshold -and $largestContext -gt $threshold
+    $columns = if ($longContext) {
+        @{ input = 'LC Input'; cached = 'LC Cached'; cacheWrite = 'LC Cache write'; output = 'LC Output' }
+    }
+    else {
+        @{ input = 'Input'; cached = 'Cached'; cacheWrite = 'Cache write'; output = 'Output' }
+    }
+    $prices = @{}
+    foreach ($name in $columns.Keys) {
+        $raw = [string]$rate[$columns[$name]]
+        $value = [decimal]0
+        if ($raw -in @('', 'n/a') -or -not [decimal]::TryParse($raw, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$value) -or $value -lt 0) {
+            throw "Invalid $($columns[$name]) rate for model '$Model'."
+        }
+        $prices[$name] = $value
+    }
+
+    $tokenFactor = if ($modelKey -eq 'hydrafusion-max') { [decimal]0.35 } else { [decimal]1 }
+    $gross = [decimal]$turns * ([decimal]$base + [decimal]$growth * ($turns - 1) / 2) * $tokenFactor
+    $inputTokens = [long][Math]::Round([double]($gross * [decimal]0.20))
+    $cached = [long][Math]::Round([double]($gross * [decimal]0.80))
+    $cacheWrite = if ($prices.cacheWrite -gt 0) {
+        [long][Math]::Round([double](([decimal]$base + [decimal]$growth * ($turns - 1)) * $tokenFactor))
+    }
+    else { 0L }
+    $output = [long]($turns * $outputPerTurn)
+    $singleCost = (
+        [decimal]$inputTokens * $prices.input +
+        [decimal]$cached * $prices.cached +
+        [decimal]$cacheWrite * $prices.cacheWrite +
+        [decimal]$output * $prices.output
+    ) / [decimal]1e6
+
+    [pscustomobject][ordered]@{
+        model = ([string]$rate['Model ID']).Trim('`')
+        pricedAs = $rate['Model (as routed)']
+        assignmentClass = $AssignmentClass
+        dispatchClass = $DispatchClass
+        count = $Count
+        longContext = $longContext
+        internalTurns = $turns
+        inputTokens = $inputTokens * $Count
+        cachedTokens = $cached * $Count
+        cacheWriteTokens = $cacheWrite * $Count
+        outputTokens = $output * $Count
+        projectedCostUsd = $singleCost * $Count
+    }
+}
+
 function Get-SquadDecision {
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
@@ -461,4 +597,4 @@ function Get-SquadPendingConnectors {
     $tasks.ToArray()
 }
 
-Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, Get-SquadDecision, Get-SquadPendingConnectors
+Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors

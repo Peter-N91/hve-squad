@@ -38,13 +38,16 @@
 .PARAMETER SessionModel
     The coordinator's session model id, used for the orchestration consumption object.
 .PARAMETER AvailableModels
-    The exact host-advertised model IDs, forwarded to the read-only routing report.
+    The exact host-advertised model IDs, used only by the human-readable routing
+    report. JSON mode defers scoring to New-SquadDispatchPlan.ps1.
 .PARAMETER AsOf
-    Evaluation date for the routing report; defaults to today.
+    Evaluation date for the human-readable routing report; defaults to today.
 .PARAMETER AsJson
     Compact metadata in every mode, including federation and uninitialized roots.
+    Active model routing is marked deferred and is not scored in this discovery call.
 .PARAMETER Roles
-    Optional exact role IDs limiting roster and routing output, not changing policy.
+    Optional exact role IDs limiting roster and human-readable routing output, not
+    changing policy.
 .PARAMETER CheckLedger
     Run the trusted read-only ledger check once at turn start. Writer receipts replace
     repeated post-write audits; a shape check alone is never a ledger PASS.
@@ -461,8 +464,11 @@ $out.Add($(if ($unreachable.Count -eq 0) { 'roster precheck (Step 1b): PASS, eve
 $routeReport = if ($routing -eq 'off') {
     [pscustomobject]@{ scoringPolicy = 'off'; snapshotIdentity = 'not-evaluated'; evaluationDate = $AsOf.ToString('yyyy-MM-dd'); availability = 'not-evaluated'; roles = @(); warnings = @() }
 }
+elseif ($AsJson) {
+    [pscustomobject]@{ scoringPolicy = 'deferred-to-dispatch-plan'; snapshotIdentity = 'not-evaluated'; evaluationDate = $AsOf.ToString('yyyy-MM-dd'); availability = 'deferred'; roles = @(); warnings = @() }
+}
 else {
-    & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') -SquadRoot $SquadRoot -AvailableModels $AvailableModels -SessionModel $SessionModel -AsOf $AsOf | ConvertFrom-Json
+    & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') -SquadRoot $SquadRoot -AvailableModels $AvailableModels -SessionModel $SessionModel -Role $Roles -AsOf $AsOf | ConvertFrom-Json
 }
 if ($AsJson) {
     $ledgerCheck = [ordered]@{ status = 'not-run'; failureClass = ''; output = '' }
@@ -529,6 +535,7 @@ if ($AsJson) {
         routing = $requestRoutes
         modelRoutes = $routes
         modelPolicy = $routeReport.scoringPolicy
+        modelRoutingDeferred = $routing -ne 'off'
         observedExecution = 'host-unreported'
         provenance = $provenance
         gates = 'not-evaluated'

@@ -136,15 +136,15 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $script:EconomySection | Should -Match ([regex]::Escape('takes a `team.md` Model Tier edit, never a routing input'))
     }
 
-    It 'escalates once to the ranked pick, written into the Model cell by the Scribe first, reset by the next re-rank' {
+    It 'escalates once to the ranked pick through the routing writer, reset by the next economy plan' {
         $script:EconomySection | Should -Match ([regex]::Escape('After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that owner once on its ranked pick'))
-        $script:EconomySection | Should -Match ([regex]::Escape('The coordinator hands the Scribe that id for the role''s `Model` cell before the re-dispatch'))
-        $script:EconomySection | Should -Match ([regex]::Escape('the next turn''s re-rank resets the cell'))
+        $script:EconomySection | Should -Match ([regex]::Escape('persist the cell through `Set-SquadModelRouting.ps1`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('the next economy plan resets the cell'))
     }
 
     It 'asks for consent once and records it as an Economy Mode Accepted decision' {
         $script:EconomySection | Should -Match ([regex]::Escape('before any dispatch under it, the coordinator says once, plainly, what changes'))
-        $script:EconomySection | Should -Match ([regex]::Escape('a decision entry headed `## Economy Mode Accepted`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('Pass the stated trade as `economyConsent`'))
         $script:EconomySection | Should -Match ([regex]::Escape('An unattended run never accepts economy for the user'))
     }
 
@@ -154,8 +154,8 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $lines = @($block.TrimEnd("`n") -split '\n' | Where-Object { $_ })
         $lines[0] | Should -Be '## Economy Mode Accepted <timestamp>'
         @($lines | Select-Object -Skip 1 | ForEach-Object { ($_ -split ':')[0] }) | Should -Be @('* User', '* Previous mode', '* Trade accepted', '* Never weakened')
-        $script:EconomySection | Should -Match ([regex]::Escape('the Scribe writes that entry with the roster-refresh payload, in exactly this shape'))
-        $script:EconomySection | Should -Match ([regex]::Escape('Missing consent is reported, never enforced'))
+        $script:EconomySection | Should -Match ([regex]::Escape('`Set-SquadModelRouting.ps1` writes the mode, selected cells, refresh decision, and this exact entry atomically'))
+        $script:EconomySection | Should -Match ([regex]::Escape('Missing consent fails a scripted switch before dispatch'))
     }
     It 'marks every economy history entry with Route: economy' {
         $script:EconomySection | Should -Match ([regex]::Escape('Every history entry produced under economy starts its **Route rationale** identity bullet (`model-routing.md` *Identity Bullets*) with `Route: economy`'))

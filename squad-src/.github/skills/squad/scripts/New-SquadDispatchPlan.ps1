@@ -5,19 +5,28 @@
 
 <#
 .SYNOPSIS
-    Resolves selected work endpoints and orders explicit dependencies into safe waves.
+    Resolves selected work endpoints, model routes, exact spend, and safe dependency waves.
 .DESCRIPTION
     AI cost: none. Input is a routing decision, not executable instructions:
     { squadRoot, units: [{ id, role | squad, pattern?, owner?, agent?, selectionCue?,
       execution?, dependsOn?: [], parallel?: bool, readOnly?: bool,
       writePaths?: [], allowedOutputs?: [] }], council?: bool, planPath?: string,
-      admissionApproved?: bool, agentTypes?: [] }.
+      admissionApproved?: bool, agentTypes?: [], availableModels?: [],
+      sessionModel?: string, asOf?: date, requestedModelRouting?: ranked|economy|manual,
+      manualModels?: {role:model}, economyConsent?: {user,tradeAccepted,neverWeakened,timestamp?},
+      cost?: {runId, roundId, ceilingUsd, sessionLog?|usageOutputPath?,
+      baselineNanoAiu?, pendingUsd?, reserveMultiplier?, timestamp?} }.
     agentTypes is the exact host-advertised custom-agent enum. When supplied,
     native type IDs are resolved by installed filename/name, never guessed from a
     display label or replaced with a built-in agent.
-    No model is launched and no state is written. The result never grants approval
-    or cost admission. Native dispatch, semantic gates and exact input forwarding
-    remain with the coordinator. Dependencies always override parallel eligibility.
+    No model is launched and no state is written. Ranked, economy, and manual routing
+    are resolved only for the actual role units in this input. Changed Model cells are
+    returned as a compare-and-swap routing refresh for Set-SquadModelRouting.ps1.
+    When cost is supplied, complete native usage records are authoritative consumed
+    spend and only the actual next wave plus one coordinator lookup is reserved.
+    The returned Cost Preflight object must be persisted before dispatch.
+    Native dispatch, semantic gates and exact input forwarding remain with the
+    coordinator. Dependencies always override parallel eligibility.
     Unproven write independence serializes; declared overlapping parallel writes,
     invalid endpoints, unknown dependencies and cycles fail before a wave is returned.
 #>
@@ -30,6 +39,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'SquadCoordinator.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SquadUsage.psm1') -Force
 
 try {
     $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath
@@ -39,7 +49,7 @@ try {
         if (-not $inputData.Contains($key)) { throw "Missing dispatch-plan field: $key" }
     }
     foreach ($key in $inputData.Keys) {
-        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes')) { throw "Unsupported dispatch-plan field: $key" }
+        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
     }
     if ($inputData.units -isnot [array] -or $inputData.units.Count -eq 0) { throw 'units must be a nonempty array.' }
     foreach ($key in @('council', 'admissionApproved')) {
@@ -50,6 +60,26 @@ try {
         if ($inputData.agentTypes -isnot [array] -or @($inputData.agentTypes | Where-Object { $_ -isnot [string] }).Count) { throw 'agentTypes must be the host string array.' }
         $agentTypes = @($inputData.agentTypes)
     }
+    $availableModels = @()
+    if ($inputData.Contains('availableModels')) {
+        if ($inputData.availableModels -isnot [array] -or @($inputData.availableModels | Where-Object { $_ -isnot [string] }).Count) { throw 'availableModels must be the host string array.' }
+        $availableModels = @($inputData.availableModels)
+    }
+    $sessionModel = if ($inputData.Contains('sessionModel')) { [string]$inputData.sessionModel } else { '' }
+    $asOf = if ($inputData.Contains('asOf')) {
+        $parsed = [datetime]::MinValue
+        if (-not [datetime]::TryParse([string]$inputData.asOf, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AllowWhiteSpaces, [ref]$parsed)) { throw 'asOf must be a date.' }
+        $parsed
+    }
+    else { Get-Date }
+    $requestedModelRouting = if ($inputData.Contains('requestedModelRouting')) { [string]$inputData.requestedModelRouting } else { '' }
+    if ($requestedModelRouting -and $requestedModelRouting -notin @('ranked', 'economy', 'manual')) {
+        throw 'requestedModelRouting must be ranked, economy, or manual.'
+    }
+    $manualModels = if ($inputData.Contains('manualModels')) { $inputData.manualModels } else { [ordered]@{} }
+    if ($manualModels -isnot [Collections.IDictionary]) { throw 'manualModels must be a role-to-model object.' }
+    $economyConsent = if ($inputData.Contains('economyConsent')) { $inputData.economyConsent } else { $null }
+    if ($null -ne $economyConsent -and $economyConsent -isnot [Collections.IDictionary]) { throw 'economyConsent must be an object.' }
     $root = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $inputData.squadRoot
     $federation = Test-Path -LiteralPath (Join-Path $root 'federation.md')
     $council = $inputData.Contains('council') -and $inputData.council
@@ -70,7 +100,71 @@ try {
     $routing = $routingTables[0].Rows
     $teamText = if ($federation) { '' } else { [IO.File]::ReadAllText((Join-Path $root 'team.md')) }
     $modeMatch = [regex]::Match($teamText, '(?m)^Model routing:[ \t]*`?(?<mode>off|ranked|economy|manual)`?[ \t]*\r?$')
-    $modelRouting = if ($modeMatch.Success) { $modeMatch.Groups['mode'].Value } else { 'off' }
+    $recordedModelRouting = if ($modeMatch.Success) { $modeMatch.Groups['mode'].Value } else { 'off' }
+    $modelRouting = if ($requestedModelRouting) { $requestedModelRouting } else { $recordedModelRouting }
+    $routingModeChanged = $modelRouting -cne $recordedModelRouting
+    if ($manualModels.Count -gt 0 -and $modelRouting -ne 'manual') { throw 'manualModels requires Model routing: manual.' }
+    if ($null -ne $economyConsent -and (-not $routingModeChanged -or $modelRouting -ne 'economy')) {
+        throw 'economyConsent is allowed only while switching into economy.'
+    }
+    if ($routingModeChanged -and $modelRouting -eq 'economy') {
+        if ($null -eq $economyConsent) { throw 'Switching into economy requires economyConsent.' }
+        foreach ($key in @('user', 'tradeAccepted', 'neverWeakened')) {
+            if (-not $economyConsent.Contains($key) -or $economyConsent[$key] -isnot [string] -or
+                [string]::IsNullOrWhiteSpace($economyConsent[$key]) -or $economyConsent[$key] -match '[\r\n]') {
+                throw "economyConsent.$key must be a nonempty single-line string."
+            }
+        }
+        foreach ($key in $economyConsent.Keys) {
+            if ($key -notin @('user', 'tradeAccepted', 'neverWeakened', 'timestamp')) { throw "Unsupported economyConsent field: $key" }
+        }
+        $consentTimestamp = if ($economyConsent.Contains('timestamp')) {
+            [DateTimeOffset]::Parse([string]$economyConsent.timestamp, [Globalization.CultureInfo]::InvariantCulture).ToUniversalTime()
+        }
+        else { [DateTimeOffset]::UtcNow }
+        $economyConsent = [ordered]@{
+            user = [string]$economyConsent.user
+            tradeAccepted = [string]$economyConsent.tradeAccepted
+            neverWeakened = [string]$economyConsent.neverWeakened
+            timestamp = $consentTimestamp.ToString('o')
+        }
+    }
+    $roleClasses = if ($federation) { @{} } else { Get-SquadRoleClassMap }
+    $routeReport = $null
+    $routeByIdentity = @{}
+    $routingChanges = [Collections.Generic.List[object]]::new()
+    $routingChangeRoles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $teamHash = if ($federation) { '' } else { (Get-FileHash -LiteralPath (Join-Path $root 'team.md') -Algorithm SHA256).Hash }
+    if (-not $federation -and $modelRouting -ne 'off') {
+        if ($availableModels.Count -eq 0 -and -not $sessionModel) {
+            throw 'Active model routing requires the host availableModels enum or the literal sessionModel.'
+        }
+        $selectedRoles = @($inputData.units | ForEach-Object {
+                if ($_ -is [Collections.IDictionary] -and $_.Contains('role')) { [string]$_.role }
+            } | Where-Object { $_ } | Select-Object -Unique)
+        foreach ($role in $manualModels.Keys) {
+            if ($role -cnotin $selectedRoles) { throw "manualModels names an unselected role: $role" }
+        }
+        $routeArguments = @{
+            SquadRoot = $root
+            AvailableModels = $availableModels
+            SessionModel = $sessionModel
+            Mode = $modelRouting
+            Role = $selectedRoles
+            AsOf = $asOf
+            Format = 'json'
+        }
+        if ($manualModels.Count -gt 0) { $routeArguments.ManualModels = $manualModels }
+        $routeReport = & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') @routeArguments | ConvertFrom-Json -AsHashtable -Depth 30
+        if ($null -ne $economyConsent) {
+            $routeReport.warnings = @($routeReport.warnings | Where-Object { $_ -notlike 'economy consent*' })
+        }
+        foreach ($route in @($routeReport.roles)) {
+            $routeKey = [string]$route.role + "`n" + [string]$route.memberName
+            if ($routeByIdentity.ContainsKey($routeKey)) { throw "Model routing returned a duplicate roster identity for '$($route.role)'." }
+            $routeByIdentity[$routeKey] = $route
+        }
+    }
     if (-not $MaxConcurrent) {
         $cap = 0
         $MaxConcurrent = if ([int]::TryParse($env:COPILOT_SUBAGENT_MAX_CONCURRENT, [ref]$cap) -and $cap -gt 0) { $cap } else { 4 }
@@ -165,13 +259,45 @@ try {
             }
             $tiers = @($matchingRoutes | ForEach-Object { $_['Autonomy Tier'] })
             $tier = if ('escalate' -in $tiers -or -not $tiers.Count) { 'escalate' } elseif ($council -or 'confirm' -in $tiers) { 'confirm' } else { 'auto' }
-            $model = if ($modelRouting -ne 'off' -and $unit.role -ne 'scribe' -and $row.ContainsKey('Model')) { $row.Model } else { '' }
-            if ($model -in @('-', [string][char]0x2014)) { $model = '' }
+            $persistedModel = if ($modelRouting -ne 'off' -and $row.ContainsKey('Model')) { [string]$row.Model } else { '' }
+            if ($persistedModel -in @('-', [string][char]0x2014)) { $persistedModel = '' }
+            $routeKey = [string]$unit.role + "`n" + [string]$selection.MemberName
+            $route = if ($routeByIdentity.ContainsKey($routeKey)) { $routeByIdentity[$routeKey] } else { $null }
+            $assignmentClass = if ($null -ne $route) { [string]$route.class }
+            elseif ($roleClasses.ContainsKey([string]$unit.role)) { [string]$roleClasses[[string]$unit.role] }
+            else { 'implementation' }
+            $model = ''
+            $routeRationale = ''
+            $cellStatus = ''
+            if ($modelRouting -ne 'off' -and $unit.role -ne 'scribe') {
+                if ($null -eq $route) { throw "No model route was returned for role '$($unit.role)'." }
+                $model = [string]$route.resolved
+                $cellStatus = [string]$route.cellStatus
+                $routeRationale = [string]$route.rationale
+                if (-not $model) {
+                    $candidates = @($route.candidates | ForEach-Object { $_.id }) -join ', '
+                    throw "Role '$($unit.role)' has no admissible $modelRouting model. Cell status: $cellStatus. Candidates: $candidates"
+                }
+                if ($persistedModel -cne $model -and $routingChangeRoles.Add($routeKey)) {
+                    $routingChanges.Add([ordered]@{
+                            role = [string]$unit.role
+                            memberName = [string]$selection.MemberName
+                            from = $persistedModel
+                            to = $model
+                            rationale = $routeRationale
+                        })
+                }
+            }
+            $pin = [string]$agents[$agent].model
+            $pricingModel = if ($model) { $model } elseif ($pin) { $pin } else { $sessionModel }
             $endpoint = [ordered]@{
                 role = $unit.role; memberName = $selection.MemberName; agent = $agent
                 execution = $selection.Choice; connectorSelection = $selection
                 squadRoot = $root; deliverableRoot = $row['Deliverable Root']
-                model = $model; modelRouting = $modelRouting; autonomyTier = $tier
+                model = $model; persistedModel = $persistedModel; pricingModel = $pricingModel
+                modelRouting = $modelRouting; modelCellStatus = $cellStatus
+                modelRationale = $routeRationale; assignmentClass = $assignmentClass
+                autonomyTier = $tier
                 nativeAgentTypes = $nativeTypes
             }
         }
@@ -207,7 +333,223 @@ try {
         $waves.Add([ordered]@{ order = $waves.Count + 1; units = @($batch | ForEach-Object id); barrier = 'artifact-before-dependent-dispatch; history-consumption-state-before-completion' })
         foreach ($node in $batch) { $null = $completed.Add($node.id) }
     }
-    [ordered]@{ status = 'ok'; kind = $(if ($federation) { 'federation' } else { 'squad' }); gates = 'not-evaluated'; admission = 'not-granted'; waves = $waves.ToArray(); units = $nodes.ToArray(); stateWritten = $false } | ConvertTo-Json -Depth 20 -Compress
+
+    $routingRefresh = [ordered]@{
+        required = $routingModeChanged -or $routingChanges.Count -gt 0
+        recordedMode = $recordedModelRouting
+        mode = $modelRouting
+        expectedTeamHash = $teamHash
+        changes = $routingChanges.ToArray()
+        economyConsent = $economyConsent
+    }
+
+    $preflight = $null
+    $decisionText = ''
+    $usageSnapshot = $null
+    $reservations = [Collections.Generic.List[object]]::new()
+    $admittedUnits = @()
+    $admission = 'not-requested'
+    $statePreflight = if ($state.Contains('currentRun') -and $state.currentRun.Contains('costPreflight')) { $state.currentRun.costPreflight } else { $null }
+    $activeCeiling = $null -ne $statePreflight -and ($null -ne $statePreflight.ceilingUsd -or $statePreflight.decision -ne 'not-requested')
+    if (-not $inputData.Contains('cost') -and $activeCeiling) {
+        throw 'An active ceiling requires the actual cost input; dispatch planning cannot bypass Cost Preflight.'
+    }
+    if ($inputData.Contains('cost')) {
+        if ($federation) { throw 'Exact Cost Preflight must be calculated inside each selected member before federation dispatch.' }
+        $cost = $inputData.cost
+        if ($cost -isnot [Collections.IDictionary]) { throw 'cost must be an object.' }
+        foreach ($key in @('runId', 'roundId', 'ceilingUsd')) {
+            if (-not $cost.Contains($key)) { throw "Missing cost field: $key" }
+        }
+        foreach ($key in $cost.Keys) {
+            if ($key -notin @('runId', 'roundId', 'ceilingUsd', 'sessionLog', 'usageOutputPath', 'baselineNanoAiu', 'pendingUsd', 'reserveMultiplier', 'timestamp')) {
+                throw "Unsupported cost field: $key"
+            }
+        }
+        $runId = [string]$cost.runId
+        $roundId = [string]$cost.roundId
+        if ($runId -cnotmatch '^[A-Za-z0-9._:-]+$' -or $roundId -cnotmatch '^[A-Za-z0-9._:-]+$') {
+            throw 'cost runId and roundId must match [A-Za-z0-9._:-]+.'
+        }
+        $ceilingUsd = [decimal]0
+        try { $ceilingUsd = [decimal]$cost.ceilingUsd } catch { throw 'cost.ceilingUsd must be numeric.' }
+        if ($ceilingUsd -le 0) { throw 'cost.ceilingUsd must be positive.' }
+        $baselineNanoAiu = $null
+        if ($cost.Contains('baselineNanoAiu')) {
+            $baselineNanoAiu = [decimal]$cost.baselineNanoAiu
+        }
+        else {
+            $decisionsPath = Join-Path $root 'decisions.md'
+            if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) {
+                $priorDecisions = [IO.File]::ReadAllText($decisionsPath)
+                $sections = [regex]::Matches($priorDecisions, '(?ms)^## Cost Preflight \S+ (?<run>[^\s]+) [^\r\n]+\r?\n(?<body>.*?)(?=^## |\z)')
+                foreach ($section in $sections) {
+                    if ($section.Groups['run'].Value -cne $runId) { continue }
+                    $match = [regex]::Match($section.Groups['body'].Value, '(?m)^\* Usage Baseline Nano-AIU:\s*(?<value>\d+(?:\.\d+)?)\s*$')
+                    if ($match.Success) { $baselineNanoAiu = [decimal]$match.Groups['value'].Value }
+                }
+            }
+        }
+        if ($null -eq $baselineNanoAiu) {
+            throw 'The first Cost Preflight round for a run requires cost.baselineNanoAiu; later rounds recover it from decisions.md.'
+        }
+        $pendingUsd = if ($cost.Contains('pendingUsd')) { [decimal]$cost.pendingUsd } else { [decimal]0 }
+        $reserveMultiplier = if ($cost.Contains('reserveMultiplier')) { [decimal]$cost.reserveMultiplier } else { [decimal]3 }
+        if ($baselineNanoAiu -lt 0 -or $pendingUsd -lt 0) { throw 'cost baselineNanoAiu and pendingUsd must be nonnegative.' }
+        if ($reserveMultiplier -ne [decimal]3) { throw 'cost.reserveMultiplier must be 3.0.' }
+        if ($cost.Contains('sessionLog') -and $cost.Contains('usageOutputPath')) { throw 'Supply only one of cost.sessionLog or cost.usageOutputPath.' }
+
+        $meteringProblems = [Collections.Generic.List[string]]::new()
+        try {
+            if ($cost.Contains('usageOutputPath')) {
+                $usageSnapshot = Get-SquadUsageSnapshot -UsagePath ([string]$cost.usageOutputPath) -BaselineNanoAiu $baselineNanoAiu
+            }
+            else {
+                $requestedLog = if ($cost.Contains('sessionLog')) { [string]$cost.sessionLog } else { 'auto' }
+                $eventsPath = Resolve-SquadSessionLogPath -SessionLog $requestedLog -RepoRoot $RepoRoot
+                if (-not $eventsPath) { throw 'No Copilot session log matches this repository.' }
+                $usageSnapshot = Get-SquadUsageSnapshot -EventsPath $eventsPath -BaselineNanoAiu $baselineNanoAiu
+            }
+        }
+        catch {
+            $meteringProblems.Add($_.Exception.Message)
+        }
+        if ($usageSnapshot -and $usageSnapshot.status -ne 'complete') {
+            foreach ($problem in @($usageSnapshot.problems)) { $meteringProblems.Add($problem) }
+        }
+
+        $nextWaveIds = @($waves[0].units)
+        $reservationProblems = [Collections.Generic.List[string]]::new()
+        $ratesPath = Join-Path $root 'consumption-rates.md'
+        foreach ($node in @($nodes | Where-Object { $_.id -cin $nextWaveIds })) {
+            try {
+                $reservation = Get-SquadDispatchReservation -RatesPath $ratesPath -Model ([string]$node.endpoint.pricingModel) -AssignmentClass ([string]$node.endpoint.assignmentClass)
+                $reservations.Add([ordered]@{
+                        slot = $node.id
+                        role = $node.endpoint.role
+                        agent = $node.endpoint.agent
+                        model = $reservation.model
+                        dispatchClass = $reservation.dispatchClass
+                        projectedCostUsd = [math]::Round([double]$reservation.projectedCostUsd, 6)
+                    })
+            }
+            catch {
+                $reservationProblems.Add("$($node.id): $($_.Exception.Message)")
+            }
+        }
+        try {
+            $coordinatorReservation = Get-SquadDispatchReservation -RatesPath $ratesPath -Model $sessionModel -AssignmentClass coordinator
+            $reservations.Add([ordered]@{
+                    slot = 'coordinator'
+                    role = 'coordinator'
+                    agent = 'Squad Coordinator'
+                    model = $coordinatorReservation.model
+                    dispatchClass = $coordinatorReservation.dispatchClass
+                    projectedCostUsd = [math]::Round([double]$coordinatorReservation.projectedCostUsd, 6)
+                })
+        }
+        catch {
+            $reservationProblems.Add("coordinator: $($_.Exception.Message)")
+        }
+
+        $actualUsedUsd = if ($usageSnapshot) { [decimal]$usageSnapshot.usd } else { [decimal]0 }
+        $evaluatedSpendUsd = $actualUsedUsd + $pendingUsd
+        $remainingUsd = if ($ceilingUsd -gt $evaluatedSpendUsd) { $ceilingUsd - $evaluatedSpendUsd } else { [decimal]0 }
+        $projectedCostUsd = [decimal]0
+        foreach ($reservation in $reservations) { $projectedCostUsd += [decimal]$reservation.projectedCostUsd }
+        $admissionCostUsd = $projectedCostUsd * $reserveMultiplier
+        $confidence = if ($meteringProblems.Count -eq 0 -and $reservationProblems.Count -eq 0) { 'medium' } else { 'low' }
+        $basis = 'host-exact+estimated-reservation'
+        $reason = ''
+        if ($meteringProblems.Count -gt 0) {
+            $decision = 'cannot-confirm'
+            $reason = 'Exact host metering is incomplete: ' + ($meteringProblems -join ' ')
+        }
+        elseif ($reservationProblems.Count -gt 0) {
+            $decision = 'cannot-confirm'
+            $reason = 'The next-wave reservation is incomplete: ' + ($reservationProblems -join ' ')
+        }
+        elseif ($evaluatedSpendUsd -ge $ceilingUsd) {
+            $decision = 'over-ceiling'
+            $reason = 'Exact consumed usage plus in-flight reservations has reached the ceiling.'
+        }
+        elseif ($admissionCostUsd -gt $remainingUsd) {
+            $decision = 'over-ceiling'
+            $reason = 'The conservative reservation for the actual next wave exceeds the exact remaining ceiling.'
+        }
+        else {
+            $decision = 'within-ceiling'
+            $reason = 'Exact consumed usage and the reserved actual next wave fit within the ceiling.'
+            $admittedUnits = $nextWaveIds
+        }
+        $admission = $decision
+        $round = {
+            param([decimal]$value)
+            [math]::Round([double]$value, 4)
+        }
+        $preflight = [ordered]@{
+            runId = $runId
+            roundId = $roundId
+            ceilingUsd = & $round $ceilingUsd
+            evaluatedSpendUsd = & $round $evaluatedSpendUsd
+            remainingUsd = & $round $remainingUsd
+            plannedDispatches = $nextWaveIds.Count
+            projectedCostUsd = & $round $projectedCostUsd
+            reserveMultiplier = [double]$reserveMultiplier
+            admissionCostUsd = & $round $admissionCostUsd
+            confidence = $confidence
+            basis = $basis
+            decision = $decision
+            reason = $reason
+        }
+        $timestamp = if ($cost.Contains('timestamp')) {
+            [DateTimeOffset]::Parse([string]$cost.timestamp, [Globalization.CultureInfo]::InvariantCulture).ToUniversalTime()
+        }
+        else { [DateTimeOffset]::UtcNow }
+        $permitted = if ($admittedUnits.Count) { ($admittedUnits | ForEach-Object { "``$_``" }) -join ', ' } else { 'none' }
+        $records = if ($usageSnapshot) { $usageSnapshot.records } else { 0 }
+        $meteringStatus = if ($usageSnapshot) { $usageSnapshot.status } else { 'unavailable' }
+        $decisionText = @(
+            "## Cost Preflight $($timestamp.ToString('o')) $runId $roundId"
+            ''
+            "* Ceiling USD: $((& $round $ceilingUsd).ToString('F4', [Globalization.CultureInfo]::InvariantCulture))"
+            "* Exact Used USD: $((& $round $actualUsedUsd).ToString('F4', [Globalization.CultureInfo]::InvariantCulture))"
+            "* Usage Baseline Nano-AIU: $($baselineNanoAiu.ToString([Globalization.CultureInfo]::InvariantCulture))"
+            "* Observed Total Nano-AIU: $(if ($usageSnapshot) { $usageSnapshot.totalNanoAiu.ToString([Globalization.CultureInfo]::InvariantCulture) } else { 'unavailable' })"
+            "* Pending Reservation USD: $((& $round $pendingUsd).ToString('F4', [Globalization.CultureInfo]::InvariantCulture))"
+            "* Remaining USD: $((& $round $remainingUsd).ToString('F4', [Globalization.CultureInfo]::InvariantCulture))"
+            "* Planned Dispatches: $($nextWaveIds.Count)"
+            "* Projected Cost USD: $((& $round $projectedCostUsd).ToString('F4', [Globalization.CultureInfo]::InvariantCulture))"
+            "* Reserve Multiplier: $($reserveMultiplier.ToString('F1', [Globalization.CultureInfo]::InvariantCulture))"
+            "* Admission Cost USD: $((& $round $admissionCostUsd).ToString('F4', [Globalization.CultureInfo]::InvariantCulture))"
+            "* Metering: $meteringStatus ($records complete unique record(s))"
+            "* Permitted Next Dispatch Set: $permitted"
+            "* Decision: $decision"
+            "* Reason: $reason"
+        ) -join "`n"
+    }
+
+    [ordered]@{
+        status = 'ok'
+        kind = $(if ($federation) { 'federation' } else { 'squad' })
+        gates = 'not-evaluated'
+        admission = $admission
+        admissionPersisted = $false
+        admittedUnits = @($admittedUnits)
+        waves = $waves.ToArray()
+        units = $nodes.ToArray()
+        recordedModelRouting = $recordedModelRouting
+        modelRouting = $modelRouting
+        modelPolicy = $(if ($routeReport) { $routeReport.scoringPolicy } else { 'off' })
+        modelSnapshot = $(if ($routeReport) { $routeReport.snapshotIdentity } else { 'not-evaluated' })
+        modelWarnings = @(if ($routeReport) { $routeReport.warnings })
+        routingRefresh = $routingRefresh
+        costPreflight = $preflight
+        costDecisionText = $decisionText
+        usage = $usageSnapshot
+        reservations = $reservations.ToArray()
+        stateWritten = $false
+    } | ConvertTo-Json -Depth 30 -Compress
 }
 catch {
     [Console]::Error.WriteLine("New-SquadDispatchPlan: $($_.Exception.Message)")

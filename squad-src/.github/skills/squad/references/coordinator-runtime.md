@@ -22,7 +22,7 @@ Runtime unavailability is not failed validation; failures never permit bypass.
 Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root>
 -SessionModel <literal session id> -AsJson -CheckLedger` at turn start.
 Reuse a verified unchanged same-turn ledger receipt instead of another check.
-Use `-Roles` after classification for cues, endpoints and routing rationale.
+Use `-Roles` after classification; JSON defers scoring to the plan.
 Do not re-open files to confirm the same facts.
 
 * With explicit `squadRoot`, stay scoped to that member.
@@ -56,7 +56,7 @@ canonical sections of `gates-and-modes.md`:
 | `mode=autonomous` | `autonomous`, `council` |
 | `mode=autopilot` | `autopilot`, plus triggered gates |
 | Connector bindings, setup/refresh, execution override or pending exchange | `connector-role-modes.md` |
-| Changing routing policy, missing manual picks or persisting proposed models | `model-routing.md`; `model-catalog.md` only for an unresolved catalog fact |
+| Manual model questions or an unresolved catalog fact | `model-routing.md`; `model-catalog.md` only for the unresolved fact |
 | Economy consent or proposed bounded lane | `economy-mode.md` |
 | Notification delivery | `gates-and-modes.md` notification section and `squad-notifications.instructions.md` |
 
@@ -71,10 +71,11 @@ human validation; autonomous revalidation is capped at two cycles.
 
 ## 3. Resolve and Schedule, Then Admit
 
-Put roles, matched routing patterns, endpoint choices, dependency IDs and
-write sets in transport JSON outside squad state. Run
+Put roles, routes, endpoint choices, dependencies, write sets, real model inputs,
+supplied active `routing` as `requestedModelRouting`, and any capped cost object
+in transport JSON outside squad state. Run
 `New-SquadDispatchPlan.ps1 -RepoRoot <repo> -InputPath <json>`.
-It returns ordered endpoint waves, not approval.
+It returns waves, `routingRefresh` and preflight; it writes nothing.
 Pass the host's actual `agentTypes` enum when available; use its resolved native
 IDs, not a guessed API type from the display name.
 Unknown, unavailable or ambiguous selected endpoints stop before dispatch.
@@ -82,8 +83,9 @@ Offer a catalog reseed, installed dispatchable substitute or dropped role; recor
 the chosen change through cold Scribe. No automatic substitution.
 
 The helper honors connector defaults; `both` needs disjoint outputs and admission.
-Alternates need documented cues. Model proposals are advisory until persisted;
-`off` passes no override, Scribe keeps its pin, and planning is not execution.
+Alternates need cues. Apply `Set-SquadModelRouting.ps1` / `Set-SquadCostPreflight.ps1` before `admittedUnits`;
+active transitions use that writer; `routing=off`/roster changes stay
+cold, `off` passes no override, and Scribe keeps its pin.
 
 Confirm the routing tier once for an eligible parallel batch. Honor all artifact
 and verdict barriers before the next wave, even if a graph would otherwise allow
@@ -115,8 +117,8 @@ or an imaginary Scribe. Never invent Scribe usage on a direct route.
 
 Unsupported exit 2 takes the documented cold Scribe path: read
 `scribe-payload-template.md`, dispatch Scribe with required fields and trusted
-ledger invocation. Verdicts, memory, notifications, refresh, admitted ceiling
-slots and summaries retain this path. Invalid data, history-integrity, rate
+ledger invocation. Verdicts, memory, notifications, `routing=off`/roster changes,
+and summaries retain this path. Invalid data, history-integrity, rate
 refusal and failed restore are not permission to fall back manually.
 Serialize writer, cold Scribe and Cost Preflight at each root.
 For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.

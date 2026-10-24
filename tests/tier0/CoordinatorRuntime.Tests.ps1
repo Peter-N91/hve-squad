@@ -59,11 +59,17 @@ BeforeAll {
     }
 
     function Initialize-Fixture {
-        param([string]$Repo, [string]$Root = '.copilot-tracking/squad')
+        param(
+            [string]$Repo,
+            [string]$Root = '.copilot-tracking/squad',
+            [ValidateSet('off', 'ranked', 'economy', 'manual')][string]$ModelRouting = 'off'
+        )
         $suffix = [guid]::NewGuid().ToString('N')
         $choicesPath = Join-Path $Repo "$suffix-choices.json"
         $payloadPath = Join-Path $Repo "$suffix-init.json"
-        Write-FixtureJson $choicesPath (New-Choices $Root)
+        $choices = New-Choices $Root
+        if ($ModelRouting -ne 'off') { $choices.modelRouting = $ModelRouting }
+        Write-FixtureJson $choicesPath $choices
         $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $Repo @('-RepoRoot', $Repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
         if ($prepared.ExitCode -ne 0) { throw $prepared.Output }
         $result = Invoke-Local 'Initialize-Squad.ps1' $Repo @('-RepoRoot', $Repo, '-PayloadPath', $payloadPath, '-Direct')
@@ -280,10 +286,13 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $data.modelRouting | Should -Be $Mode
         $data.observedExecution | Should -Be 'host-unreported'
         $data.roster.Count | Should -Be 1
+        $data.modelRoutingDeferred | Should -Be ($Mode -ne 'off')
+        $data.modelPolicy | Should -Be $(if ($Mode -eq 'off') { 'off' } else { 'deferred-to-dispatch-plan' })
         if ($Mode -ne 'economy') { $data.boundedLaneEligible | Should -BeFalse }
         $data.ledgerCheck.status | Should -Be 'not-run'
         $result.Output | Should -Not -Match '## Procedure|## Consumption objects'
         Get-FixtureHash $script:MetadataFixture.Root | Should -BeExactly $before
+        Write-FixtureText $path $team
     }
 
     It 'reads dispatchability beyond a long frontmatter allowlist' {
@@ -309,8 +318,130 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan.waves[1].units | Should -Be @('consumer')
         $plan.units[0].endpoint.agent | Should -BeExactly 'Squad Reviewer'
         $plan.units[0].endpoint.deliverableRoot | Should -Be '.copilot-tracking/reviews/'
-        $plan.admission | Should -Be 'not-granted'
+        $plan.admission | Should -Be 'not-requested'
         Get-FixtureHash $script:MetadataFixture.Root | Should -BeExactly $before
+    }
+
+    It 'resolves <Mode> routing only for the actual dispatch-plan role and returns a script refresh' -ForEach @(
+        @{ Mode = 'ranked' }
+        @{ Mode = 'economy' }
+        @{ Mode = 'manual' }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo -ModelRouting $Mode
+        $path = Join-Path $repo "$Mode-plan.json"
+        $input = @{
+            squadRoot = $fixture.Root
+            sessionModel = 'gpt-5.6-sol'
+            availableModels = @('gpt-5.6-sol')
+            units = @(@{ id = 'work'; role = 'developer' })
+        }
+        if ($Mode -eq 'manual') { $input.manualModels = @{ developer = 'gpt-5.6-sol' } }
+        Write-FixtureJson $path $input
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.units.Count | Should -Be 1
+        $plan.units[0].endpoint.role | Should -Be 'developer'
+        $plan.units[0].endpoint.model | Should -BeExactly 'gpt-5.6-sol'
+        $plan.routingRefresh.required | Should -BeTrue
+        $plan.routingRefresh.changes.Count | Should -Be 1
+        $plan.routingRefresh.changes[0].role | Should -BeExactly 'developer'
+        $plan.routingRefresh.changes[0].to | Should -BeExactly 'gpt-5.6-sol'
+    }
+
+    It 'plans the first off-to-<Mode> transition over only the actual role' -ForEach @(
+        @{ Mode = 'ranked' }
+        @{ Mode = 'economy' }
+        @{ Mode = 'manual' }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $path = Join-Path $repo "transition-$Mode.json"
+        $input = @{
+            squadRoot = $fixture.Root
+            requestedModelRouting = $Mode
+            sessionModel = 'gpt-5.6-sol'
+            availableModels = @('gpt-5.6-sol')
+            units = @(@{ id = 'work'; role = 'developer' })
+        }
+        if ($Mode -eq 'manual') { $input.manualModels = @{ developer = 'gpt-5.6-sol' } }
+        if ($Mode -eq 'economy') {
+            $input.economyConsent = @{
+                user = 'fixture-user'
+                tradeAccepted = 'Cost-first qualified implementation routing.'
+                neverWeakened = 'Floors, gates, and review stay unchanged.'
+                timestamp = '2026-10-24T16:00:00Z'
+            }
+        }
+        Write-FixtureJson $path $input
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.recordedModelRouting | Should -Be 'off'
+        $plan.modelRouting | Should -Be $Mode
+        $plan.units.Count | Should -Be 1
+        $plan.routingRefresh.required | Should -BeTrue
+        $plan.routingRefresh.recordedMode | Should -Be 'off'
+        $plan.routingRefresh.mode | Should -Be $Mode
+        $plan.routingRefresh.changes.Count | Should -Be 1
+        if ($Mode -eq 'economy') { $plan.routingRefresh.economyConsent.user | Should -Be 'fixture-user' }
+    }
+
+    It 'persists the first ranked transition directly from the actual plan receipt' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $inputPath = Join-Path $repo 'transition-input.json'
+        Write-FixtureJson $inputPath @{
+            squadRoot = $fixture.Root
+            requestedModelRouting = 'ranked'
+            sessionModel = 'gpt-5.6-sol'
+            availableModels = @('gpt-5.6-sol')
+            units = @(@{ id = 'work'; role = 'developer' })
+        }
+        $planned = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $inputPath)
+        $planned.ExitCode | Should -Be 0 -Because $planned.Output
+        $planPath = Join-Path $repo 'transition-plan.json'
+        Write-FixtureText $planPath $planned.Output.Trim()
+        $written = Invoke-Local 'Set-SquadModelRouting.ps1' $repo @('-RepoRoot', $repo, '-PlanPath', $planPath)
+        $written.ExitCode | Should -Be 0 -Because $written.Output
+        $team = [IO.File]::ReadAllText((Join-Path $fixture.Root 'team.md'))
+        $team | Should -Match '(?m)^Model routing: ranked$'
+        $team | Should -Match '\| Model Tier \| Model \| Deliverable Root \|'
+        $team | Should -Match '\| developer \| Gamma \| Squad Implementor .* \| default \| `gpt-5\.6-sol` \|'
+    }
+
+    It 'uses complete host records as exact spend and reserves only the actual next wave' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $events = Join-Path $repo 'events.jsonl'
+        @(
+            @{ type = 'session.usage_record'; timestamp = '2026-10-24T10:00:00.000Z'; data = @{ usage = @{
+                        model = 'gpt-5.6-sol'; inputTokens = 100; outputTokens = 10; cacheReadTokens = 80; cacheWriteTokens = 0
+                        accounting = @{ sourceSessionId = 'session'; usageId = 'one' }
+                        aiCreditsStatus = 'complete'; copilotUsage = @{ totalNanoAiu = 2000000000 }
+                    } } }
+            @{ type = 'session.usage_checkpoint'; timestamp = '2026-10-24T10:01:00.000Z'; data = @{ totalNanoAiu = 1000000000 } }
+        ) | ForEach-Object { $_ | ConvertTo-Json -Depth 10 -Compress } | Set-Content -LiteralPath $events -Encoding utf8NoBOM
+        $path = Join-Path $repo 'cost-plan.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root
+            sessionModel = 'gpt-5.6-sol'
+            units = @(@{ id = 'work'; role = 'developer' })
+            cost = @{ runId = 'fixture-run'; roundId = 'round-1'; ceilingUsd = 100; sessionLog = $events; baselineNanoAiu = 0 }
+        }
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.usage.status | Should -Be 'complete'
+        $plan.usage.usd | Should -Be 0.02
+        $plan.usage.checkpointNanoAiu | Should -Be 1000000000
+        $plan.costPreflight.evaluatedSpendUsd | Should -Be 0.02
+        $plan.costPreflight.projectedCostUsd | Should -BeGreaterThan 0
+        $plan.costPreflight.basis | Should -Be 'host-exact+estimated-reservation'
+        $plan.costPreflight.decision | Should -Be 'within-ceiling'
+        @($plan.admittedUnits) | Should -Be @('work')
+        $plan.costDecisionText | Should -Match '\* Permitted Next Dispatch Set: `work`'
     }
 
     It 'rejects cycles, missing dependencies and unknown roles' {

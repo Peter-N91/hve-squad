@@ -230,7 +230,7 @@ Describe 'CONN-22 and Consumption shape: trusted provenance extends history with
             $choice | Should -Match 'An external `awaiting`\s+result holds the current stage'
             $script:CoordinatorRuntime | Should -Match 'helper honors connector defaults'
             $selection = $script:DispatchPlan.IndexOf('Resolve-SquadConnectorExecution')
-            $models = $script:DispatchPlan.IndexOf('$model = if')
+            $models = $script:DispatchPlan.IndexOf('$persistedModel = if')
             $selection | Should -BeGreaterThan 0
             $selection | Should -BeLessThan $models
             $script:Coordinator | Should -Match '(?s)Check the selected endpoint.*not an unused original'
