@@ -109,6 +109,24 @@ BeforeAll {
 }
 
 Describe 'Legacy surface budgets and universal ordinary hot-path envelope' {
+    It 'keeps both coordinator entrypoints, floor and mandatory runtime contracts in the measured compact envelope (COORD-09)' {
+        $floor = Get-NormalizedByteCount (Join-Path $script:Root 'squad-src/.github/instructions/squad/squad-floor.instructions.md')
+        $floor | Should -BeLessOrEqual 6144
+        foreach ($name in @('squad-coordinator', 'squad-federation-coordinator')) {
+            Get-NormalizedByteCount (Join-Path $script:Root "squad-src/.github/agents/squad/$name.agent.md") | Should -BeLessOrEqual 6144
+        }
+        foreach ($name in @('coordinator-runtime', 'coordinator-init', 'federation-runtime')) {
+            Get-NormalizedByteCount (Join-Path $script:Root "squad-src/.github/skills/squad/references/$name.md") | Should -BeLessOrEqual 8192
+        }
+        $single = Get-NormalizedByteCount (Join-Path $script:Root 'squad-src/.github/agents/squad/squad-coordinator.agent.md')
+        $runtime = Get-NormalizedByteCount (Join-Path $script:Root 'squad-src/.github/skills/squad/references/coordinator-runtime.md')
+        ($single + $floor + $runtime) | Should -BeLessOrEqual 20480
+        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $script:Root 'squad-src/.github/instructions/squad') -Filter 'squad-*.instructions.md') {
+            if ($file.Name -eq 'squad-floor.instructions.md') { continue }
+            [IO.File]::ReadAllText($file.FullName) | Should -Not -Match "applyTo: '\*\*/\.copilot-tracking/squad/\*\*'"
+        }
+    }
+
     It 'measures the ordinary agent plus its sole mandatory reference in every routing mode' {
         $agent = 'squad-src/.github/agents/squad/squad-scribe.agent.md'
         $reference = 'squad-src/.github/skills/squad/references/economy-scribe.md'

@@ -14,6 +14,9 @@ This charter governs cold operations only; supported ordinary writes use `econom
 
 Fresh single-squad/member-root Init first uses [scribe-init.md](scribe-init.md) and its helper, without loading this charter. Explicit refresh, fallback Init without the runtime, and all other cold operations retain the contract below.
 
+For manual state writes also read `references/state-write-contract.md`, which
+holds the exact schema/accounting detail moved out of the always-loaded floor.
+
 For every cold operation, locate the `squad` skill and read these four files in one parallel block:
 
 * `references/00-index.md` — the map.

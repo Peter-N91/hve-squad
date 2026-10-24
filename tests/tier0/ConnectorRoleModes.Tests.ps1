@@ -21,6 +21,9 @@ BeforeAll {
     $script:Council = @($script:Model.Instructions | Where-Object Name -eq 'squad-council.instructions.md')[0].Body
     $script:WriteHandoff = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/Write-SquadHandoff.ps1') -Raw
     $script:Coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
+    $script:CoordinatorRuntime = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/coordinator-runtime.md') -Raw
+    $script:CoordinatorInit = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/coordinator-init.md') -Raw
+    $script:DispatchPlan = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/New-SquadDispatchPlan.ps1') -Raw
     $script:Catalog = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/roster-catalog.md') -Raw
     $script:OperatingProcedure = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/operating-procedure.md') -Raw
     $script:PayloadTemplate = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-payload-template.md') -Raw
@@ -188,7 +191,8 @@ Describe 'CONN-22 and Consumption shape: trusted provenance extends history with
 
     Describe 'connector registration activates the setup contract and generic additive policy' -Tag 'Unit' {
         It 'conditionally loads role modes for setup, refresh, and manually edited bindings' {
-            $script:Coordinator | Should -Match 'For connector setup/refresh, manual `Connector Bindings`, or connector dispatch, also read `references/connector-role-modes.md`'
+            $script:Coordinator | Should -Match 'references/coordinator-runtime\.md'
+            $script:CoordinatorRuntime | Should -Match 'Connector bindings, setup/refresh, execution override or pending exchange.*connector-role-modes\.md'
             $setup = Get-SectionBodyLocal -Text $script:RoleModes -Heading '10) Build/Refresh Question Group'
             $setup | Should -Match 'asking one missing\s+decision at a time'
             $setup | Should -Match 'Complete manually supplied decisions need validation and confirmation'
@@ -196,7 +200,7 @@ Describe 'CONN-22 and Consumption shape: trusted provenance extends history with
         }
 
         It 'passes bindings, routes, and connector identity through the Scribe payload' {
-            $script:Coordinator | Should -Match 'Pass confirmed `connectorBindings` and `customRoutingRows`'
+            $script:CoordinatorInit | Should -Match '(?s)pass confirmed `connectorBindings`/`customRoutingRows` through cold'
             $script:PayloadTemplate | Should -Match '(?m)^connectorBindings:'
             $script:PayloadTemplate | Should -Match '(?m)^customRoutingRows:'
             $script:PayloadTemplate | Should -Match '(?m)^    memberName:'
@@ -224,12 +228,12 @@ Describe 'CONN-22 and Consumption shape: trusted provenance extends history with
             $choice | Should -Match 'including planning, review'
             $choice | Should -Match 'with `unattended=true`'
             $choice | Should -Match 'An external `awaiting`\s+result holds the current stage'
-            $script:Coordinator | Should -Match 'Persisted defaults apply in autopilot without `execution=`'
-            $selection = $script:Coordinator.IndexOf('Resolve work-role execution')
-            $models = $script:Coordinator.IndexOf('### Step 2a:')
+            $script:CoordinatorRuntime | Should -Match 'helper honors connector defaults'
+            $selection = $script:DispatchPlan.IndexOf('Resolve-SquadConnectorExecution')
+            $models = $script:DispatchPlan.IndexOf('$model = if')
             $selection | Should -BeGreaterThan 0
             $selection | Should -BeLessThan $models
-            $script:Coordinator | Should -Match 'Check the selected agent, not an unused internal original'
+            $script:Coordinator | Should -Match '(?s)Check the selected endpoint.*not an unused original'
         }
     }
 

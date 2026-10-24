@@ -1,17 +1,18 @@
 ---
-description: "Squad roster schema and cast catalog mapping squad roles to deployed HVE Core agents"
-applyTo: '**/.copilot-tracking/squad/**'
+description: "Squad roster schema, casting and profile conventions"
+applyTo: '**/.copilot-tracking/squad/**/team.md'
 ---
 
 # Squad Roster Conventions
 
-The roster binds dispatchable roles to HVE Core agents. At each turn, the coordinator reads it for availability, invocation, and preferred model tier.
+Roster data maps roles to dispatchable agents, invocation and model preferences.
 
-The roster is data, not behavior. It records identities and invocation details. Routing logic lives in `squad-routing.instructions.md`, and persistence rules live in `squad-state.instructions.md`.
+Routing lives in `squad-routing.instructions.md`; persistence in `squad-state.instructions.md`.
 
 ## Roster File
 
-The roster lives at `.copilot-tracking/squad/team.md`. The coordinator creates it on first use from the cast catalog below and updates it only through the Squad Scribe.
+The roster lives at `.copilot-tracking/squad/team.md`. Confirmed Init uses the
+validated initializer; explicit recasting uses cold Scribe. Both use the cast catalog.
 
 The file begins with YAML frontmatter and a single H1 title, then a `## Members` table. Each row binds a squad role to a concrete agent.
 

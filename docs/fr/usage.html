@@ -155,6 +155,36 @@
       </p>
 
 
+      <h2 id="script-backed-coordination">Coordination pilotée par scripts</h2>
+      <p>
+        Les coordinateurs Squad et Federation chargent des contrats compacts, pas tous les catalogues,
+        modèles de fichiers et procédures au démarrage. Avec PowerShell 7.4+, les choix confirmés de
+        profil, packs, noms et notifications sont convertis en données d'initialisation par
+        <code>Get-SquadInitContext.ps1</code> ; <code>Initialize-Squad.ps1 -Direct</code> prépare,
+        valide et publie l'état. Les questions obligatoires et la confirmation restent requises.
+        L'exécution directe comptabilise le coordinateur, jamais un lancement fictif du Scribe.
+      </p>
+      <p>
+        <code>Get-SquadDispatchBrief.ps1 -AsJson</code> fournit les métadonnées dans chaque mode.
+        <code>New-SquadDispatchPlan.ps1</code> ordonne les dépendances explicites et les travaux
+        indépendants, sans accorder d'approbation ni d'admission budgétaire.
+        <code>Test-SquadTurnCompletion.ps1</code> vérifie les artefacts, historiques, consommations
+        et états réels en un appel en lecture seule. Le parcours borné reste réservé à Economy.
+        Les autres contrôles et les lancements natifs des spécialistes ne changent pas ; les
+        instructions spécialisées ont des portées limitées à leurs artefacts.
+      </p>
+      <p>
+        Les écritures ordinaires à la racine d'une fédération utilisent
+        <code>Write-SquadFederationHandoff.ps1</code>, avec un instantané produit par script avant
+        les lancements et les preuves des exécutions internes. Il vérifie les deux niveaux,
+        préserve les octets et champs existants, consigne les entrées interéquipes en lecture seule
+        et agrège les coûts sans compter deux fois l'orchestration. Promotion, extension, autopilot
+        agrégé et écritures non prises en charge conservent la procédure spécialisée. Aucune migration
+        d'état n'est nécessaire ; sans le runtime, le protocole historique reste disponible.
+        Les scripts retirent le travail mécanique du modèle, pas la méthodologie ni les validations
+        humaines ; la durée réelle dépend toujours de l'hôte et du modèle.
+      </p>
+
       <h2 id="autopilot-hand-off-pipelining">Chevauchement des transmissions en mode autopilot</h2>
       <p>
         Les transmissions ordinaires utilisent désormais <code>Write-SquadHandoff.ps1 -Quiet</code>
@@ -162,9 +192,10 @@
         lancer de sous-agent Scribe. Le résultat JSON sur une ligne indique le tour, le nombre d'entrées
         d'historique et le contrôle du registre ; les avertissements restent sur stderr. Un code de sortie
         non nul arrête la transmission. Les formats de l'historique, des décisions, du registre et de
-        l'état ne changent pas. L'initialisation, les verdicts, les notifications, la mémoire, les créneaux
-        de plafond de coût, les changements à la racine d'une fédération et les résumés utilisent encore
-        la procédure spécialisée du Scribe. Les deux chemins d'écriture restent sérialisés par racine.
+        l'état ne changent pas. Les verdicts, notifications, mémoire, créneaux budgétaires, changements
+        explicites d'équipe, cycles de vie de fédération, autopilot agrégé et résumés gardent la procédure
+        spécialisée du Scribe. L'initialisation neuve prise en charge et les écritures ordinaires à la
+        racine d'une fédération passent par leurs outils validés. Toutes les écritures restent sérialisées par racine.
         Les règles de chevauchement ci-dessous concernent ces transmissions au Scribe, pas les écritures directes ordinaires.
       </p>
       <p>

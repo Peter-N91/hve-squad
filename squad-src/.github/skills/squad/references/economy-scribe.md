@@ -6,7 +6,7 @@ license: MIT
 
 # Deterministic Ordinary Handoff
 
-Applies in **off, ranked, economy, and manual**; no economy flag or `handoff` marker is required. Consent/Route are economy-only. Run synchronously; JSON outside root:
+Applies in **off, ranked, economy, and manual**; no marker required. Consent/Route are economy-only. Run synchronously; JSON outside root:
 
 `pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -PayloadPath <payload.json> -Quiet`
 
@@ -19,7 +19,7 @@ Applies in **off, ranked, economy, and manual**; no economy flag or `handoff` ma
 Closed keys. Required `runId`, `historyRecords`, `stateAdvance.activeRoles`; omitted `turn`/`timestamp`/`mode`/consumption derive. `mode` is top-level; `route` needs `decision`.
 
 * Optional `decision`: `{title: string,rationale: string,adrNoted: boolean}`.
-* `historyRecords[]`: required agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Use roster-exact agent and an existing deliverable. Alternate needs selectionCue; ceiling slot needs Scribe. cli-pinned needs passedModel and consumption.model_source=cli-pinned/model=passedModel. Economy needs routingIdentity per record.
+* `historyRecords[]`: required agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Use the roster-exact agent and a real file. Alternate needs its cue; ceiling slots need Scribe. `reportedModel` is actual host/worker identity and outranks pins/requests; tool counts raise estimator floors. Supplied consumption must agree. Economy needs routingIdentity.
 * consumption keys: model/model_source/priced_as/model_tier/internal_turns/input_tokens/cached_tokens/cache_write_tokens/output_tokens/basis.
 * routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
 * Optional orchestration: request/outcome/passedModel/consumption (same keys): actual coordinator usage only, never fictional Scribe tokens; add Scribe's actual overhead if it ran.
@@ -41,4 +41,4 @@ Stdout is one receipt: `{"status":"written","turn":2,"dispatchEntries":1,"histor
 | 5/6 | Re-establish completion/review. |
 | 8 | Wait, verify, retry. |
 
-Never bypass a refusal by hand; no exit 7 routing guard. Timeout: verify history before resend. Cold ops (init/roster, verdicts, notifications, memory, ceiling slots, federation, summaries) need `scribe-cold-charter.md` and the full procedure.
+Never bypass a refusal by hand; no exit 7 guard. Verify history before resend. Unsupported ops need `scribe-cold-charter.md`; supported direct Init/root federation writes use their runtime contract.

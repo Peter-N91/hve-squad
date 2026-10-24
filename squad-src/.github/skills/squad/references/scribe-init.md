@@ -5,15 +5,15 @@ description: "Validated fresh squad/member Init."
 
 # Fresh Squad Initialization
 
-Success: state tree; helper JSON `status`, `rosterCheck`, and `ledgerCheck`
-all `PASS`. Init is outside admission. Serialize writers. With shell and
-`pwsh` 7.4+, read only this brief. The helper reads templates; do not read the charter, procedure, schemas,
-cast catalog, seed templates, or rate template.
+Success: helper `status`, `rosterCheck`, `ledgerCheck` all `PASS`.
+Init is outside admission; serialize writers. With `pwsh` 7.4+ read only this
+brief. The helper reads templates; do not read the charter, procedure, schemas,
+catalog or templates.
 
 ## Confirmed input
 
 Use coordinator-prepared `payloadPath` directly: pass the existing JSON file to
-the helper without an editor call or rewrite. The path is metadata, not a JSON field.
+the helper without an editor call or rewrite.
 Legacy prose/YAML alone may be adapted once with an advertised
 editor; never assume a tool name. No editor means preparation failure without
 state writes, not a shell-write fallback. Copy confirmed fields only; never
@@ -111,9 +111,9 @@ no setup-only manual baseline. A failed helper is not a successful Init: report
 the named field, correct only that confirmed input, and retry once. Do not
 dispatch a recursive repair loop or overwrite an existing tree.
 
-A synchronous child return is not a background handle. The coordinator uses only
-advertised continuation; never background-message a completed synchronous child
-or invent an agent id. After preparation failure, a fresh execution-only Scribe
+A synchronous child return is not a background handle. Use only advertised
+continuation; never message a completed child or invent an agent id.
+After preparation failure, a fresh execution-only Scribe
 may reuse prepared input only with observed evidence that no state was published.
 Success or ambiguous publication forbids repeat Init until resolved. Disclose
 interrupted unreported usage as unknown, excluded from successful setup estimates.

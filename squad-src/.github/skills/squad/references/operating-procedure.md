@@ -10,6 +10,10 @@ metadata:
 
 # Squad Operating Procedure — Turn Stages
 
+Script-backed coordinators follow `coordinator-runtime.md` and
+`coordinator-init.md`; those supersede the legacy startup, Init ownership and
+manual read-back mechanics below. The semantic gates and native fallback remain.
+
 ## Init
 
 Init once; verify each turn. Propose → confirm → create; write only after confirmation. Offer unsure users Squad Coach once before first Init; pause for manual selection if accepted.

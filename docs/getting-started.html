@@ -329,7 +329,7 @@ targets:
         <li>
           <p><strong>Initialize interactively and choose ranked models.</strong> Select <strong>Squad Coordinator</strong> and send:</p>
           <pre><code>/squad init profile=default routing=ranked</code></pre>
-          <p>Confirm the proposed topology, profile, roles, member naming, and approval channel. Only then does the Scribe create the squad state. Inspect <code>.copilot-tracking/squad/team.md</code>: <code>Model routing: ranked</code> and its <code>Model</code> column show the selected models. Ranking chooses among models your host supports; it does not change the coordinator's session model. See <a href="usage.html#model-selection-per-role">Model selection per role</a>.</p>
+          <p>Confirm the proposed topology, profile, roles, member naming, and approval channel. Only then does the validated initializer create the squad state; unsupported setups retain the Scribe procedure. Inspect <code>.copilot-tracking/squad/team.md</code>: <code>Model routing: ranked</code> and its <code>Model</code> column show the selected models. Ranking chooses among models your host supports; it does not change the coordinator's session model. See <a href="usage.html#model-selection-per-role">Model selection per role</a> and <a href="usage.html#script-backed-coordination">script-backed coordination</a>.</p>
         </li>
         <li id="coach-cost-readiness">
           <p><strong>Prepare the first cost-controlled run.</strong> Initialization seeds <code>consumption-rates.md</code> with <code>observations: 0</code> and <code>last_reconciled: never</code>. A positive ceiling therefore produces <code>cannot-confirm</code>, which approval cannot waive. Ask the Coordinator to plan preparation, not to start an uncapped run:</p>

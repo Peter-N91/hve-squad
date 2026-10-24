@@ -156,14 +156,43 @@
       </p>
 
 
+      <h2 id="script-backed-coordination">Script-backed coordination</h2>
+      <p>
+        The Squad and Federation coordinators load compact runtime contracts, not every catalog,
+        template and mode procedure at startup. With PowerShell 7.4+, confirmed profile, pack,
+        naming and notification choices are converted into the existing Init payload by
+        <code>Get-SquadInitContext.ps1</code>; <code>Initialize-Squad.ps1 -Direct</code> stages,
+        validates and publishes the state. All required questions and confirmation still apply.
+        Direct execution records coordinator usage, never a fictional Scribe dispatch.
+      </p>
+      <p>
+        <code>Get-SquadDispatchBrief.ps1 -AsJson</code> supplies metadata in every routing mode.
+        <code>New-SquadDispatchPlan.ps1</code> orders explicit dependencies and independent work;
+        it grants no approval or cost admission. <code>Test-SquadTurnCompletion.ps1</code>
+        verifies actual artifact, history, consumption and state evidence in one read-only call.
+        Economy's bounded lane is still Economy-only. Other gates and native specialist dispatch
+        are unchanged, and cold instructions have narrower artifact-specific scopes.
+      </p>
+      <p>
+        Ordinary federation-root persistence uses <code>Write-SquadFederationHandoff.ps1</code>
+        with a script-produced pre-dispatch snapshot and inner proofs. It checks both levels,
+        preserves existing bytes and state fields, records read-only cross-member inputs and
+        aggregates costs without double-counting root overhead. Promotion, expansion, aggregate
+        autopilot and unsupported writes retain the cold procedure. No state migration is required;
+        hosts without the runtime use the legacy protocol. These changes remove mechanical model
+        work, not the methodology or human approval gates; live elapsed time still depends on the host and model.
+      </p>
+
       <h2 id="autopilot-hand-off-pipelining">Autopilot hand-off pipelining</h2>
       <p>
         Ordinary hand-offs now run synchronously through <code>Write-SquadHandoff.ps1 -Quiet</code>
         directly from the coordinator, in every routing mode, without starting a Scribe subagent.
         Its one-line JSON result reports the state turn, history counts and ledger check; warnings remain
         on stderr. Nonzero exits stop the hand-off. Existing history, decision, ledger and state formats
-        are unchanged. Initialization, verdicts, notifications, memory, cost-ceiling slots, federation-root
-        changes and run summaries still use the cold Scribe procedure. Serialize both writers per root.
+        are unchanged. Verdicts, notifications, memory, cost-ceiling slots, refresh, federation lifecycle
+        changes, aggregate autopilot and run summaries still use the cold Scribe procedure.
+        Fresh supported Init and ordinary federation-root writes use their validated helpers.
+        Serialize all writers per root.
         The pipelining rules below apply to these cold Scribe hand-offs, not ordinary direct writes.
       </p>
       <p>
