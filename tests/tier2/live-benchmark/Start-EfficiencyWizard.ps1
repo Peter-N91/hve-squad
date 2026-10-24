@@ -228,7 +228,7 @@ function Get-WizardMode {
         '4' = 'Offline (full): all benchmark self-tests, possibly several minutes and Python/pytest provisioning. Recommended before formal collection; no login or AI requests.'
         '5' = 'Offline smoke (local): 1 simulated candidate using a fake CLI, usually seconds. Recommended while editing the harness; no AI, login, downloads or benchmark records.'
         '6' = 'Single candidate vs saved scores (local): smoke first, then 1 PAID workflow including judge. Recommended to debug uncommitted changes; descriptive comparison only, no benchmark records/exports.'
-        '7' = 'Repair/check setup: identify uncommitted measured files and check/rebuild the prepared install. No AI, login or benchmark runs; package rebuild may download dependencies. Then rerun 1 or 2.'
+        '7' = 'Repair setup: review and optionally commit only measured changes locally, then check/rebuild the install. Preserves unrelated work and evidence; no push, AI, login or benchmark runs. Then run 1 or 2.'
     })
     $Modes[$Choice]
 }
@@ -327,7 +327,7 @@ function Get-WizardRepair {
     [CmdletBinding()]
     param([string]$Stage, [int]$ExitCode = 1)
     switch -Regex ($Stage) {
-        'Source preflight' { 'Review the listed source/protocol paths and commit intended measured changes. Do not reset, auto-commit or relabel evidence. Both measured revisions must match the executing protocol; rebuilding dependencies cannot fix that mismatch. Rerun 7 to check setup, then 1 or 2.'; break }
+        'Source preflight' { 'Run 7 to review and explicitly authorize a local commit of only the listed measured changes and repair setup, then run 1 or 2. No source is discarded or pushed. Both measured revisions must match the executing protocol; rebuilding dependencies cannot fix protocol drift. Keep all previous evidence.'; break }
         'Compatibility preflight' { 'Source checks passed, but runtime/dependencies or saved controls are incompatible. Use 7 to inspect setup; rebuild only a stale install. For incompatible saved controls, select Series with none only when both source revisions support the same executing protocol. Preserve old evidence; no automatic paid retry.'; break }
         'Prepared package repair' { 'Inspect the managed install and any install-archive-* directory; archived contents and previous benchmark runs are preserved. Resolve the package/preparation error and rerun 7. No benchmark collection or paid retry is needed for setup repair.'; break }
         'Offline smoke|single-candidate|local candidate' { 'Inspect local diagnostic.json, error.json and retained stderr. Local tests never export benchmark records. Offline smoke needs installed Git/Pester only, not Python or login; repair execution/accounting failures before any paid attempt.'; break }
@@ -673,9 +673,9 @@ function Get-WizardConfiguration {
     }
     $Mode = Get-WizardMode -HasBaseline:([bool]$SavedControl) -DefaultMode $(if ($ExplicitControl) { 'Series' } else { $Defaults['Mode'] })
     if ($Mode -eq 'Repair') {
-        Write-Host 'Setup repair only: no AI, login, Python setup or benchmark runs. Source changes must be reviewed and committed by you; existing evidence is never rewritten. Package preparation may require network access.'
+        Write-Host 'Setup repair only: review measured changes and optionally authorize a source-only local commit, then check/rebuild the install. No push, AI, login, Python setup or benchmark runs. Unrelated work and existing evidence are preserved; package preparation may require network access.'
         $Scratch = Assert-WizardScratchPath (Read-WizardText -Question 'Dedicated work/evidence root outside the checkout' -Default $Scratch -Required) $Source
-        $RepairSource = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Source checkout to check/prepare (commit intended measured changes first)' -Default $Source -Required)).Path
+        $RepairSource = (Resolve-Path -LiteralPath (Read-WizardText -Question 'Source checkout to repair' -Default $Source -Required)).Path
         foreach ($Required in @('squad-src', 'apm.yml', '.git')) { if (-not (Test-Path -LiteralPath (Join-Path $RepairSource $Required))) { throw "Source checkout lacks $Required." } }
         $null = Assert-WizardScratchPath $Scratch $RepairSource
         $Config = @{ Mode = 'Repair'; SourceRoot = $RepairSource; WorkRoot = $Scratch; InstallRoot = Join-Path $Scratch 'install'; RunRoot = $null; BaselineSourceRoot = $RepairSource }
@@ -888,18 +888,113 @@ function Test-WizardCompatibility {
     }
 }
 
+function Repair-WizardSource {
+    <# .SYNOPSIS
+    Commits explicitly reviewed measured bytes using a serialized, path-limited Git index.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [string]$ProtocolRepository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+    )
+    $Before = Get-BenchmarkSourceStatus -Repository $Repository -ProtocolRepository $ProtocolRepository
+    if (-not $Before.issues.Count) { Write-Host "Measured source already matches commit $($Before.revision)."; return }
+    foreach ($Issue in $Before.issues) { Write-Host $Issue.detail }
+    if (@($Before.issues | Where-Object { -not $_.canCommit }).Count) {
+        throw 'These inputs cannot be repaired by a local commit. Select revisions with the same executing protocol and regular source files; no source/index/evidence was changed.'
+    }
+    $Paths = @($Before.issues.path | Sort-Object -Unique)
+    foreach ($Path in $Paths) {
+        $FullPath = Join-Path $Repository $Path
+        if (-not (Test-Path -LiteralPath $FullPath -PathType Leaf)) { continue }
+        $Raw = Invoke-BenchmarkGit $Repository @('hash-object', '--no-filters', '--', $FullPath)
+        $Filtered = Invoke-BenchmarkGit $Repository @('hash-object', "--path=$Path", '--', $FullPath)
+        if ([Text.Encoding]::UTF8.GetString($Raw) -cne [Text.Encoding]::UTF8.GetString($Filtered)) {
+            throw "Git attributes/filter/EOL conversion changes the bytes of $Path. Make its working bytes match normal Git storage before repair; no commit/index/install was changed. Filters will not be bypassed."
+        }
+    }
+    Write-Host 'Only the listed paths will be committed, using their complete current working contents (including deletions and ignored additions). Unrelated staging/files remain unchanged. Normal Git identity, signing and hooks apply. Nothing is pushed.'
+    if (-not (Confirm-WizardAction "Create this measured-source-only local commit in ${Repository}?")) {
+        throw [OperationCanceledException]::new('Source commit declined; source and index unchanged.')
+    }
+    $Current = Get-BenchmarkSourceStatus -Repository $Repository -ProtocolRepository $ProtocolRepository
+    if ($Current.revision -cne $Before.revision -or $Current.workingIdentity -cne $Before.workingIdentity) {
+        throw 'Source/protocol or HEAD changed after review. Restart repair to review the new inputs; no commit/index was changed.'
+    }
+    if ($env:GIT_INDEX_FILE) { throw 'Unset GIT_INDEX_FILE before repairing source; an existing alternate index will not be modified.' }
+    $Index = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('rev-parse', '--git-path', 'index'))).Trim()
+    $Index = [IO.Path]::GetFullPath($Index, $Repository)
+    $OriginalIndex = [IO.File]::ReadAllBytes($Index)
+    $IndexLock = "$Index.lock"
+    $Lock = [IO.File]::Open($IndexLock, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try { $OriginalIndex = [IO.File]::ReadAllBytes($Index); $Lock.Write($OriginalIndex) }
+    catch { $Lock.Dispose(); [IO.File]::Delete($IndexLock); throw }
+    finally { $Lock.Dispose() }
+    $NewPaths = @(); $PreparedEntries = @{}; $Committed = $false
+    function Get-RepairIndexEntry([string]$Path) {
+        $Entry = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('--literal-pathspecs', 'ls-files', '--stage', '--debug', '--', $Path)))
+        if ($Entry -match '(?s)^([^\n]+).*flags: ([0-9a-f]+)') { return $Matches[1] + ':' + $Matches[2] }
+        $Entry
+    }
+    try {
+        $env:GIT_INDEX_FILE = $IndexLock
+        $Indexed = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository (@('--literal-pathspecs', 'ls-files', '-z', '--') + $Paths))).Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)
+        $NewPaths = @($Paths | Where-Object { $_ -cnotin $Indexed })
+        if ($NewPaths.Count) {
+            $Exit = Invoke-WizardCommand -Command git -Arguments (@('--literal-pathspecs', '-C', $Repository, 'add', '--intent-to-add', '--force', '--') + $NewPaths)
+            foreach ($Path in $NewPaths) { $PreparedEntries[$Path] = Get-RepairIndexEntry $Path }
+            if ($Exit -ne 0) { throw "Git source preparation failed (exit $Exit); inspect the Git output." }
+        }
+        $Exit = Invoke-WizardCommand -Command git -Arguments (@('--literal-pathspecs', '-C', $Repository, 'commit', '--quiet', '--only', '-m', 'chore: prepare measured benchmark source', '--') + $Paths)
+        if ($Exit -ne 0) { throw "Git source commit failed (exit $Exit). Inspect Git/hook output and fix identity, signing or hook errors before retrying. Working files are retained." }
+        $Committed = $true
+        $After = Get-BenchmarkSourceStatus -Repository $Repository -ProtocolRepository $ProtocolRepository
+        $Parent = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('show', '-s', '--format=%P', $After.revision))).Trim()
+        $Changed = [Text.Encoding]::UTF8.GetString((Invoke-BenchmarkGit $Repository @('diff', '--name-only', '-z', $Before.revision, $After.revision))).Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)
+        if ($Parent -cne $Before.revision -or @($Changed | Where-Object { $_ -cnotin $Paths }).Count -or
+            $After.workingIdentity -cne $Before.workingIdentity -or $After.issues.Count) {
+            throw "Commit $($After.revision) or hook/concurrent effects differ from the reviewed inputs. Retained without rollback; inspect Git diff/status before retrying. Setup is not repaired."
+        }
+        Assert-BenchmarkSourceReady -Repository $Repository -ProtocolRepository $ProtocolRepository
+        Write-Host "Measured source repaired at local commit $($After.revision). Nothing was pushed."
+    }
+    finally {
+        try {
+            if (-not $Committed -and (Resolve-BenchmarkCommit $Repository HEAD) -ceq $Before.revision) {
+                foreach ($Path in $NewPaths) {
+                    if ($PreparedEntries[$Path] -and (Get-RepairIndexEntry $Path) -ceq $PreparedEntries[$Path]) {
+                        if ((Invoke-WizardCommand -Command git -Arguments @('--literal-pathspecs', '-C', $Repository, 'update-index', '--force-remove', '--', $Path)) -ne 0) {
+                            throw "Could not remove repair-owned intent-to-add for $Path; inspect the retained index."
+                        }
+                    }
+                }
+            }
+        }
+        finally {
+            Remove-Item Env:GIT_INDEX_FILE
+            if ((Get-BenchmarkDigest ([IO.File]::ReadAllBytes($Index))) -cne (Get-BenchmarkDigest $OriginalIndex)) {
+                $Retained = "$Index.wizard-repair-$([guid]::NewGuid().ToString('N'))"
+                [IO.File]::Move($IndexLock, $Retained)
+                throw "Git index changed concurrently despite its lock. Original index retained; prepared index retained at $Retained. Inspect both before retrying."
+            }
+            [IO.File]::Move($IndexLock, $Index, $true)
+        }
+    }
+}
+
 function Test-WizardSource {
     <# .SYNOPSIS
     Checks only measured arms against Git and the executing protocol, before setup.
     #>
     [CmdletBinding()]
-    param([Collections.IDictionary]$Config)
+    param([Collections.IDictionary]$Config, [switch]$Repair)
     Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
     $Sources = if ($Config.Mode -in @('Establish', 'Repair')) { @($Config.BaselineSourceRoot) }
     elseif ($Config.Mode -eq 'Series' -and $Config.BaselineEvidencePath) { @($Config.CandidateSourceRoot) }
     else { @($Config.BaselineSourceRoot, $Config.CandidateSourceRoot) }
     foreach ($Checkout in $Sources | Sort-Object -Unique) {
-        Assert-BenchmarkSourceReady -Repository $Checkout
+        if ($Repair) { Repair-WizardSource -Repository $Checkout }
+        else { Assert-BenchmarkSourceReady -Repository $Checkout }
     }
 }
 
@@ -1014,7 +1109,7 @@ function Invoke-EfficiencyWizard {
         $LocalMode = $Config.Mode -in @('OfflineSmoke', 'LocalCompare')
         if ($Config.Mode -in @('Establish', 'Series', 'Complete', 'Repair')) {
             $Stage = 'Source preflight'
-            Test-WizardSource $Config
+            Test-WizardSource $Config -Repair:($Config.Mode -eq 'Repair')
         }
         if ($Config.Mode -eq 'Repair') {
             $Stage = 'Prepared package repair'
@@ -1023,7 +1118,7 @@ function Invoke-EfficiencyWizard {
                 New-Item -ItemType Directory -Path $Config.WorkRoot | Out-Null
             }
             Initialize-WizardInstall -Path $Config.InstallRoot -ManagedRoot $Config.WorkRoot -Source $Config.SourceRoot -Repair
-            Write-Host 'Setup check/repair finished. Rerun option 1 to establish controls or option 2 to compare a committed PR with compatible parent controls. Full runtime/control compatibility and offline tests are checked there before paid collection. No benchmark evidence was changed.'
+            Write-Host 'Source and setup repair finished. Run option 1 to establish controls or option 2 to compare with compatible parent controls. Full runtime/control compatibility and offline tests are checked there before paid collection. Nothing was pushed; no benchmark evidence was changed.'
             return @{ outcome = 'setup-ready'; exitCode = 0; acceptedBaselineChanged = $false }
         }
         $Stage = 'Prerequisite installation'

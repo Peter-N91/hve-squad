@@ -38,19 +38,52 @@ Describe 'Wizard source diagnosis and setup repair' -Tag 'Unit' {
             $Root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
             [void][IO.Directory]::CreateDirectory((Join-Path $Root 'squad-src'))
             Set-Content (Join-Path $Root 'squad-src/source.md') 'committed source'
+            Set-Content (Join-Path $Root 'squad-src/keep.md') 'unchanged source'
             Set-Content (Join-Path $Root 'apm.yml') 'name: fixture'
             foreach ($Path in @('tests/tier2/live-benchmark/efficiency-scenario.json', 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1',
                     'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1', 'tests/lib/SquadInstall.psm1',
                     'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1', 'scripts/Test-SquadScribeOutput.ps1', 'scripts/Build-SquadPlugin.ps1')) {
                 $Target = Join-Path $Root $Path
                 [void][IO.Directory]::CreateDirectory((Split-Path $Target -Parent))
-                Set-Content $Target 'committed protocol'
+                Copy-Item -LiteralPath (Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))) $Path) -Destination $Target
             }
             & git -C $Root init --quiet
+            & git -C $Root config user.name Fixture
+            & git -C $Root config user.email fixture@example.invalid
+            & git -C $Root config commit.gpgsign false
+            & git -C $Root config core.hooksPath (Join-Path $Root '.git/hooks')
             & git -C $Root add --all
             & git -C $Root -c user.name=Fixture -c user.email=fixture@example.invalid -c core.hooksPath=/dev/null commit --quiet -m fixture
             if ($LASTEXITCODE -ne 0) { throw 'Fixture commit failed.' }
             $Root
+        }
+        function Set-RepairHook($Root, $Body) {
+            $Hook = Join-Path $Root '.git/hooks/pre-commit'
+            [IO.File]::WriteAllText($Hook, "#!/bin/sh`n$Body`n")
+            if (-not $IsWindows) { [IO.File]::SetUnixFileMode($Hook, 'UserRead, UserWrite, UserExecute') }
+        }
+        function Get-RepairIndexState($Root) {
+            $Lines = & git -C $Root ls-files --stage --debug
+            @($Lines | ForEach-Object {
+                if ($_ -match "`t") { $_ }
+                elseif ($_ -match 'flags: [0-9a-f]+') { $Matches[0] }
+            }) -join "`n"
+        }
+        function Get-RepairAdmission($Root) {
+            Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1')
+            $Compatibility = @{ cli = 'GitHub Copilot CLI 1.0.103'; installHash = 'a' * 64 }
+            foreach ($Pair in @{
+                    scenarioHash = 'tests/tier2/live-benchmark/efficiency-scenario.json'
+                    parserHash = 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1'
+                    exerciseHash = 'tests/tier2/live-benchmark/Invoke-EfficiencyExercise.ps1'
+                    preparationHash = 'tests/lib/SquadInstall.psm1'
+                    graderHash = 'tests/tier2/live-benchmark/Test-EfficiencyTask.ps1'
+                    verifierHash = 'scripts/Test-SquadScribeOutput.ps1'
+                    converterHash = 'scripts/Build-SquadPlugin.ps1'
+                }.GetEnumerator()) {
+                $Compatibility[$Pair.Key] = (Get-FileHash (Join-Path $Root $Pair.Value)).Hash.ToLowerInvariant()
+            }
+            Get-BenchmarkExecutionIdentity -Repository $Root -Compatibility $Compatibility -SourceHash (Get-EfficiencyTreeHash (Join-Path $Root 'squad-src'))
         }
     }
     It 'names <Change> measured source without changing Git or evidence' -ForEach @(
@@ -80,6 +113,203 @@ Describe 'Wizard source diagnosis and setup repair' -Tag 'Unit' {
         { Assert-BenchmarkSourceReady -Repository $Measured -ProtocolRepository $Executing } |
             Should -Throw '*protocol: tests/tier2/live-benchmark/EfficiencyBenchmark.psm1*'
         (& git -C $Measured status --porcelain) | Should -BeNullOrEmpty
+    }
+    It 'really repairs <Change> source and passes formal identity without changing old evidence' -ForEach @(
+        @{ Change = 'modified' }, @{ Change = 'deleted' }, @{ Change = 'untracked' }, @{ Change = 'ignored' }, @{ Change = 'local protocol' }
+    ) {
+        $Root = New-RepairSource
+        $Before = & git -C $Root rev-parse HEAD
+        $Evidence = Join-Path $TestDrive "retained-$Change.json"; Set-Content $Evidence 'old evidence'
+        $Path = Join-Path $Root 'squad-src/source.md'
+        switch ($Change) {
+            modified { Set-Content $Path 'intended patch' }
+            deleted { Remove-Item $Path }
+            untracked { Set-Content (Join-Path $Root 'squad-src/new.md') 'new source' }
+            ignored {
+                Set-Content (Join-Path $Root '.git/info/exclude') 'new.md'
+                Set-Content (Join-Path $Root 'squad-src/new.md') 'ignored intended source'
+            }
+            'local protocol' { Add-Content (Join-Path $Root 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1') '# local protocol change' }
+        }
+        $Reason = if ($Change -eq 'local protocol') { '*measured-protocol-mismatch*' } else { '*measured-source-mismatch*' }
+        { Get-RepairAdmission $Root } | Should -Throw $Reason
+        Mock Confirm-WizardAction { $true }
+        Repair-WizardSource -Repository $Root -ProtocolRepository $Root
+        { Assert-BenchmarkSourceReady -Repository $Root -ProtocolRepository $Root } | Should -Not -Throw
+        $Identity = Get-RepairAdmission $Root
+        $Identity.revision | Should -Not -Be $Before
+        (Get-BenchmarkSourceHash $Root $Identity.revision) | Should -Be $Identity.sourceHash
+        & git -C $Root merge-base --is-ancestor $Identity.revision HEAD
+        $LASTEXITCODE | Should -Be 0
+        $After = $Identity.revision
+        Repair-WizardSource -Repository $Root -ProtocolRepository $Root
+        (& git -C $Root rev-parse HEAD) | Should -Be $After
+        Test-Path Env:GIT_INDEX_FILE | Should -BeFalse
+        Should -Invoke Confirm-WizardAction -Times 1 -Exactly
+        Get-Content $Evidence | Should -Be 'old evidence'
+    }
+    It 'preserves unrelated partial staging and <Extra> index state' -ForEach @(
+        @{ Extra = 'ordinary' }, @{ Extra = 'intent-to-add' }
+    ) {
+        $Root = New-RepairSource
+        Set-Content (Join-Path $Root 'notes.md') 'committed notes'
+        & git -C $Root add -- notes.md
+        & git -C $Root commit --quiet -m notes
+        Set-Content (Join-Path $Root 'notes.md') 'staged notes'
+        & git -C $Root add -- notes.md
+        Set-Content (Join-Path $Root 'notes.md') 'unstaged notes'
+        if ($Extra -eq 'intent-to-add') {
+            Set-Content (Join-Path $Root 'pending.md') 'user intent'
+            & git -C $Root add --intent-to-add -- pending.md
+        }
+        $BeforeNotes = (& git -C $Root ls-files --stage -- notes.md) -join "`n"
+        $BeforeIntent = (& git -C $Root ls-files --stage --debug -- pending.md) -join "`n"
+        Set-Content (Join-Path $Root 'squad-src/source.md') 'approved source'
+        Set-Content (Join-Path $Root 'squad-src/new.md') 'approved addition'
+        Mock Confirm-WizardAction { $true }
+        Repair-WizardSource -Repository $Root -ProtocolRepository $Root
+        ((& git -C $Root ls-files --stage -- notes.md) -join "`n") | Should -Be $BeforeNotes
+        ((& git -C $Root ls-files --stage --debug -- pending.md) -join "`n") | Should -Be $BeforeIntent
+        (& git -C $Root show HEAD:notes.md) | Should -Be 'committed notes'
+        (& git -C $Root show :notes.md) | Should -Be 'staged notes'
+        Get-Content (Join-Path $Root 'notes.md') | Should -Be 'unstaged notes'
+        (& git -C $Root show HEAD:squad-src/new.md) | Should -Be 'approved addition'
+    }
+    It 'leaves source, HEAD and index byte-identical when source commit is declined' {
+        $Root = New-RepairSource
+        Set-Content (Join-Path $Root 'squad-src/new.md') 'not approved'
+        $Before = & git -C $Root rev-parse HEAD
+        $Index = (Get-FileHash (Join-Path $Root '.git/index')).Hash
+        Mock Confirm-WizardAction { $false }
+        { Repair-WizardSource -Repository $Root -ProtocolRepository $Root } | Should -Throw '*declined*'
+        (& git -C $Root rev-parse HEAD) | Should -Be $Before
+        (Get-FileHash (Join-Path $Root '.git/index')).Hash | Should -Be $Index
+        Get-Content (Join-Path $Root 'squad-src/new.md') | Should -Be 'not approved'
+    }
+    It 'honors a failed hook and removes only repair-owned intent-to-add entries' {
+        $Root = New-RepairSource
+        Set-Content (Join-Path $Root 'notes.md') 'user staging'
+        & git -C $Root add --intent-to-add -- notes.md
+        Set-Content (Join-Path $Root 'squad-src/new.md') 'approved new source'
+        $Before = & git -C $Root rev-parse HEAD
+        $Index = Get-RepairIndexState $Root
+        Set-RepairHook $Root 'git add -- squad-src/new.md; exit 1'
+        Mock Confirm-WizardAction { $true }
+        { Repair-WizardSource -Repository $Root -ProtocolRepository $Root } | Should -Throw '*commit failed*'
+        (& git -C $Root rev-parse HEAD) | Should -Be $Before
+        (Get-RepairIndexState $Root) | Should -Be $Index
+        Get-Content (Join-Path $Root 'squad-src/new.md') | Should -Be 'approved new source'
+        Test-Path (Join-Path $Root '.git/index.lock') | Should -BeFalse
+        $env:GIT_INDEX_FILE | Should -BeNullOrEmpty
+    }
+    It 'rejects <Drift> after consent rather than committing newly changed inputs' -ForEach @(
+        @{ Drift = 'source drift' }, @{ Drift = 'HEAD drift' }
+    ) {
+        $Root = New-RepairSource
+        Set-Content (Join-Path $Root 'squad-src/source.md') 'reviewed source'
+        $Before = & git -C $Root rev-parse HEAD
+        Mock Confirm-WizardAction {
+            if ($Drift -eq 'source drift') { Set-Content (Join-Path $Root 'squad-src/source.md') 'different bytes' }
+            else { & git -C $Root commit --quiet --allow-empty -m intervening }
+            $true
+        }.GetNewClosure()
+        { Repair-WizardSource -Repository $Root -ProtocolRepository $Root } | Should -Throw '*changed after review*'
+        if ($Drift -eq 'source drift') { (& git -C $Root rev-parse HEAD) | Should -Be $Before }
+        else { (& git -C $Root log -1 --format=%s) | Should -Be 'intervening' }
+    }
+    It 'rejects byte-changing Git EOL conversion without changing HEAD or index' {
+        $Root = New-RepairSource
+        Set-Content (Join-Path $Root '.gitattributes') 'squad-src/*.md text eol=lf'
+        & git -C $Root add -- .gitattributes
+        & git -C $Root commit --quiet -m attributes
+        [IO.File]::WriteAllText((Join-Path $Root 'squad-src/source.md'), "new source`r`n")
+        $Before = & git -C $Root rev-parse HEAD
+        $Index = (Get-FileHash (Join-Path $Root '.git/index')).Hash
+        Mock Confirm-WizardAction { throw 'Unexpected consent request' }
+        { Repair-WizardSource -Repository $Root -ProtocolRepository $Root } | Should -Throw '*attributes/filter/EOL*'
+        (& git -C $Root rev-parse HEAD) | Should -Be $Before
+        (Get-FileHash (Join-Path $Root '.git/index')).Hash | Should -Be $Index
+    }
+    It 'does not claim repair when a normal hook <Effect>' -ForEach @(
+        @{ Effect = 'rewrites approved bytes'; Body = "printf 'hook rewrite\n' > squad-src/source.md; git add -- squad-src/source.md" },
+        @{ Effect = 'adds an extra committed file'; Body = "printf 'hook extra\n' > hook-added.md; git add -- hook-added.md" },
+        @{ Effect = 'rewrites previously clean source'; Body = "printf 'hook rewrite\n' > squad-src/keep.md; git add -- squad-src/keep.md" }
+    ) {
+        $Root = New-RepairSource
+        Set-Content (Join-Path $Root 'squad-src/source.md') 'reviewed source'
+        $Before = & git -C $Root rev-parse HEAD
+        Set-RepairHook $Root $Body
+        Mock Confirm-WizardAction { $true }
+        { Repair-WizardSource -Repository $Root -ProtocolRepository $Root } | Should -Throw '*differ from the reviewed inputs*'
+        (& git -C $Root rev-parse HEAD) | Should -Not -Be $Before
+        Test-Path (Join-Path $Root '.git/index.lock') | Should -BeFalse
+    }
+    It 'does not overwrite another Git operation index lock' {
+        $Root = New-RepairSource
+        Set-Content (Join-Path $Root 'squad-src/source.md') 'reviewed source'
+        Set-Content (Join-Path $Root '.git/index.lock') 'another operation'
+        $Before = & git -C $Root rev-parse HEAD
+        Mock Confirm-WizardAction { $true }
+        { Repair-WizardSource -Repository $Root -ProtocolRepository $Root } | Should -Throw '*already exists*'
+        Get-Content (Join-Path $Root '.git/index.lock') | Should -Be 'another operation'
+        (& git -C $Root rev-parse HEAD) | Should -Be $Before
+    }
+    It 'refuses an incompatible external protocol before commit consent' {
+        $Root = New-RepairSource; $Executing = New-RepairSource
+        Add-Content (Join-Path $Executing 'tests/tier2/live-benchmark/EfficiencyBenchmark.psm1') '# different executing harness'
+        Set-Content (Join-Path $Root 'squad-src/source.md') 'uncommitted source'
+        $Before = & git -C $Root rev-parse HEAD
+        Mock Confirm-WizardAction { throw 'Unexpected commit consent' }
+        { Repair-WizardSource -Repository $Root -ProtocolRepository $Executing } | Should -Throw '*cannot be repaired by a local commit*'
+        (& git -C $Root rev-parse HEAD) | Should -Be $Before
+    }
+    It 'repairs a detached worktree without moving the original branch or its index' {
+        $Root = New-RepairSource
+        $Worktree = Join-Path $TestDrive 'repair-worktree'
+        & git -C $Root worktree add --quiet --detach $Worktree HEAD
+        $Before = & git -C $Root rev-parse HEAD
+        $Index = (Get-FileHash (Join-Path $Root '.git/index')).Hash
+        Set-Content (Join-Path $Worktree 'squad-src/new.md') 'worktree source'
+        Mock Confirm-WizardAction { $true }
+        Repair-WizardSource -Repository $Worktree -ProtocolRepository $Worktree
+        { Assert-BenchmarkSourceReady -Repository $Worktree -ProtocolRepository $Worktree } | Should -Not -Throw
+        (& git -C $Root rev-parse HEAD) | Should -Be $Before
+        (Get-FileHash (Join-Path $Root '.git/index')).Hash | Should -Be $Index
+        Test-Path (Join-Path $Root 'squad-src/new.md') | Should -BeFalse
+    }
+    It 'repairs the supplied dirty-source pattern and then completes the formal orchestration offline' {
+        $Messages = [Collections.Generic.List[string]]::new()
+        Mock Write-Host { param($Object) $Messages.Add(($Object -join ' ')) }.GetNewClosure()
+        $Root = New-RepairSource; $Work = Join-Path $TestDrive 'actual-recovery'
+        [void][IO.Directory]::CreateDirectory($Work)
+        Set-Content (Join-Path $Root 'squad-src/source.md') 'intended tracked patch'
+        Set-Content (Join-Path $Root 'squad-src/new.md') 'intended untracked script'
+        $Config = New-WizardTestConfig
+        $Config.Mode = 'Repair'; $Config.SourceRoot = $Root; $Config.BaselineSourceRoot = $Root
+        $Config.CandidateSourceRoot = $Root; $Config.WorkRoot = $Work
+        $Config.InstallRoot = Join-Path $Work 'install'; $Config.RunRoot = $null
+        Mock Get-WizardConfiguration { $Config }.GetNewClosure()
+        Mock Confirm-WizardAction { $true }
+        Mock Initialize-WizardInstall {}
+        Mock Connect-WizardGitHub { throw 'Repair must not login' }
+        Mock Install-WizardPrerequisite { throw 'Repair must not provision tests' }
+        (Invoke-EfficiencyWizard -Source $Root).outcome | Should -Be 'setup-ready'
+        Should -Invoke Connect-WizardGitHub -Times 0
+        Should -Invoke Install-WizardPrerequisite -Times 0
+        $Config.Mode = 'Establish'; $Config.RunRoot = Join-Path $Work 'formal-run'
+        Mock Connect-WizardGitHub {}
+        Mock Install-WizardPrerequisite { $TestDrive }
+        Mock Test-WizardCompatibility { param($Config) $null = Get-RepairAdmission $Config.BaselineSourceRoot }
+        Mock Invoke-WizardOfflineTest { 0 }
+        Mock Invoke-WizardBenchmark {
+            Assert-BenchmarkSourceReady -Repository $Options.SourceRoot
+            New-WizardResultFixture $Options.TrialRoot
+            0
+        }
+        $Result = Invoke-EfficiencyWizard -Source $Root
+        $Result.outcome | Should -Be 'completed' -Because ($Messages -join '; ')
+        $Result.exitCode | Should -Be 0
+        Should -Invoke Invoke-WizardBenchmark -Times 1 -Exactly
     }
     It 'checks exactly the measured roots for <Mode> with saved controls <Saved>' -ForEach @(
         @{ Mode = 'Establish'; Saved = $false; Roots = @('baseline') },
