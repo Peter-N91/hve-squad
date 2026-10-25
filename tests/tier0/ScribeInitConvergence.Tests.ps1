@@ -178,31 +178,31 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Status.ledgerCheck | Should -Be 'PASS'
         $Status.notificationsDefaulted | Should -BeTrue
         ($Status.warnings -join "`n") | Should -Not -Match 'recorded identities|partial paste|C2 guard'
-        $script:FreshRoot = Join-Path $Repository '.copilot-tracking/squad'
+        $Root = Join-Path $Repository '.copilot-tracking/squad'
         foreach ($Name in @('team.md', 'routing.md', 'decisions.md', 'notifications.md', 'state.json', 'consumption.md', 'consumption-rates.md', 'history/Squad Scribe.md')) {
-            Join-Path $script:FreshRoot $Name | Should -Exist
+            Join-Path $Root $Name | Should -Exist
         }
-        $Team = Get-Content -LiteralPath (Join-Path $script:FreshRoot 'team.md') -Raw
+        $Team = Get-Content -LiteralPath (Join-Path $Root 'team.md') -Raw
         $Team.IndexOf('| developer | Delta |') | Should -BeLessThan $Team.IndexOf('| developer | Alpha |')
         $Team | Should -Match 'Confirmed Alternate \| confirmed cue'
         $Team | Should -Match 'Model routing: manual'
-        $State = Get-Content -LiteralPath (Join-Path $script:FreshRoot 'state.json') -Raw | ConvertFrom-Json
+        $State = Get-Content -LiteralPath (Join-Path $Root 'state.json') -Raw | ConvertFrom-Json
         $State.currentRun.sessionModel | Should -BeExactly 'auto'
         $State.currentRun.costPreflight.decision | Should -Be 'not-requested'
         $State.notify.enabled | Should -BeFalse
         $State.notify.approvalChannel | Should -Be 'in-chat'
-        Get-Content -LiteralPath (Join-Path $script:FreshRoot 'decisions.md') -Raw | Should -Match 'profile: custom; packs: confirmed-pack'
-        $Routes = Get-Content -LiteralPath (Join-Path $script:FreshRoot 'routing.md') -Raw
+        Get-Content -LiteralPath (Join-Path $Root 'decisions.md') -Raw | Should -Match 'profile: custom; packs: confirmed-pack'
+        $Routes = Get-Content -LiteralPath (Join-Path $Root 'routing.md') -Raw
         $Routes | Should -Match 'council'
         $Routes | Should -Not -Match '\| researcher\s*\|'
-        @(Get-ChildItem -LiteralPath (Join-Path $script:FreshRoot 'history') -File).Count | Should -Be 1
-        $History = Get-Content -LiteralPath (Join-Path $script:FreshRoot 'history/Squad Scribe.md') -Raw
+        @(Get-ChildItem -LiteralPath (Join-Path $Root 'history') -File).Count | Should -Be 1
+        $History = Get-Content -LiteralPath (Join-Path $Root 'history/Squad Scribe.md') -Raw
         $History | Should -Match 'Initialization coordinator'
         $History | Should -Match 'Initialization scribe'
         $History | Should -Not -Match '"model": "auto"'
-        $Ledger = Get-Content -LiteralPath (Join-Path $script:FreshRoot 'consumption.md') -Raw
+        $Ledger = Get-Content -LiteralPath (Join-Path $Root 'consumption.md') -Raw
         $Ledger | Should -Match '(?m)^Squad Scribe\.md — 2 block\(s\) — identities: [0-9a-f]{8},[0-9a-f]{8}$'
-        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:FreshRoot -Check -ExpectedHistoryCounts 'Squad Scribe=2' *> $null
+        & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $Root -Check -ExpectedHistoryCounts 'Squad Scribe=2' *> $null
         $LASTEXITCODE | Should -Be 0
     }
 
@@ -229,7 +229,7 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Result.ExitCode | Should -Be 0 -Because $Result.Output
         $Root = Join-Path $Repository $Payload.squadRoot
         $State = Get-Content -LiteralPath (Join-Path $Root 'state.json') -Raw | ConvertFrom-Json
-        $Started = [DateTimeOffset]::Parse($State.updated)
+        $Started = [DateTimeOffset]::new($State.updated)
         $Started.ToUnixTimeSeconds() | Should -BeGreaterOrEqual $Before.ToUnixTimeSeconds()
         $Started.ToUnixTimeSeconds() | Should -BeLessOrEqual ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
         $Artifact = Join-Path $Repository 'research.md'
@@ -348,10 +348,14 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 
     It 'refuses re-init without altering any state bytes' {
-        $Before = @(Get-ChildItem -LiteralPath $script:FreshRoot -File -Recurse | Get-FileHash | ForEach-Object Hash) -join ','
-        $Result = Invoke-InitPayload (Get-InitPayload) (Split-Path (Split-Path $script:FreshRoot))
+        $Repository = Join-Path $TestDrive 'reinit-refusal'
+        $Result = Invoke-InitPayload (Get-InitPayload) $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Root = Join-Path $Repository '.copilot-tracking/squad'
+        $Before = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Get-FileHash | ForEach-Object Hash) -join ','
+        $Result = Invoke-InitPayload (Get-InitPayload) $Repository
         $Result.ExitCode | Should -Not -Be 0
-        $After = @(Get-ChildItem -LiteralPath $script:FreshRoot -File -Recurse | Get-FileHash | ForEach-Object Hash) -join ','
+        $After = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Get-FileHash | ForEach-Object Hash) -join ','
         $After | Should -BeExactly $Before
     }
 
@@ -644,12 +648,16 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 
     It 'ledger owns the initialization comparison and detects tampering or a missing section' {
-        $LedgerPath = Join-Path $script:FreshRoot 'consumption.md'
+        $Repository = Join-Path $TestDrive 'ledger-comparison-tampering'
+        $Result = Invoke-InitPayload (Get-InitPayload) $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Root = Join-Path $Repository '.copilot-tracking/squad'
+        $LedgerPath = Join-Path $Root 'consumption.md'
         $Original = Get-Content -LiteralPath $LedgerPath -Raw
         $Original | Should -Match 'n/a \(initialization\)'
         foreach ($Changed in @($Original.Replace('n/a (initialization)', 'fictional baseline'), ($Original -replace '(?ms)^## Cost Comparison.*', ''))) {
             Set-Content -LiteralPath $LedgerPath -Value $Changed -NoNewline
-            & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $script:FreshRoot -Check *> $null
+            & pwsh -NoProfile -File $script:LedgerScript -SquadRoot $Root -Check *> $null
             $LASTEXITCODE | Should -Not -Be 0
         }
         Set-Content -LiteralPath $LedgerPath -Value $Original -NoNewline
@@ -680,7 +688,10 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 
     It 'transitions to the first actual work comparison without duplicate sections or fictional baselines' {
-        $Repository = Split-Path (Split-Path $script:FreshRoot)
+        $Repository = Join-Path $TestDrive 'first-work-comparison'
+        $Result = Invoke-InitPayload (Get-InitPayload) $Repository
+        $Result.ExitCode | Should -Be 0 -Because $Result.Output
+        $Root = Join-Path $Repository '.copilot-tracking/squad'
         $WorkDirectory = Join-Path $Repository '.copilot-tracking/changes'
         New-Item -ItemType Directory -Path $WorkDirectory -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $WorkDirectory 'work.md') -Value '# Actual work'
@@ -697,11 +708,11 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $PreviousHome = $env:COPILOT_HOME
         try {
             $env:COPILOT_HOME = Join-Path $TestDrive 'empty-session-home'
-            $Output = & pwsh -NoProfile -File $Writer -SquadRoot $script:FreshRoot -PayloadPath $InputPath -Quiet 2>&1
+            $Output = & pwsh -NoProfile -File $Writer -SquadRoot $Root -PayloadPath $InputPath -Quiet 2>&1
             $LASTEXITCODE | Should -Be 0 -Because ($Output -join "`n")
         }
         finally { $env:COPILOT_HOME = $PreviousHome }
-        $Ledger = Get-Content -LiteralPath (Join-Path $script:FreshRoot 'consumption.md') -Raw
+        $Ledger = Get-Content -LiteralPath (Join-Path $Root 'consumption.md') -Raw
         ([regex]::Matches($Ledger, '(?m)^## Cost Comparison')).Count | Should -Be 1
         $Ledger | Should -Not -Match 'n/a \(initialization\)|saving of about'
         $Ledger | Should -Match 'squad figure only'
