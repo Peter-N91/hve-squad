@@ -86,13 +86,45 @@ Describe 'PowerShell runtime probes (PRB-01)' {
 
     It 'round-trips literal paths and inert structured parameters in an isolated child with closed stdin' {
         $fixture = New-ProbeFixture -Body @'
-param([string]$Text, [object]$Nested)
+param([string]$Text, [object]$Nested, [string]$Timestamp)
 $global:SquadProbeChildOnly = 'child'
-@{ pid = $PID; input = [Console]::In.ReadToEnd(); text = $Text; nested = $Nested } | ConvertTo-Json -Depth 10 -Compress
+$deep = $Nested.deep
+for ($level = 0; $level -lt 70; $level++) { $deep = $deep.next }
+@{
+    pid = $PID; input = [Console]::In.ReadToEnd(); text = $Text
+    nested = @{ list = $Nested.list; flag = $Nested.flag }
+    timestampBytes = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Timestamp))
+    nestedTimestampIsString = $Nested.stamp -is [string]
+    nestedTimestampBytes = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$Nested.stamp))
+    arrayTimestampIsString = $Nested.stamps[0] -is [string]
+    arrayTimestampBytes = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$Nested.stamps[0]))
+    nullPreserved = $null -eq $Nested.nil
+    emptyIsArray = $Nested.empty -is [array]; emptyCount = $Nested.empty.Count
+    singleIsArray = $Nested.single -is [array]; singleCount = $Nested.single.Count; singleValue = $Nested.single[0]
+    groupCount = $Nested.groups.Count; firstGroupIsArray = $Nested.groups[0] -is [array]
+    firstGroupCount = $Nested.groups[0].Count; secondGroupValue = $Nested.groups[1][0]; thirdGroupIsNull = $null -eq $Nested.groups[2]
+    upperKey = $Nested.caseKeys['Key']; lowerKey = $Nested.caseKeys['key']
+    deepLeaf = $deep.value
+} | ConvertTo-Json -Depth 10 -Compress
 '@
         $text = '$([IO.File]::WriteAllText("' + $fixture.Marker + '","unexpected")); quotes '' " [brackets]'
-        $parameters = @{ Text = $text; Nested = @{ list = @(1, 2); flag = $true } }
-        [IO.File]::WriteAllText($fixture.ParametersPath, (ConvertTo-Json $parameters -Depth 10))
+        $timestamp = '2026-10-25T02:46:44.694+01:00'
+        $nestedTimestamp = '2026-10-25T01:46:44.694Z'
+        $arrayTimestamp = '2026-10-25T01:46:44.6941234Z'
+        $deep = @{ value = 'deep literal' }
+        for ($level = 0; $level -lt 70; $level++) { $deep = @{ next = $deep } }
+        $caseKeys = [Management.Automation.OrderedHashtable]::new()
+        $caseKeys.Add('Key', 'upper')
+        $caseKeys.Add('key', 'lower')
+        $parameters = @{
+            Text = $text; Timestamp = $timestamp
+            Nested = @{
+                list = @(1, 2); flag = $true; stamp = $nestedTimestamp; stamps = @($arrayTimestamp)
+                nil = $null; empty = @(); single = @(7); groups = @(@(), @('one'), $null)
+                caseKeys = $caseKeys; deep = $deep
+            }
+        }
+        [IO.File]::WriteAllText($fixture.ParametersPath, (ConvertTo-Json $parameters -Depth 100))
         $result = Invoke-ProbeFixture -ScriptPath $fixture.ScriptPath -ParametersPath $fixture.ParametersPath
         $result.ExitCode | Should -Be 0 -Because $result.ErrorText
         $result.Result.status | Should -Be 'completed'
@@ -102,6 +134,25 @@ $global:SquadProbeChildOnly = 'child'
         $value.text | Should -BeExactly $text
         $value.nested.list | Should -Be @(1, 2)
         $value.nested.flag | Should -BeTrue
+        $value.deepLeaf | Should -BeExactly 'deep literal'
+        $value.timestampBytes | Should -BeExactly ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($timestamp)))
+        $value.nestedTimestampIsString | Should -BeTrue
+        $value.nestedTimestampBytes | Should -BeExactly ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($nestedTimestamp)))
+        $value.arrayTimestampIsString | Should -BeTrue
+        $value.arrayTimestampBytes | Should -BeExactly ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($arrayTimestamp)))
+        $value.nullPreserved | Should -BeTrue
+        $value.emptyIsArray | Should -BeTrue
+        $value.emptyCount | Should -Be 0
+        $value.singleIsArray | Should -BeTrue
+        $value.singleCount | Should -Be 1
+        $value.singleValue | Should -Be 7
+        $value.groupCount | Should -Be 3
+        $value.firstGroupIsArray | Should -BeTrue
+        $value.firstGroupCount | Should -Be 0
+        $value.secondGroupValue | Should -BeExactly 'one'
+        $value.thirdGroupIsNull | Should -BeTrue
+        $value.upperKey | Should -BeExactly 'upper'
+        $value.lowerKey | Should -BeExactly 'lower'
         Get-Variable SquadProbeChildOnly -Scope Global -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
         Test-Path -LiteralPath $fixture.Marker | Should -BeFalse
     }

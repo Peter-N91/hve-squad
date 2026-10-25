@@ -57,7 +57,28 @@ if ($parameters -isnot [Collections.IDictionary]) { Write-ProbeInputFailure 'Par
 $command = @'
 try {
     Import-Module Microsoft.PowerShell.Management, Microsoft.PowerShell.Utility -ErrorAction Stop
-    $Parameters = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($env:HVE_SQUAD_PROBE_PARAMETERS)) -AsHashtable -Depth 100
+    function ConvertFrom-ProbeJsonToken {
+        param([Newtonsoft.Json.Linq.JToken]$Token)
+        if ($Token -is [Newtonsoft.Json.Linq.JObject]) {
+            $Object = [Management.Automation.OrderedHashtable]::new()
+            foreach ($Property in $Token.Properties()) {
+                $Object.Add($Property.Name, (ConvertFrom-ProbeJsonToken -Token $Property.Value))
+            }
+            return $Object
+        }
+        if ($Token -is [Newtonsoft.Json.Linq.JArray]) {
+            $Array = [Collections.Generic.List[object]]::new()
+            foreach ($Item in $Token) { $Array.Add((ConvertFrom-ProbeJsonToken -Token $Item)) }
+            return ,$Array.ToArray()
+        }
+        return $Token.Value
+    }
+    $Settings = [Newtonsoft.Json.JsonSerializerSettings]::new()
+    $Settings.DateParseHandling = [Newtonsoft.Json.DateParseHandling]::None
+    $Settings.MaxDepth = 100
+    $Root = [Newtonsoft.Json.JsonConvert]::DeserializeObject(
+        [IO.File]::ReadAllText($env:HVE_SQUAD_PROBE_PARAMETERS), [Newtonsoft.Json.Linq.JObject], $Settings)
+    $Parameters = ConvertFrom-ProbeJsonToken -Token $Root
     if ($Parameters -isnot [Collections.IDictionary]) { throw 'Parameters must be one JSON object.' }
     $global:LASTEXITCODE = 0
     & $env:HVE_SQUAD_PROBE_SCRIPT @Parameters
