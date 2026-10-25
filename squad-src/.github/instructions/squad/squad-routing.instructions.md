@@ -165,7 +165,7 @@ When any precondition is unmet, the coordinator dispatches the missing stage (or
 
 * When no Council Verdict or Council Waiver exists for the topic and the request crosses two or more council-member domains (architecture, security, cost, product-fit) or raises any RAI concern, the coordinator runs the council row before the implementer, sized to the work per *Council Membership* in `squad-council.instructions.md`.
 * When the latest verdict is `Go` or `Go-With-Conditions`, the coordinator dispatches the implementer and passes the consolidated conditions as inputs.
-* When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the Scribe before any implementer dispatches.
+* When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the validated handoff writer (or cold fallback) before any implementer dispatches.
 
 The gate enforces the council protocol from `.github/instructions/squad/squad-council.instructions.md` and the autonomous loop from `.github/instructions/squad/squad-autonomous.instructions.md` at routing time.
 

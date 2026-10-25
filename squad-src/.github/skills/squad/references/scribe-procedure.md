@@ -63,7 +63,7 @@ For a cold operation the Scribe reads the full legacy charter, this procedure, `
 | initialization or roster refresh (3) | fresh Init: [scribe-init.md](scribe-init.md) + `Initialize-Squad.ps1`; additive growth: [roster-expansion.md](roster-expansion.md); otherwise [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), `seed-templates.md`; run the rate seeder |
 | Step 7.1 rate-table seed/reseed, any payload type (`consumption-rates.md` missing or shape-check-failed) | Run `scripts/Initialize-SquadConsumptionRates.ps1 -SquadRoot <squadRoot>`; read the template only when no shell tool or `pwsh` 7+ is available |
 | memory (4) | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) |
-| Council Verdict / Intake Readiness Verdict / Discovery Verdict (5, 9, 12) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
+| Council Verdict / Intake Readiness Verdict / Discovery Verdict (5, 9, 12) | supported: `verdict-writer.md`; exit 2: [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
 | autonomous-loop summary (6) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
 | autopilot-run summary, single-squad root (8) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
 | autopilot-run summary, federation root (8) | [scribe-cold-federation.md](scribe-cold-federation.md) |
@@ -83,7 +83,9 @@ Append each dispatch record to `history/<agent>.md`, creating the file with its 
 
 A federation-level history payload is different from the ordinary case above — see [scribe-cold-federation.md](scribe-cold-federation.md) § *Federation-Level History Payload*, read only for that payload type per the Cold-File Dispatch Table.
 
-Verdict entries (Council, Intake Readiness, Discovery), their per-verdict-type instruction-file schemas, the failure-note rule for an incomplete schema, the Decision Ref format, and the autonomous-loop summary shape all move to [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) — read only for that payload type per the Cold-File Dispatch Table above.
+Supported gate verdicts use `verdict-writer.md` after the ordinary handoff.
+Cold fallback schemas and run-summary shapes remain in
+[scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md).
 
 Initialization (`team.md`/`routing.md` seeding, the full state-tree seed including both consumption files, no agent file in `history/`, the `notify` object and Init decision, and Deliverable Root resolution and refresh) and Repository Memory and Learning Promotion move to [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) — read only for an initialization or memory payload per the Cold-File Dispatch Table above.
 

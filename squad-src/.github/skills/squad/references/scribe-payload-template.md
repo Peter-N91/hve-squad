@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-payload-template
-description: "Cold Scribe payload template for both coordinators: roster/mode refresh, verdicts, memory, notifications, federation, and summaries. Ordinary writes use economy-scribe.md."
+description: "Cold payload template for unsupported verdict fallback, refresh, memory, notifications, federation, and summaries."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -11,8 +11,9 @@ metadata:
 # Scribe Payload Template
 
 Fresh Init uses [scribe-init.md](scribe-init.md); additive roster growth uses
-[roster-expansion.md](roster-expansion.md); ordinary writes use the JSON in
-[economy-scribe.md](economy-scribe.md). None loads this template or executes
+[roster-expansion.md](roster-expansion.md); ordinary handoffs use
+[economy-scribe.md](economy-scribe.md), and supported verdicts use
+[verdict-writer.md](verdict-writer.md). None loads this template or executes
 `ledgerCommand` text. Unsupported/non-additive cold work fills it in section order;
 script refusal never permits a hand-written bypass.
 

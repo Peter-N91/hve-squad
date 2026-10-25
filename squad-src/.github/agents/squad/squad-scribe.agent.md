@@ -20,7 +20,7 @@ For fresh single-squad/member-root Init, read only `references/scribe-init.md`, 
 
 ## Cold operations
 
-Before cold work — refresh, unsupported lifecycle fallback, verdict, notification,
+Before cold work — refresh, unsupported lifecycle or verdict fallback, notification,
 memory, admitted slot, aggregate root write, repair or summary — read `references/scribe-cold-charter.md` in full,
 then its named legacy references. Supported
 Init/Expansion/Promotion never dispatch Scribe. Missing fields fail; no partial

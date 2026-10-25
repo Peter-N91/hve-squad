@@ -20,7 +20,7 @@ The discovery gate is the operator's brainstorming session for work that has not
 2. The chosen depth decides who runs: `quick` dispatches `analyst`; `standard` dispatches `designer` (resolved to `DT Coach`) then `analyst`; `deep` adds `challenger` and `experimenter` before the write-up. `deep` needs `challenger`, which only `full` seeds, so a `product` squad is offered the role or `standard` instead.
 3. **The dispatched roles interview you.** Each puts its questions one at a time and waits, the same discipline `Squad SQL Migration Advisor` follows. Use the host's question tool where one exists; on the Copilot CLI and the app, which ship no equivalent, the role returns the question and the coordinator asks it in the response text, then re-dispatches with the answer. A role that cannot reach you returns its questions rather than inventing the answers — the session stops instead of banking a brief built from guesses.
 4. Only `analyst` writes a file: the brief, landing in the `analyst` Deliverable Root as `<date>-<topic-id>-brief.md`. It carries the problem, why now, scope boundaries, the success measure, the options considered **with the reason each was discarded**, the chosen direction, assumptions, and open questions.
-5. The Squad Scribe appends a single `## Discovery Verdict <timestamp> <topic-id>` entry to `decisions.md`, including on a `skip`. The coordinator does not write the verdict or the brief.
+5. After the ordinary handoff, `Write-SquadVerdict.ps1` appends a single `## Discovery Verdict <timestamp> <topic-id>` entry to `decisions.md`, including on a `skip`. The coordinator does not hand-edit the verdict or the brief.
 6. The brief is itself a requirement artifact, so the **intake gate** then assesses it — resolved to an agent other than the one that wrote it, so the check is independent. The two gates are a chain, not a loop: a `Not-Ready` brief runs intake's own remediation loop and never re-opens discovery.
 7. The gate is **never available on an unattended path**. In Watch Mode the triggering issue or pull-request body becomes the input artifact and the intake gate assesses it instead, so an unattended run stays gated by validation rather than ungated.
 
@@ -30,7 +30,7 @@ The intake gate is the operator's pre-work readiness check on the inputs a turn 
 
 1. The coordinator dispatches `intake-validator` (seeded in the `product` and `full` profiles and addable to any roster, resolved by input type per the roster Selection Cue: PRD → PRD Quality Reviewer, BRD → BRD Quality Reviewer, otherwise the default PRD Quality Reviewer) to assess the inputs for completeness, clarity, testability, consistency, and scope boundaries. When the active roster lacks `intake-validator`, the coordinator offers to add it rather than skipping the check.
 2. The validator returns a verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`) with its blocking and non-blocking gaps and any clarifying questions.
-3. The Squad Scribe appends a single `## Intake Readiness Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
+3. After the ordinary handoff, `Write-SquadVerdict.ps1` appends a single `## Intake Readiness Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not hand-edit the verdict.
 4. On `Ready` or `Ready-With-Gaps`, downstream planning and implementation proceed (non-blocking gaps carried as recorded assumptions). On `Not-Ready`, the coordinator runs the bounded auto-remediation loop — dispatch `analyst` or `product-owner` to fill the blocking gaps, then re-validate; capped at two cycles — and escalates when a gap needs a human decision, the cap is reached with blocking gaps open, or the blocking-gap set stops shrinking.
 5. The verdict gates downstream dispatch and runs ahead of the Council and Implementation gates, and behind the discovery gate when one ran; a non-stale `Ready` verdict for the same unchanged inputs is reused rather than re-run.
 
@@ -46,8 +46,8 @@ The council is the operator's pre-implementation cross-check. The coordinator tr
    * A needed role missing from the roster is offered as a **council extension**: in the Init confirmation when the opening request already signals a council; at the council's `confirm` step in interactive mode, where the user accepts, adjusts, or declines; and in autopilot or autonomous mode only when a needed role is missing, never as a new question when the roster already covers the work. Watch Mode escalates with the role to add as the remediation and never adds it itself.
    * A decline is recorded as a `## Council Waiver <timestamp> <topic-id>` decision. It satisfies the Implementation Gate for the topic but never clears a Risk Gate or an Impactful-Action Gate.
 2. Each council role returns a finding with a verdict label (`Approve`, `Conditional`, `Concern`, `Block`) and a risk label (`Risk: Low`, `Risk: Medium`, `Risk: High`).
-3. The Squad Scribe synthesizes the findings using a most-restrictive-wins rule: any `Block` or any `Risk: High` drives a `Stop` verdict; any `Conditional` (with no blockers) drives `Go-With-Conditions`; otherwise the verdict is `Go`.
-4. The Scribe appends a single `## Council Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not write the verdict.
+3. `Write-SquadVerdict.ps1` synthesizes the findings using a most-restrictive-wins rule: any `Block`, blocking issue, or `Risk: High` drives a `Stop` verdict; any `Conditional` or explicit condition (with no blockers) drives `Go-With-Conditions`; otherwise the verdict is `Go`.
+4. After the ordinary handoff, the verdict writer appends a single `## Council Verdict <timestamp> <topic-id>` entry to `decisions.md`. The coordinator does not hand-edit the verdict.
 5. The verdict gates the next turn's implementation dispatch: `Go` or `Go-With-Conditions` permits dispatch (with conditions attached as inputs); `Stop` blocks dispatch and the coordinator escalates.
 
 ## Implementation Gate Procedure
@@ -60,7 +60,7 @@ The Implementation Gate is what makes the squad a methodology instead of a route
    * a plan artifact under the `lead` Deliverable Root for the topic — if missing, dispatch `lead` first;
    * a non-`Stop` Council Verdict, or a user's `## Council Waiver`, for the topic when the request crosses two or more council-member domains — if neither exists, run the council row first.
 3. When a precondition is unmet, dispatch the missing stage or escalate. **Never produce the missing research, plan, or verdict inline**, and never advance because the request "is only a document". Skipping research and plan to reach the deliverable faster is the single most common way a squad turn degrades into one model improvising, and it is invisible afterwards because the deliverable still looks finished.
-4. On the verdict: `Go` or `Go-With-Conditions` permits dispatch with the conditions attached as inputs; `Stop` escalates. A user may override `Stop`, and the override is recorded through the Scribe before any dispatch.
+4. On the verdict: `Go` or `Go-With-Conditions` permits dispatch with the conditions attached as inputs; `Stop` escalates. A user may override `Stop`, and the override is recorded through the validated handoff writer (or cold fallback) before any dispatch.
 
 ### Review Follow-Through
 

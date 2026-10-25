@@ -265,6 +265,7 @@ Describe 'Deterministic coordinator transactions ship with the runtime' {
         @{ Name = 'SquadUsage.psm1' }
         @{ Name = 'Get-SquadUsage.ps1' }
         @{ Name = 'Set-SquadModelRouting.ps1' }
+        @{ Name = 'Write-SquadVerdict.ps1' }
         @{ Name = 'SquadPromotion.psm1' }
         @{ Name = 'Get-SquadPromotionPlan.ps1' }
         @{ Name = 'Promote-SquadFederation.ps1' }

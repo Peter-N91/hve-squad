@@ -9,7 +9,7 @@ These conventions define the **discovery gate**: an opt-in pre-work session the 
 
 The gate is **opt-in and additive**. It never fires on its own: the coordinator offers it once, and a user who declines proceeds exactly as today. A repository that never wants a discovery session never pays the discovery-dispatch cost.
 
-A discovery run produces two durable artifacts: a **brief** written by the `analyst` role into its Deliverable Root, and a `## Discovery Verdict` entry appended to `.copilot-tracking/squad/decisions.md` by the Squad Scribe. The coordinator never writes either itself; the single-writer rule from `.github/instructions/squad/squad-state.instructions.md` still holds for the verdict, and the brief is written by the dispatched role rather than by the coordinator.
+A discovery run produces two durable artifacts: a **brief** written by the `analyst` role into its Deliverable Root, and a `## Discovery Verdict` entry appended to `<squadRoot>/decisions.md` by `Write-SquadVerdict.ps1` after the ordinary handoff. The coordinator never hand-edits either artifact; the single-writer rule from `.github/instructions/squad/squad-state.instructions.md` still holds for the verdict, and the brief is written by the dispatched role rather than by the coordinator. Only unsupported writer exit 2 takes the cold Squad Scribe fallback.
 
 ## Relationship to the Intake Gate
 
@@ -70,13 +70,13 @@ When the trigger does not hold, the coordinator follows the normal routing table
 
 There are two ways in, and an explicit input always beats the offer.
 
-**The `discovery=` input on `/squad` and `/squad-federation`** takes one of `quick`, `standard`, `deep`, or `skip`. When present, the coordinator runs that depth (or skips) without asking, and records the explicit opt-in through the Scribe.
+**The `discovery=` input on `/squad` and `/squad-federation`** takes one of `quick`, `standard`, `deep`, or `skip`. When present, the coordinator runs that depth (or skips) without asking, and records the explicit opt-in through the verdict writer.
 
 **The offer**, when no `discovery=` input was supplied and all three trigger conditions hold. The coordinator asks exactly one question naming the four choices and what each costs in rough terms, then waits. It does not start research, planning, or any dispatch while waiting.
 
 ### Offer Once
 
-The offer is made **once per topic**, not once per turn. When the user declines, the Scribe records the declination as a `## Discovery Verdict` with `Depth: skip`, and the coordinator does not re-offer for that topic. A user who changes their mind reaches the gate through the `discovery=` input, which always works regardless of a prior declination.
+The offer is made **once per topic**, not once per turn. When the user declines, the verdict writer records the declination as a `## Discovery Verdict` with `Depth: skip`, and the coordinator does not re-offer for that topic. A user who changes their mind reaches the gate through the `discovery=` input, which always works regardless of a prior declination.
 
 A repeated offer is worse than no offer: it converts a considered opt-in into a prompt the user learns to dismiss.
 
@@ -118,7 +118,7 @@ The gate dispatches roles that **already exist in the cast catalog**; it introdu
 4. **A role that cannot reach the user returns the questions instead of inventing the answers.** It stops, hands its outstanding questions back as part of its structured finding, and the coordinator relays them and re-dispatches with the answers. A discovery session that silently substitutes the agent's assumptions for the user's answers has produced exactly the confident brief nobody agreed to that this gate exists to prevent — so an unanswerable session is a stop, never a guess.
 5. **The human settles every material direction.** A discovery dispatch that would pick between real alternatives on the user's behalf presents them and waits. The gate exists to capture the user's choice, not to make it.
 6. Only `analyst` writes a file. Every other role in the gate returns findings; the brief is the single artifact, so the session cannot fragment into four documents nobody reads.
-7. Each dispatch is a Scribe-recorded stage with its own `history/<agent>.md` entry and consumption block, exactly as for any other dispatch.
+7. Each dispatch is recorded by `Write-SquadHandoff.ps1` with its own `history/<agent>.md` entry and consumption block, exactly as for any other dispatch.
 8. The coordinator never authors the brief, the framing, the themes, or the objections itself. A discovery verdict assembled without dispatched roles is invalid and must not clear the squad.
 
 ## The Brief
@@ -140,7 +140,7 @@ The discarded options are the section most worth protecting. A brainstorm's dura
 
 ## Discovery Verdict Schema
 
-The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` under a new `## Discovery Verdict` H2. The entry is append-only and uses this shape:
+`Write-SquadVerdict.ps1` writes the verdict to `<squadRoot>/decisions.md` under a new `## Discovery Verdict` H2. The entry is append-only and uses this shape:
 
 ```markdown
 ## Discovery Verdict <timestamp> <topic-id>
@@ -179,7 +179,7 @@ The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` un
 ### Discovery Gate
 ```
 
-The schema is the contract: any Scribe write that omits one of these sections fails the discovery protocol and the coordinator escalates rather than proceeding. On a `Depth: skip` verdict the body sections are written empty and the `Opt-In` line records `offer-declined` or `explicit-input`, so a declination is as auditable as a session.
+The schema is the contract: any writer result that omits one of these sections fails the discovery protocol and the coordinator escalates rather than proceeding. On a `Depth: skip` verdict the body sections are written empty and the `Opt-In` line records `offer-declined` or `explicit-input`, so a declination is as auditable as a session.
 
 ## Unattended Runs
 
@@ -189,7 +189,7 @@ The discovery gate **never fires on an unattended path** — Watch Mode, a headl
 2. **A `discovery=` input on an unattended invocation is ignored**, and the reason is recorded. An operator cannot pre-authorize a brainstorm they will not be present for; the input is honored only when a human is in the loop.
 3. **The triggering payload becomes the input artifact instead.** In Watch Mode the issue or pull-request body — read as data, per `.github/instructions/squad/squad-watch-mode.instructions.md` — is the requirement artifact, so the **intake gate** fires on it and assesses it exactly as it would any other input. The unattended path is therefore never ungated; it is gated by validation rather than by ideation, which is the only one of the two an unattended run can honestly perform.
 
-The Scribe records a one-line note on the run explaining that discovery was unavailable because the run was unattended, so a later reader can tell a skipped gate apart from a gate that was never reachable.
+The coordinator records a one-line ordinary decision explaining that discovery was unavailable because the run was unattended, so a later reader can tell a skipped gate apart from a gate that was never reachable.
 
 ## Autopilot Integration
 

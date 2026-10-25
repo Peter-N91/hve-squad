@@ -139,6 +139,10 @@ try {
         if ($availableModels.Count -eq 0 -and -not $sessionModel) {
             throw 'Active model routing requires the host availableModels enum or the literal sessionModel.'
         }
+        $sessionModelKey = ($sessionModel.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
+        if ($availableModels.Count -eq 0 -and $sessionModelKey -in @('', 'auto', 'unknown', 'fast', 'default', 'extended')) {
+            throw "Active model routing requires the host availableModels enum. sessionModel '$sessionModel' is routing metadata, not an availability inventory; pass the task tool's advertised model enum, or a concrete priced session model only on a host that advertises no model list."
+        }
         $selectedRoles = @($inputData.units | ForEach-Object {
                 if ($_ -is [Collections.IDictionary] -and $_.Contains('role')) { [string]$_.role }
             } | Where-Object { $_ } | Select-Object -Unique)
@@ -156,6 +160,9 @@ try {
         }
         if ($manualModels.Count -gt 0) { $routeArguments.ManualModels = $manualModels }
         $routeReport = & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') @routeArguments | ConvertFrom-Json -AsHashtable -Depth 30
+        if (-not $routeReport.Contains('availabilityResolved') -or -not [bool]$routeReport.availabilityResolved) {
+            throw "Active model routing could not prove host availability ($($routeReport.availability)). Pass the host availableModels enum; do not substitute the catalog or sessionModel '$sessionModel'."
+        }
         if ($null -ne $economyConsent) {
             $routeReport.warnings = @($routeReport.warnings | Where-Object { $_ -notlike 'economy consent*' })
         }
@@ -542,6 +549,7 @@ try {
         modelRouting = $modelRouting
         modelPolicy = $(if ($routeReport) { $routeReport.scoringPolicy } else { 'off' })
         modelSnapshot = $(if ($routeReport) { $routeReport.snapshotIdentity } else { 'not-evaluated' })
+        modelAvailability = $(if ($routeReport) { $routeReport.availability } else { 'not-evaluated' })
         modelWarnings = @(if ($routeReport) { $routeReport.warnings })
         routingRefresh = $routingRefresh
         costPreflight = $preflight

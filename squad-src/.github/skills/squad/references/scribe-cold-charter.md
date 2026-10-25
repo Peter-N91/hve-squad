@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-cold-charter
-description: "Full legacy Scribe charter for initialization, verdicts, memory, notifications, federation changes, summaries, and unsupported ordinary operations."
+description: "Full legacy Scribe charter for unsupported verdict fallback, memory, notifications, repairs, summaries, and unsupported operations."
 license: MIT
 ---
 
@@ -8,7 +8,13 @@ license: MIT
 
 Apply the coordinator's state-write payload; return concise confirmation.
 
-This charter governs cold operations only; supported ordinary writes use `economy-scribe.md` in every routing mode. Initialization is outside admission. Before later work dispatch, the coordinator owns the deterministic Cost Preflight transaction: it compare-and-swap updates `currentRun.costPreflight` and appends the matching decision while no parallel writer exists. The Scribe preserves it. Serialize every cold Scribe operation with direct deterministic handoffs at the same root.
+This charter governs cold operations only; supported ordinary writes and gate
+verdicts use `economy-scribe.md` in every routing mode. Initialization is outside
+admission. Before later work dispatch, the coordinator owns the deterministic
+Cost Preflight transaction: it compare-and-swap updates
+`currentRun.costPreflight` and appends the matching decision while no parallel
+writer exists. The Scribe preserves it. Serialize every cold Scribe operation
+with direct deterministic handoff and verdict writers at the same root.
 
 ## Skill Reference Contract
 
