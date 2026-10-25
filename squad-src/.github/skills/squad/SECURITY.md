@@ -3,7 +3,7 @@ title: Squad Skill Security Model
 description: STRIDE model for local squad routing, connector file exchanges, and state persistence.
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-24
+ms.date: 2026-10-25
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
@@ -16,6 +16,10 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `Resolve-SquadModelRoute.ps1`, its shared `ModelBenchmarkScoring.ps1`,
 `Get-SquadDispatchBrief.ps1`,
 `New-SquadDispatchPlan.ps1`, `Set-SquadModelRouting.ps1`,
+`Get-SquadPromotionPlan.ps1`, `Promote-SquadFederation.ps1`, and their shared
+`SquadPromotion.psm1`,
+`Get-SquadFederationInitPlan.ps1`, `Initialize-SquadFederation.ps1`,
+`Get-SquadRosterExpansionPlan.ps1`, `Expand-SquadRoster.ps1`,
 `Write-SquadHandoff.ps1`, `Measure-SquadLedger.ps1`,
 the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`, and
 `Initialize-SquadConsumptionRates.ps1`.
@@ -33,10 +37,10 @@ controls, not a sandbox or a substitute for host filesystem permissions.
 
 | Surface | Current controls | Residual boundary |
 |---|---|---|
-| Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell refresh, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
+| Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell and additive roster expansion, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
 | Offline capability evidence | Exact model/configuration checks, explicit verification dates, common versioned panels, digest validation and visible fallback | Curated verification facts and source hashes are not authenticated measurement signatures. |
 | External file exchange | Closed schemas, request/result identity matching, output allowlists, structural path containment | A matching envelope does not authenticate its author. |
-| Persistence | Scribe payload validation, hash/CAS routing and preflight transactions, binding-matched provenance, distinct member accounting, ledger checks | History is local and editable by principals with repository write access. |
+| Persistence | Scribe payload validation, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, ledger checks | History and lifecycle plans are local and editable by principals with repository write access; exact hashes detect changes but do not authenticate authors. |
 | Domain execution | Consumer-owned adapter; no connector command execution | Host permissions and consumer automation govern actual source changes. |
 
 Ratings are qualitative under the assumption that an external producer can
@@ -85,6 +89,29 @@ Different filesystem permissions or unattended policies change the risk.
   exposes native per-top-level-agent token categories and credits, and rolls nested
   agents up through host parent identities. It never emits prompts, responses, tool
   arguments, or raw log lines; those logs are not connector identity evidence.
+* The promotion planner writes only a transport plan outside squad state. It hashes
+  the complete plain-squad tree and every candidate directory. The promotion writer
+  requires that exact plan hash plus an exhaustive relocate/keep partition, stages
+  the final federation, revalidates under the ordinary writer lock, refuses linked
+  paths/collisions/replay, and publishes only verified local copies. The plan and
+  lock establish local integrity and serialization, not user identity.
+* The federation Init preparer validates every new member through the standard
+  Init payload builder and seals either a fresh root or the existing federation
+  snapshot. The initializer runs member transactions in parallel inside an
+  isolated stage and requires all receipts/ledgers. Fresh Init lock-publishes one
+  complete tree; Expansion validates an additive projection, then moves only new
+  members and owned root files under the same lock. A member failure or stale root
+  discards the stage. `Initialize-Squad.ps1` accepts a distinct agent validation
+  root only for the initializer's owned `.squad-federation-init-*` repository
+  stage, preventing general cross-repository roster validation.
+* The roster expansion planner resolves only confirmed shipped catalog roles and
+  packs, validates installed dispatchable Primaries, seals the selected root's
+  state/accounting/history and (for a member) its registry row, and emits exact
+  final roster/routing/decision bytes. The apply helper requires that plan hash,
+  revalidates under the plain lock or ordered federation/member locks, writes only those three files,
+  preserves accounting/state/history byte-for-byte, and checks the ledger
+  read-only. Recasting, removal, duplicate-role members, connectors, and existing
+  root edits remain outside this writer.
 
 ### Data Flow
 
@@ -239,6 +266,21 @@ The wrapper supplies the real workspace and immutable collision baseline,
 checks hashes, and publishes without overwrite. A stateless validation call
 alone does not prove replay protection or request/snapshot immutability.
 Use distinct write scopes; separate report roots do not isolate source writers.
+Promotion additionally rejects a changed plan hash, source/candidate digest,
+candidate set, required-directory omission, existing federation or destination
+collision before publish. Federation Init/Expansion binds the exact payload hash
+to either an absent/empty root or a snapshot of every root/history file, registered
+member state total and member-directory name. Expansion validates a staged final
+projection, refuses name/route/history collisions, revalidates under the root
+writer lock, never replaces existing member trees, and rolls back only files and
+member moves whose owned hashes still match. A principal able to replace both the
+installed scripts and the confirmed plan remains inside the trusted operator
+boundary.
+Roster expansion similarly binds exact final bytes to the current roster,
+routing, decisions, state, accounting, rates, notifications, history, and
+optional federation registry hashes. It refuses stale baselines and restores
+only files still matching its planned output, so it cannot silently overwrite a
+concurrent writer or reprice an exact ledger.
 
 ### Repudiation
 
@@ -289,6 +331,8 @@ least-privilege worktrees and isolation outside the prompt layer.
 | Escaping/undeclared report path | Medium | High | Medium | Wrapper filesystem/content checks tested; filesystem races and host permissions remain deployment boundaries |
 | Duplicate/partial or absent delivery | Medium | Medium | Medium | Consumer/shim lifecycle and atomic publication required |
 | Sensitive report/log disclosure | Deployment-dependent | High | Medium | Data minimization, content checks, and host ACLs required |
+| Stale or tampered federation promotion plan | Low | High | Low | Exact plan SHA-256, full-tree digests, explicit candidate partition, linked-path refusal, locked revalidation and staged publish |
+| Partial or conflicting federation initialization/expansion | Low | High | Low | Exact payload SHA-256, fresh/existing root snapshot, isolated parallel member staging, all-member receipt gate, root CAS lock, additive publish and owned-hash rollback |
 
 ## Enterprise Readiness Gaps
 
@@ -307,5 +351,11 @@ least-privilege worktrees and isolation outside the prompt layer.
 * [Connector resolver](scripts/Resolve-SquadConnectorDispatch.ps1)
 * [Connector lifecycle wrapper](scripts/Invoke-SquadConnectorDispatch.ps1)
 * [Handoff writer](scripts/Write-SquadHandoff.ps1)
+* [Promotion planner](scripts/Get-SquadPromotionPlan.ps1)
+* [Promotion transaction](scripts/Promote-SquadFederation.ps1)
+* [Federation Init preparer](scripts/Get-SquadFederationInitPlan.ps1)
+* [Federation Init transaction](scripts/Initialize-SquadFederation.ps1)
+* [Roster expansion planner](scripts/Get-SquadRosterExpansionPlan.ps1)
+* [Roster expansion transaction](scripts/Expand-SquadRoster.ps1)
 * [Consumer guide and examples](https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/CONSUMER-GUIDE.md)
 * [Repository security policy](https://github.com/Peter-N91/hve-squad/blob/main/SECURITY.md)

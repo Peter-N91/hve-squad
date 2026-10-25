@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-25"
 ---
 
 # Squad Reference Index
@@ -19,7 +19,9 @@ load only references that contract conditionally requires.
 |----------------------------------------------------|---------------------------------------------------------------------------|
 | [coordinator-runtime.md](coordinator-runtime.md) | Single/member startup |
 | [coordinator-init.md](coordinator-init.md) | Fresh confirmed Init |
+| [roster-expansion.md](roster-expansion.md) | Confirmed additive catalog-role or pack expansion |
 | [federation-runtime.md](federation-runtime.md) | Federation startup |
+| [federation-init.md](federation-init.md) | Fresh confirmed federation Init |
 | [state-write-contract.md](state-write-contract.md) | Manual/no-runtime writes |
 | [coordinator-legacy.md](coordinator-legacy.md) | Single-squad fallback |
 | [federation-coordinator-legacy.md](federation-coordinator-legacy.md) | Federation fallback |
@@ -36,7 +38,7 @@ load only references that contract conditionally requires.
 | [entry-schemas.md](entry-schemas.md) | Decision/history/state schemas |
 | [scribe-payload-template.md](scribe-payload-template.md) | Cold payload fields/order |
 | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) | Init/refresh, memory/learnings |
-| [scribe-cold-federation.md](scribe-cold-federation.md) | Federation seed/promotion/expansion/history |
+| [scribe-cold-federation.md](scribe-cold-federation.md) | Unsupported-host federation lifecycle, repairs and root history |
 | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Verdicts, summaries, notifications |
 | [seed-templates.md](seed-templates.md) | Init roster/routing templates |
 | [consumption.md](consumption.md) | Ledger, estimator, Cost Preflight |

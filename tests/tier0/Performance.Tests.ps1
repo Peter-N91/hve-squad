@@ -408,6 +408,10 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
                 Before = '**Pending reservation.** `pending_usd` is `0` whenever every child that has returned also has a verified Scribe hand-off, which is always the case without autopilot hand-off pipelining. Under pipelining, the round that admits stage N+1 runs after stage N''s child has returned but before stage N''s Scribe hand-off is dispatched, so `currentRun.estCostUsd` does not yet include stage N. For each such returned-but-unrecorded child slot, add its admitted unrounded `Projected Cost` times `reserve_multiplier` to `pending_usd`. The persisted `evaluatedSpendUsd` is `evaluated_spend_usd`, so `remainingUsd = ceilingUsd - evaluatedSpendUsd` still holds. Once that hand-off verifies, the recorded ledger figure replaces the reservation at the next round, which bounds any estimate drift to one stage. Never subtract a reservation from recorded spend or carry it into `currentRun.estCostUsd`.'
                 After  = '**Pending reservation.** `pending_usd` is the still-running or returned-but-not-yet-metered admitted work. Keep it until complete usage records for that unit appear, then drop the reservation because exact host spend has replaced it. Never add an already-metered reservation twice.'
             }
+            @{
+                Before = '1. **Choose the sub-squad name.** Default to a name derived from the existing squad''s seeded profile (for example, `default`, `azure`, `product`), normalized to lower-kebab-case and validated per *Sub-Squad Naming and Uniqueness*. The user may override. The name must not collide with an existing `members/<name>/` directory.'
+                After  = '1. **Choose the sub-squad name and seal a plan.** Default to a name derived from the existing squad''s seeded profile (for example, `default`, `azure`, `product`), normalized to lower-kebab-case and validated per *Sub-Squad Naming and Uniqueness*. Run `Get-SquadPromotionPlan.ps1` with that name and a new transport path outside squad state. It writes no state; it seals compact digests for the complete squad and every candidate directory. The name must not collide with an existing member directory.'
+            }
         )
         foreach ($migration in $approvedMigrations) {
             $baselineSentences | Should -Contain $migration.Before -Because 'approved migrations must remain tied to the captured BEFORE baseline'
@@ -426,6 +430,8 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
             @{ Before = 'Planned-dispatch manifest'; After = 'Actual next-wave reservation' }
             @{ Before = 'Comparison methodology (token terms)'; After = 'Comparison methodology' }
             @{ Before = 'Observed usage (host-reported)'; After = 'Exact native role usage' }
+            @{ Before = 'Steps (Scribe-performed)'; After = 'Steps (script-backed)' }
+            @{ Before = 'Federation Initialization and Expansion'; After = 'Federation Initialization Compatibility Fallback and Expansion' }
         )
         foreach ($migration in $migrations) {
             $baselineHeadings | Should -Contain $migration.Before -Because 'the heading migration must remain tied to the captured BEFORE baseline'

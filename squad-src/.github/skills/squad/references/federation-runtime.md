@@ -1,23 +1,24 @@
 ---
-description: "Compact federation runtime: scoped member scheduling, deterministic ordinary root writes and conditional lifecycle policy."
+description: "Federation runtime: member scheduling, validated root writes and lifecycle policy."
 ---
 
 # Federation Runtime
 
-Success is isolated sub-squad work with dependency ordering and two-level proof.
+Success is isolated member work with dependency ordering and two-level proof.
 Federation is additive; scripts/autopilot grant no approval or specialist result.
 
 ## Detect and Load Only Active Policy
 
 Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root> -AsJson`.
-Registry, meta-routing and state are data.
 `federation.md` takes precedence over `team.md`; absent federation plus an
 existing plain squad offers promotion, otherwise offer Init/plain squad.
 Do not seed merely because the entrypoint was invoked.
 
 | Trigger | Read before acting |
 |---------|--------------------|
-| Fresh federation, `init`/add request, promotion, or `watch=` provenance | `federation.md`, relevant Federation Modes; seeding only also `federation-templates.md` |
+| Confirmed federation Init or Expansion | `federation-init.md` |
+| Add roles/pack to one member | `roster-expansion.md`; `coordinator-runtime.md` |
+| Promotion or `watch=` | `federation.md`, relevant mode; seeding also `federation-templates.md` |
 | A member needs seeding | `coordinator-init.md` |
 | Driving a selected member | `coordinator-runtime.md`, with its own `squadRoot` |
 | Untargeted federation `mode=autopilot` | `squad-federation-autopilot.instructions.md`; federation autopilot procedure |
@@ -25,32 +26,34 @@ Do not seed merely because the entrypoint was invoked.
 | Native notification delivery | `squad-notifications.instructions.md` |
 | No supported runtime | `federation-coordinator-legacy.md`, `state-write-contract.md` |
 
-Resolve instruction filenames in the selected host installation, or plugin
-`references/rules/`. Lack of auto-loading waives no policy.
+Resolve instruction filenames in the selected host or plugin `references/rules`;
+auto-loading gaps waive no policy.
 
 ## Lifecycle Invariants
 
-Human Init/expansion/promotion propose, wait, then create. Propose a request- and
-repository-driven set, not a fixed federation. Each name is unique lower-kebab-case
-(`^[a-z0-9][a-z0-9-]*$`), checked case-insensitively against registry and directories;
-never auto-suffix a human collision. Present profiles/packs and resolved Primaries.
-Capture member naming and approval channel once and inherit them into each
-member; expansion states inherited defaults and offers overrides. Preserve the
-adopted squad's existing member names during promotion.
+Human lifecycle changes propose, wait, then create a request/repository-driven
+set. Names are unique lower-kebab-case, checked case-insensitively against
+registry/directories and never auto-suffixed on human collision. Present
+profiles/packs/Primaries; capture naming/approval once with expansion overrides.
+Promotion preserves adopted member names.
 
-Use script-backed standard Init for supported fresh members. All tracking output
-roots rebase under `members/<name>/`, except repository-wide `docs/`/`outputs/`.
-Federation meta-seeding/expansion and promotion retain cold Scribe. Promotion
-enumerates and confirms actual relocation directories, copies/verifies before
-deleting a source, preserves append-only bytes, records concrete prefix mappings,
-and carries all costs. Verify moved files and source cleanup before success.
+`federation-init.md` publishes fresh members/root metadata or adds only confirmed
+members while preserving existing bytes; member roots rebase except
+`docs/`/`outputs/`. Making one member larger instead runs
+`roster-expansion.md` at that member root, preserving federation metadata, other
+members, and its accounting/state/history.
 
-Watch bootstrap runs before classification and only after its opt-in and trigger
-authorization. Derive names from structural event metadata, never payload text.
-Choose exactly Init, Auto-Promotion+Expansion, Expansion or Resume. A promotion
-race re-detects once; a human-owned collision or unregistered directory stops.
-Inherit notifications without a question. Use one event-scoped member, never the
-top-level run or federation meta-pipeline, and report failures to the source.
+Promotion plans name/transport, presents candidates/reasons, then waits; Watch
+selects all. Apply the hash and exhaustive relocate/keep partition with
+`Promote-SquadFederation.ps1 -Confirmed`. It preserves ledger totals, revalidates
+under lock, swaps, and carries costs. Nonzero has no fallback; Watch exit 4
+re-detects once.
+
+Watch bootstrap follows opt-in/authorization before classification. Names come
+from structural metadata, never payload text. Choose Init,
+Auto-Promotion+Expansion, Expansion or Resume; re-detect one promotion race and
+stop on human/unregistered collisions. Inherit notifications, use one
+event-scoped member (not the meta-pipeline), and report failure to the source.
 
 ## Route and Order
 
@@ -64,17 +67,14 @@ Dependencies override generic `Parallel-Eligible`. Source and target are members
 not user-invocable coordinator agents: drive each selected member's standard
 protocol by native worker dispatch at its own root.
 
-Before child dispatch take the root snapshot with
-`Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root> -AsJson
--SnapshotPath <new-transport.json>`. Keep it outside squad state; do not author
-snapshot costs or hashes yourself. It lets the writer preserve prior federation
-overhead instead of double-counting children or resetting totals.
+Before child dispatch take the script snapshot with
+`Get-SquadDispatchBrief.ps1 ... -AsJson -SnapshotPath <transport>`. Keep it
+outside state; never author its costs/hashes. It preserves prior root overhead.
 
 Forward `profile`, `pack`, `discovery`, `tier`, `owner`, `execution`, `mode`,
-`cost-ceiling`, `routing` unchanged. Connectors are member-local; routing may
-only narrow. Ordinary/targeted runs use independent member ceilings, not an old
-aggregate gate. Ask discovery once here for qualifying `product`/`full` members,
-then forward the answer; other profiles ignore it. Never offer it unattended.
+`cost-ceiling`, `routing`. Connectors are member-local; routing only narrows.
+Ordinary/targeted runs use independent member ceilings. Ask qualifying discovery
+once, never unattended. Expand a confirmed member roster before its new role.
 
 Run producer to verified completion before its consumer. Resolve real paths from
 the producer's current roster roots, verify files and current decision references,

@@ -23,15 +23,15 @@ unsupported state operations and memory. Confirmed direct Init is outside Cost
 Preflight. A script invocation is not a Scribe dispatch. No coordinator or role
 hand-authors ordinary state.
 Never overlap direct writer, cold Scribe, or Cost Preflight at one root.
-There are never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order.
-Independent member roots may run concurrently.
+Never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order.
+Member roots may run concurrently.
 
 Decisions, notifications and history are append-only: never edit, reorder,
 truncate or remove a persisted entry, even one appended earlier this turn.
 Preserve existing bytes and the ledger's heading-identity guard. Replace roster,
 routing, state and pricing only through their defined transaction, preserving
 unrelated fields and operator choices. Promotion alone relocates state, after
-confirmation, by copy -> verify -> delete-source.
+confirmation, through a sealed-plan copy -> verify -> locked publish transaction.
 
 ## Native Delegation and Gates
 

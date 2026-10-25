@@ -26,7 +26,7 @@ Only `github-issue` closes the loop for a truly unattended run: it both reaches 
 
 ## Capture at Squad Build
 
-The capture is a **required question, with an optional answer**. Every build path that seeds a `notify` object — a plain squad's Init Mode, a federation's Init, Promotion, and Expansion Modes — must put the question to the user and wait for an answer before the Scribe stamps out state. The coordinator never resolves it silently to the default, never infers it from the request, and never treats it as a step it may compress away because the default is `in-chat`. `enabled: false` records a decision the user made, not a question the squad skipped. The single exception is an unattended run, which has no user to ask (see *Capture in a Federation* and *Unattended Runs*).
+The capture is a **required question, with an optional answer**. Every build path that seeds a `notify` object — a plain squad's Init Mode, a federation's Init, Promotion, and Expansion Modes — must put the question to the user and wait for an answer before the validated writer or Scribe stamps out state. The coordinator never resolves it silently to the default, never infers it from the request, and never treats it as a step it may compress away because the default is `in-chat`. `enabled: false` records a decision the user made, not a question the squad skipped. The single exception is an unattended run, which has no user to ask (see *Capture in a Federation* and *Unattended Runs*).
 
 During Init Mode (see `.github/agents/squad/squad-coordinator.agent.md`), after the roster and naming choices are confirmed and before the Scribe stamps out state, the coordinator asks the user how they want to approve the squad's work:
 

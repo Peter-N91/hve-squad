@@ -38,13 +38,13 @@ A federation adds a small meta layer at the federation root (`.copilot-tracking/
 
 | Path                                   | Purpose                                                                     | Write Semantics    |
 |----------------------------------------|-----------------------------------------------------------------------------|--------------------|
-| `federation.md`                        | Registry of sub-squads (name, profile, kind, location, owner, description)   | Replace via scribe |
-| `meta-routing.md`                      | Request pattern / domain → sub-squad routing table                          | Replace via scribe |
+| `federation.md`                        | Registry of sub-squads (name, profile, kind, location, owner, description)   | Replace via validated Init or Scribe |
+| `meta-routing.md`                      | Request pattern / domain → sub-squad routing table                          | Replace via validated Init or Scribe |
 | `decisions.md`                         | Federation-level cross-squad routing decisions and rationale                | Append-only; Cost Preflight via coordinator |
 | `history/<sub-squad>.md`               | Per-sub-squad federation dispatch history (which sub-squad ran, for what)   | Append-only        |
 | `history/autopilot-run-<id>.md`        | Federation autopilot meta-run summary linking each sub-squad's inner run     | Append-only        |
-| `state.json`                           | Federation status: active sub-squads, mode, current-run cost, open escalations, federation-wide `notify` default | Replace via Scribe; Cost Preflight compare-and-swap via coordinator |
-| `consumption-rates.md`                 | Rate, estimator, and calibration source used only by untargeted federation autopilot | Replace via Scribe |
+| `state.json`                           | Federation status: active sub-squads, mode, current-run cost, open escalations, federation-wide `notify` default | Replace via validated writer or Scribe; Cost Preflight compare-and-swap via coordinator |
+| `consumption-rates.md`                 | Rate, estimator, and calibration source used only by untargeted federation autopilot | Replace via validated Init or Scribe |
 | `members/<name>/`                      | A full ordinary squad state tree (the sub-squad's `squadRoot`)              | Per squad-state    |
 
 Each `members/<name>/` directory is an unmodified squad: `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `history/<agent>.md`, `state.json`, `consumption.md`, and `consumption-rates.md`, all governed by `squad-state.instructions.md` rooted at `members/<name>/`.
@@ -67,35 +67,51 @@ The Squad Coordinator resolves what kind of squad a project has at the start of 
 
 An **event-triggered Watch Mode run** resolves the same precedence but never stops at case 2 or 3: it bootstraps whatever is missing (Init, automatic Promotion, or automatic Expansion) so the run always executes inside a sub-squad dedicated to its triggering event. See `.github/instructions/squad/squad-watch-mode.instructions.md`.
 
+### Federation Init Transaction
+
+After the user confirms all names, profiles, packs, owners, descriptions, routes,
+naming and notifications, `Get-SquadFederationInitPlan.ps1` validates every
+member through the standard single-squad payload builder and writes no state.
+`Initialize-SquadFederation.ps1` requires that exact payload hash and explicit
+confirmation. With no federation it initializes the member trees in parallel,
+seeds and prices the root meta layer, then publishes the complete federation.
+With an existing federation it seals the current root/member snapshot, initializes
+only the new member trees in parallel, builds a validated additive root projection,
+then commits the new directories and root metadata under the same writer lock.
+Existing member trees are never rewritten. A stale root, failed member, collision,
+timeout, invalid receipt or restore failure writes no successful state and never
+falls back to hand-authored or Scribe state. Hosts without the scripts retain the
+compatibility procedure.
+
 ## Promotion: Single Squad → Federation
 
 An existing single-squad project already has a top-level `team.md`, so the Init-Mode single-squad-or-federation offer (which fires only when neither `team.md` nor `federation.md` exists) never reaches it, and detection precedence keeps it a plain squad. **Promotion** is the additive path that adopts that existing squad into a federation as its first sub-squad without losing any state. It is opt-in and confirmation-gated: a consumer who never promotes is completely unaffected.
 
-Promotion is a **relocation, not a rebuild**. It moves the existing top-level squad tree under a named sub-squad root and seeds the thin meta layer; it never re-creates the roster or rewrites the append-only logs.
+Promotion is a **relocation, not a rebuild**. It moves the existing top-level squad tree under a named sub-squad root and seeds the thin meta layer; it never re-creates the roster or rewrites prior append-only bytes. Supported hosts execute the relocation through the sealed-plan transaction in `Get-SquadPromotionPlan.ps1` and `Promote-SquadFederation.ps1`; the Scribe procedure is compatibility fallback only when those scripts are unavailable.
 
 ### Trigger
 
 The Squad Federation Coordinator enters Promotion Mode when **all** of these hold: a top-level `team.md` is present, no top-level `federation.md` is present, and the user asks to move to a federation (or invokes `/squad-federation promote`). The single Squad Coordinator, on detecting a top-level `team.md` and a user request to federate, offers the handoff to `/squad-federation promote` rather than promoting anything itself. Nothing is moved or written before the user confirms.
 
-### Steps (Scribe-performed)
+### Steps
 
-1. **Choose the sub-squad name.** Default to a name derived from the existing squad's seeded profile (for example, `default`, `azure`, `product`), normalized to lower-kebab-case and validated per *Sub-Squad Naming and Uniqueness*. The user may override. The name must not collide with an existing `members/<name>/` directory.
-2. **Relocate the existing tree.** Move the full top-level squad state tree — `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/<agent>.md` — from `.copilot-tracking/squad/` into `.copilot-tracking/squad/members/<name>/`, preserving contents byte-for-byte apart from the single roster column step 5 rebases. Append-only files (`decisions.md`, `history/<agent>.md`, per-dispatch consumption blocks) are moved intact, never edited or truncated. Because the squad root is parameterized (`<squadRoot>/...`), the moved files keep working unchanged once rooted at `members/<name>/`.
-3. **Enumerate the pre-promotion deliverables from disk, never from the table.** The squad's artifacts were written to the single-squad deliverable roots, and *Deliverable Roots* in `.github/instructions/squad/squad-roster.instructions.md` rebases those roots under `members/<name>/` the moment the federation exists — so an artifact left at its old path falls outside the root its own roster now points at. The lookup table in *Deliverable Roots* names the roots the cast writes today; it does not name every directory a session produced. Build the candidate list by listing `.copilot-tracking/` and taking every directory except `squad/` itself, then confirm the list with the user before anything moves. Session directories such as `brd-sessions/`, `prd-sessions/`, `details/`, `plans/`, `research/`, and `changes/` are the common case, and a table-only list silently leaves them behind. When a candidate directory predates the squad or was produced by a plain workflow rather than by this squad, say so in the proposal and let the user keep it in place; ambiguity is resolved by asking, never by skipping silently.
-4. **Relocate the confirmed deliverables.** Move each confirmed directory into `.copilot-tracking/squad/members/<name>/`, preserving its internal structure and every file's contents byte-for-byte. `docs/` and `outputs/` stay at the repository root, because the same rebasing rule already exempts them as repository-wide outputs.
+1. **Choose the sub-squad name and seal a plan.** Default to a name derived from the existing squad's seeded profile (for example, `default`, `azure`, `product`), normalized to lower-kebab-case and validated per *Sub-Squad Naming and Uniqueness*. Run `Get-SquadPromotionPlan.ps1` with that name and a new transport path outside squad state. It writes no state; it seals compact digests for the complete squad and every candidate directory. The name must not collide with an existing member directory.
+2. **Enumerate from disk and confirm an exhaustive partition.** Present every planned directory under `.copilot-tracking/` except `squad/`, including file/byte counts and any `requiredToRelocate` reasons derived from roster roots or append-only history. The confirmed `RelocateDirectory` and `KeepDirectory` sets are disjoint and together name every candidate. A required candidate cannot be kept. Ambiguity is resolved by asking, never by omission.
+3. **Apply the exact sealed plan.** Invoke `Promote-SquadFederation.ps1` with the exact plan SHA-256 and `-Confirmed`. A changed source tree, candidate, plan file, candidate set, existing federation or member collision refuses before mutation.
+4. **Stage, verify, then publish.** The writer builds the complete final federation in a sibling transaction directory, copies and verifies every source tree, rebases the roster, appends a zero-consumption promotion entry, preserves and checks the ledger/totals, and validates the federation snapshot. Only then does it take the ordinary writer lock, revalidate the plan, move sources into a rollback backup and publish the staged root. A pre-commit failure leaves every source path intact; a publish failure restores owned sources when they remain unchanged.
 5. **Rebase the relocated roster's deliverable roots.** The moved `team.md` still points every role at the repository-root tracking paths the artifacts just left, so prefix each `Deliverable Root` cell that begins with `.copilot-tracking/` with `.copilot-tracking/squad/members/<name>/`, leaving `docs/` and `outputs/` unchanged. Rebase whatever the cell holds, including a path the consumer edited by hand, so a customized root survives the promotion pointing at its own relocated directory. This column is the one field a promotion rewrites, and it is deliberate: `team.md` has replace semantics, and the byte-for-byte guarantee protects the append-only logs rather than freezing a roster whose paths the promotion has just invalidated. Nothing else in the roster changes — no role is re-cast, renamed, added, or dropped.
 6. **Seed the meta layer** at the federation root `.copilot-tracking/squad/`: `federation.md` with one row for the promoted sub-squad (profile inferred from the moved `team.md`, `kind=in-repo`, `location=members/<name>/`); `meta-routing.md` whose patterns all route to that sole sub-squad initially (derived from its profile and description); a federation `decisions.md` whose first entry records the promotion and the source→destination move; `history/<name>.md`; and a federation `state.json`.
-7. **Carry the consumption ledger across the boundary.** The relocated `consumption.md` and `consumption-rates.md` describe a run that continues after the promotion, so the promotion itself is a recorded turn rather than a gap in the ledger: the Scribe writes the promotion's orchestration consumption into the relocated sub-squad's `members/<name>/history/scribe.md` and rewrites `members/<name>/consumption.md` from the relocated history, then seeds the federation `state.json` `currentRun` cost totals from that ledger's total row. A federation whose first turn reports zero cost while the sub-squad it just adopted carries a populated ledger is reporting the promotion as free, which it was not.
+7. **Carry the consumption ledger across the boundary.** The relocated `consumption.md` and `consumption-rates.md` describe a continuing run. Record the model-free promotion in `members/<name>/history/Squad Scribe.md` without a Consumption block, preserve `consumption.md` and member run totals unchanged, check the ledger read-only, and seed federation totals from that verified member state.
 
 The move (step 2) removes the top-level `team.md`, so detection precedence flips from "top-level `team.md`" (plain squad) to "top-level `federation.md`" (federation) the moment promotion completes. From the next turn, `/squad-federation` owns turns and `/squad` detects the federation and defers.
 
 ### Copy, Verify, Then Delete
 
-Every move in steps 2 and 4 is a **copy → verify → delete-source** sequence, in that order, per file. Write the destination first, read it back and confirm it matches the source, and only then remove the source. Nothing at the source is removed, cleared, or truncated before its destination copy exists and has been verified.
+Every source tree in step 4 follows **copy → verify → remove-source**, in that order. The final destination is completely staged and checked first. Source paths disappear only inside the short locked publish, where they are renamed into the rollback backup before the stage replaces them. Nothing is cleared or truncated before its verified copy exists.
 
 Deleting first is the one failure mode this contract exists to prevent: a relocation that clears the source and then cannot find the files to move has destroyed append-only decision and history logs that no later step can reconstruct. When a destination write fails, stop and escalate with the source still intact; a partially relocated tree with an intact source is recoverable, and a deleted source is not.
 
-**Every destination path is written from the project root, including the parent directories the move creates**, and the promotion creates nothing outside `.copilot-tracking/squad/`. `.copilot-tracking/squad/members/<name>/plans/` is the whole path, not a segment to append to wherever the last step was working. The observed failure created its destinations from inside `.copilot-tracking/` and left `.copilot-tracking/.copilot-tracking/squad/members/<name>/` behind — empty, so no file was lost and no step reported a failure, while the tree gained a second tracking directory that every later path resolution has to step around. Before the promotion is confirmed, list `.copilot-tracking/` and remove anything the move created by accident, along with any directory the move emptied.
+**Every destination path is resolved from the project root**, and the transaction creates only its named stage/backup siblings under `.copilot-tracking/`; both are removed before a success receipt. `.copilot-tracking/squad/members/<name>/plans/` is the whole final path, never a segment appended to the caller's working directory. The writer rejects a nested `.copilot-tracking/`, verifies relocated sources are absent, verifies kept directories still match their sealed digests, and reports no success while a transaction directory remains.
 
 ### Guards
 
@@ -108,11 +124,11 @@ Deleting first is the one failure mode this contract exists to prevent: a reloca
 
 An event-triggered **Watch Mode** run has no human in the loop at trigger time, yet it must execute inside an event-scoped sub-squad. When such a run finds a plain single squad — a top-level `team.md` and no `federation.md` — it performs the same promotion **auto-approved**, then adds the event's own sub-squad through *Automatic Expansion* below. The full trigger contract is `.github/instructions/squad/squad-watch-mode.instructions.md`.
 
-Everything about the promotion is otherwise identical: the same Scribe-performed relocation, the same copy → verify → delete-source ordering, the same byte-for-byte preservation of the append-only logs, the same meta-layer seed, the same collision refusal, the same consumption carry-over. Only the confirmation step differs, and that exception is deliberately bounded — the operation writes only under `.copilot-tracking/`, it runs only after the Watch Mode opt-in gate and trigger authorization have already passed, it is a relocation rather than a rebuild, and it waives no Human Gate inside the run.
+Everything about the promotion is otherwise identical: the same sealed-plan writer, verified staging, append-only-prefix preservation, meta-layer seed, collision refusal and consumption carry-over. Only the confirmation step differs, and that exception is deliberately bounded — the operation writes only under `.copilot-tracking/`, it runs only after the Watch Mode opt-in gate and trigger authorization have already passed, it is a relocation rather than a rebuild, and it waives no Human Gate inside the run.
 
 * **Unattended deliverable enumeration.** There is no user to confirm the candidate list, so the run moves every `.copilot-tracking/` directory except `squad/` and records the moved list in the promotion decision entry for a human to review. A collision still stops the run rather than resolving itself.
 * **Name derivation.** The promoted sub-squad takes the name of the profile recorded in the existing `team.md` (for example `azure`, `product`), normalized and validated per *Sub-Squad Naming and Uniqueness*, falling back to `default` when the profile cannot be read. The name is never derived from the triggering event, because the squad predates it.
-* **Concurrent promotion is a compare-and-swap.** Two events may be in flight and both observe a plain single squad. The Scribe's existing refusal when a `federation.md` already exists is the swap check: the loser re-detects the repository state once and continues as an expansion instead. Only a second consecutive failure escalates.
+* **Concurrent promotion is a compare-and-swap.** Two events may be in flight and both observe a plain single squad. The promotion writer's locked revalidation and exit 4 are the swap check: the loser re-detects the repository state once and continues as an expansion instead. Only a second consecutive failure escalates.
 * **Escalation, not overwrite.** A collision with an existing `members/<name>/` directory stops the run and escalates on the source thread, exactly as the interactive guard does. Watch Mode never proceeds without its sub-squad.
 
 ## Expansion: Add a Sub-Squad to an Existing Federation
@@ -123,11 +139,12 @@ Once a federation exists, a team can grow it by **adding a new sub-squad** — f
 
 The Squad Federation Coordinator runs Expansion when a top-level `federation.md` is present and the user asks to add a sub-squad (or passes `init`, which on an existing federation means expand, not rebuild). Nothing is written before the user confirms.
 
-### Steps
+### Steps (script-backed)
 
-1. **Propose the new sub-squad(s).** Each is a unique lower-kebab-case name, a profile (or a custom roster), an optional owner, and a one-line description, proposed from the repo and request exactly as Init proposes a sub-squad. Validate each name per *Sub-Squad Naming and Uniqueness*, comparing it against the existing `federation.md` rows and the `members/` directories.
-2. **Seed the new sub-squad's tree** under `members/<new>/` via the standard Squad Coordinator Init scoped to that root (its `team.md`, `routing.md`, `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/`), exactly as Federation Init Phase 2 seeds each sub-squad.
-3. **Register it (Scribe-performed, preserve-on-replace).** `federation.md` and `meta-routing.md` use replace semantics, so the Scribe **read-merge-writes** them: it appends the new sub-squad's registry row to `federation.md` and its pattern → sub-squad route to `meta-routing.md`, preserving every existing row and route. It appends a federation-level `decisions.md` entry recording the addition and creates `history/<new>.md`. Existing sub-squad rows, routes, decisions, and history are never edited or removed.
+1. **Propose the new sub-squad(s).** Each is a unique lower-kebab-case name, a profile (or a custom roster), an optional owner, and a one-line description, proposed from the repo and request exactly as Init proposes a sub-squad.
+2. **Prepare one sealed Init payload.** Run `Get-SquadFederationInitPlan.ps1`. It validates names against both the registry and member directories, rejects route/history collisions, validates every new roster through the single-squad Init builder, and seals the current federation root files plus registered member state.
+3. **Apply the exact payload.** Run `Initialize-SquadFederation.ps1 -Confirmed` with the exact payload hash. It initializes all new members in parallel inside an isolated stage, requires every ledger receipt, and builds the final root projection without copying or editing any existing member tree.
+4. **Commit additively under the root lock.** The transaction revalidates the sealed federation, moves only the verified new member directories, appends registry/routes/decisions/history, advances aggregate state and verifies the final snapshot. A stale root, collision, timeout or failed write rolls back owned changes and returns nonzero; never dispatch Scribe as a retry.
 
 ### Guards
 
@@ -137,7 +154,11 @@ The Squad Federation Coordinator runs Expansion when a top-level `federation.md`
 
 ### Automatic Expansion (Watch Mode)
 
-A **Watch Mode** run adds its own event-scoped sub-squad through this same expansion path, **auto-approved** rather than confirmation-gated, for the same bounded reasons given under *Automatic Promotion (Watch Mode)*. The registration is unchanged: preserve-on-replace read-merge-write of `federation.md` and `meta-routing.md`, a federation-level `decisions.md` entry, and a new `history/<name>.md`.
+A **Watch Mode** run adds its own event-scoped sub-squad through this same
+transaction, **auto-approved** rather than confirmation-gated, for the same
+bounded reasons given under *Automatic Promotion (Watch Mode)*. Supported hosts
+use the sealed Init payload and additive locked commit; compatibility hosts use
+the preserve-on-replace cold procedure.
 
 * **Event-derived name.** The new sub-squad's name comes from the event's structural identity (`issue-<N>`, `pr-<N>`, `sweep-<YYYY-MM-DD>`, `push-<branch-slug>-<sha7>`, `dispatch-<runId>`), never from payload prose. The naming table and normalization rules live in `.github/instructions/squad/squad-watch-mode.instructions.md`.
 * **Reuse before create.** When the derived name already exists as a watch-owned sub-squad whose recorded trigger provenance matches this event, the run reuses it and no expansion occurs. A watch-owned name with different provenance is disambiguated by appending the workflow run id once.
@@ -252,7 +273,16 @@ Meta-routing decides *which sub-squad* handles a request, the layer above the pe
 
 ## Two-Level State and the Single Writer
 
-Federation-root operations remain cold Scribe work. Supported ordinary member-root handoffs may run the validated writer directly and synchronously with `-Quiet` in every routing mode, per `references/economy-scribe.md`. Serialize direct writer, cold Scribe, and Cost Preflight at each root. Initialization stays outside admission; Cost Preflight remains the narrow coordinator hand-edited transaction (matching decision plus compare-and-swap `currentRun.costPreflight`, then read back).
+Supported Init/Expansion, Promotion, and ordinary federation handoffs use their
+validated root writers. Member roster growth is member-scoped; root state is
+unchanged. Aggregate summaries, repairs, renames/removals and
+unsupported-host fallbacks remain cold Scribe work. Supported ordinary
+member-root handoffs run the validated writer directly and synchronously with
+`-Quiet` in every routing mode, per `references/economy-scribe.md`. Serialize
+direct writer, cold Scribe, and Cost Preflight at each root. Initialization stays
+outside admission; Cost Preflight remains the narrow coordinator hand-edited
+transaction (matching decision plus compare-and-swap
+`currentRun.costPreflight`, then read back).
 
 * **Sub-squad level.** When the Federation Coordinator drives a sub-squad, the Scribe writes that sub-squad's `decisions.md`, `history/<agent>.md`, `consumption.md`, and the rest under `members/<name>/`, exactly as for a plain squad. Proof-of-dispatch is unchanged: a sub-squad stage is proven by a `members/<name>/history/<agent>.md` entry plus its consumption block. The pre-work gates are sub-squad state like everything else: a `## Discovery Verdict` and a `## Intake Readiness Verdict` land in `members/<name>/decisions.md`, and a discovery brief lands in `members/<name>/plans/`, never at the federation root.
 * **Federation level.** Ordinary or targeted routing forwards the same ceiling lifecycle to every selected sub-squad, where each ceiling is independent; the root records routing but performs no aggregate preflight. Untargeted `mode=autopilot` instead keeps one aggregate ceiling at the root, uses the root rate table, and does not double-gate child runs. Federation decisions and `history/<sub-squad>.md` link both levels.

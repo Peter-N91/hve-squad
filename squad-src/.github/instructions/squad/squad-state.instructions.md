@@ -40,7 +40,7 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 
 ### state.json Shape
 
-The Scribe seeds `state.json`; the validated ordinary writer or cold Scribe advances it. In every routing mode, the coordinator may synchronously run `Write-SquadHandoff.ps1 -Quiet` using the minimal JSON in `references/economy-scribe.md`, without loading cold schemas or dispatching Scribe. It may also apply an actual-plan, hash-bound Model-cell refresh through `Set-SquadModelRouting.ps1`; that transaction changes only selected `team.md` cells plus its decision. Serialize direct writer, routing refresh, cold Scribe, and Cost Preflight per root. Quiet success requires one valid status/count/check object; warnings stay visible on stderr. Failure never permits unvalidated hand edits or ordinary ledger arithmetic. Before a child dispatch the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching decision and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`.
+The Scribe seeds `state.json`; the validated ordinary writer or cold Scribe advances it. In every routing mode, the coordinator may synchronously run `Write-SquadHandoff.ps1 -Quiet` using the minimal JSON in `references/economy-scribe.md`, without loading cold schemas or dispatching Scribe. Hash-bound Model-cell and additive-roster writers change only their sealed configuration/decision files, never state or accounting. Serialize every writer with Cost Preflight per root. Quiet success requires one valid status/count/check object; warnings stay visible on stderr. Failure never permits unvalidated hand edits or ordinary ledger arithmetic. Before a child dispatch the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching decision and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`.
 
 ```json
 {
@@ -196,9 +196,12 @@ Totals are computed by summing the rows, never estimated. The total row must equ
 
 ## State Ownership
 
-Only the owning coordinator initiates state changes. Ordinary writes use the synchronous validated script in every routing mode; routine active-policy Model-cell refresh uses the hash-bound routing writer; cold operations use Scribe. Cost Preflight remains the narrow coordinator-edited state transaction: compare `updated`, change only `currentRun.costPreflight` plus the exact legacy schema bump, append its decision, read back, and dispatch nothing on collision or mismatch. Other cast agents never write squad state directly.
+Only the owning coordinator initiates state changes. Supported ordinary and
+configuration writes use validated scripts; cold operations use Scribe. Cost
+Preflight remains the narrow compare-and-swap transaction. Other cast agents
+never write squad state directly.
 
-One writer per root keeps concurrent roles from racing: serialize direct writer, routing refresh, cold Scribe, and Cost Preflight. Under cold autopilot pipelining, at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order. Direct ordinary handoffs and routing refreshes run synchronously, never alongside another writer; each federation member applies this independently.
+One writer per root keeps concurrent roles from racing: serialize direct writer, routing refresh, roster expansion, cold Scribe, and Cost Preflight. Under cold autopilot pipelining, at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order. Direct ordinary handoffs, routing refreshes, and roster expansions run synchronously, never alongside another writer; each federation member applies this independently.
 
 ## Proof of Dispatch
 

@@ -20,11 +20,15 @@ For fresh single-squad/member-root Init, read only `references/scribe-init.md`, 
 
 ## Cold operations
 
-Before refresh, fallback init, verdicts, notifications, memory, ceiling-admitted slots, federation-root writes, promotion/expansion, summaries, or other cold work, read `references/scribe-cold-charter.md` in full, then the full legacy procedure, schema, payload template, and conditional references named by `scribe-procedure.md`'s Cold-File Dispatch Table. Apply verbatim; missing required fields fail without partial writes. Cold loading is not a validation bypass.
+Before cold work — refresh, unsupported lifecycle fallback, verdict, notification,
+memory, admitted slot, aggregate root write, repair or summary — read `references/scribe-cold-charter.md` in full,
+then its named legacy references. Supported
+Init/Expansion/Promotion never dispatch Scribe. Missing fields fail; no partial
+write. Cold loading is not a validation bypass.
 
 ## Portable safety floor
 
-One writer per resolved `squadRoot`: serialize direct writer, cold Scribe, and Cost Preflight; never overlap them or background Scribe. Preserve unrelated state and admission references. Decisions/history are append-only, each history entry needs its consumption block, and ceiling slots are admitted once. Scope paths to the supplied root; only cold promotion may relocate state.
+Serialize all writers and Cost Preflight per `squadRoot`; never overlap or background Scribe. Preserve unrelated state and admission references. Decisions/history are append-only, each history entry needs consumption, and ceiling slots are admitted once. Only the promotion writer or cold fallback may relocate state.
 
 Never edit persisted history, even this turn's entries.
 

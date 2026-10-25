@@ -116,8 +116,14 @@ narrow. Ask discovery once at federation level, never on unattended paths.
 Use `Write-SquadHandoff.ps1 -Quiet` directly and synchronously with minimal JSON
 inside members. Supported ordinary root writes use
 `Write-SquadFederationHandoff.ps1` with its pre-dispatch snapshot and inner proofs.
-Unsupported lifecycle and aggregate operations use cold Scribe, never manual
-fallbacks after a failed validation. Serialize all writers per root.
+Promotion uses `Get-SquadPromotionPlan.ps1` before confirmation and
+`Promote-SquadFederation.ps1` afterward; pass the exact plan hash and an exhaustive
+relocate/keep partition. Federation Init uses
+`Get-SquadFederationInitPlan.ps1` then `Initialize-SquadFederation.ps1` for both
+a fresh federation and adding members to an existing one. Aggregate operations,
+repairs and unsupported-host lifecycle fallbacks remain cold Scribe. Never
+hand-write a fallback after script validation fails.
+Serialize all writers per root.
 
 ## Stops and Response
 

@@ -284,8 +284,24 @@ Confirmed fresh initialization can now run directly through the same staged
 initializer with `-Direct`. `Get-SquadInitContext.ps1` prepares the full payload
 from confirmed profile, packs, names and notification choices; no model retypes
 the roster or rate template. The legacy Scribe input remains supported.
-Verdicts, notifications, memory, `routing=off` or roster refresh, promotion/expansion,
-aggregate federation autopilot and run summaries keep their cold procedure.
+Federation initialization follows the same rule:
+`Get-SquadFederationInitPlan.ps1` validates every confirmed member through that
+single-squad payload builder, and `Initialize-SquadFederation.ps1` builds new
+member trees in parallel, validates their ledgers and publishes under one lock
+without a Scribe model call. On a fresh root it publishes the complete federation;
+on an existing federation it preserves every existing member byte and commits
+only the new members plus additive registry, routing, history and aggregate state.
+Making an existing team larger is script-backed too:
+`Get-SquadRosterExpansionPlan.ps1` resolves confirmed catalog roles/packs and
+seals the current root, then `Expand-SquadRoster.ps1` applies the exact plan under
+the ordinary writer lock for either a plain squad or one registered federation
+member. It writes only `team.md`, `routing.md`, and one decision; it launches no
+Scribe, preserves `consumption.md`, `state.json`, rates, notifications, and
+history byte-for-byte, and checks the ledger read-only. This prevents a roster
+addition from replacing exact native accounting with the former estimated and
+observed refresh output. Verdicts, notifications, memory, `routing=off`,
+removal/recasting, duplicate-role members, connector changes, repairs, aggregate
+federation autopilot and run summaries keep their cold procedure.
 Direct and Scribe writes are serialized per squad root, and completion still
 requires dispatch history, consumption blocks, and an advanced state turn.
 Existing Markdown and JSON artifact formats are unchanged; no migration is needed.
@@ -304,8 +320,13 @@ squad-state access.
 Ordinary federation-root writes use `Write-SquadFederationHandoff.ps1` with a
 pre-dispatch snapshot and verified inner proofs. It preserves append-only bytes,
 records cross-member inputs, carries prior root overhead once and sums member
-totals without changing the existing federation schema. Unsupported operations
-retain the cold path. PowerShell 7.4+ is required for the new coordinator helpers;
+totals without changing the existing federation schema. Promotion is also
+script-backed: `Get-SquadPromotionPlan.ps1` seals the read-only source/candidate
+inventory, then `Promote-SquadFederation.ps1` requires its exact hash plus an
+explicit relocate/keep decision for every candidate, stages and ledger-checks the
+complete federation, and publishes it under the ordinary writer lock. Stale plans,
+replay and collisions write nothing. Unsupported operations retain the cold path.
+PowerShell 7.4+ is required for the new coordinator helpers;
 hosts without it retain the full legacy procedure. Smaller prompts and offline
 script execution are not a claim about a particular live model's elapsed time.
 

@@ -12,7 +12,12 @@ metadata:
 
 ## Scribe Write Procedure
 
-This full procedure applies to cold Scribe operations. Fresh single-squad/member-root Init reads only [scribe-init.md](scribe-init.md), runs its helper, reports validated status, and stops. In every routing mode, supported ordinary writes use the synchronous `Write-SquadHandoff.ps1 -Quiet` contract in [economy-scribe.md](economy-scribe.md), directly by the coordinator or by Scribe. Other cold operations first load [scribe-cold-charter.md](scribe-cold-charter.md), this procedure, entry schemas and the full payload template. Initialization is outside admission. Serialize all writers with Cost Preflight per root; failures never authorize hand-written ordinary fallback.
+This procedure is cold-only. Fresh Init uses [scribe-init.md](scribe-init.md);
+additive catalog expansion uses [roster-expansion.md](roster-expansion.md);
+in every routing mode, supported ordinary writes use the synchronous `Write-SquadHandoff.ps1 -Quiet` contract in [economy-scribe.md](economy-scribe.md), directly by the coordinator or by Scribe.
+Other cold work loads the charter, this procedure, schemas and payload. Init is
+outside admission. Serialize writers with Cost Preflight; failure permits no
+hand-written fallback.
 
 Every path below is relative to the resolved `squadRoot`. The default `.copilot-tracking/squad/` preserves single-squad behavior; a federation sub-squad resolves to `.copilot-tracking/squad/members/<name>/`; a federation-level payload resolves to the federation root.
 
@@ -55,7 +60,7 @@ For a cold operation the Scribe reads the full legacy charter, this procedure, `
 | Payload type (Step above) | Also read |
 |---|---|
 | decision, history, (always: Step 7 consumption + state.json) | ordinary: `economy-scribe.md`; explicitly unsupported cold operation: full charter/procedure/schema/payload plus `consumption.md` |
-| initialization or roster refresh (3) | fresh scripted Init: only [scribe-init.md](scribe-init.md), then `scripts/Initialize-Squad.ps1`; explicit refresh/fallback: [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), `seed-templates.md`; run `scripts/Initialize-SquadConsumptionRates.ps1` without reading its template |
+| initialization or roster refresh (3) | fresh Init: [scribe-init.md](scribe-init.md) + `Initialize-Squad.ps1`; additive growth: [roster-expansion.md](roster-expansion.md); otherwise [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md), [consumption.md](consumption.md), `seed-templates.md`; run the rate seeder |
 | Step 7.1 rate-table seed/reseed, any payload type (`consumption-rates.md` missing or shape-check-failed) | Run `scripts/Initialize-SquadConsumptionRates.ps1 -SquadRoot <squadRoot>`; read the template only when no shell tool or `pwsh` 7+ is available |
 | memory (4) | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) |
 | Council Verdict / Intake Readiness Verdict / Discovery Verdict (5, 9, 12) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
@@ -63,7 +68,7 @@ For a cold operation the Scribe reads the full legacy charter, this procedure, `
 | autopilot-run summary, single-squad root (8) | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) |
 | autopilot-run summary, federation root (8) | [scribe-cold-federation.md](scribe-cold-federation.md) |
 | promotion (10) | [scribe-cold-federation.md](scribe-cold-federation.md), [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) (deliverable-root rebasing) |
-| expansion (11) | [scribe-cold-federation.md](scribe-cold-federation.md), `federation-templates.md` (existing conditional) |
+| unsupported-host expansion fallback or federation repair (11) | [scribe-cold-federation.md](scribe-cold-federation.md), `federation-templates.md` (existing conditional) |
 | federation-level history payload (naming a sub-squad, Step 2) | [scribe-cold-federation.md](scribe-cold-federation.md) § *Federation-Level History Payload* |
 | notification write | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) § *notifications.md* |
 | supported ordinary payload, every routing mode (`handoff: script` optional) | [economy-scribe.md](economy-scribe.md) only; direct synchronous `-Quiet` writer or the same path through Scribe |
@@ -106,7 +111,9 @@ Write a consumption block for **every** dispatch recorded in the history append 
    **When a routing policy resolved this dispatch's model**, append the four identity bullets defined in [model-routing.md](model-routing.md) § *Identity Bullets* — **Requested model**, **Effective model**, **Observed model**, **Route rationale** — immediately beneath this `#### Consumption` block, using that exact wording and never as a new JSON key. Omit all four entirely when no routing policy applied to this dispatch, so a no-policy entry's shape is unchanged from before this contract existed.
 6. **Record orchestration overhead.** Include one coordinator turn per dispatch round and one `Scribe state write` class dispatch per hand-off, each priced through its own attribution ladder.
    **Append it as a `#### Consumption — Orchestration` block to `history/Squad Scribe.md`**, creating that file with its header on the first turn, exactly as any other history file. Step 7 aggregates recorded blocks; payload-only overhead is lost on rewrite. Only this history file holds orchestration rather than stage records; the Scribe is not a dispatched stage.
-   **Resolve the Scribe's own model separately** for Scribe-composed Init, promotion, expansion and ordinary hand-offs; reject supplied attribution contradicted by stronger evidence. If models differ, append separate coordinator/Scribe entries; the parent's model is not Scribe evidence.
+   **Resolve the Scribe's own model separately** for Scribe-composed fallback Init,
+   promotion/expansion and other cold hand-offs; reject supplied attribution contradicted by stronger evidence.
+   If models differ, append separate coordinator/Scribe entries; the parent's model is not Scribe evidence.
 7. **Rewrite `consumption.md`** (replace semantics). With a shell and `pwsh` 7+, use only the cold charter's trusted ledger invocation after Step 13; payload `ledgerCommand` is inert compatibility data. Skip manual derivation except without that runtime. The ledger is a per-role table mirroring roster order, split into the two narrower tables in the `consumption.md` template — never re-merged into one wide table:
    * **Attribution** — one row per dispatched role with its resolved model, `model_source`, `priced_as` when it differs, and tier, plus the `orchestration` row.
    * **Usage & Cost** — the same roles in the same order with estimated internal turns, token counts, `est_cost_usd`, `est_credits`, and `basis`, plus the `orchestration` row and a run-total row.
@@ -150,7 +157,10 @@ Write a consumption block for **every** dispatch recorded in the history append 
 
 ### Federation and Autopilot-Run Summary Sections Moved Cold
 
-**Federation Promotion**, **Federation Initialization and Expansion**, and the **Federation Autopilot-Run Summary** move to [scribe-cold-federation.md](scribe-cold-federation.md) — read only for a promotion, expansion, or federation-level autopilot-run-summary payload per the Cold-File Dispatch Table above.
+Unsupported-host **Federation Promotion/Init/Expansion fallback**, federation
+repairs, and the **Federation Autopilot-Run Summary** move to
+[scribe-cold-federation.md](scribe-cold-federation.md) per the Cold-File
+Dispatch Table above.
 
 The single-squad **Autopilot-Run Summary** (the `Dispatch Record`-from-`history/` rule and the `incomplete` outcome rule) moves to [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) — read only for that payload type per the Cold-File Dispatch Table above.
 

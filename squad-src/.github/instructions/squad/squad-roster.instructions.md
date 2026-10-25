@@ -11,8 +11,9 @@ Routing lives in `squad-routing.instructions.md`; persistence in `squad-state.in
 
 ## Roster File
 
-The roster lives at `.copilot-tracking/squad/team.md`. Confirmed Init uses the
-validated initializer; explicit recasting uses cold Scribe. Both use the cast catalog.
+The roster lives at `.copilot-tracking/squad/team.md`. Confirmed Init and
+additive catalog expansion use validated writers; other refreshes use cold
+Scribe. All use the cast catalog.
 
 The file begins with YAML frontmatter and a single H1 title, then a `## Members` table. Each row binds a squad role to a concrete agent.
 
@@ -313,8 +314,8 @@ A compliance-plus-Power-Platform project is therefore `profile=compliance pack=p
 * **A pack never introduces a role that duplicates work an existing role already owns.** Check the catalog first and widen the existing role instead — the same rule that gave the incident lifecycle to `azure-diagnose` rather than to a second `sre` role. Two roles claiming one phase is worse than a missing role, and that stays true across packs.
 * **Exactly one profile, zero or more packs.** A pack is never chosen *instead of* a profile, because a pack carries no methodology spine and cannot research, plan, implement, and review on its own.
 * **A pack's roles obey every rule a profile's roles obey.** In particular, a role whose registered external resource is not installed is offered with its `Install or Entry` command rather than seeded, per *Building a Custom Roster* below.
-* **The Scribe records the roster's provenance when it seeds.** A roster is a profile plus zero or more packs, or `custom`, and that is written into the Init decision in `decisions.md`; in a federation it is also the `Profile` column of the `federation.md` registry, in `azure +power-platform` form. A pack applied later is recorded the same way, as a decision, exactly like an added opt-in role.
-* **A pack can be applied to a roster that already exists**, and it is offered rather than assumed. When a request matches the routing pattern of a role that belongs to a registered pack the roster does not carry — or names the pack's domain plainly, which is the same signal arriving in words rather than keywords — the coordinator escalates and proposes applying the pack, naming its roles, what they would add, and the install command for any registered resource that is not yet present. This is the same offer the coordinator already makes for `intake-validator` and for an opt-in role, one level up: a group of roles instead of one. On acceptance the Scribe appends the pack's roles to `team.md`, their rows to `routing.md`, and a decision recording the applied pack; on decline the coordinator reports what it cannot do rather than substituting a role that cannot do the work.
+* **The writer records provenance when it seeds.** Init writes profile plus packs, or `custom`, to `decisions.md`; a federation also copies build-time provenance to its `Profile` column. Later packs update the selected squad/member decision, not federation-root metadata.
+* **A pack can be applied to an existing roster**, but is offered, never assumed. Name its roles and any missing-resource install command. On acceptance use `references/roster-expansion.md`; on decline report the capability gap rather than substituting.
 
 #### Removing a Pack
 
