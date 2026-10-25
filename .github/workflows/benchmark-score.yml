@@ -1,0 +1,93 @@
+name: Benchmark Score
+
+# Shows how the benchmark score saved in a pull request (benchmarks/efficiency/score.json)
+# compares with the score on its base branch, as a pull request comment.
+#
+# This workflow never runs the benchmark and never spends credits. Developers measure
+# their own branch with tests/tier2/live-benchmark/Invoke-Benchmark.ps1 and commit the
+# result with it.
+#
+# Informational only. A lower score or a failed run becomes a warning; a missing,
+# unreadable or incomparable score only changes what the comment shows. Nothing here
+# fails the pull request, so every step that could fail is allowed to, and the
+# comparison script itself always exits 0.
+
+on:
+  pull_request:
+    paths:
+      - 'squad-src/**'
+      - 'benchmarks/efficiency/**'
+      - 'tests/tier2/live-benchmark/BenchmarkScore.psm1'
+      - 'tests/tier2/live-benchmark/Compare-Benchmark.ps1'
+      - '.github/workflows/benchmark-score.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-score-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: Compare benchmark score
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # the single score comment, updated in place
+    steps:
+      # The checkout is the pull request merged into its base: HEAD is the merge commit,
+      # HEAD^1 the base branch and HEAD the score the pull request would leave behind.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Read the base branch score
+        id: base
+        continue-on-error: true
+        shell: bash
+        run: |
+          if git show 'HEAD^1:benchmarks/efficiency/score.json' > "$RUNNER_TEMP/base-score.json" 2>/dev/null; then
+            echo "path=$RUNNER_TEMP/base-score.json" >> "$GITHUB_OUTPUT"
+          fi
+          if ! git diff --quiet HEAD^1 HEAD -- squad-src; then
+            echo "squad-src-changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compare scores
+        continue-on-error: true
+        shell: pwsh
+        env:
+          BASE_SCORE: ${{ steps.base.outputs.path }}
+          SQUAD_SRC_CHANGED: ${{ steps.base.outputs.squad-src-changed }}
+        run: |
+          $parameters = @{
+              BasePath = $env:BASE_SCORE
+              HeadPath = 'benchmarks/efficiency/score.json'
+              CommentPath = Join-Path $env:RUNNER_TEMP 'benchmark-comment.md'
+              SquadSourceChanged = ($env:SQUAD_SRC_CHANGED -eq 'true')
+          }
+          & ./tests/tier2/live-benchmark/Compare-Benchmark.ps1 @parameters
+
+      # Pull requests from forks get a read-only token, so they only see the job summary.
+      - name: Update the pull request comment
+        if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          comment="$RUNNER_TEMP/benchmark-comment.md"
+          [ -s "$comment" ] || exit 0
+          id=$(gh api --paginate "repos/$REPO/issues/$PULL_REQUEST/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- squad-benchmark-score -->"))) | .id' | sed -n '1p')
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$id" -F body=@"$comment" > /dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$PULL_REQUEST/comments" -F body=@"$comment" > /dev/null
+          fi

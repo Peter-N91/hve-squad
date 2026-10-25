@@ -1,0 +1,114 @@
+{
+  "schema": "benchmark-score-v1",
+  "scenario": "task-cli-cold-start",
+  "measuredAt": "2026-10-21T10:23:20Z",
+  "source": {
+    "commit": "59880d5c0417e99a7fe6ab5f12670f8bd9b7401b",
+    "squadSourceHash": "c69a057c35921bd53843bf407f9e135c30f655b6d301c69b9d5fa939b05a3e98",
+    "uncommittedChanges": false
+  },
+  "environment": {
+    "model": "claude-sonnet-5.5",
+    "cli": "1.0.101-0",
+    "powershell": "7.6.7"
+  },
+  "runs": {
+    "requested": 3,
+    "scored": 3,
+    "failed": 0
+  },
+  "summary": {
+    "quality": 83.0,
+    "dimensions": {
+      "businessClarity": 18.0,
+      "scopeFidelity": 17.0,
+      "acceptanceCriteria": 16.0,
+      "traceability": 17.0,
+      "risksAndDecisions": 15.0
+    },
+    "functional": 3,
+    "workflow": 0,
+    "criticalHighFindings": 2,
+    "averageSeconds": 1188.5176666666666,
+    "averageCredits": 287.1999151666667
+  },
+  "trials": [
+    {
+      "run": 1,
+      "scored": true,
+      "quality": 83.0,
+      "dimensions": {
+        "businessClarity": 18.0,
+        "scopeFidelity": 17.0,
+        "acceptanceCriteria": 16.0,
+        "traceability": 17.0,
+        "risksAndDecisions": 15.0
+      },
+      "functional": true,
+      "workflow": false,
+      "criticalHighFindings": 1,
+      "seconds": 1159.972,
+      "credits": 300.4319185,
+      "failedChecks": [
+        "build/stateVerifier",
+        "requirements/BRD Quality Reviewer",
+        "requirements/PRD Quality Reviewer",
+        "requirements/reviewOutcome",
+        "requirements/stateVerifier"
+      ],
+      "note": ""
+    },
+    {
+      "run": 2,
+      "scored": true,
+      "quality": 83.0,
+      "dimensions": {
+        "businessClarity": 18.0,
+        "scopeFidelity": 18.0,
+        "acceptanceCriteria": 16.0,
+        "traceability": 17.0,
+        "risksAndDecisions": 14.0
+      },
+      "functional": true,
+      "workflow": false,
+      "criticalHighFindings": 0,
+      "seconds": 1271.579,
+      "credits": 300.503642,
+      "failedChecks": [
+        "requirements/BRD Quality Reviewer",
+        "requirements/PRD Quality Reviewer",
+        "requirements/reviewOutcome"
+      ],
+      "note": ""
+    },
+    {
+      "run": 3,
+      "scored": true,
+      "quality": 82.0,
+      "dimensions": {
+        "businessClarity": 17.0,
+        "scopeFidelity": 17.0,
+        "acceptanceCriteria": 17.0,
+        "traceability": 16.0,
+        "risksAndDecisions": 15.0
+      },
+      "functional": true,
+      "workflow": false,
+      "criticalHighFindings": 1,
+      "seconds": 1134.002,
+      "credits": 260.664185,
+      "failedChecks": [
+        "build/developer",
+        "build/lead",
+        "build/researcher",
+        "build/reviewOutcome",
+        "build/tester",
+        "requirements/BRD Quality Reviewer",
+        "requirements/PRD Quality Reviewer",
+        "requirements/reviewOutcome",
+        "requirements/tester"
+      ],
+      "note": ""
+    }
+  ]
+}

@@ -87,6 +87,9 @@ Documentation, package-version, and pending change-fragment updates on `main` re
 
 The [efficiency benchmark](benchmarks/efficiency/README.md) records document quality,
 functional acceptance, workflow compliance, measured time and consumption separately.
+Each branch carries its own score in `benchmarks/efficiency/`: run
+`pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-Benchmark.ps1 [-Runs 1..3]`
+to refresh it (about 300 Copilot credits and 20 minutes per run) and commit the result.
 Its methodology review and measurement hardening drew on these primary sources
 (consulted 20 October 2026):
 
@@ -100,12 +103,11 @@ Its methodology review and measurement hardening drew on these primary sources
 | OpenTelemetry, [GenAI metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/547934afa90a34298441caf80c43b27255c3a292/docs/gen-ai/gen-ai-metrics.md) and [token metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/547934afa90a34298441caf80c43b27255c3a292/docs/gen-ai/gen-ai-token-metrics.md) | Define timing boundaries and token-accounting semantics explicitly. These are pinned Development-stage references, not a claim of OpenTelemetry instrumentation or conformance. |
 | NIST/SEMATECH, [Confidence intervals](https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm) | Keep three-trial results descriptive; observed pass counts and resource differences do not establish statistical significance. |
 
-These sources informed the design; they do not certify it. The current three-trial,
-single-scenario baseline is a regression-screening reference, not a representative
+These sources informed the design; they do not certify it. A score from one to three runs of
+a single scenario is a regression-screening reference, not a representative
 agent leaderboard. Human calibration, repeated-judge agreement and broader held-out
 task studies remain future empirical work. See the [generated report](benchmarks/efficiency/report.md)
-for actual results and the [collection guide](tests/tier2/live-benchmark/README.md)
-for execution details.
+for actual results and the [benchmark guide](benchmarks/efficiency/README.md) for how to run it.
 
 ## Related repositories
 
