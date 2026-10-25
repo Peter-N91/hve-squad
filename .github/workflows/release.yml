@@ -25,11 +25,6 @@ on:
         required: false
         default: main
         type: string
-      run_benchmark:
-        description: 'Require recorded benchmark non-regression before release. Uncheck only for an intentional manual bypass.'
-        required: false
-        default: false
-        type: boolean
   push:
     branches:
       - main
@@ -64,25 +59,10 @@ jobs:
         id: identity
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  benchmark:
-    name: Benchmark before release
-    needs: candidate
-    if: github.event_name != 'workflow_dispatch' || inputs.run_benchmark != false
-    permissions:
-      contents: read
-    uses: ./.github/workflows/tier2-benchmark.yml
-    with:
-      candidate_sha: ${{ needs.candidate.outputs.sha }}
-
   release:
     name: Create Release
-    needs: [candidate, benchmark]
+    needs: candidate
     runs-on: ubuntu-latest
-    if: >
-      always() && !cancelled() && needs.candidate.result == 'success' &&
-      (needs.benchmark.result == 'success' ||
-       (github.event_name == 'workflow_dispatch' && inputs.run_benchmark == false &&
-        needs.benchmark.result == 'skipped'))
     permissions:
       contents: write
     steps:
@@ -92,12 +72,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           ref: ${{ needs.candidate.outputs.sha }}
-
-      - name: Record manual benchmark bypass
-        if: github.event_name == 'workflow_dispatch' && inputs.run_benchmark == false
-        run: |
-          echo "::warning::Benchmark gate explicitly disabled for this manual release."
-          echo "## Benchmark gate intentionally disabled by manual release input" >> "$GITHUB_STEP_SUMMARY"
 
       # ── Release gate ─────────────────────────────────────────────────────
       #    Tier 0 runs twice, and the two runs assert different things.

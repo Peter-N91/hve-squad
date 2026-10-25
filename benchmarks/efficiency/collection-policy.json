@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "benchmark-collection-policy-v1",
-  "perTrialCredits": 1000,
-  "campaignCredits": 6000,
-  "campaignTimeoutMinutes": 330,
-  "model": "claude-sonnet-5.5",
-  "cliVersion": "1.0.101-0"
-}

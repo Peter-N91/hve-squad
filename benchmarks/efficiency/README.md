@@ -1,26 +1,95 @@
-# Repository benchmark evidence
+# Squad benchmark
 
 [![Observed document quality, acceptance and average benchmark time](badge.svg)](report.md)
 
-`current.json` selects one immutable `records/<series-id>.json` by SHA-256.
-This is **recorded observational evidence, not an approved quality baseline**.
-The selected v2 main observations pass all functional probes but include real
-state and review-deliverable failures. A score must never conceal those failures.
-Private logs, generated documents, judge explanations and session identifiers
-are not committed. File hashes provide integrity, not authenticated execution.
+This folder holds the benchmark score of the squad **in the branch you are viewing**:
+`score.json` (the data), `badge.svg` (the badge above) and `report.md` (a readable
+report). Open `main` to see main's score. Developers run the benchmark locally and
+commit the result with their branch.
 
-## How the benchmark measures a run
+## Run the benchmark
 
-The benchmark has the squad build a small offline task-list CLI (`src/task.ps1`)
-and write a BRD and PRD first. The exercise is repeated three times, and each
-run is checked in three separate ways. They are reported separately so a good
-score on one cannot hide a failure in another.
+```powershell
+pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-Benchmark.ps1
+```
+
+One command does everything. It benchmarks the squad in your current checkout
+(`squad-src/`, including uncommitted changes), then writes `score.json`, `badge.svg`
+and `report.md` into this folder. Commit those files with your branch. It does not
+look at any other branch.
+
+**It spends Copilot credits.** One run takes about 20 minutes and uses about 300
+credits (the recorded runs used 261 to 301 credits and took 19 to 21 minutes).
+Choose how many runs with `-Runs`, from 1 to 3 (default 3):
+
+| Command | Runs | Time | Copilot credits |
+| --- | --- | --- | --- |
+| `Invoke-Benchmark.ps1 -Runs 1` | 1 | about 20 min | about 300 |
+| `Invoke-Benchmark.ps1 -Runs 2` | 2 | about 40 min | about 600 |
+| `Invoke-Benchmark.ps1` | 3 | about 1 h | about 900 |
+
+Runs happen one after another, after a short setup that installs the squad. Each run
+stops at 1,000 credits (a soft limit, because usage is reported asynchronously) and a
+hung run is stopped after 3 hours. One run is a quick check: the judge is an AI model,
+so a single run varies more than the median of three. Add `-WhatIf` to see what would
+run without spending anything.
+
+Before you run it:
+
+* PowerShell 7.4 or later, Git, the APM CLI (`apm`, version 0.29.0 as in
+  [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html)) and the
+  GitHub Copilot CLI (`copilot`, signed in) on your `PATH`, plus network access.
+* A throwaway machine, container or VM. The benchmark runs an autonomous Copilot
+  agent with tool filters, not an OS sandbox.
+* Commit your `squad-src/` changes first, so the commit recorded in the score matches
+  the code that was measured. The score files are outside `squad-src/`, so committing
+  them afterwards does not change what was measured.
+
+When it finishes, the command prints the badge text and saves:
+
+| File | Contents |
+| --- | --- |
+| `score.json` | The score and every run, in a fixed format that the pull request comparison reads |
+| `badge.svg` | The badge shown at the top of this page and in the root README |
+| `report.md` | The score, the five quality dimensions, each run and the checks that did not pass |
+
+A run that does not finish, or has no valid judged result, is recorded as failed: it is
+left out of the quality median and averages, and the functional and workflow counts are
+always out of the runs you asked for. If no run produces a score, this folder is left
+unchanged and the command exits with code 1.
+Logs and evidence stay in a temporary folder whose path the command prints. They can
+contain generated documents, so review them before sharing, and delete them when you
+are done.
+
+## Pull requests
+
+A pull request that changes `squad-src/` or this folder gets a **Benchmark score**
+comment (`.github/workflows/benchmark-score.yml`) with its `score.json` next to the
+base branch's. It never runs the benchmark, spends nothing and **never fails** the
+pull request.
+
+* **Warnings** are shown for lower document quality or dimension medians, a lower
+  functional or workflow pass rate, more critical or high findings per run, and runs
+  that did not produce a score.
+* **Notes** explain what limits the comparison. Scores with different run counts, models
+  or Copilot CLI versions are still compared (pass rates and per-run averages) but are
+  flagged as indicative. When the base branch has no readable score, or the pull request
+  does not change the score, the comment just shows the current score. If `squad-src/`
+  changed and the score was not refreshed, it suggests running the command above.
+* Pull requests from forks cannot be commented on, so they get the same text in the job
+  summary.
+
+## What a run measures
+
+The squad builds a small offline task-list CLI (`src/task.ps1`) after writing a BRD and
+a PRD. Each run is checked in three separate ways, reported separately so a good result
+on one cannot hide a failure in another.
 
 ### Quality: are the documents good?
 
-A blind AI judge reads the BRD and PRD and scores five dimensions from 0 to 20
-each, for a total out of 100. 18–20 means complete, specific and consistent;
-14–17 means material omissions; 0–13 means major gaps.
+A blind AI judge reads the BRD and PRD and scores five dimensions from 0 to 20 each,
+for a total out of 100. 18–20 means complete, specific and consistent; 14–17 means
+material omissions; 0–13 means major gaps. The score is the median over the runs.
 
 | Dimension           | What the judge asks                                    |
 |---------------------|--------------------------------------------------------|
@@ -35,319 +104,35 @@ production-safety claims) are counted separately.
 
 ### Functional: does the product work?
 
-After each run the benchmark executes the delivered CLI and tries specific
-behaviours. Each is a pass/fail check, shown as passes out of 3 trials: Unicode
-titles round-trip, blank or missing titles are rejected, unknown IDs fail,
-marking done twice is safe, IDs are unique and increasing, empty and filtered
-lists work, data persists across separate runs, and a corrupt store is left
-untouched.
+After each run the benchmark executes the delivered CLI and tries specific behaviours:
+Unicode titles round-trip, blank or missing titles are rejected, unknown IDs fail,
+marking done twice is safe, IDs are unique and increasing, empty and filtered lists
+work, data persists across separate runs, and a corrupt store is left untouched. Each is
+a pass/fail check and a run passes only if all of them do. The result is shown as runs
+passing out of runs requested.
 
 ### Workflow: did the squad follow its process?
 
-This ignores whether the code works. It checks that the squad completed its own
-process through the init, requirements and build stages and left evidence:
-state, team, routing and decision files, cost logs, proof that the expected
-roles (researcher, developer, tester, lead, BRD/PRD builders) were dispatched,
-a recorded review outcome, and a state verifier confirming the recorded state
-matches reality.
+This ignores whether the code works. It checks that the squad completed its own process
+through the init, requirements and build stages and left evidence: state, team, routing
+and decision files, cost logs, proof that the expected roles (researcher, developer,
+tester, lead, BRD/PRD builders) were dispatched, a recorded review outcome, and a state
+verifier confirming the recorded state matches reality. A run passes only if every check
+passes.
 
-### Regression rules
+## Reading a score
 
-A change must not lower the quality total or any dimension median, and must not
-reduce any functional or workflow pass count. The badge shows all three measures
-plus **average measured benchmark time per trial**, and is not a claim that every gate
-passed. `avg benchmark time` is the arithmetic mean of the three stage-plus-judge
-wall times. Stage clocks include some harness checks; setup, report generation
-and some independent evaluation are excluded. This is neither pure agent latency
-nor whole-wizard duration. The performance
-table and comparison gates still use medians; an outlier can make the badge's
-mean differ from the report's median.
-
-## Collect with a reviewed controller
-
-`Collect Benchmark Evidence` (`tier2-collect-benchmark.yml`) is a separate,
-manual-only workflow. It does not replace the read-only recorded release gate
-and never runs on a pull request, ordinary push, or release call.
-Its default `preflight_only: true` validates immutable sources and the reviewed
-collection policy without installing dependencies, using Copilot credentials,
-or launching a model. This is source/policy readiness, not a benchmark result
-or proof that dependency installation and live execution will succeed.
-
-Select the candidate by full `head_sha` (blank uses the dispatch's selected
-commit). A fork uses its parent's current default branch as the controller.
-The controller must already contain this collector, and all seven shared
-protocol files must match the candidate. Reconcile these files when integrating
-an upstream prerequisite; never bypass their identity checks.
-
-After reviewing the preflight and separately authorizing the displayed ceiling,
-dispatch with `preflight_only: false`. `refresh_reference: true` explicitly
-collects six serial observations: three from the current controller and three
-from the candidate. The historical pointer remains integrity-checked, but its
-old source revision is not the fresh baseline. Without refresh, only three
-candidates are collected against an existing,
-compatible v2 historical reference, with environment differences disclosed.
-
-`collection-policy.json` pins the model, CLI, per-trial reservation, campaign
-ceiling and deadline. Failed, interrupted or regressing campaigns remain
-failures; another campaign needs new authorization. Only sanitized reports,
-identity and original portable records are uploaded; private trial evidence
-stays off the artifact allowlist. Nothing is committed or published
-automatically. Review and publish the original base/head records and their
-branch-specific pointers through separate PRs before expecting recorded
-comparisons to pass. Adding the collector alone cannot fix stale evidence.
-
-## Record and regenerate
-
-PowerShell **7.5+**, Git and the existing harness are required. Select exactly
-three private trial directories and their saved `efficiency-control-v1` series:
-
-```powershell
-$trials = 1..3 | ForEach-Object { "/private/control/trials/baseline-$_" }
-./tests/tier2/live-benchmark/Export-BenchmarkResults.ps1 `
-  -ControlPath /private/control/out/control-series.json `
-  -TrialDirectories $trials -SeriesId run-YYYYMMDD-HHMMSS-identifier -SelectCurrent
-```
-
-For a native `-Mode Series` run reusing saved controls, use its
-`out/series-evidence.json` as `-ControlPath` and the three `candidate-1` through
-`candidate-3` trial directories. That file contains six original raw runs:
-three saved controls and three new candidates. The importer validates those
-arm/slot identities and selects **all three** supplied candidate trials without
-rebuilding native Run objects or inventing a new control series.
-
-Import validates saved runs against the selected trial files, original judge and
-document hashes, complete numeric coverage, source/protocol fingerprints and
-measured revision ancestry. It creates a new record exclusively; never overwrite
-an earlier series. `-SelectCurrent` explicitly updates the pointer and generates
-`report.json`, `report.md`, and `badge.svg`. Review/commit these files together.
-No model is called and no observation is regraded during export.
-Incomplete metering or unavailable required fields stop import; product failures
-remain false. SHA changes for docs/results alone need no new measurements.
-
-The root README uses relative image/report links, so its badge follows the
-branch being viewed. It shows quality median, functional pass count and complete
-workflow pass count independently; incomplete acceptance is amber, unavailable
-grey. SVG is static, contains no script and uses no remote badge service.
-
-## Compare the actual parent
-
-```powershell
-./tests/tier2/live-benchmark/Compare-BranchBenchmark.ps1 `
-  -BaseRef origin/jmservera/performance-comparison -HeadRef HEAD `
-  -OutputDirectory ./benchmark-report
-```
-
-The parent is explicit, not assumed to be `main`. PR Actions use immutable
-`pull_request.base.sha` and `head.sha`, including stacked/fork PRs. Each pointer,
-record and source fingerprint is read from its own snapshot. The merge-base is
-reported only for context, not used as the baseline. A head-edited policy or
-copy of the original file cannot replace the base's policy/evidence.
-
-| Exit | Meaning |
-|---|---|
-| 0 | Valid non-regression, or unchanged source/protocol using identical evidence |
-| 1 | Unexpected operational failure |
-| 2 | Missing, invalid, stale, incompatible or non-evaluable evidence |
-| 3 | Measured regression |
-
-Missing `main` results explicitly fail; there is no fallback to another branch
-or Actions artifact. Identical selected evidence means **no independent candidate
-measurement**, not improvement. Changed source with inherited evidence is stale;
-independent series must have disjoint IDs. Historical records cannot be edited
-or removed in a comparison. Selecting a new current record requires review and
-does not invoke the harness's strict baseline-promotion function.
-
-Trial UUIDs must use canonical lowercase, hyphenated `D` format. Alternate casing
-is rejected as invalid evidence, not normalized, so it cannot disguise reused
-trials within or across series.
-
-## Report and screening policy
-
-### Offline study and external rating analysis
-
-The optional study reader does not run agents, change the three-trial collector
-or promote evidence. Supply a private local manifest and, optionally, external
-ratings:
-
-```powershell
-Import-Module ./tests/tier2/live-benchmark/BenchmarkStudy.psm1
-Get-BenchmarkStudyAnalysis -Repository . -ManifestPath /private/study.json `
-  -AnnotationPath /private/ratings.json | ConvertTo-Json -Depth 32
-```
-
-Omit `-AnnotationPath` when no ratings exist. The manifest uses
-`schemaVersion: benchmark-study-v1`, `studyId`, `strata`, `batches` and `slots`:
-
-* A stratum declares `stratumId`, `taskId`, `taskRole` (`development` or
-  `held-out`), `design` (`descriptive`, `aa` or `ab`) and `protocolFingerprint`.
-  The fingerprint is SHA-256 of the UTF-8 `ConvertTo-BenchmarkCanonicalJson`
-  representation of the record's complete `protocol`.
-* A batch declares `batchId`, `stratumId`, `arm`, `recordPath` (below
-  `benchmarks/efficiency/records/`) and `recordSha256` (exact file bytes).
-* A slot declares `slotId`, `stratumId`, `arm`, `state` and, for `recorded`,
-  `batchId`/`runId`. Every referenced batch's three trials must appear exactly
-  once. `planned` slots have no observation; `aborted` slots add a bounded
-  operator `reason`, not invented outcomes or resource values.
-
-The reader validates each record at its own measured Git revision, not against
-today's protocol. This permits historical description **without** bypassing the
-strict current-branch comparison. It rejects overlapping trial IDs, incomplete
-batches, invalid digests and path/symlink escapes. Strata and arms remain
-separate; statistics reduce all included trials, not medians of batches.
-An A/A stratum requires disjoint recorded arms with identical source/protocol;
-these declarations do not establish randomized execution or causal effects.
-
-Interrupted attempts remain visible. Recorded-only acceptance is conditional on
-exported evidence; when aborts exist, whole-study reliability and complete
-resource totals are unavailable. Planned slots are not attempts. Unknown optional
-metrics stay unknown, and zero accepted workflows cannot yield a zero-cost ratio.
-
-Optional `benchmark-human-annotations-v1` input contains an `annotations` array.
-Each annotation binds its `annotationId`, all three document hashes, record
-digest, source/revision/run ID, rubric, judge implementation (`protocol.parserHash`)
-and recorded model string to an included trial. `recordedModelHash` is null for
-v1, which has no model-artifact hash. It includes the five integer dimension
-ratings (0-20) and an external attestation with opaque `annotatorId`,
-`attestationRef` and status `externally-attested-human`. Keep documents, actual
-ratings, identities and attestation material private; do not commit them here.
-
-Attestation strings do not authenticate humans or expertise. Valid input produces
-only descriptive rating coverage/differences and `external-ratings-present`,
-never calibrated/approved status. With no annotations calibration is `unassessed`.
-Actual expert adjudication, repeated judging of frozen artifacts, representative
-task selection and an authorized live A/A pilot remain empirical work.
-
-### Fixed-series screening
-
-`policy.json` is loaded from the base. Version 1 permits at most 5% growth in
-combined per-trial median credits, usage-accounting requests, input/output
-tokens, tool calls and **measured process wall seconds**. Workflow counters are
-the final cumulative snapshot counted once; independently metered judge counters
-are added once. Time sums each stage's `process.seconds` and the judge's process
-seconds. Stage clocks include snapshot, parsing and readiness work, not just
-native subprocess execution. It is not event-span time, pure agent latency or
-whole-wizard duration.
-
-The quality score assesses BRD/PRD documents, not delivered software. No expert
-calibration or statistical significance is established by these three trials.
-Observed total consumption per accepted workflow divides all recorded consumption
-(including unsuccessful trials) by full-workflow successes. Zero successes means
-unavailable, not zero consumption or an expected retry-cost estimate.
-
-Quality total and each of five dimension medians cannot decline. Critical/high
-findings and combined tool failures use three-trial sums with no increase
-(failure sums deliberately expose outliers hidden by the old failure median).
-Every functional probe/state/readiness/workflow boolean uses pass count out of
-three, with no decrease. Split workflow/judge values, optional cache tokens and
-event intervals are diagnostic, not extra gates. Missing required token coverage
-cannot become zero even if general metering says complete. From zero, positive
-growth has an undefined percentage and explicit absolute worsening.
-
-Reports lead with a plain-language verdict, readable performance/consumption
-and quality/acceptance summaries, and checks needing attention. Expandable
-sections retain all exact samples, medians/ranges, sums, per-check pass counts,
-fingerprints, compatibility fields and machine reasons. `report.json` preserves
-the full machine-readable data; presentation rounding does not change gates. A 10% request/input-token improvement screen
-is separate from non-regression, product acceptance and strict promotion.
-Three independent series samples are unpaired screening evidence, not
-statistical significance or a guarantee of causality.
-
-## GitHub Actions and bootstrap
-
-The read-only **Tier 2 Benchmark** (`.github/workflows/tier2-benchmark.yml`) runs
-manually or as a **pre-publication gate in the Release workflow**, never on PRs
-or rolling previews. Standalone manual comparisons retain explicit base
-and head commit SHAs. Release runs freeze the candidate commit and select the
-most recently published stable release that is an ancestor of that commit,
-not a hardcoded branch or a newer unrelated hotfix.
-Annotated tags are peeled to commits. No earlier stable ancestor means an
-explicit missing-baseline result (exit 2), not a passing self-comparison.
-
-The Release workflow requires comparison success **before any version bump,
-tag push or GitHub Release creation**, including draft creation. Regressions,
-missing/stale/incompatible evidence and operational errors block publication;
-Tier 0 still applies. The release uses the same frozen candidate that was compared,
-not a moving branch. Version and self-reference manifest edits do not change the
-measured Squad source or benchmark protocol.
-
-Manual **Release** runs expose a boolean **`run_benchmark`**, currently default
-**false**. A human with release-dispatch permission can check it to require the
-comparison, or leave it unchecked to bypass only this gate. **Release Prep**
-does not expose or forward this input; its downstream manual Release dispatch
-inherits the Release workflow's default, so currently skips the benchmark.
-The skipped gate and warning are recorded in the run summary;
-other release checks remain mandatory. Push-triggered releases cannot use that
-manual bypass.
-
-A temporary release bootstrap exception applies through **v0.18.1 inclusive**:
-when the frozen candidate's `apm.yml` declares a stable version no higher than
-0.18.1, a missing previous stable release or missing trusted base comparator
-emits a warning but permits the release gate. The original missing-baseline
-report remains unchanged; no benchmark approval is claimed. This exception
-applies only to the pre-publication release caller, not standalone comparisons,
-and expires from v0.18.2. Stale/incompatible evidence, missing candidate records,
-regressions and operational failures still block.
-No post-publication benchmark trigger remains. Direct publication outside the
-Release workflow is not controlled by this gate.
-
-This compares existing immutable records; it does **not** run agents or spend
-model requests. Fresh compatible records must be collected separately. In
-particular, historical v1 records cannot satisfy the current v2 protocol gate.
-
-The workflow publishes the full report in
-the run Summary and uploads Markdown, JSON and SVG even when comparison fails.
-It calls no paid model, uses no model secrets and executes the selected **base**
-comparator/dependencies; head contents are Git blobs/JSON, not executable code.
-Actions are SHA-pinned and checkout credentials are not persisted.
-
-The reviewed workflow YAML/bootstrap is itself the controller trust root.
-A PR editing it is review-required infrastructure, not independently
-authenticated evidence. Manual dispatch requires authorized reviewed base and
-candidate **full commit SHAs** in this repository; never choose an unreviewed
-base merely because it is called base. Fork identity does not grant code trust.
-
-When the base lacks the helper or selected record, the bootstrap explicitly
-reports missing baseline/tooling and fails; it never runs a head helper.
-Never bypass existing required checks. Workflow registration and automatic
-release orchestration requires the workflow on the default branch; a change delivered
-only on an integration branch may need that merge before manual dispatch is
-available. Use the local report in the meantime, not a fabricated Actions run.
-
-## Reproduce the original environment
-
-Historical `benchmark-series-v1` records preserve their original actual revision,
-source hash, protocol and dependency-install identities. Their verifier hash was
-derived from the measured Git revision, not observed executing-file telemetry;
-they also lack a native converter digest. They remain readable for descriptive
-historical analysis, but current snapshot validation explicitly rejects them as
-`stale-record:unbound-execution-protocol`. The selected baseline now uses fresh v2
-observations from main revision `59880d5c0417e99a7fe6ab5f12670f8bd9b7401b`.
-Historical v1 records remain unchanged; their pointer was replaced by an explicit
-selection of the new observations, not by relabeling old evidence.
-
-New exports use `benchmark-series-v2`. Live compatibility binds the native
-converter actually loaded from the selected source checkout
-(`scripts/Build-SquadPlugin.ps1`) and the state verifier actually executed from
-the harness checkout (`scripts/Test-SquadScribeOutput.ps1`). Export requires both
-digests to agree with the measured Git revision; mismatched or unbound raw
-controls are refused, never retrospectively relabeled. Converter-only changes
-invalidate inherited snapshot evidence even when `squad-src` is unchanged.
-Full machine attestation remains unavailable. For new observations, pin both:
-
-```powershell
-$env:COPILOT_CLI_DIST_DIR = '/local/cache/copilot/pkg/linux-x64/1.0.101-0'
-$env:COPILOT_AUTO_UPDATE = 'false'
-```
-
-Validate the actual CLI, model, PowerShell, prepared installation and frozen
-scenario/parser/exercise/preparation/grader/verifier/converter before any paid execution.
-Use fresh workspaces. A mismatch blocks the historical comparison: do not
-waive it or automatically buy replacement controls. A different reference
-campaign needs separate authorization. Never retry until the result looks good.
-
-Run the portable record, study and installer regressions without paid execution
-using PowerShell 7.5+ and pinned Pester 5.7.1:
-
-```powershell
-pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-BenchmarkEvidenceTests.ps1
-```
+* The badge shows the quality median, the functional and workflow pass counts and the
+  **average benchmark time per run**. It is green only when every run was scored and
+  passed both checks, amber otherwise and grey when no run was scored. It is not a claim
+  that every check passed: `report.md` lists the ones that did not.
+* The time is the mean of each run's workflow stages plus the judge. Stage clocks include
+  some harness checks; setup and report generation are excluded. It is neither pure
+  agent latency nor total command duration. Credits count the workflow and the judge.
+* The quality score grades the BRD and PRD, not the delivered software. The judge is an
+  AI model, so treat a difference of a few points as noise and prefer three runs.
+* Scores measured with a different model or Copilot CLI version are not directly
+  comparable. Both are recorded in `score.json`, and the runner sets
+  `COPILOT_AUTO_UPDATE=false` so the CLI does not update during a run.
+* The score is evidence, not a gate: failures are recorded, never hidden or turned into
+  a pass.

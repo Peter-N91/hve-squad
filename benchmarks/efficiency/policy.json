@@ -1,9 +1,0 @@
-{
-  "schemaVersion": "benchmark-policy-v1",
-  "efficiencyTolerancePercent": 5,
-  "minimumImprovementPercent": 10,
-  "qualityReducer": "median-no-decrease",
-  "failureReducer": "sum-no-increase",
-  "reliabilityReducer": "per-check-count-no-decrease",
-  "criticalHighReducer": "sum-no-increase"
-}
