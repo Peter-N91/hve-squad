@@ -5,7 +5,7 @@
 
 <#
 .SYNOPSIS
-    Runs the offline self-checks for the benchmark score, its pull request comparer and the squad installer.
+    Runs the offline self-checks for the benchmark score, its pull request comparer, the bash launcher and the squad installer.
 .DESCRIPTION
     Invokes no model and needs no Python, credentials or network access.
     Separate from the live-harness runner because it needs no Python. Also invoked by the

@@ -424,3 +424,81 @@ Copy-Item (Join-Path $PSScriptRoot 'fake-run.json') (Join-Path $TrialRoot 'out/r
         }
     }
 }
+
+Describe 'invoke-benchmark.sh' -Skip:(-not ($IsLinux -and (Get-Command bash -ErrorAction SilentlyContinue))) {
+    BeforeAll {
+        $script:Bash = (Get-Command bash).Source
+        $script:Launcher = Join-Path $PSScriptRoot 'invoke-benchmark.sh'
+        $script:NoPwsh = Join-Path $TestDrive 'no-pwsh'
+        $script:FakeBin = Join-Path $TestDrive 'fake-bin'
+        $null = New-Item -ItemType Directory -Path $script:NoPwsh, $script:FakeBin
+
+        # Stand-in pwsh: the version check (-Command) exits $CHECK_EXIT; any other call records its arguments.
+        $fake = Join-Path $script:FakeBin 'pwsh'
+        @'
+#!/bin/sh
+for argument in "$@"; do
+  if [ "$argument" = '-Command' ]; then exit "$CHECK_EXIT"; fi
+done
+printf '%s\n' "$@" > "$ARG_LOG"
+exit "$RUNNER_EXIT"
+'@.Replace("`r", '') | Set-Content -LiteralPath $fake -NoNewline
+        [IO.File]::SetUnixFileMode($fake, [IO.UnixFileMode]'UserRead, UserWrite, UserExecute')
+
+        function Invoke-Launcher {
+            param([string]$Path, [string[]]$Arguments = @(), [int]$CheckExit = 0, [int]$RunnerExit = 0)
+            $log = Join-Path $TestDrive ([guid]::NewGuid().ToString('N') + '.log')
+            $saved = $env:PATH
+            try {
+                $env:PATH = $Path
+                $env:CHECK_EXIT = $CheckExit
+                $env:RUNNER_EXIT = $RunnerExit
+                $env:ARG_LOG = $log
+                $output = & $script:Bash $script:Launcher @Arguments 2>&1 | Out-String
+                [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output; Arguments = @(if (Test-Path $log) { Get-Content $log }) }
+            }
+            finally {
+                $env:PATH = $saved
+                $env:CHECK_EXIT = $null
+                $env:RUNNER_EXIT = $null
+                $env:ARG_LOG = $null
+            }
+        }
+        $script:WithFake = @($script:FakeBin, '/usr/bin', '/bin') -join [IO.Path]::PathSeparator
+    }
+
+    It 'is valid bash' {
+        & $script:Bash -n $script:Launcher
+        $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'stops with install instructions and runs nothing when pwsh is missing' {
+        $result = Invoke-Launcher -Path $script:NoPwsh -Arguments @('-WhatIf')
+        $result.ExitCode | Should -Be 127
+        $result.Output | Should -Match 'was not found on PATH'
+        $result.Output | Should -Match 'Nothing has been installed'
+        $result.Output | Should -Match 'packages\.microsoft\.com/config/ubuntu'
+    }
+
+    It 'stops with install instructions and runs nothing when pwsh is older than 7.4 or cannot run' {
+        $result = Invoke-Launcher -Path $script:WithFake -CheckExit 1
+        $result.ExitCode | Should -Be 2
+        $result.Output | Should -Match 'older than 7\.4 or could not run'
+        $result.Arguments.Count | Should -Be 0
+    }
+
+    It 'passes its arguments to Invoke-Benchmark.ps1 unchanged and returns its exit status' {
+        $result = Invoke-Launcher -Path $script:WithFake -Arguments @('-Runs', '2', '-WhatIf', 'a b') -RunnerExit 7
+        $result.ExitCode | Should -Be 7 -Because $result.Output
+        $result.Arguments.Count | Should -Be 8
+        ($result.Arguments[0..2] -join ' ') | Should -Be '-NoLogo -NoProfile -File'
+        $result.Arguments[3] | Should -Be (Join-Path $PSScriptRoot 'Invoke-Benchmark.ps1')
+        ($result.Arguments[4..7] -join '|') | Should -Be '-Runs|2|-WhatIf|a b'
+    }
+
+    It 'starts the real Invoke-Benchmark.ps1 with the installed pwsh' {
+        $result = Invoke-Launcher -Path $env:PATH -Arguments @('-Runs', '4', '-WhatIf')
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "parameter 'Runs'"
+    }
+}

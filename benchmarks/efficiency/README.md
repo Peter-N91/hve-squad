@@ -18,6 +18,11 @@ One command does everything. It benchmarks the squad in your current checkout
 and `report.md` into this folder. Commit those files with your branch. It does not
 look at any other branch.
 
+From a bash shell (Linux, WSL), `bash tests/tier2/live-benchmark/invoke-benchmark.sh` does the
+same and takes the same options (for example `-Runs 1` or `-WhatIf`). It first checks that
+PowerShell 7.4 or later (`pwsh`) is installed; if not, it prints Ubuntu installation commands
+and stops without installing anything.
+
 **It spends Copilot credits.** One run takes about 20 minutes and uses about 300
 credits (the recorded runs used 261 to 301 credits and took 19 to 21 minutes).
 Choose how many runs with `-Runs`, from 1 to 3 (default 3):

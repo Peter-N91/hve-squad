@@ -50,6 +50,7 @@ pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-Benchmark.ps1 -Runs 3
 | File | Role |
 | --- | --- |
 | `Invoke-Benchmark.ps1` | Installs this checkout's squad, runs the engine once per run and saves the score files |
+| `invoke-benchmark.sh` | Bash starter for `Invoke-Benchmark.ps1`: checks that PowerShell 7.4+ (`pwsh`) is installed, prints Ubuntu install commands if not (it installs nothing) and passes its options through |
 | `BenchmarkScore.psm1` | Turns run results into `score.json`, `badge.svg` and `report.md`, and compares two scores |
 | `Compare-Benchmark.ps1` | Writes the pull request comparison; warns about lower scores or failed runs and never fails |
 | `Invoke-EfficiencyExercise.ps1`, `EfficiencyBenchmark.psm1` | Engine that executes and checks one run |
