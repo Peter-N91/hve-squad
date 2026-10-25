@@ -25,6 +25,7 @@ $config = New-PesterConfiguration
 $config.Run.Container = New-PesterContainer -Path @(
     (Join-Path $PSScriptRoot '../../lib/SquadInstall.Tests.ps1'),
     (Join-Path $PSScriptRoot 'BenchmarkResults.Tests.ps1'),
+    (Join-Path $PSScriptRoot 'ReleaseBenchmark.Tests.ps1'),
     (Join-Path $PSScriptRoot 'BenchmarkStudy.Tests.ps1')
 )
 $config.Run.PassThru = $true

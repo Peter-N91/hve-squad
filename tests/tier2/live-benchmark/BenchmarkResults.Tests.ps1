@@ -131,6 +131,58 @@ BeforeAll {
 }
 
 Describe 'Portable benchmark history and reporting' {
+    It 'keeps historical environment differences explicit without relaxing the strict default' {
+        $Fixture = New-TestRepository
+        $Candidate = New-TestCandidate $Fixture.record
+        $Changes = @{ installHash = ('b' * 64); powershell = '99.0.0'; cliVersion = '9.9.9'; maxCredits = 600; roleModelPolicyHash = ('c' * 64) }
+        foreach ($Key in $Changes.Keys) { $Candidate.protocol[$Key] = $Changes[$Key] }
+        $Before = ConvertTo-BenchmarkCanonicalJson $Candidate
+        { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy } | Should -Throw '*compatibility-*'
+        { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -DeploymentComparison } | Should -Throw '*compatibility-*'
+        $Result = Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference
+        $Result.protocolDifferences.Count | Should -Be 5
+        $Result.comparisonWarning | Should -Match 'Approximate historical'
+        foreach ($Key in $Changes.Keys) {
+            $Result.protocolDifferences[$Key].old | Should -BeExactly $Fixture.record.protocol[$Key]
+            $Result.protocolDifferences[$Key].new | Should -BeExactly $Changes[$Key]
+        }
+        (ConvertTo-BenchmarkCanonicalJson $Candidate) | Should -BeExactly $Before
+        foreach ($Trial in $Candidate.trials) { $Trial.workflow.credits = 116 }
+        (Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference).status | Should -Be 'regression'
+        $Candidate.protocol.model = 'different-model'
+        { Compare-BenchmarkSeries $Fixture.record $Candidate $Policy -HistoricalReference } | Should -Throw '*compatibility-model*'
+    }
+    It 'admits frozen executing identity and rejects source or admission drift offline' {
+        $Fixture = New-TestRepository
+        $Identity = Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Fixture.compatibility -SourceHash $Fixture.record.sourceHash
+        $Identity.revision | Should -BeExactly $Fixture.revision
+        { Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Fixture.compatibility -SourceHash ('f' * 64) } | Should -Throw '*measured-source-mismatch*'
+        $Changed = Copy-Value $Fixture.compatibility
+        $Changed.cli = 'GitHub Copilot CLI 9.9.9.'
+        { Get-BenchmarkExecutionIdentity -Repository $Fixture.repository -Compatibility $Changed -SourceHash $Fixture.record.sourceHash -ExpectedIdentity $Identity } | Should -Throw '*execution-identity-drift*'
+    }
+    It 'exports the exercise finalizer score from original evidence and retains incomplete attempts as failures' {
+        $Fixture = New-TestRepository
+        $Raw = New-TestRawEvidence $Fixture
+        for ($Index = 0; $Index -lt 3; $Index++) {
+            foreach ($Name in @('build', 'judge')) {
+                $Path = Join-Path $Raw.directories[$Index] "out/$Name-events.jsonl"
+                [IO.File]::WriteAllText($Path, "$Name synthetic event fixture")
+                $Hash = (Get-FileHash -LiteralPath $Path).Hash.ToLowerInvariant()
+                if ($Name -eq 'build') { $Raw.runs[$Index].metrics.evidence.sha256 = $Hash }
+                else { $Raw.runs[$Index].judge.metrics.evidence.sha256 = $Hash }
+            }
+            Write-TestJson (Join-Path $Raw.directories[$Index] 'out/run.json') $Raw.runs[$Index]
+        }
+        $Output = Join-Path $TestDrive 'exercise-finalizer-score'
+        $Score = Export-BenchmarkScore -Repository $Fixture.repository -TrialDirectories $Raw.directories -SeriesId finalizer-score -OutputDirectory $Output
+        $Score.score.state | Should -Be 'measured'
+        $Score.evidence.measuredRevision | Should -BeExactly $Fixture.revision
+        $Score.evidence.trials.Count | Should -Be 3
+        (ConvertTo-BenchmarkCanonicalJson $Score) | Should -Not -Match 'PRIVATE|sessionId'
+        $Failed = Export-BenchmarkScore -SeriesId failed-finalizer -OutputDirectory (Join-Path $TestDrive 'failed-finalizer') -FailureReason 'score-export-failed'
+        $Failed.score.state | Should -Be 'failed'
+    }
     It 'exports only validated numeric evidence and never overwrites a series' {
         $Fixture = New-TestRepository; $Raw = New-TestRawEvidence $Fixture
         $Record = Export-BenchmarkSeries -Repository $Fixture.repository -ControlPath $Raw.control -TrialDirectories $Raw.directories -SeriesId safe-series -SelectCurrent

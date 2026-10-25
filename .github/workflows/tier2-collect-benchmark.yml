@@ -1,0 +1,200 @@
+name: Collect Benchmark Evidence
+
+# Manual collection is separate from the read-only release gate.
+# AI cost: none by default; explicit paid mode reserves 3 trials, or 6 with refresh.
+on:
+  workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Operator-selected immutable candidate; paid collection requires explicit opt-in.
+    inputs:
+      head_sha:
+        description: Candidate full commit SHA (blank uses the selected branch commit)
+        required: false
+        type: string
+      preflight_only:
+        description: Validate source and policy without installing dependencies or spending credits
+        required: false
+        default: true
+        type: boolean
+      refresh_reference:
+        description: Explicit six-observation refresh against the current reviewed controller
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collect-benchmark-${{ inputs.head_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      COPILOT_AUTO_UPDATE: 'false'
+    steps:
+      - name: Freeze reviewed controller and candidate
+        id: refs
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_HEAD: ${{ inputs.head_sha || github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          "started=$([DateTimeOffset]::UtcNow.ToString('o'))" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          $metadata = (& gh api "repos/$env:GITHUB_REPOSITORY") | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve reviewed default branch.' }
+          $repository = if ($metadata.fork) { $metadata.parent.full_name } else { $env:GITHUB_REPOSITORY }
+          $branch = if ($metadata.fork) { $metadata.parent.default_branch } else { $metadata.default_branch }
+          if ($repository -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid controller repository.' }
+          $controller = (& gh api "repos/$repository/commits/$([Uri]::EscapeDataString($branch))" --jq '.sha').Trim()
+          if ($LASTEXITCODE -ne 0 -or $controller -cnotmatch '^[0-9a-f]{40}$') { throw 'Cannot freeze reviewed controller.' }
+          if ($env:INPUT_HEAD -cnotmatch '^[0-9a-f]{40}$') { throw 'Candidate must be a full commit SHA.' }
+          "controller=$controller", "controller_repository=$repository", "candidate=$env:INPUT_HEAD" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Checkout frozen reviewed controller
+        timeout-minutes: 10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.refs.outputs.controller_repository }}
+          ref: ${{ steps.refs.outputs.controller }}
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Validate sources and reviewed spending policy without model calls
+        id: preflight
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          CONTROLLER: ${{ steps.refs.outputs.controller }}
+          CANDIDATE: ${{ steps.refs.outputs.candidate }}
+          REFRESH_REFERENCE: ${{ inputs.refresh_reference }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git -c core.hooksPath=/dev/null fetch --no-tags --no-recurse-submodules -- "https://github.com/$env:GITHUB_REPOSITORY.git" $env:CANDIDATE
+          if ($LASTEXITCODE -ne 0 -or (git rev-parse FETCH_HEAD).Trim() -cne $env:CANDIDATE) { throw 'Candidate fetch failed.' }
+          $manifest = (git show "$($env:CANDIDATE):apm.yml") -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $manifest -cnotmatch '(?m)^version: ([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)\r?$') { throw 'Candidate version unavailable.' }
+          $version = $Matches[1]
+          Import-Module ./tests/tier2/live-benchmark/ReleaseBenchmark.psm1
+          $context = Get-ReleaseBenchmarkPreflight -Repository $PWD -Controller $env:CONTROLLER -Candidate $env:CANDIDATE -EffectiveVersion $version -RefreshReference:($env:REFRESH_REFERENCE -ceq 'true')
+          "cli=$($context.policy.cliVersion)", "version=$version" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          @(
+            '## Collection preflight passed (no model calls)'
+            "Controller: $($context.controller)"
+            "Candidate: $($context.candidate)"
+            "Reference: $($context.reference)"
+            "Reserved ceiling if explicitly collected: $($context.reservedCredits) credits."
+            'Preflight is not a benchmark result, dependency-install check, or spending authorization.'
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      - name: Install the APM CLI
+        if: inputs.preflight_only != true
+        timeout-minutes: 10
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: 'true'
+          apm-version: '0.29.0'
+          github-token: ${{ github.token }}
+
+      - name: Set up Node.js
+        if: inputs.preflight_only != true
+        timeout-minutes: 5
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Install and verify pinned CLI without automatic updates
+        if: inputs.preflight_only != true
+        timeout-minutes: 10
+        # zizmor: ignore[adhoc-packages] - exact reviewed collection-policy version.
+        shell: bash
+        env:
+          CLI_VERSION: ${{ steps.preflight.outputs.cli }}
+        run: |
+          set -euo pipefail
+          npm install -g "@github/copilot@${CLI_VERSION}"
+          mkdir -p .benchmark-private/bin
+          COPILOT_BIN="$(command -v copilot)"
+          printf '#!/usr/bin/env bash\nexec "%s" --no-auto-update "$@"\n' "$COPILOT_BIN" > .benchmark-private/bin/copilot
+          chmod 700 .benchmark-private/bin/copilot
+          ACTUAL_VERSION="$(.benchmark-private/bin/copilot --version)"
+          [[ "$ACTUAL_VERSION" == "GitHub Copilot CLI ${CLI_VERSION}."* ]]
+
+      - name: Prepare source-bound installs without Copilot credentials
+        if: inputs.preflight_only != true
+        timeout-minutes: 40
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONTROLLER: ${{ steps.refs.outputs.controller }}
+          CANDIDATE: ${{ steps.refs.outputs.candidate }}
+          EFFECTIVE_VERSION: ${{ steps.preflight.outputs.version }}
+          REFRESH_REFERENCE: ${{ inputs.refresh_reference }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module ./tests/tier2/live-benchmark/ReleaseBenchmark.psm1
+          Import-Module ./tests/lib/SquadInstall.psm1
+          $context = Get-ReleaseBenchmarkPreflight -Repository $PWD -Controller $env:CONTROLLER -Candidate $env:CANDIDATE -EffectiveVersion $env:EFFECTIVE_VERSION -RefreshReference:($env:REFRESH_REFERENCE -ceq 'true')
+          foreach ($arm in $context.arms) {
+            $revision = if ($arm -eq 'baseline') { $context.reference } else { $env:CANDIDATE }
+            $source = Join-Path $PWD ".benchmark-private/sources/$arm"
+            git -c core.hooksPath=/dev/null worktree add --detach $source $revision
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare frozen source.' }
+            $null = Install-SquadPackage -SourceRoot $source -Destination (Join-Path $PWD ".benchmark-private/install/$arm")
+          }
+
+      - name: Collect bounded observations and preserve the actual comparison verdict
+        if: inputs.preflight_only != true
+        shell: pwsh
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          CONTROLLER: ${{ steps.refs.outputs.controller }}
+          CANDIDATE: ${{ steps.refs.outputs.candidate }}
+          EFFECTIVE_VERSION: ${{ steps.preflight.outputs.version }}
+          STARTED: ${{ steps.refs.outputs.started }}
+          REFRESH_REFERENCE: ${{ inputs.refresh_reference }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module ./tests/tier2/live-benchmark/ReleaseBenchmark.psm1
+          $report = Invoke-ReleaseBenchmark -Repository $PWD -Controller $env:CONTROLLER -Candidate $env:CANDIDATE -EffectiveVersion $env:EFFECTIVE_VERSION `
+            -InstallRoot (Join-Path $PWD '.benchmark-private/install') -CliPath (Join-Path $PWD '.benchmark-private/bin/copilot') `
+            -PrivateRoot (Join-Path $PWD '.benchmark-private/campaign') -OutputDirectory (Join-Path $PWD '.benchmark-public') `
+            -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT -RepositorySlug $env:GITHUB_REPOSITORY -Started ([DateTimeOffset]::Parse($env:STARTED)) `
+            -RefreshReference:($env:REFRESH_REFERENCE -ceq 'true')
+          exit ([int]$report.exitCode)
+
+      - name: Finalize sanitized collection summary, including failures
+        if: always() && inputs.preflight_only != true
+        shell: pwsh
+        run: |
+          $root = Join-Path $PWD '.benchmark-public'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $path = Join-Path $root 'report.md'
+          if (-not (Test-Path -LiteralPath $path)) {
+            '# Benchmark operational failure before collection. No passing result.' | Set-Content -LiteralPath $path
+            @{ schemaVersion = 'benchmark-report-v1'; status = 'operational-error'; exitCode = 1; reasons = @('workflow-preflight-failed') } |
+              ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'report.json')
+          }
+          Get-Content -LiteralPath $path -Raw | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload only sanitized collection evidence
+        if: always() && inputs.preflight_only != true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: collected-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .benchmark-public/report.json
+            .benchmark-public/report.md
+            .benchmark-public/badge.svg
+            .benchmark-public/identity.json
+            .benchmark-public/base-record.json
+            .benchmark-public/head-record.json
+          if-no-files-found: error
+          retention-days: 30

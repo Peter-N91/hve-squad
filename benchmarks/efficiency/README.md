@@ -63,6 +63,39 @@ nor whole-wizard duration. The performance
 table and comparison gates still use medians; an outlier can make the badge's
 mean differ from the report's median.
 
+## Collect with a reviewed controller
+
+`Collect Benchmark Evidence` (`tier2-collect-benchmark.yml`) is a separate,
+manual-only workflow. It does not replace the read-only recorded release gate
+and never runs on a pull request, ordinary push, or release call.
+Its default `preflight_only: true` validates immutable sources and the reviewed
+collection policy without installing dependencies, using Copilot credentials,
+or launching a model. This is source/policy readiness, not a benchmark result
+or proof that dependency installation and live execution will succeed.
+
+Select the candidate by full `head_sha` (blank uses the dispatch's selected
+commit). A fork uses its parent's current default branch as the controller.
+The controller must already contain this collector, and all seven shared
+protocol files must match the candidate. Reconcile these files when integrating
+an upstream prerequisite; never bypass their identity checks.
+
+After reviewing the preflight and separately authorizing the displayed ceiling,
+dispatch with `preflight_only: false`. `refresh_reference: true` explicitly
+collects six serial observations: three from the current controller and three
+from the candidate. The historical pointer remains integrity-checked, but its
+old source revision is not the fresh baseline. Without refresh, only three
+candidates are collected against an existing,
+compatible v2 historical reference, with environment differences disclosed.
+
+`collection-policy.json` pins the model, CLI, per-trial reservation, campaign
+ceiling and deadline. Failed, interrupted or regressing campaigns remain
+failures; another campaign needs new authorization. Only sanitized reports,
+identity and original portable records are uploaded; private trial evidence
+stays off the artifact allowlist. Nothing is committed or published
+automatically. Review and publish the original base/head records and their
+branch-specific pointers through separate PRs before expecting recorded
+comparisons to pass. Adding the collector alone cannot fix stale evidence.
+
 ## Record and regenerate
 
 PowerShell **7.5+**, Git and the existing harness are required. Select exactly

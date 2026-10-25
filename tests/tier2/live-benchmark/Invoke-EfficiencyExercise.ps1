@@ -7,8 +7,16 @@
 .SYNOPSIS
     Analyzes CLI logs or explicitly launches a bounded cold-init squad exercise.
 .DESCRIPTION
+    AI cost: paid in live modes. Each trial runs init, requirements, build and a separate
+    judge under -MaxCredits. Establish collects 3 trials; Series collects 3 candidates
+    with CandidateOnly needs no controls. Explicit paired collection remains available.
+    Parallelism changes concurrency, not trial count.
     Run spends credits and requires a prepared full install and isolated environment.
     Analyze, Compare and Promote are offline. No command commits or pushes.
+.PARAMETER LocalTest
+    Paid single-Run diagnostic, not a benchmark. Allows uncommitted measured files,
+    rejects later working-identity drift, and retains diagnostic.json plus a descriptive score/badge
+    beneath a fresh local-test-* directory outside both checkouts. Requires ObservationOnly.
 .PARAMETER Mode
     Analyze freezes a log; Run launches one trial; Compare and Promote gate reports.
 .PARAMETER TrialRoot
@@ -39,7 +47,11 @@ param(
     [switch]$IsolatedEnvironment,
     [string[]]$RunPaths,
     [string]$AcceptedPath,
-    [switch]$ObservationOnly
+    [string]$AdmissionPath,
+    [switch]$LocalTest,
+    [switch]$ObservationOnly,
+    [switch]$CandidateOnly,
+    [switch]$ParallelTrials
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -47,7 +59,30 @@ Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
 
 if ($MyInvocation.InvocationName -ne '.') {
     $Out = $null
+    $ScoreRoot = $null
+    $CollectionFailed = $false
+    $Admission = $null; $Metadata = $null; $Stages = $null; $Attempts = $null; $Metrics = $null
+    $ProgressPath = $null; $ProgressCompleted = 0; $ProgressStage = 'preflight'
     try {
+        if ($Mode -in @('Run', 'Establish', 'Series') -and $TrialRoot) {
+            $Full = [IO.Path]::GetFullPath($TrialRoot)
+            if (Test-Path -LiteralPath $Full) { throw 'TrialRoot must not exist; saved evidence is never overwritten.' }
+            $Roots = @($SourceRoot, $BaselineSourceRoot, $CandidateSourceRoot, [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))) | Where-Object { $_ }
+            foreach ($Root in $Roots) {
+                $Root = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($Root))
+                $Separator = [IO.Path]::DirectorySeparatorChar
+                if ($Full.Equals($Root, [StringComparison]::OrdinalIgnoreCase) -or $Full.StartsWith($Root + $Separator, [StringComparison]::OrdinalIgnoreCase) -or $Root.StartsWith($Full.TrimEnd($Separator) + $Separator, [StringComparison]::OrdinalIgnoreCase)) { throw 'TrialRoot must be outside source checkouts and their ancestors.' }
+            }
+            $Cursor = $Full
+            while ($Cursor) {
+                if ((Test-Path -LiteralPath $Cursor) -and ((Get-Item -LiteralPath $Cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'TrialRoot cannot traverse symbolic links.' }
+                $Cursor = [IO.Path]::GetDirectoryName($Cursor)
+            }
+            $ScoreRoot = Join-Path $Full 'score'
+        }
+        if ($LocalTest -and ($Mode -ne 'Run' -or -not $ObservationOnly -or $AdmissionPath -or $ParallelTrials)) {
+            throw 'LocalTest requires a single Run with ObservationOnly, without admission manifests or parallel trials.'
+        }
         if ($Mode -eq 'Analyze') {
             if (-not $EventsPath -or -not $OutputPath) { throw 'Analyze requires EventsPath and a new OutputPath directory.' }
             if (Test-Path -LiteralPath $OutputPath) { throw 'OutputPath must not exist.' }
@@ -84,6 +119,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (-not $Live -or -not $IsolatedEnvironment -or $MaxCredits -le 0 -or [double]::IsNaN($MaxCredits) -or [double]::IsInfinity($MaxCredits)) {
             throw 'Run requires -Live -IsolatedEnvironment and a finite positive -MaxCredits. Tool filters are not an OS sandbox.'
         }
+        Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1') -Force
         $RecoveryPolicy = Get-EfficiencyRecoveryPolicy -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
         if ($Mode -in @('Establish', 'Series')) {
             if (-not $TrialRoot -or -not $InstallRoot -or $MaxSeriesCredits -le 0 -or [double]::IsNaN($MaxSeriesCredits) -or [double]::IsInfinity($MaxSeriesCredits)) { throw 'Establish/Series requires a new TrialRoot, InstallRoot and finite positive MaxSeriesCredits.' }
@@ -92,51 +128,47 @@ if ($MyInvocation.InvocationName -ne '.') {
             if ($BaselineSourceRoot) { $BaselineSourceRoot = (Resolve-Path -LiteralPath $BaselineSourceRoot).Path }
             if ($CandidateSourceRoot) { $CandidateSourceRoot = (Resolve-Path -LiteralPath $CandidateSourceRoot).Path }
             if ($Mode -eq 'Establish' -and -not $BaselineSourceRoot) { throw 'Establish requires SourceRoot or BaselineSourceRoot.' }
-            if ($Mode -eq 'Series' -and (-not $CandidateSourceRoot -or (-not $BaselineSourceRoot -and -not $BaselineEvidencePath))) { throw 'Series requires CandidateSourceRoot and either BaselineSourceRoot or BaselineEvidencePath.' }
+            if ($Mode -eq 'Series' -and (-not $CandidateSourceRoot -or (-not $CandidateOnly -and -not $BaselineSourceRoot -and -not $BaselineEvidencePath))) { throw 'Series requires CandidateSourceRoot and either CandidateOnly, BaselineSourceRoot or BaselineEvidencePath.' }
             if (-not $CliPath) { $CliPath = (Get-Command copilot -ErrorAction Stop).Source }
             $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
             $InstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
-            $Saved = if ($BaselineEvidencePath) { Get-Content -LiteralPath $BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable } else { $null }
+            $Saved = if ($BaselineEvidencePath -and -not $CandidateOnly) { Get-Content -LiteralPath $BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable } else { $null }
             $IdentitySource = if ($Mode -eq 'Establish') { $BaselineSourceRoot } else { $CandidateSourceRoot }
-            $Expected = Get-EfficiencyCompatibility -SourceRoot $IdentitySource -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
-            if ($Mode -eq 'Series' -and $BaselineSourceRoot) {
-                $ControlCompatibility = Get-EfficiencyCompatibility -SourceRoot $BaselineSourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
+            $Expected = Get-EfficiencyCompatibility -SourceRoot $IdentitySource -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
+            if ($Mode -eq 'Series' -and $BaselineSourceRoot -and -not $CandidateOnly) {
+                $ControlCompatibility = Get-EfficiencyCompatibility -SourceRoot $BaselineSourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
                 $Before = @($ControlCompatibility.Keys | Sort-Object | ForEach-Object { $_ + '=' + ($ControlCompatibility[$_] | ConvertTo-Json -Depth 10 -Compress) }) -join "`n"
                 $After = @($Expected.Keys | Sort-Object | ForEach-Object { $_ + '=' + ($Expected[$_] | ConvertTo-Json -Depth 10 -Compress) }) -join "`n"
                 if ($Before -cne $After) { throw 'Baseline/candidate model policy or installed environment is incompatible.' }
                 if ($Saved -and $Saved['runs'][0]['metadata']['sourceHash'] -cne (Get-EfficiencyTreeHash (Join-Path $BaselineSourceRoot 'squad-src'))) { throw 'Saved control does not match BaselineSourceRoot.' }
             }
+            $Admissions = @{}
+            $Arms = if ($Mode -eq 'Establish') { @{ baseline = $BaselineSourceRoot } } else { @{ candidate = $CandidateSourceRoot } }
+            if ($Mode -eq 'Series' -and -not $Saved -and -not $CandidateOnly) { $Arms['baseline'] = $BaselineSourceRoot }
+            foreach ($Key in $Arms.Keys) {
+                $Admissions[$Key] = Get-EfficiencyAdmission -SourceRoot $Arms[$Key] -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials
+            }
+            if ($Saved) {
+                $HistoryRepository = if ($BaselineSourceRoot) { $BaselineSourceRoot } else { $CandidateSourceRoot }
+                foreach ($Control in $Saved['runs']) { Assert-BenchmarkRecordedIdentity -Repository $HistoryRepository -Run $Control }
+            }
             $TrialRoot = [IO.Path]::GetFullPath($TrialRoot)
             $Out = Join-Path $TrialRoot 'out'; $Trials = Join-Path $TrialRoot 'trials'
             New-Item -ItemType Directory -Path $Out, $Trials | Out-Null
-            $EntryScript = $PSCommandPath
-            $SourcePaths = @{ baseline = $BaselineSourceRoot; candidate = $CandidateSourceRoot }
+            $AdmissionPath = Join-Path $Out 'admission.json'
+            $Admissions | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $AdmissionPath -Encoding utf8NoBOM
+            $TrialContext = @{
+                EntryScript = $PSCommandPath; Trials = $Trials; Out = $Out
+                SourcePaths = @{ baseline = $BaselineSourceRoot; candidate = $CandidateSourceRoot }
+                InstallRoot = $InstallRoot; Model = $Model; CliPath = $CliPath
+                ObservationOnly = [bool]$ObservationOnly; ParallelTrials = [bool]$ParallelTrials
+                AdmissionPath = $AdmissionPath
+            }
             $TrialRunner = {
                 param($TrialArm, $TrialPair, [double]$CreditCeiling)
-                $TrialPath = Join-Path $Trials "$TrialArm-$TrialPair"
-                $Arguments = @('-NoProfile', '-File', $EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $SourcePaths[$TrialArm], '-InstallRoot', $InstallRoot, '-Arm', $TrialArm, '-Pair', [string]$TrialPair, '-Model', $Model, '-CliPath', $CliPath, '-MaxCredits', $CreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
-                if ($ObservationOnly) { $Arguments += '-ObservationOnly' }
-                $LaunchPath = Join-Path $Out "$TrialArm-$TrialPair-launch.jsonl"
-                try {
-                    $ScenarioLimits = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
-                    $TrialSeconds = if ($ObservationOnly) { [int]$ScenarioLimits.observationTimeoutMinutes * 60 + 120 } else { 2820 }
-                    $Process = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Trials -OutputPath $LaunchPath -TimeoutSeconds $TrialSeconds
-                    $EvidencePath = Join-Path $TrialPath 'out/run.json'
-                    if (-not (Test-Path -LiteralPath $EvidencePath)) {
-                        $Failure = [InvalidOperationException]::new('Trial did not produce run evidence; inspect its retained launch stderr.')
-                        $Failure.Data['efficiencyCategory'] = 'child-exited-without-run-evidence'
-                        $Failure.Data['efficiencyExitCode'] = [int]$Process.exitCode
-                        $Failure.Data['efficiencyStopCause'] = [string]$Process.stopCause
-                        throw $Failure
-                    }
-                    Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json -AsHashtable
-                }
-                catch {
-                    ($_ | Out-String) + "`n" + $_.ScriptStackTrace | Set-Content -LiteralPath ($LaunchPath + '.exception.txt') -Encoding utf8NoBOM
-                    throw
-                }
+                Invoke-EfficiencyTrial -Context $TrialContext -Arm $TrialArm -Pair $TrialPair -MaxCredits $CreditCeiling
             }.GetNewClosure()
-            $Series = Invoke-EfficiencySeries -Kind $Mode -RunTrial $TrialRunner -PerRunCredits $MaxCredits -SeriesCredits $MaxSeriesCredits -BaselineEvidence $Saved -ExpectedCompatibility $Expected -ObservationOnly:$ObservationOnly
+            $Series = Invoke-EfficiencySeries -Kind $Mode -RunTrial $TrialRunner -TrialContext $TrialContext -PerRunCredits $MaxCredits -SeriesCredits $MaxSeriesCredits -BaselineEvidence $Saved -ExpectedCompatibility $Expected -ObservationOnly:$ObservationOnly -ParallelTrials:$ParallelTrials -CandidateOnly:$CandidateOnly
             foreach ($Slot in $Series.report.slots) {
                 if ($Slot.status -ne 'failed') { continue }
                 $Prefix = "$($Slot.arm)-$($Slot.pair)"
@@ -207,11 +239,15 @@ if ($MyInvocation.InvocationName -ne '.') {
                 }
                 foreach ($Evidence in $Slot.evidence) { Write-Host "Diagnostic: $(Join-Path $TrialRoot $Evidence)" }
             }
+            $CollectionFailed = $Series.exitCode -ne 0
             exit $Series.exitCode
         }
         if (-not $TrialRoot -or -not $SourceRoot -or -not $InstallRoot) { throw 'Run requires TrialRoot, SourceRoot and a prepared full InstallRoot.' }
         if (Test-Path -LiteralPath $TrialRoot) { throw 'TrialRoot must not exist.' }
         $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
+        if ($LocalTest) {
+            $TrialRoot = Assert-EfficiencyLocalRoot -Path $TrialRoot -Sources @($SourceRoot, [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..')))
+        }
         $InstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
         $InstalledAgents = Join-Path $InstallRoot '.github/agents'
         if (-not (Test-Path -LiteralPath $InstalledAgents -PathType Container)) { throw 'Prepared install lacks deployed .github/agents.' }
@@ -223,17 +259,43 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (-not $CliPath) { $CliPath = (Get-Command copilot -ErrorAction Stop).Source }
         $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
         $HelpText = (& $CliPath --help | Out-String)
-        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--no-remote', '--no-remote-export', '--add-dir')) {
+        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--add-dir')) {
             if (-not $HelpText.Contains($Flag)) { throw "Installed CLI does not support $Flag" }
         }
-        $Revision = (& git -C $SourceRoot rev-parse HEAD).Trim()
-        if ($LASTEXITCODE -ne 0) { throw 'Cannot identify source revision.' }
+        $LocalArguments = @(Get-EfficiencyCliLocalArguments -HelpText $HelpText)
+        $TrialRoot = [IO.Path]::GetFullPath($TrialRoot)
+        $Out = Join-Path $TrialRoot 'out'
+        New-Item -ItemType Directory -Path $Out | Out-Null
+        $AdmissionArguments = @{ SourceRoot = $SourceRoot; InstallRoot = $InstallRoot; CliPath = $CliPath; Model = $Model; MaxCredits = $MaxCredits; ObservationOnly = [bool]$ObservationOnly; ParallelTrials = [bool]$ParallelTrials }
+        $ExpectedIdentity = if ($AdmissionPath) {
+            $Manifest = Get-Content -LiteralPath $AdmissionPath -Raw | ConvertFrom-Json -AsHashtable
+            if (-not $Manifest.ContainsKey($Arm)) { throw 'Admission manifest lacks the requested arm.' }
+            $Manifest[$Arm]
+        } else { $null }
+        $Admission = $ExpectedIdentity
+        function Get-RunWorkingIdentity {
+            [ordered]@{ repository = $SourceRoot; revision = Resolve-BenchmarkCommit $SourceRoot 'HEAD'; sourceHash = Get-EfficiencyTreeHash (Join-Path $SourceRoot 'squad-src'); compatibility = Get-EfficiencyCompatibility @AdmissionArguments }
+        }
+        $Admission = if ($LocalTest) { Get-RunWorkingIdentity } else { Get-EfficiencyAdmission @AdmissionArguments -ExpectedIdentity $ExpectedIdentity }
+        function Assert-RunAdmission {
+            if ($LocalTest) {
+                $Observed = Get-RunWorkingIdentity
+                if ((ConvertTo-BenchmarkCanonicalJson $Observed) -cne (ConvertTo-BenchmarkCanonicalJson $Admission)) {
+                    $Drift = [IO.InvalidDataException]::new('Local diagnostic working identity drift; stopped before the next paid call.')
+                    $Drift.Data['observedIdentity'] = $Observed
+                    throw $Drift
+                }
+            }
+            else { $null = Get-EfficiencyAdmission @AdmissionArguments -ExpectedIdentity $Admission }
+        }
         Import-Module (Join-Path $PSScriptRoot '../../lib/SquadInstall.psm1') -Force
         Import-Module (Join-Path $PSScriptRoot 'LiveBenchmark.psm1') -Force
         $DisabledServers = @(Get-ConfiguredMcpServerNames -CliPath $CliPath)
         $TrialRoot = [IO.Path]::GetFullPath($TrialRoot)
         $Workspace = Join-Path $TrialRoot 'workspace'; $Out = Join-Path $TrialRoot 'out'
-        New-Item -ItemType Directory -Path $Workspace, $Out | Out-Null
+        New-Item -ItemType Directory -Path $Workspace | Out-Null
+        $ProgressPath = Join-Path $Out 'progress.json'
+        Write-EfficiencyProgress -Path $ProgressPath -Stage preflight -Completed 0 -Total 7
         foreach ($Directory in @('.github', '.agents', 'apm_modules')) {
             $From = Join-Path $InstallRoot $Directory
             if (Test-Path -LiteralPath $From) { Copy-Item -LiteralPath $From -Destination $Workspace -Recurse -Force }
@@ -252,17 +314,22 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
         $Common += " The authorized local root is '$Workspace'; resolve installed skills from '$Workspace/.agents/skills' and customization from '$Workspace/.github'. Keep discovery and scripts inside that root, without parent traversal. Prefer native read/list/search tools; split large reference reads into explicit ranges covering all required sections. Send one complete Scribe handoff per completed dispatch, in order; do not merge stages into catch-up payloads or invent missing reviewer outputs."
         $Common += " Prepend this context to every dispatched role and Scribe prompt, outside any schema payload: absolute workspace '$Workspace'; absolute skill root '$Workspace/.agents/skills'. Do not assume children inherit the working directory or discover skills from home directories."
+        $BoundaryValidation = 'Before closing review, test persisted Int32 and Int64 ID boundaries and data preservation: an add must never report success then leave storage unreadable; if an increasing integer cannot be represented, fail without modifying stored bytes. Do not defer known data corruption merely because it needs a seeded boundary case.'
+        $RequirementsHandoffs = 'Before dispatching a dependent reviewer or PRD author, finish and verify the preceding author/reviewer handoff synchronously. Persist the closing tester handoff before the next stage; stale-artifact refusal is a blocker, never permission to touch artifacts or backdate payloads.'
+        $Common += ' Carry supplied synthetic sponsor facts with source anchors and distinguish them from production evidence. Record routine decisions within the delegated authority before author dispatch; never invent human approval or waive canonical gates.'
         $Prompts = [ordered]@{
             init = "$Common Initialize the squad with profile=product and mode=autopilot. Use the current installed squad implementation. Set up the roster and routing, including BRD and PRD capability. Initialization only; no substantive business deliverables yet."
             requirements = "$Common Using the initialized squad, create both a BRD and a PRD for EXERCISE.txt. Use mapped requirements agents and the required methodology. Author and review roster-root drafts first. Before requesting review, complete the authors' required self-validation checklists and reconcile cross-document IDs, counts and traceability; keep acceptance-criterion references unambiguous. Assess business clarity, scope fidelity, acceptance criteria, traceability, and risks/decisions. Record evidence-grounded risks with mitigations and owners, assumptions and decisions; distinguish engineering choices from mandatory product requirements. Use BR-nnn and FR-nnn identifiers and explicit measurable acceptance criteria. All scenario facts are synthetic and the fixed brief is authoritative; do not add unsupported requirements or invent deadlines. Resolve required domain-review findings, then dispatch the roster's tester role for a separate independent closing review of the final roster-root drafts. Domain quality reviews do not replace that tester dispatch, its review artifact or its Scribe history. This is a requirements-only stage: no implementation or destination copies are expected during that review. Only after all required reviews pass, copy the reviewed documents byte-for-byte to docs/requirements/brd.md and docs/requirements/prd.md. These are local copies, not external publication or human approval."
-            build = "$Common Implement docs/requirements/prd.md and the frozen EXERCISE.txt CLI contract through a complete Research, Plan, Implement, Review cycle with the mapped roles. Produce src/task.ps1, tests and a short README. Before closing review, test persisted ID boundaries and data preservation: an add must never report success then leave storage unreadable; if an increasing integer cannot be represented, fail without modifying stored bytes. Do not defer known data corruption merely because it needs a seeded boundary case. Run your own tests, preserve independent closing review and state/ledger integrity. Do not invent successful tests; disclose host-only validation limits. Record remaining required findings as blockers."
+            build = "$Common Implement docs/requirements/prd.md and the frozen EXERCISE.txt CLI contract through a complete Research, Plan, Implement, Review cycle with the mapped roles. Produce src/task.ps1, tests and a short README. $BoundaryValidation Run your own tests, preserve independent closing review and state/ledger integrity. Do not invent successful tests; disclose host-only validation limits. Record remaining required findings as blockers."
         }
         if ($ObservationOnly) {
             $Prompts.requirements = "$Common Using the initialized squad and mapped requirements roles, produce a BRD and PRD for EXERCISE.txt and collect independent domain and closing reviews. Preserve unresolved findings as measured quality results; do not repeatedly rewrite merely to reach a quality threshold. Keep roster-root deliverables and copy available drafts byte-for-byte to docs/requirements/brd.md and docs/requirements/prd.md for independent measurement, clearly identifying them as unapproved baseline artifacts. Missing or failed review is a recorded outcome, not permission to claim approval."
-            $Prompts.build = "$Common Implement the frozen EXERCISE.txt CLI contract using available requirements, mapped roles and a Research, Plan, Implement, Review cycle. Produce src/task.ps1, tests and a short README. Run your own tests and closing review; record actual failures, unresolved findings and missing evidence rather than inventing success. This stage must still attempt feasible work if the preceding stage had quality or bookkeeping failures."
+            $Prompts.build = "$Common Implement the frozen EXERCISE.txt CLI contract using available requirements, mapped roles and a Research, Plan, Implement, Review cycle. Produce src/task.ps1, tests and a short README. $BoundaryValidation Run your own tests and closing review; record actual failures, unresolved findings and missing evidence rather than inventing success. This stage must still attempt feasible work if the preceding stage had quality or bookkeeping failures."
+            $Prompts.build += ' This is the separately authorized synthetic EXERCISE prototype, not an approved-PRD handoff or a governed production transition. Preserve blocked BRD/PRD gates and draft status.'
         }
-        $Compatibility = Get-EfficiencyCompatibility -SourceRoot $SourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
-        $Metadata = @{ runId = [guid]::NewGuid().ToString(); pair = $Pair; arm = $Arm; revision = $Revision; sourceHash = Get-EfficiencyTreeHash (Join-Path $SourceRoot 'squad-src'); hostProfile = $Compatibility.hostProfile; compatibility = $Compatibility; sessionId = $Session; started = [datetime]::UtcNow.ToString('o') }
+        $Prompts.requirements += " $RequirementsHandoffs"
+        $Compatibility = $Admission.compatibility
+        $Metadata = @{ runId = [guid]::NewGuid().ToString(); pair = $Pair; arm = $Arm; revision = $Admission.revision; sourceHash = $Admission.sourceHash; hostProfile = $Compatibility.hostProfile; compatibility = $Compatibility; sessionId = $Session; started = [datetime]::UtcNow.ToString('o') }
         $Metadata | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath (Join-Path $Out 'metadata.json') -Encoding utf8NoBOM
         $Stages = [Collections.Generic.List[object]]::new()
         $AllPassed = $true; $StartLine = 0; $Metrics = $null
@@ -271,7 +338,10 @@ if ($MyInvocation.InvocationName -ne '.') {
         $WorkflowRequestCeiling = if ($ObservationOnly) { [int]::MaxValue } else { [int]$Scenario.maxModelRequests - 10 }
         $WorkflowSeconds = if ($ObservationOnly) { [int]$Scenario.observationTimeoutMinutes * 60 } else { [int]$Scenario.timeoutMinutes * 60 }
         $Watch = [Diagnostics.Stopwatch]::StartNew()
+        $ProgressCompleted = 1
         foreach ($Stage in $Prompts.Keys) {
+            $ProgressStage = $Stage
+            Write-EfficiencyProgress -Path $ProgressPath -Stage $Stage -Completed $ProgressCompleted -Total 7
             $StageWatch = [Diagnostics.Stopwatch]::StartNew()
             $StageStartLine = $StartLine; $PreviousMetrics = $Metrics
             $PriorRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests } else { 0 }
@@ -279,13 +349,14 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Attempts = [Collections.Generic.List[object]]::new()
             $Recovery = @{ count = 0; status = 'not-needed'; reason = $null; resolvedDiscoveryDenials = 0 }
             $UsagePath = Join-Path $Out "$Stage-usage.json"
-            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN') + $LocalArguments
             if ($ObservationOnly) { $CliArgs[[array]::IndexOf($CliArgs, '--max-autopilot-continues') + 1] = '1000'; $StageRequestCeiling = 0 }
             foreach ($Server in $DisabledServers) { $CliArgs += @('--disable-mcp-server', $Server) }
             foreach ($Denied in @('shell(git push)', 'shell(gh)', 'shell(az)', 'shell(curl)', 'shell(wget)', 'shell(Invoke-WebRequest)', 'shell(Invoke-RestMethod)', 'shell(Start-Process)')) { $CliArgs += @('--deny-tool', $Denied) }
             $Executable = $CliPath
             if ($CliPath.EndsWith('.ps1')) { $Executable = (Get-Command pwsh).Source; $CliArgs = @('-NoProfile', '-File', $CliPath) + $CliArgs }
             $InitialSeconds = [Math]::Floor($WorkflowSeconds - $Watch.Elapsed.TotalSeconds)
+            Assert-RunAdmission
             $Result = if (-not $ObservationOnly -and $StageRequestCeiling -lt 1) { [pscustomobject]@{ exitCode = -1; stopCause = 'request-limit'; seconds = 0; observedRequests = 0 } } elseif ($InitialSeconds -ge 1) { Invoke-EfficiencyProcess -FilePath $Executable -Arguments $CliArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-stdout.jsonl") -TimeoutSeconds ([int]$InitialSeconds) -EventsPath $SessionEvents -StartLine $StageStartLine -MaxRequests $StageRequestCeiling -MaxCredits $SessionCreditCeiling -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' } } else { [pscustomobject]@{ exitCode = -1; stopCause = 'timeout'; seconds = 0; observedRequests = 0 } }
             $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix $Stage
             $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
@@ -301,6 +372,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 $Recovery.resolvedDiscoveryDenials = $Decision.resolvedDiscoveryDenials
                 if ($Decision.allowed -and [Math]::Floor($RemainingSeconds) -ge 1) {
                     $Recovery.count = 1; $Recovery.status = 'attempted'
+                    Assert-RunAdmission
                     $Compact = Invoke-EfficiencyCompaction -CliPath $CliPath -SessionId $Session -Workspace $Workspace -EventsPath $SessionEvents -OutputPath (Join-Path $Out "$Stage-compaction-stdout.jsonl") -UsagePath (Join-Path $Out "$Stage-compaction-usage.json") -MaxCredits $SessionCreditCeiling -Model $Model -TimeoutSeconds ([int][Math]::Min(300, [Math]::Floor($RemainingSeconds))) -StartLine $StageStartLine -MaxRequests $StageRequestCeiling -DisabledServers $DisabledServers -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
                     $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix "$Stage-compaction"
                     $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
@@ -312,6 +384,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                         $ContinueArgs[[array]::IndexOf($ContinueArgs, '-p') + 1] = $Prompts[$Stage] + ' This is a continuation of this same stage after verified context compaction, not a new run. Resume only the interrupted Scribe handoff first; inspect existing history and do not duplicate it or rerun completed specialist roles. After the handoff verifies, finish only the pending stage work. Preserve run identity, artifacts and safety gates. If still blocked, record the remaining blocker and stop; no further recovery is allowed.'
                         $ContinueArgs[[array]::IndexOf($ContinueArgs, '--max-ai-credits') + 1] = $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
                         $ContinueArgs[[array]::IndexOf($ContinueArgs, '--usage-output-file') + 1] = Join-Path $Out "$Stage-continuation-usage.json"
+                        Assert-RunAdmission
                         $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $ContinueArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-continuation-stdout.jsonl") -TimeoutSeconds ([int][Math]::Floor($RemainingSeconds)) -EventsPath $SessionEvents -StartLine $StageStartLine -MaxRequests $StageRequestCeiling -MaxCredits $SessionCreditCeiling -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
                         $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix "$Stage-continuation"
                         $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
@@ -334,34 +407,90 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
             $StageProcess = @{ exitCode = $Result.exitCode; stopCause = $Result.stopCause; seconds = [Math]::Round($StageWatch.Elapsed.TotalSeconds, 3); observedRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests - $PriorRequests } else { $null } }
             $Stages.Add(@{ name = $Stage; process = $StageProcess; readiness = $Readiness; attempts = @($Attempts); recovery = $Recovery; metrics = $Metrics; metricScope = 'cumulative-session'; stageTokenDelta = $Delta; passed = $StagePassed })
+            $ProgressCompleted++
             if (-not $StagePassed) {
                 $AllPassed = $false
                 if (-not $ObservationOnly -or $Result.stopCause -ne 'none' -or -not $Metrics -or -not $Metrics.credits.complete) { break }
             }
         }
+        $ProgressStage = 'acceptance'
+        Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7
+        Assert-RunAdmission
         $Acceptance = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json -AsHashtable
         $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics }
+        $ProgressCompleted++
         $Judge = $null
         if (($ObservationOnly -or ($AllPassed -and $Acceptance.passed -and $Workflow.passed)) -and $Watch.Elapsed.TotalSeconds -lt $WorkflowSeconds) {
+            $ProgressStage = 'judge'
+            Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7
+            Assert-RunAdmission
             $Judge = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $CliPath -Model $Model -MaxCredits $RecoveryPolicy.judgeCredits -ReviewPath ([string]$Workflow.reviewPath) -TimeoutSeconds ([Math]::Max(1, [Math]::Min(300, $WorkflowSeconds - $Watch.Elapsed.TotalSeconds))) -ObservationOnly:$ObservationOnly
+            $ProgressCompleted++
         }
+        $ProgressStage = 'report'
+        Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7
         $Run = @{ schemaVersion = $Scenario.schemaVersion; metadata = $Metadata; stages = @($Stages); metrics = $Metrics; acceptance = $Acceptance; workflow = $Workflow; judge = $Judge; completed = ($AllPassed -and $Acceptance.passed -and $Workflow.passed -and $null -ne $Judge -and $Judge.valid) }
         if ($ObservationOnly) { $Run.collection = @{ policy = 'baseline-observation-v1'; recorded = $true; stagesAttempted = $Stages.Count; judgeAvailable = ($null -ne $Judge -and $Judge.valid) } }
-        $Run | ConvertTo-Json -Depth 45 | Set-Content -LiteralPath (Join-Path $Out 'run.json') -Encoding utf8NoBOM
         $Succeeded = Test-EfficiencyRun $Run -ObservationOnly:$ObservationOnly
-        Write-Host "Run complete: $($Run.completed). Independent checks passed: $Succeeded. Report: $(Join-Path $Out 'run.json')"
-        if ($ObservationOnly) {
-            $Recorded = Test-EfficiencyObservation $Run
-            Write-Host "Baseline observation recorded: $Recorded. Failed checks remain findings, not a passing workflow."
-            if (-not $Recorded) { exit 2 }
+        $Recorded = if ($ObservationOnly) { Test-EfficiencyObservation $Run } else { $null }
+        if ($LocalTest) {
+            $LocalExecutionComplete = [bool]$Recorded -and $Stages.Count -eq 3 -and @($Stages | Where-Object { $_.process.stopCause -ne 'none' }).Count -eq 0 -and
+                (-not $Judge -or -not $Judge['process'] -or $Judge.process.stopCause -eq 'none')
+            $Run.schemaVersion = 'efficiency-local-test-v1'
+            $Run.localDiagnostic = $true
+            $Run.collection = @{ policy = 'local-diagnostic-v1'; recorded = $false }
+            $Run.diagnostic = @{ executionComplete = $LocalExecutionComplete; independentChecksPassed = $Succeeded; judgeAvailable = ($null -ne $Judge -and $Judge.valid) }
         }
-        elseif (-not $Succeeded) { exit 2 }
+        $ResultPath = Join-Path $Out $(if ($LocalTest) { 'diagnostic.json' } else { 'run.json' })
+        $Run | ConvertTo-Json -Depth 45 | Set-Content -LiteralPath $ResultPath -Encoding utf8NoBOM
+        $ProgressCompleted++
+        Write-EfficiencyProgress -Path $ProgressPath -Stage report -Completed $ProgressCompleted -Total 7 -Status finished -IndependentChecksPassed $Succeeded -Recorded $(if ($LocalTest) { $false } else { $Recorded })
+        Write-Host "Run complete: $($Run.completed). Independent checks passed: $Succeeded. Diagnostic/report: $ResultPath"
+        if ($LocalTest) {
+            Write-Host 'LOCAL TEST ONLY: a descriptive score/badge is retained; one candidate is not formal comparison evidence or an improvement claim.'
+            if (-not $LocalExecutionComplete) { $CollectionFailed = $true; exit 2 }
+            exit 0
+        }
+        if ($ObservationOnly) {
+            Write-Host "Baseline observation recorded: $Recorded. Failed checks remain findings, not a passing workflow."
+            if (-not $Recorded) { $CollectionFailed = $true; exit 2 }
+        }
+        elseif (-not $Succeeded) { $CollectionFailed = $true; exit 2 }
     }
     catch {
+        $Failure = $_
+        $CollectionFailed = $true
+        if ($ProgressPath) { Write-EfficiencyProgress -Path $ProgressPath -Stage $ProgressStage -Completed $ProgressCompleted -Total 7 -Status failed }
         if ($Out -and (Test-Path -LiteralPath $Out)) {
-            @{ schemaVersion = 'efficiency-error-v1'; outcome = 'incomplete'; reason = 'execution-or-evidence-error'; acceptedBaselineChanged = $false } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Out 'error.json') -Encoding utf8NoBOM
+            $Reason = if ($Failure.Exception.Message -match 'execution-identity-drift|Provenance preflight failed|Local diagnostic working identity drift') { 'provenance-failure' } else { 'execution-or-evidence-error' }
+            @{ schemaVersion = 'efficiency-error-v1'; outcome = 'incomplete'; reason = $Reason; acceptedBaselineChanged = $false; admission = $Admission; observedIdentity = $Failure.Exception.Data['observedIdentity']; metadata = $Metadata; stages = @($Stages); pendingAttempts = @($Attempts); metrics = $Metrics } | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath (Join-Path $Out 'error.json') -Encoding utf8NoBOM
         }
-        Write-Error -Message $_.Exception.Message -ErrorAction Continue
+        Write-Error -Message $Failure.Exception.Message -ErrorAction Continue
         exit 1
+    }
+    finally {
+        if ($ScoreRoot) {
+            Import-Module (Join-Path $PSScriptRoot 'BenchmarkResults.psm1')
+            $ScoreSource = if ($Mode -eq 'Series') { $CandidateSourceRoot } elseif ($Mode -eq 'Establish' -and $BaselineSourceRoot) { $BaselineSourceRoot } else { $SourceRoot }
+            $ScoreArm = if ($Mode -eq 'Establish') { 'baseline' } else { 'candidate' }
+            $Directories = @(if ($Mode -eq 'Run') {
+                if (Test-Path -LiteralPath (Join-Path $TrialRoot $(if ($LocalTest) { 'out/diagnostic.json' } else { 'out/run.json' }))) { @($TrialRoot) } else { @() }
+            } else {
+                @(foreach ($Slot in 1..3) {
+                    $Directory = Join-Path $TrialRoot "trials/$ScoreArm-$Slot"
+                    if (Test-Path -LiteralPath (Join-Path $Directory 'out/run.json')) { $Directory }
+                })
+            })
+            $Id = 'attempt-' + [guid]::NewGuid().ToString('N')
+            try {
+                $Record = Export-BenchmarkScore -Repository $ScoreSource -TrialDirectories @($Directories) -SeriesId $Id -OutputDirectory $ScoreRoot -Local:$LocalTest
+                Write-Host "Score $($Record.score.value)/100 ($($Record.score.state)); score/report/badge stored: $ScoreRoot"
+            }
+            catch {
+                $null = Export-BenchmarkScore -SeriesId ($Id + '-failed') -OutputDirectory (Join-Path $ScoreRoot 'failed') -FailureReason 'score-export-failed'
+                Write-Error -Message 'Score export failed; a failed-score diagnostic was retained. Inspect local evidence; no paid retry.' -ErrorAction Continue
+                if (-not $CollectionFailed) { exit 1 }
+            }
+        }
     }
 }
