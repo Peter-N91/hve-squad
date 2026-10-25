@@ -1136,6 +1136,89 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         pour la spécification normative de chaque champ et de chaque règle de validation.
       </p>
 
+      <h2>Construire avec les builders invocables par l'utilisateur</h2>
+
+      <p>
+        Le package installé expose <strong>Squad Connector Builder</strong> et
+        <strong>Squad External Agent Builder</strong> dans le sélecteur d'agents. Leurs prompts
+        recueillent les décisions ; des scripts PowerShell réutilisables effectuent chaque opération
+        de création de répertoire, de rendu de modèle, de manifeste et de validation. Aucun builder
+        ne demande d'identifiants secrets ni n'inscrit un connecteur dans l'état de la squad.
+      </p>
+
+      <h3>Builder de connecteur : configuré ou modèle modifiable</h3>
+      <p>Pour un connecteur configuré, commencez avec les informations déjà connues :</p>
+      <pre><code>/squad-connector-builder mode=interactive destination=. request="Connect our repository research agent for the researcher role. Use connector id org-research and contact integrations@example.invalid."</code></pre>
+      <ol>
+        <li>Le builder demande uniquement le type d'endpoint, les capacités, rôles, version,
+          échéance et limite de tentatives manquants.</li>
+        <li>Après votre confirmation, <code>New-SquadConnector.ps1</code> crée
+          <code>connectors/&lt;id&gt;.json</code>, la boîte
+          <code>.connector-drops/&lt;id&gt;/</code> avec ses instructions, des exemples de
+          demande/résultat, un runner amovible et un runbook détaillé.</li>
+        <li><code>Test-SquadConnectorManifest.ps1</code> valide le schéma fermé 1.1 généré.
+          Corrigez chaque problème avant l'inscription.</li>
+      </ol>
+      <p>Pour partir d'exemples modifiables, invoquez plutôt :</p>
+      <pre><code>/squad-connector-builder mode=template destination=. request="Create an editable connector starter and identify every value I must replace."</code></pre>
+      <p>
+        Le mode modèle signale <code>REPLACE_CONNECTOR_ID</code>,
+        <code>REPLACE_CAPABILITY</code>, <code>REPLACE_ROLE</code> et
+        <code>REPLACE_CONTACT</code>. La validation échoue volontairement jusqu'à leur remplacement.
+      </p>
+
+      <h3>Builder externe : créer ou adapter un agent ou orchestrateur</h3>
+      <p>
+        Le mode création prend en charge un agent autonome ou un orchestrateur avec un worker borné
+        par responsabilité. Indiquez l'environnement d'exécution et les besoins en compétences ; le
+        builder réutilise une compétence HVE Core ou d'organisation installée et adaptée lorsqu'elle
+        existe, puis génère des instructions de compétence modifiables appartenant au consommateur
+        pour les besoins manquants. <code>New-SquadExternalEndpoint.ps1</code> effectue le rendu du
+        plan confirmé.
+      </p>
+      <pre><code>/squad-external-agent-builder action=create kind=orchestrator destination=. request="Create an implementation orchestrator with separate implementation and validation responsibilities, then connect it to the developer role."</code></pre>
+      <p>
+        La sortie comprend les chartes de l'endpoint et des workers, une compétence, les mêmes
+        artefacts de connecteur et runner amovible, ainsi que des runbooks séparés pour l'endpoint
+        et le connecteur. Les endpoints générés restent hors de la coordination HVE et ne peuvent
+        écrire l'état de la squad ni revendiquer des portes.
+      </p>
+      <p>Pour conserver et envelopper une implémentation dont vous êtes déjà propriétaire :</p>
+      <pre><code>/squad-external-agent-builder action=adapt kind=agent destination=. request="Adapt tools/existing-research-agent for the researcher role without modifying or replacing it."</code></pre>
+      <p>
+        Le mode adaptation vérifie que le chemin existe, le laisse identique octet par octet et ne
+        crée que les artefacts de connecteur et un runbook d'adaptation. Ce runbook associe les
+        champs bornés de demande et les enveloppes de sortie à l'hôte existant et fournit des
+        instructions concrètes pour installer les compétences dans cet hôte.
+      </p>
+
+      <h3>Personnaliser, réexécuter et vérifier de bout en bout</h3>
+      <ol>
+        <li>Installez PowerShell 7.4 ou ultérieur et examinez chaque fichier généré. Conservez les
+          identifiants secrets dans le coffre de l'hôte externe, jamais dans un manifeste, une
+          enveloppe, une charte, une compétence ou un runbook.</li>
+        <li>Validez depuis une installation APM avec
+          <code>.agents/skills/squad/scripts/Test-SquadConnectorManifest.ps1</code> ; les utilisateurs
+          du plugin emploient <code>skills/squad/scripts/Test-SquadConnectorManifest.ps1</code>.</li>
+        <li>Effectuez un passage avec
+          <code>pwsh -File scripts/Run-&lt;id&gt;-Connector.ps1 -Once</code>. Le runner par défaut
+          écrit un reçu de transport clairement étiqueté et ne nécessite aucun identifiant secret.
+          Remplacez sa fonction <code>Invoke-ExampleEndpoint</code> par l'appel de votre hôte/SDK de
+          confiance, remplacez entièrement le runner ou supprimez-le.</li>
+        <li>Testez directement l'endpoint, configurez l'association de confiance entre
+          <code>connectorId</code> et l'endpoint hors du manifeste, puis demandez au Squad
+          Coordinator d'inscrire le manifeste.</li>
+        <li>Exécutez une demande bornée. La première délégation renvoie <code>awaiting</code> ;
+          après publication du résultat par l'adaptateur, reprenez le même identifiant de tâche et
+          examinez la sortie comme <code>external, unverified</code>.</li>
+      </ol>
+      <div class="callout"><p>
+        Les réexécutions sûres n'écrasent jamais silencieusement le travail utilisateur. Les fichiers
+        identiques sont signalés <code>unchanged</code>. Si un fichier généré a été personnalisé, le
+        script prévalide le plan complet, s'arrête avant toute écriture et répertorie les conflits.
+        Il n'existe aucun commutateur de forçage ; comparez et adoptez délibérément le contenu régénéré.
+      </p></div>
+
       <h2>Ce qui n'est pas encore pris en charge</h2>
 
       <p>
@@ -1170,16 +1253,6 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         boucle humaine). Un manifeste décrivant <code>"mcp"</code> échouera la validation. Le
         construire nécessite un nouveau plan gardé par la porte d'action impactful et une passe
         de conseil fraîche.
-      </p>
-
-      <p>
-        <strong>Agent/compétence Squad Connector Builder (T2, différé).</strong> Cette version
-        expédie le contrat de connecteur et les modèles uniquement. Un agent ou une compétence
-        Squad Connector Builder dédié, qui pourrait vous aider à créer un manifeste compatible
-        et vous guider étape par étape dans l'intégration, est prévu comme suivi après observation
-        de la façon dont les équipes utilisent l'approche basée sur modèle. Si vous êtes bloqué
-        en créant un manifeste ou un coordinateur, consultez la page
-        <a href="troubleshooting.html">Dépannage</a> ou contactez les responsables.
       </p>
 
       <div class="pager">

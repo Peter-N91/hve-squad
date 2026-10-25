@@ -25,6 +25,13 @@ host/adapter: it reads file-drop requests, runs the configured endpoint with its
 own skills, and returns a result. Copying a manifest or an agent file does not
 start that process.
 
+If your installed package includes the user-invocable builders, use
+`/squad-connector-builder` for a configured connector or editable template, and
+`/squad-external-agent-builder` to create a standalone agent/orchestrator or
+adapt an existing implementation. Both produce a detailed runbook and a
+removable PowerShell runner; safe reruns stop rather than overwrite customized
+files. The manual steps below remain the contract-level reference.
+
 ## Step 1: Create the connector folders
 
 Create `connectors` and the two mailbox directories in your project:
@@ -206,7 +213,9 @@ arrives. If your workflow uses manual file handoff, resume the same task:
 /squad mode=autopilot Continue the current run. Check the pending connector result using its existing taskId and binding; do not create a new task.
 ```
 
-The connector does not provide an external runner or automatic wake-up service.
+The connector shim does not run an external endpoint or provide an automatic
+wake-up service. The optional builder can scaffold a removable example runner,
+but the consumer still owns and starts it (or replaces it with their host).
 That transport limitation is separate from automatic role selection.
 
 The thin `Squad Connector` agent runs `Invoke-SquadConnectorDispatch.ps1` once

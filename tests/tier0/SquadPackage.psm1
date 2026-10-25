@@ -15,6 +15,8 @@ $script:AgentBodyCharLimit = 30000
 $script:EntrypointPromptNames = @(
     'squad.prompt.md'
     'squad-coach.prompt.md'
+    'squad-connector-builder.prompt.md'
+    'squad-external-agent-builder.prompt.md'
     'squad-federation.prompt.md'
     'squad-document.prompt.md'
     'squad-governance-report.prompt.md'

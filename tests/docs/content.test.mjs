@@ -85,6 +85,28 @@ test("connector guides explain consumer seats, arbitrary additions, and squad-lo
   }
 });
 
+test("connector guides document both builders and safe end-to-end runs in both languages", () => {
+  for (const prefix of ["", "fr/"]) {
+    const { $, raw } = readSource("connector", prefix);
+    const text = $("main").text();
+    for (const term of [
+      "Squad Connector Builder", "Squad External Agent Builder",
+      "New-SquadConnector.ps1", "Test-SquadConnectorManifest.ps1",
+      "New-SquadExternalEndpoint.ps1", "Run-<id>-Connector.ps1",
+      "Invoke-ExampleEndpoint", "REPLACE_CONNECTOR_ID", "unchanged",
+      "awaiting", "external, unverified",
+    ]) {
+      assert(text.includes(term), `${prefix}connector: missing builder runbook term ${term}`);
+    }
+    assert(raw.includes("/squad-connector-builder mode=interactive"));
+    assert(raw.includes("/squad-connector-builder mode=template"));
+    assert(raw.includes("/squad-external-agent-builder action=create kind=orchestrator"));
+    assert(raw.includes("/squad-external-agent-builder action=adapt kind=agent"));
+    assert.match(text, prefix ? /identique octet par octet/ : /byte-identical/);
+    assert.match(text, prefix ? /ne demande d'identifiants secrets/ : /asks for credentials/);
+  }
+});
+
 test("connector guides keep retry exhaustion aligned with the unreachable runtime status", () => {
   for (const prefix of ["", "fr/"]) {
     const { $ } = readSource("connector", prefix);

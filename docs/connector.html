@@ -1088,6 +1088,82 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         for the normative specification of every field and every validation rule.
       </p>
 
+      <h2>Build with the user-invocable builders</h2>
+
+      <p>
+        The installed package exposes <strong>Squad Connector Builder</strong> and
+        <strong>Squad External Agent Builder</strong> in the agent picker. Their prompts gather
+        decisions; reusable PowerShell scripts perform every directory, template, manifest, and
+        validation operation. Neither builder asks for credentials or registers a connector in
+        squad state.
+      </p>
+
+      <h3>Connector builder: configured or editable template</h3>
+      <p>For a configured connector, start with what you already know:</p>
+      <pre><code>/squad-connector-builder mode=interactive destination=. request="Connect our repository research agent for the researcher role. Use connector id org-research and contact integrations@example.invalid."</code></pre>
+      <ol>
+        <li>The builder asks only for missing endpoint kind, capabilities, roles, version, deadline, and retry cap.</li>
+        <li>After your confirmation, <code>New-SquadConnector.ps1</code> creates
+          <code>connectors/&lt;id&gt;.json</code>, the <code>.connector-drops/&lt;id&gt;/</code> mailbox
+          and guidance, request/result examples, a removable runner, and a detailed runbook.</li>
+        <li><code>Test-SquadConnectorManifest.ps1</code> validates the generated closed 1.1 schema.
+          Resolve every issue before registration.</li>
+      </ol>
+      <p>To start from editable examples instead, invoke:</p>
+      <pre><code>/squad-connector-builder mode=template destination=. request="Create an editable connector starter and identify every value I must replace."</code></pre>
+      <p>
+        Template mode reports <code>REPLACE_CONNECTOR_ID</code>,
+        <code>REPLACE_CAPABILITY</code>, <code>REPLACE_ROLE</code>, and
+        <code>REPLACE_CONTACT</code>. Validation intentionally fails until all four are resolved.
+      </p>
+
+      <h3>External builder: create or adapt an agent or orchestrator</h3>
+      <p>
+        Create mode supports a standalone agent or an orchestrator with one bounded worker per
+        responsibility. Name the execution environment and skill requirements; the builder reuses
+        a matching installed HVE Core or organization skill when available and generates editable
+        consumer-owned skill guidance for missing requirements.
+        <code>New-SquadExternalEndpoint.ps1</code> renders the confirmed plan.
+      </p>
+      <pre><code>/squad-external-agent-builder action=create kind=orchestrator destination=. request="Create an implementation orchestrator with separate implementation and validation responsibilities, then connect it to the developer role."</code></pre>
+      <p>
+        The output includes endpoint and worker charters, a skill, the same connector artifacts and
+        removable runner, and separate endpoint/connector runbooks. Generated endpoints remain
+        outside HVE coordination and cannot write squad state or claim gates.
+      </p>
+      <p>To preserve and wrap an implementation you already own, use adapt mode:</p>
+      <pre><code>/squad-external-agent-builder action=adapt kind=agent destination=. request="Adapt tools/existing-research-agent for the researcher role without modifying or replacing it."</code></pre>
+      <p>
+        Adapt mode checks that the path exists, leaves it byte-identical, and creates only connector
+        artifacts plus an adaptation runbook. That runbook maps bounded request fields and output
+        envelopes to the existing host and gives concrete native-host skill installation guidance.
+      </p>
+
+      <h3>Customize, rerun, and verify end to end</h3>
+      <ol>
+        <li>Install PowerShell 7.4 or newer and review every generated file. Keep credentials in the
+          external host's secret store, never in a manifest, envelope, charter, skill, or runbook.</li>
+        <li>Validate from an APM install with
+          <code>.agents/skills/squad/scripts/Test-SquadConnectorManifest.ps1</code>; plugin users use
+          <code>skills/squad/scripts/Test-SquadConnectorManifest.ps1</code>.</li>
+        <li>Poll once with
+          <code>pwsh -File scripts/Run-&lt;id&gt;-Connector.ps1 -Once</code>. The default runner writes
+          a labelled transport receipt and needs no credentials. Replace its
+          <code>Invoke-ExampleEndpoint</code> function with your trusted host/SDK invocation, replace
+          the runner entirely, or remove it.</li>
+        <li>Test the endpoint directly, configure the trusted <code>connectorId</code>-to-endpoint
+          mapping outside the manifest, then ask Squad Coordinator to register the manifest.</li>
+        <li>Run one bounded request. The first dispatch returns <code>awaiting</code>; after the
+          adapter publishes a result, resume the same task id and review the output as
+          <code>external, unverified</code>.</li>
+      </ol>
+      <div class="callout"><p>
+        Safe reruns never silently overwrite user work. Byte-identical files are reported
+        <code>unchanged</code>. If any generated file was customized, the script preflights the
+        complete plan, stops before writing anything, and lists the conflicts. There is no force
+        switch; compare and adopt regenerated content deliberately.
+      </p></div>
+
       <h2>What is not supported yet</h2>
 
       <p>
@@ -1121,17 +1197,6 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
         <code>transport: "file"</code> (Mode 2, human-in-the-loop file drop). A manifest declaring
         <code>"mcp"</code> will fail validation. Building it requires a new Impactful-Action-gated
         plan and a fresh Council pass.
-      </p>
-
-      <p>
-        <strong>Squad Connector Builder agent/skill (T2, deferred).</strong> This release ships the
-        connector contract and templates only. A dedicated Squad Connector Builder agent or skill,
-        which could help you author a compatible manifest and walk you through the integration step by
-        step, is planned as a follow-up after observing how teams use the template-based approach. If
-        you get stuck authoring a manifest or coordinator, check the <a href="troubleshooting.html"
-          >Troubleshooting</a
-        >
-        page or reach out to the maintainers.
       </p>
 
       <div class="pager">

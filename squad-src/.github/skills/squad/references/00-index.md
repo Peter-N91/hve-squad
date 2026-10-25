@@ -19,6 +19,7 @@ Load only required references.
 | [profiles-and-packs.md](profiles-and-packs.md)     | Roster seeding/changes: profiles, packs, roles |
 | [roster-catalog.md](roster-catalog.md)             | Casting/upgrades, custom/external roles, pack registration/resolution |
 | [connector-role-modes.md](connector-role-modes.md) | Setup/refresh, bindings, execution; [shim transport](connector-contract.md) |
+| [builder-workflows.md](builder-workflows.md)       | User-invocable connector or external endpoint builder flow |
 | [foundry-blueprint.md](foundry-blueprint.md)       | `foundry` roles |
 | [foundry-platform-options.md](foundry-platform-options.md) | `foundry` platform |
 | [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
