@@ -36,13 +36,14 @@ load only references that contract conditionally requires.
 | [requirements-quality.md](requirements-quality.md) | Requirements authoring/review only |
 | [federation.md](federation.md) | Federation lifecycle/layout |
 | [economy-scribe.md](economy-scribe.md) | Ordinary writes, all routing modes |
+| [verdict-writer.md](verdict-writer.md) | Supported Council, Intake Readiness and Discovery Verdicts |
 | [scribe-cold-charter.md](scribe-cold-charter.md) | Unsupported/cold Scribe work |
 | [scribe-procedure.md](scribe-procedure.md) | Cold rules, step map and checks |
 | [entry-schemas.md](entry-schemas.md) | Decision/history/state schemas |
 | [scribe-payload-template.md](scribe-payload-template.md) | Cold payload fields/order |
 | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) | Init/refresh, memory/learnings |
 | [scribe-cold-federation.md](scribe-cold-federation.md) | Unsupported-host federation lifecycle, repairs and root history |
-| [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Verdicts, summaries, notifications |
+| [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Unsupported verdict fallback, summaries, notifications |
 | [seed-templates.md](seed-templates.md) | Init roster/routing templates |
 | [consumption.md](consumption.md) | Ledger, estimator, Cost Preflight |
 | [consumption-rates-template.md](consumption-rates-template.md) | Init/reseed rates without the script |

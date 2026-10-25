@@ -110,9 +110,12 @@ all gate procedures, or unrelated instruction files.
   agent's model and internal tool-call count. Keep `auto` literal session
   metadata; unreported actual usage is `unknown`, never a guessed model.
 * Run `Write-SquadHandoff.ps1 -Quiet` directly and synchronously with minimal
-  JSON for ordinary writes. Confirmed fresh Init may also run its validated
-  helper directly. Unsupported operations use the cold Scribe contract, not
-  hand-authored state or an automatic fallback after invalid input.
+  JSON for ordinary writes. After its handoff, run
+  `Write-SquadVerdict.ps1 -Quiet` directly for Council, Intake Readiness, and
+  Discovery Verdicts and use the returned Decision Ref. Confirmed fresh Init may
+  also run its validated helper directly. Unsupported operations use the cold
+  Scribe contract, not hand-authored state or an automatic fallback after invalid
+  input.
 * Before an independent closing implementation review, pass literal source,
   research, plan and report paths and a unique authorized workspace-contained
   probe scratch directory. Reviewers remain implementation/state read-only;
@@ -125,9 +128,11 @@ all gate procedures, or unrelated instruction files.
 
 Use the runtime's mechanical completion call, not a narrative or repeated manual
 file audits. A script failure, missing proof or unadmitted cost slot stops
-completion. Never overlap direct writer, cold Scribe, or Cost Preflight at one
-root. For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
+completion. Never overlap handoff writer, verdict writer, cold Scribe, or Cost
+Preflight at one root.
+For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
 Ordinary handoffs run synchronously through the validated writer.
+Supported verdicts run synchronously through the verdict writer.
 
 Return the matched pattern, actual agents and tiers, their synthesized findings,
 verified paths/state receipt, and unresolved approvals or blockers. No model pin:

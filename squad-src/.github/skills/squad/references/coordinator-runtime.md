@@ -60,6 +60,7 @@ canonical sections of `gates-and-modes.md`:
 | Manual model questions or an unresolved catalog fact | `model-routing.md`; `model-catalog.md` only for the unresolved fact |
 | Economy consent or proposed bounded lane | `economy-mode.md` |
 | Notification delivery | `gates-and-modes.md` notification section and `squad-notifications.instructions.md` |
+| Council, Intake Readiness, or Discovery Verdict persistence | `verdict-writer.md` |
 
 Offer discovery once only for eligible attended profiles. Reuse unchanged intake;
 blockers remain questions and `Ready-With-Gaps` has none. Councils are task-fit,
@@ -76,11 +77,14 @@ in transport JSON outside squad state. Run
 It returns waves, `routingRefresh` and preflight; it writes nothing.
 Pass the host's actual `agentTypes` enum when available; use its resolved native
 IDs, not a guessed API type from the display name.
+For active routing, `task` hosts pass their complete `availableModels` enum;
+`auto` is not inventory. A host without an enum may pass a concrete priced
+session model. Unresolved availability stops before refresh or dispatch.
 Unknown, unavailable or ambiguous endpoints stop. A confirmed missing catalog
 role/pack uses `roster-expansion.md`; substitution, recasting or removal is a
 separate explicit choice, never automatic.
 
-Honor connector defaults; `both` needs disjoint outputs/admission and Alternates
+The helper honors connector defaults; `both` needs disjoint outputs/admission and Alternates
 need cues. Apply routing/preflight writers before `admittedUnits`. Expand a
 confirmed catalog roster before planning its new role. `routing=off` and every
 non-additive roster change stay cold; `off` passes no override and Scribe keeps
@@ -107,19 +111,15 @@ Require final model identity, tool-call count,
 actual paths, outcome and unresolved questions. Review only after owners' final
 returns. Use the write-set snapshot/verify mode for a closing review when needed.
 
-Run `Write-SquadHandoff.ps1 -Quiet` directly and synchronously for ordinary
-payloads in every routing mode, per `economy-scribe.md`. Save minimal JSON outside
-squad state; let the script derive turns, timestamps, estimator floors and ledger
-arithmetic when facts are absent. Supply stronger actual host/worker usage when
-reported. `stateAdvance.activeRoles` names actual dispatched agents, not role ids
-or an imaginary Scribe. Never invent Scribe usage on a direct route.
+Run `Write-SquadHandoff.ps1 -Quiet` synchronously per `economy-scribe.md`.
+Supply actual usage; `activeRoles` names dispatched agents, never Scribe.
+After it, gate verdicts use `Write-SquadVerdict.ps1 -Quiet` at the same root per
+`verdict-writer.md`; validate its Decision Ref before advancing.
 
-Unsupported exit 2 takes the documented cold Scribe path: read
-`scribe-payload-template.md`, dispatch Scribe with required fields and trusted
-ledger invocation. Verdicts, memory, notifications, `routing=off`, non-additive
-roster changes, and summaries retain this path. Invalid data, history-integrity, rate
-refusal and failed restore are not permission to fall back manually.
-Serialize writer, cold Scribe and Cost Preflight at each root.
+Exit 2 uses `scribe-payload-template.md` and cold Scribe. Other failures never
+permit manual fallback; cold-only work includes memory, notifications,
+`routing=off`, non-additive roster changes and summaries.
+Serialize handoff writer, verdict writer, cold Scribe and Cost Preflight at each root.
 For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
 
 ## 5. Complete Mechanically

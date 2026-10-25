@@ -16,11 +16,12 @@ These schemas are separate from [seed-templates.md](seed-templates.md), which st
 
 Write semantics follow the state layout: `decisions.md`, `history/<agent>.md`, `history/autonomous-loop-<id>.md`, `history/autopilot-run-<id>.md`, and `notifications.md` are append-only; `state.json` uses replace semantics.
 
-**This file carries recurring compatibility shapes, not a mandatory ordinary read.** Cost Preflight, verdicts, cycle/run summaries, and notifications are in [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md), loaded by the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
+**This file carries recurring compatibility shapes, not a mandatory ordinary read.** Supported gate verdicts use [verdict-writer.md](verdict-writer.md); cold verdict fallback, summaries, and notifications use [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md).
 
 ## decisions.md
 
-Append-only log. The header is written once; every decision is appended below it and prior entries are never edited. Council Verdicts (from the Council Procedure) use the same append-only contract but a fixed schema; the placeholder shapes are in [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md).
+Append-only log. The header is written once; prior entries are never edited.
+Gate verdicts use fixed schemas validated by `Write-SquadVerdict.ps1`.
 
 ```markdown
 ---

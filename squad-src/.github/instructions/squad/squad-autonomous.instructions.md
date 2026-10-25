@@ -31,7 +31,7 @@ When the input is absent, the coordinator runs the normal per-turn protocol from
 The autonomous loop is a fixed sequence the coordinator runs on a single turn:
 
 1. Council dispatch. The coordinator dispatches the task-fit council (the roles from the roster for the lenses the proposal touches, out of `architect`, `security`, `cost-manager`, `product-owner`, and `rai`) in parallel against the proposal under review and waits for findings, per `.github/instructions/squad/squad-council.instructions.md`. It selects the roles without asking and stops only when a needed role is absent from the roster, offering it as a council extension; a waived council ends the loop for the turn.
-2. Verdict synthesis. The coordinator hands the findings to the Scribe and the Scribe writes the Council Verdict to `decisions.md`. When the verdict is `Stop`, the loop ends and the coordinator escalates immediately; the loop never runs an implementer against a `Stop` verdict.
+2. Verdict synthesis. The coordinator records the council dispatches through `Write-SquadHandoff.ps1`, then passes the closed findings to `Write-SquadVerdict.ps1`, which derives and writes the Council Verdict to `decisions.md`. When the verdict is `Stop`, the loop ends and the coordinator escalates immediately; the loop never runs an implementer against a `Stop` verdict.
 3. Implementer dispatch. On `Go` or `Go-With-Conditions`, the coordinator dispatches the implementation role (typically `developer`) with the consolidated conditions attached as inputs.
 4. Council re-validation. The coordinator dispatches the same council in parallel against the implementer's output for one re-validation cycle.
 5. Decision. On a `Go` re-validation, the loop converges; the coordinator hands the final history entry to the Scribe and reports back to the user. On `Go-With-Conditions` whose conditions are all satisfied in the implementer's output, the loop converges. On any other outcome, the coordinator either runs cycle 2 of re-validation or escalates per the cap below.
@@ -44,7 +44,7 @@ The loop caps re-validation at two cycles. After cycle 2, the coordinator escala
 
 * Cycle 1 (mandatory): council re-validates the first implementer output.
 * Cycle 2 (conditional): council re-validates a second implementer output, used only when cycle 1 returned `Go-With-Conditions` with outstanding conditions or a non-`Stop` verdict whose conditions the implementer addressed in a follow-up draft.
-* No cycle 3. Whatever the cycle-2 verdict is (`Go`, `Go-With-Conditions`, or `Stop`), the coordinator stops the loop, hands the final history entry to the Scribe, and surfaces the result to the user.
+* No cycle 3. Whatever the cycle-2 verdict is (`Go`, `Go-With-Conditions`, or `Stop`), the coordinator stops the loop, persists the final history through the validated handoff writer (or cold fallback), and surfaces the result to the user.
 
 The cap is hard. Iteration limits guard against the thrashing failure mode documented in the autonomous-validation research (see `.copilot-tracking/research/subagents/2026-06-11/autonomous-validation-patterns-research.md`).
 

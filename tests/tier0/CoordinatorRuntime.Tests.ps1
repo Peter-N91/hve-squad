@@ -350,6 +350,23 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan.routingRefresh.changes[0].to | Should -BeExactly 'gpt-5.6-sol'
     }
 
+    It 'refuses active routing when sessionModel auto is supplied without the host model enum' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo -ModelRouting ranked
+        $path = Join-Path $repo 'ranked-auto-without-host-models.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root
+            sessionModel = 'auto'
+            units = @(@{ id = 'work'; role = 'developer' })
+        }
+        $before = Get-FixtureHash $fixture.Root
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path)
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'sessionModel ''auto'' is routing metadata, not an availability inventory'
+        $result.Output | Should -Match 'availableModels'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+    }
+
     It 'plans the first off-to-<Mode> transition over only the actual role' -ForEach @(
         @{ Mode = 'ranked' }
         @{ Mode = 'economy' }

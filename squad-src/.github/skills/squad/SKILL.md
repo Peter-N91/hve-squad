@@ -58,7 +58,7 @@ is an on-demand map, not a mandatory coordinator startup read.
 | [scribe-payload-template.md](references/scribe-payload-template.md) | The Scribe hand-off payload both coordinators fill, byte-stable-prefix ordered |
 | [scribe-cold-init-and-seeding.md](references/scribe-cold-init-and-seeding.md) | Full state-tree seed and Repository Memory promotion — Scribe only, conditional |
 | [scribe-cold-federation.md](references/scribe-cold-federation.md) | Unsupported-host federation lifecycle fallbacks, repairs, and federation-level summaries — Scribe only, conditional |
-| [scribe-cold-gates-and-verdicts.md](references/scribe-cold-gates-and-verdicts.md) | Verdict schemas, autonomous-loop and autopilot-run summaries, notifications.md — Scribe only, conditional |
+| [scribe-cold-gates-and-verdicts.md](references/scribe-cold-gates-and-verdicts.md) | Unsupported verdict fallback, autonomous-loop/autopilot summaries, notifications.md — Scribe only, conditional |
 | [seed-templates.md](references/seed-templates.md)             | First-run state templates: team.md and routing.md                              |
 | [consumption.md](references/consumption.md)                   | Consumption ledger templates, the cost estimator, and Cost Preflight           |
 | [consumption-rates-template.md](references/consumption-rates-template.md) | Cold seed template for consumption-rates.md: rate tables, tier fallback, calibration |

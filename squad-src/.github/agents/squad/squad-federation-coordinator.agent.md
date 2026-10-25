@@ -114,7 +114,8 @@ as explicit read-only `inputs=`. Preserve current roster output roots, forwardin
 narrow. Ask discovery once at federation level, never on unattended paths.
 
 Use `Write-SquadHandoff.ps1 -Quiet` directly and synchronously with minimal JSON
-inside members. Supported ordinary root writes use
+inside members, followed by the same `Write-SquadVerdict.ps1 -Quiet` used by a
+plain squad for Council, Intake Readiness, and Discovery Verdicts. Supported ordinary root writes use
 `Write-SquadFederationHandoff.ps1` with its pre-dispatch snapshot and inner proofs.
 Promotion uses `Get-SquadPromotionPlan.ps1` before confirmation and
 `Promote-SquadFederation.ps1` afterward; pass the exact plan hash and an exhaustive

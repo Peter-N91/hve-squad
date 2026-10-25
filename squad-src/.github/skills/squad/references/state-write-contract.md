@@ -48,7 +48,15 @@ adds or changes the active mode/Model column, writes selected cells and economy
 consent when supplied, then reads back. It never changes roster membership,
 routing rows, or `state.json`; `routing=off` remains cold.
 
-Every unsupported operation cold-loads the full Scribe charter/procedure/schema/payload. After admission Scribe preserves the preflight object and links each child to its admitted run/round/slot. Never overlap direct writer, cold Scribe, or Cost Preflight at one root. For cold autopilot handoffs, never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order and verify before the next. A direct ordinary handoff is synchronous, not pipelined.
+Council, Intake Readiness, and Discovery Verdicts are also deterministic on
+supported hosts. After `Write-SquadHandoff.ps1` records that turn's dispatches
+and state, `Write-SquadVerdict.ps1` validates the closed verdict payload, shares
+the same per-root lock, appends the exact schema to `decisions.md`, and returns
+its Decision Ref. A federation member passes its member root unchanged; the
+federation meta-root is not a verdict target. Only exit 2 takes the cold Scribe
+fallback.
+
+Every unsupported operation cold-loads the full Scribe charter/procedure/schema/payload. After admission Scribe preserves the preflight object and links each child to its admitted run/round/slot. Never overlap handoff writer, verdict writer, cold Scribe, or Cost Preflight at one root. For cold autopilot handoffs, never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order and verify before the next. Direct ordinary handoffs and verdict appends are synchronous, not pipelined.
 
 Append-only files are never edited or removed. Coordinators must not edit state themselves outside Cost Preflight; invoking a validated handoff, routing, or promotion writer grants no permission to hand-edit history or state. Nonzero exits, invalid status, stale promotion plans, history-integrity, and restore failures fail closed, never trigger a hand-written fallback. Quiet success is one JSON status/count/check object; warnings stay visible on stderr and tolerated `ledger-only` is not `PASS`.
 

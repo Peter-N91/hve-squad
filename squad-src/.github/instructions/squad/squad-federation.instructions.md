@@ -7,7 +7,7 @@ applyTo: '**/.copilot-tracking/squad/federation.md'
 
 These conventions define **federation**: running several named sub-squads under one hub so a single repository can host more than one squad — for example, a business team's `product` sub-squad and an architecture team's `azure` sub-squad, side by side. Federation is **opt-in and additive**. A repository that never opts in keeps exactly today's single-squad behavior.
 
-Federation reuses every existing squad mechanism unchanged. Each sub-squad is an ordinary squad — same roster, routing, decisions, history, consumption, and single-writer Scribe discipline — only rooted at a named path instead of the top-level `.copilot-tracking/squad/`. The only new pieces are a **parameterized state root** and a thin **meta layer** (a registry, a meta-routing table, and the Squad Federation Coordinator) that classifies a request to one or more sub-squads and runs each scoped to its own root.
+Federation reuses every existing squad mechanism unchanged. Each sub-squad is an ordinary squad — same roster, routing, decisions, history, consumption, and per-root writer discipline — only rooted at a named path instead of the top-level `.copilot-tracking/squad/`. The only new pieces are a **parameterized state root** and a thin **meta layer** (a registry, a meta-routing table, and the Squad Federation Coordinator) that classifies a request to one or more sub-squads and runs each scoped to its own root.
 
 Routing across sub-squads is decided here and in `meta-routing.md`; routing *within* a sub-squad is unchanged (`squad-routing.instructions.md`). Roster and persistence rules are unchanged (`squad-roster.instructions.md`, `squad-state.instructions.md`).
 
@@ -30,7 +30,7 @@ A squad's state lives under a **squad root**. The root is parameterized:
 
 * The default squad root is `.copilot-tracking/squad/`. Every state path in `squad-state.instructions.md` (`team.md`, `routing.md`, `decisions.md`, `history/<agent>.md`, `state.json`, `consumption.md`, and the rest) is `<squadRoot>/...`, and the default keeps today's literal paths.
 * In a federation, each sub-squad roots at `.copilot-tracking/squad/members/<name>/`, where `<name>` is the sub-squad's registered name (lower-kebab-case). That directory holds the sub-squad's full standard state tree.
-* The Squad Coordinator and the Squad Scribe accept an optional `squadRoot`; when omitted, the default preserves single-squad behavior. The Squad Federation Coordinator sets `squadRoot=.copilot-tracking/squad/members/<name>/` when it drives a sub-squad.
+* Coordinators, writers, and Scribe accept `squadRoot`; the Federation Coordinator sets `members/<name>/` when driving a sub-squad.
 
 Because every squad instruction file's `applyTo` is `**/.copilot-tracking/squad/**`, all conventions auto-apply at any depth, so a sub-squad tree under `members/<name>/` inherits the roster, routing, and state rules without any `applyTo` change.
 
@@ -286,10 +286,10 @@ outside admission; Cost Preflight remains the narrow coordinator hand-edited
 transaction (matching decision plus compare-and-swap
 `currentRun.costPreflight`, then read back).
 
-* **Sub-squad level.** When the Federation Coordinator drives a sub-squad, the Scribe writes that sub-squad's `decisions.md`, `history/<agent>.md`, `consumption.md`, and the rest under `members/<name>/`, exactly as for a plain squad. Proof-of-dispatch is unchanged: a sub-squad stage is proven by a `members/<name>/history/<agent>.md` entry plus its consumption block. The pre-work gates are sub-squad state like everything else: a `## Discovery Verdict` and a `## Intake Readiness Verdict` land in `members/<name>/decisions.md`, and a discovery brief lands in `members/<name>/plans/`, never at the federation root.
+* **Sub-squad level.** The same handoff and verdict writers target `members/<name>/`; exit 2 uses cold Scribe. Proof remains member history plus consumption. Discovery/Intake Verdicts land in member `decisions.md`, and briefs in member `plans/`, never at the root.
 * **Federation level.** Ordinary or targeted routing forwards the same ceiling lifecycle to every selected sub-squad, where each ceiling is independent; the root records routing but performs no aggregate preflight. Untargeted `mode=autopilot` instead keeps one aggregate ceiling at the root, uses the root rate table, and does not double-gate child runs. Federation decisions and `history/<sub-squad>.md` link both levels.
 
-No coordinator hand-edits history, prior decisions, or state outside Cost Preflight; direct validated execution is not a bypass. Every admitted child carries its preflight run, round, and slot to cold Scribe. Each member's writes stay inside its root, so parallel sub-squads never touch the same files.
+No coordinator hand-edits history, prior decisions, or state outside Cost Preflight; direct validated execution is not a bypass. Every admitted child carries its preflight run, round, and slot to the validated handoff writer or cold fallback. Each member's writes stay inside its root, so parallel sub-squads never touch the same files.
 
 Cold Scribe hand-off pipelining follows this same per-root scoping: the federation root itself never pipelines its own meta-transitions, and each sub-squad's inner run evaluates the Enablement Predicate (`.github/instructions/squad/squad-autopilot.instructions.md`) against its own root. Direct ordinary writes are synchronous. An inner run under an aggregate ceiling may pipeline cold Scribe work because meta rounds read its ledger only after all its writers have returned and verified.
 

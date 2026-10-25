@@ -189,7 +189,7 @@ only untargeted federation autopilot uses one aggregate federation ceiling.
 
 **Ranked is capability-first; Economy is cost-first after qualification.** Policy `squad-capability-v3` uses a common versioned comparison panel, selected by independent snapshot-wide coverage, never scores, prices or host availability (`references/model-scoring.md`). Implementation retains SciCode/Terminal-Bench and a visibly reduced SciCode panel. Economy requires each full-panel percentile to reach `0.50`, or reduced SciCode to reach `0.75`, then selects the lowest known Blended price. Confidence and cost only break genuine Ranked capability ties. The 90-day safeguard applies to genuine verification, not publication age; result, acquisition, verification and generation dates stay distinct, and legacy unknowns are not silently refreshed. Reports expose panels and precise exclusions; unsupported comparisons fall back explicitly. Modes may agree. A `fast` floor is a minimum, not a frontier ceiling. Coordinators keep the selected session model, and the Scribe keeps its pin.
 
-The compact discovery brief no longer ranks the whole roster. `New-SquadDispatchPlan.ps1` receives the real selected units and host model list, resolves only those roles, and returns the active-mode transition or changed cells. `Set-SquadModelRouting.ps1` applies it through an exact `team.md` hash check, so first activation and refresh of ranked, economy, or manual routing do not spend a Scribe model turn.
+The compact discovery brief no longer ranks the whole roster. `New-SquadDispatchPlan.ps1` receives the real selected units and host model list, resolves only those roles, and returns the active-mode transition or changed cells. `Set-SquadModelRouting.ps1` applies it through an exact `team.md` hash check, so first activation and refresh of ranked, economy, or manual routing do not spend a Scribe model turn. On `task` hosts, `sessionModel: auto` is metadata rather than an availability list: active routing now fails before changing `team.md` unless the coordinator supplies the tool's advertised model enum. This prevents catalog-only IDs from being persisted and then silently losing to an agent's default pin.
 
 **How manual picks are made.** When you switch to `routing=manual`, whether at squad creation or later, the coordinator asks before dispatching anything:
 
@@ -197,7 +197,7 @@ The compact discovery brief no longer ranks the whole roster. `New-SquadDispatch
 2. choose one model per assignment class, then
 3. override any individual role.
 
-Every question lists only models **your host can run** and that meet the role's `Model Tier` floor. On the Copilot CLI and the GitHub Copilot app, that is the exact list the `task` tool advertises. VS Code does not advertise a list, so the squad offers catalog models priced at or below your session model; VS Code rejects a subagent model above the session's cost tier. If VS Code rejects a pick, you are asked again with the list VS Code reports. You can also edit a `Model` cell by hand; the squad validates it on every read.
+Every question lists only models **your host can run** and that meet the role's `Model Tier` floor. On the Copilot CLI and the GitHub Copilot app, that is the exact list the `task` tool advertises. VS Code does not advertise a list, so the squad offers catalog models priced at or below a concrete, priced session model; `auto`, `unknown`, tier labels, and unpriced session models produce no automatic suggestion until a concrete picker value or rejection-reported list is available. If VS Code rejects a pick, you are asked again with the list VS Code reports. You can also edit a `Model` cell by hand; the squad validates it on every read.
 
 **What a `Model` cell holds.** One exact model id from the `Model ID` column of `consumption-rates.md` (for example `claude-sonnet-5.5`). A cell below the role's floor, an unknown id, or an id containing shell or prompt metacharacters is refused and logged, never guessed. That role then falls back to its `Model Tier`, and the next interactive turn asks again.
 
@@ -275,6 +275,16 @@ starting a Scribe subagent. Quiet mode returns one JSON status line containing
 remain on stderr. `ledgerCheck: ledger-only` preserves the existing tolerated
 accounting-warning behavior and is not reported as `PASS`. Nonzero exits stop the
 handoff; they are not permission to bypass validation with handwritten state.
+
+Council, Intake Readiness, and Discovery Verdicts are deterministic too. After
+the handoff writer records the turn's history, consumption, and state, the
+coordinator runs
+[`Write-SquadVerdict.ps1`](squad-src/.github/skills/squad/scripts/Write-SquadVerdict.ps1)
+at the same root. It validates the complete verdict schema, derives council
+most-restrictive-wins synthesis, appends `decisions.md` under the same writer
+lock, rejects replays, and returns the stable Decision Ref without starting a
+Scribe subagent. Federation members use the identical script with their
+`members/<name>/` root; verdicts never land at the federation meta-root.
 
 Confirmed fresh initialization can now run directly through the same staged
 initializer with `-Direct`. `Get-SquadInitContext.ps1` prepares the full payload

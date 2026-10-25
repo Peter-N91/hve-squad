@@ -20,7 +20,7 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `SquadPromotion.psm1`,
 `Get-SquadFederationInitPlan.ps1`, `Initialize-SquadFederation.ps1`,
 `Get-SquadRosterExpansionPlan.ps1`, `Expand-SquadRoster.ps1`,
-`Write-SquadHandoff.ps1`, `Measure-SquadLedger.ps1`,
+`Write-SquadHandoff.ps1`, `Write-SquadVerdict.ps1`, `Measure-SquadLedger.ps1`,
 the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`, and
 `Initialize-SquadConsumptionRates.ps1`.
 The two buckets below cover configuration/dispatch and file exchange/persistence.
@@ -40,7 +40,7 @@ controls, not a sandbox or a substitute for host filesystem permissions.
 | Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell and additive roster expansion, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
 | Offline capability evidence | Exact model/configuration checks, explicit verification dates, common versioned panels, digest validation and visible fallback | Curated verification facts and source hashes are not authenticated measurement signatures. |
 | External file exchange | Closed schemas, request/result identity matching, output allowlists, structural path containment | A matching envelope does not authenticate its author. |
-| Persistence | Scribe payload validation, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, ledger checks | History and lifecycle plans are local and editable by principals with repository write access; exact hashes detect changes but do not authenticate authors. |
+| Persistence | Closed handoff/verdict payload validation, shared per-root writer locks, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, ledger checks | History, verdicts, and lifecycle plans are local and editable by principals with repository write access; exact hashes detect changes but do not authenticate authors. |
 | Domain execution | Consumer-owned adapter; no connector command execution | Host permissions and consumer automation govern actual source changes. |
 
 Ratings are qualitative under the assumption that an external producer can
@@ -351,6 +351,7 @@ least-privilege worktrees and isolation outside the prompt layer.
 * [Connector resolver](scripts/Resolve-SquadConnectorDispatch.ps1)
 * [Connector lifecycle wrapper](scripts/Invoke-SquadConnectorDispatch.ps1)
 * [Handoff writer](scripts/Write-SquadHandoff.ps1)
+* [Verdict writer](scripts/Write-SquadVerdict.ps1)
 * [Promotion planner](scripts/Get-SquadPromotionPlan.ps1)
 * [Promotion transaction](scripts/Promote-SquadFederation.ps1)
 * [Federation Init preparer](scripts/Get-SquadFederationInitPlan.ps1)

@@ -49,8 +49,9 @@
     The session model id (VS Code's Local agent advertises no model list). Used only
     when -AvailableModels is omitted: catalog ids whose Input rate exceeds the session
     model's are treated as unavailable, because VS Code rejects a subagent model above
-    the session model's cost tier. `auto`, or an id the catalog cannot price, applies
-    no such limit.
+    the session model's cost tier. `auto`, `unknown`, a tier label, or an id the
+    catalog cannot price does not prove availability and therefore produces no
+    automatic ranked suggestion.
 .PARAMETER Mode
     `ranked`, `economy`, or `manual`. Defaults to the mode recorded in `team.md`; when
     neither is set the script still ranks, so a caller can preview suggestions before
@@ -168,7 +169,7 @@ function ConvertTo-CanonicalModelIdLocal {
     if (-not $Value) {
         return ''
     }
-    $id = $Value.Trim().ToLowerInvariant()
+    $id = ($Value.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
     if ($id -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) {
         return 'hydrafusion-max'
     }
@@ -671,6 +672,7 @@ $available = $null
 $advertised = $null
 $advertisedIdByCanonical = @{}
 $availability = 'unverified'
+$availabilityResolved = $false
 $unevaluated = @()
 if ($AvailableModels.Count -gt 0) {
     $rawIds = @(
@@ -693,16 +695,28 @@ if ($AvailableModels.Count -gt 0) {
     }
     $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$canonicalIds)
     $availability = 'host-advertised'
+    $availabilityResolved = $true
     $unevaluated = @($rawIds | Where-Object { -not $catalog.Capability.ContainsKey((ConvertTo-CanonicalModelIdLocal -Value $_)) } | Sort-Object -Unique)
 }
 elseif ($SessionModel) {
     $canonicalSessionModel = ConvertTo-CanonicalModelIdLocal -Value $SessionModel
-    if ($canonicalSessionModel -ne 'auto' -and $catalog.InputRate.ContainsKey($canonicalSessionModel)) {
+    if ($canonicalSessionModel -notin @('auto', 'unknown', 'fast', 'default', 'extended') -and $catalog.InputRate.ContainsKey($canonicalSessionModel)) {
         $ceiling = $catalog.InputRate[$canonicalSessionModel]
         $ids = @($catalog.Fit | Where-Object { $catalog.InputRate.ContainsKey($_.Id) -and $catalog.InputRate[$_.Id] -le $ceiling } | ForEach-Object { $_.Id })
         $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$ids)
         $availability = "unverified (priced at or below session model $canonicalSessionModel)"
+        $availabilityResolved = $true
     }
+    else {
+        $available = [System.Collections.Generic.HashSet[string]]::new()
+        $availability = "unresolved (session model '$canonicalSessionModel' is not a host model inventory)"
+        $warnings.Add("Host model availability is unresolved: sessionModel '$SessionModel' cannot replace the host availableModels enum, so automatic routing returns no model.")
+    }
+}
+else {
+    $available = [System.Collections.Generic.HashSet[string]]::new()
+    $availability = 'unresolved (no host model inventory or concrete priced session model)'
+    $warnings.Add('Host model availability is unresolved: pass the host availableModels enum, or a concrete priced session model only on a host that advertises no model list.')
 }
 
 # economy-mode.md *Consent*: report a missing ## Economy Mode Accepted entry; never refuse on it.
@@ -805,6 +819,7 @@ $results = foreach ($row in $roster.Rows) {
     $cellStatus = 'empty'
     if ($cell) {
         if ($cell -match $MetacharacterPattern) { $cellStatus = 'refused: metacharacter' }
+        elseif (-not $availabilityResolved) { $cellStatus = 'refused: host availability unresolved' }
         elseif (-not $catalog.Capability.ContainsKey($canonicalCell) -and ($null -eq $advertised -or -not $advertised.Contains($cellId))) { $cellStatus = 'refused: unknown id' }
         elseif ($null -ne $advertised -and -not $advertised.Contains($cellId)) { $cellStatus = 'refused: not available on this host' }
         elseif (-not $catalog.Capability.ContainsKey($canonicalCell)) { $cellStatus = 'valid: unevaluated' }
@@ -997,6 +1012,7 @@ $report = [pscustomobject][ordered]@{
     evaluationDate      = $AsOf.ToString('yyyy-MM-dd')
     executionEvidence   = 'selection only; host execution unreported'
     availability        = $availability
+    availabilityResolved = $availabilityResolved
     unevaluated         = $unevaluated
     warnings            = @($warnings)
     roles               = @($results)

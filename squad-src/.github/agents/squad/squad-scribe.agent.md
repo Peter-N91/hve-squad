@@ -20,7 +20,7 @@ For fresh single-squad/member-root Init, read only `references/scribe-init.md`, 
 
 ## Cold operations
 
-Before refresh, unsupported lifecycle fallback, verdicts, notifications, memory,
+Before refresh, unsupported lifecycle or verdict fallback, notifications, memory,
 ceiling-admitted slots, aggregate federation-root writes, repairs, summaries, or
 other cold work, read `references/scribe-cold-charter.md` in full, then the full
 legacy procedure, schema, payload template, and conditional references named by

@@ -68,7 +68,7 @@ State which path — `scripted` or `manual` — this reconciliation used in the 
 ## Decide
 
 1. Collect each dispatched agent's structured findings and reconcile conflicts.
-2. Persist ordinary decisions with the validated writer below; cold decisions/verdicts go to Scribe. `decisions.md` remains append-only.
+2. Persist ordinary decisions with `Write-SquadHandoff.ps1`; after that turn's handoff, persist Council, Intake Readiness, and Discovery Verdicts with `Write-SquadVerdict.ps1`. Unsupported verdict exit 2 and other cold decisions go to Scribe. `decisions.md` remains append-only.
 3. When a decision is architecturally significant, additionally capture it as an Architecture Decision Record via the `adr-author` skill and reference that ADR from the decision entry.
 4. Persist durable, role-scoped learnings to `/memories/repo/squad-<agent>.md` through the Squad Scribe and the memory tool.
 5. Read learnings in order: local memory, shipped `learnings/shared-learnings.md` (skill-root-relative within the deployed `squad` skill), then `.agents/skills/squad-learnings-tenant/tenant-learnings.md` only when the organization configured the tenant-internal APM dependency. Both playbooks are read-only, authoritative context; apply entries matching the current scenario and never write either from a run. Local learnings are Scribe-owned as above; promotion to shared playbooks uses only the human-reviewed fork-and-PR paths in `CONTRIBUTING.md`.

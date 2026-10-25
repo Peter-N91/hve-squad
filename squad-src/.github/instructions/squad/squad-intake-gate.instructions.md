@@ -9,7 +9,9 @@ These conventions define the **intake gate**: a conditional pre-work check the S
 
 The gate is **conditional and additive**. When a turn has no requirement or input artifacts to validate, the gate is a silent no-op and the squad proceeds exactly as today. A repository that never grounds work in inputs never pays the intake-dispatch cost.
 
-An intake run produces exactly one durable artifact: an `## Intake Readiness Verdict` entry appended to `.copilot-tracking/squad/decisions.md` by the Squad Scribe. The coordinator never writes that entry itself; the single-writer rule from `.github/instructions/squad/squad-state.instructions.md` still holds.
+An intake run appends one `## Intake Readiness Verdict` through
+`Write-SquadVerdict.ps1` after the ordinary handoff. No role or coordinator
+hand-edits it; unsupported exit 2 uses cold Scribe.
 
 ## Relationship to the Implementation Gate
 
@@ -52,7 +54,7 @@ When the resolved validator agent is absent from the active roster or not instal
 
 1. The coordinator dispatches the `intake-validator` against the scoped inputs (the requirement/input artifacts under review), passing the artifacts and the intended downstream work as context.
 2. The validator returns a structured finding that names: its verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`), the completeness and clarity gaps it found (may be empty), the specific clarifying questions a human must answer (may be empty), and any assumptions it recommends recording.
-3. The validator is read-only. It never edits the input artifacts and never writes squad state directly; findings flow back to the coordinator, which hands them to the Squad Scribe for the verdict write.
+3. The validator is read-only. The coordinator records its dispatch with `Write-SquadHandoff.ps1`, then sends the closed verdict payload to `Write-SquadVerdict.ps1`.
 4. Intake runs on its own turn edge: the coordinator does not dispatch planning or implementation on the same turn it runs the gate when the verdict is `Not-Ready`. A `Ready` or a remediated-then-`Ready` verdict clears the same-turn or next-turn work.
 
 ## Readiness Assessment
@@ -69,7 +71,7 @@ A gap is **blocking** when it would force the downstream role to guess a materia
 
 ## Verdict Synthesis
 
-The Scribe records the label the validator returned; it does not synthesize or downgrade it. The labels mean:
+The verdict writer records the label the validator returned and validates it against the supplied blocking/non-blocking gap counts; it does not synthesize or downgrade it. The labels mean:
 
 * `Ready` — no blocking gaps. The squad proceeds; any non-blocking gaps are recorded as assumptions.
 * `Ready-With-Gaps` — only non-blocking gaps remain. The squad proceeds **with the gaps recorded as explicit assumptions** carried into the downstream work; the coordinator surfaces them to the user.
@@ -88,7 +90,7 @@ Each validator dispatch and each remediation dispatch is a Scribe-recorded stage
 
 ## Intake Readiness Verdict Schema
 
-The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` under a new `## Intake Readiness Verdict` H2. The entry is append-only and uses this shape:
+`Write-SquadVerdict.ps1` writes the verdict to `<squadRoot>/decisions.md` under a new `## Intake Readiness Verdict` H2. The entry is append-only and uses this shape:
 
 ```markdown
 ## Intake Readiness Verdict <timestamp> <topic-id>
@@ -130,7 +132,7 @@ Required fields:
 * The `Verdict` value is one of exactly `Ready`, `Ready-With-Gaps`, or `Not-Ready`.
 * Blocking and non-blocking gaps carry artifact attribution inline when more than one input is in scope (for example, `(prd.md) no acceptance criteria`).
 
-The schema is the contract: any Scribe write that omits one of these sections fails the intake protocol and the coordinator escalates rather than proceeding.
+The schema is the contract: any writer result that omits one of these sections fails the intake protocol and the coordinator escalates rather than proceeding.
 
 ## Verdict Anchor and Decision Ref
 
@@ -160,4 +162,7 @@ The gate applies in every mode; how an unresolved `Not-Ready` presents differs b
 
 ## Single-Writer Rule
 
-The Squad Scribe is the only agent that writes the Intake Readiness Verdict entry. The coordinator assembles the payload (the validator's findings, the inputs reviewed, the topic id, the timestamp, the remediation-cycle count, and the verdict label) and hands it to the Scribe through the normal dispatch contract. The validator and remediation roles never edit `decisions.md`. This preserves the parallel-dispatch race-prevention guarantee from `.github/instructions/squad/squad-state.instructions.md`.
+Roles never edit `decisions.md`. The coordinator runs the handoff, then the
+verdict writer at the same root. It locks, validates all five dimensions and
+gap consistency, appends once, rejects replay, and returns the **Decision Ref**.
+Federation members use the same path; exit 2 alone takes cold Scribe.
