@@ -287,6 +287,29 @@ Describe 'Requirements document quality source contracts (RQ-01..09)' -Tag 'Requ
         $reviewer | Should -Match 'denied/unexecuted probes as unverified rather than substituting the implementer'
     }
 
+    It 'RQ-11 captures each returned review only after the preceding verified handoff' {
+        $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
+        $guide | Should -Match 'finish capture/verify/write/verify for one reviewer before capturing the next'
+        $guide | Should -Match 'Never touch or backdate a refused capture'
+        $guide | Should -Match 'never pre-capture a wave then attempt sequential handoffs'
+    }
+
+    It 'RQ-12 keeps one canonical verdict and literal contract fidelity without softening failures' {
+        $reviewer = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-reviewer.agent.md')[0].Body
+        $reviewer | Should -Match 'both the durable review record and return: `Verdict: Pass`, `Verdict: Pass-With-Findings` or `Verdict: Fail`'
+        $reviewer | Should -Match 'Preserve real findings, unavailable required runtime evidence and failed canonical gates'
+        (Get-Content -LiteralPath $script:RequirementsGuide -Raw) | Should -Match 'Reconcile literal source/plan/schema/error clauses'
+    }
+
+    It 'PRB-01 routes initial local probes through the shared helper without permission retries' {
+        foreach ($name in @('squad-reviewer.agent.md', 'squad-implementor.agent.md')) {
+            $body = @($script:Model.SquadAgents | Where-Object Name -eq $name)[0].Body
+            $body | Should -Match 'scripts/Invoke-SquadPowerShellProbe\.ps1 -ScriptPath <absolute\.ps1> -ParametersPath <absolute\.json>'
+            $body | Should -Match 'never (?:use it to )?retry a denied command'
+            $body | Should -Match 'unchanged-state assertion block'
+        }
+    }
+
     It 'RQ-09 keeps caller-required draft observation copies separate from approved publication' {
         $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
         $guide | Should -Match 'caller explicitly requires unapproved draft copies as inputs to that tester, the lead records that observation-only ordering in the plan before execution'

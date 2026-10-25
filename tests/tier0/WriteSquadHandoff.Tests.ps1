@@ -76,6 +76,25 @@ BeforeAll {
         $payload
     }
 
+    function New-ReviewerCaptureFixture {
+        [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+            Justification = 'Creates only owned TestDrive captures, never live squad evidence.')]
+        [CmdletBinding()]
+        param()
+        $root = New-Root
+        $team = Join-Path $root 'team.md'
+        $text = [IO.File]::ReadAllText($team)
+        $text = [regex]::Replace($text, '(?m)^(\| researcher[^\r\n]*)(\r?\n)', '$1$2| tester | Beta | Squad Tester | — | — | runSubagent / task | default | reviews/ |$2')
+        [IO.File]::WriteAllText($team, $text)
+        $repo = Split-Path -Parent (Split-Path -Parent $root)
+        Set-Content -LiteralPath (Join-Path $repo '.github/agents/squad/squad-tester.agent.md') -Value "---`nname: Squad Tester`nmodel: Claude Sonnet 4.6 (copilot)`n---`n# Tester`n"
+        [void][IO.Directory]::CreateDirectory((Join-Path $root 'reviews'))
+        $first = Join-Path $root 'research/first-review.md'
+        [IO.File]::WriteAllText($first, "Original first reviewer return`n")
+        (Get-Item -LiteralPath $first).LastWriteTimeUtc = [DateTime]::Parse('2026-09-27T09:30:00Z').ToUniversalTime()
+        @{ Root = $root; First = $first; Second = Join-Path $root 'reviews/second-review.md' }
+    }
+
     function Invoke-Writer {
         param([string]$Root, $Payload, [switch]$Quiet, [string]$Writer = $script:Writer)
         $json = $Payload | ConvertTo-Json -Depth 8
@@ -901,6 +920,49 @@ Describe 'Write-SquadHandoff.ps1 refuses what it cannot admit or verify' {
             $result.Output | Should -Match 'payload.since'
             Get-TreeHash $bad | Should -Be $before
         }
+    }
+
+    It 'refuses the stale second reviewer pre-capture without changing any squad files (RQ-11)' {
+        $capture = New-ReviewerCaptureFixture
+        [IO.File]::WriteAllText($capture.Second, "Original second reviewer return`n")
+        (Get-Item -LiteralPath $capture.Second).LastWriteTimeUtc = [DateTime]::Parse('2026-09-27T09:30:00Z').ToUniversalTime()
+        $first = New-Payload
+        $first.historyRecords[0].deliverable = 'research/first-review.md'
+        (Invoke-Writer -Root $capture.Root -Payload $first).ExitCode | Should -Be 0
+        $second = New-Payload -Override @{ turn = 3; timestamp = '2026-09-27T11:00:00Z' }
+        $second.historyRecords[0].agent = 'Squad Tester'
+        $second.historyRecords[0].deliverable = 'reviews/second-review.md'
+        $second.stateAdvance.activeRoles = @('Squad Tester')
+        $before = Get-TreeHash $capture.Root
+        $result = Invoke-Writer -Root $capture.Root -Payload $second
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'last modified before this turn began'
+        Get-TreeHash $capture.Root | Should -Be $before
+    }
+
+    It 'persists lossless just-in-time second reviewer capture after the first verified handoff (RQ-11)' {
+        $capture = New-ReviewerCaptureFixture
+        $first = New-Payload
+        $first.historyRecords[0].deliverable = 'research/first-review.md'
+        $written = Invoke-Writer -Root $capture.Root -Payload $first -Quiet
+        $written.ExitCode | Should -Be 0 -Because $written.Output
+        ($written.Stdout | ConvertFrom-Json).ledgerCheck | Should -Be 'PASS'
+        $firstHash = (Get-FileHash -LiteralPath $capture.First).Hash
+        $history = Join-Path $capture.Root 'history/Squad Researcher.md'
+        $historyHash = (Get-FileHash -LiteralPath $history).Hash
+        $original = "PRD_STANDARD_FINDINGS_V1`nVerdict: Fail`nPRD_QUALITY_REPORT_V1`nUnchanged findings.`n"
+        [IO.File]::WriteAllText($capture.Second, $original)
+        $second = New-Payload -Override @{ turn = 3; timestamp = [DateTime]::UtcNow.ToString('o') }
+        $second.historyRecords[0].agent = 'Squad Tester'
+        $second.historyRecords[0].deliverable = 'reviews/second-review.md'
+        $second.stateAdvance.activeRoles = @('Squad Tester')
+        $written = Invoke-Writer -Root $capture.Root -Payload $second -Quiet
+        $written.ExitCode | Should -Be 0 -Because $written.Output
+        ($written.Stdout | ConvertFrom-Json).historyCounts.'Squad Tester' | Should -Be 1
+        [IO.File]::ReadAllText((Join-Path $capture.Root 'history/Squad Tester.md')) | Should -Match 'reviews/second-review\.md'
+        [IO.File]::ReadAllText($capture.Second) | Should -BeExactly $original
+        (Get-FileHash -LiteralPath $capture.First).Hash | Should -Be $firstHash
+        (Get-FileHash -LiteralPath $history).Hash | Should -Be $historyHash
     }
 
     It 'refuses the same heading at the next turn (the duplicate-heading guard, not only the turn check)' {

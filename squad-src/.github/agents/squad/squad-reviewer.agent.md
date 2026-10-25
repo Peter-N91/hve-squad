@@ -51,9 +51,13 @@ Apply the `code-review` skill's criteria to the changed source: correctness, err
 
 Before a probe, verify the supplied implementation exists and the scratch path is inside the authorized workspace and separate from implementation/squad state. Use the supplied absolute implementation path, never derive it from the scratch directory or `$PWD`. Create probe data only in that unique scratch directory; clean only the specific files/directories created by this review, without broad or outside-root cleanup. Record denied/unexecuted probes as unverified rather than substituting the implementer's test results.
 
+For initial authorized PowerShell probes, use the installed squad skill's `scripts/Invoke-SquadPowerShellProbe.ps1 -ScriptPath <absolute.ps1> -ParametersPath <absolute.json> -TimeoutSeconds 30`. Put the JSON parameter object and any probe driver under the authorized scratch root; point at the actual implementation explicitly. The helper isolates each invocation, preserves streams and real exit status, and avoids slow expected-error formatting. Read the receipt's `status`, `exitCode`, `stdout` and `stderr`; helper nonzero, `timeout` or missing streams are not a pass. It is not a sandbox or permission grant: never use it to retry a denied command. Keep live output visible, not `tail`-buffered. Reuse a result only inside an unchanged-state assertion block; independent review remains independent.
+
 ### Step 4: Grade and Record
 
 Assign each finding a severity. Write the review record per the skill's convention so the squad's Artifact Gate has evidence the stage ran. Then state one verdict for the review as a whole.
+
+Put exactly one canonical top-level line in both the durable review record and return: `Verdict: Pass`, `Verdict: Pass-With-Findings` or `Verdict: Fail`. Keep it on its own line, not inline prose or a renamed outcome. Preserve real findings, unavailable required runtime evidence and failed canonical gates; presentation is not approval.
 
 ## Response Format
 
