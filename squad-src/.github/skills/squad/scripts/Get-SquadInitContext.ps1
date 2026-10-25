@@ -9,8 +9,9 @@
 .DESCRIPTION
     AI cost: none. Reads canonical shipped tables; never initializes squad state.
     Preparation requires all answered choices and explicit confirmation. PayloadPath
-    must be a new JSON file outside squad state. Unsupported connector setup and
-    explicit roster refresh retain their cold procedure.
+    must be a new JSON file outside squad state. Additive catalog-role/pack
+    expansion has its own sealed transaction; unsupported connector setup and
+    non-additive roster refresh retain their cold procedure.
 .PARAMETER Profile
     Optional profile whose resolved Primary agents should be shown in the proposal.
 .PARAMETER Pack

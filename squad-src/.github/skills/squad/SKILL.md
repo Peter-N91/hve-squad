@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-24"
+  last_updated: "2026-10-25"
 ---
 
 # Squad Operating Procedure
@@ -50,14 +50,14 @@ is an on-demand map, not a mandatory coordinator startup read.
 | [foundry-platform-options.md](references/foundry-platform-options.md) | `foundry` platform choices                                         |
 | [operating-procedure.md](references/operating-procedure.md)   | Init, Route, ledger reconciliation, Decide, Handoff, tool-to-mechanism mapping |
 | [gates-and-modes.md](references/gates-and-modes.md)           | Discovery, intake, council, implementation gates; autopilot and autonomy modes |
-| [federation.md](references/federation.md)                     | Federation layout, detection precedence, and federation modes                  |
+| [federation.md](references/federation.md)                     | Federation layout, deterministic Init, detection, and modes                     |
 | [economy-scribe.md](references/economy-scribe.md)             | Ordinary writer in every routing mode: minimal JSON, quiet status, serialized writes, fail-closed recovery |
 | [scribe-cold-charter.md](references/scribe-cold-charter.md)   | Full legacy Scribe charter; cold operations only, with required procedure/schema/payload reads |
 | [scribe-procedure.md](references/scribe-procedure.md)         | The Squad Scribe write procedure, Non-Negotiable Rules, and Cold-File Dispatch Table — Scribe only |
 | [entry-schemas.md](references/entry-schemas.md)               | Recurring write shapes: decision base entry, history, state.json          |
 | [scribe-payload-template.md](references/scribe-payload-template.md) | The Scribe hand-off payload both coordinators fill, byte-stable-prefix ordered |
 | [scribe-cold-init-and-seeding.md](references/scribe-cold-init-and-seeding.md) | Full state-tree seed and Repository Memory promotion — Scribe only, conditional |
-| [scribe-cold-federation.md](references/scribe-cold-federation.md) | Federation promotion, expansion, and federation-level summaries — Scribe only, conditional |
+| [scribe-cold-federation.md](references/scribe-cold-federation.md) | Unsupported-host federation lifecycle fallbacks, repairs, and federation-level summaries — Scribe only, conditional |
 | [scribe-cold-gates-and-verdicts.md](references/scribe-cold-gates-and-verdicts.md) | Verdict schemas, autonomous-loop and autopilot-run summaries, notifications.md — Scribe only, conditional |
 | [seed-templates.md](references/seed-templates.md)             | First-run state templates: team.md and routing.md                              |
 | [consumption.md](references/consumption.md)                   | Consumption ledger templates, the cost estimator, and Cost Preflight           |

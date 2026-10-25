@@ -56,18 +56,16 @@ canonical sections of `gates-and-modes.md`:
 | `mode=autonomous` | `autonomous`, `council` |
 | `mode=autopilot` | `autopilot`, plus triggered gates |
 | Connector bindings, setup/refresh, execution override or pending exchange | `connector-role-modes.md` |
+| Confirmed addition of catalog roles or packs | `roster-expansion.md` |
 | Manual model questions or an unresolved catalog fact | `model-routing.md`; `model-catalog.md` only for the unresolved fact |
 | Economy consent or proposed bounded lane | `economy-mode.md` |
 | Notification delivery | `gates-and-modes.md` notification section and `squad-notifications.instructions.md` |
 
-Discovery is offered once and waited on,
-only for eligible profiles, never unattended. Intake reuses current readiness for
-unchanged inputs; blocking gaps remain questions, never assumptions.
-`Ready-With-Gaps` has zero blockers. Council is task-fit, offers a missing lens,
-records omissions/waivers, and never runs implementers on its verdict turn.
-Unattended work, autopilot and non-economy modes never use the economy bounded
-lane. Autopilot preserves Init, every stage, Risk/Impactful gates and final
-human validation; autonomous revalidation is capped at two cycles.
+Offer discovery once only for eligible attended profiles. Reuse unchanged intake;
+blockers remain questions and `Ready-With-Gaps` has none. Councils are task-fit,
+record omissions/waivers, and dispatch no implementer on the verdict turn.
+Economy bounded work is never unattended, autopilot, or non-economy. Autopilot
+keeps every stage/gate/final validation; autonomous revalidation is capped at two.
 
 ## 3. Resolve and Schedule, Then Admit
 
@@ -78,14 +76,15 @@ in transport JSON outside squad state. Run
 It returns waves, `routingRefresh` and preflight; it writes nothing.
 Pass the host's actual `agentTypes` enum when available; use its resolved native
 IDs, not a guessed API type from the display name.
-Unknown, unavailable or ambiguous selected endpoints stop before dispatch.
-Offer a catalog reseed, installed dispatchable substitute or dropped role; record
-the chosen change through cold Scribe. No automatic substitution.
+Unknown, unavailable or ambiguous endpoints stop. A confirmed missing catalog
+role/pack uses `roster-expansion.md`; substitution, recasting or removal is a
+separate explicit choice, never automatic.
 
-The helper honors connector defaults; `both` needs disjoint outputs and admission.
-Alternates need cues. Apply `Set-SquadModelRouting.ps1` / `Set-SquadCostPreflight.ps1` before `admittedUnits`;
-active transitions use that writer; `routing=off`/roster changes stay
-cold, `off` passes no override, and Scribe keeps its pin.
+Honor connector defaults; `both` needs disjoint outputs/admission and Alternates
+need cues. Apply routing/preflight writers before `admittedUnits`. Expand a
+confirmed catalog roster before planning its new role. `routing=off` and every
+non-additive roster change stay cold; `off` passes no override and Scribe keeps
+its pin.
 
 Confirm the routing tier once for an eligible parallel batch. Honor all artifact
 and verdict barriers before the next wave, even if a graph would otherwise allow
@@ -117,8 +116,8 @@ or an imaginary Scribe. Never invent Scribe usage on a direct route.
 
 Unsupported exit 2 takes the documented cold Scribe path: read
 `scribe-payload-template.md`, dispatch Scribe with required fields and trusted
-ledger invocation. Verdicts, memory, notifications, `routing=off`/roster changes,
-and summaries retain this path. Invalid data, history-integrity, rate
+ledger invocation. Verdicts, memory, notifications, `routing=off`, non-additive
+roster changes, and summaries retain this path. Invalid data, history-integrity, rate
 refusal and failed restore are not permission to fall back manually.
 Serialize writer, cold Scribe and Cost Preflight at each root.
 For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.

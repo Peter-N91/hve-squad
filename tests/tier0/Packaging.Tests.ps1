@@ -260,11 +260,18 @@ Describe 'Shared scoring is delivered with the plugin runtime (SQ-33c)' {
     }
 }
 
-Describe 'Exact usage and routing transactions ship with the runtime' {
+Describe 'Deterministic coordinator transactions ship with the runtime' {
     It 'delivers <Name> unchanged beside the coordinator scripts' -ForEach @(
         @{ Name = 'SquadUsage.psm1' }
         @{ Name = 'Get-SquadUsage.ps1' }
         @{ Name = 'Set-SquadModelRouting.ps1' }
+        @{ Name = 'SquadPromotion.psm1' }
+        @{ Name = 'Get-SquadPromotionPlan.ps1' }
+        @{ Name = 'Promote-SquadFederation.ps1' }
+        @{ Name = 'Get-SquadFederationInitPlan.ps1' }
+        @{ Name = 'Initialize-SquadFederation.ps1' }
+        @{ Name = 'Get-SquadRosterExpansionPlan.ps1' }
+        @{ Name = 'Expand-SquadRoster.ps1' }
     ) {
         $source = Join-Path $script:SourceRootResolved "squad-src/.github/skills/squad/scripts/$Name"
         $delivered = Join-Path $script:PluginOutputRoot "skills/squad/scripts/$Name"

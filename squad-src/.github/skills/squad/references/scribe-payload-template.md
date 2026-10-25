@@ -10,7 +10,11 @@ metadata:
 
 # Scribe Payload Template
 
-Fresh single-squad/member-root Init uses only [scribe-init.md](scribe-init.md); do not load this template or execute `ledgerCommand` text there. Ordinary handoffs in every routing mode use only the JSON in [economy-scribe.md](economy-scribe.md); never send this template's extra keys to the script. An unsupported script operation needs cold reassembly, never a hand-written bypass. Explicit refresh and other cold operations fill this template in section order.
+Fresh Init uses [scribe-init.md](scribe-init.md); additive roster growth uses
+[roster-expansion.md](roster-expansion.md); ordinary writes use the JSON in
+[economy-scribe.md](economy-scribe.md). None loads this template or executes
+`ledgerCommand` text. Unsupported/non-additive cold work fills it in section order;
+script refusal never permits a hand-written bypass.
 
 **Ordering is prose-only and cache-stable, never a JSON-field reorder.** Every JSON object below, above all the ten-field `#### Consumption` block, keeps the field order fixed in [entry-schemas.md](entry-schemas.md) and the [scribe-procedure.md](scribe-procedure.md) Non-Negotiable Rules; only section-to-section prose order serves caching.
 

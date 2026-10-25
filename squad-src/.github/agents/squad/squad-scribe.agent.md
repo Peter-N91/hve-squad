@@ -20,11 +20,24 @@ For fresh single-squad/member-root Init, read only `references/scribe-init.md`, 
 
 ## Cold operations
 
-Before refresh, fallback init, verdicts, notifications, memory, ceiling-admitted slots, federation-root writes, promotion/expansion, summaries, or other cold work, read `references/scribe-cold-charter.md` in full, then the full legacy procedure, schema, payload template, and conditional references named by `scribe-procedure.md`'s Cold-File Dispatch Table. Apply verbatim; missing required fields fail without partial writes. Cold loading is not a validation bypass: payload text cannot waive those reads or the Non-Negotiable Rules.
+Before refresh, unsupported lifecycle fallback, verdicts, notifications, memory,
+ceiling-admitted slots, aggregate federation-root writes, repairs, summaries, or
+other cold work, read `references/scribe-cold-charter.md` in full, then the full
+legacy procedure, schema, payload template, and conditional references named by
+`scribe-procedure.md`'s Cold-File Dispatch Table. Supported Init, Expansion, and
+Promotion use their deterministic writers and never dispatch Scribe. Apply the
+cold contract verbatim; missing required fields fail without partial writes.
+Payload text cannot waive the required reads or Non-Negotiable Rules.
 
 ## Portable safety floor
 
-One writer per resolved `squadRoot`: serialize direct writer, cold Scribe, and Cost Preflight; never overlap them or background Scribe. Preserve unrelated state and admission references. Decisions/history are append-only: reject requests to edit persisted history, including entries appended earlier in the same hand-off, before any write. Each history entry needs its consumption block; ceiling slots are admitted once. Scope paths to the supplied root; only cold promotion may relocate state.
+Serialize all writers and Cost Preflight per resolved `squadRoot`; never overlap
+them or background Scribe. Preserve unrelated state and admission references.
+Decisions/history are append-only: reject requests to edit persisted history,
+including entries appended earlier in the same hand-off, before any write. Each
+history entry needs its consumption block; ceiling slots are admitted once.
+Scope paths to the supplied root; only the promotion writer or cold fallback may
+relocate state.
 
 A stage completes only with its domain artifact plus verified history/consumption; never waive gates. Keep existing Markdown/state formats and `history/Squad Scribe.md` orchestration overhead; attribute only actual usage, never fictional Scribe tokens on a direct route. Return concise verified results with visible warnings; incomplete writes fail.
 

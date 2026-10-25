@@ -5,12 +5,18 @@
     Publishes a fresh squad tree from confirmed JSON, only after validation.
 .DESCRIPTION
     AI cost: none; publishes confirmed payload data without dispatching the Scribe.
-    Roots containing files or links are refused, including partial initialization. Explicit roster
-    refresh stays on the cold Scribe path. Payload strings are data, never commands.
+    Roots containing files or links are refused, including partial initialization.
+    Additive catalog-role/pack expansion has a separate sealed transaction;
+    non-additive refresh stays on the cold Scribe path. Payload strings are data,
+    never commands.
 .PARAMETER PayloadPath
     JSON input described in references/scribe-init.md.
 .PARAMETER RepoRoot
     Consumer repository boundary; defaults to the current directory.
+.PARAMETER AgentRepoRoot
+    Repository whose installed agents are validated for `-Direct`. Defaults to
+    RepoRoot. Federation Init supplies the consumer repository while staging member
+    state in an isolated repository-shaped directory.
 .PARAMETER Direct
     Confirmed coordinator execution. Records coordinator usage only; it is not a
     Scribe dispatch. The legacy Scribe invocation remains the default.
@@ -23,6 +29,7 @@
 param(
     [Parameter(Mandatory)][string]$PayloadPath,
     [string]$RepoRoot = (Get-Location).ProviderPath,
+    [string]$AgentRepoRoot = $RepoRoot,
     [switch]$Direct
 )
 $ErrorActionPreference = 'Stop'
@@ -60,12 +67,12 @@ function Get-EmptyDirectoryTree {
     param([string]$Path)
     $Item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
     if ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw "Linked path refused: $Path" }
-    if (-not $Item.PSIsContainer) { throw 'Squad root already exists; retry writes nothing. Use the cold path for explicit roster refresh.' }
+    if (-not $Item.PSIsContainer) { throw 'Squad root already exists; retry writes nothing. Use roster expansion for additive roles/packs or the cold path for other refreshes.' }
     $Directories = [System.Collections.Generic.List[string]]::new()
     $Directories.Add($Item.FullName)
     foreach ($Child in @(Get-ChildItem -LiteralPath $Path -Force)) {
         if ($Child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw "Linked path refused: $($Child.FullName)" }
-        if (-not $Child.PSIsContainer) { throw 'Squad root already exists; retry writes nothing. Use the cold path for explicit roster refresh.' }
+        if (-not $Child.PSIsContainer) { throw 'Squad root already exists; retry writes nothing. Use roster expansion for additive roles/packs or the cold path for other refreshes.' }
         foreach ($Nested in (Get-EmptyDirectoryTree $Child.FullName)) { $Directories.Add($Nested) }
     }
     return $Directories
@@ -283,7 +290,15 @@ if ($MyInvocation.InvocationName -ne '.') {
         if ('scribe' -notin $Roles -or @($Payload.roster | Where-Object { $_.Role -eq 'scribe' -and $_['Agent Name (Primary)'] -eq 'Squad Scribe' }).Count -ne 1) { throw 'Confirmed Squad Scribe roster row required.' }
         if ($Direct) {
             Import-Module (Join-Path $PSScriptRoot 'SquadCoordinator.psm1') -Force
-            $AgentIndex = Get-SquadAgentIndex $Repository
+            $AgentRepository = (Resolve-Path -LiteralPath $AgentRepoRoot).ProviderPath
+            Assert-UnlinkedPath $AgentRepository
+            if ($AgentRepository -ine $Repository) {
+                $StageRelative = [IO.Path]::GetRelativePath($AgentRepository, $Repository) -replace '\\', '/'
+                if ($StageRelative -cnotmatch '^\.copilot-tracking/\.squad-federation-init-[a-f0-9]+/repository$') {
+                    throw 'AgentRepoRoot may differ only for the owned federation Init staging repository.'
+                }
+            }
+            $AgentIndex = Get-SquadAgentIndex $AgentRepository
             foreach ($Row in $Payload.roster) {
                 $Primary = $Row['Agent Name (Primary)']
                 if (-not $AgentIndex.ContainsKey($Primary) -or -not $AgentIndex[$Primary].dispatchable) {

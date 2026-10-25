@@ -12,7 +12,9 @@ This charter governs cold operations only; supported ordinary writes use `econom
 
 ## Skill Reference Contract
 
-Fresh single-squad/member-root Init first uses [scribe-init.md](scribe-init.md) and its helper, without loading this charter. Explicit refresh, fallback Init without the runtime, and all other cold operations retain the contract below.
+Fresh Init uses [scribe-init.md](scribe-init.md); supported additive roster
+growth uses [roster-expansion.md](roster-expansion.md). This charter covers every
+other refresh, fallback, and cold operation.
 
 For manual state writes also read `references/state-write-contract.md`, which
 holds the exact schema/accounting detail moved out of the always-loaded floor.
@@ -31,7 +33,7 @@ Then read the cold file(s) the **Cold-File Dispatch Table in `references/scribe-
 | Read                                       | Only when                                                                                     |
 |---------------------------------------------|-----------------------------------------------------------------------------------------------|
 | `references/scribe-cold-init-and-seeding.md` | The payload type is initialization or memory, or a promotion's deliverable-root rebasing.     |
-| `references/scribe-cold-federation.md`       | The payload type is promotion, expansion, a federation-level autopilot-run summary, or a federation-level history payload. |
+| `references/scribe-cold-federation.md`       | The payload type is an unsupported-host federation lifecycle fallback, a repair, a federation-level autopilot-run summary, or a federation-level history payload. |
 | `references/scribe-cold-gates-and-verdicts.md` | The payload type is a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write. |
 | `references/consumption.md`                | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` from its own template. |
 | `references/consumption-rates-template.md` | Only without a shell or `pwsh` 7+: Init or Step 7.1 reseed. Otherwise run `scripts/Initialize-SquadConsumptionRates.ps1`; do not read or retype the template. |
@@ -54,7 +56,7 @@ The contract below holds whether or not `.github/instructions/squad/squad-state.
 * (Optional) A memory payload: the role-scoped note for a specific agent.
 * (Optional) A Council Verdict, Intake Readiness Verdict, or Discovery Verdict payload, each carrying the schema its instruction file defines; or an autonomous-loop summary (per-cycle verdicts, blocking issues, conditions, final outcome).
 * (Optional) A consumption payload: the resolved model and the rung it came from (`model_source`), the model each dispatch self-reported, the session model and any overrides in force, the tier, the estimator's dispatch-size signals, and the dispatch the block attaches to. It may carry a legacy `observed_credits` delta for fallback calibration only; native exact rows ignore it. **The payload is optional; the consumption write is not** — when it is absent the Scribe resolves the model itself and records `unknown` rather than guessing.
-* (Optional) A federation autopilot-run summary (meta-run topic id, ordered sub-squads and inner-run ids, gates raised and by whom, aggregate cost, consolidated outcome) or federation initialization payload (confirmed registry and meta-routes, federation `notify`, initial history names, current complete root rate-table template).
+* (Optional) A federation autopilot-run summary (meta-run topic id, ordered sub-squads and inner-run ids, gates raised and by whom, aggregate cost, consolidated outcome) or unsupported-host federation initialization payload (confirmed registry and meta-routes, federation `notify`, initial history names, current complete root rate-table template).
 * (Optional) A promotion payload: the sub-squad name, the profile inferred from the existing `team.md`, the federation-wide `notify` object, and the confirmed **deliverable relocation list**; or an expansion payload: new sub-squad name, profile, one-line description, and meta-routing pattern. Either may carry Watch Mode provenance (`source`, `ref`, `eventId`, `actor`; expansion also an `Owner=watch-mode` marker).
 
 ## Required Steps
@@ -64,6 +66,7 @@ Apply the steps whose payload is present, following the matching subsection of *
 1. **Append decisions** to `decisions.md`. Append-only; never edit or remove a prior entry. Flag an architecturally significant decision for ADR capture via the `adr-author` skill.
 2. **Append history** to `history/<agent>.md`, paired with its consumption block from Step 7 — the two writes are inseparable. When a ceiling is configured, confirm the referenced round is `within-ceiling` or valid `approved-over-ceiling`, its permitted set contains the supplied slot, and no history entry has consumed that run, round, and slot. Then write the Decision Ref and slot into the entry. Reject an unpermitted or repeated child without a partial write. Create the file with its header in that same write when it does not exist yet. A federation-level payload names a sub-squad instead of an agent, and is the only history append that carries no consumption block.
 3. **Initialize state when requested** — `team.md` and `routing.md` from the coordinator-confirmed roster (the profile's members, not the full cast catalog), plus `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/`. Replace semantics; write only when missing or on an explicit refresh. Always include the `scribe` role. Copy each `team.md` row verbatim from the payload `roster`; never derive an agent name. Resolve every `Deliverable Root` against the `squadRoot` in hand, and preserve existing cells on a refresh. Seed both consumption files here — a squad without the rate table cannot price its first dispatch. Create no agent file inside `history/`; only `history/Squad Scribe.md` with this hand-off's orchestration block, then invoke the trusted ledger helper last.
+
 4. **Write repository memory** to `/memories/repo/squad-<agent>.md` through the memory tool. Never write outside consumer-local memory, and never edit a shipped or tenant learnings playbook.
 5. **Write the Council Verdict** to `decisions.md`. Append-only. The label is exactly `Go`, `Go-With-Conditions`, or `Stop`.
 6. **Write the autonomous-loop summary** to `history/autonomous-loop-<id>.md`. Append-only by topic-id; append a new dated section rather than overwriting a prior run.

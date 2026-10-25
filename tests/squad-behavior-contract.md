@@ -178,6 +178,7 @@ Markdown histories, decisions, ledger, and state remain the compatibility contra
 | WRT-11 | Ledger `-Write -SessionLog auto` transactionally replaces estimates with exact-native per-role requests, four disjoint billed token categories, credits, and cost only when event-agent attribution, nested-owner roll-up, history coverage, and session nano-AIU reconciliation all pass. It removes duplicate Observed Usage and derives Cost Comparison from the same exact snapshot plus an identical-traffic single-model counterfactual. Any gap keeps the estimator and transactionally finalizes the estimated Cost Comparison while preserving supplied baseline context and notes, signed savings, unavailable zero/unknown baselines, and initialization n/a. Read-only `-Check` validates exact row sums, snapshot metadata, state totals, and exact or fallback comparison arithmetic. Cold Scribe never edits derived figures after checking | `SquadUsage.psm1`; `Measure-SquadLedger.ps1`; `Write-SquadHandoff.ps1`; `references/consumption.md`; `references/scribe-procedure.md` |
 | WRT-12 | Single-dispatch fact parameters construct the ordinary payload without a payload file, derive activeRoles from the actual agent, preserve supplied consumption blocks and estimated fallbacks, and use the unchanged validation, freshness, replay, attribution, rollback, exit-code and quiet-receipt path in every routing mode | `Write-SquadHandoff.ps1`, SingleDispatch parameter set; `references/economy-scribe.md` |
 | WRT-13 | Coordinator ordinary one-dispatch guidance uses the fact interface without constructing an envelope or activeRoles, retains full JSON for complex metadata/state changes, preserves supplied usage and allows the existing estimated fallback without forcing a consumption input on every call | `squad-coordinator.agent.md`, Step 5; `references/economy-scribe.md` |
+| WRT-14 | Confirmed additive catalog-role/pack expansion is a sealed plan/apply transaction for a plain squad or one registered federation member. It preserves existing roster rows, custom routes and edited roots, writes only `team.md`, `routing.md`, and one decision, holds the required plain or ordered federation/member locks, rejects stale plans/collisions, checks the ledger read-only, and leaves `consumption.md`, `state.json`, rates, notifications, history, federation root metadata, and other members byte-identical. No Scribe dispatch or estimated/observed ledger rewrite occurs | `Get-SquadRosterExpansionPlan.ps1`; `Expand-SquadRoster.ps1`; `references/roster-expansion.md` |
 
 | ID | Assertion | Rationale |
 |---|---|---|
@@ -545,6 +546,9 @@ Init with each profile and assert the seeded roster holds exactly the documented
 | FD-04 | `federation.md` has columns `Sub-squad`, `Profile`, `Kind`, `Location`, `Owner`, `Description`; every `Kind` is `in-repo`; every `Location` equals `members/<Sub-squad>/` | Registry Schema |
 | FD-05 | Every `Sub-squad` name is lower-kebab-case and unique | Sub-Squad Naming and Uniqueness |
 | FD-06 | `meta-routing.md` has columns `Pattern / Domain`, `Sub-squad`, `Parallel-Eligible`; every `Sub-squad` value exists as a row in `federation.md` | Meta-Routing Schema |
+| FD-07 | The confirmed preparer writes no squad state, validates every new member through the standard Init payload builder, returns an exact payload SHA-256, and seals either the fresh-root baseline or the existing federation root/member snapshot | `Get-SquadFederationInitPlan.ps1` |
+| FD-08 | Federation Init stages new-member `Initialize-Squad.ps1 -Direct` transactions in parallel and requires every verified ledger receipt; fresh Init publishes the complete root, while Expansion preserves existing members and commits only new roots plus additive metadata under the same writer lock | `Initialize-SquadFederation.ps1` |
+| FD-09 | A stale root, bad payload hash, failed member, lock timeout, collision, replay, or restore failure never reports success or leaves a partial federation; fixture Init/Expansion completes within 30 seconds with bounded member-start skew | `InitializeSquadFederation.Tests.ps1` |
 
 ### Promotion — single squad to federation
 
@@ -553,27 +557,33 @@ This is the highest-risk operation in the system because it moves state. Fixture
 | ID | Assertion | Source |
 |---|---|---|
 | FD-10 | Precondition detection: promotion runs only when a top-level `team.md` exists and no top-level `federation.md` exists | Promotion Mode trigger |
-| FD-11 | Nothing is written before the user confirms | "Nothing is moved or written before the user confirms" |
+| FD-11 | The read-only plan writes no squad state, and apply refuses without explicit confirmation | `Get-SquadPromotionPlan.ps1`; `Promote-SquadFederation.ps1 -Confirmed` |
 | FD-12 | After promotion the top-level `team.md` is **gone**, and the full tree is present under `members/<name>/` | Step 2 |
-| FD-13 | **Every append-only file is byte-identical** to its pre-promotion checksum: `decisions.md`, every `history/<agent>.md`, every per-dispatch consumption block | Step 2, byte-for-byte guarantee |
-| FD-14 | `team.md` is the **only** file whose content changed, and within it only the `Deliverable Root` column | Step 5 |
+| FD-13 | Every pre-promotion append-only byte is preserved: member `decisions.md` and non-orchestration history stay byte-identical, while `history/Squad Scribe.md` keeps its exact old prefix before the zero-consumption promotion lifecycle append | `Promote-SquadFederation.ps1`, staged prefix verification |
+| FD-14 | Among roster data, only `team.md`'s `Deliverable Root` cells change; promotion preserves `consumption.md` byte-for-byte and carries the member's existing run totals unchanged | `ConvertTo-SquadPromotionTeam`; promotion accounting |
 | FD-15 | Every `Deliverable Root` cell that began with `.copilot-tracking/` now reads `.copilot-tracking/squad/members/<name>/...` — the `.copilot-tracking/` segment is **replaced**, not prepended to. Cells beginning `docs/` or `outputs/` are unchanged | Step 5, disambiguated by `squad-roster.instructions.md`: a sub-squad roster reads `.copilot-tracking/squad/members/product/plans/` |
 | FD-15a | **Strongest form.** Every rebased `Deliverable Root` cell resolves to a directory that actually exists on disk after promotion. This is the assertion that catches a literal prepend producing `.copilot-tracking/squad/members/<name>/.copilot-tracking/plans/` | See the source ambiguity noted below |
 | FD-16 | Deliverable directories were enumerated **from disk**, not from the roster table: every directory under `.copilot-tracking/` except `squad/` was offered as a candidate | Step 3 |
 | FD-17 | No source file was removed before its destination copy existed and verified — assert zero data loss by comparing the full manifest | Copy, Verify, Then Delete |
 | FD-18 | Federation `decisions.md` first entry records the promotion and the source-to-destination move | Step 6 |
 | FD-19 | `federation.md` has exactly one row, with `Location` = `members/<name>/` and `Profile` inferred from the moved `team.md` | Step 6 |
-| FD-20 | `members/<name>/history/scribe.md` carries the promotion's orchestration consumption block, and federation `state.json` `currentRun` totals are seeded from the relocated ledger total row | Step 7 — the ledger must not show a gap across the boundary |
+| FD-20 | `members/<name>/history/Squad Scribe.md` records the script-only lifecycle event without a consumption block, and federation `state.json` `currentRun` totals are seeded from the unchanged relocated ledger total row | Step 7 — promotion must neither create a gap nor invent model spend |
 | FD-21 | After promotion, detection flips: `/squad-federation` owns turns and `/squad` detects the federation and defers | Detection precedence |
+| FD-22 | The plan seals compact digests for the full squad and every on-disk candidate; a changed source, candidate, plan hash, or candidate set refuses before mutation | `Get-SquadPromotionPlan.ps1`; `Promote-SquadFederation.ps1` |
+| FD-23 | Confirmed `RelocateDirectory` and `KeepDirectory` sets are disjoint and exhaust every candidate; a roster/history-referenced candidate cannot be kept | `Promote-SquadFederation.ps1`, explicit partition gate |
+| FD-24 | The complete final federation is staged and ledger-checked before the short locked publish; the writer revalidates the plan under the ordinary handoff lock | `Promote-SquadFederation.ps1`, staged transaction |
+| FD-25 | Replay, an already-created federation, a member-name collision, and a destination collision fail closed without merging or overwriting | `Promote-SquadFederation.ps1`, CAS and collision exits |
+| FD-26 | A fixture promotion completes within 30 seconds without a model/Scribe dispatch and returns measured `elapsedMs` in its verified receipt | `PromoteSquadFederation.Tests.ps1` |
 
 ### Expansion
 
 | ID | Assertion | Source |
 |---|---|---|
-| FD-30 | New sub-squad tree seeded at `members/<new>/` with the same file set as FD-02 | Expansion Step 2 |
-| FD-31 | `federation.md` and `meta-routing.md` are **read-merge-written**: every pre-existing row and route is byte-identical afterward, with the new ones appended | Expansion Step 3, preserve-on-replace |
-| FD-32 | Federation `decisions.md` gained an entry recording the addition; `history/<new>.md` created | Expansion Step 3 |
-| FD-33 | **Negative case.** Adding a sub-squad whose name collides with an existing `members/<name>/` directory is refused | Naming and Uniqueness |
+| FD-30 | New sub-squad trees are initialized in parallel at `members/<new>/` with the same file set and direct Init receipt as FD-02 | `Initialize-SquadFederation.ps1`, `operation=expand` |
+| FD-31 | `federation.md` and `meta-routing.md` preserve every pre-existing row/route byte and append only the confirmed additions; every existing member tree remains byte-identical | Expansion transaction |
+| FD-32 | Federation `decisions.md` and root orchestration history append the addition, `history/<new>.md` is created, root `state.json` advances once, sums existing/new member totals plus one expansion overhead block, and resets stale aggregate admission | Expansion transaction |
+| FD-33 | Name, route, member-directory and root-history collisions are refused before publication; replay or a competing expansion fails the sealed-baseline compare-and-swap | `Get-SquadFederationInitPlan.ps1`; `Initialize-SquadFederation.ps1` |
+| FD-34 | Expansion dispatches no Scribe/model, returns one measured verified receipt, and completes a one-member fixture within 30 seconds | `InitializeSquadFederation.Tests.ps1` |
 
 ### Meta-routing turn
 
