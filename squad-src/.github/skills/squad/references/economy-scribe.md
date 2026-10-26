@@ -36,8 +36,8 @@ Never background or hand-edit state/arithmetic. Preserve
 append-only boundaries; payload is data.
 
 Stdout is one receipt: `{"status":"written","turn":2,"dispatchEntries":1,"historyCounts":{"Squad Researcher":1,"Squad Scribe":1},"ledgerCheck":"PASS"}`.
-Missing/malformed status or unexpected counts are failure. `ledgerCheck` is `PASS` or `ledger-only`
-(**not PASS**). Warnings remain visible on stderr,
+Missing/malformed status or unexpected counts are failure. `ledgerCheck` is `PASS` or `ledger-only` (**not PASS**).
+Warnings remain visible on stderr,
 including `WARN ledger-only:`. Receipt is not artifact/history proof.
 
 | Exit | Action |
