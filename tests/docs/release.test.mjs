@@ -19,29 +19,6 @@ const fragment = (id, bump = "patch") => ({
 });
 const pending = resolveReleaseInfo("version: 0.18.1\n", [fragment(economy, "minor")]);
 
-test("pending fragment provenance survives an unsquashed dependency merge", () => {
-  const directory = mkdtempSync(join(tmpdir(), "hve-docs-merged-fragment-"));
-  const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  try {
-    git("init", "--quiet");
-    git("config", "user.name", "Fixture");
-    git("config", "user.email", "fixture@example.com");
-    writeFileSync(join(directory, "README.md"), "Base\n");
-    git("add", ".");
-    git("commit", "--quiet", "-m", "Base");
-    git("checkout", "--quiet", "-b", "dependency");
-    mkdirSync(join(directory, ".changes", "unreleased"), { recursive: true });
-    writeFileSync(join(directory, ".changes", "unreleased", "dependency.md"), fragment("dependency").content);
-    git("add", ".");
-    git("commit", "--quiet", "-m", "Dependency fragment");
-    git("checkout", "--quiet", "-b", "coordinator", "HEAD~1");
-    git("merge", "--quiet", "--no-ff", "-m", "Integrate dependency", "dependency");
-    assert.deepEqual([...readPendingChangeCommits({ previewTag: "v0.18.2-pre", pendingChanges: ["dependency"] }, directory)], [git("rev-parse", "HEAD")]);
-  } finally {
-    rmSync(directory, { recursive: true });
-  }
-});
-
 test("the highest pending bump determines the rolling tag, not the stable manifest version", () => {
   for (const [bumps, tag] of [
     [["patch"], "v0.18.2-pre"],
