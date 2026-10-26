@@ -223,7 +223,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (-not $CliPath) { $CliPath = (Get-Command copilot -ErrorAction Stop).Source }
         $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
         $HelpText = (& $CliPath --help | Out-String)
-        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--no-remote', '--no-remote-export', '--add-dir')) {
+        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--add-dir')) {
             if (-not $HelpText.Contains($Flag)) { throw "Installed CLI does not support $Flag" }
         }
         $Revision = (& git -C $SourceRoot rev-parse HEAD).Trim()
@@ -279,7 +279,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Attempts = [Collections.Generic.List[object]]::new()
             $Recovery = @{ count = 0; status = 'not-needed'; reason = $null; resolvedDiscoveryDenials = 0 }
             $UsagePath = Join-Path $Out "$Stage-usage.json"
-            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
             if ($ObservationOnly) { $CliArgs[[array]::IndexOf($CliArgs, '--max-autopilot-continues') + 1] = '1000'; $StageRequestCeiling = 0 }
             foreach ($Server in $DisabledServers) { $CliArgs += @('--disable-mcp-server', $Server) }
             foreach ($Denied in @('shell(git push)', 'shell(gh)', 'shell(az)', 'shell(curl)', 'shell(wget)', 'shell(Invoke-WebRequest)', 'shell(Invoke-RestMethod)', 'shell(Start-Process)')) { $CliArgs += @('--deny-tool', $Denied) }
