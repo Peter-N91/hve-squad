@@ -8,6 +8,7 @@ BeforeAll {
     function Get-FakeEfficiencyAcpText {
         @'
 $ErrorActionPreference='Stop'
+if ($args -contains '--no-remote' -or $args -contains '--no-remote-export') { throw 'Unsupported retired CLI option' }
 $Mode=$env:HVE_FAKE_ACP_MODE
 while($null -ne ($Line=[Console]::In.ReadLine())) {
     Add-Content -LiteralPath $env:HVE_FAKE_ACP_TRACE -Value $Line
@@ -72,6 +73,62 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
 }
 
 Describe 'Efficiency event analysis' -Tag 'Unit' {
+    It 'attributes activity by agent identity and deduplicates usage and dispatch receipts' {
+        $Path = Join-Path $TestDrive 'activity.jsonl'
+        $Events = @(
+            @{ id = 'root'; type = 'session.start'; data = @{ sessionId = 'root' } }
+            @{ id = 'scribe-start'; type = 'subagent.started'; agentId = 'scribe'; data = @{ agentName = 'Squad Scribe'; toolCallId = 'dispatch' } }
+            @{ id = 'scribe-start-repeated'; type = 'subagent.started'; agentId = 'scribe'; data = @{ agentName = 'Squad Scribe'; toolCallId = 'dispatch' } }
+            @{ id = 'scribe-end'; type = 'subagent.completed'; agentId = 'scribe'; data = @{ toolCallId = 'dispatch'; durationMs = 68818 } }
+        )
+        foreach ($Actor in @('scribe', 'root', 'author', 'prd', 'nested')) {
+            $Event = New-TestUsage $Actor | ConvertFrom-Json -AsHashtable
+            $Event.data.usage.accounting.sourceSessionId = $Actor
+            if ($Actor -ne 'root') { $Event.agentId = $Actor }
+            $Events += $Event
+            $Events += $Event
+        }
+        $Events += @(
+            @{ id = 'author-start'; type = 'subagent.started'; agentId = 'author'; data = @{ agentName = 'BRD Builder'; toolCallId = 'author-dispatch' } }
+            @{ id = 'prd-start'; type = 'subagent.started'; agentId = 'prd'; data = @{ agentName = 'PRD Builder'; toolCallId = 'prd-dispatch' } }
+            @{ id = 'nested-start'; type = 'subagent.started'; agentId = 'nested'; data = @{ agentName = 'Researcher'; toolCallId = 'nested-dispatch' } }
+        )
+        $Events | ForEach-Object { $_ | ConvertTo-Json -Depth 15 -Compress } | Set-Content $Path
+        $Activity = (Measure-EfficiencyEvents $Path).activity
+        $Activity.scribeDispatches | Should -Be 1
+        $Activity.scribeModelRequests | Should -Be 1
+        $Activity.scribeSeconds | Should -Be 68.818
+        $Activity.scribeCredits | Should -Be 0.001
+        $Activity.coordinatorModelRequests | Should -Be 1
+        $Activity.authorModelRequests | Should -Be 2
+    }
+    It 'distinguishes absent activity from missing duration, credits and attribution' {
+        $Path = Join-Path $TestDrive 'missing-activity.jsonl'
+        $Root = @{ type = 'session.start'; data = @{ sessionId = 'child' } } | ConvertTo-Json -Compress
+        @($Root; New-TestUsage) | Set-Content $Path
+        $Activity = (Measure-EfficiencyEvents $Path).activity
+        $Activity.scribeDispatches | Should -Be 0
+        $Activity.scribeSeconds | Should -Be 0
+        $Activity.scribeCredits | Should -Be 0
+        $Activity.authorModelRequests | Should -Be 0
+
+        $Start = @{ type = 'subagent.started'; agentId = 'scribe'; data = @{ agentName = 'Squad Scribe'; toolCallId = 'dispatch' } } | ConvertTo-Json -Compress
+        $Usage = New-TestUsage | ConvertFrom-Json -AsHashtable
+        $Usage.agentId = 'scribe'
+        $Usage.data.usage.Remove('copilotUsage')
+        @($Root; $Start; ($Usage | ConvertTo-Json -Depth 15 -Compress)) | Set-Content $Path
+        $Activity = (Measure-EfficiencyEvents $Path).activity
+        $Activity.scribeModelRequests | Should -Be 1
+        $Activity.scribeSeconds | Should -BeNullOrEmpty
+        $Activity.scribeCredits | Should -BeNullOrEmpty
+
+        New-TestUsage | Set-Content $Path
+        (Measure-EfficiencyEvents $Path).activity.coordinatorModelRequests | Should -BeNullOrEmpty
+        @($Root; ($Usage | ConvertTo-Json -Depth 15 -Compress)) | Set-Content $Path
+        (Measure-EfficiencyEvents $Path).activity.coordinatorModelRequests | Should -BeNullOrEmpty
+        @($Root; $Start; (New-TestUsage)) | Set-Content $Path
+        (Measure-EfficiencyEvents $Path).activity.scribeModelRequests | Should -BeNullOrEmpty
+    }
     It 'deduplicates accounting records without double-counting child usage' {
         $Path = Join-Path $TestDrive 'usage.jsonl'
         @(New-TestUsage; New-TestUsage) | Set-Content $Path
@@ -325,7 +382,8 @@ Describe 'Efficiency recovery end to end' -Tag 'Unit' {
         $Fake = @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-recovery-cli'; exit 0 }
-if ($args -contains '--help') { '--acp --session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+if ($args -contains '--help') { '--acp --session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --add-dir'; exit 0 }
+if ($args -contains '--no-remote' -or $args -contains '--no-remote-export') { throw 'Unsupported retired CLI option' }
 if ($args -contains '--acp') {
     $env:HVE_FAKE_ACP_MODE='success'
     $env:HVE_FAKE_ACP_TRACE=Join-Path $PWD 'acp-trace.jsonl'
@@ -376,6 +434,16 @@ exit 0
         $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 90 -InputText ''
         $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
         try {
+            $Progress = Get-Content (Join-Path $TestDrive "$Outcome-launch.txt") -Raw
+            $Progress | Should -Match 'Step 1/7: Preparing workspace - started; 6 steps remaining'
+            $Progress | Should -Match 'Step 2/7: Initializing squad - started; 5 steps remaining'
+            $Progress | Should -Match 'Step 3/7: Writing requirements - started; 4 steps remaining'
+            $Progress | Should -Match 'Step 5/7: Checking acceptance and workflow - started; 2 steps remaining'
+            $Progress | Should -Match 'Step 7/7: Saving run evidence - finished; 0 steps remaining'
+            if ($Outcome -in @('credit-limit', 'observe-credit-limit')) {
+                $Progress | Should -Match 'Step 4/7: Building product - skipped; 3 steps remaining'
+            }
+            if ($Outcome -eq 'credit-limit') { $Progress | Should -Match 'Step 6/7: Judging documents - skipped; 1 step remaining' }
             if ($Outcome -like 'observe-*') {
                 $Execution.exitCode | Should -Be 0
                 $Run.collection.recorded | Should -BeTrue
@@ -439,6 +507,46 @@ exit 0
 }
 
 Describe 'Efficiency process boundary' -Tag 'Unit' {
+    It 'relays dedicated progress without exposing subprocess output for <Case>' -ForEach @(
+        @{ Case = 'fast'; Enabled = $true; Delay = 0 }
+        @{ Case = 'heartbeat'; Enabled = $true; Delay = 1800 }
+        @{ Case = 'disabled'; Enabled = $false; Delay = 0 }
+    ) {
+        $ProgressPath = Join-Path $TestDrive "$Case-progress.log"
+        $OutputPath = Join-Path $TestDrive "$Case-output.log"
+        $Script = Join-Path $TestDrive "$Case-progress.ps1"
+        @'
+param($Path, [int]$Delay)
+[Console]::WriteLine('private model output')
+[Console]::Error.WriteLine('private diagnostic')
+[IO.File]::AppendAllText($Path, '[2026-10-26 14:00:00+01:00] Step 3/7: Writing ')
+if ($Delay) { Start-Sleep -Milliseconds 500 }
+[IO.File]::AppendAllText($Path, "requirements - started; 4 steps remaining after this step.`n")
+if ($Delay) { Start-Sleep -Milliseconds $Delay }
+'@ | Set-Content $Script
+        $Options = if ($Enabled) { @{ ProgressPath = $ProgressPath; ProgressIntervalSeconds = 1 } } else { @{} }
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Script, $ProgressPath, [string]$Delay) -WorkingDirectory $TestDrive -OutputPath $OutputPath -TimeoutSeconds 10 @Options -InformationVariable Messages
+        $Result.exitCode | Should -Be 0
+        $Text = @($Messages | ForEach-Object { $_.ToString() }) -join "`n"
+        if ($Enabled) {
+            $Text | Should -Match '\[2026-10-26 14:00:00\+01:00\] Step 3/7: Writing requirements - started; 4 steps remaining'
+            @($Messages | Where-Object { $_.ToString() -match '^\[2026-10-26 14:00:00\+01:00\]' }).Count | Should -Be 1
+            if ($Delay) { $Text | Should -Match 'Still running .*Last update: .*Step 3/7' }
+        }
+        else { $Text | Should -BeNullOrEmpty }
+        $Text | Should -Not -Match 'private model output|private diagnostic'
+        Get-Content $OutputPath -Raw | Should -Match 'private model output'
+        Get-Content "$OutputPath.stderr" -Raw | Should -Match 'private diagnostic'
+    }
+    It 'writes timestamped progress without polluting structured output' {
+        $Path = Join-Path $TestDrive 'written-progress.log'
+        $Result = @(Write-EfficiencyProgress -Step 2 -Label 'Initializing squad' -Path $Path)
+        $Result.Count | Should -Be 0
+        Write-EfficiencyProgress -Step 6 -Label 'Judging documents' -Status skipped -Path $Path
+        $Lines = @(Get-Content $Path)
+        $Lines[0] | Should -Match '^\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d[+-]\d\d:\d\d\] Step 2/7: Initializing squad - started; 5 steps remaining'
+        $Lines[1] | Should -Match 'Step 6/7: Judging documents - skipped; 1 step remaining'
+    }
     It 'guards cumulative credits for <Case>' -ForEach @(
         @{ Case = 'reset-counter'; Amount = 1200000000; Delay = 3000; Expected = 'credit-limit'; Prior = $true }
         @{ Case = 'fast-exit'; Amount = 1200000000; Delay = 0; Expected = 'credit-limit'; Prior = $true }
@@ -714,8 +822,11 @@ exit 37
         foreach ($BroadPermission in @('--allow-all', '--yolo', '--allow-all-tools', '--allow-all-paths', '--allow-all-urls')) {
             $Arguments | Should -Not -Contain $BroadPermission
         }
-        foreach ($PreservedOption in @('--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export')) {
+        foreach ($PreservedOption in @('--no-custom-instructions', '--disable-builtin-mcps')) {
             $Arguments | Should -Contain $PreservedOption
+        }
+        foreach ($RetiredOption in @('--no-remote', '--no-remote-export')) {
+            $Arguments | Should -Not -Contain $RetiredOption
         }
     }
 
@@ -884,7 +995,8 @@ exit 0
         @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-incomplete-cli'; exit 0 }
-if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --add-dir'; exit 0 }
+if ($args -contains '--no-remote' -or $args -contains '--no-remote-export') { throw 'Unsupported retired CLI option' }
 Add-Content 'stage-launches.txt' 'one invocation'
 $Session = $args[[array]::IndexOf($args, '--session-id') + 1]
 $SessionRoot = Join-Path $HOME ".copilot/session-state/$Session"
@@ -917,7 +1029,7 @@ exit 0
         @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-argv-cli'; exit 0 }
-if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --add-dir'; exit 0 }
 @{ arguments = @($args); repoHooks = $env:GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS; stateParentsReady = (Test-Path -LiteralPath '.copilot-tracking/squad/history' -PathType Container); stateFiles = if(Test-Path -LiteralPath '.copilot-tracking/squad'){@(Get-ChildItem -LiteralPath '.copilot-tracking/squad' -Recurse -File).Count}else{-1} } | ConvertTo-Json -Depth 6 -Compress
 exit 37
 '@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
@@ -931,6 +1043,8 @@ exit 37
         $Captured.arguments | Should -Contain '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN'
         $Captured.arguments | Should -Not -Contain 'GITHUB_TOKEN'
         $Captured.arguments | Should -Not -Contain '--trust-folder'
+        $Captured.arguments | Should -Not -Contain '--no-remote'
+        $Captured.arguments | Should -Not -Contain '--no-remote-export'
         $Captured.arguments | Should -Contain '--session-id'
         $Captured.arguments | Should -Contain '--allow-all-tools'
         $DirectoryIndex = [array]::IndexOf($Captured.arguments, '--add-dir')

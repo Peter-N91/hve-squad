@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,9 @@ import { buildPages, enhanceContent, headingIds, readLocales } from "../../scrip
 import {
   addReleaseBadges,
   annotateReleaseSource,
+  createAutomaticReleaseAnnotator,
   populateReleaseInstalls,
+  readPendingChangeCommits,
   readReleaseInfo,
   resolveReleaseInfo,
 } from "../../scripts/docs-release.mjs";
@@ -75,6 +78,40 @@ test("metadata reads only pending markdown files and supports a consumed fragmen
     writeFileSync(join(fragments, `${economy}.md`), fragment(economy, "minor").content);
     assert.equal(readReleaseInfo(directory).previewTag, "v0.19.0-pre");
     assert.deepEqual(readReleaseInfo(directory).pendingChanges, [economy]);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
+test("merge-added fragments and pages retain their release provenance", () => {
+  const directory = mkdtempSync(join(tmpdir(), "hve-docs-merge-"));
+  const git = (...args) => execFileSync("git", [
+    "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args,
+  ], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  try {
+    git("init", "-q", "-b", "main");
+    writeFileSync(join(directory, "apm.yml"), "version: 0.18.1\n");
+    git("add", ".");
+    git("commit", "-qm", "Base");
+    git("checkout", "-qb", "feature");
+    writeFileSync(join(directory, "feature.txt"), "Feature\n");
+    git("add", ".");
+    git("commit", "-qm", "Feature");
+    git("checkout", "-q", "main");
+    git("merge", "--no-ff", "--no-commit", "feature");
+    const fragments = join(directory, ".changes", "unreleased");
+    mkdirSync(fragments, { recursive: true });
+    writeFileSync(join(fragments, "merge-added.md"), fragment("merge-added").content);
+    const raw = "<header class=\"hero\"><h1>New guide</h1></header>\n<main><h2>Details</h2></main>\n";
+    writeFileSync(join(directory, "guide.html"), raw);
+    git("add", ".");
+    git("commit", "-qm", "Merge with release documentation");
+    const commit = git("rev-parse", "HEAD");
+    const release = readReleaseInfo(directory);
+    assert.deepEqual([...readPendingChangeCommits(release, directory)], [commit]);
+    const annotated = load(createAutomaticReleaseAnnotator(release, directory)("guide.html", raw));
+    assert.equal(annotated("h1[data-release-auto]").length, 1);
+    assert.equal(annotated("h2[data-release-auto]").length, 0);
   } finally {
     rmSync(directory, { recursive: true });
   }

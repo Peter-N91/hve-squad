@@ -2,6 +2,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Checks documented routing/performance contracts and their packaged artifacts.
+# AI cost: none; assertions inspect files, not paid performance observations.
+
 # False positive: $SourceRoot is read inside the top-level BeforeAll block, which
 # PSScriptAnalyzer treats as a scope unrelated to the param block.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SourceRoot',
@@ -365,10 +368,42 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
         $raw | Should -Not -Match '[A-Za-z]:\\\\'
     }
 
-    It 'keeps every baseline obligation, with only the SQ-33 capability-first replacement' {
+    It 'keeps baseline normative sentences or their explicitly approved successors present' {
         $baselineSentences = @($script:Baseline.correctnessInventory.normativeCounts.PSObject.Properties.Name)
         $currentSentences = @($script:Measured.correctnessInventory.normativeCounts.PSObject.Properties.Name)
-        $missing = @(Get-MissingNormativeSentence -Baseline $baselineSentences -Current $currentSentences)
+        $approvedMigrations = @(
+            @{
+                Before = '3. **Initialize state when requested** — `team.md` and `routing.md` from the coordinator-confirmed roster (the profile''s members, not the full cast catalog), plus `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/`. Replace semantics; write only when missing or on an explicit refresh. Always include the `scribe` role. Copy each `team.md` row verbatim from the payload `roster`; never derive an agent name. Resolve every `Deliverable Root` against the `squadRoot` in hand, and preserve existing cells on a refresh. Seed both consumption files here — a squad without the rate table cannot price its first dispatch. Create no agent file inside `history/`; only `history/Squad Scribe.md` with this hand-off''s orchestration block, then `ledgerCommand` last.'
+                After  = '3. **Initialize state when requested** — `team.md` and `routing.md` from the coordinator-confirmed roster (the profile''s members, not the full cast catalog), plus `decisions.md`, `notifications.md`, `state.json`, `consumption.md`, `consumption-rates.md`, and `history/`. Replace semantics; write only when missing or on an explicit refresh. Always include the `scribe` role. Copy each `team.md` row verbatim from the payload `roster`; never derive an agent name. Resolve every `Deliverable Root` against the `squadRoot` in hand, and preserve existing cells on a refresh. Seed both consumption files here — a squad without the rate table cannot price its first dispatch. Create no agent file inside `history/`; only `history/Squad Scribe.md` with this hand-off''s orchestration block, then invoke the trusted ledger helper last.'
+            }
+            @{
+                Before = 'Never drop the payload — even on a disrupted turn, an alternate-agent resolution, or a partial run. Apart from the pre-dispatch Cost Preflight transaction, the coordinator supplies values only and the Scribe remains the writer.'
+                After  = 'Never drop the payload — even on a disrupted turn, an alternate-agent resolution, or a partial run. Only the validated writer or cold Scribe persists it; direct execution does not authorize unvalidated coordinator edits.'
+            }
+            @{
+                Before = '**Omitting the parameter defers to the target agent''s own model pin, when it has one.** A dispatch with no `model` parameter runs on that pin; when the agent declares none, the host decides — typically the session model — so the squad pins every role it wants off the session model. The two coordinators (`squad-coordinator`, `federation-coordinator`) declare no pin by design and run on the session model the user selected. The Scribe must not inherit the frontier session model: its `model:` frontmatter pins Claude Haiku 5.5, its `bookkeeping` assignment class floors at the seeded `fast` Model Tier, and neither routing input nor the no-policy default ever substitutes the orchestrating session''s own model in its place.'
+                After  = '**Omitting the parameter defers to the target agent''s own model pin, when it has one.** A dispatch with no `model` parameter runs on that pin; when the agent declares none, the host decides — typically the session model — so the squad pins every role it wants off the session model. The two coordinators (`squad-coordinator`, `federation-coordinator`) declare no pin by design and run on the session model the user selected. **Never substitute the frontier session model for a dispatched Scribe:** it retains its Claude Haiku 5.5 `model:` pin and `bookkeeping` class at the seeded `fast` tier; routing does not change either. A direct deterministic handoff is not a Scribe dispatch: its orchestration records the coordinator model and no fictional Scribe tokens.'
+            }
+            @{
+                Before = '**Always hand a consumption payload alongside them.** This is mandatory, not best-effort. For every dispatched agent supply:'
+                After  = '* Every dispatch carries a consumption attribution. Resolve the model through the *Model Attribution* ladder and pass it with its `model_source`; when it cannot be resolved, pass `unknown` and the roster tier so the Scribe prices a `tier-default` estimate. Never pass a model name you did not resolve.'
+            }
+            @{
+                Before = '* **The resolved model and its source**, through the *Model Attribution* ladder. **Capture what the host reported for the dispatch before falling back to inference** — the Copilot CLI labels each dispatch `AgentName(model-id)`, and that label is rung 1 because it is the only signal that survives an entitlement gap. A frontmatter pin is a prediction: when the account cannot use the pinned model the host substitutes the session model, silently. **Never pass a model name you did not resolve**; `unknown` beats a fabricated attribution.'
+                After  = '* Every dispatch carries a consumption attribution. Resolve the model through the *Model Attribution* ladder and pass it with its `model_source`; when it cannot be resolved, pass `unknown` and the roster tier so the Scribe prices a `tier-default` estimate. Never pass a model name you did not resolve.'
+            }
+            @{
+                Before = '* **`observed_credits`** when the run''s actual `ai_credits_used` delta is available. Never estimate that figure.'
+                After  = '**Consumption attribution is mandatory, input blocks are not.** Preserve supplied usage with `-ConsumptionPath`/`-OrchestrationConsumptionPath`; else use the existing estimated fallback. Apply *Model Attribution*: host-reported `AgentName(model-id)` first (rung 1), then resolved pin/session model; use `unknown` plus roster tier rather than inventing. Preserve self-reported `sessionModel`; send changes and volunteered `modelOverrides` through full JSON without prompting. `model_tier` is preference, not actual usage. Include available estimator signals (internal calls, files/size, artifacts, findings length). Record actual Coordinator usage; Scribe usage only if dispatched. Never invent Scribe tokens. Actual `ai_credits_used` deltas go only through cold Scribe''s Consumption Accounting item 9; never add `observed_credits` to ordinary writer inputs.'
+            }
+        )
+        foreach ($migration in $approvedMigrations) {
+            $baselineSentences | Should -Contain $migration.Before -Because 'approved migrations must remain tied to the captured BEFORE baseline'
+            $currentSentences | Should -Contain $migration.After -Because "the approved successor must preserve the contract: $($migration.Before)"
+        }
+        $migratedSentences = @($approvedMigrations | ForEach-Object Before)
+        $remainingSentences = @($baselineSentences | Where-Object { $_ -notin $migratedSentences })
+        $missing = @(Get-MissingNormativeSentence -Baseline $remainingSentences -Current $currentSentences)
         $missing.Count | Should -Be 0 -Because "these normative sentences existed in the BEFORE baseline and are absent from the current tree: $($missing -join ' | ')"
     }
 
@@ -380,10 +415,14 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
         @($missing | Where-Object { $_ -like '3. Compare **granular task capability**,*' }).Count | Should -Be 1
     }
 
-    It 'keeps every baseline named heading present in the current tree (moves allowed, deletions not)' {
+    It 'keeps baseline named headings or their explicitly approved successors present' {
         $baselineHeadings = @($script:Baseline.correctnessInventory.headingCounts.PSObject.Properties.Name)
         $currentHeadings = @($script:Measured.correctnessInventory.headingCounts.PSObject.Properties.Name)
-        $missing = @($baselineHeadings | Where-Object { $_ -notin $currentHeadings })
+        $before = 'Step 5: Hand State to the Squad Scribe'
+        $after = 'Step 5: Persist State Through the Validated Writer'
+        $baselineHeadings | Should -Contain $before -Because 'the heading migration must remain tied to the captured BEFORE baseline'
+        $currentHeadings | Should -Contain $after -Because 'the replacement heading identifies the validated ordinary-writer contract'
+        $missing = @($baselineHeadings | Where-Object { $_ -notin $currentHeadings -and $_ -ne $before })
         $missing.Count | Should -Be 0 -Because "these headings existed in the BEFORE baseline and are absent from the current tree: $($missing -join ' | ')"
     }
 }
@@ -470,6 +509,99 @@ Describe 'The verifier resolves known rate spellings without guessing costs' -Ta
         $Outcome.ExitCode | Should -Not -Be 0
         ($Outcome.Result.failures -join ' | ') | Should -Match 'ledger says 9.3171'
         ($Outcome.Result.failures -join ' | ') | Should -Not -Match 'no rate row for:'
+    }
+}
+
+Describe 'The verifier prices long-context blocks and calibration independently of the writer' -Tag 'Unit' {
+    BeforeAll {
+        function Get-PricingScenario {
+            # Rewrites the correct-write fixture with a header-keyed LC rate table (base 1/0.1/0/2 and
+            # LC 3/0.5/0/6 for Sonnet, flat-equivalent halves for Haiku) and the given per-block tokens.
+            param(
+                [Parameter(Mandatory)][int[]]$Sonnet,
+                [Parameter(Mandatory)][int[]]$Haiku,
+                [Parameter(Mandatory)][double]$Total,
+                [double]$Calibration = 1.0,
+                [string]$Threshold = '<=100K / >100K',
+                [string]$LcCached = '0.50',
+                [string]$LcCacheWrite = '0',
+                [string]$Headers = '| Model | Input | Cached | Cache write | Output | LC Threshold | LC Input | LC Cached | LC Cache write | LC Output |',
+                [string]$Delimiter = '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+                [string]$SonnetRow = $null,
+                [string]$HaikuRow = $null
+            )
+            $root = Get-CorrectWriteFixture
+            if (-not $SonnetRow) { $SonnetRow = "| Claude Sonnet 4.6 | 1.00 | 0.10 | 0 | 2.00 | $Threshold | 3.00 | $LcCached | $LcCacheWrite | 6.00 |" }
+            if (-not $HaikuRow) { $HaikuRow = "| Claude Haiku 4.5 | 1.00 | 0.10 | 0 | 2.00 | $Threshold | 2.00 | 0.20 | 0 | 4.00 |" }
+            $ratesPath = Join-Path $root 'consumption-rates.md'
+            $rates = (Get-Content -LiteralPath $ratesPath -Raw).Replace('calibration_factor: 1.00', "calibration_factor: $Calibration")
+            $table = "$Headers`n$Delimiter`n$SonnetRow`n$HaikuRow`n`n"
+            Set-Content -LiteralPath $ratesPath -Value $rates.Replace('## Per-model token rates', "$table## Per-model token rates") -Encoding utf8NoBOM
+
+            foreach ($entry in @(@{ File = 'Squad Researcher.md'; Tokens = $Sonnet }, @{ File = 'Squad Scribe.md'; Tokens = $Haiku })) {
+                $path = Join-Path $root "history/$($entry.File)"
+                $text = Get-Content -LiteralPath $path -Raw
+                $fields = 'input_tokens', 'cached_tokens', 'cache_write_tokens', 'output_tokens'
+                for ($i = 0; $i -lt 4; $i++) { $text = $text -replace ('"' + $fields[$i] + '": \d+'), ('"' + $fields[$i] + '": ' + $entry.Tokens[$i]) }
+                Set-Content -LiteralPath $path -Value $text -Encoding utf8NoBOM
+            }
+            $sum = for ($i = 0; $i -lt 4; $i++) { $Sonnet[$i] + $Haiku[$i] }
+            $ledgerPath = Join-Path $root 'consumption.md'
+            $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+            $totalRow = '| **Total**     | **16** | **{0}** | **{1}** | **{2}** | **{3}**  | **{4}**       | **0.00**    |           |' -f $sum[0], $sum[1], $sum[2], $sum[3], $Total.ToString('0.0000', [cultureinfo]::InvariantCulture)
+            $ledger = [regex]::Replace($ledger, '(?m)^\| \*\*Total\*\*.*$', [System.Text.RegularExpressions.MatchEvaluator] { $totalRow })
+            Set-Content -LiteralPath $ledgerPath -Value $ledger -Encoding utf8NoBOM
+            $root
+        }
+    }
+
+    BeforeEach { $script:PricingRoot = $null }
+    AfterEach { if ($script:PricingRoot) { Remove-Item -LiteralPath $script:PricingRoot -Recurse -Force -ErrorAction SilentlyContinue } }
+
+    # Haiku's default block (3000/12000/1250/3200) prices flat to 0.0106 here: 3000x1 + 12000x0.1 + 3200x2 = 10600 per 1e6.
+    # Sonnet: base 1/0.1/0/2 and LC 3/0.5/0/6, so 40000/50000/0/1000 = 47000 and 1000/100000/0/1000 above threshold = 59000 (base would be 13000).
+    It 'prices <Name> per block from known rates: expected pass=<Pass>' -ForEach @(
+        @{ Name = 'below threshold'; Sonnet = @(40000, 50000, 0, 1000); Total = 0.0576; Calibration = 1.0; Pass = $true }
+        @{ Name = 'exactly at threshold (not strictly above)'; Sonnet = @(50000, 50000, 0, 1000); Total = 0.0676; Calibration = 1.0; Pass = $true }
+        @{ Name = 'above only through cached tokens'; Sonnet = @(1000, 100000, 0, 1000); Total = 0.0696; Calibration = 1.0; Pass = $true }
+        @{ Name = 'above threshold priced at base rates (wrong total)'; Sonnet = @(1000, 100000, 0, 1000); Total = 0.0236; Calibration = 1.0; Pass = $false }
+        @{ Name = 'above threshold with calibration applied once'; Sonnet = @(1000, 100000, 0, 1000); Total = 0.10440; Calibration = 1.5; Pass = $true }
+        @{ Name = 'above threshold with calibration applied twice (wrong total)'; Sonnet = @(1000, 100000, 0, 1000); Total = 0.15660; Calibration = 1.5; Pass = $false }
+        @{ Name = 'sub-threshold blocks whose sum exceeds it stay flat'; Sonnet = @(30000, 30000, 0, 0); Total = 0.0624; Calibration = 1.0; Pass = $true; Haiku = @(20000, 30000, 0, 3200) }
+        @{ Name = 'long-context cache writes use the LC rate'; Sonnet = @(1000, 100000, 10000, 1000); Total = 0.1096; Calibration = 1.0; Pass = $true; Extra = @{ LcCacheWrite = '4.00' } }
+        @{ Name = 'cache-write and output tokens do not trigger long context'; Sonnet = @(1000, 1000, 200000, 200000); Total = 0.4117; Calibration = 1.0; Pass = $true; Extra = @{ LcCacheWrite = '4.00' } }
+    ) {
+        param(
+            [int[]]$Haiku = @(3000, 12000, 1250, 3200),
+            [hashtable]$Extra = @{}
+        )
+        $script:PricingRoot = Get-PricingScenario -Sonnet $Sonnet -Haiku $Haiku -Total $Total -Calibration $Calibration @Extra
+        $outcome = Invoke-Verifier -SquadRootPath $script:PricingRoot
+        $outcome.Result.passed | Should -Be $Pass -Because ($outcome.Result.failures -join ' | ')
+        if (-not $Pass) { ($outcome.Result.failures -join ' | ') | Should -Match 'ledger says' }
+    }
+
+    It 'refuses to price <Name> and names the rate metadata' -ForEach @(
+        @{ Name = 'a partial LC header set'; Extra = @{
+                Headers = '| Model | Input | Cached | Cache write | Output | LC Threshold | LC Input | LC Cached | LC Cache write |'
+                Delimiter = '| --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+                SonnetRow = '| Claude Sonnet 4.6 | 1.00 | 0.10 | 0 | 2.00 | <=100K | 3.00 | 0.50 | 0 |'
+                HaikuRow = '| Claude Haiku 4.5 | 1.00 | 0.10 | 0 | 2.00 | <=100K | 2.00 | 0.20 | 0 |'
+            }
+        }
+        @{ Name = 'a malformed threshold'; Extra = @{ Threshold = 'about a hundred thousand' } }
+        @{ Name = 'a non-numeric LC rate'; Extra = @{ LcCached = 'n/a' } }
+    ) {
+        $script:PricingRoot = Get-PricingScenario -Sonnet @(1000, 100000, 0, 1000) -Haiku @(3000, 12000, 1250, 3200) -Total 0.0696 @Extra
+        $outcome = Invoke-Verifier -SquadRootPath $script:PricingRoot
+        $outcome.Result.passed | Should -BeFalse
+        ($outcome.Result.failures -join ' | ') | Should -Match 'invalid long-context rate metadata'
+    }
+
+    It 'keeps a declared none (flat rate) table flat even when tokens exceed any threshold' {
+        $script:PricingRoot = Get-PricingScenario -Sonnet @(1000, 100000, 0, 1000) -Haiku @(3000, 12000, 1250, 3200) -Total 0.0236 -Threshold 'none (flat rate)' -LcCached 'n/a'
+        $outcome = Invoke-Verifier -SquadRootPath $script:PricingRoot
+        $outcome.Result.passed | Should -BeTrue -Because ($outcome.Result.failures -join ' | ')
     }
 }
 
