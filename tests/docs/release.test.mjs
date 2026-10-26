@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,10 +8,7 @@ import { JSDOM } from "jsdom";
 import { buildPages, enhanceContent, headingIds, readLocales } from "../../scripts/docs-content.mjs";
 import {
   addReleaseBadges,
-  annotateReleaseSource,
-  createAutomaticReleaseAnnotator,
   populateReleaseInstalls,
-  readPendingChangeCommits,
   readReleaseInfo,
   resolveReleaseInfo,
 } from "../../scripts/docs-release.mjs";
@@ -83,80 +79,10 @@ test("metadata reads only pending markdown files and supports a consumed fragmen
   }
 });
 
-test("merge-added fragments and pages retain their release provenance", () => {
-  const directory = mkdtempSync(join(tmpdir(), "hve-docs-merge-"));
-  const git = (...args) => execFileSync("git", [
-    "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args,
-  ], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  try {
-    git("init", "-q", "-b", "main");
-    writeFileSync(join(directory, "apm.yml"), "version: 0.18.1\n");
-    git("add", ".");
-    git("commit", "-qm", "Base");
-    git("checkout", "-qb", "feature");
-    writeFileSync(join(directory, "feature.txt"), "Feature\n");
-    git("add", ".");
-    git("commit", "-qm", "Feature");
-    git("checkout", "-q", "main");
-    git("merge", "--no-ff", "--no-commit", "feature");
-    const fragments = join(directory, ".changes", "unreleased");
-    mkdirSync(fragments, { recursive: true });
-    writeFileSync(join(fragments, "merge-added.md"), fragment("merge-added").content);
-    const raw = "<header class=\"hero\"><h1>New guide</h1></header>\n<main><h2>Details</h2></main>\n";
-    writeFileSync(join(directory, "guide.html"), raw);
-    git("add", ".");
-    git("commit", "-qm", "Merge with release documentation");
-    const commit = git("rev-parse", "HEAD");
-    const release = readReleaseInfo(directory);
-    assert.deepEqual([...readPendingChangeCommits(release, directory)], [commit]);
-    const annotated = load(createAutomaticReleaseAnnotator(release, directory)("guide.html", raw));
-    assert.equal(annotated("h1[data-release-auto]").length, 1);
-    assert.equal(annotated("h2[data-release-auto]").length, 0);
-  } finally {
-    rmSync(directory, { recursive: true });
-  }
-});
-
-test("automatic annotations group pending content under the nearest safe section heading", () => {
-  const lines = [
-    "<body>",
-    "<nav><a href=\"usage.html\">Changed navigation</a></nav>",
-    "<header class=\"hero\">",
-    "  <h1>Guide</h1>",
-    "</header>",
-    "<main>",
-    "  <h2 id=\"stable\">Stable section</h2>",
-    "  <p>Changed stable copy.</p>",
-    "  <h2 id=\"new\">New feature</h2>",
-    "  <p>New feature detail.</p>",
-    "  <a href=\"elsewhere.html\"><h3 id=\"card\">Changed card</h3></a>",
-    "</main>",
-    "</body>",
-  ];
-  const line = text => lines.indexOf(text) + 1;
-  const annotated = annotateReleaseSource(lines.join("\n"), new Set([
-    line("<nav><a href=\"usage.html\">Changed navigation</a></nav>"),
-    line("  <p>Changed stable copy.</p>"),
-    line("  <h2 id=\"new\">New feature</h2>"),
-    line("  <p>New feature detail.</p>"),
-    line("  <a href=\"elsewhere.html\"><h3 id=\"card\">Changed card</h3></a>"),
-  ]));
-  const $ = load(annotated);
-  assert.equal($("#stable").attr("data-release-auto"), "");
-  assert.equal($("#new").attr("data-release-auto"), "");
-  assert.equal($("h1, #card").filter("[data-release-auto]").length, 0);
-});
-
-test("a documentation page added by a pending change gets one page-level annotation", () => {
-  const raw = [
-    "<body>",
-    "<header class=\"hero\"><h1>New guide</h1></header>",
-    "<main><h2>First section</h2><p>New content.</p><h2>Second section</h2></main>",
-    "</body>",
-  ].join("\n");
-  const $ = load(annotateReleaseSource(raw, new Set([2, 3]), true));
-  assert.equal($("h1[data-release-auto]").length, 1);
-  assert.equal($("h2[data-release-auto]").length, 0);
+test("unmarked stable sections are never inferred as pre-release content", () => {
+  const $ = load(`<main><h2 id="stable">Stable section</h2><p>Edited stable copy.</p></main>`);
+  addReleaseBadges($, pending, readLocales().en.ui.release);
+  assert.equal($(".prerelease-badge").length, 0);
 });
 
 for (const language of ["en", "fr"]) {
@@ -274,9 +200,9 @@ test("both languages track preview renames, hotfixes and consumed feature fragme
     for (const language of ["en", "fr"]) {
       const usage = pages.find(page => page.language === language && page.slug === "usage");
       const $ = load(usage.content);
-      assert.equal($("#model-selection-per-role .prerelease-badge").length, release.previewTag ? 1 : 0);
+      assert.equal($("#routing-economy .prerelease-badge").length, release.previewTag ? 1 : 0);
       if (release.previewTag) {
-        assert($("#model-selection-per-role .prerelease-badge").text().includes(release.previewTag));
+        assert($("#routing-economy .prerelease-badge").text().includes(release.previewTag));
         assert($(".prerelease-badge").length > 0);
       } else {
         assert.equal($(".prerelease-badge").length, 0);
@@ -293,23 +219,43 @@ test("both languages track preview renames, hotfixes and consumed feature fragme
   }
 });
 
-test("all currently documented pending features receive automatic pre-release badges", () => {
+test("only explicitly marked pending features receive pre-release badges", () => {
   const release = readReleaseInfo();
   assert(release.previewTag);
   const pages = buildPages(undefined, release);
   for (const language of ["en", "fr"]) {
+    const index = load(pages.find(page => page.language === language && page.slug === "index").content);
     const connector = load(pages.find(page => page.language === language && page.slug === "connector").content);
     const gettingStarted = load(pages.find(page => page.language === language && page.slug === "getting-started").content);
     const usage = load(pages.find(page => page.language === language && page.slug === "usage").content);
+    const maintaining = load(pages.find(page => page.language === language && page.slug === "maintaining").content);
+    assert.equal(index("h1 > .prerelease-badge").length, 0);
     assert.equal(connector("h1 .prerelease-badge").length, 1);
     assert.equal(gettingStarted("#chat-with-the-squad-coach .prerelease-badge").length, 1);
-    assert.equal(gettingStarted("#testing-the-pre-release .prerelease-badge").length, 1);
-    assert.equal(usage("#model-selection-per-role .prerelease-badge").length, 1);
+    assert.equal(gettingStarted("#testing-the-pre-release > .prerelease-badge").length, 0);
+    assert.equal(usage("#autopilot-hand-off-pipelining > .prerelease-badge").length, 0);
+    assert.equal(usage("#model-selection-per-role > .prerelease-badge").length, 0);
+    assert.equal(usage("#routing-economy .prerelease-badge").length, 1);
+    assert.equal(usage('[data-release-change="20261026-scribe-single-dispatch-handoffs"] .prerelease-badge').length, 1);
+    assert.equal(usage("#install-the-foundry-pack-s-skills .prerelease-badge").length, 1);
+    assert.equal(maintaining("#documentation-site > .prerelease-badge").length, 0);
+  }
+});
+
+test("explicit release markers stay aligned across translations", () => {
+  const pages = buildPages(undefined, resolveReleaseInfo("version: 0.18.1\n", []));
+  for (const english of pages.filter(page => page.language === "en")) {
+    const translated = pages.find(page => page.language === "fr" && page.slug === english.slug);
+    const markers = page => {
+      const $ = load(page.content);
+      return $("[data-release-change]").toArray().map(element => $(element).attr("data-release-change"));
+    };
+    assert.deepEqual(markers(translated), markers(english), english.slug);
   }
 });
 
 test("fragment-only merges rebuild the published version notice", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/docs.yml", import.meta.url), "utf8");
   assert.equal(workflow.match(/- '\.changes\/unreleased\/\*\*'/g)?.length, 2);
-  assert.match(workflow, /fetch-depth:\s*0/);
+  assert.doesNotMatch(workflow, /fetch-depth:\s*0/);
 });
