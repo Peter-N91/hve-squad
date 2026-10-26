@@ -1,15 +1,15 @@
 # Benchmark score
 
-Measured: 2026-10-26 00:33 UTC, commit `f524e9a`, model `claude-sonnet-5.5`, Copilot CLI `GitHub Copilot CLI 1.0.101-0. Run copilot update to check for up`, 1 run.
+Measured: 2026-10-26 09:28 UTC, commit `b3c51ab`, model `claude-sonnet-5.5`, Copilot CLI `GitHub Copilot CLI 1.0.104-3. Run copilot update to check for up`, 1 run.
 
 | Measure | Result |
 | --- | --- |
-| Document quality (median, out of 100) | 77 |
+| Document quality (median, out of 100) | 78 |
 | Functional (runs passing) | 1/1 |
 | Workflow (runs passing) | 0/1 |
-| Critical/high findings | 3 (3 per run) |
-| Average time per run | 19 min 27.4 s |
-| Average credits per run | 430.38 |
+| Critical/high findings | 1 (1 per run) |
+| Average time per run | 25 min 0.6 s |
+| Average credits per run | 508.09 |
 | Runs that produced a score | 1/1 |
 
 ## Document quality by dimension (median, out of 20)
@@ -17,16 +17,16 @@ Measured: 2026-10-26 00:33 UTC, commit `f524e9a`, model `claude-sonnet-5.5`, Cop
 | Dimension | Score |
 | --- | --- |
 | Business clarity | 15 |
-| Scope fidelity | 18 |
-| Acceptance criteria | 14 |
-| Traceability | 17 |
-| Risks and decisions | 13 |
+| Scope fidelity | 16 |
+| Acceptance criteria | 16 |
+| Traceability | 16 |
+| Risks and decisions | 15 |
 
 ## Runs
 
 | Run | Scored | Quality | Functional | Workflow | Critical/high | Time | Credits |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | yes | 77 | yes | no | 3 | 19 min 27.4 s | 430.38 |
+| 1 | yes | 78 | yes | no | 1 | 25 min 0.6 s | 508.09 |
 
 ## What did not pass
 

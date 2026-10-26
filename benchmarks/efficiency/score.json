@@ -1,15 +1,15 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-10-26T00:33:35Z",
+  "measuredAt": "2026-10-26T09:28:30Z",
   "source": {
-    "commit": "f524e9a80d7031dc94e13aa09ee75906de21508c",
-    "squadSourceHash": "f1821ccc39503aa079f668bf2194bfae67982a33b4e63428ed900e6a171a7bde",
+    "commit": "b3c51ab524899bd07aea11fd7d3653c7b635fb95",
+    "squadSourceHash": "ee545046b1459cee7901e4036f522b0cf32e730abaa9233944626370e8d09b15",
     "uncommittedChanges": false
   },
   "environment": {
     "model": "claude-sonnet-5.5",
-    "cli": "GitHub Copilot CLI 1.0.101-0. Run 'copilot update' to check for updates.",
+    "cli": "GitHub Copilot CLI 1.0.104-3. Run 'copilot update' to check for updates.",
     "powershell": "7.6.7"
   },
   "runs": {
@@ -18,37 +18,37 @@
     "failed": 0
   },
   "summary": {
-    "quality": 77.0,
+    "quality": 78.0,
     "dimensions": {
       "businessClarity": 15.0,
-      "scopeFidelity": 18.0,
-      "acceptanceCriteria": 14.0,
-      "traceability": 17.0,
-      "risksAndDecisions": 13.0
+      "scopeFidelity": 16.0,
+      "acceptanceCriteria": 16.0,
+      "traceability": 16.0,
+      "risksAndDecisions": 15.0
     },
     "functional": 1,
     "workflow": 0,
-    "criticalHighFindings": 3,
-    "averageSeconds": 1167.358,
-    "averageCredits": 430.37998949999997
+    "criticalHighFindings": 1,
+    "averageSeconds": 1500.616,
+    "averageCredits": 508.091203
   },
   "trials": [
     {
       "run": 1,
       "scored": true,
-      "quality": 77.0,
+      "quality": 78.0,
       "dimensions": {
         "businessClarity": 15.0,
-        "scopeFidelity": 18.0,
-        "acceptanceCriteria": 14.0,
-        "traceability": 17.0,
-        "risksAndDecisions": 13.0
+        "scopeFidelity": 16.0,
+        "acceptanceCriteria": 16.0,
+        "traceability": 16.0,
+        "risksAndDecisions": 15.0
       },
       "functional": true,
       "workflow": false,
-      "criticalHighFindings": 3,
-      "seconds": 1167.358,
-      "credits": 430.37998949999997,
+      "criticalHighFindings": 1,
+      "seconds": 1500.616,
+      "credits": 508.091203,
       "failedChecks": [
         "requirements/reviewOutcome"
       ],
