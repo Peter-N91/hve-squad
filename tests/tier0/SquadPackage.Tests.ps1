@@ -129,7 +129,7 @@ Describe 'PKG-09 Entrypoint prompts are delivered' {
     }
 }
 
-Describe 'Requirements document quality source contracts (RQ-01..09)' -Tag 'RequirementsQuality' {
+Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'RequirementsQuality' {
     BeforeAll {
         $script:RequirementsGuide = Join-Path $script:Model.SquadSkillRoot 'references/requirements-quality.md'
         $script:RequirementsCoordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
@@ -318,6 +318,35 @@ Describe 'Requirements document quality source contracts (RQ-01..09)' -Tag 'Requ
         $guide | Should -Match 'Observation copies do not satisfy blocked canonical gates, imply stakeholder approval'
         $guide | Should -Match 'Otherwise retain the plan.s post-review copy ordering'
         $guide | Should -Match 'No approval, waiver or business fact is inferred from an exercise'
+    }
+
+    It 'RQ-13 closes delegated routine choices before authoring without inventing authority' {
+        $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
+        $guide | Should -Match 'explicitly delegated routine choices'
+        $guide | Should -Match 'before authoring'
+        $guide | Should -Match 'source anchors and rationale'
+        $guide | Should -Match 'non-delegated.+human-only.+unavailable'
+    }
+
+    It 'RQ-14 overlaps independent domain reads but freezes drafts and serializes all proof' {
+        $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
+        $guide | Should -Match 'independent read-only domain reviews in parallel'
+        $guide | Should -Match 'both verified draft handoffs'
+        $guide | Should -Match 'frozen until both returns'
+        $guide | Should -Match 'unsupported or unverified.+serial'
+        $guide | Should -Match 'finish capture/verify/write/verify for one reviewer before capturing the next'
+    }
+
+    It 'RQ-15 reconciles correction and copy identity and finishes required review reads' {
+        $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
+        $reviewer = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-reviewer.agent.md')[0].Body
+        $guide | Should -Match 'one source-supported correction batch'
+        $guide | Should -Match 'post-disposition drafts'
+        $guide | Should -Match 'immutable pre-review snapshot'
+        $guide | Should -Match 'reconcile.+lead.+before.+author'
+        $reviewer | Should -Match 'truncated.+explicit ranges'
+        $reviewer | Should -Match 'required promotion.+blocked'
+        $reviewer | Should -Match 'Preserve real findings, unavailable required runtime evidence and failed canonical gates'
     }
 }
 
