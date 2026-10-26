@@ -14,48 +14,51 @@ Load only required references.
 
 ## Which file for which job
 
-| File                                               | Read it when                                                              |
-|----------------------------------------------------|---------------------------------------------------------------------------|
-| [profiles-and-packs.md](profiles-and-packs.md)     | Roster seeding/changes: profiles, packs, roles |
-| [roster-catalog.md](roster-catalog.md)             | Casting/upgrades, custom/external roles, pack registration/resolution |
+| File | Read it when |
+|---|---|
+| [profiles-and-packs.md](profiles-and-packs.md) | Roster seeding/changes: profiles, packs, roles |
+| [roster-catalog.md](roster-catalog.md) | Casting/upgrades, custom/external roles, pack registration/resolution |
 | [connector-role-modes.md](connector-role-modes.md) | Setup/refresh, bindings, execution; [shim transport](connector-contract.md) |
-| [builder-workflows.md](builder-workflows.md)       | User-invocable connector or external endpoint builder flow |
-| [foundry-blueprint.md](foundry-blueprint.md)       | `foundry` roles |
+| [builder-workflows.md](builder-workflows.md) | User-invocable connector or external endpoint builder flow |
+| [foundry-blueprint.md](foundry-blueprint.md) | `foundry` roles |
 | [foundry-platform-options.md](foundry-platform-options.md) | `foundry` platform |
-| [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
-| [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
-| [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |
-| [scribe-procedure.md](scribe-procedure.md)         | Scribe state writes: rules, payload/step map, cold reads, completeness |
-| [entry-schemas.md](entry-schemas.md)               | Ordinary Scribe writes: decision/history/state schemas |
-| [scribe-payload-template.md](scribe-payload-template.md) | Every hand-off: fields and stable-prefix/volatile-tail order |
-| [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) | Scribe Init or memory: state seeds and memory/learning promotion |
-| [scribe-cold-federation.md](scribe-cold-federation.md) | Scribe promotion, expansion, federation autopilot summary/history |
-| [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Scribe verdict, loop or single-squad autopilot summary, notification |
-| [seed-templates.md](seed-templates.md)             | Stamping first-run state, Init only: `team.md` and `routing.md`           |
-| [consumption.md](consumption.md)                   | Recording or estimating cost: ledger templates, the estimator, and Cost Preflight |
+| [operating-procedure.md](operating-procedure.md) | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff |
+| [gates-and-modes.md](gates-and-modes.md) | Gates — discovery, intake, council, implementation — and autonomy modes |
+| [requirements-quality.md](requirements-quality.md) | Only BRD/PRD or requirements authoring/review; not startup or code-only reviews |
+| [federation.md](federation.md) | The squad root is a federation: layout, precedence, federation modes |
+| [economy-scribe.md](economy-scribe.md) | Ordinary handoffs, all modes: minimal JSON, synchronous `-Quiet`, status verification and failures |
+| [scribe-cold-charter.md](scribe-cold-charter.md) | Full legacy charter for cold init, verdicts, memory, notifications, ceiling slots, federation changes, summaries, unsupported operations |
+| [scribe-procedure.md](scribe-procedure.md) | Writing squad state, Scribe only: Non-Negotiable Rules, payload-to-step rules, Cold-File Dispatch Table, Write-Completeness Self-Check |
+| [entry-schemas.md](entry-schemas.md) | Cold writes and schema reference: `decisions.md` base shape, `history/<agent>.md`, state.json |
+| [scribe-payload-template.md](scribe-payload-template.md) | Filling or reading the Scribe hand-off payload: field order and the byte-stable-prefix / volatile-tail section order |
+| [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) | Scribe only, initialization or memory payload: the full state-tree seed and Repository Memory and Learning Promotion |
+| [scribe-cold-federation.md](scribe-cold-federation.md) | Scribe only, promotion, expansion, or a federation-level autopilot-run-summary or history payload |
+| [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Scribe only, a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write |
+| [seed-templates.md](seed-templates.md) | Stamping first-run state, Init only: `team.md`, `routing.md`|
+| [consumption.md](consumption.md) | Recording or estimating cost: ledger templates, the estimator, and Cost Preflight |
 | [consumption-rates-template.md](consumption-rates-template.md) | Scribe only, initialization or a Step 7.1 reseed: the cold seed template for `consumption-rates.md` |
-| [model-catalog.md](model-catalog.md)               | Model routing: declared capability, prices, host precedence |
+| [model-catalog.md](model-catalog.md) | Model routing: declared capability, prices, host precedence |
 | [model-benchmarks.md](model-benchmarks.md) | Offline evidence, provenance, and source versions |
 | [model-routing.md](model-routing.md) | Applying routing: modes, cells, floors, and identity |
 | [model-scoring.md](model-scoring.md) | Policy or evidence audit only |
 | [federation-templates.md](federation-templates.md) | Federation creation/expansion: registry, meta-routing, root seeds |
-| [coach-discovery.md](coach-discovery.md)           | Coach only: discover current code, documentation, entrypoints, and state without a feature-specific playbook |
+| [coach-discovery.md](coach-discovery.md) | Coach only: discover current code, documentation, entrypoints, and state without a feature-specific playbook |
 
-The Scribe reads `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` on every turn — this hot core replaced a heavier unconditional set so the common case reads less — and reads every other file above, including the three `scribe-cold-*.md` files, only when the turn's payload calls for it per the Cold-File Dispatch Table in `scribe-procedure.md`. The coordinators read `seed-templates.md` and `federation-templates.md` only to verify deliverable roots during Init or a federation change, and fill `scribe-payload-template.md` on every hand-off.
+The ordinary hot path reads only `economy-scribe.md`; coordinators run its validated writer directly with `-Quiet` in all modes. Scribe uses it too. Cold operations first read `scribe-cold-charter.md`, then `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` plus conditional files required by the Cold-File Dispatch Table. Use small script JSON for ordinary writes; the full template only for cold handoffs. Seed templates remain Init/federation-change-only reads.
 
 ## Companion instruction files
 
-The `squad` skill complements eleven instruction files that auto-apply when squad state is touched. Their `applyTo` globs only fire in a host that loads modular instructions, so a rule that must hold unconditionally belongs in a reference file above, not only here.
+These companions apply to squad state only in hosts honoring `applyTo`; unconditional rules belong in references above. Names below resolve to installed instructions, or ported rules in plugin hosts:
 
-* `.github/instructions/squad/squad-roster.instructions.md` — roster schema, `### Dispatchability`, Casting Rules, and Squad Profiles/Packs; the Cast Catalog and External Cast are canonical in `references/roster-catalog.md`.
-* `.github/instructions/squad/squad-routing.instructions.md` — routing table and escalation rules.
-* `.github/instructions/squad/squad-discovery-gate.instructions.md` — opt-in pre-work discovery gate, scoped to the `product` and `full` profiles, that brainstorms a brief when a turn has no requirement or input artifact to build on, with depth tiers, an offer-once rule, an unattended-run prohibition, and the Discovery Verdict schema.
-* `.github/instructions/squad/squad-intake-gate.instructions.md` — conditional pre-work intake gate that validates requirement and input artifacts before planning or implementation, with a bounded auto-remediation loop and the Intake Readiness Verdict schema.
-* `.github/instructions/squad/squad-state.instructions.md` — state layout, single-writer ownership, and tool-to-mechanism mapping.
-* `.github/instructions/squad/squad-council.instructions.md` — pre-implementation council protocol with parallel dispatch, most-restrictive-wins synthesis, and the Council Verdict schema.
-* `.github/instructions/squad/squad-autonomous.instructions.md` — opt-in `auto-validated` autonomy tier with a bounded re-validation loop, divergence detection, and mandatory escalation triggers.
-* `.github/instructions/squad/squad-autopilot.instructions.md` — opt-in `mode=autopilot` full pipeline (research→plan→implement→review) with Human Gates only on impactful actions and final-outcome validation.
-* `.github/instructions/squad/squad-notifications.instructions.md` — user-contact capture at squad build time and the delivery-agnostic notification (ping) contract per mode.
-* `.github/instructions/squad/squad-watch-mode.instructions.md` — event-driven Watch Mode (DR-01) trigger contract: opt-in gates, event-to-intent map, injection-safe payloads, the event-scoped sub-squad bootstrap, and the pull-request deliverable.
-* `.github/instructions/squad/squad-federation.instructions.md` — opt-in federation of named sub-squads under one repo: the parameterized squad root, the registry (`federation.md`) and meta-routing (`meta-routing.md`) schemas, detection precedence, and the two-level single-writer rule.
-* `.github/instructions/squad/squad-federation-autopilot.instructions.md` — opt-in federation-level autopilot: the meta-pipeline (`mode=autopilot` with no `squad=` target) that orders sub-squad autopilot runs under one set of federation gates, an aggregate cost ceiling, and one consolidated final-outcome validation.
+* `squad-roster` — roster schema, `### Dispatchability`, Casting Rules, Profiles/Packs (Cast Catalog and External Cast: `roster-catalog.md`).
+* `squad-routing` — routing table and escalation rules.
+* `squad-discovery-gate` — opt-in pre-work discovery gate (`product`/`full` profiles): depth tiers, offer-once, no unattended runs, Discovery Verdict schema.
+* `squad-intake-gate` — conditional intake gate validating requirement/input artifacts, bounded auto-remediation, Intake Readiness Verdict schema.
+* `squad-state` — state layout, single-writer ownership, tool-to-mechanism mapping.
+* `squad-council` — pre-implementation council: parallel dispatch, most-restrictive-wins, Council Verdict schema.
+* `squad-autonomous` — opt-in `auto-validated` tier: bounded re-validation loop, divergence detection, mandatory escalations.
+* `squad-autopilot` — opt-in `mode=autopilot` pipeline with Human Gates only on impactful actions and final-outcome validation.
+* `squad-notifications` — user-contact capture at build time and the delivery-agnostic ping contract per mode.
+* `squad-watch-mode` — event-driven Watch Mode (DR-01): opt-in gates, event-to-intent map, injection-safe payloads, event-scoped sub-squad bootstrap, pull-request deliverable.
+* `squad-federation` — opt-in federation of named sub-squads: parameterized squad root, `federation.md`/`meta-routing.md` schemas, detection precedence, two-level single-writer rule.
+* `squad-federation-autopilot` — federation-level autopilot meta-pipeline under one set of gates, an aggregate cost ceiling, and one final-outcome validation.

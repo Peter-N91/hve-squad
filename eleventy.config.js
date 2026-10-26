@@ -1,3 +1,5 @@
+// Builds the static documentation site, including recorded benchmark summaries.
+// AI cost: none; reads checked-in content and evidence without collecting new observations.
 import { validatePublicInputs } from "./scripts/docs-inputs.mjs";
 
 export default function (config) {

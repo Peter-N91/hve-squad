@@ -49,6 +49,9 @@ function Measure-EfficiencyEvents {
     $Counts = @{ lines = 0; malformed = 0; duplicates = 0; usage = 0; duplicateUsage = 0; missingUsageIds = 0; turns = 0; turnEnds = 0; messages = 0; failures = 0; questions = 0; compactions = 0; hookFailures = 0 }
     $First = $null; $Last = $null
     $Credits = New-EfficiencyCreditMonitor -MaxCredits ([double]::MaxValue)
+    $RootSession = $null; $AgentNames = @{}; $AgentDispatches = @{}; $DispatchSeconds = @{}
+    $DispatchIdentityComplete = $true
+    $ActivityUsage = [Collections.Generic.List[object]]::new()
     $Reader = [IO.File]::OpenText((Resolve-Path -LiteralPath $Path).Path)
     try {
         while ($null -ne ($Line = $Reader.ReadLine())) {
@@ -69,6 +72,9 @@ function Measure-EfficiencyEvents {
                 catch { $Counts.malformed++ }
             }
             switch ($LogEvent['type']) {
+                'session.start' {
+                    if (-not $LogEvent['agentId']) { $RootSession = [string]$Data['sessionId'] }
+                }
                 'assistant.turn_start' { $Counts.turns++ }
                 'assistant.turn_end' { $Counts.turnEnds++ }
                 'user.message' { $Counts.messages++ }
@@ -82,6 +88,7 @@ function Measure-EfficiencyEvents {
                     $Key = $Source + ':' + [string]$Accounting['usageId']
                     if (-not $UsageSeen.Add($Key)) { $Counts.duplicateUsage++; continue }
                     $Counts.usage++
+                    $ActivityUsage.Add(@{ actor = [string]$LogEvent['agentId']; source = $Source; event = $LogEvent })
                     $ModelName = [string]$Usage['model']
                     if ($ModelName) { if (-not $Models.ContainsKey($ModelName)) { $Models[$ModelName] = 0 }; $Models[$ModelName]++ }
                     if (-not $Sources.ContainsKey($Source)) { $Sources[$Source] = @{ records = 0; inputTokens = 0L; outputTokens = 0L; covered = 0 } }
@@ -116,6 +123,21 @@ function Measure-EfficiencyEvents {
                 'subagent.started' {
                     $Agent = [string]$Data['agentName']
                     if ($Agent) { if (-not $Dispatches.ContainsKey($Agent)) { $Dispatches[$Agent] = 0 }; $Dispatches[$Agent]++ }
+                    if ($LogEvent['agentId']) { $AgentNames[[string]$LogEvent['agentId']] = $Agent }
+                    $DispatchKey = [string]$Data['toolCallId']
+                    if (-not $DispatchKey -or -not $LogEvent['agentId'] -or -not $Agent) { $DispatchIdentityComplete = $false }
+                    if ($DispatchKey -and -not $AgentDispatches.ContainsKey($DispatchKey)) {
+                        $AgentDispatches[$DispatchKey] = @{ agent = $Agent; actor = [string]$LogEvent['agentId'] }
+                    }
+                }
+                'subagent.completed' {
+                    $DispatchKey = [string]$Data['toolCallId']
+                    if ($DispatchKey) {
+                        $Duration = $Data['durationMs']
+                        if ($null -ne $Duration -and $Duration -is [ValueType] -and $Duration -isnot [bool] -and [double]::IsFinite([double]$Duration) -and $Duration -ge 0) {
+                            $DispatchSeconds[$DispatchKey] = [double]$Duration / 1000
+                        }
+                    }
                 }
                 'tool.execution_complete' {
                     $Key = [string]$Data['toolCallId']
@@ -161,6 +183,42 @@ function Measure-EfficiencyEvents {
     }
     $UnmatchedTools = @($ToolStarts.Keys | Where-Object { -not $ToolEnds.ContainsKey($_) }).Count + @($ToolEnds.Keys | Where-Object { -not $ToolStarts.ContainsKey($_) }).Count
     $UnmatchedHooks = @($HookStarts.Keys | Where-Object { -not $HookEnds.ContainsKey($_) }).Count + @($HookEnds.Keys | Where-Object { -not $HookStarts.ContainsKey($_) }).Count
+    # Attribute deduplicated usage by observed runtime identity, never by a model pin.
+    $Activity = [ordered]@{ scribeDispatches = $null; scribeModelRequests = $null; scribeSeconds = $null; scribeCredits = $null; coordinatorModelRequests = $null; authorModelRequests = $null }
+    if ($RootSession -and $Counts.usage -gt 0 -and $Counts.missingUsageIds -eq 0 -and $Counts.malformed -eq 0) {
+        $Requests = @{ 'Squad Scribe' = 0; coordinator = 0; authors = 0 }
+        $ScribeCredits = New-EfficiencyCreditMonitor -MaxCredits ([double]::MaxValue)
+        $AttributionComplete = $DispatchIdentityComplete
+        $ActorsWithUsage = [Collections.Generic.HashSet[string]]::new()
+        foreach ($Entry in $ActivityUsage) {
+            $Actor = if ($Entry.actor -and $AgentNames.ContainsKey($Entry.actor)) { $AgentNames[$Entry.actor] } elseif (-not $Entry.actor -and $Entry.source -eq $RootSession) { 'coordinator' } else { $null }
+            if (-not $Actor) { $AttributionComplete = $false; continue }
+            [void]$ActorsWithUsage.Add($Entry.actor)
+            if ($Actor -in @('BRD Builder', 'PRD Builder')) { $Requests.authors++ }
+            elseif ($Requests.ContainsKey($Actor)) { $Requests[$Actor]++ }
+            if ($Actor -eq 'Squad Scribe') { Update-EfficiencyCreditMonitor -Context $ScribeCredits -LogEvent $Entry.event }
+        }
+        if ($AttributionComplete) {
+            $ScribeDispatches = @($AgentDispatches.Values | Where-Object { $_.agent -eq 'Squad Scribe' })
+            $Activity.scribeDispatches = $ScribeDispatches.Count
+            $Activity.scribeModelRequests = $Requests['Squad Scribe']
+            $Activity.coordinatorModelRequests = $Requests.coordinator
+            $Activity.authorModelRequests = $Requests.authors
+            $ScribeKeys = @($AgentDispatches.Keys | Where-Object { $AgentDispatches[$_].agent -eq 'Squad Scribe' })
+            if (@($ScribeKeys | Where-Object { -not $DispatchSeconds.ContainsKey($_) }).Count -eq 0) {
+                $Activity.scribeSeconds = if ($ScribeKeys.Count) { [double]($ScribeKeys | ForEach-Object { $DispatchSeconds[$_] } | Measure-Object -Sum).Sum } else { 0.0 }
+            }
+            if ($ScribeCredits.reason -eq 'none') {
+                $Activity.scribeCredits = [double]($ScribeCredits.nanoAiu / 1e9)
+            }
+            foreach ($Dispatch in $AgentDispatches.Values) {
+                if (-not $ActorsWithUsage.Contains($Dispatch.actor)) {
+                    if ($Dispatch.agent -eq 'Squad Scribe') { $Activity.scribeModelRequests = $null; $Activity.scribeCredits = $null }
+                    if ($Dispatch.agent -in @('BRD Builder', 'PRD Builder')) { $Activity.authorModelRequests = $null }
+                }
+            }
+        }
+    }
     [pscustomobject][ordered]@{
         schemaVersion = 'efficiency-events-v1'
         evidence = @{ sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = (Get-Item -LiteralPath $Path).Length }
@@ -175,6 +233,7 @@ function Measure-EfficiencyEvents {
         sources = $Sources
         dispatches = $Dispatches
         models = $Models
+        activity = $Activity
         credits = @{ complete = ($Credits.reason -eq 'none' -and $Credits.usageIds.Count -gt 0); used = if ($Credits.reason -eq 'none' -and $Credits.usageIds.Count -gt 0) { $Credits.nanoAiu / 1e9 } else { $null } }
         hooks = @{ count = $Intervals.Count; sumMs = $Sum; unionMs = $Union; overlapMs = $Sum - $Union; byType = $HookTypes; blockingMs = $null; criticalPathMs = $null; basis = 'wall-clock event intervals, not monotonic await instrumentation' }
         completeness = @{ malformed = $Counts.malformed; unmatchedTools = $UnmatchedTools; unmatchedHooks = $UnmatchedHooks; unmatchedTurns = [Math]::Abs($Counts.turns - $Counts.turnEnds); usageIdsMissing = $Counts.missingUsageIds }
@@ -545,6 +604,44 @@ function Save-EfficiencyAttemptEvidence {
     [pscustomobject]@{ metrics = $Metrics; lineCount = (Get-Content -LiteralPath $Snapshot | Measure-Object -Line).Lines }
 }
 
+function Write-EfficiencyProgress {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][ValidateRange(1, 7)][int]$Step,
+        [Parameter(Mandatory)][string]$Label,
+        [ValidateSet('started', 'finished', 'skipped', 'failed')][string]$Status = 'started',
+        [string]$Path = ''
+    )
+    $Remaining = 7 - $Step
+    $Unit = if ($Remaining -eq 1) { 'step' } else { 'steps' }
+    $Line = '[{0}] Step {1}/7: {2} - {3}; {4} {5} remaining after this step.' -f [datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'), $Step, $Label, $Status, $Remaining, $Unit
+    if ($Path) { Add-Content -LiteralPath $Path -Value $Line -Encoding utf8NoBOM }
+    else { Write-Host $Line }
+}
+
+function Update-EfficiencyProgress {
+    [CmdletBinding()]
+    param([hashtable]$Context, [string]$Path, [double]$ElapsedSeconds, [int]$IntervalSeconds, [switch]$Final)
+    if (-not $Context.reader -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        $Context.reader = [IO.StreamReader]::new([IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite'))
+    }
+    if ($Context.reader) {
+        $Context.pending += $Context.reader.ReadToEnd()
+        while (($Boundary = $Context.pending.IndexOf("`n")) -ge 0) {
+            $Line = $Context.pending.Substring(0, $Boundary).TrimEnd("`r")
+            $Context.pending = $Context.pending.Substring($Boundary + 1)
+            if (-not $Line) { continue }
+            Write-Host $Line
+            $Context.last = $Line
+            $Context.reportedAt = $ElapsedSeconds
+        }
+    }
+    if (-not $Final -and $ElapsedSeconds - $Context.reportedAt -ge $IntervalSeconds) {
+        Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Still running ($([int]$ElapsedSeconds) s elapsed). Last update: $($Context.last)"
+        $Context.reportedAt = $ElapsedSeconds
+    }
+}
+
 function Invoke-EfficiencyProcess {
     <# .SYNOPSIS
     Runs a subprocess with redirected streams and a watchdog; optionally watches CLI usage limits.
@@ -561,7 +658,9 @@ function Invoke-EfficiencyProcess {
         [int]$StartLine = 0,
         [double]$MaxCredits = 0,
         [AllowEmptyString()][string]$InputText,
-        [hashtable]$EnvironmentVariables = @{}
+        [hashtable]$EnvironmentVariables = @{},
+        [string]$ProgressPath = '',
+        [ValidateRange(1, 3600)][int]$ProgressIntervalSeconds = 30
     )
     if ($MaxCredits -gt 0 -and -not $EventsPath) { throw 'A credit-guarded process requires an events path.' }
     $Info = [Diagnostics.ProcessStartInfo]::new()
@@ -577,6 +676,7 @@ function Invoke-EfficiencyProcess {
     $Watch = [Diagnostics.Stopwatch]::StartNew()
     $StopCause = 'none'; $Started = $false
     $Monitor = @{ reader = $null; lines = 0; pending = ''; reason = 'none'; requestIds = [Collections.Generic.HashSet[string]]::new(); questions = 0; credits = (New-EfficiencyCreditMonitor -MaxCredits $MaxCredits) }
+    $Progress = @{ reader = $null; pending = ''; last = 'Waiting for run setup (step 1/7).'; reportedAt = 0.0 }
     $OutputStream = [IO.File]::Create($OutputPath)
     $ErrorStream = [IO.File]::Create($OutputPath + '.stderr')
     try {
@@ -595,12 +695,14 @@ function Invoke-EfficiencyProcess {
             else { $null = $InputCopy.GetAwaiter().GetResult(); $Process.StandardInput.Close() }
         }
         while (-not $Process.WaitForExit(250)) {
+            if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds $Watch.Elapsed.TotalSeconds -IntervalSeconds $ProgressIntervalSeconds }
             if ($Watch.Elapsed.TotalSeconds -gt $TimeoutSeconds) { $StopCause = 'timeout' }
             Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
             if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
             if ($StopCause -ne 'none') { $Process.Kill($true); $Process.WaitForExit(); break }
         }
         $null = $OutputCopy.GetAwaiter().GetResult(); $null = $ErrorCopy.GetAwaiter().GetResult()
+        if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds $Watch.Elapsed.TotalSeconds -IntervalSeconds $ProgressIntervalSeconds -Final }
         Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
         if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
         if ($MaxCredits -gt 0 -and ($Monitor.credits.usageIds.Count -le $PriorCreditRecords -or $Monitor.pending.Trim())) { $StopCause = 'incomplete-credit-metering' }
@@ -608,6 +710,7 @@ function Invoke-EfficiencyProcess {
     }
     finally {
         if ($Monitor.reader) { $Monitor.reader.Dispose() }
+        if ($Progress.reader) { $Progress.reader.Dispose() }
         if ($Started -and -not $Process.HasExited) { $Process.Kill($true) }
         $OutputStream.Dispose(); $ErrorStream.Dispose(); $Process.Dispose()
     }
@@ -1166,4 +1269,4 @@ function Invoke-EfficiencySeries {
     [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded')) { 0 } else { 2 } }
 }
 
-Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
+Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries

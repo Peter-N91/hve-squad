@@ -2,8 +2,10 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
-# Hot-file byte diff against v0.18.1. Every default (off, ranked, manual) run reads
-# these files, so economy procedure must live in cold references. The aggregate
+# AI cost: none; measures shipped prompt bytes without making model requests.
+
+# Legacy file byte diff against v0.18.1, plus the measured universal ordinary path.
+# Full legacy Scribe procedure is now cold, not a required default-mode read. The aggregate
 # ceiling remains fixed while documented per-file overrides permit concentrated
 # growth within it. Pull requests inherit existing base debt but may not increase
 # it. Sizes are LF-normalized UTF-8 bytes, so checkout line endings do not matter.
@@ -41,6 +43,16 @@ BeforeAll {
 
     function Get-PerFileThreshold {
         param([Parameter(Mandatory)][string]$Path)
+        # Redistribute existing aggregate headroom for universal contract pointers;
+        # this does not increase the aggregate ceiling or exclude their bytes.
+        if ($Path -in @(
+                'squad-src/.github/agents/squad/squad-coordinator.agent.md'
+                'squad-src/.github/agents/squad/squad-federation-coordinator.agent.md'
+                'squad-src/.github/instructions/squad/squad-state.instructions.md'
+                'squad-src/.github/skills/squad/SKILL.md'
+                'squad-src/.github/skills/squad/references/operating-procedure.md'
+                'squad-src/.github/skills/squad/references/gates-and-modes.md'
+            )) { return 1024 }
         if ($script:Budget.PSObject.Properties['perFileThresholdOverrides']) {
             $entry = $script:Budget.perFileThresholdOverrides.PSObject.Properties[$Path]
             if ($entry) { return [int]$entry.Value.bytes }
@@ -96,11 +108,25 @@ BeforeAll {
     }
 }
 
-Describe 'Hot files stay within the v0.18.1 aggregate performance envelope' {
+Describe 'Legacy surface budgets and universal ordinary hot-path envelope' {
+    It 'measures the ordinary agent plus its sole mandatory reference in every routing mode' {
+        $agent = 'squad-src/.github/agents/squad/squad-scribe.agent.md'
+        $reference = 'squad-src/.github/skills/squad/references/economy-scribe.md'
+        $agentBytes = Get-NormalizedByteCount -Path (Join-Path $script:Root $agent)
+        $contractBytes = Get-NormalizedByteCount -Path (Join-Path $script:Root $reference)
+        $agentBytes | Should -BeLessThan 3000
+        $contractBytes | Should -BeLessOrEqual 3072
+        ($agentBytes + $contractBytes) | Should -BeLessOrEqual 6144
+        $body = Get-Content -LiteralPath (Join-Path $script:Root $agent) -Raw
+        $ordinary = [regex]::Match($body, '(?s)## Ordinary handoff.*?(?=## Cold operations)').Value
+        $ordinary | Should -Match 'Read only `references/economy-scribe\.md`'
+        $ordinary | Should -Not -Match 'Read.*references/(scribe-procedure|entry-schemas|scribe-payload-template|00-index)\.md'
+    }
+
     It '<Path> grows by at most the per-file threshold' -ForEach $script:HotFiles {
         $size = Get-NormalizedByteCount -Path (Join-Path $script:Root $Path)
         $limit = (Get-EffectivePerFileThreshold -Path $Path -Baseline $Baseline) + (Get-EveryModeAllowance -Path $Path)
-        ($size - $Baseline) | Should -BeLessOrEqual $limit -Because "$Path is read on every default run: $size bytes against $Baseline at $($script:Budget.ref); move economy text to references/economy-mode.md"
+        ($size - $Baseline) | Should -BeLessOrEqual $limit -Because "$Path remains in the legacy surface budget: $size bytes against $Baseline at $($script:Budget.ref); keep ordinary writes in the measured small contract and cold details conditional"
     }
 
     It 'the hot set grows by at most the total threshold, every-mode allowances aside' {

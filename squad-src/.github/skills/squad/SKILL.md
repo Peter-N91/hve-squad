@@ -25,7 +25,7 @@ This skill packages the coordinator's operating procedure and the seed templates
 
 ## Procedure
 
-The coordinator runs four stages each turn: **init**, **route**, **decide**, and **handoff**. The Squad Scribe performs ordinary writes. Init is outside admission; before later work dispatch, the owning coordinator may perform only the deterministic Cost Preflight transaction defined by the squad floor.
+The coordinator runs four stages each turn: **init**, **route**, **decide**, and **handoff**. In every routing mode it may execute the validated ordinary writer synchronously with `-Quiet`, without a Scribe dispatch. Cold operations remain Scribe-owned. Serialize both routes with Cost Preflight per root; retain existing Markdown/state storage and completion proof.
 
 Read [references/00-index.md](references/00-index.md) first, then only files your Skill Reference Contract names or conditionally requires.
 
@@ -38,6 +38,8 @@ Read [references/00-index.md](references/00-index.md) first, then only files you
 | [operating-procedure.md](references/operating-procedure.md)   | Init, Route, ledger reconciliation, Decide, Handoff, tool-to-mechanism mapping |
 | [gates-and-modes.md](references/gates-and-modes.md)           | Discovery, intake, council, implementation gates; autopilot and autonomy modes |
 | [federation.md](references/federation.md)                     | Federation layout, detection precedence, and federation modes                  |
+| [economy-scribe.md](references/economy-scribe.md)             | Ordinary writer in every routing mode: minimal JSON, quiet status, serialized writes, fail-closed recovery |
+| [scribe-cold-charter.md](references/scribe-cold-charter.md)   | Full legacy Scribe charter; cold operations only, with required procedure/schema/payload reads |
 | [scribe-procedure.md](references/scribe-procedure.md)         | The Squad Scribe write procedure, Non-Negotiable Rules, and Cold-File Dispatch Table — Scribe only |
 | [entry-schemas.md](references/entry-schemas.md)               | Recurring write shapes: decision base entry, history, state.json          |
 | [scribe-payload-template.md](references/scribe-payload-template.md) | The Scribe hand-off payload both coordinators fill, byte-stable-prefix ordered |
