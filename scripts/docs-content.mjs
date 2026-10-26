@@ -5,7 +5,6 @@ import { load } from "cheerio";
 import { localizeDiagram } from "./diagram-locales.mjs";
 import {
   addReleaseBadges,
-  createAutomaticReleaseAnnotator,
   populateReleaseInstalls,
   previewBadge,
   readReleaseInfo,
@@ -54,10 +53,10 @@ export function readLocales() {
   return locales;
 }
 
-export function readSource(slug, prefix = "", annotateRelease = null) {
+export function readSource(slug, prefix = "") {
   const sourcePath = `docs/${prefix}${slug}.html`;
   const raw = readFileSync(resolve(repositoryRoot, sourcePath), "utf8");
-  const $ = load(annotateRelease ? annotateRelease(sourcePath, raw) : raw);
+  const $ = load(raw);
   if ($("main").length !== 1) throw new Error(`${sourcePath}: expected exactly one main element.`);
   if ($("body > header.hero").length !== 1) throw new Error(`${sourcePath}: expected the original hero header.`);
   embedConnectorTemplates($);
@@ -192,14 +191,13 @@ export function enhanceContent($, englishIds, ui, rootPrefix, language = "en", s
 
 export function buildPages(locales = readLocales(), release = readReleaseInfo()) {
   const pages = [];
-  const annotateRelease = createAutomaticReleaseAnnotator(release);
   const hostLocales = JSON.parse(readFileSync(resolve(repositoryRoot, "site/host-locales.json"), "utf8"));
   for (const language of Object.keys(locales)) validateMessages(hostLocales.en, hostLocales[language], `${language}.host`);
   for (const slug of pageOrder) {
-    const english = readSource(slug, "", annotateRelease);
+    const english = readSource(slug);
     const ids = headingIds(english.$);
     for (const [language, locale] of Object.entries(locales)) {
-      const { $, sourcePath } = readSource(slug, locale.prefix, annotateRelease);
+      const { $, sourcePath } = readSource(slug, locale.prefix);
       const rootPrefix = locale.prefix ? "../" : "";
       if ($("main h2, main h3").length !== ids.length) {
         throw new Error(`${sourcePath}: expected ${ids.length} section headings to match English.`);

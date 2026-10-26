@@ -209,7 +209,7 @@ targets:
       </section>
       </div>
 
-      <h2 id="chat-with-the-squad-coach">2. New here? Chat with the Squad Coach</h2>
+      <h2 id="chat-with-the-squad-coach" data-release-change="20261019-squad-coach">2. New here? Chat with the Squad Coach</h2>
       <p>
         Once HVE Squad is installed, the <strong>Squad Coach works before initialization</strong>:
         neither <code>team.md</code> nor <code>federation.md</code> has to exist. Describe the outcome
@@ -382,9 +382,10 @@ targets:
       <p>
         These docs follow <code>main</code>, which can be ahead of the latest stable release.
         A <strong>Pre-release only</strong> badge identifies a feature that has merged but has not
-        shipped in a stable release. The site derives those badges from pending change fragments
-        and the documentation sections changed by the commits that introduced them; an official release consumes
-        the fragments and removes the badges automatically. The notice on every page shows both
+        shipped in a stable release. Guide authors attach each pending change fragment to the smallest
+        affected feature label, paragraph, list item, heading, table cell, or code block. The site renders
+        a badge only for those explicit markers; an official release consumes the fragments and removes
+        the badges automatically. The notice on every page shows both
         versions, and each badge links here. Use stable releases for work you depend on.
       </p>
       <p>
