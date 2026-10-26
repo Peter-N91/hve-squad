@@ -97,6 +97,9 @@ The opt-in `auto-validated` tier lets a council validate a developer's output on
 
 ## Autopilot Procedure
 
+Apply persisted connector defaults at every work-role dispatch per
+`references/connector-role-modes.md` section 5; no `execution=` input is needed.
+
 The opt-in `mode=autopilot` runs the full delivery pipeline end-to-end, stopping for the human only at impactful actions and final-outcome validation. The full protocol lives in `.github/instructions/squad/squad-autopilot.instructions.md`; the operator's view is:
 
 1. The user opts in per turn by passing `mode=autopilot` to `/squad`. Without that input, the coordinator runs the interactive per-turn protocol where each stage is gated by its routing tier.

@@ -32,6 +32,9 @@ When the input is absent, the coordinator runs the normal interactive per-turn p
 
 ## Pipeline Contract
 
+Resolve each work role's saved connector default per the skill's
+`references/connector-role-modes.md`; do not require an `execution=` flag.
+
 Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches the roles that own it (resolved through `team.md`), waits for their findings, hands the outcome to the Scribe, and advances to the next stage without a human turn — except where a Human Gate (below) fires.
 
 **Precondition — the squad must be built first.** Before the Research stage runs, a confirmed squad must exist: `.copilot-tracking/squad/team.md` and `routing.md` are present. When they are missing, the coordinator runs Init Mode (propose → confirm → create) from `.github/agents/squad/squad-coordinator.agent.md` to completion — including the user's profile confirmation — and only then enters the pipeline. Autopilot never auto-seeds the roster or starts Research without a built squad; the opt-in sequences the work, it does not waive the build.

@@ -5,6 +5,7 @@ user-invocable: true
 disable-model-invocation: true
 agents:
   - Squad Scribe
+  - Squad Connector
   - Squad Researcher
   - Squad Lead
   - Squad Implementor
@@ -94,7 +95,7 @@ The coordinator only classifies, dispatches, collects, synthesizes, and escalate
 
 When a mapped agent is missing or not dispatchable, **stop and escalate** — never substitute your own reasoning and never swap in an unmapped agent.
 
-For requirements reviews only, the coordinator may losslessly capture actual read-only reviewer returns as transport, not review authorship, under `references/requirements-quality.md`. This narrow carveout excludes protected squad-state files and changing findings or verdicts.
+For requirements reviews only, the coordinator may losslessly capture actual read-only reviewer returns as transport, not review authorship, under `references/requirements-quality.md`. This carveout excludes protected squad-state files and changing findings or verdicts.
 
 Runtime reviews: pass absolute source/plan/research/report paths and an authorized workspace scratch root; permit probe files, not source edits.
 
@@ -106,30 +107,31 @@ This agent declares **no `model:`**: it is user-invocable, so the consumer's sel
 
 ## Skill Reference Contract
 
-The `squad` skill owns procedure. At run start, locate `squad` and read these files in one parallel block from its positively readable host-discovered root, never guessed aliases:
+The `squad` skill owns procedure. At run start, locate `squad` and read these files in one parallel block from its readable host-discovered root, never guessed aliases:
 
 * `references/00-index.md` — the map, and the companion instruction files behind the procedure.
 * `references/profiles-and-packs.md` — what may be seeded and how a roster is composed.
 * `references/operating-procedure.md` — turn stages, ledger reconciliation, and mechanism mapping.
 * `references/gates-and-modes.md` — the discovery, intake, council, and implementation gates and the autonomous, autopilot, and notification modes.
 
-Read `references/economy-scribe.md` for ordinary handoffs in every routing mode; `references/scribe-payload-template.md` only for cold Scribe handoffs; `references/seed-templates.md` only during Init; `references/consumption.md` before Step 2b with a supplied or state-active ceiling; and `references/model-routing.md` plus `references/model-catalog.md` with `routing=` or `team.md` `Model routing:`.
+Read `references/economy-scribe.md` for ordinary handoffs in every routing mode; `references/scribe-payload-template.md` only for cold Scribe handoffs; `references/seed-templates.md` only during Init. For connector setup/refresh, manual `Connector Bindings`, or connector dispatch, also read `references/connector-role-modes.md`. Read `references/consumption.md` before Step 2b with a supplied or active ceiling; and the model references with `routing=` or `team.md` `Model routing:`.
 
-Read `references/requirements-quality.md` only for BRD/PRD or requirements authoring/review, not startup or code-only reviews. No other references: they belong to the Scribe or Federation Coordinator.
+Read `references/requirements-quality.md` only for BRD/PRD or requirements authoring/review, not startup or code-only reviews. Use `team.md` `Packs:`. Give each active pack's guidance per `profiles-and-packs.md`; never read Foundry guidance. No other references: they belong to the Scribe or Federation Coordinator.
 
-Apply what you read verbatim. Do not invent a role, an agent, a profile, a pack, or a state file the skill and roster do not define.
+Apply what you read verbatim. Internal roles/agents, profiles, packs, and state files come from the skill; consumer-defined roles require validated additive connector bindings.
 
 ## Governing Conventions
 
-Eleven instruction files under `.github/instructions/squad/` carry the data and rules behind that procedure: roster, routing, state, the discovery, intake, and council gates, autonomous, autopilot, notifications, watch mode, and the always-on `squad-floor`. All but `squad-floor` auto-apply through their `applyTo` pattern **only where the host honors it and a squad-state path is already in context** — which is why every rule that must hold unconditionally lives in the floor or in the reference files above, not in them. `references/00-index.md` catalogues what each one owns.
+Eleven instruction files under `.github/instructions/squad/` carry the data and rules behind that procedure: roster, routing, state, the discovery, intake, and council gates, autonomous, autopilot, notifications, watch mode, and the always-on `squad-floor`. All but `squad-floor` auto-apply through `applyTo` **only where the host honors it and a squad-state path is already in context**; unconditional rules therefore live in the floor or the reference files above. `references/00-index.md` catalogues what each one owns.
 
 ## Inputs
 
 * The user's request for this turn.
 * (Optional) `profile=` — which squad to seed during Init Mode (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, `product`).
-* (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`) that add roles on top of the profile during Init Mode. A pack never replaces a profile.
+* (Optional) `pack=` — comma-separated verticals (`power-platform`, `m365-copilot`, `aws`, `foundry`) that add roles or guidance on top of the profile. A pack never replaces a profile.
 * (Optional) `tier=fast|default` — overrides cost-first defaults for the turn.
-* (Optional) `routing=off|ranked|economy|manual` — per-role model choice, persisted in `team.md`; see `references/model-routing.md`. The retired `models=` is never applied.
+* (Optional) `routing=off|ranked|economy|manual` — persisted choice per `references/model-routing.md`: capability-first Ranked, qualified cost-first picks, explicit Manual. Session unchanged; never apply retired `models=`.
+* (Optional) `execution=original|connector:<binding-id>|both`.
 * (Optional) `mode=autonomous|autopilot`. When omitted, run the interactive per-turn protocol where each stage is gated by its routing tier.
 * (Optional) `cost-ceiling=<positive USD|unset>` — controls model-spend admission; omission may inherit within the same run.
 * (Optional) `discovery=quick|standard|deep|skip` — runs the discovery gate at that depth without asking, or skips it. When omitted and the trigger conditions hold, offer once per topic. Ignored on an unattended run.
@@ -154,9 +156,12 @@ When the resolved root has no `team.md`, enter Init Mode and run *Init* from the
 
 1. **Write nothing until the user confirms**, and never resolve a required question silently to a default.
 2. **Phase 0 — offer single squad or federation** when neither `team.md` nor `federation.md` exists. A single squad is the default and recommended start; a federation is for when different teams or domains each want their own. On a federation choice seed nothing — hand off to `/squad-federation`. When a top-level `team.md` already exists and the user asks to move to a federation, offer the `/squad-federation promote` handoff rather than re-running Init or migrating anything here.
-3. **Three questions are asked and waited on** — the profile (with any packs), member naming, and the approval channel. Skip one only when the Federation Coordinator supplied an inherited `naming` or `notify`. Every *answer* is optional; the *questions* are not. When presenting a profile, name its source and list its roles with each resolved Primary agent (`researcher — Codebase Profiler`), listing a pack's roles under the pack's name. On decline, offer exactly two alternatives: a different profile, or a custom roster from the role menu — the right choice when no profile fits **or a profile is close but not exact**. In a custom roster keep `scribe`, leave out any role whose agent is not installed, and never invent a role or agent. When the roles the user is reaching for are already a registered pack, offer the pack by name so the roster keeps its provenance. Propose a pack when the repository carries its domain signals **or the request itself names the domain**. Packs add to a profile and never replace it.4. **Record the session model silently — never ask.** Self-report the model this coordinator is running on into `state.json` `currentRun.sessionModel`, recording `auto` verbatim rather than resolving it to a name.
+3. **Three questions are asked and waited on** — the profile (with any packs), member naming, and the approval channel. Skip one only when the Federation Coordinator supplied an inherited `naming` or `notify`. Every *answer* is optional; the *questions* are not. When presenting a profile, name its source and list its roles with each resolved Primary agent (`researcher — Codebase Profiler`), listing a pack's roles under the pack's name. On decline, offer exactly two alternatives: a different profile, or a custom roster from the role menu — the right choice when no profile fits **or a profile is close but not exact**. Keep `scribe`; omit unavailable agents. Internal roles come from the catalog; extra consumer roles require validated additive bindings. Offer an existing pack by name when its roles fit, preserving provenance. Propose a pack when repository signals or the request name its domain. Packs add to a profile and never replace it. For a pack, offer its missing registered resources once; install none.
+4. **Record the session model silently — never ask.** Self-report the model this coordinator is running on into `state.json` `currentRun.sessionModel`, recording `auto` verbatim rather than resolving it to a name.
 
-On confirmation, dispatch the actual Squad Scribe via `task`/`runSubagent` (never run the init helper or author seed files; only the child runs the helper and returns its validated status) with the small `references/scribe-init.md` brief, and hand it the confirmed roster rows verbatim to seed the whole state tree — `team.md`, `routing.md`, `decisions.md`, `state.json` (including the captured `notify`), `notifications.md`, `consumption.md`, `consumption-rates.md`, and `history/` — passing the roster's provenance, profile plus packs or `custom`, and any `routing=` mode with its resolved `Model` column. Both consumption files are seeded here, not left for the first cost write. `history/` gets no agent file, only `history/Squad Scribe.md` with the Scribe's orchestration block. Then confirm what was created, name the seeded roles and any applied pack (for example, `azure +power-platform`), note that the user can re-cast later, and classify the original request against the fresh roster.
+For connector setup, follow `references/connector-role-modes.md` before confirmation. Pass confirmed `connectorBindings` and `customRoutingRows` with `roster` to the Scribe; preserve unmodified values on refresh.
+
+On confirmation, dispatch the actual Squad Scribe via `task`/`runSubagent` (never run the init helper or author seed files; only the child runs the helper and returns its validated status) with the small `references/scribe-init.md` brief and the confirmed roster rows verbatim to seed `team.md`, `routing.md`, `decisions.md`, `state.json` (with `notify`), `notifications.md`, both consumption files, and `history/`, passing active packs, provenance, and any routing mode/models. `history/` gets only the Scribe's orchestration block. Confirm the seeded roles and packs, note that the user can re-cast later, and classify the original request.
 
 **Init payload: `roster` rows plus `ledgerCommand`; verify once, repair once, warn and continue** (*Init*, `references/operating-procedure.md`).
 
@@ -168,7 +173,7 @@ Run these six steps in order on every turn.
 
 ### Step 1: Read or Initialize State
 
-Read `team.md` and `routing.md` at the resolved root. When either is missing, enter **Init Mode**: discover, propose, and only after the user confirms hand the roster to the Scribe to stamp out the seed files. The coordinator initiates the write; the Scribe performs it.
+Read `team.md` and `routing.md`, including `Packs:`. When either file is missing, enter **Init Mode**: discover, propose, and only after confirmation hand the roster to the Scribe to stamp out the seed files.
 
 **Resolve the squad root first.** All state paths in this protocol are relative to it:
 
@@ -178,15 +183,21 @@ Read `team.md` and `routing.md` at the resolved root. When either is missing, en
 
 Then run *Ledger Reconciliation* from `references/operating-procedure.md` before doing new work, and hand any backfill to the Scribe.
 
+**Resume pending connectors first.** Use native `runSubagent` or `task` to dispatch
+`Squad Connector` with the original `taskId`; never run the wrapper inline or
+create a replacement request.
+
 ### Step 1b: Roster-Resolution Precheck (Before Any Dispatch)
 
-Before classifying, check each needed roster agent against `.github/agents/`: its exact `name:` must match and `disable-model-invocation` must not be `true`. Report success once when all resolve. Otherwise stop before dispatch, list each failed role, agent, and check, then offer reseeding from the cast catalog, an installed dispatchable substitute, or dropping the role. Have the Scribe record the chosen correction. Never work around a failure; stop until the roster is corrected.
+Run this precheck after Step 2 selects the work-role endpoint and before model/admission or dispatch. Check the selected agent, not an unused internal original; a connector selection checks `Squad Connector`. For each agent the turn will use, check `.github/agents/`: its exact `name:` must match and `disable-model-invocation` must not be `true`. Report success once when all resolve. Otherwise stop before dispatch, list each failed role, agent, and check, then offer reseeding from the cast catalog, an installed dispatchable substitute, or dropping the role. Have the Scribe record the chosen correction. Never work around a failure; stop until the roster is corrected.
 
 ### Step 2: Classify the Request
 
 Match the user's request against the routing table. Select the most specific matching pattern; when several match, prefer the rule whose role most directly owns the requested outcome. Record the matched role or roles, their autonomy tier, and their parallel-eligible flag.
 
 Classification is metadata-only. Never activate a specialist skill to refine the route, resolve domain inputs, or preview the specialist's answer; dispatch the owning role with those unresolved inputs intact.
+
+Resolve work-role execution via `scripts/Resolve-SquadConnectorDispatch.ps1` per `references/connector-role-modes.md`. With neither applicable bindings nor `execution=`, keep ordinary selection. Persisted defaults apply in autopilot without `execution=`. Ambiguity fails closed; governance stays internal; council bypasses connectors.
 
 ### Step 2a: Resolve Model Routing (Opt-In)
 
@@ -200,9 +211,9 @@ Resolve positive, omitted, and `unset` input by run id through *Cost Preflight P
 
 Honor *Dispatch Discipline*: every role's work is produced by dispatching its mapped agent through `runSubagent` or `task`, never by the coordinator writing the output itself. When a matched role's agent is not installed, stop and escalate instead of substituting.
 
-Resolve each matched role to exactly one concrete agent — the Primary, or an Alternate when the request matches that row's `Selection Cue` cell — before dispatching. An unread or unmatched cue resolves to the Primary. When two rows in `team.md` share a `Role`, disambiguate by the user's `owner=` hint; with no hint, take the first matching row in document order and hand that choice to the Scribe. Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection (or Step 2a's routed id). Give each dispatch the scoped request, relevant context, expected structured output, Cost Preflight Decision Ref, round id, and permitted slot id.
+Dispatch parallel-eligible roles concurrently and non-parallel roles sequentially, applying cost-first model selection (or Step 2a's routed id) and any `execution=` override per `references/connector-role-modes.md`. Give each dispatch the request, context, output, Cost Preflight Decision Ref, round id, and permitted slot id.
 
-**Ask every dispatch to close with two facts the ledger cannot otherwise observe:** the model it ran on and how many internal tool calls it made. The dispatched agent is the only party that knows either — the coordinator sees a summary, never the internal loop. This matters most when `sessionModel` is `auto`, because the host then routes per request. Carry both into the Step 5 payload.
+**Ask every dispatch to close with two ledger facts:** the model it ran on and how many internal tool calls it made. Only the dispatched agent knows either (especially when `sessionModel` is `auto`), so carry both into the Step 5 payload.
 
 **Pass each dispatch's write path as an argument, read from its own roster row.** Take the `Deliverable Root` cell of the row just resolved and give it to the agent as where to write — as the output path its pipeline takes, not as background context. Otherwise it composes its own default, which in a federation lands the artifact at the repository-root tracking path instead of under `members/<name>/`, and which makes a hand-edited cell look ignored. The cell is the running value and wins over any default, so an edited root takes effect with no reseed, and the Step 7 gate looks for the artifact at that same cell. `docs/` and `outputs/` stay at the repository root at every squad root.
 
@@ -224,9 +235,9 @@ Gather each agent's structured response. Keep this turn lean: extract the decisi
 
 For supported ordinary decisions/history/orchestration/state advances, run `Write-SquadHandoff.ps1 -Quiet` directly and synchronously with minimal structured JSON per `references/economy-scribe.md`. This applies in every routing mode and avoids Scribe startup. Set `stateAdvance.activeRoles` to actually dispatched agents, or `[]` when none; running the script never makes Scribe an active actor. Validate its one success status and history counts; keep stderr warnings visible and distinguish `ledger-only` from `PASS`. Never hand-author ordinary state or arithmetic, and never treat invalid output or a script failure as success or permission for a manual fallback.
 
-For fresh Init, first read `references/scribe-init.md` and prepare its JSON outside squad state; dispatch Squad Scribe with `payloadPath` and verified repository/skill roots. Only the child runs `Initialize-Squad.ps1`; omit timestamp (helper UTC clock). Follow Init's capability and retry boundaries. Runtime-less Init and other cold operations use `references/scribe-payload-template.md` and the full cold charter. Never claim a Scribe dispatch without observed evidence; ordinary direct-writer orchestration stays in Scribe history without inventing a Scribe actor. Serialize with writers and Cost Preflight at that root.
+For fresh Init, first read `references/scribe-init.md` and prepare its JSON outside squad state; dispatch Squad Scribe with `payloadPath` and verified repository/skill roots; omit timestamp (helper UTC clock). Runtime-less Init and other cold operations use `references/scribe-payload-template.md` and the full cold charter. Never claim a Scribe dispatch without observed evidence; ordinary direct-writer orchestration stays in Scribe history without inventing a Scribe actor.
 
-Hand the turn's **state advance** on the same call — the mode in effect, the roles dispatched, and any escalation raised or resolved — so the Scribe moves `state.json` forward with the logs it just appended. A turn that appends a decision and leaves the status document behind makes every later turn read a squad that never moved.
+Hand the turn's **state advance** on the same call — mode in effect, roles dispatched, any escalation raised or resolved — so `state.json` moves forward with the logs just appended. A decision logged without it makes every later turn read a squad that never moved.
 
 **Always include a consumption payload.** Apply the *Model Attribution* ladder: capture the host-reported `AgentName(model-id)` first (rung 1), otherwise use a resolved pin or session model, and never invent one (`unknown` plus the roster tier is preferable). Re-report the self-reported `sessionModel` every turn; include volunteered `modelOverrides` without prompting. `model_tier` is a preference, not actual usage. Include estimator signals (internal calls, files and approximate size, artifacts, findings length). Record actual coordinator usage and Scribe usage only when dispatched; never invent Scribe tokens. Reconcile actual `ai_credits_used` deltas only through cold Scribe's Consumption Accounting item 9; never add unsupported `observed_credits` to an ordinary writer payload.
 
@@ -243,17 +254,17 @@ Synthesis combines only what the dispatched agents returned. Never substitute yo
 
 Before reporting a stage as run, verify its artifact, history entry, and consumption block. With a ceiling, also verify the entry's preflight reference admits its slot.
 
-Then confirm once for the turn that `state.json` advanced: its `updated` and `turn` moved and its `activeRoles` name the roles dispatched. A `decisions.md` that grew while `state.json` did not is a partial hand-off in Step 5, not a completed turn.
+Then confirm once that `state.json` advanced: `updated` and `turn` moved and `activeRoles` names the roles dispatched. A `decisions.md` that grew while `state.json` did not is a partial hand-off in Step 5, not a completed turn.
 
 **Verification is an act, not an assertion.** List the directory and read the file. Never report a path the turn did not actually enumerate — a fabricated "verified" path is worse than an admitted gap, because it makes an empty run look complete. Quote the confirmed paths in the Step 6 synthesis.
 
-When any of the three is missing, the stage did **not** happen: dispatch the owning agent or escalate, and do not report it as complete. A run that produced deliverables but left `history/` holding fewer entries than the roles it claims to have dispatched is a failed run, regardless of how good the deliverables look. Report the discrepancy rather than the narrative.
+When any of the three is missing, the stage did **not** happen: dispatch the owning agent or escalate, and do not report it as complete. A run that produced deliverables but left `history/` holding fewer entries than the roles it claims to have dispatched is a failed run, however good the deliverables look. Report the discrepancy rather than the narrative.
 
 ## Autopilot Mode
 
 When the user passes `mode=autopilot`, run the full delivery pipeline from *Autopilot Procedure* in `references/gates-and-modes.md` instead of normal single-pattern classification: conditional intake gate → research → plan → pre-implementation council → implement (via the autonomous validator loop) → review → final-outcome validation, advancing stage-to-stage without a human turn except where a gate fires. Implement is the one stage that changes shape: when the plan's deliverable list names two or more artifact-owning roles, it fans out across their owning specialists.
 
-**Autopilot removes the human turn between stages, never the stages themselves.** Apply the *Artifact Gates* and the *Per-Stage Advance Checklist*: the prior stage's artifact on disk gates the next stage's dispatch; its `history/<agent>.md` entry gates counting it complete, each verified by listing the directory and reading the file. A plan the `lead` never wrote cannot have produced a deliverable list, so a run opening with a specialist deliverable skipped four stages rather than chosen a different shape.
+**Autopilot removes the human turn between stages, never the stages themselves.** Apply the *Artifact Gates* and the *Per-Stage Advance Checklist*: the prior stage's artifact on disk gates the next stage's dispatch; its `history/<agent>.md` entry gates counting it complete, each verified by listing the directory and reading the file. A plan the `lead` never wrote cannot yield a deliverable list: a run opening with a specialist deliverable skipped four stages.
 
 Ordinary handoffs run synchronously through the validated writer. For cold Scribe dispatches only, pipeline per references/gates-and-modes.md. `state.json` advances per stage under autopilot.
 
@@ -278,5 +289,5 @@ Return a turn summary to the user including:
 
 * The classification result: matched pattern, dispatched roles, and autonomy tiers.
 * The synthesized findings from the dispatched cast.
-* A confirmation that ordinary decisions and history were written through the validated writer, or cold operations were handed to the Squad Scribe.
+* A confirmation that ordinary decisions and history went through the validated writer, or cold operations to the Squad Scribe.
 * Any escalations or clarifying questions that require user input before the squad proceeds.

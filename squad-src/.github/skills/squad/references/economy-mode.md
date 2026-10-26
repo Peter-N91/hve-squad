@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-06"
+  last_updated: "2026-10-23"
 ---
 
 # Economy Mode
@@ -42,14 +42,18 @@ Economy changes the model of these roles only: `developer`, `technical-writer`, 
 
 ## Pick
 
-For an allowlisted role, build `model-routing.md` *Ranking Algorithm* step 2's eligible set under the role's own floor, keep the rows at fit 2 or better for the `implementation` class, and take the lowest **Blended** rate (then higher fit, then newer generation within a family, then row order). With no such row, the role keeps its ranked pick.
+For an allowlisted role, build `model-routing.md` *Ranking Algorithm* step 2's eligible set under the role's own floor. Apply [model-scoring.md](model-scoring.md)'s versioned selected-panel minimum: under `implementation-full-midpoint-v1`, each primary percentile must be at least `0.50`; under the explicitly reduced `implementation-scicode-upper-quartile-v1`, SciCode must reach `0.75`. Every selected primary needs verified, comparable independent evidence, and Blended price must be known and nonnegative. Publication age alone never expires a result; genuine verification expires after 90 days. This is a declared policy qualification, not a validated success guarantee or the old "fit 2" assumption.
+
+Among qualified candidates take the lowest **Blended** rate first, then higher granular capability, then secondary coverage, primary verification freshness, newer generation within a family, and catalog order. Extra capability or confidence above the minimum never overrides a lower price. An unpriced model is never free. With no qualified candidate, the role explicitly falls back to its capability-first Ranked pick and reports the panel, qualification and actual rejection reasons.
+
+For example, B meets both primary minimums and costs less than A: Economy selects B even if A is substantially stronger. Ranked may select A on that same evidence. The modes can also select the same model; neither price nor a model name guarantees a different winner.
 
 * **Floors hold.** The pick never leaves `model-routing.md` *Consequence Floors*; running a `default`-floor role on a `fast-lightweight` model takes a `team.md` Model Tier edit, never a routing input.
 * **Model cell.** As under `ranked`: the coordinator computes each pick, the Scribe writes it into the `Model` cell, and every dispatch copies the cell.
 
 ## One Escalation
 
-After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that owner once on its ranked pick, then re-run the review. The coordinator hands the Scribe that id for the role's `Model` cell before the re-dispatch, so dispatch still copies the cell; a costlier id with an active ceiling needs a new Cost Preflight round. When the economy pick already is the ranked pick there is nothing to escalate to. A second failure follows `gates-and-modes.md` *Review Follow-Through*, and the next turn's re-rank resets the cell.
+After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that owner once on its ranked pick, then re-run the review. Ranked means the new capability-first destination, not a fit-bucket cost winner. The coordinator hands the Scribe that id for the role's `Model` cell before the re-dispatch, so dispatch still copies the cell; a costlier id with an active ceiling needs a new Cost Preflight round. When the two picks coincide, report **no higher-ranked escalation target exists**. A second failure follows `gates-and-modes.md` *Review Follow-Through*, and the next turn's re-rank resets the cell.
 
 ## Route Markers
 
@@ -75,7 +79,7 @@ Interactive mode only (no `mode=`). Besides the `Parallel-Eligible` flag, owners
 
 ## Dispatch Brief
 
-With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, the roster (agent and Alternates with dispatchability, pin, `Model` cell, rate row, deliverable root), ready consumption objects, the direct ordinary-writer command, and the *Bounded Lane*, *Plan-Driven Parallelism*, and *Scripted Writes* sections verbatim. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
+With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` (add `-AvailableModels <host enum>` on CLI/app) prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, roster, versioned routing report and Route rationales, ready consumption objects, the direct ordinary-writer command, and the *Bounded Lane*, *Plan-Driven Parallelism*, and *Scripted Writes* sections. The report distinguishes proposed picks from persisted cells; the Scribe must persist changes before dispatch. It reports host execution as unreported. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
 
 ## Never Weakened
 
@@ -105,4 +109,4 @@ A Watch Mode or other unattended trigger ignores `routing=economy` wherever it a
 
 ## Helper
 
-`scripts/Resolve-SquadModelRoute.ps1 -Mode economy` applies the allowlist, the pick, and the floors. It returns each role's pick as `suggested`, the escalation id as `escalation` (empty when the economy pick already is the ranked pick, and for every role off the allowlist), and the agent's own pin as `pin`. Under economy it also reports `consent` (`recorded` or `missing`) from `decisions.md` beside `team.md`; it never refuses on it.
+`scripts/Resolve-SquadModelRoute.ps1 -Mode economy` applies the allowlist, qualification, cost-first ordering, and floors. Its additive report identifies objective, capability, evidence and coverage, estimated cost and basis, reason, policy/snapshot/date, and the Ranked `escalation` destination. Use `rationale` for the existing **Route rationale** bullet. The Scribe reports its actual pin exception, and coordinators retain the session model. `consent` remains `recorded` or `missing`; the resolver never accepts consent or changes state.

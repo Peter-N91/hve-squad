@@ -29,18 +29,47 @@
 </p>
 <!-- markdownlint-enable MD013 MD033 -->
 
+## New here? Chat with the Squad Coach
+
+After installing HVE Squad, select the **Squad Coach** agent and describe your goal in everyday language. No initialization is needed:
+
+```text
+I need to modernize two applications owned by different teams. Help me choose the simplest setup and walk me through every step, with the commands and prompts to use.
+```
+
+The advisory-only Coach reads current installed code, entrypoint contracts, and documentation rather
+than following a frozen feature checklist. It recommends the simplest sufficient setup, identifies
+essential and optional inputs, and gives a detailed, source-cited runbook: where to act, which agent to
+select, exact messages or commands, expected outputs, approvals, and how to resume. Ask about any
+shipped capability; the Coach discovers its workflow from source without needing a charter update.
+It reads existing state but never initializes, dispatches, changes configuration, or migrates it.
+
+- **VS Code:** select **Squad Coach** from the Copilot Chat agents dropdown, then send the message.
+- **Copilot CLI:** enter `/agent`, select **Squad Coach**, then send the message.
+- **Copilot App:** select **Squad Coach**, then send the message.
+
+Agent messages are prefix-free on all three hosts. A plugin may display the agent as
+`hve-squad:squad-coach`. The Coach also helps after setup, including taking a confirmed squad into
+autopilot, using ranked models, or planning a later federation promotion; it derives the steps from
+the installed version rather than owning those execution workflows.
+
+See [Getting Started → Squad Coach](https://peter-n91.github.io/hve-squad/getting-started.html#chat-with-the-squad-coach)
+for example conversations, the topology decision guide, preparation checklists, and an end-to-end
+initialization-to-completion example.
+
 ## Documentation
 
-[![Latest measured campaign: comparison unavailable](benchmarks/efficiency/campaign-badge.svg)](benchmarks/efficiency/campaign-report.md)
-
-Latest measured results: **unavailable / 82 / 79**, **870.7412115 known credits**;
-the missing first grade and whole-campaign total remain unavailable.
-[Earlier complete-series observations](benchmarks/efficiency/report.md):
-[![Earlier observed efficiency benchmark](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
+[![Observed efficiency benchmark: document quality, acceptance and average benchmark time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
 
 Full documentation lives on the project site:
 
 **[peter-n91.github.io/hve-squad](https://peter-n91.github.io/hve-squad/)**
+
+> **Merged does not mean released.** This README and the documentation follow `main`.
+> The site shows the latest stable and rolling pre-release numbers; **Pre-release only**
+> badges identify documented features that have not shipped in stable.
+> Follow [Install and test the pre-release](https://peter-n91.github.io/hve-squad/getting-started.html#testing-the-pre-release)
+> for the current tag, exact installation command, testing steps, and return-to-stable command.
 
 | Page                                                                          | What it covers                                                           |
 |-------------------------------------------------------------------------------|--------------------------------------------------------------------------|
@@ -50,14 +79,17 @@ Full documentation lives on the project site:
 | [Maintaining](https://peter-n91.github.io/hve-squad/maintaining.html)         | Dependency generation, author workflow, customization, release process   |
 | [Troubleshooting](https://peter-n91.github.io/hve-squad/troubleshooting.html) | Known install errors with fixes, versioning, and repository notes        |
 
-The site source is in [docs/](docs/) and is published to GitHub Pages by
-[.github/workflows/docs.yml](.github/workflows/docs.yml) on every push to `main` that touches
-`docs/`.
+The site source is in [docs/](docs/), with its shared shell in [site/](site/), and is
+built and published to GitHub Pages by [.github/workflows/docs.yml](.github/workflows/docs.yml).
+Documentation, package-version, and pending change-fragment updates on `main` refresh the site.
 
 ## Benchmark methodology and sources
 
 The [efficiency benchmark](benchmarks/efficiency/README.md) records document quality,
 functional acceptance, workflow compliance, measured time and consumption separately.
+Each branch carries its own score in `benchmarks/efficiency/`: run
+`pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-Benchmark.ps1 [-Runs 1..3]`
+to refresh it (about 300 Copilot credits and 20 minutes per run) and commit the result.
 Its methodology review and measurement hardening drew on these primary sources
 (consulted 20 October 2026):
 
@@ -71,13 +103,11 @@ Its methodology review and measurement hardening drew on these primary sources
 | OpenTelemetry, [GenAI metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/547934afa90a34298441caf80c43b27255c3a292/docs/gen-ai/gen-ai-metrics.md) and [token metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/547934afa90a34298441caf80c43b27255c3a292/docs/gen-ai/gen-ai-token-metrics.md) | Define timing boundaries and token-accounting semantics explicitly. These are pinned Development-stage references, not a claim of OpenTelemetry instrumentation or conformance. |
 | NIST/SEMATECH, [Confidence intervals](https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm) | Keep three-trial results descriptive; observed pass counts and resource differences do not establish statistical significance. |
 
-These sources informed the design; they do not certify it. The current three-trial,
-single-scenario baseline is a regression-screening reference, not a representative
+These sources informed the design; they do not certify it. A score from one to three runs of
+a single scenario is a regression-screening reference, not a representative
 agent leaderboard. Human calibration, repeated-judge agreement and broader held-out
-task studies remain future empirical work. See the [latest campaign report](benchmarks/efficiency/campaign-report.md),
-the [earlier complete-series report](benchmarks/efficiency/report.md)
-for actual results and the [collection guide](tests/tier2/live-benchmark/README.md)
-for execution details.
+task studies remain future empirical work. See the [generated report](benchmarks/efficiency/report.md)
+for actual results and the [benchmark guide](benchmarks/efficiency/README.md) for how to run it.
 
 ## Related repositories
 
@@ -154,10 +184,10 @@ only untargeted federation autopilot uses one aggregate federation ceiling.
 |------|---------------------------------|----------------------|
 | `off` (default) | Not chosen; the agent's own pin or the session model runs | No `Model` column |
 | `ranked` | The squad picks the model that best fits the role's work, among the models your host offers | `Model routing: ranked` and a `Model` column listing each pick |
-| `economy` | As `ranked`, except five low-impact implementation roles (developer, technical-writer, presenter, prompt-engineer, data-scientist) get the cheapest model with a fit of 2 or better within their floor, and move once to their `ranked` pick after a failed review. The squad asks for and records your consent first; gates never change | `Model routing: economy` and a `Model` column listing each pick |
+| [`economy` (release availability)](https://peter-n91.github.io/hve-squad/usage.html#routing-economy) | Five implementation roles (developer, technical-writer, presenter, prompt-engineer, data-scientist) choose the cheapest model meeting the documented independent capability minimum within their floor, then move once to their capability-first Ranked pick after a failed review. Consent is recorded first; protected roles and gates never change | `Model routing: economy` and a `Model` column listing each pick |
 | `manual` | You pick, once, with suggestions pre-filled | `Model routing: manual` and a `Model` column holding your picks |
 
-**How ranked picks are made.** Each role maps to an assignment class (`research`, `planning`, `implementation`, `review`, `council`, `intake`, `bookkeeping`). The model catalog scores every model 0–3 for each class, and the squad picks the highest fit, then the lowest blended cost, then the newest generation of the same model family. It never breaks a tie by a model's name. On the Copilot CLI the seeded roster resolves to, for example, `researcher` → `claude-opus-5.5`, `lead` → `gpt-5.6-sol`, `developer` → `gpt-5.3-codex`, `tester` → `gpt-6-sol`, `architect` → `gpt-5.5`, `intake-validator` → `claude-sonnet-5.5`, and `scribe` → `claude-haiku-4.5`.
+**Ranked is capability-first; Economy is cost-first after qualification.** Policy `squad-capability-v3` uses a common versioned comparison panel, selected by independent snapshot-wide coverage, never scores, prices or host availability (`references/model-scoring.md`). Implementation retains SciCode/Terminal-Bench and a visibly reduced SciCode panel. Economy requires each full-panel percentile to reach `0.50`, or reduced SciCode to reach `0.75`, then selects the lowest known Blended price. Confidence and cost only break genuine Ranked capability ties. The 90-day safeguard applies to genuine verification, not publication age; result, acquisition, verification and generation dates stay distinct, and legacy unknowns are not silently refreshed. Reports expose panels and precise exclusions; unsupported comparisons fall back explicitly. Modes may agree. A `fast` floor is a minimum, not a frontier ceiling. Coordinators keep the selected session model, and the Scribe keeps its pin.
 
 **How manual picks are made.** When you switch to `routing=manual`, whether at squad creation or later, the coordinator asks before dispatching anything:
 
@@ -207,7 +237,7 @@ The former `models=<key>:<id>,...` input is retired. If you pass it, it is not a
 
 **Full catalog:** See `squad-src/.github/skills/squad/references/model-catalog.md`. It is a dated snapshot (retrieved 2026-09-30) with capability classes, per-class fit scores, pricing, and host-availability notes. After 90 days the catalog counts as stale, and ranking falls back to static tier pricing.
 
-**Deterministic helper:** `.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1 -SquadRoot .copilot-tracking/squad` (PowerShell 7+, read-only) prints each role's class, floor, ranked pick, and `Model` cell status. On the CLI, pass `-AvailableModels` with your host's model ids; on VS Code, pass `-SessionModel`.
+**Deterministic helper:** `.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1 -SquadRoot .copilot-tracking/squad` (PowerShell 7+, read-only) reports objective, granular capability, evidence and coverage, cost basis, selection reason, policy/snapshot/date, escalation, and `Model` cell status. On the CLI, pass `-AvailableModels` with your host's model ids; on VS Code, pass `-SessionModel`. Copy `rationale` into the existing Route rationale; a routing calculation does not observe host execution.
 
 **History and identity bullets:**
 

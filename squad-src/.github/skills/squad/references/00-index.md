@@ -5,37 +5,44 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-24"
 ---
 
 # Squad Reference Index
 
-Read this index first; load only references your Skill Reference Contract names or conditionally requires.
+Load only required references.
 
 ## Which file for which job
 
-| File                                               | Read it when                                                              |
-|----------------------------------------------------|---------------------------------------------------------------------------|
-| [profiles-and-packs.md](profiles-and-packs.md)     | Seeding or amending a roster: profile choice, packs, which roles exist    |
-| [roster-catalog.md](roster-catalog.md)             | Casting a role, recasting after an HVE Core upgrade, applying/registering a pack's external agents, resolving an external role, or assembling a custom roster |
-| [operating-procedure.md](operating-procedure.md)   | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff       |
-| [gates-and-modes.md](gates-and-modes.md)           | Gates — discovery, intake, council, implementation — and autonomy modes   |
+| File | Read it when |
+|---|---|
+| [profiles-and-packs.md](profiles-and-packs.md) | Roster seeding/changes: profiles, packs, roles |
+| [roster-catalog.md](roster-catalog.md) | Casting/upgrades, custom/external roles, pack registration/resolution |
+| [connector-role-modes.md](connector-role-modes.md) | Setup/refresh, bindings, execution; [shim transport](connector-contract.md) |
+| [builder-workflows.md](builder-workflows.md) | User-invocable connector or external endpoint builder flow |
+| [foundry-blueprint.md](foundry-blueprint.md) | `foundry` roles |
+| [foundry-platform-options.md](foundry-platform-options.md) | `foundry` platform |
+| [operating-procedure.md](operating-procedure.md) | Running a turn: Init, Route, ledger reconciliation, Decide, Handoff |
+| [gates-and-modes.md](gates-and-modes.md) | Gates — discovery, intake, council, implementation — and autonomy modes |
 | [requirements-quality.md](requirements-quality.md) | Only BRD/PRD or requirements authoring/review; not startup or code-only reviews |
-| [federation.md](federation.md)                     | The squad root is a federation: layout, precedence, federation modes      |
-| [economy-scribe.md](economy-scribe.md)             | Ordinary handoffs, all modes: minimal JSON, synchronous `-Quiet`, status verification and failures |
-| [scribe-cold-charter.md](scribe-cold-charter.md)    | Full legacy charter for cold init, verdicts, memory, notifications, ceiling slots, federation changes, summaries, unsupported operations |
-| [scribe-procedure.md](scribe-procedure.md)         | Writing squad state, Scribe only: Non-Negotiable Rules, payload-to-step rules, Cold-File Dispatch Table, Write-Completeness Self-Check |
-| [entry-schemas.md](entry-schemas.md)               | Cold writes and schema reference: `decisions.md` base shape, `history/<agent>.md`, state.json |
+| [federation.md](federation.md) | The squad root is a federation: layout, precedence, federation modes |
+| [economy-scribe.md](economy-scribe.md) | Ordinary handoffs, all modes: minimal JSON, synchronous `-Quiet`, status verification and failures |
+| [scribe-cold-charter.md](scribe-cold-charter.md) | Full legacy charter for cold init, verdicts, memory, notifications, ceiling slots, federation changes, summaries, unsupported operations |
+| [scribe-procedure.md](scribe-procedure.md) | Writing squad state, Scribe only: Non-Negotiable Rules, payload-to-step rules, Cold-File Dispatch Table, Write-Completeness Self-Check |
+| [entry-schemas.md](entry-schemas.md) | Cold writes and schema reference: `decisions.md` base shape, `history/<agent>.md`, state.json |
 | [scribe-payload-template.md](scribe-payload-template.md) | Filling or reading the Scribe hand-off payload: field order and the byte-stable-prefix / volatile-tail section order |
 | [scribe-cold-init-and-seeding.md](scribe-cold-init-and-seeding.md) | Scribe only, initialization or memory payload: the full state-tree seed and Repository Memory and Learning Promotion |
 | [scribe-cold-federation.md](scribe-cold-federation.md) | Scribe only, promotion, expansion, or a federation-level autopilot-run-summary or history payload |
 | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Scribe only, a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write |
-| [seed-templates.md](seed-templates.md)             | Stamping first-run state, Init only: `team.md`, `routing.md`|
-| [consumption.md](consumption.md)                   | Recording or estimating cost: ledger templates, the estimator, and Cost Preflight |
+| [seed-templates.md](seed-templates.md) | Stamping first-run state, Init only: `team.md`, `routing.md`|
+| [consumption.md](consumption.md) | Recording or estimating cost: ledger templates, the estimator, and Cost Preflight |
 | [consumption-rates-template.md](consumption-rates-template.md) | Scribe only, initialization or a Step 7.1 reseed: the cold seed template for `consumption-rates.md` |
-| [model-catalog.md](model-catalog.md)               | Routing a dispatch to a specific model: declared capability, pricing, and host-availability precedence |
-| [model-routing.md](model-routing.md)               | Applying `routing=` (all modes): modes, the Model column, fit ranking, floors, and identity bullets |
-| [federation-templates.md](federation-templates.md) | Creating or expanding a federation: registry, meta-routing, root files    |
+| [model-catalog.md](model-catalog.md) | Model routing: declared capability, prices, host precedence |
+| [model-benchmarks.md](model-benchmarks.md) | Offline evidence, provenance, and source versions |
+| [model-routing.md](model-routing.md) | Applying routing: modes, cells, floors, and identity |
+| [model-scoring.md](model-scoring.md) | Policy or evidence audit only |
+| [federation-templates.md](federation-templates.md) | Federation creation/expansion: registry, meta-routing, root seeds |
+| [coach-discovery.md](coach-discovery.md) | Coach only: discover current code, documentation, entrypoints, and state without a feature-specific playbook |
 
 The ordinary hot path reads only `economy-scribe.md`; coordinators run its validated writer directly with `-Quiet` in all modes. Scribe uses it too. Cold operations first read `scribe-cold-charter.md`, then `00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, and `scribe-payload-template.md` plus conditional files required by the Cold-File Dispatch Table. Use small script JSON for ordinary writes; the full template only for cold handoffs. Seed templates remain Init/federation-change-only reads.
 

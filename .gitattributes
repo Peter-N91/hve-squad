@@ -1,1 +1,1 @@
-tests/tier2/live-benchmark/start-efficiency-wizard.sh text eol=lf
+tests/tier2/live-benchmark/invoke-benchmark.sh text eol=lf

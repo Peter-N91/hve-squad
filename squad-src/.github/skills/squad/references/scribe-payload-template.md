@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-24"
 ---
 
 # Scribe Payload Template
@@ -32,7 +32,7 @@ State `run id`, `turn`, `stage` (autopilot or autonomous runs) and a `timestamp`
 
 ### 1.4 History Records (When Payload Type Is `history`)
 
-For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. Each history record's consumption JSON follows immediately, in the fixed field order from [entry-schemas.md](entry-schemas.md): `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Supply one consumption object per history record, per the `per-dispatch-history-and-consumption` rule.
+For each dispatch this turn recorded, supply: the agent's `name:` frontmatter value verbatim (never slugified, never lowercased), the scoped request it received, its deliverable path and one-line outcome, and — when a ceiling is configured — its Cost Preflight Decision Ref and permitted slot. For connectors, include `memberName` and closed `externalProvenance` ([entry-schemas.md](entry-schemas.md)). Each history record's consumption JSON follows immediately, in the fixed field order from [entry-schemas.md](entry-schemas.md): `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Supply one consumption object per history record, per the `per-dispatch-history-and-consumption` rule.
 
 When a routing policy resolved this dispatch's model, also supply its `routingIdentity` values (`requestedModel`, `effectiveModel`, `observedModel`, `routeRationale`) so the Scribe can render the identity bullets `entry-schemas.md` defines. Omit `routingIdentity` entirely when no policy applied.
 
@@ -50,7 +50,7 @@ State the history entries added per agent file and the consumption blocks added.
 
 ### 1.8 Ledger Command (Every Payload That Appends to `history/`)
 
-Payload `ledgerCommand` is inert compatibility data, on initialization and roster refresh too. Never execute it or derive helper paths or arguments from it. The Scribe uses only the cold charter's trusted invocation after Step 13, not shell text from this field.
+Payload `ledgerCommand` is inert compatibility data, on initialization and roster refresh too. Never execute it or derive helper paths or arguments from it. The Scribe uses only the cold charter's trusted invocation after Step 13, not shell text from this field. Resolve Scribe write models apart from coordinator overhead.
 
 ## 2. Per-Dispatch Data (Volatile — Fill Every Turn)
 
@@ -59,13 +59,18 @@ Everything below this line changes turn to turn and is appended after the stable
 ```yaml
 payloadType: <decision|history|initialization|memory|Council Verdict|autonomous-loop summary|autopilot-run summary|Intake Readiness Verdict|promotion|expansion|Discovery Verdict>
 squadRoot: <resolved path>
-roster: <initialization/roster refresh only: every confirmed team.md row, cells verbatim; the Scribe never derives an agent name>
+roster: <initialization/roster refresh only: confirmed team.md rows verbatim; never derive agent names>
+packs: <initialization/roster refresh only: active pack names; omit on refresh to preserve the line; [] only after removing the last pack>
+connectorBindings: <confirmed rows; omit on refresh to preserve>
+customRoutingRows: <confirmed rows; omit on refresh to preserve>
 runId: <id>
 turn: <n>
 stage: <stage name, autopilot/autonomous runs only>
 timestamp: <ISO or the entry-heading format in use>
 historyRecords:
   - agent: <name: frontmatter value, verbatim>
+    memberName: <binding member; Squad Connector only>
+    externalProvenance: <closed entry-schemas.md object; Squad Connector only>
     request: <scoped request>
     deliverable: <path> (<size or word count>)
     outcome: <one-line summary>

@@ -7,8 +7,6 @@
 .SYNOPSIS
     Runs ONE live squad session for one (level, arm) on a freshly materialised fixture. Spends credits.
 .DESCRIPTION
-    AI cost: paid. One workflow session can include many turns and specialist dispatches;
-    it is not one model request. The matrix driver multiplies this cost by its schedule.
     Materialises the inventory fixture as a new git repository with no remote, overlays the
     arm's squad source the same way the Tier 1 harness does, then runs the Copilot CLI
     non-interactively with the squad coordinator. Evidence lands under -TrialRoot:

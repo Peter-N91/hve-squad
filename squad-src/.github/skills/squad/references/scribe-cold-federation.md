@@ -12,6 +12,15 @@ metadata:
 
 Read this file only when the turn's payload is one of: **promotion** (Payload-to-Step Map Step 10), **expansion** (Step 11), a confirmed **federation-initialization** payload, or a **federation autopilot-run summary** payload written at the federation root. An ordinary single-squad turn, including one running inside an already-federated sub-squad, never needs this file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
 
+For promotion and expansion, including the new sub-squad's scoped Init, apply
+Consumption Accounting to the Scribe's own state-write dispatch: prefer its
+reported model, otherwise read its agent pin; never substitute the coordinator's session model.
+Reject a payload that prescribes a lower attribution rung contrary to that evidence,
+before any state write. Coordinator overhead may use a different model:
+record separate dated orchestration entries with one block each, aggregated in the
+existing ledger row. Relocation preserves every old block; it is not permission to
+reprice historical work using today's model.
+
 ### Federation Promotion
 
 Adopt an existing single squad into a federation as its first sub-squad, per *Promotion: Single Squad → Federation* (`squad-federation.instructions.md`). This is the only write that relocates existing state. Perform it as a relocation, never a rebuild, and never before the coordinator confirms the user's go-ahead — or, for an unattended Watch Mode bootstrap, before it confirms the event passed its opt-in and authorization gates.
@@ -22,6 +31,12 @@ Adopt an existing single squad into a federation as its first sub-squad, per *Pr
 4. **Move by copy → verify → delete-source, in that order, per file.** Write the destination, read it back and confirm it matches, and only then remove the source. Never remove, clear, or truncate anything at the source before its verified destination copy exists. Deleting first is the failure this ordering prevents: a relocation that clears the source and then cannot find the files has destroyed append-only logs no later step reconstructs. On any destination write failure, stop and return a failure note with the source intact.
 
    **Every destination path is written from the project root, including the parent directories the move creates.** `.copilot-tracking/squad/members/<name>/plans/` is the whole path, not a segment to append to wherever the last step happened to be working. A promotion that created its destinations from inside `.copilot-tracking/` left `.copilot-tracking/.copilot-tracking/squad/members/<name>/` behind it — empty, so nothing was lost and nothing reported a failure, and the tree now carries a second tracking directory that every later path resolution has to step around. The promotion creates nothing outside `.copilot-tracking/squad/`.
+
+   Connector bindings move with their owning roster, never to federation-global
+   authority. Preserve binding/member ids and manifest paths; do not rewrite a
+   manifest's mailbox as though it were a deliverable root. Before promotion,
+   complete or explicitly abandon pending exchanges and issue fresh tasks with
+   rebased roots afterwards; never retarget an existing bound request silently.
 5. **Rebase the relocated roster's deliverable roots.** In the moved `members/<name>/team.md`, prefix every `Deliverable Root` cell beginning with `.copilot-tracking/` with `.copilot-tracking/squad/members/<name>/`, leaving `docs/` and `outputs/` unchanged. Rebase whatever the cell holds, including a consumer-edited path, so a customized root survives pointing at its own relocated directory. This column is the only field the promotion rewrites. Re-cast, rename, add, or drop nothing else. **The `Deliverable:` paths already recorded in `history/` are not rewritten** — those files are append-only and move byte-for-byte, so every pre-promotion entry keeps naming the pre-promotion location. Step 8 is what makes those paths resolvable again; editing the entries instead breaks a stronger rule than the one it repairs.
 6. **Seed the federation-root meta layer**: `federation.md`, `meta-routing.md`, federation `state.json`, `history/<name>.md`, and a root `consumption-rates.md` copied verbatim from [consumption-rates-template.md](consumption-rates-template.md). The root rate file is used only by untargeted federation autopilot.
 7. **Carry the consumption ledger across the boundary.** The promotion is a recorded turn, not a gap. Run *Consumption Accounting* scoped to `members/<name>/`: append the promotion's `orchestration` block to that root's `history/Squad Scribe.md`, rewrite its `consumption.md` from every block in the relocated `history/`, and overwrite the sub-squad `state.json` totals. Then seed the federation `state.json` totals from that ledger's total row, so federation-level cost does not read zero over a populated ledger.

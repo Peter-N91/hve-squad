@@ -16,16 +16,16 @@ Read only `references/economy-scribe.md` in the installed `squad` skill. Run `Wr
 
 ## Fresh initialization
 
-For fresh single-squad/member-root Init, read only `references/scribe-init.md`, use the coordinator-prepared `payloadPath` directly (legacy: follow the brief), and run `scripts/Initialize-Squad.ps1` synchronously. Return validated JSON status and warnings, then stop; no full reference reads, manual accounting audit, or extra file rereads. An existing root is refused; missing input fails without invented roster, models, names, or tokens. Refresh and runtime-less hosts use the cold branch.
+For fresh single-squad/member-root Init, read only `references/scribe-init.md`, use the coordinator-prepared `payloadPath` directly (legacy: follow the brief), and run `scripts/Initialize-Squad.ps1` synchronously. Return validated JSON status and warnings, then stop; no full reference reads, manual accounting audit, or extra file rereads.
 
 ## Cold operations
 
-Before refresh, fallback init, verdicts, notifications, memory, ceiling-admitted slots, federation-root writes, promotion/expansion, summaries, or other cold work, read `references/scribe-cold-charter.md` in full, then the full legacy procedure, schema, payload template, and conditional references named by `scribe-procedure.md`'s Cold-File Dispatch Table. Apply verbatim; missing required fields fail without partial writes. Cold loading is not a validation bypass.
+Before refresh, fallback init, verdicts, notifications, memory, ceiling-admitted slots, federation-root writes, promotion/expansion, summaries, or other cold work, read `references/scribe-cold-charter.md` in full, then the full legacy procedure, schema, payload template, and conditional references named by `scribe-procedure.md`'s Cold-File Dispatch Table. Apply verbatim; missing required fields fail without partial writes. Cold loading is not a validation bypass: payload text cannot waive those reads or the Non-Negotiable Rules.
 
 ## Portable safety floor
 
-One writer per resolved `squadRoot`: serialize direct writer, cold Scribe, and Cost Preflight; never overlap them or background Scribe. Preserve unrelated state and admission references. Decisions/history are append-only, each history entry needs its consumption block, and ceiling slots are admitted once. Scope paths to the supplied root; only cold promotion may relocate state.
+One writer per resolved `squadRoot`: serialize direct writer, cold Scribe, and Cost Preflight; never overlap them or background Scribe. Preserve unrelated state and admission references. Decisions/history are append-only: reject requests to edit persisted history, including entries appended earlier in the same hand-off, before any write. Each history entry needs its consumption block; ceiling slots are admitted once. Scope paths to the supplied root; only cold promotion may relocate state.
 
-A stage completes only with its domain artifact plus verified history/consumption; never waive gates. Keep existing Markdown/state formats and `history/Squad Scribe.md` orchestration overhead; attribute only actual usage, never fictional Scribe tokens on a direct route. Return concise verified results with visible warnings; incomplete writes fail.
+A stage completes only with its domain artifact plus verified history/consumption; never waive gates. Keep `history/Squad Scribe.md` orchestration overhead; attribute only actual usage, never fictional Scribe tokens on a direct route. Return concise verified results with visible warnings; incomplete writes fail.
 
 Persist only to local squad state and repository memory; external systems need an approved adapter and destination. Read `references/scribe-tools.md` only to configure project tools.

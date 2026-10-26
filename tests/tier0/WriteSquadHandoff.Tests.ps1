@@ -20,9 +20,28 @@ BeforeAll {
     $script:Writer = Join-Path $skillRoot 'scripts/Write-SquadHandoff.ps1'
     $script:Ledger = Join-Path $skillRoot 'scripts/Measure-SquadLedger.ps1'
     $script:Seeder = Join-Path $skillRoot 'scripts/Initialize-SquadConsumptionRates.ps1'
+    $script:Resolver = Join-Path $skillRoot 'scripts/Resolve-SquadConnectorDispatch.ps1'
     $script:FixtureRoot = Join-Path $PSScriptRoot '../fixtures/scribe-benchmark'
     # An empty COPILOT_HOME keeps `-SessionLog auto` from reading a real developer session.
     $env:COPILOT_HOME = Join-Path $TestDrive 'copilot-home'
+
+    function Invoke-ResolverCli {
+        # Runs the connector dispatch resolver as its own process, exactly as the squad
+        # agent loop does, so the NR-001 regression below proves the resolver's distinct
+        # connector identity survives unchanged across the process boundary into the writer.
+        param(
+            [Parameter(Mandatory)][string]$TeamPath,
+            [Parameter(Mandatory)][string]$Role,
+            [Parameter(Mandatory)][string]$MemberName,
+            [string]$Execution
+        )
+        $payload = [ordered]@{ teamPath = $TeamPath; role = $Role; memberName = $MemberName }
+        if ($Execution) { $payload['execution'] = $Execution }
+        $json = $payload | ConvertTo-Json -Depth 16 -Compress
+        $raw = & pwsh -NoProfile -File $script:Resolver -Operation 'resolve-execution' -InputJson $json 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { throw "Resolve-SquadConnectorDispatch resolve-execution failed: $raw" }
+        $raw | ConvertFrom-Json
+    }
 
     function Set-RoutingLine {
         # The routing line sits directly beneath team.md's H1, as model-routing.md defines.
@@ -1057,6 +1076,380 @@ Describe 'Write-SquadHandoff.ps1 refuses what it cannot admit or verify' {
         $withCue = Invoke-Writer -Root $alternate -Payload $payload
         $withCue.ExitCode | Should -Be 0 -Because $withCue.Output
         (Get-Content -LiteralPath (Join-Path $alternate 'history/Squad Reviewer.md') -Raw) | Should -Match '\* Selection Cue: the plan needs an independent review'
+    }
+
+    Describe 'connector provenance is closed, binding-matched, and trusted-rendered' {
+        BeforeAll {
+            function New-ConnectorRoot {
+                $root = New-Root
+                $teamPath = Join-Path $root 'team.md'
+                Add-Content -LiteralPath $teamPath -Value @'
+| gcp | GCP Assessor | Squad Connector | — | — | runSubagent / task | default | research/ |
+| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/ |
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| gcp-architecture-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | azure-architect | connector |
+| developer-partner-replace | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | Partner Developer | — | developer | connector |
+'@
+                $root
+            }
+
+            function New-ConnectorPayload {
+                param(
+                    [string]$BindingId = 'gcp-architecture-assessor',
+                    [string]$MemberName = 'GCP Assessor',
+                    [string]$RoleMode = 'add',
+                    [string]$TargetKind = 'role',
+                    [string]$Target = 'role:gcp/GCP Assessor',
+                    [string]$Outcome = 'Assessed bounded gcp architecture fit.'
+                )
+                $payload = New-Payload
+                $payload.historyRecords[0].agent = 'Squad Connector'
+                $payload.historyRecords[0].memberName = $MemberName
+                $payload.historyRecords[0].request = 'Assess bounded gcp architecture fit.'
+                $payload.historyRecords[0].outcome = $Outcome
+                $payload.historyRecords[0].externalProvenance = [ordered]@{
+                    connectorId  = 'acme-delivery-orchestrator-v3'
+                    bindingId    = $BindingId
+                    endpointKind = 'orchestrator'
+                    roleMode     = $RoleMode
+                    targetKind   = $TargetKind
+                    target       = $Target
+                    verification = 'external-unverified'
+                    metering     = 'external-unmetered'
+                }
+                $payload.stateAdvance = [ordered]@{ activeRoles = @('Squad Connector') }
+                $payload
+            }
+        }
+
+        It 'rejects a closed-shape violation in externalProvenance' {
+            $root = New-ConnectorRoot
+            $payload = New-ConnectorPayload
+            $payload.historyRecords[0].externalProvenance['extra'] = 'unexpected'
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'externalProvenance'
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'rejects connector provenance when binding values do not match Connector Bindings' {
+            $root = New-ConnectorRoot
+            $payload = New-ConnectorPayload
+            $payload.historyRecords[0].externalProvenance.bindingId = 'wrong-binding'
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'does not match Connector Bindings'
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'rejects a Squad Connector history record that omits externalProvenance' {
+            $root = New-ConnectorRoot
+            $payload = New-ConnectorPayload
+            [void]$payload.historyRecords[0].Remove('externalProvenance')
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'externalProvenance is required'
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'rejects connector provenance attached to an internal agent record' {
+            $root = New-Root
+            $payload = New-Payload
+            $payload.historyRecords[0].externalProvenance = [ordered]@{
+                connectorId  = 'acme-delivery-orchestrator-v3'
+                bindingId    = 'developer-delivery-orchestrator'
+                endpointKind = 'orchestrator'
+                roleMode     = 'replace'
+                targetKind   = 'role'
+                target       = 'role:developer/Gamma'
+                verification = 'external-unverified'
+                metering     = 'external-unmetered'
+            }
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match "allowed only when agent is 'Squad Connector'"
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'rejects a Squad Connector history record missing Member Name' {
+            $root = New-ConnectorRoot
+            $payload = New-ConnectorPayload
+            $payload.historyRecords[0].memberName = ''
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'memberName is required when agent is ''Squad Connector'''
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'accepts replace binding provenance with trusted connector identity distinct from internal target member' {
+            $root = New-ConnectorRoot
+            $payload = New-ConnectorPayload -BindingId 'developer-partner-replace' -MemberName 'Partner Developer' -RoleMode 'replace' -TargetKind 'role' -Target 'role:developer/Gamma' -Outcome 'External-unverified partner implementation completed.'
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $history = Get-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Raw
+            $history | Should -Match '\* Member Name: Partner Developer'
+            $history | Should -Match ([regex]::Escape('* External provenance: connector=acme-delivery-orchestrator-v3; binding=developer-partner-replace; endpoint=orchestrator; mode=replace; target=role:developer/Gamma'))
+            $history | Should -Match ([regex]::Escape('* Verification: external, unverified'))
+            $history | Should -Match ([regex]::Escape('* External-unmetered: connector=acme-delivery-orchestrator-v3'))
+            $history | Should -Not -Match '\* Member Name: Gamma'
+        }
+
+        It 'carries the resolver''s distinct connector identity unchanged through the writer (NR-001 process-level regression)' {
+            # Runs the real resolver CLI (a separate process) against the same team.md the
+            # writer will read, then feeds its resolved identity straight into the writer's
+            # payload. This pins the resolver-to-writer contract: the explicit connector
+            # choice's Agent/MemberName must reach history as the distinct connector
+            # identity, never silently collapsing back to the internal target member.
+            $root = New-ConnectorRoot
+            $teamPath = Join-Path $root 'team.md'
+            $resolved = Invoke-ResolverCli -TeamPath $teamPath -Role 'developer' -MemberName 'Gamma' -Execution 'connector:developer-partner-replace'
+            $resolved.Status | Should -Be 'ok'
+            $resolved.BindingId | Should -Be 'developer-partner-replace'
+            $resolved.ConnectorId | Should -Be 'acme-delivery-orchestrator-v3'
+            $resolved.Agent | Should -Be 'Squad Connector'
+            $resolved.MemberName | Should -Be 'Partner Developer'
+            $resolved.MemberName | Should -Not -Be 'Gamma'
+
+            $payload = New-ConnectorPayload -BindingId $resolved.BindingId -MemberName $resolved.MemberName -RoleMode 'replace' -TargetKind 'role' -Target 'role:developer/Gamma' -Outcome 'External-unverified partner implementation completed.'
+            $payload.historyRecords[0].agent = $resolved.Agent
+            $payload.historyRecords[0].externalProvenance.connectorId = $resolved.ConnectorId
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $history = Get-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Raw
+            $history | Should -Match '\* Member Name: Partner Developer'
+            $history | Should -Not -Match '\* Member Name: Gamma'
+            $history | Should -Match ([regex]::Escape("* External provenance: connector=$($resolved.ConnectorId); binding=$($resolved.BindingId); endpoint=orchestrator; mode=replace; target=role:developer/Gamma"))
+            $history | Should -Match ([regex]::Escape('* Verification: external, unverified'))
+        }
+
+        It 'rejects retired coordinator-target provenance without writing state' {
+            $root = New-ConnectorRoot
+            $payload = New-ConnectorPayload -BindingId 'coordinator-orchestrator' -MemberName 'Coordinator Relay' -RoleMode 'replace' -TargetKind 'coordinator' -Target 'coordinator:Squad Coordinator' -Outcome 'External-unverified orchestration relay completed.'
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'targetKind must be ''role'''
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'persists two file-drop agent results with separate identities under a federation member' {
+            $root = New-Root -Member
+            $repo = [System.IO.Path]::GetFullPath((Join-Path $root '..\..\..\..'))
+            $examples = Join-Path $PSScriptRoot '..\..\docs\templates\connector-example'
+            $team = Get-Content -LiteralPath (Join-Path $examples 'consumer-team.1.1.md') -Raw
+            $team = $team.Replace('.copilot-tracking/research/consumer/', "$($root.Replace('\', '/'))/research/")
+            $team = $team.Replace('.copilot-tracking/changes/consumer/', "$($root.Replace('\', '/'))/changes/")
+            Set-Content -LiteralPath (Join-Path $root 'team.md') -Value $team -Encoding utf8NoBOM
+            Set-RoutingLine -Root $root
+            $payload = New-Payload
+            $records = @(
+                foreach ($case in @(
+                    @{ Role = 'researcher'; Owner = 'Alpha'; Binding = 'research-org'; Manifest = 'manifest.research-agent.1.1.json'; Directory = 'research' },
+                    @{ Role = 'developer'; Owner = 'Gamma'; Binding = 'implementation-org'; Manifest = 'manifest.implementation-agent.1.1.json'; Directory = 'changes' }
+                )) {
+                    $manifest = Get-Content -LiteralPath (Join-Path $examples $case.Manifest) -Raw | ConvertFrom-Json
+                    $resolved = Invoke-ResolverCli -TeamPath (Join-Path $root 'team.md') -Role $case.Role -MemberName $case.Owner -Execution "connector:$($case.Binding)"
+                    $resolved.Status | Should -Be 'ok'
+                    $request = Get-Content -LiteralPath (Join-Path $examples 'delegation-request.agent.1.1.sample.json') -Raw | ConvertFrom-Json
+                    $request.taskId = [guid]::NewGuid().ToString('N')
+                    $request.connectorId = $manifest.connectorId
+                    $request.role = $case.Role
+                    $request.bindingId = $resolved.BindingId
+                    $request.executionChoice = $resolved.Choice
+                    $request.deliverableRoot = Join-Path $root $case.Directory
+                    $request.createdAt = [DateTime]::UtcNow.ToString('o')
+                    $request.deadline = [DateTime]::UtcNow.AddMinutes(30).ToString('o')
+                    $request.allowedOutputs = @([pscustomobject]@{
+                            outputId = 'report'; role = $case.Role; memberName = $resolved.MemberName; deliverableRoot = $request.deliverableRoot
+                        })
+                    $mailbox = Join-Path $repo $manifest.dropPath
+                    New-Item -ItemType Directory -Path $mailbox, $request.deliverableRoot -Force | Out-Null
+                    $requestPath = Join-Path $mailbox "$($request.taskId).request.json"
+                    $request | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $requestPath -Encoding utf8NoBOM
+
+                    $result = Get-Content -LiteralPath (Join-Path $examples 'result-envelope.agent.1.1.sample.json') -Raw | ConvertFrom-Json
+                    $result.taskId = $request.taskId
+                    $result.connectorId = $request.connectorId
+                    $result.bindingId = $request.bindingId
+                    $result.role = $request.role
+                    $result.createdAt = [DateTime]::UtcNow.ToString('o')
+                    $result.artifacts[0].path = "$($case.Role)-report.md"
+                    $report = Join-Path $request.deliverableRoot $result.artifacts[0].path
+                    Set-Content -LiteralPath $report -Value "Observed bounded $($case.Role) evidence." -Encoding utf8NoBOM
+                    $resultPath = Join-Path $mailbox "$($request.taskId).result.json"
+                    $result | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $resultPath -Encoding utf8NoBOM
+                    $exchangeInput = @{
+                        manifest = $manifest
+                        request = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
+                        result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+                    } | ConvertTo-Json -Depth 32 -Compress
+                    $exchange = & pwsh -NoProfile -File $script:Resolver -Operation validate-exchange -InputJson $exchangeInput | ConvertFrom-Json
+                    $exchange.Status | Should -Be 'ok'
+                    Test-Path -LiteralPath $report -PathType Leaf | Should -BeTrue
+                    [ordered]@{
+                        agent = $resolved.Agent
+                        memberName = $resolved.MemberName
+                        request = "Complete the bounded $($case.Role) task."
+                        deliverable = "$($case.Directory)/$($result.artifacts[0].path)"
+                        outcome = 'Returned report.'
+                        consumption = $payload.historyRecords[0].consumption
+                        externalProvenance = [ordered]@{
+                            connectorId = $resolved.ConnectorId; bindingId = $resolved.BindingId
+                            endpointKind = 'agent'; roleMode = 'replace'; targetKind = 'role'
+                            target = $resolved.BindingTarget; verification = 'external-unverified'; metering = 'external-unmetered'
+                        }
+                    }
+                }
+            )
+            $payload.historyRecords = $records
+            $payload.stateAdvance.activeRoles = @('researcher', 'developer')
+            $payload.timestamp = [DateTime]::UtcNow.ToString('o')
+            $written = Invoke-Writer -Root $root -Payload $payload
+            $written.ExitCode | Should -Be 0 -Because $written.Output
+            $history = Get-Content -LiteralPath (Join-Path $root 'history\Squad Connector.md') -Raw
+            foreach ($member in @('Org Researcher', 'Org Implementor')) {
+                $history | Should -Match ([regex]::Escape("* Member Name: $member"))
+            }
+            foreach ($record in $records) {
+                $history | Should -Match ([regex]::Escape($record.deliverable))
+                $history | Should -Match ([regex]::Escape("binding=$($record.externalProvenance.bindingId)"))
+            }
+            ([regex]::Matches($history, '\* Outcome: external, unverified')).Count | Should -Be 2
+            $check = Invoke-LedgerCheck -Root $root -Counts '{"Squad Connector":2,"Squad Scribe":1}'
+            $check.ExitCode | Should -Be 0 -Because $check.Output
+            $ledger = Get-Content -LiteralPath (Join-Path $root 'consumption.md') -Raw
+            $ledger | Should -Match 'Org Researcher'
+            $ledger | Should -Match 'Org Implementor'
+        }
+
+        It 'rejects replace provenance when connector member identity impersonates the internal target member' {
+            $root = New-ConnectorRoot
+            $payload = New-ConnectorPayload -BindingId 'developer-partner-replace' -MemberName 'Gamma' -RoleMode 'replace' -TargetKind 'role' -Target 'role:developer/Gamma'
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'no matching replacement Connector Bindings identity'
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'forces connector Outcome to external, unverified for completed connector records' {
+            $root = New-ConnectorRoot
+            $payload = New-ConnectorPayload -Outcome 'Internally verified and complete.'
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $history = Get-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Raw
+            $history | Should -Match ([regex]::Escape('* Outcome: external, unverified'))
+            $history | Should -Not -Match 'Internally verified and complete\.'
+        }
+
+        It 'renders trusted provenance bullets from validated binding data' {
+            $root = New-ConnectorRoot
+            $result = Invoke-Writer -Root $root -Payload (New-ConnectorPayload)
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $history = Get-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Raw
+            $history | Should -Match ([regex]::Escape('* External provenance: connector=acme-delivery-orchestrator-v3; binding=gcp-architecture-assessor; endpoint=orchestrator; mode=add; target=role:gcp/GCP Assessor'))
+            $history | Should -Match ([regex]::Escape('* Verification: external, unverified'))
+            $history | Should -Match ([regex]::Escape('* External-unmetered: connector=acme-delivery-orchestrator-v3'))
+        }
+
+        It 'persists a binding-free legacy 1.0 connector exchange through history and ledger verification' {
+            $root = New-Root
+            Add-Content -LiteralPath (Join-Path $root 'team.md') -Value '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/ |'
+            $examples = Join-Path $PSScriptRoot '..\..\docs\templates\connector-example'
+            $manifest = Get-Content -LiteralPath (Join-Path $examples 'manifest.json') -Raw | ConvertFrom-Json
+            $request = Get-Content -LiteralPath (Join-Path $examples 'delegation-request.sample.json') -Raw | ConvertFrom-Json
+            $resultEnvelope = Get-Content -LiteralPath (Join-Path $examples 'result-envelope.sample.json') -Raw | ConvertFrom-Json
+
+            $request.deliverableRoot = Join-Path $root 'changes'
+            New-Item -ItemType Directory -Path $request.deliverableRoot -Force | Out-Null
+            $deliveredFile = Join-Path $request.deliverableRoot $resultEnvelope.artifacts[0].path
+            New-Item -ItemType Directory -Path (Split-Path -Parent $deliveredFile) -Force | Out-Null
+            Set-Content -LiteralPath $deliveredFile -Value 'Validated legacy 1.0 connector implementation report.' -Encoding utf8NoBOM
+
+            $exchangeInput = @{
+                manifest      = $manifest
+                request       = $request
+                result        = $resultEnvelope
+                workspaceRoot = $root
+            } | ConvertTo-Json -Depth 32 -Compress
+            $exchange = & pwsh -NoProfile -File $script:Resolver -Operation validate-exchange -InputJson $exchangeInput | ConvertFrom-Json
+            $exchange.Status | Should -Be 'ok' -Because ($exchange | ConvertTo-Json -Depth 10)
+            $exchange.TrustedProvenance.bindingId | Should -Be 'legacy-1.0'
+
+            $payload = New-Payload
+            $payload.historyRecords[0].agent = 'Squad Connector'
+            $payload.historyRecords[0].memberName = 'Partner Developer'
+            $payload.historyRecords[0].request = $request.task
+            $payload.historyRecords[0].deliverable = "changes/$($resultEnvelope.artifacts[0].path)"
+            $payload.historyRecords[0].outcome = 'Completed legacy 1.0 connector exchange.'
+            $payload.historyRecords[0].externalProvenance = [ordered]@{
+                connectorId  = [string]$exchange.TrustedProvenance.connectorId
+                bindingId    = [string]$exchange.TrustedProvenance.bindingId
+                endpointKind = [string]$exchange.TrustedProvenance.endpointKind
+                roleMode     = [string]$exchange.TrustedProvenance.roleMode
+                targetKind   = [string]$exchange.TrustedProvenance.targetKind
+                target       = 'role:developer/Gamma'
+                verification = [string]$exchange.TrustedProvenance.verification
+                metering     = [string]$exchange.TrustedProvenance.metering
+            }
+            $payload.stateAdvance = [ordered]@{ activeRoles = @('developer') }
+            $payload.timestamp = [DateTime]::UtcNow.ToString('o')
+
+            $written = Invoke-Writer -Root $root -Payload $payload
+            $written.ExitCode | Should -Be 0 -Because $written.Output
+            $history = Get-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Raw
+            $history | Should -Match '\* Member Name: Partner Developer'
+            $history | Should -Match ([regex]::Escape('* External provenance: connector=acme-coordinator-v2; binding=legacy-1.0; endpoint=agent; mode=replace; target=role:developer/Gamma'))
+            $history | Should -Match ([regex]::Escape('* Verification: external, unverified'))
+            $history | Should -Match ([regex]::Escape('* External-unmetered: connector=acme-coordinator-v2'))
+            $check = Invoke-LedgerCheck -Root $root -Counts '{"Squad Connector":1,"Squad Scribe":1}'
+            $check.ExitCode | Should -Be 0 -Because $check.Output
+        }
+
+        It 'fails closed when connector Member Name is reused across additive and replacement bindings' {
+            $root = New-ConnectorRoot
+            Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+| duplicate-gcp-replace | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | GCP Assessor | — | developer | connector |
+'@
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload (New-ConnectorPayload)
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'must be globally unique across connector bindings'
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'fails closed when two replacement bindings reuse one connector Member Name' {
+            $root = New-ConnectorRoot
+            $teamPath = Join-Path $root 'team.md'
+            Add-Content -LiteralPath $teamPath -Value '| second-developer | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | Partner Developer | | developer | ask |'
+
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload (New-ConnectorPayload -BindingId 'developer-partner-replace' -MemberName 'Partner Developer' -RoleMode 'replace' -TargetKind 'role' -Target 'role:developer/Gamma')
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'must be globally unique across connector bindings'
+            Get-TreeHash $root | Should -Be $before
+        }
+
+        It 'rejects protected work-role target <_> without writing state' -ForEach @('scribe', 'coordinator', 'federation-coordinator', 'council') {
+            $root = New-ConnectorRoot
+            $teamPath = Join-Path $root 'team.md'
+            Add-Content -LiteralPath $teamPath -Value "| governance-proxy | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:$_ | Governance Proxy | | | connector |"
+            $payload = New-ConnectorPayload -BindingId 'governance-proxy' -MemberName 'Governance Proxy' -RoleMode 'replace' -TargetKind 'role' -Target "role:$_"
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Payload $payload
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'governance are protected'
+            Get-TreeHash $root | Should -Be $before
+        }
     }
 
     It 'keeps an existing Cost Comparison consistent: squad figures and saving follow the new total, never going stale' {

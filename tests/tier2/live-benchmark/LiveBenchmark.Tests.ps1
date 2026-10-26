@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
-# Offline checks for the live benchmark harness. AI cost: none; Python and pytest
+# Offline checks for the live benchmark harness. No model is called; Python and pytest
 # are required because the scorer and the task validation run real test suites.
 
 #Requires -Version 7.4

@@ -10,7 +10,16 @@
   }
   const messages = locales[language];
   const hosts = ['cli', 'app', 'vscode'];
-  const commands = ['/squad', '/squad-federation', '/squad-document', '/squad-governance-report', '/squad-learn'];
+  const commands = [
+    '/squad',
+    '/squad-coach',
+    '/squad-connector-builder',
+    '/squad-external-agent-builder',
+    '/squad-federation',
+    '/squad-document',
+    '/squad-governance-report',
+    '/squad-learn'
+  ];
   const requireMessage = (value, key) => {
     if (typeof value !== 'string' || !value.trim()) {
       throw new Error(`Host guides locale "${language}" is missing "${key}".`);
@@ -44,7 +53,7 @@
       console.warn('Could not save the host preference; it applies only to this page.', error);
     }
   };
-  const commandPattern = /^[ \t]*(\/squad(?:-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
+  const commandPattern = /^[ \t]*(\/squad(?:-coach|-connector-builder|-external-agent-builder|-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
   const parseExample = text => {
     const requests = [];
     let current;

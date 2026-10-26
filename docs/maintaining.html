@@ -21,6 +21,7 @@
         <a href="usage.html">Usage</a>
         <a href="demo.html">Demo</a>
         <a href="ecosystem.html">Ecosystem</a>
+        <a href="connector.html">Connector</a>
         <a href="maintaining.html" class="active">Maintaining</a>
         <a href="troubleshooting.html">Troubleshooting</a>
         <a href="contributing.html">Contributing</a>
@@ -72,12 +73,15 @@
 
       <h2>Scripts</h2>
       <h3>Documentation site</h3>
-      <p>The site is static HTML with shared CSS and progressive JavaScript, published directly from <code>docs/</code>. Open <code>docs/index.html</code> locally; no frontend build or server is required. English pages live in <code>docs/</code> and their French counterparts in <code>docs/fr/</code>, using the same filenames and shared anchor IDs.</p>
-      <p>Update both languages in the same change. Preserve command names and parameters, and label links to English-only external guides, historical reports and videos. Shared presentation and controls live in <code>docs/assets/style.css</code>, <code>theme.js</code> and <code>site.js</code>. Host tabs belong to individual command examples and share the selected environment across examples and pages; language switching keeps the current page.</p>
+      <p>Eleventy builds the published site from the English sources in <code>docs/</code> and French sources in <code>docs/fr/</code>, using matching filenames and shared anchor IDs. Generated pages and search indexes go into <code>_site/</code>; opening an original source page does not show the generated release notices or versioned installation commands.</p>
+      <p>Update both languages in the same change. Preserve command names and parameters, and label links to English-only external guides, historical reports and videos. The published shell, translations and appearance live in <code>site/pages.njk</code>, <code>site/locales.json</code> and <code>site/assets/site.css</code>. Host tabs belong to individual command examples and share the selected environment across examples and pages; language switching keeps the current page.</p>
+      <p>Pre-release badges are derived automatically from Git history. <code>scripts/docs-release.mjs</code> resolves each tracked pending fragment to the commit that added it, finds English and French hero or main-content lines last changed by those commits, and places one badge on the nearest safe section heading. Documentation-only pull requests with <code>skip-changelog</code> have no fragment, so they are not presented as package-only previews. The Pages checkout must retain full history (<code>fetch-depth: 0</code>). The badge always uses the rolling version resolved from <code>apm.yml</code> and the highest pending bump, and disappears as soon as Release Prep consumes the fragments. Keep <code>data-release-change="fragment-name"</code> only as an explicit fallback for an unusual section that Git history cannot associate correctly; never place it inside a link or copyable code block.</p>
       <p>Author runnable Squad examples in <code>pre &gt; code</code> blocks using the canonical slash-command syntax. The shared renderer uses that source to create prefix-free VS Code, CLI, and App requests with the matching agent, preserving arguments and multiline text. Keep shell commands and GitHub comment triggers separate; mark explicit host-comparison references with <code>data-host-reference</code>. Without JavaScript, the original canonical examples remain readable.</p>
-      <pre><code>npm --prefix tests/docs ci --ignore-scripts
-    npm --prefix tests/docs test</code></pre>
-      <p>The isolated test dependency is not shipped to GitHub Pages. Tests check language pairing, local links and assets, keyboard tabs, saved preferences and no-script setup content. The Pages workflow runs them on documentation pull requests and before deployment. Also check desktop and mobile layouts in a browser after visual changes.</p>
+      <pre><code>npm ci
+npm run docs:test
+npm run docs:build
+npm run docs:dev</code></pre>
+      <p>The build preserves source prose and examples, inserts current release information, and checks translations, links, assets and search. Tests also cover keyboard tabs, saved preferences, no-script content, automatic feature badges and release promotion. The Pages workflow rebuilds on pending-fragment changes as well as documentation changes, so a renamed preview tag cannot leave the version notice behind and an official release removes every consumed badge. Check desktop and mobile layouts after visual changes.</p>
       <h3>Package scripts</h3>
       <p>Defined in <code>apm.yml</code>:</p>
       <ul>
@@ -586,7 +590,7 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
       <p>
         <strong>Between releases, <code>main</code> is installable.</strong> Every merge triggers
         <strong>Rolling Preview</strong>, which renders the pending fragments into a single GitHub
-        pre-release tagged with the version they resolve to (<code>v0.15.0-pre</code>) and force-moves
+        pre-release tagged with the version they resolve to (see the <a href="getting-started.html#testing-the-pre-release">current version and install command</a>) and force-moves
         that tag to the new head. It only reads: no fragment is consumed, no version is bumped, and
         <code>CHANGELOG.md</code> is untouched. Exactly one pre-release is open at a time, so when a
         <code>minor</code> fragment lands the old one is deleted and the new name takes over.
@@ -656,9 +660,9 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0    # force an exact ver
         Each incident was detected and corrected with append-only history entries or by re-dispatching the owning role. The original bytes for incidents 3 and 5 could not be recovered. The corrective controls are now integrated into the Scribe pipelining verification contract: <code>Measure-SquadLedger.ps1 -Check -ExpectedHistoryCounts -BaselinePath</code> (not bare <code>-Check</code>), content-prefix preservation and checking via baseline snapshots, and role re-dispatch on failed verification.
       </p>
       <div class="pager">
-        <a class="prev" href="ecosystem.html">
+        <a class="prev" href="connector.html">
           <div class="dir">← Back</div>
-          <div class="ttl">Ecosystem</div>
+          <div class="ttl">Connector</div>
         </a>
         <a class="next" href="troubleshooting.html">
           <div class="dir">Next →</div>

@@ -1,0 +1,12 @@
+{
+  "connectorId": "",
+  "schemaVersion": "1.0",
+  "transport": "file",
+  "capabilities": [],
+  "roles": [],
+  "dropPath": "",
+  "deadlineMinutesDefault": 0,
+  "retryCapDefault": 0,
+  "contact": "",
+  "version": ""
+}

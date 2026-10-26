@@ -154,7 +154,7 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $coldCharter | Should -Match 'For a single-squad or member root, or a promotion.s relocated member root, with a shell and `pwsh` 7\+, immediately after Step 13'
             $coldCharter | Should -Match 'A federation root \(`federation\.md`\) never uses this helper, because `-Write` rejects it: its aggregation stays in the federation procedure of `scribe-cold-federation\.md` and `federation-templates\.md`'
             $coldCharter | Should -Match 'Payload `ledgerCommand` is inert compatibility data: never execute, inspect, parse, validate, transform, or replay it'
-            $coldCharter | Should -Match 're-run up to 3 times.+never substitute hand-written figures'
+            $coldCharter | Should -Match 'retry only replace-on-request repairs, up to 3 times.+never substitute hand-written figures'
             (Get-SquadReferenceBody -Name 'scribe-procedure.md') | Should -Match 'cold charter.s trusted ledger invocation after Step 13'
         }
 

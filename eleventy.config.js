@@ -6,7 +6,10 @@ export default function (config) {
   validatePublicInputs();
   config.addWatchTarget("docs");
   config.addWatchTarget("scripts/docs-content.mjs");
+  config.addWatchTarget("scripts/docs-release.mjs");
   config.addWatchTarget("scripts/diagram-locales.mjs");
+  config.addWatchTarget("apm.yml");
+  config.addWatchTarget(".changes/unreleased");
   config.addPassthroughCopy({ "site/assets": "assets" });
   config.addPassthroughCopy({ "docs/assets/fonts": "fonts" });
   config.addPassthroughCopy({ "docs/assets/logo.svg": "assets/logo.svg" });

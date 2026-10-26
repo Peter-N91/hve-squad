@@ -42,7 +42,7 @@ A model is **eligible** for automatic ranking only when it is in the intersectio
 2. **Host config/picker** — when no enum is advertised (for example, VS Code's `runSubagent`), the effective host-available set is whatever the operator's picker/config allows; the routing procedure re-ranks reactively on rejection.
 3. **Declared catalog** — this file, used as the ranking universe once the eligible set from (1) or (2) is known, or as the static fallback when the catalog itself is stale or unparsable (see Staleness above).
 
-Ranked selection reads the *Catalog: Assignment Fit* table below, never the capability class alone: the capability class decides only which Model Tier floors a model can serve, while the per-class fit score decides which model suits the work.
+Ranked selection uses the comparable task-evidence policy in `model-scoring.md`; the *Catalog: Assignment Fit* table below is its explicit declared-fit fallback. Capability class decides which minimum Model Tier floors a model can serve, never a maximum spending or capability ceiling.
 
 Two labels describe a mismatch between what the host advertises and what this catalog declares, and neither is ever silently dropped:
 
@@ -81,6 +81,7 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 | `gpt-6-luna` | advertised | GPT-6 Luna | GA | fast-lightweight | undocumented | undocumented | intake, bookkeeping | "Fast help with simple or repetitive tasks"; card "Coming soon" |
 | `gpt-6-sol` | advertised | GPT-6 Sol | GA | balanced | undocumented | undocumented | planning, implementation, review | "Interactive and agentic coding... all-round development tasks that benefit from careful, multistep validation"; card "Coming soon" |
 | `gpt-6.1-sol` | advertised | GPT-6.1 Sol | GA | frontier-reasoning | undocumented | undocumented | implementation, review, planning | "Complex coding tasks... advanced, efficient reasoning for complex coding tasks"; "Powerful" category on the pricing page; card "Coming soon" |
+| `hydrafusion-max` | constructed | HydraFusion Max | GA (documented, not advertised) | frontier-reasoning | undocumented | undocumented | research, planning, implementation, review, council, intake | Copilot cascade routing policy (`policy=max`); dynamically routes solver turns across GPT-6.1 Sol and GPT-6 Luna with incremental WebSocket prompt caching (~0.35x token footprint) |
 
 ### Anthropic
 
@@ -151,6 +152,7 @@ Every price below is transcribed verbatim from the "Models and pricing" page ret
 | `gpt-6-luna` | GPT-6 Luna | ≤272K / >272K | 0.10 | 0.01 | 0.125 | 0.50 | 0.20 | 0.02 | 0.25 | 0.75 |
 | `gpt-6-sol` | GPT-6 Sol | ≤272K / >272K | 2.00 | 0.20 | 2.50 | 10.00 | 4.00 | 0.40 | 5.00 | 15.00 |
 | `gpt-6.1-sol` | GPT-6.1 Sol | ≤272K / >272K | 2.00 | 0.10 | 2.50 | 10.00 | 4.00 | 0.20 | 5.00 | 15.00 |
+| `hydrafusion-max` | HydraFusion Max | ≤272K / >272K | 0.80 | 0.05 | 1.00 | 4.00 | 1.60 | 0.10 | 2.00 | 6.00 |
 
 ### Anthropic (Claude Haiku 5.5 has a documented long-context tier)
 
@@ -199,14 +201,14 @@ Gemini 3.6/3.7/3.8 Flash are priced at a promotional rate ($0.75 / $0.075 / – 
 
 ## Catalog: Assignment Fit
 
-This table is what ranked routing reads. Each row scores how well a model suits each of the seven assignment classes, so ranking matches a model to the work rather than to its price or its name:
+This table is Ranked's operational fallback when the pinned independent evidence cannot support a comparison. Its coarse editorial scores are not granular measured capability, calibrated uncertainty, or a validated Economy quality threshold:
 
 * `3` — best in class: the source pages name this model for exactly this kind of work.
 * `2` — capable: a sound choice for the class, but not what the sources lead with.
 * `1` — usable: acceptable for the class, but weaker at it than its cost suggests.
 * `0` — unsuitable: never ranked for the class.
 
-The scores are this catalog's editorial curation over the sources' task-area and "excels at" text, like the capability class, and are revisited on every re-verification. `3` is kept scarce on purpose: when several models score `3` the cheapest wins, so a generous `3` would hand every class to one low-cost model. `research` needs sustained reading and synthesis over large codebases; `planning` needs multi-step reasoning; `implementation` needs agentic coding; `review` needs careful verification; `council` needs cross-domain judgment; `intake` needs a reliable judgment on whether requirements are complete and testable, which is why the lightweight rows score `1` there; `bookkeeping` needs exact, schema-bound writes at the lowest cost.
+The scores are editorial curation over the sources' task-area and "excels at" text, revisited on re-verification. A fallback uses higher declared fit, then known Blended cost and deterministic tie-breaks, and labels the evidence limitation rather than claiming its winner is independently proven superior. Comparable benchmark capability is never reduced to these buckets. The Scribe's explicit pin remains authoritative for bookkeeping.
 
 `Family` and `Generation` resolve a tie between two generations of the same line (`claude-sonnet` `5.5` ranks ahead of `5` at equal fit and price). `Blended` is USD per 1M tokens of a representative agentic dispatch, derived from the pricing tables above as `0.20 × Input + 0.80 × Cached + 0.08 × Cache write + 0.02 × Output` (`n/a` counts as `0`); `model-routing.md` defines how it is used. Rows are grouped by family, newest generation first; that order is the final tie-break. Unevaluated and degraded-confidence ids carry no row, so they are never ranked.
 
@@ -248,6 +250,7 @@ The scores are this catalog's editorial curation over the sources' task-area and
 | `kimi-k3` | kimi | 3 | 1 | 1 | 2 | 1 | 0 | 1 | 0 | 1.140 |
 | `kimi-k2.7-code` | kimi-code | 2.7 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0.422 |
 | `mai-code-1.1-flash` | mai-code-flash | 1.1 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.080 |
+| `hydrafusion-max` | hydrafusion | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 0.360 |
 ## Advertised but Unevaluated
 
 This host's `task` dispatch tool advertises `model` values that this snapshot's three sources do not document at all. Each is `unevaluated`: excluded from automatic ranking, priced `unpriced` (never `0`), and reachable only as an explicit `routing=manual` pick.
@@ -270,6 +273,7 @@ These models are named by at least one of the three sources but are not in this 
 | `claude-fable-5.1` | Claude Fable 5.1 | Same gating as Claude Fable 5; not in this host's `model` enum at retrieval |
 | `kimi-k2.7-code` | Kimi K2.7 Code | Not in this host's `model` enum at retrieval; documented and priced normally |
 | `kimi-k3` | Kimi K3 | Not in this host's `model` enum at retrieval; source notes elevated-risk safeguards |
+| `hydrafusion-max` | HydraFusion Max | Host-level cascade routing policy (`selectedModel: hydrafusion-max`); not in this host's static `model` enum at retrieval |
 
 ## Named Only in the Comparison Guide (Degraded Confidence)
 

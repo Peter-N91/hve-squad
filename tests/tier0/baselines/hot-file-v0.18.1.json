@@ -47,6 +47,14 @@
     "squad-src/.github/skills/squad/references/consumption.md": {
       "bytes": 1506,
       "reason": "FinOps unit economics (#143) applies in every routing mode by design: the Unit economics paragraph tells the Scribe and the Cost Manager how Measure-SquadLedger counts accepted deliverables, first-pass yield, and rework. It is not an economy-mode change."
+    },
+    "squad-src/.github/skills/squad/references/model-routing.md": {
+      "bytes": 1086,
+      "reason": "Benchmark-backed ranking and provenance attribution (#166) apply to routing=ranked and manual suggestions across non-economy runs: the Ranking Algorithm and Identity Bullets sections document reading model-benchmarks.md first, ignoring self-reported scores, and falling back to model-catalog.md on missing or stale evidence."
+    },
+    "squad-src/.github/skills/squad/SKILL.md": {
+      "bytes": 210,
+      "reason": "The model-benchmarks.md reference row (#166) ships in the skill reference table for ranked and manual model routing across all modes."
     }
   }
 }

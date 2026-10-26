@@ -1,0 +1,14 @@
+{
+  "taskId": "task-2026-10-11-0001",
+  "connectorId": "acme-coordinator-v2",
+  "role": "developer",
+  "status": "completed",
+  "artifacts": [
+    {
+      "path": "2026-10-11-invoice-total-negative-amount-fix.md",
+      "type": "md"
+    }
+  ],
+  "narrative": "Added a guard clause rejecting a negative invoice amount before the total is computed, and recorded the change note at the Deliverable Root. External-unmetered: connector=acme-coordinator-v2.",
+  "createdAt": "2026-10-11T17:30:00Z"
+}

@@ -7,8 +7,6 @@
 .SYNOPSIS
     Blind-judges every run's deliverable, one judge session per difficulty level. The judge step spends credits.
 .DESCRIPTION
-    AI cost: paid judge session per populated level, in addition to workflow costs.
-    -PrepareOnly and -MergeOnly make no new model requests.
     For each level: anonymises each run's out/deliverable.diff (arm labels, run ids, paths,
     model ids and routing tokens redacted; squad tracking and install trees were already
     excluded when the diff was taken), shuffles the samples with a seeded RNG, and writes

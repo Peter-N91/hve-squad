@@ -1,0 +1,13 @@
+{
+  "connectorId": "acme-implementation-agent",
+  "schemaVersion": "1.1",
+  "transport": "file",
+  "endpointKind": "agent",
+  "capabilities": ["Implements approved changes in a shared worktree using the consumer's engineering skills."],
+  "roles": ["developer"],
+  "dropPath": ".connector-drops/acme-implementation-agent/",
+  "deadlineMinutesDefault": 90,
+  "retryCapDefault": 2,
+  "contact": "squad-integrations@example.com",
+  "version": "1.0.0"
+}

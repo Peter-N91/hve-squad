@@ -343,6 +343,19 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
         if ($script:HasBaseline) {
             $script:Baseline = Get-Content -LiteralPath $script:BaselinePath -Raw | ConvertFrom-Json
         }
+
+        function Get-MissingNormativeSentence {
+            param([string[]]$Baseline, [string[]]$Current)
+
+            # SQ-33 deliberately replaces this one legacy ordering rule; every
+            # other baseline obligation and the replacement itself still hold.
+            $retired = "3. Rank by, in order: **fit** for the class, highest first; then **Blended** rate, lowest first; then, within the same model family, the **newer generation** first; then the fit table's row order. Never break a tie by the Catalog ID's spelling."
+            $replacement = "3. Compare **granular task capability**, highest first, using the versioned fixed-primary policy in [model-scoring.md](model-scoring.md), not legacy fit buckets. On an exact capability tie use comparable secondary coverage, then freshest oldest primary evidence, then lowest known **Blended** rate, then newer generation within a family, then catalog row order. Never break a tie by the Catalog ID's spelling."
+            foreach ($sentence in $Baseline) {
+                $required = if ($sentence -ceq $retired) { $replacement } else { $sentence }
+                if ($required -cnotin $Current) { $required }
+            }
+        }
     }
 
     It 'has a checked-in BEFORE baseline captured' {
@@ -389,8 +402,17 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
             $currentSentences | Should -Contain $migration.After -Because "the approved successor must preserve the contract: $($migration.Before)"
         }
         $migratedSentences = @($approvedMigrations | ForEach-Object Before)
-        $missing = @($baselineSentences | Where-Object { $_ -notin $currentSentences -and $_ -notin $migratedSentences })
+        $remainingSentences = @($baselineSentences | Where-Object { $_ -notin $migratedSentences })
+        $missing = @(Get-MissingNormativeSentence -Baseline $remainingSentences -Current $currentSentences)
         $missing.Count | Should -Be 0 -Because "these normative sentences existed in the BEFORE baseline and are absent from the current tree: $($missing -join ' | ')"
+    }
+
+    It 'rejects a missing capability-first replacement even if the retired fit-first rule remains' {
+        $baselineSentences = @($script:Baseline.correctnessInventory.normativeCounts.PSObject.Properties.Name)
+        $currentSentences = @($script:Measured.correctnessInventory.normativeCounts.PSObject.Properties.Name)
+        $mutated = @($currentSentences | Where-Object { $_ -notlike '3. Compare **granular task capability**,*' })
+        $missing = @(Get-MissingNormativeSentence -Baseline $baselineSentences -Current $mutated)
+        @($missing | Where-Object { $_ -like '3. Compare **granular task capability**,*' }).Count | Should -Be 1
     }
 
     It 'keeps baseline named headings or their explicitly approved successors present' {

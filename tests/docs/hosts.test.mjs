@@ -90,6 +90,12 @@ for (const lang of ['en', 'fr']) {
       ['/squad', 'Squad Coordinator', locales[lang].defaultRequests['/squad']],
       ['/squad init', 'Squad Coordinator', 'init'],
       ['/squad request="Review this" mode=autopilot cost-ceiling=20', 'Squad Coordinator', 'request="Review this" mode=autopilot cost-ceiling=20'],
+      ['/squad-coach', 'Squad Coach', locales[lang].defaultRequests['/squad-coach']],
+      ['/squad-coach request="Help me choose a setup"', 'Squad Coach', 'request="Help me choose a setup"'],
+      ['/squad-connector-builder', 'Squad Connector Builder', locales[lang].defaultRequests['/squad-connector-builder']],
+      ['/squad-connector-builder mode=template destination=.', 'Squad Connector Builder', 'mode=template destination=.'],
+      ['/squad-external-agent-builder', 'Squad External Agent Builder', locales[lang].defaultRequests['/squad-external-agent-builder']],
+      ['/squad-external-agent-builder action=adapt kind=agent', 'Squad External Agent Builder', 'action=adapt kind=agent'],
       ['/squad-federation', 'Squad Federation Coordinator', locales[lang].defaultRequests['/squad-federation']],
       ['/squad-federation promote', 'Squad Federation Coordinator', 'promote'],
       ['/squad-document request="summarize" format=html outputPath=docs/summary.html', 'Squad Document', 'request="summarize" format=html outputPath=docs/summary.html'],
@@ -124,12 +130,18 @@ for (const lang of ['en', 'fr']) {
 test('default request translations retain their original English and French wording', () => {
   assert.deepEqual(locales.en.defaultRequests, {
     '/squad': 'Initialize the squad.',
+    '/squad-coach': 'Help me choose the simplest HVE Squad setup for my goal.',
+    '/squad-connector-builder': 'Help me scaffold a Squad Connector.',
+    '/squad-external-agent-builder': 'Help me create or adapt an external agent for HVE Squad.',
     '/squad-federation': 'Initialize the federation.',
     '/squad-governance-report': 'Generate the governance report with default settings.',
     '/squad-learn': 'Help me propose a shared learning.'
   });
   assert.deepEqual(locales.fr.defaultRequests, {
     '/squad': 'Initialise la squad.',
+    '/squad-coach': 'Aide-moi à choisir la configuration HVE Squad la plus simple pour mon objectif.',
+    '/squad-connector-builder': 'Aide-moi à préparer un Squad Connector.',
+    '/squad-external-agent-builder': 'Aide-moi à créer ou adapter un agent externe pour HVE Squad.',
     '/squad-federation': 'Initialise la fédération.',
     '/squad-governance-report': 'Génère le rapport de gouvernance avec les paramètres par défaut.',
     '/squad-learn': 'Aide-moi à proposer un apprentissage partagé.'

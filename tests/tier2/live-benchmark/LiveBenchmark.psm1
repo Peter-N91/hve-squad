@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # Offline core of the live benchmark: fixture materialisation, task loading, scheduling,
-# scoring, judge anonymisation and summary statistics. AI cost: none; no model is called, so
+# scoring, judge anonymisation and summary statistics. Nothing here calls a model, so
 # every function is exercised by LiveBenchmark.Tests.ps1 without a Copilot session.
 
 #Requires -Version 7.4

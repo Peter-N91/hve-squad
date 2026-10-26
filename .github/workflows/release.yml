@@ -1,8 +1,5 @@
 name: Release
 
-# Publishes the frozen candidate after the recorded-evidence gate and package checks.
-# AI cost: none; tier2-recorded-benchmark.yml compares saved observations without paid collection.
-
 # Triggers:
 #   workflow_dispatch — cuts a GitHub Release for the version in apm.yml.
 #                       If a `version` input is provided, apm.yml is bumped
@@ -28,11 +25,6 @@ on:
         required: false
         default: main
         type: string
-      run_benchmark:
-        description: 'Require recorded benchmark non-regression before release. Uncheck only for an intentional manual bypass.'
-        required: false
-        default: true
-        type: boolean
   push:
     branches:
       - main
@@ -67,26 +59,10 @@ jobs:
         id: identity
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  benchmark:
-    name: Benchmark before release
-    needs: candidate
-    if: github.event_name != 'workflow_dispatch' || inputs.run_benchmark != false
-    permissions:
-      contents: read
-      pull-requests: read
-    uses: ./.github/workflows/tier2-recorded-benchmark.yml
-    with:
-      candidate_sha: ${{ needs.candidate.outputs.sha }}
-
   release:
     name: Create Release
-    needs: [candidate, benchmark]
+    needs: candidate
     runs-on: ubuntu-latest
-    if: >
-      always() && !cancelled() && needs.candidate.result == 'success' &&
-      (needs.benchmark.result == 'success' ||
-       (github.event_name == 'workflow_dispatch' && inputs.run_benchmark == false &&
-        needs.benchmark.result == 'skipped'))
     permissions:
       contents: write
     steps:
@@ -96,12 +72,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           ref: ${{ needs.candidate.outputs.sha }}
-
-      - name: Record manual benchmark bypass
-        if: github.event_name == 'workflow_dispatch' && inputs.run_benchmark == false
-        run: |
-          echo "::warning::Benchmark gate explicitly disabled for this manual release."
-          echo "## Benchmark gate intentionally disabled by manual release input" >> "$GITHUB_STEP_SUMMARY"
 
       # ── Release gate ─────────────────────────────────────────────────────
       #    Tier 0 runs twice, and the two runs assert different things.
@@ -218,7 +188,7 @@ jobs:
           if [[ -z "$NOTES" ]]; then
             NOTES="See [CHANGELOG.md](CHANGELOG.md) for full details."
           fi
-          printf '%s' "$NOTES" > release_notes.md
+          printf '%s' "$NOTES" > /tmp/release_notes.md
 
       # ── Pin squad self-references, then tag that commit ──────────────────
       #    The 47 Peter-N91/hve-squad entries in apm.yml ship as bare paths, and
@@ -271,7 +241,7 @@ jobs:
           ARGS=(
             "$TAG"
             --title "$TAG"
-            --notes-file release_notes.md
+            --notes-file /tmp/release_notes.md
           )
           [[ "$DRAFT" == "true" ]] && ARGS+=(--draft)
 

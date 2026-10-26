@@ -149,7 +149,8 @@ function Assert-TolerableInstallFailure {
 
         The tolerance is narrow on purpose. Each failure must name a file that exists in
         the working copy, because that is the file the overlay is about to supply. A
-        failure naming anything else is a real one and still throws.
+        failure naming anything else is a real one and still throws. Validate each
+        failed dependency record independently: an agent and prompt can share a package slug.
     #>
     [CmdletBinding()]
     param(
@@ -165,20 +166,29 @@ function Assert-TolerableInstallFailure {
     # APM wraps its output at the terminal width, so the log is flattened before matching.
     $log = ((Get-Content -LiteralPath $InstallLog -Raw) -replace '\s+', ' ')
 
-    # APM 0.29 reports a missing self-reference after its sparse-checkout fallback in a second form.
-    $missing = @(@([regex]::Matches($log, 'File not found: (?<path>\S+) in ')) + @([regex]::Matches($log, "File '(?<path>[^']+)' not found after git sparse checkout")) |
-            ForEach-Object { $_.Groups['path'].Value } | Sort-Object -Unique)
-    $failed = @([regex]::Matches($log, '\+- (?<package>\S+) -- ') |
-            ForEach-Object { $_.Groups['package'].Value } | Sort-Object -Unique)
+    $failed = @([regex]::Matches($log, '\+- (?<package>\S+) -- (?<error>.*?)(?= \+- \S+ -- |\z)'))
+    if ($failed.Count -eq 0) { throw $generic }
 
-    if ($missing.Count -eq 0 -or $failed.Count -ne $missing.Count) { throw $generic }
-
-    $unexplained = @($missing | Where-Object { -not (Test-Path -LiteralPath (Join-Path $SourceRoot $_)) })
+    $missing = @(
+        foreach ($record in $failed) {
+            $errorText = $record.Groups['error'].Value
+            # APM 0.29 uses the second form after its sparse-checkout fallback.
+            $paths = @(@([regex]::Matches($errorText, 'File not found: (?<path>\S+) in ')) +
+                @([regex]::Matches($errorText, "File '(?<path>[^']+)' not found after git sparse checkout")) |
+                ForEach-Object { $_.Groups['path'].Value } | Sort-Object -Unique)
+            if ($paths.Count -ne 1) { throw "$generic Unexplained failure for $($record.Groups['package'].Value)." }
+            $paths[0]
+        }
+    )
+    $unexplained = @($missing | Where-Object {
+        $_ -notmatch '^squad-src/\.github/' -or $_ -match '(?:^|/)\.\.?(?:/|$)' -or
+        -not (Test-Path -LiteralPath (Join-Path $SourceRoot $_))
+    })
     if ($unexplained.Count -gt 0) {
         throw "$generic Not explained by the working copy: $($unexplained -join ', ')."
     }
 
-    Write-Warning ("apm install reported {0} unresolvable self-reference(s); every one names a file this branch adds, and the overlay supplies them: {1}" -f $missing.Count, ($missing -join ', '))
+    Write-Warning ("apm install reported {0} unresolvable self-reference record(s); every one names content this branch supplies through the overlay: {1}" -f $failed.Count, (($missing | Sort-Object -Unique) -join ', '))
 }
 
 function Install-SquadPackage {

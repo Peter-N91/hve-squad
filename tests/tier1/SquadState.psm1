@@ -15,6 +15,17 @@
 
 Set-StrictMode -Version Latest
 
+$script:ConnectorBindingColumns = @(
+    'Binding ID', 'Connector ID', 'Manifest', 'Endpoint Kind', 'Role Mode',
+    'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role',
+    'Default Execution'
+)
+$connectorDispatchHelper = Join-Path $PSScriptRoot '..' '..' 'squad-src' '.github' 'skills' 'squad' 'scripts' 'Resolve-SquadConnectorHistory.ps1'
+if (-not (Test-Path -LiteralPath $connectorDispatchHelper -PathType Leaf)) {
+    throw "The connector dispatch helper was not found at '$connectorDispatchHelper'."
+}
+. $connectorDispatchHelper
+
 # Field order is contractual: the ledger rewrite reparses these blocks. Rates and money
 # are deliberately absent - a block records consumption, the ledger prices it.
 $script:ConsumptionFields = @(
@@ -157,14 +168,35 @@ function Get-HistoryEntry {
 
         $preflightRef = [regex]::Match($body, '(?m)^\s*\*\s*Cost Preflight Ref:\s*`(?<value>[^`]+)`\s*$')
         $preflightSlot = [regex]::Match($body, '(?m)^\s*\*\s*Cost Preflight Slot:\s*(?<value>\S+)\s*$')
+        $memberName = [regex]::Match($body, '(?m)^\s*\*\s*Member Name:\s*(?<value>.+?)\s*$')
+        $provenanceLine = [regex]::Match($body, '(?m)^\s*\*\s*External provenance:\s*(?<value>.+?)\s*$')
+        $provenance = if ($provenanceLine.Success) {
+            [regex]::Match(
+                $provenanceLine.Groups['value'].Value,
+                '^connector=(?<connector>[^;]+);\s*binding=(?<binding>[^;]+);\s*endpoint=(?<endpoint>[^;]+);\s*mode=(?<mode>[^;]+);\s*target=(?<target>.+)$')
+        }
+        else { $null }
+        $verification = [regex]::Match($body, '(?m)^\s*\*\s*Verification:\s*(?<value>.+?)\s*$')
+        $unmetered = [regex]::Match($body, '(?m)^\s*\*\s*External-unmetered:\s*connector=(?<value>.+?)\s*$')
 
         [pscustomobject]@{
-            Source        = Split-Path $Path -Leaf
-            Agent         = [System.IO.Path]::GetFileNameWithoutExtension($Path)
-            Title         = $headings[$index].Groups['title'].Value.Trim()
-            NamesArtifact = $declared.Count -gt 0
-            PreflightRef  = if ($preflightRef.Success) { $preflightRef.Groups['value'].Value } else { $null }
-            PreflightSlot = if ($preflightSlot.Success) { $preflightSlot.Groups['value'].Value } else { $null }
+            Source                    = Split-Path $Path -Leaf
+            Agent                     = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+            Title                     = $headings[$index].Groups['title'].Value.Trim()
+            DeliverablePaths          = $declared
+            NamesArtifact             = $declared.Count -gt 0
+            PreflightRef              = if ($preflightRef.Success) { $preflightRef.Groups['value'].Value } else { $null }
+            PreflightSlot             = if ($preflightSlot.Success) { $preflightSlot.Groups['value'].Value } else { $null }
+            MemberName                = if ($memberName.Success) { $memberName.Groups['value'].Value.Trim() } else { '' }
+            HasExternalProvenance      = $provenanceLine.Success
+            ExternalProvenanceValid    = $null -ne $provenance -and $provenance.Success
+            ExternalConnectorId        = if ($null -ne $provenance -and $provenance.Success) { $provenance.Groups['connector'].Value.Trim() } else { '' }
+            ExternalBindingId          = if ($null -ne $provenance -and $provenance.Success) { $provenance.Groups['binding'].Value.Trim() } else { '' }
+            ExternalEndpointKind       = if ($null -ne $provenance -and $provenance.Success) { $provenance.Groups['endpoint'].Value.Trim().ToLowerInvariant() } else { '' }
+            ExternalRoleMode           = if ($null -ne $provenance -and $provenance.Success) { $provenance.Groups['mode'].Value.Trim().ToLowerInvariant() } else { '' }
+            ExternalTarget             = if ($null -ne $provenance -and $provenance.Success) { $provenance.Groups['target'].Value.Trim() } else { '' }
+            Verification               = if ($verification.Success) { $verification.Groups['value'].Value.Trim() } else { '' }
+            ExternalUnmeteredConnector = if ($unmetered.Success) { $unmetered.Groups['value'].Value.Trim() } else { '' }
         }
     }
 }
@@ -213,12 +245,13 @@ function Get-DeliverableEntry {
         [string]$Path
     )
 
-    $raw = Get-Content -LiteralPath $Path -Raw
-    foreach ($line in [regex]::Matches($raw, '(?m)^\s*\*\s*Deliverable:\s*(?<value>.+)$')) {
-        foreach ($candidate in (Get-DeliverablePathToken $line.Groups['value'].Value)) {
+    foreach ($entry in (Get-HistoryEntry -Path $Path)) {
+        foreach ($candidate in $entry.DeliverablePaths) {
             [pscustomobject]@{
-                Source = Split-Path $Path -Leaf
-                Agent  = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+                Source = $entry.Source
+                Agent  = $entry.Agent
+                Title  = $entry.Title
+                MemberName = $entry.MemberName
                 Path   = $candidate -replace '\\', '/'
             }
         }
@@ -239,7 +272,7 @@ function Get-DeliverableTail {
     #>
     param([string]$Path)
 
-    ($Path -replace '^\./', '') -replace '^\.copilot-tracking/(squad/members/[^/]+/)?', ''
+    (($Path -replace '\\', '/') -replace '^\./', '') -replace '^\.copilot-tracking/(squad/members/[^/]+/)?', ''
 }
 
 function Get-LedgerTable {
@@ -387,6 +420,381 @@ function ConvertTo-LongContextThreshold {
         default { 1.0 }
     }
     [double]$Matches.amount * $multiplier
+}
+
+function Resolve-ConnectorManifestPath {
+    param(
+        [AllowEmptyString()][string]$ManifestPath,
+        [Parameter(Mandatory)][string]$ProjectRoot,
+        [Parameter(Mandatory)][string]$TeamPath
+    )
+
+    $manifest = ([string]$ManifestPath).Trim()
+    if (-not $manifest) { return $null }
+
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    if ([System.IO.Path]::IsPathRooted($manifest)) {
+        $candidates.Add($manifest)
+    }
+    else {
+        $candidates.Add((Join-Path $ProjectRoot $manifest))
+        $candidates.Add((Join-Path (Split-Path -Parent $TeamPath) $manifest))
+        $candidates.Add($manifest)
+    }
+
+    foreach ($candidate in @($candidates | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    $null
+}
+
+function Get-ConnectorRosterRows {
+    param([AllowNull()][string]$TeamContent)
+
+    foreach ($table in (Get-MarkdownTable -Content $TeamContent)) {
+        if ('Agent Name (Primary)' -notin $table.Header -or 'Role' -notin $table.Header) { continue }
+        foreach ($row in $table.Rows) {
+            if (-not $row['Role'] -or -not $row['Agent Name (Primary)']) { continue }
+            [pscustomobject]@{
+                Role       = ([string]$row['Role']).Trim().ToLowerInvariant()
+                MemberName = if ('Member Name' -in $table.Header) { ([string]$row['Member Name']).Trim() } else { '' }
+                Agent      = ([string]$row['Agent Name (Primary)']).Trim()
+                Tier       = ([string]$row['Model Tier']).Trim()
+                DeliverableRoot = ([string]$row['Deliverable Root']).Trim()
+            }
+        }
+    }
+}
+
+function Get-ConnectorBindingModel {
+    param(
+        [AllowNull()][string]$TeamContent,
+        [Parameter(Mandatory)][string]$TeamPath,
+        [Parameter(Mandatory)][string]$ProjectRoot,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$RosterRows,
+        [System.Collections.IDictionary]$ManifestSnapshots
+    )
+
+    $issues = [System.Collections.Generic.List[string]]::new()
+    $bindings = [System.Collections.Generic.List[object]]::new()
+    $tables = @(Get-MarkdownTable -Content $TeamContent)
+    $candidateTables = @(
+        $tables | Where-Object {
+            'Binding ID' -in $_.Header -or 'Connector ID' -in $_.Header -or 'Role Mode' -in $_.Header
+        }
+    )
+    $bindingTables = @(
+        $candidateTables | Where-Object {
+            $table = $_
+            @($script:ConnectorBindingColumns | Where-Object { $_ -notin $table.Header }).Count -eq 0
+        }
+    )
+
+    if ($candidateTables.Count -gt 0 -and $bindingTables.Count -eq 0) {
+        $issues.Add('Connector Bindings table does not carry the complete contractual column set.')
+    }
+    if ($bindingTables.Count -gt 1) {
+        $issues.Add("Connector Bindings is declared in $($bindingTables.Count) tables; one roster owns one binding table.")
+    }
+
+    $rowIndex = 0
+    foreach ($table in $bindingTables) {
+        foreach ($row in $table.Rows) {
+            $rowIndex++
+            $binding = [pscustomobject]@{
+                RowIndex         = $rowIndex
+                BindingId        = ([string]$row['Binding ID']).Trim()
+                ConnectorId      = ([string]$row['Connector ID']).Trim()
+                ManifestPath     = ([string]$row['Manifest']).Trim()
+                ResolvedManifest = ''
+                EndpointKind     = ([string]$row['Endpoint Kind']).Trim().ToLowerInvariant()
+                RoleMode         = ([string]$row['Role Mode']).Trim().ToLowerInvariant()
+                TargetKind       = ([string]$row['Target Kind']).Trim().ToLowerInvariant()
+                Target           = ([string]$row['Target']).Trim()
+                MemberName       = ([string]$row['Member Name']).Trim()
+                AddedRole        = ([string]$row['Added Role']).Trim().ToLowerInvariant()
+                AlignedRole      = ([string]$row['Aligned Role']).Trim().ToLowerInvariant()
+                DefaultExecution = ([string]$row['Default Execution']).Trim().ToLowerInvariant()
+                Role             = ''
+                TargetMemberName = ''
+                Tier             = ''
+                DeliverableRoot  = ''
+                Issues           = [System.Collections.Generic.List[string]]::new()
+            }
+            $bindings.Add($binding)
+
+            if (-not $binding.BindingId) { $binding.Issues.Add('missing:bindingId') }
+            elseif ($binding.BindingId -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { $binding.Issues.Add('invalid:bindingId') }
+            if (-not $binding.ConnectorId) { $binding.Issues.Add('missing:connectorId') }
+            if ($binding.EndpointKind -notin @('agent', 'orchestrator')) { $binding.Issues.Add('invalid:endpointKind') }
+            if ($binding.RoleMode -notin @('replace', 'add')) { $binding.Issues.Add('invalid:roleMode') }
+            if ($binding.TargetKind -ne 'role') { $binding.Issues.Add('invalid:targetKind') }
+            if ($binding.DefaultExecution -notin @('original', 'connector', 'ask', 'both')) { $binding.Issues.Add('invalid:defaultExecution') }
+
+            $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+            if ($target.Kind -ne 'role') {
+                $binding.Issues.Add('invalid:target')
+            }
+            else {
+                $binding.Role = $target.Role
+                $binding.TargetMemberName = $target.MemberName
+                if (Test-ConnectorGovernanceRoleLocal -Role $target.Role) { $binding.Issues.Add('invalid:reserved-role-target') }
+            }
+
+            if ($binding.RoleMode -eq 'replace') {
+                if (-not $binding.MemberName) { $binding.Issues.Add('missing:memberName') }
+                if ($target.Kind -eq 'role') {
+                    $targetRows = @(
+                        $RosterRows | Where-Object {
+                            $_.Agent -cne 'Squad Connector' -and $_.Role -eq $target.Role
+                        }
+                    )
+                    if ($target.MemberName) {
+                        $targetRows = @($targetRows | Where-Object { $_.MemberName -ceq $target.MemberName })
+                    }
+                    if ($targetRows.Count -eq 0) {
+                        $binding.Issues.Add($(if ($target.MemberName) { 'target-member-not-found' } else { 'target-role-not-found' }))
+                    }
+                    elseif (-not $target.MemberName -and $targetRows.Count -gt 1) {
+                        $binding.Issues.Add('ambiguous:replace-target-member-required')
+                    }
+                    if ($targetRows.Count -eq 1) {
+                        $binding.Tier = $targetRows[0].Tier
+                        $binding.DeliverableRoot = $targetRows[0].DeliverableRoot
+                    }
+                    if ($binding.MemberName -and @($targetRows | Where-Object { $_.MemberName -and $_.MemberName -ceq $binding.MemberName }).Count -gt 0) {
+                        $binding.Issues.Add('invalid:memberName-collides-with-target')
+                    }
+                }
+            }
+            elseif ($binding.RoleMode -eq 'add') {
+                if (-not $binding.MemberName) { $binding.Issues.Add('missing:memberName') }
+                if (-not $binding.AddedRole) { $binding.Issues.Add('missing:addedRole') }
+                elseif ($binding.AddedRole -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { $binding.Issues.Add('invalid:addedRole') }
+                if (-not $binding.AlignedRole) { $binding.Issues.Add('missing:alignedRole') }
+                if (Test-ConnectorGovernanceRoleLocal -Role $binding.AddedRole) { $binding.Issues.Add('invalid:reserved-added-role') }
+                if (Test-ConnectorGovernanceRoleLocal -Role $binding.AlignedRole) { $binding.Issues.Add('invalid:reserved-aligned-role') }
+                if ($binding.DefaultExecution -in @('original', 'both')) { $binding.Issues.Add('invalid:defaultExecution-for-add') }
+                if ($target.Kind -eq 'role') {
+                    if ($target.Role -ne $binding.AddedRole) { $binding.Issues.Add('invalid:add-target-role-mismatch') }
+                    if (-not $target.MemberName -or $target.MemberName -cne $binding.MemberName) { $binding.Issues.Add('invalid:add-target-member-mismatch') }
+                }
+                $memberRows = @(
+                    $RosterRows | Where-Object {
+                        $_.Role -eq $binding.AddedRole -and
+                        $_.MemberName -ceq $binding.MemberName -and
+                        $_.Agent -ceq 'Squad Connector'
+                    }
+                )
+                if ($memberRows.Count -ne 1) { $binding.Issues.Add('add-member-row-missing-or-ambiguous') }
+                else {
+                    $binding.Tier = $memberRows[0].Tier
+                    $binding.DeliverableRoot = $memberRows[0].DeliverableRoot
+                }
+                if ($binding.AddedRole) { $binding.Role = $binding.AddedRole }
+            }
+
+            $manifest = $null
+            if (-not $binding.ManifestPath) {
+                $binding.Issues.Add('missing:manifestPath')
+            }
+            elseif ($PSBoundParameters.ContainsKey('ManifestSnapshots')) {
+                if ($null -eq $ManifestSnapshots -or -not $ManifestSnapshots.Contains($binding.ManifestPath)) {
+                    $binding.Issues.Add('snapshot-manifest-missing')
+                }
+                else { $manifest = $ManifestSnapshots[$binding.ManifestPath] }
+            }
+            else {
+                $resolvedManifest = Resolve-ConnectorManifestPath -ManifestPath $binding.ManifestPath -ProjectRoot $ProjectRoot -TeamPath $TeamPath
+                if (-not $resolvedManifest) { $binding.Issues.Add('manifest-not-found') }
+                else {
+                    $binding.ResolvedManifest = $resolvedManifest
+                    try { $manifest = Get-Content -LiteralPath $resolvedManifest -Raw | ConvertFrom-Json -AsHashtable -Depth 64 }
+                    catch { $binding.Issues.Add('manifest-parse-failed') }
+                }
+            }
+            if ($manifest -is [System.Collections.IDictionary]) {
+                $shape = Test-SquadConnectorManifestShape -Manifest $manifest
+                foreach ($shapeIssue in @($shape.Issues)) { $binding.Issues.Add("manifest-shape:$shapeIssue") }
+                if ([string]$manifest['schemaVersion'] -ne '1.1') { $binding.Issues.Add('manifest-version-not-1.1') }
+                if ([string]$manifest['connectorId'] -cne $binding.ConnectorId) { $binding.Issues.Add('manifest-connectorId-mismatch') }
+                if (([string]$manifest['endpointKind']).Trim().ToLowerInvariant() -ne $binding.EndpointKind) { $binding.Issues.Add('manifest-endpointKind-mismatch') }
+                $manifestRoles = @($manifest['roles'] | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() })
+                if ($binding.Role -and $manifestRoles -notcontains $binding.Role) { $binding.Issues.Add("manifest-role-missing:$($binding.Role)") }
+            }
+            else { $binding.Issues.Add('manifest-unreadable') }
+        }
+    }
+
+    foreach ($group in @($bindings | Where-Object BindingId | Group-Object { $_.BindingId.ToLowerInvariant() })) {
+        if ($group.Count -le 1) { continue }
+        foreach ($binding in $group.Group) { $binding.Issues.Add('duplicate:bindingId') }
+    }
+    foreach ($group in @($bindings | Where-Object MemberName | Group-Object MemberName)) {
+        if ($group.Count -le 1) { continue }
+        foreach ($binding in $group.Group) { $binding.Issues.Add('duplicate:memberName') }
+    }
+
+    foreach ($binding in $bindings) {
+        $label = if ($binding.BindingId) { $binding.BindingId } else { "<row-$($binding.RowIndex)-blank-binding-id>" }
+        foreach ($issue in @($binding.Issues)) { $issues.Add("${label}:$issue") }
+    }
+
+    [pscustomobject]@{
+        HasBindings  = $candidateTables.Count -gt 0
+        Bindings     = $bindings.ToArray()
+        ValidBindings = @($bindings | Where-Object { $_.Issues.Count -eq 0 })
+        Issues       = $issues.ToArray()
+    }
+}
+
+function Get-ConnectorRetirementModel {
+    param(
+        [AllowNull()][string]$Content,
+        [Parameter(Mandatory)][string]$TeamPath,
+        [Parameter(Mandatory)][string]$ProjectRoot
+    )
+
+    Get-SquadConnectorRetirementModel -Content $Content -TeamPath $TeamPath -ProjectRoot $ProjectRoot
+}
+
+function Get-ConnectorHistoryModel {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Entries,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Bindings,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$ValidBindings,
+        [AllowEmptyCollection()][object[]]$RetiredBindings = @(),
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$RosterRows
+    )
+
+    $issues = [System.Collections.Generic.List[string]]::new()
+    $identities = [System.Collections.Generic.List[object]]::new()
+    foreach ($entry in $Entries) {
+        if ($entry.Agent -cne 'Squad Connector') {
+            if ($entry.HasExternalProvenance) { $issues.Add("$($entry.Source): non-connector history carries external provenance") }
+            continue
+        }
+
+        $entryIssueCount = $issues.Count
+        if (-not $entry.MemberName) { $issues.Add("$($entry.Source): connector history is missing Member Name") }
+        if (-not $entry.HasExternalProvenance) {
+            $issues.Add("$($entry.Source): connector history is missing external provenance")
+            continue
+        }
+        if (-not $entry.ExternalProvenanceValid) {
+            $issues.Add("$($entry.Source): connector history external provenance is malformed")
+            continue
+        }
+        if ($entry.Verification -cne 'external, unverified') { $issues.Add("$($entry.Source): connector history verification marker is invalid") }
+        if ($entry.ExternalUnmeteredConnector -cne $entry.ExternalConnectorId) { $issues.Add("$($entry.Source): connector history unmetered marker does not match provenance") }
+
+        $role = ''
+        $deliverableRoot = ''
+        if ($entry.ExternalBindingId -in @('legacy-1.0', 'none (legacy-1.0)')) {
+            if ($entry.ExternalEndpointKind -ne 'agent') { $issues.Add("$($entry.Source): legacy connector endpoint must be agent") }
+            if ($entry.ExternalRoleMode -ne 'replace') { $issues.Add("$($entry.Source): legacy connector mode must be replace") }
+            $target = Get-ConnectorTargetRoleLocal -Target $entry.ExternalTarget
+            if ($target.Kind -ne 'role' -or (Test-ConnectorGovernanceRoleLocal -Role $target.Role)) {
+                $issues.Add("$($entry.Source): legacy connector target is not an ordinary work role")
+            }
+            else {
+                $role = $target.Role
+                $targetRows = @($RosterRows | Where-Object { $_.Role -eq $target.Role -and $_.Agent -cne 'Squad Connector' })
+                if ($target.MemberName) { $targetRows = @($targetRows | Where-Object { $_.MemberName -ceq $target.MemberName }) }
+                if ($targetRows.Count -eq 0) { $issues.Add("$($entry.Source): legacy connector target has no matching internal member") }
+                elseif ($targetRows.Count -eq 1) { $deliverableRoot = $targetRows[0].DeliverableRoot }
+                $roleBindings = @(
+                    $Bindings | Where-Object {
+                        $_.Role -eq $target.Role -and
+                        (-not $target.MemberName -or -not $_.TargetMemberName -or $_.TargetMemberName -ceq $target.MemberName)
+                    }
+                )
+                if ($roleBindings.Count -gt 0) { $issues.Add("$($entry.Source): legacy connector provenance bypasses a Connector Bindings row") }
+            }
+        }
+        else {
+            # The calculator gives a listed retirement precedence over today's root/tier.
+            $bindingMatches = @($RetiredBindings | Where-Object {
+                    $_.BindingId -ceq $entry.ExternalBindingId -and $_.HistoryEntries -ccontains $entry.Title
+                })
+            if ($bindingMatches.Count -eq 0) {
+                $bindingMatches = @($ValidBindings | Where-Object { $_.BindingId -ceq $entry.ExternalBindingId })
+            }
+            if ($bindingMatches.Count -ne 1) {
+                $issues.Add("$($entry.Source): connector history binding '$($entry.ExternalBindingId)' does not resolve to one valid binding")
+            }
+            else {
+                $binding = $bindingMatches[0]
+                $role = $binding.Role
+                $deliverableRoot = $binding.DeliverableRoot
+                foreach ($comparison in @(
+                        @{ Name = 'connector'; Actual = $entry.ExternalConnectorId; Expected = $binding.ConnectorId }
+                        @{ Name = 'endpoint'; Actual = $entry.ExternalEndpointKind; Expected = $binding.EndpointKind }
+                        @{ Name = 'mode'; Actual = $entry.ExternalRoleMode; Expected = $binding.RoleMode }
+                        @{ Name = 'target'; Actual = $entry.ExternalTarget; Expected = $binding.Target }
+                        @{ Name = 'member'; Actual = $entry.MemberName; Expected = $binding.MemberName }
+                    )) {
+                    if ([string]$comparison.Actual -cne [string]$comparison.Expected) {
+                        $issues.Add("$($entry.Source): connector history $($comparison.Name) '$($comparison.Actual)' does not match binding '$($comparison.Expected)'")
+                    }
+                }
+            }
+        }
+
+        if ($issues.Count -eq $entryIssueCount -and $role) {
+            $identities.Add([pscustomobject]@{
+                    Role        = $role
+                    MemberName  = $entry.MemberName
+                    Agent       = 'Squad Connector'
+                    BindingId   = $entry.ExternalBindingId
+                    ConnectorId = $entry.ExternalConnectorId
+                    Source      = $entry.Source
+                    Title       = $entry.Title
+                    DeliverableRoot = $deliverableRoot
+                })
+        }
+    }
+
+    [pscustomobject]@{
+        Identities = $identities.ToArray()
+        Issues     = $issues.ToArray()
+    }
+}
+
+function Get-ConnectorLedgerIssues {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Attribution,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$HistoryIdentities
+    )
+
+    $issues = [System.Collections.Generic.List[string]]::new()
+    $connectorRows = @(
+        foreach ($row in $Attribution) {
+            if ($row.Count -ge 3 -and ([string]$row[2]).Trim() -ceq 'Squad Connector') {
+                [pscustomobject]@{
+                    Role       = (Get-LedgerRoleKey ([string]$row[0])).ToLowerInvariant()
+                    MemberName = ([string]$row[1]).Trim()
+                    Agent      = ([string]$row[2]).Trim()
+                }
+            }
+        }
+    )
+
+    foreach ($row in $connectorRows) {
+        $matches = @($HistoryIdentities | Where-Object { $_.Role -eq $row.Role -and $_.MemberName -ceq $row.MemberName })
+        if ($matches.Count -eq 0) {
+            $issues.Add("Attribution row '$($row.Role)' / '$($row.MemberName)' has no exact connector history identity")
+        }
+    }
+    foreach ($identity in $HistoryIdentities) {
+        $matches = @($connectorRows | Where-Object { $_.Role -eq $identity.Role -and $_.MemberName -ceq $identity.MemberName })
+        if ($matches.Count -eq 0) {
+            $issues.Add("Connector history '$($identity.Source)' / '$($identity.MemberName)' has no exact Attribution row")
+        }
+    }
+    $issues.ToArray()
 }
 
 function Get-RateTable {
@@ -600,40 +1008,53 @@ function Get-SquadStateModel {
     $ratesContent = Read-Text 'consumption-rates.md'
     $teamContent = Read-Text 'team.md'
 
-    # The ledger rewrite matches a history file back to its roster row by file name, so
-    # the roster is what makes a basename legal. Alternates count: a dispatch can be
-    # routed to one and it writes its own history file.
-    $roleAgents = @{}
-    $rosterAgents = @(
-        foreach ($table in (Get-MarkdownTable -Content $teamContent)) {
-            if ('Agent Name (Primary)' -notin $table.Header) { continue }
-            foreach ($row in $table.Rows) {
-                $names = @(
-                    if ($row['Agent Name (Primary)']) { $row['Agent Name (Primary)'] }
-                    if ('Alternate Agents' -in $table.Header) {
-                        foreach ($alternate in ($row['Alternate Agents'] -split ',')) {
-                            $trimmed = $alternate.Trim()
-                            if ($trimmed -and $trimmed -notmatch '^[-\u2014]$') { $trimmed }
-                        }
-                    }
-                )
-                if ('Role' -in $table.Header -and $row['Role']) { $roleAgents[$row['Role']] = $names }
-                $names
-            }
-        }
-    ) | Sort-Object -Unique
-
-    # Only this file holds token rates, so every block's rates are checked against it.
-    $rates = Get-RateTable -Content $ratesContent
-    $decisionsContent = Read-Text 'decisions.md'
-
-    # The Deliverable Root cell is an operator declaration, not a default: a role writes
-    # there or it escalates. Roots are resolved against the project root first and the
-    # squad root second, because a federation sub-squad's roots are rebased under its own.
     $projectRoot = $SquadRoot
     if (($SquadRoot -replace '\\', '/') -match '^(?<base>.*?)/?\.copilot-tracking(/|$)') {
         $projectRoot = if ($Matches['base']) { $Matches['base'] } else { '.' }
     }
+
+    # The ledger rewrite matches a history file back to its roster row by file name, so
+    # the roster is what makes a basename legal. Alternates count: a dispatch can be
+    # routed to one and it writes its own history file. A connector replacement retains
+    # the internal Members row, so its binding must separately admit Squad Connector as
+    # the history agent for the target role.
+    $roleAgents = @{}
+    $rosterAgentCandidates = [System.Collections.Generic.List[string]]::new()
+    $rosterRows = @(Get-ConnectorRosterRows -TeamContent $teamContent)
+    $teamTables = @(Get-MarkdownTable -Content $teamContent)
+    foreach ($table in $teamTables) {
+        if ('Agent Name (Primary)' -notin $table.Header) { continue }
+        foreach ($row in $table.Rows) {
+            $names = @(
+                if ($row['Agent Name (Primary)']) { $row['Agent Name (Primary)'] }
+                if ('Alternate Agents' -in $table.Header) {
+                    foreach ($alternate in ($row['Alternate Agents'] -split ',')) {
+                        $trimmed = $alternate.Trim()
+                        if ($trimmed -and $trimmed -notmatch '^[-\u2014]$') { $trimmed }
+                    }
+                }
+            )
+            if ('Role' -in $table.Header -and $row['Role']) {
+                $role = ([string]$row['Role']).Trim().ToLowerInvariant()
+                $combined = @($roleAgents[$role]) + $names
+                $roleAgents[$role] = @($combined | Where-Object { $_ } | Sort-Object -Unique)
+            }
+            foreach ($name in $names) { [void]$rosterAgentCandidates.Add([string]$name) }
+        }
+    }
+
+    $teamPath = Join-Path $SquadRoot 'team.md'
+    $connectorBindingModel = Get-ConnectorBindingModel -TeamContent $teamContent -TeamPath $teamPath -ProjectRoot $projectRoot -RosterRows $rosterRows
+    foreach ($binding in $connectorBindingModel.ValidBindings) {
+        $combined = @($roleAgents[$binding.Role]) + @('Squad Connector')
+        $roleAgents[$binding.Role] = @($combined | Where-Object { $_ } | Sort-Object -Unique)
+        [void]$rosterAgentCandidates.Add('Squad Connector')
+    }
+    $rosterAgents = @($rosterAgentCandidates | Sort-Object -Unique)
+
+    # Only this file holds token rates, so every block's rates are checked against it.
+    $rates = Get-RateTable -Content $ratesContent
+    $decisionsContent = Read-Text 'decisions.md'
 
     # A move that joined a project-root-relative destination onto the tracking directory
     # instead of the project root leaves an empty .copilot-tracking inside .copilot-tracking.
@@ -699,6 +1120,14 @@ function Get-SquadStateModel {
 
     $declared = @(foreach ($file in $dispatchHistory) { Get-DeliverableEntry -Path $file.FullName })
     $entries = @(foreach ($file in $dispatchHistory) { Get-HistoryEntry -Path $file.FullName })
+    $connectorRetirementModel = Get-ConnectorRetirementModel -Content $decisionsContent -TeamPath $teamPath -ProjectRoot $projectRoot
+    $connectorHistoryModel = Get-ConnectorHistoryModel -Entries $entries -Bindings $connectorBindingModel.Bindings `
+        -ValidBindings $connectorBindingModel.ValidBindings -RetiredBindings $connectorRetirementModel.Retirements -RosterRows $rosterRows
+    foreach ($identity in $connectorHistoryModel.Identities) {
+        $combined = @($roleAgents[$identity.Role]) + @('Squad Connector')
+        $roleAgents[$identity.Role] = @($combined | Where-Object { $_ } | Sort-Object -Unique)
+        if ('Squad Connector' -notin $rosterAgents) { $rosterAgents += 'Squad Connector' }
+    }
     $preflightEntries = @(
         foreach ($file in ($historyFiles | Where-Object { $_.BaseName -notmatch '^(autonomous-loop|autopilot-run)-' })) {
             Get-HistoryEntry -Path $file.FullName
@@ -716,6 +1145,12 @@ function Get-SquadStateModel {
         foreach ($entry in $declared) {
             $resolved = Resolve-Deliverable $entry.Path
             $root = if ($agentRoots.ContainsKey($entry.Agent)) { $agentRoots[$entry.Agent] } else { $null }
+            if ($entry.Agent -ceq 'Squad Connector') {
+                $identity = @($connectorHistoryModel.Identities | Where-Object {
+                        $_.Source -ceq $entry.Source -and $_.Title -ceq $entry.Title -and $_.MemberName -ceq $entry.MemberName
+                    })
+                $root = if ($identity.Count -eq 1) { $identity[0].DeliverableRoot } else { $null }
+            }
 
             # Compared as tails, not as written: a promotion rebases the roster's roots
             # but cannot edit the append-only entries that predate it.
@@ -728,7 +1163,9 @@ function Get-SquadStateModel {
                 Path       = $entry.Path
                 Resolved   = $resolved
                 Root       = $root
-                UnderRoot  = -not $root -or $declaredPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
+                UnderRoot  = if (-not $root) { $entry.Agent -cne 'Squad Connector' }
+                    elseif ($entry.Agent -ceq 'Squad Connector') { $declaredPath.StartsWith("$prefix/", [StringComparison]::OrdinalIgnoreCase) }
+                    else { $declaredPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) }
             }
         }
     )
@@ -790,6 +1227,10 @@ function Get-SquadStateModel {
         if ($observedOn.Success) { $ratesObservedOn = $observedOn.Groups[1].Value.Trim() }
     }
 
+    $attribution = @(if ($ledgerContent) { Get-LedgerTable -Content $ledgerContent -Heading 'Attribution' })
+    $usageAndCost = @(if ($ledgerContent) { Get-LedgerTable -Content $ledgerContent -Heading 'Usage & Cost' })
+    $connectorLedgerIssues = Get-ConnectorLedgerIssues -Attribution $attribution -HistoryIdentities $connectorHistoryModel.Identities
+
     @{
         SquadRoot        = $SquadRoot
         Exists           = Test-Path -LiteralPath $SquadRoot
@@ -804,6 +1245,13 @@ function Get-SquadStateModel {
         Team             = $teamContent
         RosterAgents     = @($rosterAgents)
         RoleAgents       = $roleAgents
+        ConnectorBindings = @($connectorBindingModel.Bindings)
+        ConnectorBindingIssues = @($connectorBindingModel.Issues)
+        ConnectorRetirements = @($connectorRetirementModel.Retirements)
+        ConnectorRetirementIssues = @($connectorRetirementModel.Issues)
+        ConnectorHistoryIdentities = @($connectorHistoryModel.Identities)
+        ConnectorHistoryIssues = @($connectorHistoryModel.Issues)
+        ConnectorLedgerIssues = @($connectorLedgerIssues)
         AgentRoots       = $agentRoots
         RoleRoots        = $roleRoots
         Deliverables     = @($deliverables)
@@ -829,8 +1277,8 @@ function Get-SquadStateModel {
         Blocks           = $blocks
         DispatchBlocks   = @($blocks | Where-Object { -not $_.IsOrchestration })
         OrchestrationBlocks = @($blocks | Where-Object { $_.IsOrchestration })
-        Attribution      = @(if ($ledgerContent) { Get-LedgerTable -Content $ledgerContent -Heading 'Attribution' })
-        UsageAndCost     = @(if ($ledgerContent) { Get-LedgerTable -Content $ledgerContent -Heading 'Usage & Cost' })
+        Attribution      = $attribution
+        UsageAndCost     = $usageAndCost
         ConsumptionFields = $script:ConsumptionFields
         ModelSources     = $script:ModelSources
         Bases            = $script:Bases

@@ -486,6 +486,31 @@ function Get-RateTableLocal {
         }
     }
 
+    if ($byModel.Count -gt 0) {
+        if (-not $byNormalized.ContainsKey('hydrafusion-max')) {
+            $hfRate = @{
+                input                  = 0.80
+                cached                 = 0.05
+                cache_write            = 1.00
+                output                 = 4.00
+                pricedAsName           = 'HydraFusion Max'
+                tier                   = 'default'
+                long_context_threshold = 272000.0
+                lc_input               = 1.60
+                lc_cached              = 0.10
+                lc_cache_write         = 2.00
+                lc_output              = 6.00
+            }
+            $byModel['HydraFusion Max'] = $hfRate
+            $byModel['hydrafusion-max'] = $hfRate
+            $byNormalized['hydrafusion-max'] = $hfRate
+        }
+        $hfResolved = $byNormalized['hydrafusion-max']
+        foreach ($alias in @('HydraFusion', 'hydrafusion', 'hydrafusion-max')) {
+            if (-not $byModel.ContainsKey($alias)) { $byModel[$alias] = $hfResolved }
+        }
+    }
+
     [pscustomobject]@{ ByModel = $byModel; ByTier = $byTier; ByNormalized = $byNormalized }
 }
 
@@ -498,7 +523,9 @@ function ConvertTo-RateKeyLocal {
     #>
     param([AllowEmptyString()][string]$Value)
     $text = ($Value -replace '`', '' -replace '\((copilot|preview)\)', '').Trim().ToLowerInvariant()
-    return ($text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
+    $key = ($text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
+    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    return $key
 }
 
 function Get-CalibrationFactorLocal {
@@ -525,10 +552,14 @@ function Get-RosterLocal {
     <#
     .SYNOPSIS
         Reads team.md into an ordered list of { Role, AgentNames, MemberName,
-        PrimaryAgent, Tier } — AgentNames is every name in that row's Agent Name
-        (Primary) and Alternate Agents cells, used for matching; MemberName and
-        Tier (the Model Tier cell) are the roster-declared identity the
-        Attribution table's Member/Tier columns print for a matched role.
+        PrimaryAgent, Tier, AlignedRole }.
+        AgentNames is every name in that row's Agent Name (Primary) and Alternate
+        Agents cells, used for matching; MemberName and Tier (the Model Tier cell)
+        are the roster-declared identity the Attribution table's Member/Tier columns
+        print for a matched role.
+        AlignedRole is populated for connector-backed additive rows from
+        Connector Bindings (`Role Mode=add`) and is used for review-role
+        classification.
         PrimaryAgent (the Agent Name (Primary) cell alone) is captured but never
         printed as the Attribution table's Agent cell -- that column instead
         names the history file actually dispatched (its own file name), so a
@@ -538,31 +569,182 @@ function Get-RosterLocal {
     #>
     param([string]$Content)
 
+    function Get-ConnectorTargetRoleLocal {
+        param([AllowEmptyString()][string]$Target)
+        $text = ([string]$Target).Trim()
+        if ($text -match '^(?i)role:(?<role>[a-z0-9-]+)(?:/(?<member>.+))?$') {
+            return [pscustomobject]@{
+                Kind       = 'role'
+                Role       = $Matches['role'].ToLowerInvariant()
+                MemberName = if ($Matches['member']) { ([string]$Matches['member']).Trim() } else { '' }
+            }
+        }
+        if ($text -match '^(?i)coordinator:Squad Coordinator$') {
+            return [pscustomobject]@{ Kind = 'coordinator'; Role = 'coordinator'; MemberName = '' }
+        }
+        [pscustomobject]@{ Kind = 'invalid'; Role = ''; MemberName = '' }
+    }
+
+    $tables = @(Get-MarkdownTableLocal -Content $Content)
     $roster = [System.Collections.Generic.List[pscustomobject]]::new()
-    foreach ($table in (Get-MarkdownTableLocal -Content $Content)) {
+    $connectorHeader = @('Binding ID', 'Connector ID', 'Manifest', 'Endpoint Kind', 'Role Mode', 'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role', 'Default Execution')
+    $connectorTable = @(
+        $tables | Where-Object {
+            $table = $_
+            @($connectorHeader | Where-Object { $_ -in $table.Header }).Count -eq $connectorHeader.Count
+        } | Select-Object -First 1
+    )
+    $addBindingsByRoleMember = @{}
+    $replaceBindings = [System.Collections.Generic.List[pscustomobject]]::new()
+    $connectorBindingsWithMembers = [System.Collections.Generic.List[pscustomobject]]::new()
+    if ($connectorTable.Count -gt 0) {
+        foreach ($binding in $connectorTable[0].Rows) {
+            $bindingId = ([string]$binding['Binding ID']).Trim()
+            $roleMode = ([string]$binding['Role Mode']).Trim().ToLowerInvariant()
+            $memberName = ([string]$binding['Member Name']).Trim()
+            $target = Get-ConnectorTargetRoleLocal -Target ([string]$binding['Target'])
+            $protectedRoles = @('scribe', 'coordinator', 'federation-coordinator', 'council')
+            if (([string]$binding['Target Kind']).Trim().ToLowerInvariant() -ne 'role' -or $target.Kind -ne 'role' -or $target.Role -in $protectedRoles -or ([string]$binding['Added Role']).Trim().ToLowerInvariant() -in $protectedRoles -or ([string]$binding['Aligned Role']).Trim().ToLowerInvariant() -in $protectedRoles) {
+                throw "Measure-SquadLedger: Connector Bindings row '$bindingId' must target an ordinary work role; coordinator, Scribe, and council governance are protected."
+            }
+            if ($bindingId -and $memberName) {
+                $connectorBindingsWithMembers.Add([pscustomobject]@{
+                        BindingId  = $bindingId
+                        MemberName = $memberName
+                        RoleMode   = $roleMode
+                        TargetKind = ([string]$binding['Target Kind']).Trim().ToLowerInvariant()
+                        Target     = ([string]$binding['Target']).Trim()
+                    })
+            }
+            if ($roleMode -eq 'add') {
+                $addedRole = ([string]$binding['Added Role']).Trim().ToLowerInvariant()
+                $alignedRole = ([string]$binding['Aligned Role']).Trim().ToLowerInvariant()
+                if (-not $addedRole -or -not $memberName) { continue }
+                $key = ("{0}`n{1}" -f $addedRole, $memberName)
+                if (-not $addBindingsByRoleMember.ContainsKey($key)) { $addBindingsByRoleMember[$key] = [System.Collections.Generic.List[string]]::new() }
+                if ($alignedRole) { $addBindingsByRoleMember[$key].Add($alignedRole) }
+                continue
+            }
+            if ($roleMode -ne 'replace' -or -not $memberName) { continue }
+            $replaceBindings.Add([pscustomobject]@{
+                    BindingId   = ([string]$binding['Binding ID']).Trim()
+                    MemberName  = $memberName
+                    TargetKind  = ([string]$binding['Target Kind']).Trim().ToLowerInvariant()
+                    Target      = ([string]$binding['Target']).Trim()
+                    AlignedRole = ([string]$binding['Aligned Role']).Trim().ToLowerInvariant()
+                })
+        }
+    }
+
+    foreach ($table in $tables) {
         if ('Role' -notin $table.Header) { continue }
         # Model-written rosters drift from the template header; accept the same primary spellings Write-SquadHandoff.ps1 does.
         $primaryHeader = @('Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent') | Where-Object { $_ -in $table.Header } | Select-Object -First 1
+        if (-not $primaryHeader) { continue }
 
         foreach ($row in $table.Rows) {
             $names = [System.Collections.Generic.List[string]]::new()
             foreach ($column in @($primaryHeader, 'Alternate Agents')) {
                 if (-not $column -or $column -notin $table.Header) { continue }
-                foreach ($name in ($row[$column] -split ',')) {
+                foreach ($name in (([string]$row[$column]) -split '[,;]|\s/\s')) {
                     $trimmed = $name.Trim()
                     if ($trimmed -and $trimmed -ne '—' -and $trimmed -ne '-') { $names.Add($trimmed) }
                 }
             }
-            if (-not $row['Role']) { continue }
-            $memberName = if ('Member Name' -in $table.Header) { $row['Member Name'] } else { '' }
-            $primaryAgent = if ($primaryHeader) { $row[$primaryHeader] } else { '' }
-            $tier = if ('Model Tier' -in $table.Header) { $row['Model Tier'] } else { '' }
+            $role = ([string]$row['Role']).Trim()
+            if (-not $role) { continue }
+            $memberName = if ('Member Name' -in $table.Header) { ([string]$row['Member Name']).Trim() } else { '' }
+            $primaryAgent = ([string]$row[$primaryHeader]).Trim()
+            $tier = if ('Model Tier' -in $table.Header) { ([string]$row['Model Tier']).Trim() } else { '' }
+            $alignedRole = ''
+            if ($primaryAgent -ceq 'Squad Connector' -and $memberName) {
+                $key = ("{0}`n{1}" -f $role.ToLowerInvariant(), $memberName)
+                $matches = @(if ($addBindingsByRoleMember.ContainsKey($key)) { $addBindingsByRoleMember[$key] } else { @() })
+                if ($matches.Count -eq 1) { $alignedRole = [string]$matches[0] }
+            }
             $roster.Add([pscustomobject]@{
-                    Role         = $row['Role']
+                    Role         = $role
                     AgentNames   = $names
                     MemberName   = $memberName
                     PrimaryAgent = $primaryAgent
                     Tier         = $tier
+                    AlignedRole  = $alignedRole
+                })
+        }
+        break
+    }
+
+    $bindingsByMember = @{}
+    foreach ($binding in @($connectorBindingsWithMembers)) {
+        if (-not $bindingsByMember.ContainsKey($binding.MemberName)) { $bindingsByMember[$binding.MemberName] = [System.Collections.Generic.List[object]]::new() }
+        $bindingsByMember[$binding.MemberName].Add($binding)
+    }
+    foreach ($member in @($bindingsByMember.Keys)) {
+        $bindings = @($bindingsByMember[$member])
+        if ($bindings.Count -le 1) { continue }
+        $bindingList = @($bindings | ForEach-Object { $_.BindingId }) -join ', '
+        throw "Measure-SquadLedger: Connector Bindings Member Name '$member' is reused by $($bindings.Count) rows ($bindingList); connector member identities must be globally unique across connector bindings."
+    }
+
+    foreach ($binding in @($connectorBindingsWithMembers)) {
+        $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+        $targetRows = @()
+        if ($binding.TargetKind -eq 'role' -and $target.Kind -eq 'role') {
+            $targetRows = @($roster | Where-Object { ([string]$_.Role).Trim().ToLowerInvariant() -eq $target.Role -and $_.PrimaryAgent -cne 'Squad Connector' })
+            if ($target.MemberName) {
+                $targetRows = @($targetRows | Where-Object { ([string]$_.MemberName).Trim() -ceq $target.MemberName })
+            }
+        }
+        if (@($targetRows | Where-Object { ([string]$_.MemberName).Trim() -and ([string]$_.MemberName).Trim() -ceq $binding.MemberName }).Count -gt 0) {
+            throw "Measure-SquadLedger: Connector Bindings row '$($binding.BindingId)' must use a trusted Member Name distinct from targeted internal roster identities."
+        }
+    }
+
+    if ($replaceBindings.Count -gt 0) {
+        foreach ($binding in $replaceBindings) {
+            $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+            if ($binding.TargetKind -eq 'role' -and $target.Kind -ne 'role') { continue }
+            $role = $target.Role
+            if (-not $role) { continue }
+            $classification = if ($binding.AlignedRole) { $binding.AlignedRole } else { $role }
+            $tier = ''
+            $targetRows = @($roster | Where-Object { ([string]$_.Role).Trim().ToLowerInvariant() -eq $role -and $_.PrimaryAgent -cne 'Squad Connector' })
+            if ($binding.TargetKind -eq 'role' -and $target.MemberName) {
+                $targetRows = @($targetRows | Where-Object { ([string]$_.MemberName).Trim() -ceq $target.MemberName })
+            }
+            if ($targetRows.Count -eq 1) {
+                $tier = [string]$targetRows[0].Tier
+            }
+            elseif ($targetRows.Count -gt 1) {
+                $tiers = @($targetRows | ForEach-Object { ([string]$_.Tier).Trim() })
+                $uniqueTiers = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+                foreach ($value in $tiers) { [void]$uniqueTiers.Add($value) }
+                if ($uniqueTiers.Count -eq 1) {
+                    $tier = @($uniqueTiers)[0]
+                }
+                else {
+                    $tierList = @($uniqueTiers) -join ', '
+                    throw "Measure-SquadLedger: Connector Bindings row '$($binding.BindingId)' targets role '$role' with ambiguous internal tiers ($tierList). Use an explicit role member target or align internal tiers."
+                }
+            }
+
+            $already = @($roster | Where-Object {
+                    $_.PrimaryAgent -ceq 'Squad Connector' -and ([string]$_.MemberName).Trim() -ceq $binding.MemberName
+                })
+            if ($already.Count -gt 0) {
+                $collisionRoles = @($already | ForEach-Object { ([string]$_.Role).Trim().ToLowerInvariant() }) -join ', '
+                throw "Measure-SquadLedger: synthetic connector identity collision for member '$($binding.MemberName)' (binding '$($binding.BindingId)') with existing roster rows ($collisionRoles)."
+            }
+
+            $agentNames = [System.Collections.Generic.List[string]]::new()
+            $agentNames.Add('Squad Connector')
+            $roster.Add([pscustomobject]@{
+                    Role         = $role
+                    AgentNames   = $agentNames
+                    MemberName   = $binding.MemberName
+                    PrimaryAgent = 'Squad Connector'
+                    Tier         = $tier
+                    AlignedRole  = $classification
                 })
         }
     }
@@ -572,22 +754,174 @@ function Get-RosterLocal {
 function Resolve-RoleForAgentLocal {
     <#
     .SYNOPSIS
-        Finds the roster row order index and Role label for a history file's agent
-        name. Returns $null Index (sorted last, before orchestration) when unmapped.
+        Finds the roster row order index and role identity for a history file's agent
+        name and optional Member Name. Shared-agent history without Member Name
+        resolves only when exactly one roster row matches.
     #>
     param(
         [Parameter(Mandatory)][string]$AgentName,
+        [AllowEmptyString()][string]$MemberName = '',
         # Not Mandatory -- see Resolve-RateForBlockLocal for why an empty
         # collection argument must not carry [Parameter(Mandatory)].
-        [System.Collections.Generic.List[pscustomobject]]$Roster
+        [System.Collections.Generic.List[pscustomobject]]$Roster,
+        [AllowEmptyString()][string]$ExternalProvenance = '',
+        [AllowEmptyString()][string]$EntryTitle = '',
+        [AllowEmptyString()][string]$Verification = '',
+        [AllowEmptyString()][string]$ExternalUnmeteredConnector = '',
+        [AllowEmptyCollection()][object[]]$ActiveConnectorBindings = @(),
+        [AllowEmptyCollection()][object[]]$RetiredConnectorBindings = @()
     )
 
-    for ($i = 0; $i -lt $Roster.Count; $i++) {
-        if ($AgentName -in $Roster[$i].AgentNames) {
-            return [pscustomobject]@{ Index = $i; Role = $Roster[$i].Role }
+    $member = ([string]$MemberName).Trim()
+    if ($AgentName -ceq 'Squad Connector' -and [string]::IsNullOrWhiteSpace($ExternalProvenance)) {
+        return [pscustomobject]@{
+            Index = $null; Role = $AgentName; ClassificationRole = $AgentName
+            MemberName = $member; Tier = ''; AggregateKey = "$AgentName`n$member"
+            Status = 'connector-missing-provenance'
         }
     }
-    return [pscustomobject]@{ Index = $null; Role = $AgentName }
+    $matches = [System.Collections.Generic.List[pscustomobject]]::new()
+    for ($i = 0; $i -lt $Roster.Count; $i++) {
+        if ($AgentName -in $Roster[$i].AgentNames) { $matches.Add([pscustomobject]@{ Index = $i; Row = $Roster[$i] }) }
+    }
+
+    $provMatch = [regex]::Match($ExternalProvenance, '^(?i)connector=[^;]+;\s*binding=(?:legacy-1\.0|none\s*\(legacy-1\.0\));\s*endpoint=agent;\s*mode=replace;\s*target=role:(?<role>[a-z0-9-]+)(?:/(?<targetMember>[^\r\n;]+))?\s*$')
+    if ($AgentName -ceq 'Squad Connector' -and $ExternalProvenance -and -not $provMatch.Success) {
+        $provenance = [regex]::Match($ExternalProvenance, '^connector=(?<connector>[^;]+);\s*binding=(?<binding>[^;]+);\s*endpoint=(?<endpoint>[^;]+);\s*mode=(?<mode>[^;]+);\s*target=(?<target>.+)$')
+        $identityMatches = @()
+        if ($provenance.Success) {
+            $retired = @($RetiredConnectorBindings | Where-Object {
+                    $_.BindingId -ceq $provenance.Groups['binding'].Value -and $_.HistoryEntries -ccontains $EntryTitle
+                })
+            $candidates = if ($retired.Count -gt 0) { $retired } else { $ActiveConnectorBindings }
+            $identityMatches = @($candidates | Where-Object {
+                    $_.BindingId -ceq $provenance.Groups['binding'].Value -and
+                    $_.ConnectorId -ceq $provenance.Groups['connector'].Value -and
+                    $_.EndpointKind -ceq $provenance.Groups['endpoint'].Value -and
+                    $_.RoleMode -ceq $provenance.Groups['mode'].Value -and
+                    $_.Target -ceq $provenance.Groups['target'].Value -and $_.MemberName -ceq $member
+                })
+        }
+        if ($identityMatches.Count -eq 1 -and $Verification -ceq 'external, unverified' -and
+            $ExternalUnmeteredConnector -ceq $identityMatches[0].ConnectorId) {
+            $identity = $identityMatches[0]
+            $index = $Roster.Count
+            for ($i = 0; $i -lt $Roster.Count; $i++) {
+                if ($Roster[$i].Role -eq $identity.Role -and $Roster[$i].MemberName -ceq $member -and
+                    $Roster[$i].PrimaryAgent -ceq 'Squad Connector') { $index = $i; break }
+            }
+            return [pscustomobject]@{
+                Index = $index; Role = $identity.Role
+                ClassificationRole = if ($identity.AlignedRole) { $identity.AlignedRole } else { $identity.Role }
+                MemberName = $member; Tier = $identity.Tier
+                AggregateKey = "$AgentName`n$($identity.Role)`n$member"; Status = 'ok'
+            }
+        }
+        return [pscustomobject]@{
+            Index = $null; Role = $AgentName; ClassificationRole = $AgentName
+            MemberName = $member; Tier = ''; AggregateKey = "$AgentName`n$member"
+            Status = 'connector-identity-mismatch'
+        }
+    }
+    if ($AgentName -eq 'Squad Connector' -and $provMatch.Success) {
+        $legacyRole = $provMatch.Groups['role'].Value.ToLowerInvariant()
+        $legacyTargetMember = if ($provMatch.Groups['targetMember'].Success) { ([string]$provMatch.Groups['targetMember'].Value).Trim() } else { '' }
+        $directMatches = @(if ($member) { $matches | Where-Object { ([string]$_.Row.MemberName).Trim() -ceq $member } } else { $matches })
+        if ($directMatches.Count -eq 0) {
+            for ($i = 0; $i -lt $Roster.Count; $i++) {
+                $r = $Roster[$i]
+                if (([string]$r.Role).Trim().ToLowerInvariant() -ne $legacyRole) { continue }
+                if ($legacyTargetMember -and ([string]$r.MemberName).Trim() -cne $legacyTargetMember) { continue }
+                $resolvedMember = if ($member) { $member } else { ([string]$r.MemberName).Trim() }
+                $aggregateKey = if ($resolvedMember) { "$AgentName`n$resolvedMember" } else { $AgentName }
+                return [pscustomobject]@{
+                    Index              = $i
+                    Role               = $r.Role
+                    ClassificationRole = if ($r.AlignedRole) { $r.AlignedRole } else { $r.Role }
+                    MemberName         = $resolvedMember
+                    Tier               = $r.Tier
+                    AggregateKey       = $aggregateKey
+                    Status             = 'ok'
+                }
+            }
+        }
+    }
+
+    if ($matches.Count -eq 0) {
+        return [pscustomobject]@{
+            Index              = $null
+            Role               = $AgentName
+            ClassificationRole = $AgentName
+            MemberName         = ''
+            Tier               = ''
+            AggregateKey       = $AgentName
+            Status             = if ($AgentName -ceq 'Squad Connector') { 'connector-unregistered' } else { 'unmapped' }
+        }
+    }
+
+    if ($member) {
+        $matches = @($matches | Where-Object { ([string]$_.Row.MemberName).Trim() -ceq $member })
+        if ($matches.Count -eq 0) {
+            return [pscustomobject]@{
+                Index              = $null
+                Role               = $AgentName
+                ClassificationRole = $AgentName
+                MemberName         = $member
+                Tier               = ''
+                AggregateKey       = "$AgentName`n$member"
+                Status             = 'member-not-found'
+            }
+        }
+    }
+
+    if (-not $member -and $matches.Count -gt 1) {
+        return [pscustomobject]@{
+            Index              = $null
+            Role               = $AgentName
+            ClassificationRole = $AgentName
+            MemberName         = ''
+            Tier               = ''
+            AggregateKey       = $AgentName
+            Status             = 'ambiguous-missing-member'
+        }
+    }
+    if ($matches.Count -gt 1) {
+        return [pscustomobject]@{
+            Index              = $null
+            Role               = $AgentName
+            ClassificationRole = $AgentName
+            MemberName         = $member
+            Tier               = ''
+            AggregateKey       = "$AgentName`n$member"
+            Status             = 'ambiguous-member'
+        }
+    }
+
+    $resolved = $matches[0]
+    $row = $resolved.Row
+    if (-not $member -and $row.PrimaryAgent -ceq 'Squad Connector') {
+        return [pscustomobject]@{
+            Index              = $null
+            Role               = $AgentName
+            ClassificationRole = $AgentName
+            MemberName         = ''
+            Tier               = ''
+            AggregateKey       = $AgentName
+            Status             = 'connector-missing-member'
+        }
+    }
+    $classificationRole = if ($row.AlignedRole) { $row.AlignedRole } else { $row.Role }
+    $resolvedMember = if ($member) { $member } else { ([string]$row.MemberName).Trim() }
+    $aggregateKey = if ($resolvedMember) { "$AgentName`n$resolvedMember" } else { $AgentName }
+    return [pscustomobject]@{
+        Index              = $resolved.Index
+        Role               = $row.Role
+        ClassificationRole = $classificationRole
+        MemberName         = $resolvedMember
+        Tier               = $row.Tier
+        AggregateKey       = $aggregateKey
+        Status             = 'ok'
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -1049,26 +1383,61 @@ function Add-BlockToAggregateLocal {
 function Get-AttributionCompositeKeyLocal {
     <#
     .SYNOPSIS
-        Builds the (Role, Agent) composite key `-Check`'s Attribution comparison
-        indexes and looks up by, trimmed and folded to invariant lowercase so a
-        merely differently-cased or differently-spaced Agent name is still the
-        same row.
+        Builds the (Role, Member, Agent) composite key `-Check`'s Attribution
+        comparison indexes and looks up by, trimmed and folded to invariant
+        lowercase so spacing/casing drift does not split identity rows.
     .DESCRIPTION
-        R-LEDGER-ATTRIBUTION follow-up: a role with both a Primary and a Fallback
-        agent dispatched in the same run (e.g. team.md's own `architect` row)
-        produces two distinct $roleAggregates entries -- and two ledger rows --
-        that share the same Role but carry different Agent cells (see the
-        Agent-assignment comment in the main loop below). Indexing the lookup by
-        Role alone collapses those two rows onto each other (last-write-wins):
-        both aggregates would then be compared against whichever row survived,
-        producing a false mismatch when the survivor's own cells legitimately
-        differ from the other aggregate's, or a false pass when a corrupted cell
-        happened to coincide with the survivor. Keying by this composite instead
-        means each history-file's own row is looked up, and compared, only
-        against its own aggregate.
+        Role and Agent are no longer enough once connector-backed rows share the
+        same `history/Squad Connector.md` file. Member Name is part of dispatch
+        identity and keeps repeated connector activity split per member rather
+        than collapsed onto one row.
     #>
-    param([Parameter(Mandatory)][AllowEmptyString()][string]$Role, [Parameter(Mandatory)][AllowEmptyString()][string]$Agent)
-    '{0}|{1}' -f $Role.Trim().ToLowerInvariant(), $Agent.Trim().ToLowerInvariant()
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Role,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Member,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Agent
+    )
+    '{0}|{1}|{2}' -f $Role.Trim().ToLowerInvariant(), $Member.Trim().ToLowerInvariant(), $Agent.Trim().ToLowerInvariant()
+}
+
+function Resolve-OrchestrationAgentLabelLocal {
+    <#
+    .SYNOPSIS
+        Preserves the orchestration attribution agent label already present in
+        consumption.md when that legacy identity is recognized.
+    .DESCRIPTION
+        Historical ledgers may carry either `Coordinator+Scribe` or
+        `Squad Scribe` for the orchestration row's Agent cell. To keep `-Check`
+        deterministic across old and new ledgers without rewriting history, the
+        calculator reuses whichever known label the existing ledger already
+        records. When no recognizable orchestration row exists, the caller's
+        default label is kept.
+    #>
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$ConsumptionContent = '',
+        [Parameter(Mandatory)]
+        [string]$DefaultLabel
+    )
+
+    if (-not $ConsumptionContent) { return $DefaultLabel }
+
+    $orchestrationAgents = [System.Collections.Generic.List[string]]::new()
+    foreach ($table in (Get-MarkdownTableLocal -Content $ConsumptionContent | Where-Object { 'Role' -in $_.Header -and 'Agent' -in $_.Header })) {
+        foreach ($row in $table.Rows) {
+            if (([string]$row['Role']).Trim().ToLowerInvariant() -ne 'orchestration') { continue }
+            $agent = ([string]$row['Agent']).Trim()
+            if (-not $agent) { continue }
+            # Normalize optional spaces around '+' so legacy rows like
+            # `Coordinator + Scribe` still map to the canonical label.
+            $orchestrationAgents.Add(($agent -replace '\s*\+\s*', '+'))
+        }
+    }
+
+    if (@($orchestrationAgents | Where-Object { $_ -eq 'Coordinator+Scribe' }).Count -gt 0) { return 'Coordinator+Scribe' }
+    if (@($orchestrationAgents | Where-Object { $_ -eq 'Squad Scribe' }).Count -gt 0) { return 'Squad Scribe' }
+    return $DefaultLabel
 }
 
 # ---------------------------------------------------------------------------
@@ -1693,6 +2062,7 @@ function Read-SessionUsageLocal {
     $memberPattern = if ($memberMatch.Success) { 'members[\\/]+' + [regex]::Escape($memberMatch.Groups['name'].Value) + '([\\/]|\b)' } else { $null }
 
     $dispatches = [System.Collections.Generic.List[pscustomobject]]::new()
+    $fusionSolvers = [System.Collections.Generic.List[string]]::new()
     $prompts = @{}
     $nanoAiu = $null
     $first = $null
@@ -1702,7 +2072,7 @@ function Read-SessionUsageLocal {
     $reader = [System.IO.StreamReader]::new($stream)
     try {
         while ($null -ne ($line = $reader.ReadLine())) {
-            $typeMatch = [regex]::Match($line, '"type"\s*:\s*"(?<type>subagent\.completed|session\.usage_checkpoint|tool\.execution_start)"')
+            $typeMatch = [regex]::Match($line, '"type"\s*:\s*"(?<type>subagent\.completed|session\.usage_checkpoint|session\.fusion_resolved|tool\.execution_start)"')
             $timeMatch = [regex]::Match($line, '"timestamp"\s*:\s*"(?<ts>[^"]+)"')
             if ($timeMatch.Success) {
                 if (-not $first) { $first = $timeMatch.Groups['ts'].Value }
@@ -1718,16 +2088,25 @@ function Read-SessionUsageLocal {
                 'tool.execution_start' {
                     $prompts[[string]$data['toolCallId']] = ($data['arguments'] | ConvertTo-Json -Depth 6 -Compress)
                 }
+                'session.fusion_resolved' {
+                    $primarySolver = [string]$data['primaryModel']
+                    if ($primarySolver -and $primarySolver -notin $fusionSolvers) { $fusionSolvers.Add($primarySolver) }
+                }
                 'session.usage_checkpoint' {
                     if ($null -ne $data['totalNanoAiu']) { $nanoAiu = [double]$data['totalNanoAiu'] }
                 }
                 'subagent.completed' {
+                    $firstDispatched = if ($data.ContainsKey('firstDispatchedModel')) { [string]$data['firstDispatchedModel'] } else { '' }
+                    if ($firstDispatched -and ([string]$data['model']) -match '(?i)^hydrafusion' -and $firstDispatched -notin $fusionSolvers) {
+                        $fusionSolvers.Add($firstDispatched)
+                    }
                     $dispatches.Add([pscustomobject]@{
-                            ToolCallId = [string]$data['toolCallId']
-                            AgentName  = [string]$data['agentName']
-                            Model      = [string]$data['model']
-                            Tokens     = [double]$data['totalTokens']
-                            DurationMs = [double]$data['durationMs']
+                            ToolCallId           = [string]$data['toolCallId']
+                            AgentName            = [string]$data['agentName']
+                            Model                = [string]$data['model']
+                            FirstDispatchedModel = $firstDispatched
+                            Tokens               = [double]$data['totalTokens']
+                            DurationMs           = [double]$data['durationMs']
                         })
                 }
             }
@@ -1745,13 +2124,14 @@ function Read-SessionUsageLocal {
     }
 
     [pscustomobject]@{
-        Path       = $Path
-        SessionId  = Split-Path -Leaf (Split-Path -Parent $Path)
-        Dispatches = $dispatches
-        NanoAiu    = $nanoAiu
-        First      = $first
-        Last       = $last
-        MemberName = if ($memberMatch.Success) { $memberMatch.Groups['name'].Value } else { $null }
+        Path          = $Path
+        SessionId     = Split-Path -Leaf (Split-Path -Parent $Path)
+        Dispatches    = $dispatches
+        FusionSolvers = @($fusionSolvers)
+        NanoAiu       = $nanoAiu
+        First         = $first
+        Last          = $last
+        MemberName    = if ($memberMatch.Success) { $memberMatch.Groups['name'].Value } else { $null }
     }
 }
 
@@ -1802,14 +2182,49 @@ function Get-ObservedUsageLocal {
     if ($Session.Dispatches.Count -eq 0 -and $null -eq $Session.NanoAiu) { return $null }
 
     $estimatedByAgent = @{}
+    $hydraEstimateByAgent = @{}
     $ledgerModelsByAgent = @{}
     foreach ($entry in $OrderedAggregates) {
         $agg = $entry.Aggregate
-        $estimatedByAgent[$entry.AgentName] = $agg.Input + $agg.Cached + $agg.CacheWrite + $agg.Output
+        $estimatedByAgent[$entry.AgentName] = [pscustomobject]@{
+            Scaled = $agg.Input + $agg.Cached + $agg.CacheWrite
+            Output = $agg.Output
+            Total  = $agg.Input + $agg.Cached + $agg.CacheWrite + $agg.Output
+        }
+        $hydraScaled = 0.0
+        $hydraInput = 0.0
+        $hydraCached = 0.0
+        $hydraCacheWrite = 0.0
+        $hydraOutput = 0.0
+        foreach ($blockEntry in $agg.Blocks) {
+            $fields = $blockEntry.Block.Fields
+            if ((ConvertTo-RateKeyLocal ([string]$fields['model'])) -ne 'hydrafusion-max') {
+                continue
+            }
+            $hydraInput += [double]$fields['input_tokens']
+            $hydraCached += [double]$fields['cached_tokens']
+            $hydraCacheWrite += [double]$fields['cache_write_tokens']
+            $hydraOutput += [double]$fields['output_tokens']
+        }
+        $hydraScaled = $hydraInput + $hydraCached + $hydraCacheWrite
+        if ($hydraScaled -gt 0 -or $hydraOutput -gt 0) {
+            $hydraEstimateByAgent[$entry.AgentName] = [pscustomobject]@{
+                Input      = $hydraInput
+                Cached     = $hydraCached
+                CacheWrite = $hydraCacheWrite
+                Scaled     = $hydraScaled
+                Output     = $hydraOutput
+                Total      = $hydraScaled + $hydraOutput
+            }
+        }
         $ledgerModelsByAgent[$entry.AgentName] = @($agg.Models)
     }
     if ($OrchestrationAggregate) {
-        $estimatedByAgent['Squad Scribe'] = $OrchestrationAggregate.Input + $OrchestrationAggregate.Cached + $OrchestrationAggregate.CacheWrite + $OrchestrationAggregate.Output
+        $estimatedByAgent['Squad Scribe'] = [pscustomobject]@{
+            Scaled = $OrchestrationAggregate.Input + $OrchestrationAggregate.Cached + $OrchestrationAggregate.CacheWrite
+            Output = $OrchestrationAggregate.Output
+            Total  = $OrchestrationAggregate.Input + $OrchestrationAggregate.Cached + $OrchestrationAggregate.CacheWrite + $OrchestrationAggregate.Output
+        }
         $ledgerModelsByAgent['Squad Scribe'] = @($OrchestrationAggregate.Models)
     }
 
@@ -1817,9 +2232,13 @@ function Get-ObservedUsageLocal {
     $rows = [System.Collections.Generic.List[pscustomobject]]::new()
     foreach ($group in ($Session.Dispatches | Group-Object AgentName)) {
         $observedModels = @($group.Group | ForEach-Object { $_.Model } | Where-Object { $_ } | Select-Object -Unique)
+        $solverModels = @($group.Group | ForEach-Object { if ($_.PSObject.Properties['FirstDispatchedModel']) { $_.FirstDispatchedModel } } | Where-Object { $_ -and $_ -notin $observedModels } | Select-Object -Unique)
         $cost = 0.0
         foreach ($d in $group.Group) {
             $blended = Get-BlendedRateLocal -Model $d.Model -Rates $Rates
+            if ($null -eq $blended -and $d.PSObject.Properties['FirstDispatchedModel'] -and $d.FirstDispatchedModel) {
+                $blended = Get-BlendedRateLocal -Model $d.FirstDispatchedModel -Rates $Rates
+            }
             if ($null -eq $blended) { if ($d.Model -notin $unpriced) { $unpriced.Add($d.Model) }; continue }
             $cost += $d.Tokens * $blended / 1e6
         }
@@ -1837,10 +2256,11 @@ function Get-ObservedUsageLocal {
                 IsScribe       = ($group.Name -eq 'Squad Scribe')
                 Dispatches     = $group.Count
                 ObservedModels = $observedModels
+                SolverModels   = $solverModels
                 LedgerModels   = $ledgerModels
                 Match          = $match
                 Tokens         = Get-PropertySumLocal -InputObject $group.Group -Property Tokens
-                Estimated      = if ($estimatedByAgent.ContainsKey($group.Name)) { $estimatedByAgent[$group.Name] } else { 0.0 }
+                Estimated      = if ($estimatedByAgent.ContainsKey($group.Name)) { $estimatedByAgent[$group.Name].Total } else { 0.0 }
                 Minutes        = (Get-PropertySumLocal -InputObject $group.Group -Property DurationMs) / 60000.0
                 CostUsd        = $cost
             })
@@ -1849,15 +2269,110 @@ function Get-ObservedUsageLocal {
 
     $roleRows = @($rows | Where-Object { -not $_.IsScribe })
     $roleTokens = Get-PropertySumLocal -InputObject $roleRows -Property Tokens
+    $hydraDispatchRows = @(
+        $Session.Dispatches | Where-Object {
+            $_.AgentName -ne 'Squad Scribe' -and (
+                (ConvertTo-RateKeyLocal $_.Model) -eq 'hydrafusion-max' -or
+                ($_.PSObject.Properties['FirstDispatchedModel'] -and (ConvertTo-RateKeyLocal $_.FirstDispatchedModel) -eq 'hydrafusion-max')
+            )
+        }
+    )
 
     $baseline = $BaselineModel
     if (-not $baseline) {
-        $baseline = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique |
+        $candidateModels = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique)
+        if ($hydraDispatchRows.Count -gt 0) {
+            $nonHydra = @($candidateModels | Where-Object { (ConvertTo-RateKeyLocal $_) -ne 'hydrafusion-max' })
+            $defaultFallback = if ($null -ne (Get-BlendedRateLocal -Model 'claude-sonnet-4.6' -Rates $Rates)) { 'claude-sonnet-4.6' }
+            elseif ($Rates.ByTier.ContainsKey('default') -and $Rates.ByTier['default'].pricedAsName) { [string]$Rates.ByTier['default'].pricedAsName }
+            else { $null }
+            $candidateModels = @($nonHydra + $(if ($defaultFallback) { @($defaultFallback) } else { @() }) | Select-Object -Unique)
+            if ($candidateModels.Count -eq 0) { $candidateModels = @($roleRows | ForEach-Object { $_.ObservedModels } | Select-Object -Unique) }
+        }
+        $baseline = @($candidateModels |
                 Sort-Object { $rate = Get-BlendedRateLocal -Model $_ -Rates $Rates; if ($null -eq $rate) { -1 } else { $rate } } -Descending |
                 Select-Object -First 1) | Select-Object -First 1
     }
     $baselineRate = if ($baseline) { Get-BlendedRateLocal -Model $baseline -Rates $Rates } else { $null }
     if ($baseline -and $null -eq $baselineRate) { $Warnings.Add("WARN: baseline model '$baseline' has no rate row; the without-HVE-Squad comparison is omitted.") }
+
+    $hydraSummary = $null
+    if ($hydraDispatchRows.Count -gt 0) {
+        $hydraObservedTokens = Get-PropertySumLocal -InputObject $hydraDispatchRows -Property Tokens
+        $hydraCostUsd = 0.0
+        foreach ($dispatch in $hydraDispatchRows) {
+            $blended = Get-BlendedRateLocal -Model $dispatch.Model -Rates $Rates
+            if ($null -eq $blended -and $dispatch.PSObject.Properties['FirstDispatchedModel']) {
+                $blended = Get-BlendedRateLocal -Model $dispatch.FirstDispatchedModel -Rates $Rates
+            }
+            if ($null -ne $blended) {
+                $hydraCostUsd += $dispatch.Tokens * $blended / 1e6
+            }
+        }
+
+        $hydraEstimatedTokens = 0.0
+        $hasHydraEstimate = $false
+        $hasCategoryEstimate = $false
+        $hasProportionalEstimate = $false
+        foreach ($agentGroup in ($hydraDispatchRows | Group-Object AgentName)) {
+            if ($hydraEstimateByAgent.ContainsKey($agentGroup.Name)) {
+                $estimate = $hydraEstimateByAgent[$agentGroup.Name]
+                $hydraEstimatedTokens += ($estimate.Scaled / 0.35) + $estimate.Output
+                $hasHydraEstimate = $true
+                $hasCategoryEstimate = $true
+                continue
+            }
+            if (-not $estimatedByAgent.ContainsKey($agentGroup.Name)) {
+                continue
+            }
+
+            $allAgentDispatches = @($Session.Dispatches | Where-Object { $_.AgentName -eq $agentGroup.Name })
+            $allAgentTokens = Get-PropertySumLocal -InputObject $allAgentDispatches -Property Tokens
+            if ($allAgentTokens -le 0) {
+                continue
+            }
+            $hydraAgentTokens = Get-PropertySumLocal -InputObject $agentGroup.Group -Property Tokens
+            $share = [math]::Min(1.0, [math]::Max(0.0, $hydraAgentTokens / $allAgentTokens))
+            $hydraEstimatedTokens += $estimatedByAgent[$agentGroup.Name].Total * $share
+            $hasHydraEstimate = $true
+            $hasProportionalEstimate = $true
+        }
+        $counterfactualBasis = if ($hasCategoryEstimate -and $hasProportionalEstimate) {
+            'mixed category-specific 0.35x inverse and proportional token-share estimate; representative blended-rate pricing'
+        }
+        elseif ($hasCategoryEstimate) {
+            'category-specific 0.35x inverse for input/cache/cache-write with output unchanged; representative blended-rate pricing'
+        }
+        elseif ($hasProportionalEstimate) {
+            'proportional token-share estimate; representative blended-rate pricing'
+        }
+        else {
+            $null
+        }
+        $hydraSolvers = @(
+            $hydraDispatchRows |
+                ForEach-Object {
+                    if ($_.PSObject.Properties['FirstDispatchedModel'] -and $_.FirstDispatchedModel -and (ConvertTo-RateKeyLocal $_.FirstDispatchedModel) -ne 'hydrafusion-max') {
+                        $_.FirstDispatchedModel
+                    }
+                } |
+                Where-Object { $_ } |
+                Select-Object -Unique
+        )
+        if ($hydraSolvers.Count -eq 0 -and $Session.PSObject.Properties['FusionSolvers']) {
+            $hydraSolvers = @($Session.FusionSolvers)
+        }
+        $hydraSummary = [pscustomobject]@{
+            Dispatches            = [int]$hydraDispatchRows.Count
+            ObservedTokens        = $hydraObservedTokens
+            EstimatedTokens       = if ($hasHydraEstimate) { $hydraEstimatedTokens } else { $null }
+            BlendedCostUsd        = $hydraCostUsd
+            CounterfactualModel   = $baseline
+            CounterfactualCostUsd = if ($hasHydraEstimate -and $null -ne $baselineRate) { $hydraEstimatedTokens * $baselineRate / 1e6 } else { $null }
+            CounterfactualBasis   = $counterfactualBasis
+            SolverModels          = @($hydraSolvers)
+        }
+    }
 
     [pscustomobject]@{
         Session          = $Session
@@ -1868,6 +2383,7 @@ function Get-ObservedUsageLocal {
         RoleTokens       = $roleTokens
         BaselineModel    = $baseline
         BaselineCostUsd  = if ($null -ne $baselineRate) { $roleTokens * $baselineRate / 1e6 } else { $null }
+        HydraFusion      = $hydraSummary
         SessionAiu       = if ($null -ne $Session.NanoAiu) { $Session.NanoAiu / 1e9 } else { $null }
     }
 }
@@ -1887,8 +2403,8 @@ function Get-ObservedSectionLinesLocal {
     $scope = if ($s.MemberName) { " Only dispatches whose prompt names ``members/$($s.MemberName)`` are counted." } else { '' }
     $lines.Add("Source: Copilot session ``$($s.SessionId)`` (``events.jsonl``, $($s.First) to $($s.Last)). The host reports one real token total per dispatch, not split into input, cached, and output, so these figures sit beside the estimates above rather than replacing them. Blended USD prices each total with model-catalog.md's blended mix (0.20 input, 0.80 cached, 0.08 cache write, 0.02 output) over this root's rate rows.$scope")
     $lines.Add('')
-    $lines.Add('| Agent | Dispatches | Observed Model | Ledger Model | Match | Observed Tokens | Estimated Tokens | Minutes | Blended USD |')
-    $lines.Add('| ----- | ---------- | -------------- | ------------ | ----- | --------------- | ---------------- | ------- | ----------- |')
+    $lines.Add('| Agent | Dispatches | Observed Model | Ledger Model | Match | Observed Tokens | Estimated Tokens | Minutes | Calculated Blended USD |')
+    $lines.Add('| ----- | ---------- | -------------- | ------------ | ----- | --------------- | ---------------- | ------- | ---------------------- |')
     foreach ($r in ($Observed.Rows | Sort-Object IsScribe, Agent)) {
         $ledger = if ($r.LedgerModels.Count -gt 0) { $r.LedgerModels -join ', ' } else { '—' }
         $lines.Add(('| {0} | {1} | {2} | {3} | {4} | {5:N0} | {6:N0} | {7:N1} | {8:N4} |' -f $r.Agent, $r.Dispatches, ($r.ObservedModels -join ', '), $ledger, $r.Match, $r.Tokens, $r.Estimated, $r.Minutes, $r.CostUsd))
@@ -1902,8 +2418,8 @@ function Get-ObservedSectionLinesLocal {
     if ($null -ne $Observed.BaselineCostUsd) {
         $lines.Add('### Without HVE Squad')
         $lines.Add('')
-        $lines.Add('| Scenario | Tokens | Model | Blended USD |')
-        $lines.Add('| -------- | ------ | ----- | ----------- |')
+        $lines.Add('| Scenario | Tokens | Model | Calculated Blended USD |')
+        $lines.Add('| -------- | ------ | ----- | ---------------------- |')
         $lines.Add(('| With HVE Squad: routed roles plus Scribe, as observed | {0:N0} | as routed | {1:N4} |' -f $Observed.ObservedTokens, $Observed.SquadCostUsd))
         $lines.Add(('| Without HVE Squad: the same role work on one model, no Scribe | {0:N0} | {1} | {2:N4} |' -f $Observed.RoleTokens, $Observed.BaselineModel, $Observed.BaselineCostUsd))
         $lines.Add('')
@@ -1912,6 +2428,18 @@ function Get-ObservedSectionLinesLocal {
         $direction = if ($delta -ge 0) { 'lower' } else { 'higher' }
         $lines.Add(('HVE Squad is **{0:N4} USD ({1:N1}%) {2}** than running the same role work on `{3}`. Both rows use the same blended mix; neither includes coordinator turns, and the single-model row adds no context growth or rework a long single chat would carry, so it is a floor for that scenario rather than a forecast.' -f [math]::Abs($delta), $pct, $direction, $Observed.BaselineModel))
         $lines.Add('')
+        if ($Observed.PSObject.Properties['HydraFusion'] -and $Observed.HydraFusion -and $null -ne $Observed.HydraFusion.CounterfactualCostUsd) {
+            $hf = $Observed.HydraFusion
+            $solverNote = if ($hf.SolverModels.Count -gt 0) { " (solver: $($hf.SolverModels -join ', '))" } else { '' }
+            $tokDelta = $hf.EstimatedTokens - $hf.ObservedTokens
+            $tokPct = if ($hf.EstimatedTokens -gt 0) { [math]::Abs($tokDelta) / $hf.EstimatedTokens * 100.0 } else { 0.0 }
+            $tokDirection = if ($tokDelta -ge 0) { 'fewer' } else { 'more' }
+            $costSaved = $hf.CounterfactualCostUsd - $hf.BlendedCostUsd
+            $costPct = if ($hf.CounterfactualCostUsd -gt 0) { [math]::Abs($costSaved) / $hf.CounterfactualCostUsd * 100.0 } else { 0.0 }
+            $costDirection = if ($costSaved -ge 0) { 'lower' } else { 'higher' }
+            $lines.Add(('HydraFusion comparison: **{0}** role dispatch(es) on `hydrafusion-max`{1} consumed **{2:N0} host-reported tokens** with a **calculated representative-blend cost of {3:N4} USD**, against an **estimated counterfactual of {4:N0} standard-model tokens ({5:N4} calculated USD on `{6}`)** — **{7:N1}% {8} tokens and {9:N4} USD ({10:N1}%) {11} calculated cost** on those dispatches. Counterfactual basis: {12}.' -f $hf.Dispatches, $solverNote, $hf.ObservedTokens, $hf.BlendedCostUsd, $hf.EstimatedTokens, $hf.CounterfactualCostUsd, $hf.CounterfactualModel, $tokPct, $tokDirection, [math]::Abs($costSaved), $costPct, $costDirection, $hf.CounterfactualBasis))
+            $lines.Add('')
+        }
     }
     return $lines.ToArray()
 }
@@ -2060,17 +2588,23 @@ function Get-HistoryEntryRecordsLocal {
         $deliverable = (& $field 'Deliverable').Replace('`', '').Trim().Replace('\', '/').ToLowerInvariant()
         if ($deliverable -in @('none', 'n/a', '-', [string][char]0x2014)) { $deliverable = '' }
         [pscustomobject]@{
-            Agent       = $AgentName
-            Start       = $start
-            End         = $end
-            Timestamp   = if ($stamp -match '^\d{4}-\d\d-\d\dT') { $stamp } else { '' }
-            Turn        = (& $field 'Turn')
-            Workstream  = (& $field 'Workstream').ToLowerInvariant()
-            Deliverable = $deliverable
-            Request     = (& $field 'Request')
-            Outcome     = (& $field 'Outcome')
-            Cost        = 0.0
-            Seq         = 0
+            Agent              = $AgentName
+            Start              = $start
+            End                = $end
+            Timestamp          = if ($stamp -match '^\d{4}-\d\d-\d\dT') { $stamp } else { '' }
+            Turn               = (& $field 'Turn')
+            Workstream         = (& $field 'Workstream').ToLowerInvariant()
+            MemberName         = (& $field 'Member Name')
+            ExternalProvenance = (& $field 'External provenance')
+            MalformedExternalMarkers = [regex]::IsMatch($text, '(?mi)^[ \t]*(?:-[ \t]+)?(?:External provenance|Verification|External-unmetered):')
+            Title              = $headings[$i].Groups['title'].Value.Trim()
+            Verification       = (& $field 'Verification')
+            ExternalUnmeteredConnector = ((& $field 'External-unmetered') -replace '^connector=', '')
+            Deliverable        = $deliverable
+            Request            = (& $field 'Request')
+            Outcome            = (& $field 'Outcome')
+            Cost               = 0.0
+            Seq                = 0
         }
     }
 }
@@ -2098,7 +2632,9 @@ function Get-UnitEconomicsLocal {
 
     $seen = @{}
     foreach ($e in $sorted) {
-        $role = (Resolve-RoleForAgentLocal -AgentName $e.Agent -Roster $Roster).Role
+        $extProv = if ($e.PSObject.Properties['ExternalProvenance']) { [string]$e.ExternalProvenance } else { '' }
+        $resolvedRole = Resolve-RoleForAgentLocal -AgentName $e.Agent -MemberName $e.MemberName -Roster $Roster -ExternalProvenance $extProv
+        $role = $resolvedRole.ClassificationRole
         $e | Add-Member -NotePropertyName IsReview -NotePropertyValue ($role.ToLowerInvariant() -in $script:UnitEconomicsReviewRoles) -Force
         $isRework = $false
         if ($e.Deliverable) {
@@ -2343,7 +2879,28 @@ $historyFiles = @(
 )
 
 $teamPath = Join-Path $SquadRoot 'team.md'
-$roster = Get-RosterLocal -Content $(if (Test-Path -LiteralPath $teamPath) { Get-Content -LiteralPath $teamPath -Raw } else { '' })
+$teamContent = if (Test-Path -LiteralPath $teamPath) { Get-Content -LiteralPath $teamPath -Raw } else { '' }
+$roster = Get-RosterLocal -Content $teamContent
+$projectRoot = [System.IO.Path]::GetFullPath($SquadRoot)
+if ($projectRoot.Replace('\', '/') -match '^(?<base>.*?)/\.copilot-tracking(?:/|$)') { $projectRoot = $Matches['base'] }
+$decisionsPath = Join-Path $SquadRoot 'decisions.md'
+$decisionsContent = if (Test-Path -LiteralPath $decisionsPath) { Get-Content -LiteralPath $decisionsPath -Raw } else { '' }
+$retirementModel = [pscustomobject]@{ Retirements = @(); Issues = @() }
+$connectorIdentityIssues = @()
+$activeConnectorBindings = @()
+$connectorHistory = @($historyFiles | Where-Object BaseName -CEQ 'Squad Connector')
+$hasConnectorHistory = $connectorHistory.Count -gt 0 -and
+    [System.IO.File]::ReadAllText($connectorHistory[0].FullName) -match '(?m)^###[ \t]+\S'
+if ($hasConnectorHistory -or $decisionsContent -match '(?m)^## Connector Binding Retirement') {
+    . (Join-Path $PSScriptRoot 'Resolve-SquadConnectorHistory.ps1')
+    $retirementModel = Get-SquadConnectorRetirementModel -Content $decisionsContent -TeamPath $teamPath -ProjectRoot $projectRoot
+    $connectorIdentityIssues = @($retirementModel.Issues)
+    if ($hasConnectorHistory) {
+        $activeModel = Get-SquadConnectorBindingIdentityModel -TeamContent $teamContent -TeamPath $teamPath -ProjectRoot $projectRoot
+        $activeConnectorBindings = @($activeModel.Bindings)
+        $connectorIdentityIssues += @($activeModel.Issues)
+    }
+}
 
 $ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
 if (-not (Test-Path -LiteralPath $ratesPath -PathType Leaf)) {
@@ -2374,6 +2931,8 @@ if ($EmitBaseline) {
 
 $warnings = [System.Collections.Generic.List[string]]::new()
 $postBaselineBlockIssues = [System.Collections.Generic.List[string]]::new()
+$attributionIssues = [System.Collections.Generic.List[string]]::new()
+foreach ($issue in $connectorIdentityIssues) { $attributionIssues.Add("Connector identity: $issue") }
 $historyCounts = @{}
 $historyIdentitiesByFile = @{}
 $enumerationLines = [System.Collections.Generic.List[string]]::new()
@@ -2399,6 +2958,23 @@ foreach ($file in $historyFiles) {
 
     $blocks = @(Get-ConsumptionBlockLocal -Content $content -SourceName $file.Name)
     $fileEntries = if ($agentName -eq 'Squad Scribe') { @() } else { @(Get-HistoryEntryRecordsLocal -Content $content -AgentName $agentName) }
+    if ($agentName -ceq 'Squad Connector') {
+        foreach ($entry in $fileEntries) {
+            $requiredMetadata = [ordered]@{
+                ExternalProvenance = 'External provenance'
+                Verification = 'Verification'
+                ExternalUnmeteredConnector = 'External-unmetered'
+            }
+            foreach ($field in $requiredMetadata.GetEnumerator()) {
+                if ([string]::IsNullOrWhiteSpace([string]$entry.($field.Key))) {
+                    $attributionIssues.Add("history/$($file.Name) entry '$($entry.Title)' is missing required connector metadata: $($field.Value).")
+                }
+            }
+            if ($entry.MalformedExternalMarkers) {
+                $attributionIssues.Add("history/$($file.Name) entry '$($entry.Title)' has malformed connector metadata; External provenance, Verification, and External-unmetered must use the literal '* ' bullet prefix.")
+            }
+        }
+    }
     $enumerationLines.Add("$($file.Name) — $($blocks.Count) block(s) — identities: $identityLabel")
 
     foreach ($block in $blocks) {
@@ -2447,21 +3023,38 @@ foreach ($file in $historyFiles) {
                 # turns plus every Scribe write, not a dispatched role), so its Member/
                 # Agent/Tier are the fixed template convention from consumption.md's
                 # own `<coord+scribe>` / `mixed` placeholders, never a roster lookup.
-                $orchestrationAggregate.Agent = 'Coordinator+Scribe'
+                # Default to "Squad Scribe"; after consumption.md is loaded, a
+                # compatibility pass may switch this to the historical
+                # `Coordinator+Scribe` label when that is what the current ledger
+                # already records.
+                $orchestrationAggregate.Agent = 'Squad Scribe'
                 $orchestrationAggregate.Tier = 'mixed'
             }
             Add-BlockToAggregateLocal -Aggregate $orchestrationAggregate -Block $block -Rates $rates -CalibrationFactor $calibrationFactor -Warnings $warnings -TreatUnresolvedRateAsWarning $isLegacyBlock
             continue
         }
 
-        $resolved = Resolve-RoleForAgentLocal -AgentName $agentName -Roster $roster
-        $existing = $ordered | Where-Object { $_.AgentName -eq $agentName } | Select-Object -First 1
+        $entryForBlock = @($fileEntries | Where-Object { $block.Offset -ge $_.Start -and $block.Offset -lt $_.End } | Select-Object -First 1)
+        $memberForBlock = if ($entryForBlock.Count -eq 1) { [string]$entryForBlock[0].MemberName } else { '' }
+        $extProvForBlock = if ($entryForBlock.Count -eq 1) { [string]$entryForBlock[0].ExternalProvenance } else { '' }
+        $resolved = Resolve-RoleForAgentLocal -AgentName $agentName -MemberName $memberForBlock -Roster $roster -ExternalProvenance $extProvForBlock `
+            -EntryTitle $(if ($entryForBlock) { $entryForBlock[0].Title } else { '' }) `
+            -Verification $(if ($entryForBlock) { $entryForBlock[0].Verification } else { '' }) `
+            -ExternalUnmeteredConnector $(if ($entryForBlock) { $entryForBlock[0].ExternalUnmeteredConnector } else { '' }) `
+            -ActiveConnectorBindings $activeConnectorBindings -RetiredConnectorBindings $retirementModel.Retirements
+        if ($resolved.Status -notin @('ok', 'unmapped')) {
+            $problem = "history/$($file.Name) consumption block $($block.Ordinal) cannot be attributed for agent '$agentName'$(if ($memberForBlock) { ", member '$memberForBlock'" } else { '' }) (status: $($resolved.Status))."
+            $warnings.Add("WARN: $problem")
+            $attributionIssues.Add($problem)
+            continue
+        }
+
+        $existing = $ordered | Where-Object { $_.AggregateKey -eq $resolved.AggregateKey } | Select-Object -First 1
         if (-not $existing) {
             $aggregate = New-RoleAggregateLocal -Label $resolved.Role
             if ($null -ne $resolved.Index) {
-                $rosterRow = $roster[$resolved.Index]
-                $aggregate.Member = $rosterRow.MemberName
-                $aggregate.Tier = $rosterRow.Tier
+                $aggregate.Member = $resolved.MemberName
+                $aggregate.Tier = $resolved.Tier
             }
             # Agent always names the agent actually dispatched -- this history
             # file's own agent name -- never merely the role's roster-declared
@@ -2475,9 +3068,10 @@ foreach ($file in $historyFiles) {
             # branches without needing a separate unmapped-agent case.
             $aggregate.Agent = $agentName
             $existing = [pscustomobject]@{
-                AgentName = $agentName
-                SortIndex = if ($null -ne $resolved.Index) { $resolved.Index } else { [int]::MaxValue }
-                Aggregate = $aggregate
+                AggregateKey = $resolved.AggregateKey
+                AgentName    = $agentName
+                SortIndex    = if ($null -ne $resolved.Index) { $resolved.Index } else { [int]::MaxValue }
+                Aggregate    = $aggregate
             }
             $ordered.Add($existing)
         }
@@ -2496,6 +3090,10 @@ foreach ($file in $historyFiles) {
 if ($postBaselineBlockIssues.Count -gt 0 -and -not $Check) {
     foreach ($e in $postBaselineBlockIssues) { Write-Warning $e }
     throw "Measure-SquadLedger: $($postBaselineBlockIssues.Count) post-baseline consumption block(s) failed to parse or validate; see warnings above. Refusing to compute a ledger from unreadable blocks."
+}
+if ($attributionIssues.Count -gt 0 -and -not $Check) {
+    foreach ($issue in $attributionIssues) { Write-Warning $issue }
+    throw "Measure-SquadLedger: $($attributionIssues.Count) history entry(ies) could not be attributed to a unique roster identity. Add Member Name to shared-agent entries (especially Squad Connector) and rerun."
 }
 
 $roleAggregates = @($ordered | Sort-Object SortIndex, AgentName | ForEach-Object { $_.Aggregate })
@@ -2565,6 +3163,9 @@ if (Test-Path -LiteralPath $consumptionPath -PathType Leaf) {
     $existingConsumptionContent = Get-Content -LiteralPath $consumptionPath -Raw
     $identityGuardResult = Test-HistoryIdentityGuardLocal -ConsumptionContent $existingConsumptionContent -CurrentIdentitiesByFile $historyIdentitiesByFile -PostWrite:$postWriteIdentityCheck
 }
+if ($orchestrationAggregate) {
+    $orchestrationAggregate.Agent = Resolve-OrchestrationAgentLabelLocal -ConsumptionContent $existingConsumptionContent -DefaultLabel $orchestrationAggregate.Agent
+}
 
 if (-not $Check -and $identityGuardResult) {
     foreach ($w in $identityGuardResult.Warnings) { $warnings.Add("WARN: $w") }
@@ -2596,6 +3197,7 @@ if ($Check) {
     # these are reported as FAILs rather than thrown (see the non--Check throw
     # gate above, right after the per-file loop).
     foreach ($e in $postBaselineBlockIssues) { $mismatches.Add("Post-baseline block: $e") }
+    foreach ($e in $attributionIssues) { $mismatches.Add("Attribution identity: $e") }
 
     # -BaselinePath append-only/protected-artifact verification (Amendment 3 §2
     # item 1), only meaningful paired with -Check: shrink, prefix-hash mismatch,
@@ -2664,70 +3266,34 @@ if ($Check) {
             $mismatches.Add("No '## Attribution' table with the contractual 'Model Source' and 'Priced As' columns found in consumption.md.")
         }
         else {
-            # R-LEDGER-ATTRIBUTION follow-up: a role dispatched through both a
-            # Primary and a Fallback agent in the same run (e.g. team.md's own
-            # `architect` row) produces more than one $roleAggregates entry --
-            # and more than one ledger row -- sharing the same Role but carrying
-            # different Agent cells (see the Agent-assignment comment in the main
-            # loop above). Only when a Role actually has more than one row or
-            # more than one aggregate does Agent become load-bearing for *which*
-            # row an aggregate is compared against -- keyed by the composite
-            # (Role, Agent), trimmed and case-insensitive (see
-            # Get-AttributionCompositeKeyLocal above), so each history file's own
-            # row is compared only to its own aggregate. In the ordinary
-            # one-row-per-role case, matching stays Role-only, unchanged, since
-            # Member/Agent/Tier remain intentionally excluded from *value*
-            # comparison (see the design-decision comment above) -- disambiguation
-            # is the only reason Agent participates in the lookup at all.
-            $ledgerRowsByRole = @{}
-            $seenLedgerComposites = @{}
+            # Member-aware disambiguation: connector activity can share one
+            # history file (`Squad Connector`) while representing distinct
+            # roster rows. Match Attribution rows by (Role, Member, Agent), not
+            # Role alone.
+            $ledgerRowsByComposite = @{}
             foreach ($row in $attributionTable[0].Rows) {
                 $roleText = ([string]$row['Role']).Trim()
                 if (-not $roleText) { continue }
+                $memberText = ([string]$row['Member']).Trim()
                 $agentText = ([string]$row['Agent']).Trim()
-                $roleKeyLower = $roleText.ToLowerInvariant()
-                $compositeKey = Get-AttributionCompositeKeyLocal -Role $roleText -Agent $agentText
-                if ($seenLedgerComposites.ContainsKey($compositeKey)) {
-                    $mismatches.Add("Attribution: consumption.md has more than one row for role '$roleText' agent '$agentText'.")
+                $compositeKey = Get-AttributionCompositeKeyLocal -Role $roleText -Member $memberText -Agent $agentText
+                if ($ledgerRowsByComposite.ContainsKey($compositeKey)) {
+                    $memberSuffix = if ($memberText) { " (member '$memberText')" } else { '' }
+                    $mismatches.Add("Attribution: consumption.md has more than one row for role '$roleText' agent '$agentText'$memberSuffix.")
                     continue
                 }
-                $seenLedgerComposites[$compositeKey] = $true
-                if (-not $ledgerRowsByRole.ContainsKey($roleKeyLower)) {
-                    $ledgerRowsByRole[$roleKeyLower] = [System.Collections.Generic.List[pscustomobject]]::new()
-                }
-                $ledgerRowsByRole[$roleKeyLower].Add([pscustomobject]@{ Role = $roleText; Agent = $agentText; Row = $row; CompositeKey = $compositeKey })
-            }
-
-            $aggregatesByRole = @{}
-            foreach ($agg in $roleAggregates) {
-                $roleKeyLower = $agg.Label.Trim().ToLowerInvariant()
-                if (-not $aggregatesByRole.ContainsKey($roleKeyLower)) {
-                    $aggregatesByRole[$roleKeyLower] = [System.Collections.Generic.List[pscustomobject]]::new()
-                }
-                $aggregatesByRole[$roleKeyLower].Add($agg)
+                $ledgerRowsByComposite[$compositeKey] = [pscustomobject]@{ Role = $roleText; Member = $memberText; Agent = $agentText; Row = $row; CompositeKey = $compositeKey }
             }
 
             $consumedLedgerComposites = @{}
             foreach ($agg in $roleAggregates) {
-                $roleKeyLower = $agg.Label.Trim().ToLowerInvariant()
                 $agentLabel = ([string]$agg.Agent).Trim()
-                $candidates = @(if ($ledgerRowsByRole.ContainsKey($roleKeyLower)) { $ledgerRowsByRole[$roleKeyLower] })
-                # Disambiguation by Agent is only required when a collision
-                # actually exists on either side -- more than one aggregate for
-                # this Role, or more than one ledger row for it.
-                $needsDisambiguation = ($aggregatesByRole[$roleKeyLower].Count -gt 1) -or ($candidates.Count -gt 1)
-
-                $matchEntry = $null
-                if ($needsDisambiguation) {
-                    $agentLabelLower = $agentLabel.ToLowerInvariant()
-                    $matchEntry = $candidates | Where-Object { $_.Agent.Trim().ToLowerInvariant() -eq $agentLabelLower } | Select-Object -First 1
-                }
-                elseif ($candidates.Count -eq 1) {
-                    $matchEntry = $candidates[0]
-                }
-
+                $memberLabel = ([string]$agg.Member).Trim()
+                $memberSuffix = if ($memberLabel) { " (member '$memberLabel')" } else { '' }
+                $compositeKey = Get-AttributionCompositeKeyLocal -Role $agg.Label -Member $memberLabel -Agent $agentLabel
+                $matchEntry = if ($ledgerRowsByComposite.ContainsKey($compositeKey)) { $ledgerRowsByComposite[$compositeKey] } else { $null }
                 if (-not $matchEntry) {
-                    $mismatches.Add("Attribution: consumption.md is missing a row for role '$($agg.Label)' agent '$agentLabel'.")
+                    $mismatches.Add("Attribution: consumption.md is missing a row for role '$($agg.Label)' agent '$agentLabel'$memberSuffix.")
                     continue
                 }
                 $consumedLedgerComposites[$matchEntry.CompositeKey] = $true
@@ -2742,22 +3308,21 @@ if ($Check) {
                     $expectedCells = @($column.Expected | ForEach-Object { $_.Trim() })
                     $setDiff = @(Compare-Object -ReferenceObject $expectedCells -DifferenceObject $actualCells -SyncWindow 0)
                     if ($setDiff.Count -gt 0) {
-                        $mismatches.Add("Attribution: role '$($agg.Label)' agent '$agentLabel' column '$($column.Name)': consumption.md says '$($ledgerRow[$column.Name])', derived from history/ is '$($expectedCells -join ', ')'.")
+                        $mismatches.Add("Attribution: role '$($agg.Label)' agent '$agentLabel' column '$($column.Name)'${memberSuffix}: consumption.md says '$($ledgerRow[$column.Name])', derived from history/ is '$($expectedCells -join ', ')'.")
                     }
                 }
 
                 foreach ($sourceValue in (([string]$ledgerRow['Model Source'] -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
                     if ($sourceValue -notin $legalModelSources) {
-                        $mismatches.Add("Attribution: role '$($agg.Label)' agent '$agentLabel' column 'Model Source' has illegal value '$sourceValue' (legal values: $($legalModelSources -join ', ')).")
+                        $mismatches.Add("Attribution: role '$($agg.Label)' agent '$agentLabel' column 'Model Source' has illegal value '$sourceValue'$memberSuffix (legal values: $($legalModelSources -join ', ')).")
                     }
                 }
             }
 
-            foreach ($roleKeyLower in $ledgerRowsByRole.Keys) {
-                foreach ($entry in $ledgerRowsByRole[$roleKeyLower]) {
-                    if (-not $consumedLedgerComposites.ContainsKey($entry.CompositeKey)) {
-                        $mismatches.Add("Attribution: consumption.md has an extra row for role '$($entry.Role)' agent '$($entry.Agent)' with no matching consumption block in history/.")
-                    }
+            foreach ($entry in $ledgerRowsByComposite.Values) {
+                if (-not $consumedLedgerComposites.ContainsKey($entry.CompositeKey)) {
+                    $memberSuffix = if ($entry.Member) { " (member '$($entry.Member)')" } else { '' }
+                    $mismatches.Add("Attribution: consumption.md has an extra row for role '$($entry.Role)' agent '$($entry.Agent)'$memberSuffix with no matching consumption block in history/.")
                 }
             }
         }
@@ -2916,8 +3481,13 @@ $fragmentLines.Add(('| **Total** | **{0:N0}** | **{1:N0}** | **{2:N0}** | **{3:N
             $totalTurns, $totalInput, $totalCached, $totalCacheWrite, $totalOutput, $totalCost, $totalCredits))
 if ($observed -and $null -ne $observed.SessionAiu -and $observed.SessionAiu -gt 0) {
     $billedUsd = $observed.SessionAiu * 0.01
+    $hydraNote = ''
+    if ($observed.PSObject.Properties['HydraFusion'] -and $observed.HydraFusion -and @($roleAggregates | Where-Object { 'unknown' -in $_.Models }).Count -gt 0) {
+        $hf = $observed.HydraFusion
+        $hydraNote = (' Roles recorded as `unknown` above were priced at the `tier-default` fallback (`Claude Sonnet 4.6`) over static token floors; the session log shows {0} role dispatch(es) actually ran on `hydrafusion-max` ({1:N0} observed tokens, {2:N4} USD blended).' -f $hf.Dispatches, $hf.ObservedTokens, $hf.BlendedCostUsd)
+    }
     $fragmentLines.Add('')
-    $fragmentLines.Add(('> **Billed by the host for this session so far: {0:N2} AI units, about {1:N2} USD.** The estimate above is {2:N2}x that figure. Estimates come from dispatch-size guesses; the billed figure is the host''s own count, coordinator included. See *Observed Usage (host-reported)* below.' -f $observed.SessionAiu, $billedUsd, ($totalCost / $billedUsd)))
+    $fragmentLines.Add(('> **Billed by the host for this session so far: {0:N2} AI units, about {1:N2} USD.** The estimate above is {2:N2}x that figure. Estimates come from dispatch-size guesses; the billed figure is the host''s own count, coordinator included.{3} See *Observed Usage (host-reported)* below.' -f $observed.SessionAiu, $billedUsd, ($totalCost / $billedUsd), $hydraNote))
 }
 $fragmentLines.Add('')
 $fragmentLines.Add('### Derivation')
@@ -3049,6 +3619,19 @@ if ($Format -eq 'json') {
                 blendedCostUsd  = [math]::Round($observed.SquadCostUsd, 4)
                 baselineModel   = $observed.BaselineModel
                 baselineCostUsd = if ($null -ne $observed.BaselineCostUsd) { [math]::Round($observed.BaselineCostUsd, 4) } else { $null }
+                hydraFusion     = if ($observed.PSObject.Properties['HydraFusion'] -and $observed.HydraFusion) {
+                    [ordered]@{
+                        dispatches            = $observed.HydraFusion.Dispatches
+                        observedTokens        = $observed.HydraFusion.ObservedTokens
+                        estimatedTokens       = $observed.HydraFusion.EstimatedTokens
+                        blendedCostUsd        = [math]::Round($observed.HydraFusion.BlendedCostUsd, 4)
+                        counterfactualModel   = $observed.HydraFusion.CounterfactualModel
+                        counterfactualCostUsd = if ($null -ne $observed.HydraFusion.CounterfactualCostUsd) { [math]::Round($observed.HydraFusion.CounterfactualCostUsd, 4) } else { $null }
+                        counterfactualBasis   = $observed.HydraFusion.CounterfactualBasis
+                        solverModels          = @($observed.HydraFusion.SolverModels)
+                    }
+                }
+                else { $null }
                 agents          = @(
                     foreach ($r in $observed.Rows) {
                         [ordered]@{ agent = $r.Agent; dispatches = $r.Dispatches; observedModels = @($r.ObservedModels); ledgerModels = @($r.LedgerModels); match = $r.Match; observedTokens = $r.Tokens; estimatedTokens = $r.Estimated; blendedCostUsd = [math]::Round($r.CostUsd, 4) }

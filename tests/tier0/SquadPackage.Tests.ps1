@@ -519,7 +519,7 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
             $route = [regex]::Match($Procedure, '(?ms)^## Route\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
             $contract = [regex]::Match($Coordinator, '(?ms)^## Skill Reference Contract\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
             $routePattern = (
-                '(?ms)^1\. Read `team\.md` and `routing\.md`\..*?^2\. Match the request against the routing table;.*?^4\. Select cost-first:.*?^' +
+                '(?ms)^1\. Read `team\.md` and `routing\.md`\..*?^2\. Match the request against the routing table;.*?^4\. For `team\.md` `Model routing: ranked\|economy\|manual` or `routing=`, resolve ids per `references/model-routing\.md`.*?^' +
                 [regex]::Escape($script:ProgressRoutePointer) + '\r?\n6\. Dispatch all parallel-eligible roles'
             )
             return (
