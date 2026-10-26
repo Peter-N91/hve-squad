@@ -2070,19 +2070,21 @@ Describe 'Write-SquadHandoff.ps1 compact all-mode Scribe read set (H1, WRT-08)' 
         $scribe | Should -Not -Match 'economy only'
     }
 
-    It 'the Coordinator prefers dispatch facts without forcing derived JSON inputs (WRT-13)' {
+    It 'the compact runtime delegates ordinary facts without forcing derived JSON inputs (WRT-13)' {
         $coordinator = @($script:HandoffModel.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
-        $step = [regex]::Match($coordinator, '(?s)### Step 5:.*?(?=### Step 6:)').Value
-        $step | Should -Match 'single-dispatch fact parameters'
+        $runtime = Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/coordinator-runtime.md') -Raw
+        $step = Get-Content -LiteralPath $script:EconomyScribePath -Raw
+        $runtime | Should -Match 'Run `Write-SquadHandoff\.ps1 -Quiet` synchronously per `economy-scribe\.md`'
+        $coordinator | Should -Match 'Run `Write-SquadHandoff\.ps1 -Quiet` directly and synchronously'
         foreach ($parameter in @('RunId', 'Agent', 'Request', 'Deliverable', 'Outcome', 'ConsumptionPath', 'OrchestrationConsumptionPath')) {
             $step | Should -Match ([regex]::Escape("-$parameter"))
         }
-        $step | Should -Match 'derives.*activeRoles'
-        $step | Should -Match 'Full JSON.*decisions.*multiple/no dispatches.*routing.*state changes'
+        $step | Should -Match 'derive.*activeRoles'
+        $step | Should -Match 'decisions.*multiple/no dispatches.*routing.*state changes'
         $step | Should -Match 'estimated fallback'
-        $step | Should -Match 'sessionModel.*changes.*modelOverrides'
+        $step | Should -Match 'stateAdvance.*sessionModel.*modelOverrides'
         $step | Should -Match 'ledger-only.*PASS'
-        $step | Should -Not -Match 'minimal structured JSON|Always include a consumption payload|Re-report.*every turn'
+        $step | Should -Not -Match 'Always include a consumption payload|Re-report.*every turn'
     }
 
     It 'the legacy procedure and economy mode link to the shared deterministic contract' {

@@ -69,7 +69,7 @@ is an on-demand map, not a mandatory coordinator startup read.
 | [economy-mode.md](references/economy-mode.md)                 | Only under `Model routing: economy`: consent, role allowlist, economy pick, one escalation |
 | [federation-templates.md](references/federation-templates.md) | Federation-root seed templates                                                 |
 
-Files at the skill root that are not part of this split — `learnings/shared-learnings.md`, `squad-watch.workflow.yml`, `github-approval-watcher.workflow.yml`, `mcp.template.json`, `mcp-server.template.json`, and `squad-task.issue-template.yml` — keep their existing paths.
+Other skill-root files retain their existing paths.
 
 ## Attribution
 

@@ -10,9 +10,8 @@ metadata:
 
 # Squad Operating Procedure — Turn Stages
 
-Script-backed coordinators follow `coordinator-runtime.md` and
-`coordinator-init.md`; those supersede the legacy startup, Init ownership and
-manual read-back mechanics below. The semantic gates and native fallback remain.
+`coordinator-runtime.md` and `coordinator-init.md` supersede legacy startup,
+Init ownership, and read-back below; gates and fallback remain.
 
 ## Init
 
@@ -28,7 +27,7 @@ Init once; verify each turn. Propose → confirm → create; write only after co
 
 ## Route
 
-1. Read state and routing once with `Get-SquadDispatchBrief.ps1`; JSON defers model scoring. Use the returned `Packs:` state per `profiles-and-packs.md`.
+1. Read state/routing once with `Get-SquadDispatchBrief.ps1`; JSON defers model scoring. Apply `Packs:` per `profiles-and-packs.md`.
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
 3. Resolve work roles through the roster, then persisted connector defaults per `references/connector-role-modes.md`, including autopilot and setup for manual bindings. Governance stays internal. A role marked **thin charter needed** or missing capability escalates, never substitutes.
 4. For `team.md` `Model routing: ranked|economy|manual` or `routing=`, send actual units/host models to `New-SquadDispatchPlan.ps1` and apply its hash-bound refresh with `Set-SquadModelRouting.ps1`. Otherwise `off` keeps cost-first selection: `fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`; user tier hints override per-role defaults for this turn.

@@ -350,6 +350,15 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan.routingRefresh.changes[0].to | Should -BeExactly 'gpt-5.6-sol'
     }
 
+    It 'requires the planned model to control the native dispatch rather than agent frontmatter' {
+        $runtime = Get-Content -LiteralPath (Join-Path $script:References 'coordinator-runtime.md') -Raw
+        $coordinator = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
+        $runtime | Should -Match 'Pass non-empty `endpoint\.model` exactly as the native\s+`model`; omit only when empty\.'
+        $runtime | Should -Match 'Never use `pricingModel` or frontmatter instead'
+        $coordinator | Should -Match 'Copy every non-empty planned `endpoint\.model` into the native dispatch\s+tool''s `model` argument exactly'
+        $coordinator | Should -Match 'never substitute the pricing model or defer an active route to frontmatter'
+    }
+
     It 'refuses active routing when sessionModel auto is supplied without the host model enum' {
         $repo = New-FixtureRepo
         $fixture = Initialize-Fixture $repo -ModelRouting ranked

@@ -35,6 +35,8 @@ BeforeAll {
     }
 
     $script:Coordinator = Get-SquadReferenceBody -Name 'coordinator-legacy.md'
+    $script:CoordinatorInit = Get-SquadReferenceBody -Name 'coordinator-init.md'
+    $script:CoordinatorAgent = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
     $script:ScribeHot = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0].Body
     $script:Scribe = Get-SquadReferenceBody -Name 'scribe-cold-charter.md'
     $script:InitCold = Get-SquadReferenceBody -Name 'scribe-cold-init-and-seeding.md'
@@ -112,12 +114,10 @@ Describe 'GATE-38 Init copies roster rows from the payload and never derives an 
             $script:Scribe | Should -Match ([regex]::Escape("references/$reference"))
         }
         $script:ScribeHot | Should -Match 'Cold loading is not a validation bypass'
-        $script:Coordinator | Should -Match 'never for fresh Init or `Initialize-Squad`'
-        $script:Coordinator | Should -Match 'dispatch the actual Squad Scribe via `task`/`runSubagent`'
-        $script:Coordinator | Should -Match 'only the child runs the helper and returns its validated status'
-        (Get-SquadReferenceBody 'coordinator-init.md') | Should -Match 'Initialize-Squad\.ps1.+-Direct'
-        $script:Coordinator | Should -Match 'ordinary direct-writer orchestration stays in Scribe history without inventing a Scribe actor'
-        $script:Coordinator | Should -Match 'Set `stateAdvance.activeRoles` to actually dispatched agents, or `\[\]` when none; running the script never makes Scribe an active actor'
+        $script:CoordinatorAgent | Should -Match 'Confirmed fresh Init may\s+also run its validated helper directly'
+        $script:CoordinatorInit | Should -Match 'Initialize-Squad\.ps1.+-Direct'
+        $script:CoordinatorInit | Should -Match 'records coordinator overhead only in `history/Squad Scribe\.md`, never a fictional\s+Scribe actor'
+        $script:CoordinatorInit | Should -Match 'A real dispatched Scribe can\s+still use `scribe-init\.md` without `-Direct`'
     }
     It 'the payload template carries a roster field for initialization and roster refresh' {
         $script:PayloadTemplate | Should -Match '(?m)^roster: <initialization/roster refresh only'
@@ -183,9 +183,11 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         }
     }
 
-    It 'prepares transport before actual dispatch without requiring a child editor or background resume' {
+    It 'prepares transport before direct publication without a shell fallback' {
         $Brief = Get-SquadReferenceBody 'scribe-init.md'
-        $script:Coordinator | Should -Match 'first read `references/scribe-init\.md` and prepare its JSON outside squad state; dispatch Squad Scribe with `payloadPath`'
+        $script:CoordinatorInit | Should -Match 'Write a small confirmed choices JSON with an advertised editor, outside squad\s+state'
+        $script:CoordinatorInit | Should -Match 'Get-SquadInitContext\.ps1.+-ChoicesPath.+-PayloadPath'
+        $script:CoordinatorInit | Should -Match 'Initialize-Squad\.ps1.+-PayloadPath.+-Direct'
         $script:ScribeHot | Should -Match 'use the coordinator-prepared `payloadPath` directly'
         $Brief | Should -Match 'Use coordinator-prepared `payloadPath` directly'
         $Brief | Should -Match 'without an editor call or rewrite'

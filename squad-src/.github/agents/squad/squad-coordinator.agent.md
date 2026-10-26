@@ -106,6 +106,9 @@ all gate procedures, or unrelated instruction files.
 * Pass the row's current `Deliverable Root` as an output argument; edited cells
   win. Forward `inputs=` verbatim as read-only. Preserve member identities,
   connector defaults and explicit execution choices.
+* Copy every non-empty planned `endpoint.model` into the native dispatch
+  tool's `model` argument exactly. Omit it only when the plan leaves it empty;
+  never substitute the pricing model or defer an active route to frontmatter.
 * Capture host-reported model identity before pin/session inference, plus each
   agent's model and internal tool-call count. Keep `auto` literal session
   metadata; unreported actual usage is `unknown`, never a guessed model.

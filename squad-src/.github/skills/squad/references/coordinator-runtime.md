@@ -100,13 +100,15 @@ nothing. `approved-over-ceiling` is one sequential unit, not another gate's waiv
 ## 4. Native Work and Persistence
 
 Before nontrivial work load `Get-SquadProcedure.ps1 -Name progress` with the other
-active sections. Its measured canonical Progress Presentation contract owns the
-stable 3-7 outcomes, native tracker/in-chat fallback, phase updates and blockers.
+active sections. Its measured Progress Presentation contract owns 3-7 outcomes,
+tracker/chat fallback, phase updates and blockers.
 This is coordinator-owned ephemeral UI, not a role or state write.
 
 Dispatch each planned endpoint with native `task`/`runSubagent`, the request,
 scoped context, exact output-root argument, read-only inputs, and any admitted
-Decision Ref/round/slot. Parallelize only an independent wave.
+Decision Ref/round/slot. Pass non-empty `endpoint.model` exactly as the native
+`model`; omit only when empty. Never use `pricingModel` or frontmatter instead.
+Parallelize only an independent wave.
 Require final model identity, tool-call count,
 actual paths, outcome and unresolved questions. Review only after owners' final
 returns. Use the write-set snapshot/verify mode for a closing review when needed.
