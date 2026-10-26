@@ -41,6 +41,14 @@
     every changed file is restored to its original bytes (a file the script created is
     removed) and the script exits 3.
 
+    For one completed dispatch, pass -RunId, -Agent, -Request, -Deliverable and -Outcome
+    instead of preparing JSON. This builds the same payload with that agent as activeRoles
+    and uses the same validation and write path. Optional -MemberName, -SelectionCue and
+    -PassedModel retain actual dispatch attribution. Optional -ConsumptionPath and
+    -OrchestrationConsumptionPath supply existing consumption JSON objects unchanged;
+    omit them only when no usage block was supplied, to use the existing estimated fallback.
+    This mode never captures a review, refreshes an artifact or repairs dispatch order.
+
     Payload (JSON object; every object is a closed key set). Only `runId`, `historyRecords`
     (each with agent, request, deliverable, outcome) and `stateAdvance.activeRoles` are
     required; everything marked "derived" is filled in when omitted and strictly validated
@@ -138,6 +146,26 @@
     Path to a JSON payload file, instead of -PayloadJson.
 .PARAMETER PayloadJson
     The payload as a JSON string.
+.PARAMETER RunId
+    Single-dispatch mode: the actual run identifier, not inferred from cost-preflight state.
+.PARAMETER Agent
+    Single-dispatch mode: the actual dispatched agent's roster-exact name.
+.PARAMETER Request
+    Single-dispatch mode: the actual request.
+.PARAMETER Deliverable
+    Single-dispatch mode: the existing artifact path, never a copy made to renew freshness.
+.PARAMETER Outcome
+    Single-dispatch mode: the actual returned outcome, not an inferred approval or finding.
+.PARAMETER MemberName
+    Single-dispatch mode: the actual roster member, when needed to disambiguate identity.
+.PARAMETER SelectionCue
+    Single-dispatch mode: the actual cue that selected an Alternate.
+.PARAMETER PassedModel
+    Single-dispatch mode: the actual CLI-pinned model, when applicable.
+.PARAMETER ConsumptionPath
+    Single-dispatch mode: a file containing the supplied ten-field dispatch consumption object.
+.PARAMETER OrchestrationConsumptionPath
+    Single-dispatch mode: a file containing supplied coordinator consumption, not fictional Scribe usage.
 .PARAMETER SessionLog
     Passed to `Measure-SquadLedger.ps1 -Write`; defaults to `auto`.
 .PARAMETER Quiet
@@ -167,6 +195,8 @@
 .EXAMPLE
     ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -PayloadPath $env:TEMP/handoff.json
 .EXAMPLE
+    ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -RunId r1 -Agent 'Squad Researcher' -Request 'Survey conventions.' -Deliverable research/topic.md -Outcome 'Survey complete.' -Quiet
+.EXAMPLE
     ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -SnapshotPath $env:TEMP/deliverables.json -Path src/app.py, .copilot-tracking/changes/x.md
 .EXAMPLE
     ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -VerifySnapshotPath $env:TEMP/deliverables.json
@@ -174,6 +204,7 @@
 [CmdletBinding(DefaultParameterSetName = 'Handoff')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Handoff')]
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
     [Parameter(Mandatory, ParameterSetName = 'Snapshot')]
     [Parameter(Mandatory, ParameterSetName = 'Verify')]
     [string]$SquadRoot,
@@ -184,13 +215,46 @@ param(
     [Parameter(ParameterSetName = 'Handoff')]
     [string]$PayloadJson,
 
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$RunId,
+
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$Agent,
+
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$Request,
+
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$Deliverable,
+
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$Outcome,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$MemberName,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$SelectionCue,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$PassedModel,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$ConsumptionPath,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$OrchestrationConsumptionPath,
+
     [Parameter(ParameterSetName = 'Handoff')]
+    [Parameter(ParameterSetName = 'SingleDispatch')]
     [string]$SessionLog = 'auto',
 
     [Parameter(ParameterSetName = 'Handoff')]
+    [Parameter(ParameterSetName = 'SingleDispatch')]
     [switch]$Quiet,
 
     [Parameter(ParameterSetName = 'Handoff')]
+    [Parameter(ParameterSetName = 'SingleDispatch')]
     [ValidateRange(1, 3600)]
     [int]$LockTimeoutSeconds = 120,
 
@@ -812,16 +876,46 @@ function Get-LastEntryTimestamp {
 $PwshPath = (Get-Process -Id $PID).Path
 
 # --- Inputs ------------------------------------------------------------------------------------
-if ($PSBoundParameters.ContainsKey('PayloadJson') -eq $PSBoundParameters.ContainsKey('PayloadPath')) {
-    Stop-Handoff 1 'supply exactly one of -PayloadJson or -PayloadPath.'
+if ($PSCmdlet.ParameterSetName -eq 'SingleDispatch') {
+    $record = [ordered]@{ agent = $Agent; request = $Request; deliverable = $Deliverable; outcome = $Outcome }
+    foreach ($field in @('memberName', 'selectionCue', 'passedModel')) {
+        if ($PSBoundParameters.ContainsKey($field)) { $record[$field] = $PSBoundParameters[$field] }
+    }
+    $PayloadJson = [ordered]@{
+        runId          = $RunId
+        historyRecords = @($record)
+        stateAdvance   = [ordered]@{ activeRoles = @($Agent) }
+    } | ConvertTo-Json -Depth 8
 }
-if ($PSBoundParameters.ContainsKey('PayloadPath')) {
-    $PayloadPath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($PayloadPath)
-    if (-not (Test-Path -LiteralPath $PayloadPath -PathType Leaf)) { Stop-Handoff 1 "missing $PayloadPath." }
-    $PayloadJson = [System.IO.File]::ReadAllText($PayloadPath)
+else {
+    if ($PSBoundParameters.ContainsKey('PayloadJson') -eq $PSBoundParameters.ContainsKey('PayloadPath')) {
+        Stop-Handoff 1 'supply exactly one of -PayloadJson or -PayloadPath.'
+    }
+    if ($PSBoundParameters.ContainsKey('PayloadPath')) {
+        $PayloadPath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($PayloadPath)
+        if (-not (Test-Path -LiteralPath $PayloadPath -PathType Leaf)) { Stop-Handoff 1 "missing $PayloadPath." }
+        $PayloadJson = [System.IO.File]::ReadAllText($PayloadPath)
+    }
 }
 try { $payload = [System.Text.Json.Nodes.JsonNode]::Parse($PayloadJson) }
 catch { Stop-Handoff 1 "payload is not valid JSON (duplicate keys are rejected): $($_.Exception.Message)" }
+
+if ($PSCmdlet.ParameterSetName -eq 'SingleDispatch') {
+    foreach ($parameter in @('ConsumptionPath', 'OrchestrationConsumptionPath')) {
+        if (-not $PSBoundParameters.ContainsKey($parameter)) { continue }
+        try {
+            $usagePath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($PSBoundParameters[$parameter])
+            $usage = [System.Text.Json.Nodes.JsonNode]::Parse([System.IO.File]::ReadAllText($usagePath))
+        }
+        catch { Stop-Handoff 1 "$parameter cannot be read as JSON: $($_.Exception.Message)" }
+        if ((Get-Kind $usage) -ne 'Object') { Stop-Handoff 1 "$parameter must contain a consumption object; supplied usage cannot fall back to estimates." }
+        if ($parameter -eq 'ConsumptionPath') { $payload['historyRecords'][0]['consumption'] = $usage }
+        else {
+            $payload['orchestration'] = [System.Text.Json.Nodes.JsonObject]::new()
+            $payload['orchestration']['consumption'] = $usage
+        }
+    }
+}
 
 $scriptsRoot = $PSScriptRoot
 $statePath = Join-Path $SquadRoot 'state.json'

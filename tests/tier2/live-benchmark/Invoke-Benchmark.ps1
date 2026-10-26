@@ -74,8 +74,9 @@ $Trials = Join-Path $Work 'trials'
 [void][IO.Directory]::CreateDirectory($Trials)
 Write-Host "Evidence and logs are kept in $Work (safe to delete afterwards)."
 
-Write-Host 'Installing the squad from this checkout...'
+Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Installing the squad from this checkout..."
 $Install = Install-SquadPackage -Destination (Join-Path $Work 'install') -SourceRoot $RepoRoot
+Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Installation finished; $Runs runs and report generation remain."
 
 $Engine = Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'
 $Scenario = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
@@ -85,14 +86,15 @@ $Summaries = [Collections.Generic.List[object]]::new()
 $Identity = @{}
 
 for ($Run = 1; $Run -le $Runs; $Run++) {
-    Write-Host "Run $Run of $Runs started at $(Get-Date -Format 'HH:mm'). It takes about 20 minutes..."
+    Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run of $Runs started; 7 planned steps, $($Runs - $Run) later runs, then report generation. It takes about 20 minutes..."
     $TrialPath = Join-Path $Trials "run-$Run"
     $Log = Join-Path $Work "run-$Run.log"
+    $ProgressLog = Join-Path $Work "run-$Run-progress.log"
     $Result = $null
     $Note = ''
     try {
-        $Arguments = @('-NoProfile', '-File', $Engine, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $RepoRoot, '-InstallRoot', $Install.Root, '-Arm', 'baseline', '-Pair', [string]$Run, '-MaxCredits', $Ceiling, '-Live', '-IsolatedEnvironment', '-ObservationOnly')
-        $Process = Invoke-EfficiencyProcess -FilePath (Get-Process -Id $PID).Path -Arguments $Arguments -WorkingDirectory $Trials -OutputPath $Log -TimeoutSeconds $TimeoutSeconds -EnvironmentVariables @{ COPILOT_AUTO_UPDATE = 'false' }
+        $Arguments = @('-NoProfile', '-File', $Engine, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $RepoRoot, '-InstallRoot', $Install.Root, '-Arm', 'baseline', '-Pair', [string]$Run, '-MaxCredits', $Ceiling, '-ProgressPath', $ProgressLog, '-Live', '-IsolatedEnvironment', '-ObservationOnly')
+        $Process = Invoke-EfficiencyProcess -FilePath (Get-Process -Id $PID).Path -Arguments $Arguments -WorkingDirectory $Trials -OutputPath $Log -TimeoutSeconds $TimeoutSeconds -EnvironmentVariables @{ COPILOT_AUTO_UPDATE = 'false' } -ProgressPath $ProgressLog
         $RunJson = Join-Path $TrialPath 'out/run.json'
         if (Test-Path -LiteralPath $RunJson -PathType Leaf) { $Result = Get-Content -LiteralPath $RunJson -Raw | ConvertFrom-Json -AsHashtable }
         else { $Note = "the run produced no result (exit code $($Process.exitCode), stop cause $($Process.stopCause))" }
@@ -105,10 +107,10 @@ for ($Run = 1; $Run -le $Runs; $Run++) {
     $Summaries.Add($Summary)
     if ($Summary['scored']) {
         if (-not $Identity.Count -and $null -ne $Result) { $Identity = Get-BenchmarkRunIdentity -Result $Result }
-        Write-Host "Run $Run scored: quality $($Summary['quality'])/100, functional $(if ($Summary['functional']) { 'passed' } else { 'failed' }), workflow $(if ($Summary['workflow']) { 'passed' } else { 'failed' })."
+        Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run scored: quality $($Summary['quality'])/100, functional $(if ($Summary['functional']) { 'passed' } else { 'failed' }), workflow $(if ($Summary['workflow']) { 'passed' } else { 'failed' })."
     }
     else {
-        Write-Host "Run $Run did not produce a score: $($Summary['note'])"
+        Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run did not produce a score: $($Summary['note'])"
         if (Test-Path -LiteralPath "$Log.stderr") { Get-Content -LiteralPath "$Log.stderr" -Tail 8 | ForEach-Object { Write-Host "  $_" } }
     }
 }
@@ -119,8 +121,15 @@ if ($Scored -eq 0) {
     exit 1
 }
 $Score = ConvertTo-BenchmarkScore -Trial $Summaries.ToArray() -Requested $Runs -Commit $Commit -UncommittedChanges $Uncommitted -Identity $Identity -Scenario ([string]$Scenario.name)
-[void](Write-BenchmarkScore -Score $Score -Directory $OutputDirectory)
+Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Generating score, badge and report; final step."
+$EarlierScore = $null
+$EarlierPath = Join-Path $OutputDirectory 'score.json'
+if (Test-Path -LiteralPath $EarlierPath -PathType Leaf) {
+    try { $EarlierScore = Read-BenchmarkScore -Path $EarlierPath }
+    catch { Write-Warning "Earlier score could not be read; its activity is unavailable: $($_.Exception.Message)" }
+}
+[void](Write-BenchmarkScore -Score $Score -Directory $OutputDirectory -EarlierScore $EarlierScore)
 Write-Host ''
 Write-Host (Get-BenchmarkBadgeText $Score)
 if ($Scored -lt $Runs) { Write-Warning "$($Runs - $Scored) of $Runs runs did not produce a score; they are recorded as failed." }
-Write-Host 'Saved score.json, badge.svg and report.md in benchmarks/efficiency/. Commit them with your branch.'
+Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Saved score.json, badge.svg and report.md in benchmarks/efficiency/; 0 steps remaining. Commit them with your branch."

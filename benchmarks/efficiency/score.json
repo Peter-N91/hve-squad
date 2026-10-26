@@ -1,15 +1,15 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-10-26T09:28:30Z",
+  "measuredAt": "2026-10-26T14:20:17Z",
   "source": {
-    "commit": "b3c51ab524899bd07aea11fd7d3653c7b635fb95",
-    "squadSourceHash": "ee545046b1459cee7901e4036f522b0cf32e730abaa9233944626370e8d09b15",
+    "commit": "9bd6c886aa3d5a4f333d230b656daf18e9a8505f",
+    "squadSourceHash": "19670b6ad9395846fef577c0c367be5d4fc951ebe0fa7e3c5029b0e835dfce0c",
     "uncommittedChanges": false
   },
   "environment": {
     "model": "claude-sonnet-5.5",
-    "cli": "GitHub Copilot CLI 1.0.104-3. Run 'copilot update' to check for updates.",
+    "cli": "GitHub Copilot CLI 1.0.103. Run 'copilot update' to check for updates.",
     "powershell": "7.6.7"
   },
   "runs": {
@@ -18,41 +18,58 @@
     "failed": 0
   },
   "summary": {
-    "quality": 78.0,
+    "quality": 77.0,
     "dimensions": {
-      "businessClarity": 15.0,
-      "scopeFidelity": 16.0,
-      "acceptanceCriteria": 16.0,
-      "traceability": 16.0,
-      "risksAndDecisions": 15.0
+      "businessClarity": 16.0,
+      "scopeFidelity": 15.0,
+      "acceptanceCriteria": 15.0,
+      "traceability": 17.0,
+      "risksAndDecisions": 14.0
     },
     "functional": 1,
     "workflow": 0,
     "criticalHighFindings": 1,
-    "averageSeconds": 1500.616,
-    "averageCredits": 508.091203
+    "averageSeconds": 2000.806,
+    "averageCredits": 495.391752,
+    "activity": {
+      "scribeDispatches": 1.0,
+      "scribeModelRequests": 2.0,
+      "scribeSeconds": 13.077,
+      "scribeCredits": 0.2560735,
+      "coordinatorModelRequests": 41.0,
+      "authorModelRequests": 39.0
+    }
   },
   "trials": [
     {
       "run": 1,
       "scored": true,
-      "quality": 78.0,
+      "quality": 77.0,
       "dimensions": {
-        "businessClarity": 15.0,
-        "scopeFidelity": 16.0,
-        "acceptanceCriteria": 16.0,
-        "traceability": 16.0,
-        "risksAndDecisions": 15.0
+        "businessClarity": 16.0,
+        "scopeFidelity": 15.0,
+        "acceptanceCriteria": 15.0,
+        "traceability": 17.0,
+        "risksAndDecisions": 14.0
       },
       "functional": true,
       "workflow": false,
       "criticalHighFindings": 1,
-      "seconds": 1500.616,
-      "credits": 508.091203,
+      "seconds": 2000.806,
+      "credits": 495.391752,
       "failedChecks": [
-        "requirements/reviewOutcome"
+        "requirements/reviewOutcome",
+        "build/reviewOutcome"
       ],
-      "note": ""
+      "note": "",
+      "activity": {
+        "scribeDispatches": 1.0,
+        "scribeModelRequests": 2.0,
+        "scribeSeconds": 13.077,
+        "scribeCredits": 0.2560735,
+        "coordinatorModelRequests": 41.0,
+        "authorModelRequests": 39.0
+      }
     }
   ]
 }

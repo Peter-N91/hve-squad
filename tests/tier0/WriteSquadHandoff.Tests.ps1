@@ -115,13 +115,22 @@ BeforeAll {
     }
 
     function Invoke-Writer {
-        param([string]$Root, $Payload, [switch]$Quiet, [string]$Writer = $script:Writer)
-        $json = $Payload | ConvertTo-Json -Depth 8
-        $file = Join-Path $TestDrive "payload-$([guid]::NewGuid().ToString('N')).json"
-        Set-Content -LiteralPath $file -Value $json -Encoding utf8NoBOM
+        param([string]$Root, $Payload, [switch]$Quiet, [string]$Writer = $script:Writer, [System.Collections.IDictionary]$Dispatch)
         $psi = [System.Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
-        foreach ($argument in @('-NoProfile', '-File', $Writer, '-SquadRoot', $Root, '-PayloadPath', $file)) {
+        foreach ($argument in @('-NoProfile', '-NonInteractive', '-File', $Writer, '-SquadRoot', $Root)) {
             $psi.ArgumentList.Add($argument)
+        }
+        if ($null -ne $Dispatch) {
+            foreach ($key in $Dispatch.Keys) {
+                $psi.ArgumentList.Add("-$key")
+                $psi.ArgumentList.Add([string]$Dispatch[$key])
+            }
+        }
+        else {
+            $file = Join-Path $TestDrive "payload-$([guid]::NewGuid().ToString('N')).json"
+            Set-Content -LiteralPath $file -Value ($Payload | ConvertTo-Json -Depth 8) -Encoding utf8NoBOM
+            $psi.ArgumentList.Add('-PayloadPath')
+            $psi.ArgumentList.Add($file)
         }
         if ($Quiet) { $psi.ArgumentList.Add('-Quiet') }
         $psi.RedirectStandardOutput = $true
@@ -651,17 +660,31 @@ Describe 'Write-SquadHandoff.ps1 supports every routing mode (WRT-01, WRT-05)' -
         $LASTEXITCODE | Should -Be 0 -Because $verify
     }
 
-    It 'accepts the literal payload example in the shared writer contract' {
+    It 'accepts the literal CLI example in the shared writer contract' {
         $doc = (Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/economy-scribe.md') -Raw) -replace "`r`n", "`n"
-        $example = [regex]::Match($doc, '(?ms)^```json\n(?<json>.*?)\n```').Groups['json'].Value
+        $example = [regex]::Match($doc, '(?m)^`pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff\.ps1 -SquadRoot <squadRoot> (?<args>.+)`$').Groups['args'].Value
         $example | Should -Not -BeNullOrEmpty
+        $tokens = $null
+        $parseErrors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput("writer $example", [ref]$tokens, [ref]$parseErrors)
+        $parseErrors | Should -BeNullOrEmpty
+        $elements = $ast.EndBlock.Statements[0].PipelineElements[0].CommandElements
+        $facts = @{}
+        for ($i = 1; $i -lt $elements.Count; $i++) {
+            $parameter = $elements[$i]
+            $parameter | Should -BeOfType ([System.Management.Automation.Language.CommandParameterAst])
+            if ($parameter.ParameterName -eq 'Quiet') { continue }
+            $parameter.ParameterName | Should -BeIn @('RunId', 'Agent', 'Request', 'Deliverable', 'Outcome')
+            $value = $elements[++$i]
+            $value | Should -BeOfType ([System.Management.Automation.Language.StringConstantExpressionAst])
+            $facts.Add($parameter.ParameterName, $value.Value)
+        }
+        $facts.Count | Should -Be 5
         $root = New-Root
         Set-Content -LiteralPath (Join-Path $root 'research/topic.md') -Value 'Survey.'
-        $file = Join-Path $TestDrive "example-$([guid]::NewGuid().ToString('N')).json"
-        [System.IO.File]::WriteAllText($file, $example, [System.Text.UTF8Encoding]::new($false))
-        $output = & pwsh -NoProfile -File $script:Writer -SquadRoot $root -PayloadPath $file *>&1 | Out-String
-        $LASTEXITCODE | Should -Be 0 -Because $output
-        $output | Should -Match 'Measure-SquadLedger -Check: PASS'
+        $result = Invoke-Writer -Root $root -Dispatch $facts -Quiet
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        ($result.Stdout | ConvertFrom-Json).ledgerCheck | Should -Be 'PASS'
     }
 
     It 'refuses a handoff value other than script' {
@@ -1648,6 +1671,115 @@ Describe 'Write-SquadHandoff.ps1 derives omitted payload fields' {
         }
     }
 
+    Context 'Single-dispatch CLI facts (WRT-12)' {
+        BeforeAll {
+            function Get-DispatchFact {
+                $payload = New-MinimalPayload
+                $record = $payload.historyRecords[0]
+                @{
+                    RunId = $payload.runId
+                    Agent = $record.agent
+                    Request = $record.request
+                    Deliverable = $record.deliverable
+                    Outcome = $record.outcome
+                }
+            }
+        }
+
+        It 'records one completed dispatch without a payload file under <Mode>' -ForEach @(
+            @{ Mode = 'off' }
+            @{ Mode = 'ranked' }
+            @{ Mode = 'economy' }
+            @{ Mode = 'manual' }
+        ) {
+            $root = New-Root
+            Set-RoutingLine -Root $root -Line "Model routing: $Mode"
+            $facts = Get-DispatchFact
+            $facts.Request = 'Survey ''quoted'' `$facts conventions.'
+            $result = Invoke-Writer -Root $root -Dispatch $facts -Quiet
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            @($result.Stdout.Trim() -split '\r?\n').Count | Should -Be 1
+            $status = $result.Stdout | ConvertFrom-Json
+            $status.status | Should -Be 'written'
+            $status.historyCounts.'Squad Researcher' | Should -Be 1
+            $status.ledgerCheck | Should -Be 'PASS'
+            $state = Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json
+            @($state.activeRoles) | Should -Be @($facts.Agent)
+            $history = Get-Content -LiteralPath (Join-Path $root 'history/Squad Researcher.md') -Raw
+            $history | Should -Match ([regex]::Escape($facts.Request))
+            $block = Get-Block -Root $root -Agent $facts.Agent
+            $block.model_source | Should -Be 'agent-pinned'
+            $block.basis | Should -Be 'estimated'
+            (Invoke-LedgerCheck -Root $root -Counts 'Squad Researcher=1;Squad Scribe=1').ExitCode | Should -Be 0
+        }
+
+        It 'retains supplied dispatch and coordinator consumption instead of replacing them with estimator floors' {
+            $root = New-Root
+            $payload = New-Payload
+            $supplied = $payload.historyRecords[0].consumption
+            $supplied.model_source = 'cli-pinned'
+            $supplied.internal_turns = 3
+            $supplied.input_tokens = 1117
+            $usagePath = Join-Path $TestDrive 'dispatch-consumption.json'
+            $orchestrationPath = Join-Path $TestDrive 'coordinator-consumption.json'
+            Set-Content -LiteralPath $usagePath -Value ($supplied | ConvertTo-Json) -Encoding utf8NoBOM
+            Set-Content -LiteralPath $orchestrationPath -Value ($payload.orchestration.consumption | ConvertTo-Json) -Encoding utf8NoBOM
+            $facts = Get-DispatchFact
+            $facts.PassedModel = $supplied.model
+            $facts.ConsumptionPath = $usagePath
+            $facts.OrchestrationConsumptionPath = $orchestrationPath
+            $result = Invoke-Writer -Root $root -Dispatch $facts -Quiet
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $actual = Get-Block -Root $root -Agent $facts.Agent
+            $actual.Keys.Count | Should -Be $supplied.Keys.Count
+            foreach ($key in $supplied.Keys) { $actual[$key] | Should -BeExactly $supplied[$key] }
+            $actual = Get-Block -Root $root -Agent 'Squad Scribe'
+            foreach ($key in $payload.orchestration.consumption.Keys) {
+                $actual[$key] | Should -BeExactly $payload.orchestration.consumption[$key]
+            }
+        }
+
+        It 'refuses <Case> supplied consumption without estimating or writing' -ForEach @(
+            @{ Case = 'missing'; Text = $null }
+            @{ Case = 'malformed'; Text = '{' }
+            @{ Case = 'null'; Text = 'null' }
+        ) {
+            $root = New-Root
+            $facts = Get-DispatchFact
+            $facts.ConsumptionPath = Join-Path $TestDrive "invalid-usage-$Case.json"
+            if ($null -ne $Text) { Set-Content -LiteralPath $facts.ConsumptionPath -Value $Text -Encoding utf8NoBOM }
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Dispatch $facts -Quiet
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Stdout | Should -BeNullOrEmpty
+            $result.Stderr | Should -Match 'ConsumptionPath'
+            Get-TreeHash $root | Should -BeExactly $before
+        }
+
+        It 'refuses an unchanged artifact after its recorded dispatch without refreshing evidence or history' {
+            $root = New-Root
+            $facts = Get-DispatchFact
+            $first = Invoke-Writer -Root $root -Dispatch $facts -Quiet
+            $first.ExitCode | Should -Be 0 -Because $first.Output
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Dispatch $facts -Quiet
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Stdout | Should -BeNullOrEmpty
+            $result.Stderr | Should -Match 'last modified before this turn began'
+            Get-TreeHash $root | Should -BeExactly $before
+        }
+
+        It 'retains the unsupported-operation exit rather than emitting a successful receipt' {
+            $root = New-Root
+            Set-Content -LiteralPath (Join-Path $root 'federation.md') -Value '# Federation'
+            $before = Get-TreeHash $root
+            $result = Invoke-Writer -Root $root -Dispatch (Get-DispatchFact) -Quiet
+            $result.ExitCode | Should -Be 2 -Because $result.Output
+            $result.Stdout | Should -BeNullOrEmpty
+            Get-TreeHash $root | Should -BeExactly $before
+        }
+    }
+
     It 'derives turn, timestamp, mode and both consumption blocks from a minimal payload, and the ledger check passes' {
         $root = New-Root
         $result = Invoke-Writer -Root $root -Payload (New-MinimalPayload)
@@ -1873,7 +2005,8 @@ Describe 'Write-SquadHandoff.ps1 compact all-mode Scribe read set (H1, WRT-08)' 
         Test-Path -LiteralPath $script:EconomyScribePath -PathType Leaf | Should -BeTrue
         $text = (Get-Content -LiteralPath $script:EconomyScribePath -Raw) -replace "`r`n", "`n"
         [System.Text.Encoding]::UTF8.GetByteCount($text) | Should -BeLessOrEqual 3072
-        $text | Should -Match ([regex]::Escape('pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -PayloadPath <payload.json>'))
+        $text | Should -Match ([regex]::Escape('pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -RunId run-01 -Agent "Squad Researcher"'))
+        $text | Should -Match ([regex]::Escape('`-PayloadPath`/`-PayloadJson`'))
         $text | Should -Match '\-Quiet'
         foreach ($code in 0, 1, 2, 3, 4, 8) { $text | Should -Match "(?m)^\| $code \|" -Because "exit $code needs a row" }
         $text | Should -Match 'RESTORE FAILED'
@@ -1890,6 +2023,21 @@ Describe 'Write-SquadHandoff.ps1 compact all-mode Scribe read set (H1, WRT-08)' 
         $scribe | Should -Match 'ordinary'
         $scribe | Should -Match 'cold'
         $scribe | Should -Not -Match 'economy only'
+    }
+
+    It 'the Coordinator prefers dispatch facts without forcing derived JSON inputs (WRT-13)' {
+        $coordinator = @($script:HandoffModel.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
+        $step = [regex]::Match($coordinator, '(?s)### Step 5:.*?(?=### Step 6:)').Value
+        $step | Should -Match 'single-dispatch fact parameters'
+        foreach ($parameter in @('RunId', 'Agent', 'Request', 'Deliverable', 'Outcome', 'ConsumptionPath', 'OrchestrationConsumptionPath')) {
+            $step | Should -Match ([regex]::Escape("-$parameter"))
+        }
+        $step | Should -Match 'derives.*activeRoles'
+        $step | Should -Match 'Full JSON.*decisions.*multiple/no dispatches.*routing.*state changes'
+        $step | Should -Match 'estimated fallback'
+        $step | Should -Match 'sessionModel.*changes.*modelOverrides'
+        $step | Should -Match 'ledger-only.*PASS'
+        $step | Should -Not -Match 'minimal structured JSON|Always include a consumption payload|Re-report.*every turn'
     }
 
     It 'the legacy procedure and economy mode link to the shared deterministic contract' {
