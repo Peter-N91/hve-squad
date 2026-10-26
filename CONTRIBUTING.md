@@ -36,7 +36,7 @@ hve-squad gets better when a durable fix found in one environment reaches every 
 4. Open a pull request against the default branch.
 5. A maintainer reviews, requests changes when needed, and merges.
 
-Merging publishes the change to the rolling pre-release within minutes, so it can be installed and tested straight away (see [Testing before a release](#testing-before-a-release)). When the pull request updates the English and French guides, the Pages build traces its pending fragment back to the commit that introduced it and automatically adds the current pre-release badge to the affected sections. It reaches consumers pinned to a released version when a maintainer cuts the next release, which happens when the pending work is judged ready rather than on a schedule.
+Merging publishes the change to the rolling pre-release within minutes, so it can be installed and tested straight away (see [Testing before a release](#testing-before-a-release)). When the pull request documents unreleased package behavior, mark the smallest affected element in both the English and French guides with that change fragment's `data-release-change` value. Pages renders the current pre-release badge only on those explicit markers while the fragment remains pending. It reaches consumers pinned to a released version when a maintainer cuts the next release, which happens when the pending work is judged ready rather than on a schedule.
 
 ## Recording your change
 

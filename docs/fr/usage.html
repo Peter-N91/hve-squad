@@ -67,7 +67,7 @@
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code> ou <code>pack=foundry</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code> ou <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>
           &mdash; ajoute au profil
           les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
@@ -80,7 +80,7 @@
           <code>routing=off|ranked|economy|manual</code> — la méthode de sélection du modèle de chaque rôle, enregistrée dans
           <code>team.md</code> jusqu'à ce que vous la changiez. <code>off</code> (par défaut) n'applique aucune politique ;
           <code>ranked</code> choisit le modèle le mieux adapté au travail de chaque rôle parmi ceux
-          que propose votre hôte ; <code>economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
+          que propose votre hôte ; <code data-release-change="20261005-routing-economy">economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
           rôles d'implémentation, après votre accord ; <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir
           <a href="#model-selection-per-role">Sélection du modèle par rôle</a> ci-dessous.
         </li>
@@ -156,7 +156,7 @@
 
 
       <h2 id="autopilot-hand-off-pipelining">Chevauchement des transmissions en mode autopilot</h2>
-      <p>
+      <p data-release-change="20261026-scribe-single-dispatch-handoffs">
         Les transmissions ordinaires utilisent désormais <code>Write-SquadHandoff.ps1 -Quiet</code>
         de manière synchrone, directement depuis le coordinateur dans tous les modes de routage, sans
         lancer de sous-agent Scribe. Le résultat JSON sur une ligne indique le tour, le nombre d'entrées
@@ -1160,7 +1160,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
-          <tr><td><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
+          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
         </tbody>
       </table>
       <p>
@@ -1198,7 +1198,7 @@ flowchart TD
         rôle que ce pack apporterait. Foundry réutilise les rôles existants et les oriente vers des compétences Microsoft et Azure
         enregistrées, au lieu de copier dans la squad une documentation produit qui évolue rapidement.
       </p>
-      <h3>Installer les compétences du pack Foundry</h3>
+      <h3 data-release-change="20261024-foundry-agent-sync-replacement">Installer les compétences du pack Foundry</h3>
       <p>
         Lorsque vous appliquez <code>foundry</code>, le coordinateur regroupe dans un seul message
         toutes les compétences enregistrées manquantes et leurs prérequis. N'installez que les
@@ -1221,7 +1221,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
         CLI, un compte ou projet Azure et une gateway existante. L'authentification de déploiement
         reste exclusivement OIDC.
       </p>
-      <h3>Consignes de projet Microsoft Foundry</h3>
+      <h3 data-release-change="20261008-foundry-agentic-pack">Consignes de projet Microsoft Foundry</h3>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
@@ -1622,7 +1622,7 @@ layouts:
           de chaque rôle parmi ceux proposés par votre hôte, et affiche chaque choix dans une colonne <code>Model</code>
           sous une ligne <code>Model routing: ranked</code>.
         </li>
-        <li>
+        <li data-release-change="20261005-routing-economy">
           <strong><code>economy</code></strong> — comme <code>ranked</code>, sauf que cinq rôles d'implémentation
           à faible impact reçoivent le modèle le moins cher suffisamment adapté à leur travail ; affiché sous une ligne
           <code>Model routing: economy</code>. Sur option, et seulement après que vous avez accepté le compromis. Voir
@@ -1633,7 +1633,7 @@ layouts:
           sont enregistrés dans la colonne <code>Model</code> sous une ligne <code>Model routing: manual</code>.
         </li>
       </ul>
-      <p>
+      <p data-release-change="20261018-benchmark-backed-model-routing-and-daily-sync">
         <strong>Comment les choix classés sont établis.</strong> Chaque rôle correspond à une classe de mission
         (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
         <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Ranked donne la
@@ -1662,7 +1662,7 @@ layouts:
         squad propose donc des modèles du catalogue dont le prix est inférieur ou égal à celui du modèle de votre session ; si VS Code refuse un
         choix, la question vous est reposée avec la liste signalée par VS Code.
       </p>
-      <p id="routing-economy">
+      <p id="routing-economy" data-release-change="20261005-routing-economy">
         <strong>Mode economy (<code>routing=economy</code>).</strong> Seuls ces cinq rôles changent de
         modèle : <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code> et <code>data-scientist</code>. Chacun reçoit le modèle du catalogue le
@@ -1708,7 +1708,7 @@ layouts:
       <p><strong>Ordre de priorité</strong> (le plus élevé l'emporte, pour chaque rôle) :</p>
       <ol>
         <li><code>routing=manual</code> : la cellule <code>Model</code> valide du rôle.</li>
-        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code>routing=economy</code> : le choix economy).</li>
+        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code data-release-change="20261005-routing-economy">routing=economy</code> : le choix economy).</li>
         <li>
           <code>tier=</code> (le paramètre de niveau statique existant) ou le niveau de modèle initialisé dans <code>team.md</code>
           — le mécanisme de repli actuel, inchangé.
@@ -1716,7 +1716,7 @@ layouts:
         <li>Omettre le paramètre — le comportement par défaut sans politique.</li>
       </ol>
       <p>
-        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code>economy</code> ou <code>manual</code>, chaque
+        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code data-release-change="20261005-routing-economy">economy</code> ou <code>manual</code>, chaque
         lancement d'un agent de l'équipe transmet exactement la cellule <code>Model</code> de sa ligne, sauf pour le Scribe,
         dont le propre modèle fixé prévaut. Dans la distribution plugin, le hook <code>dispatch-guards</code>
         refuse un lancement dont le <code>model</code> manque ou diffère de la cellule, et indique la
@@ -1750,7 +1750,7 @@ layouts:
       <p><strong>Exemples :</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
 /squad request="implement the design" routing=ranked</code></pre>
-      <pre><code># Switch to economy; the squad states the trade and records your consent first.
+      <pre data-release-change="20261005-routing-economy"><code># Switch to economy; the squad states the trade and records your consent first.
 /squad request="update the getting-started guide" routing=economy</code></pre>
       <pre><code># Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual

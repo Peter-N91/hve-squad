@@ -67,7 +67,7 @@
           proposes a recommended profile before creating anything.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, or <code>pack=foundry</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, or <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>
           &mdash; adds a technology
           vertical's specialist roles, scoped guidance, or both on top of the profile. A pack never replaces the profile, and you
           can apply more than one (comma-separated). See <em>Packs</em> below.
@@ -80,7 +80,7 @@
           <code>routing=off|ranked|economy|manual</code> — how each role's model is chosen, saved in
           <code>team.md</code> until you change it. <code>off</code> (default) applies no policy;
           <code>ranked</code> picks the model that best fits each role's work among the models your
-          host offers; <code>economy</code> is <code>ranked</code> with cheaper picks for five
+          host offers; <code data-release-change="20261005-routing-economy">economy</code> is <code>ranked</code> with cheaper picks for five
           implementation roles, after your consent; <code>manual</code> asks you to pick, with
           suggestions pre-filled. See
           <a href="#model-selection-per-role">Model selection per role</a> below.
@@ -157,7 +157,7 @@
 
 
       <h2 id="autopilot-hand-off-pipelining">Autopilot hand-off pipelining</h2>
-      <p>
+      <p data-release-change="20261026-scribe-single-dispatch-handoffs">
         Ordinary hand-offs now run synchronously through <code>Write-SquadHandoff.ps1 -Quiet</code>
         directly from the coordinator, in every routing mode, without starting a Scribe subagent.
         Its one-line JSON result reports the state turn, history counts and ledger check; warnings remain
@@ -1158,7 +1158,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>The project is built on Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>The project is built on Microsoft 365 Copilot &mdash; declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>The project is built on AWS &mdash; Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage</td></tr>
-          <tr><td><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Microsoft Foundry project planning, independent review, and gated deployment with a seven-block blueprint, source evidence, and SDK/API revalidation; reuses existing roles</td></tr>
+          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Microsoft Foundry project planning, independent review, and gated deployment with a seven-block blueprint, source evidence, and SDK/API revalidation; reuses existing roles</td></tr>
         </tbody>
       </table>
       <p>
@@ -1196,7 +1196,7 @@ flowchart TD
         role the pack would provide. Foundry reuses existing roles and points them to registered upstream
         Microsoft and Azure skills instead of copying changing product documentation into the squad.
       </p>
-      <h3>Install the Foundry pack's skills</h3>
+      <h3 data-release-change="20261024-foundry-agent-sync-replacement">Install the Foundry pack's skills</h3>
       <p>
         When you apply <code>foundry</code>, the coordinator reports all missing registered skills and
         prerequisites in one message. Install only the capabilities the project needs; nothing is
@@ -1217,7 +1217,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
         <code>npx</code>. Foundry and gateway workflows may also need Azure CLI access, an Azure
         account or project, and an existing gateway. Deployment authentication remains OIDC-only.
       </p>
-      <h3>Microsoft Foundry project guidance</h3>
+      <h3 data-release-change="20261008-foundry-agentic-pack">Microsoft Foundry project guidance</h3>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
@@ -1615,7 +1615,7 @@ layouts:
           work, among the models your host offers, and shows each pick in a <code>Model</code> column
           under a <code>Model routing: ranked</code> line.
         </li>
-        <li>
+        <li data-release-change="20261005-routing-economy">
           <strong><code>economy</code></strong> — as <code>ranked</code>, except that five low-impact
           implementation roles get the cheapest model that fits their work well enough; shown under a
           <code>Model routing: economy</code> line. Opt-in, and only after you accept the trade. See
@@ -1626,7 +1626,7 @@ layouts:
           are stored in the <code>Model</code> column under a <code>Model routing: manual</code> line.
         </li>
       </ul>
-      <p>
+      <p data-release-change="20261018-benchmark-backed-model-routing-and-daily-sync">
         <strong>How ranked picks are made.</strong> Each role maps to an assignment class
         (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
         <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Ranked is
@@ -1654,7 +1654,7 @@ layouts:
         squad offers catalog models priced at or below your session model; if VS Code rejects a
         pick, you are asked again with the list VS Code reports.
       </p>
-      <p id="routing-economy">
+      <p id="routing-economy" data-release-change="20261005-routing-economy">
         <strong>Economy mode (<code>routing=economy</code>).</strong> Only these five roles change
         model: <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code>, and <code>data-scientist</code>. Each gets the cheapest catalog
@@ -1698,7 +1698,7 @@ layouts:
       <p><strong>Precedence</strong> (highest wins, per role):</p>
       <ol>
         <li><code>routing=manual</code>: the role's valid <code>Model</code> cell.</li>
-        <li><code>routing=ranked</code>: the ranked pick for that role (<code>routing=economy</code>: the economy pick).</li>
+        <li><code>routing=ranked</code>: the ranked pick for that role (<code data-release-change="20261005-routing-economy">routing=economy</code>: the economy pick).</li>
         <li>
           <code>tier=</code> (the existing static-tier input) or the seeded <code>team.md</code> Model
           Tier — today's fallback, unchanged.
@@ -1706,7 +1706,7 @@ layouts:
         <li>Omit the parameter — the no-policy default.</li>
       </ol>
       <p>
-        <strong>Dispatch copies the cell:</strong> under <code>ranked</code>, <code>economy</code>, or <code>manual</code>, every
+        <strong>Dispatch copies the cell:</strong> under <code>ranked</code>, <code data-release-change="20261005-routing-economy">economy</code>, or <code>manual</code>, every
         dispatch to a roster agent passes that row's <code>Model</code> cell exactly, except the Scribe,
         whose own model pin governs. In the plugin distribution, the <code>dispatch-guards</code> hook
         refuses a dispatch whose <code>model</code> is missing or differs from the cell, and names the
@@ -1740,7 +1740,7 @@ layouts:
       <p><strong>Examples:</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
 /squad request="implement the design" routing=ranked</code></pre>
-      <pre><code># Switch to economy; the squad states the trade and records your consent first.
+      <pre data-release-change="20261005-routing-economy"><code># Switch to economy; the squad states the trade and records your consent first.
 /squad request="update the getting-started guide" routing=economy</code></pre>
       <pre><code># Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual

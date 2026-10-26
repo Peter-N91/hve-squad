@@ -70,10 +70,11 @@ bump in .changes/unreleased, using the same rules as Invoke-ReleasePrep.ps1.
 No network request or hardcoded preview number is needed for a build.
 
 For newly documented unreleased behavior, add data-release-change to the smallest
-feature label, paragraph, heading, list item or whole pre block in both languages.
+feature label, paragraph, heading, list item, table cell or whole pre block in both languages.
 The value is that feature's change-fragment filename without .md, for example
 data-release-change="20261005-routing-economy". Do not put it inside a link or a
 copyable block, or apply it to already stable options and documentation fixes.
+The build never infers release state from Git history or from a changed section.
 The build inserts an accessible, versioned badge linking to
 getting-started.html#testing-the-pre-release. Consumption of that fragment retires
 the badge automatically, including for an overridden release version; a later

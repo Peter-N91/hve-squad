@@ -63,7 +63,7 @@ Two workflows read that directory:
 apm install "Peter-N91/hve-squad#v0.14.0-pre"
 ```
 
-The documentation build reads the same pending fragments. It resolves each tracked fragment to the commit that added it, uses full Git history to find the English and French guide sections changed by those commits, and adds the current rolling tag beside the nearest safe section heading. A documentation-only pull request with `skip-changelog` has no fragment and receives no package preview badge. Release Prep deletes the consumed fragments, so the next Pages build removes those badges without a source edit.
+The documentation build reads the same pending fragments. When a guide describes unreleased package behavior, its English and French sources mark the smallest affected label, paragraph, list item, heading, table cell, or code block with `data-release-change="<fragment-name>"`. The build renders the current rolling tag only when that exact fragment is still pending; it does not infer availability from Git history or badge a whole stable section because one line changed. A documentation-only pull request with `skip-changelog` adds no marker and receives no package preview badge. Release Prep deletes the consumed fragments, so the next Pages build removes those badges without a source edit.
 
 **Release Prep** runs only when a maintainer dispatches it. It reads every pending fragment, resolves the new version from the highest `bump`, groups the bodies by `type`, prepends the assembled section to `CHANGELOG.md` with the standard consumer-install block and link reference, writes the new `version:` into `apm.yml`, deletes the fragments it consumed, cuts the tag and GitHub Release, and retires the pre-release. Nothing releases on a timer.
 
