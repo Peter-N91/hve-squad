@@ -152,6 +152,7 @@ Describe 'SquadUsage exact native accounting' {
         $snapshot = Get-SquadUsageSnapshot -EventsPath $path -IncludeAgentRuns
         $snapshot.status | Should -Be 'complete'
         $snapshot.attributionStatus | Should -Be 'complete'
+        $snapshot.sessionId | Should -Be 'main-session'
         $snapshot.totalNanoAiu | Should -Be 2500000000
         $snapshot.identityDigest | Should -Match '^[A-F0-9]{64}$'
         @($snapshot.agentRuns).Count | Should -Be 2

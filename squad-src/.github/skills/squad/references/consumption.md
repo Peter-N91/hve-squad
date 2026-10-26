@@ -5,32 +5,34 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-24"
+  last_updated: "2026-10-26"
 ---
 
 # Squad Consumption Ledger
 
 ## consumption.md
 
-Authoritative ledger of squad members, the models they consumed, their billed token
-categories, and native AI credits. With `-SessionLog auto`,
+Authoritative, single-file ledger of squad members, the models they consumed, their
+billed token categories, and native AI credits. With `-SessionLog auto`,
 `Measure-SquadLedger.ps1` joins each complete native usage record's event `agentId`
 to `subagent.started`, follows `parentAgentId` so nested workers roll into their
-owning top-level role, and writes one exact ledger. Coordinator and Squad Scribe
-records share `orchestration`. The row sum must equal the complete deduplicated
-session nano-AIU total; otherwise the helper keeps the history estimator as an
-explicit fallback rather than claiming exact attribution.
+owning top-level role, and writes one cumulative exact ledger. Coordinator and Squad
+Scribe records share `orchestration`. The row sum must equal the complete
+deduplicated native nano-AIU total across every accepted session snapshot; otherwise
+the helper keeps the history estimator as an explicit fallback rather than claiming
+exact attribution.
 
 The ledger is split into two narrower tables that both key on `Role` — one **Attribution** table (who ran, on what model) and one **Usage & Cost** table (what it cost) — instead of one 15-column table, because a table wide enough to need horizontal scrolling defeats the point of a ledger a consumer should be able to read at a glance.
 
 Replace semantics govern the file, not the rows. In exact mode every rewrite is a
-native snapshot through the recorded timestamp and SHA-256 identity digest; active
-and completed top-level role runs present in that snapshot are included. The
-`history/*.md` entries still supply the append-only proof-of-dispatch identities and
-the fallback estimator. Exact mode is admitted only when every history-backed role
-and orchestration row has native coverage. A rewrite that reflects only the current
-turn, silently omits a history-backed role, or cannot reconcile to the native total
-falls back rather than presenting a partial exact ledger.
+cumulative snapshot through the recorded timestamp and SHA-256 digest; active and
+completed top-level role runs present in its accepted session snapshots are included.
+The `history/*.md` entries still supply the append-only proof-of-dispatch identities
+and the fallback estimator. Exact mode is admitted only when every metered
+history-backed role and orchestration entry has native coverage. A rewrite that
+reflects only the current turn, silently omits a history-backed role, overlaps a
+previous native accounting identity, or cannot reconcile to the native total falls
+back rather than presenting a partial exact ledger.
 
 ````markdown
 ---
@@ -91,6 +93,41 @@ counterfactual, not an observed alternate run; it deliberately adds no hypotheti
 context growth, rework, or behavioral change. When exact attribution is unavailable,
 the historical estimated comparison remains the fallback. Run `-Check` afterward;
 never hand-edit derived comparison figures after a successful check.
+
+## consumption-sessions.json
+
+Optional machine-readable journal for cumulative exact accounting. It is created
+lazily by `Measure-SquadLedger.ps1 -Write -SessionLog ...` after the first complete
+native reconciliation; Init does not seed it. `consumption.md` remains the only
+human-readable ledger.
+
+The journal carries one closed-schema snapshot per native host session:
+
+* native session id, first/last timestamps, complete-record count, and identity digest;
+* per-role exact token categories and nano-AIU;
+* SHA-256 hashes of native accounting identities, never raw prompts, responses, tool
+  arguments, or event lines;
+* the ordered `history/*.md` entry identities covered by that session;
+* a deterministic content digest over the persisted snapshot fields, checked before use.
+
+Repeated writes in the same host session **replace that session's snapshot**. A new
+session appends only after all prior coverage is still an ordered prefix of current
+history, and its native role set matches the newly metered history suffix. The writer
+then sums every cached session into `consumption.md`. This makes session changes
+additive without double counting and keeps old exact totals available after a host log
+is rotated or no longer selected by `auto`.
+
+`consumption.md`, `state.json`, and `consumption-sessions.json` are one atomic writer
+transaction. A malformed journal, changed history prefix, duplicate native identity,
+missing native coverage, or incomplete current session leaves the journal unchanged
+and keeps the all-history estimator as the public fallback. The writer never mixes
+exact cached rows with estimated new rows under an `exact-native` label.
+
+On upgrade, a valid existing single-session exact `consumption.md` can seed the
+journal once. Its exact historical credits and token totals are retained. Because the
+old Markdown ledger did not persist request-level token details, the identical-traffic
+single-model counterfactual is unavailable for that migrated session unless its native
+log is still selected and refreshes the snapshot.
 
 ## consumption-rates.md
 

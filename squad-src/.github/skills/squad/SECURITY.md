@@ -3,7 +3,7 @@ title: Squad Skill Security Model
 description: STRIDE model for local squad routing, connector file exchanges, and state persistence.
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-25
+ms.date: 2026-10-26
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
@@ -40,7 +40,7 @@ controls, not a sandbox or a substitute for host filesystem permissions.
 | Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell and additive roster expansion, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
 | Offline capability evidence | Exact model/configuration checks, explicit verification dates, common versioned panels, digest validation and visible fallback | Curated verification facts and source hashes are not authenticated measurement signatures. |
 | External file exchange | Closed schemas, request/result identity matching, output allowlists, structural path containment | A matching envelope does not authenticate its author. |
-| Persistence | Closed handoff/verdict payload validation, shared per-root writer locks, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, ledger checks | History, verdicts, and lifecycle plans are local and editable by principals with repository write access; exact hashes detect changes but do not authenticate authors. |
+| Persistence | Closed handoff/verdict payload validation, shared per-root writer locks, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, cumulative exact-session journal with history-prefix and native-identity deduplication, ledger checks | History, verdicts, lifecycle plans, and exact-session snapshots are local and editable by principals with repository write access; hashes detect changes but do not authenticate authors. |
 | Domain execution | Consumer-owned adapter; no connector command execution | Host permissions and consumer automation govern actual source changes. |
 
 Ratings are qualitative under the assumption that an external producer can
@@ -87,8 +87,13 @@ Different filesystem permissions or unattended policies change the risk.
   rate seeder write their declared local state/output files. `SquadUsage.psm1`
   streams local host usage logs, deduplicates complete accounting identities,
   exposes native per-top-level-agent token categories and credits, and rolls nested
-  agents up through host parent identities. It never emits prompts, responses, tool
-  arguments, or raw log lines; those logs are not connector identity evidence.
+  agents up through host parent identities. `Measure-SquadLedger.ps1` stores only
+  closed-schema per-session aggregates, hashed accounting identities, and ordered
+  history coverage in `consumption-sessions.json`; repeated writes replace one
+  native session and cross-session merges reject overlaps or history-prefix drift.
+  The ledger, run totals, and journal publish as one rollback-capable transaction.
+  These helpers never emit prompts, responses, tool arguments, or raw log lines;
+  host logs and the journal are not connector identity evidence.
 * The promotion planner writes only a transport plan outside squad state. It hashes
   the complete plain-squad tree and every candidate directory. The promotion writer
   requires that exact plan hash plus an exhaustive relocate/keep partition, stages
@@ -174,8 +179,8 @@ flowchart TD
 | A1 | Governance, council, and Scribe ownership | External work cannot acquire these authorities. |
 | A2 | Declared reports and authorized source worktree | No undeclared overwrite or cross-squad write |
 | A3 | Task/binding/member identity | Results stay attached to the intended request and squad. |
-| A4 | History and accounting | External work stays unverified and unmetered; shim spend remains attributable. |
-| A5 | Local inputs and host usage records | Expose only accounting identity, agent/model labels, token categories, and credits; no prompts, responses, tool arguments, credentials, or raw-log disclosure |
+| A4 | History and accounting | External work stays unverified and unmetered; shim spend remains attributable; accepted exact sessions cannot overlap or detach from their covered history prefix. |
+| A5 | Local inputs, host usage records, and exact-session journal | Expose only hashed accounting identity, session/agent/model labels, token categories, and credits; no prompts, responses, tool arguments, credentials, or raw-log disclosure |
 
 ## Adversaries
 
@@ -207,7 +212,11 @@ cryptographic proof. Protect the pinned evidence and review refreshes as code.
 Model refresh additionally requires the exact planned `team.md` hash, unchanged
 source cells, one unambiguous roster row per role, and a safe lowercase model id.
 Cost admission never trusts a lagging checkpoint as exact spend: native usage
-records require complete status and stable host accounting identities.
+records require complete status and stable host accounting identities. Cumulative
+accounting additionally requires a unique native session id, non-overlapping hashed
+request identities, a closed cache schema, and cached history identities that remain
+an ordered prefix of current append-only history. Any mismatch keeps the journal
+unchanged and returns to the all-history estimator.
 
 ### Repudiation
 
@@ -217,15 +226,18 @@ Pending identity hashes include the external member and owning roster, so a
 rename or cross-squad resume cannot silently relabel a result. Retirement records
 retain historical attribution only while the trusted local record remains intact.
 Routing refresh and Cost Preflight decisions record their selected roles/slots and
-inputs, but remain local append-only evidence rather than signed audit events.
+inputs. Exact-session snapshots record native session and history coverage but remain
+local evidence rather than signed audit events.
 
 ### Information Disclosure
 
 Dispatch metadata and bounded inputs reach the selected endpoint. Limit those
 inputs and output roots to the approved task. Required skill names are local
 consumer configuration; manifests intentionally contain no credentials.
-Usage parsing returns aggregate accounting fields and never writes raw event
-content into squad state; host-log access and retention remain deployment concerns.
+Usage parsing returns aggregate accounting fields. The persistent journal hashes
+native accounting identities and never writes raw event content into squad state;
+host-log and journal access, retention, and repository visibility remain deployment
+concerns.
 
 ### Denial of Service
 

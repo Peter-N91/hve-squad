@@ -25,8 +25,10 @@
     or any other squad-state file, and only computes what the Scribe should write, or
     checks what it did write. The one exception is `-Write`, which the Scribe itself
     runs as its own tool: it splices the derived fragment into `consumption.md` and
-    sets the two `state.json` `currentRun` totals, so the Scribe remains the single
-    writer of squad state while no model transcribes a derived number by hand.
+    sets the two `state.json` `currentRun` totals, and when exact native usage is
+    available upserts `consumption-sessions.json`, so the Scribe remains the single
+    writer of squad state while no model transcribes a derived number by hand. Those
+    three replace-semantics files commit or roll back as one transaction.
 
     Field order for a `#### Consumption` (or `#### Consumption — Orchestration`) block
     is contractual and validated in order: `model`, `model_source`, `priced_as`,
@@ -136,7 +138,11 @@
     the estimated fallback comparison and preserves supplied manual-baseline notes,
     and sets only `currentRun.estCostUsd` and `currentRun.estCreditsTotal` in
     `state.json` to the derived run totals (a value-only replacement, so every other
-    byte of `state.json`, including date strings, is preserved). Refuses, writing
+    byte of `state.json`, including date strings, is preserved). Exact mode also
+    upserts the active native session in optional `consumption-sessions.json`; repeated
+    writes replace that session, later sessions append only after cached history
+    coverage and native identities validate, and every accepted session is summed
+    into the one public ledger. Refuses, writing
     nothing, when combined with -Check or key-lookup mode, on a federation root
     (marked by `federation.md`), when `consumption.md` lacks those anchors or
     `state.json` lacks exactly one of each `currentRun` key, and in every case the
@@ -164,9 +170,10 @@
     Consumption` block's ordinal, character offset, and content SHA-256, so a
     later `-BaselinePath` check can recognise a pre-baseline/legacy block by
     ordinal <= this recorded `blockCount`); and for every `-ProtectedPath`
-    entry a `{exists, sha256}` record. `state.json` and `consumption.md` are
-    intentionally never covered (they are replace-semantics files rewritten
-    every stage) -- passing either as `-ProtectedPath` throws. Also writes full
+    entry a `{exists, sha256}` record. `state.json`, `consumption.md`, and
+    `consumption-sessions.json` are intentionally never covered (they are
+    replace-semantics files rewritten by ledger transactions) -- passing any of
+    them as `-ProtectedPath` throws. Also writes full
     pre-write copies of every covered file next to the JSON, under a sibling
     `<baseline-file-name>.files/` directory (mirroring each file's relative
     path), per Amendment 3 E3. Orthogonal to `-BaselinePath` and to `-Check`:
@@ -242,11 +249,14 @@
     accounting identity. Event `agentId` joins to `subagent.started`; nested
     `parentAgentId` chains roll into their owning top-level role. Native token
     details provide disjoint uncached input, cache read, cache write, and output
-    counts whose charges must reproduce total nano-AIU. When every history-backed
-    row and orchestration reconcile to the session total, exact rows replace
-    estimates and drive state totals, unit economics, JSON `exact`, and Cost
-    Comparison. Any gap leaves the estimator in place. Member-scoped roots retain
-    estimates because coordinator usage cannot be assigned to one member.
+    counts whose charges must reproduce total nano-AIU. When every newly metered
+    history-backed row and orchestration entry reconcile to the active session total,
+    its closed-schema snapshot is upserted by native session id and merged with prior
+    accepted sessions. Duplicate request identities, history-prefix drift, or any
+    coverage gap leaves the journal unchanged and the estimator in place. Exact rows
+    drive state totals, unit economics, JSON `exact`, and Cost Comparison.
+    Member-scoped roots retain estimates because coordinator usage cannot be assigned
+    to one member.
 .PARAMETER BaselineModel
     Model id that prices the without-Squad counterfactual: the same exact role
     request token categories on one model, with no coordinator or Scribe. Defaults
@@ -1483,8 +1493,8 @@ function Get-AppendOnlyFileListLocal {
     .SYNOPSIS
         The append-only file set a baseline covers: every history/*.md file,
         plus decisions.md and notifications.md when present (Amendment 3 §2
-        item 1). state.json and consumption.md are never included here -- they
-        are replace-semantics files the Scribe legitimately rewrites every
+        item 1). state.json, consumption.md, and consumption-sessions.json are
+        never included here -- they are replace-semantics files the Scribe legitimately rewrites every
         stage, per Amendment 2 §8's "-Check -ExpectedHistoryCounts is retained
         for replace-semantics consumption" language.
     #>
@@ -1506,15 +1516,16 @@ function Get-AppendOnlyFileListLocal {
 function Assert-ProtectedPathNotReplaceSemanticsLocal {
     <#
     .SYNOPSIS
-        Throws if a caller-supplied -ProtectedPath entry names state.json or
-        consumption.md -- both are excluded from protection by design (they are
-        rewritten every stage), not merely by omission.
+        Throws if a caller-supplied -ProtectedPath entry names state.json,
+        consumption.md, or consumption-sessions.json -- all are excluded from
+        protection by design (they are rewritten by ledger transactions), not
+        merely by omission.
     #>
     param([Parameter(Mandatory)][string[]]$ProtectedPath)
     foreach ($rel in $ProtectedPath) {
         $normalized = ($rel -replace '\\', '/').Trim('/')
-        if ($normalized -match '(?i)^(state\.json|consumption\.md)$') {
-            throw "Measure-SquadLedger: -ProtectedPath must not name '$rel' -- state.json and consumption.md are replace-semantics files the Scribe legitimately rewrites every stage and are excluded from protected-artifact checks by design."
+        if ($normalized -match '(?i)^(state\.json|consumption\.md|consumption-sessions\.json)$') {
+            throw "Measure-SquadLedger: -ProtectedPath must not name '$rel' -- state.json, consumption.md, and consumption-sessions.json are replace-semantics files the ledger transaction legitimately rewrites and are excluded from protected-artifact checks by design."
         }
     }
 }
@@ -1607,7 +1618,7 @@ function Copy-BaselineSourceFilesLocal {
     <#
     .SYNOPSIS
         Writes full pre-write copies of every append-only and protected file,
-        plus consumption.md and state.json, into a sibling `<name>.files/`
+        plus consumption.md, consumption-sessions.json, and state.json, into a sibling `<name>.files/`
         directory next to the baseline JSON (Amendment 3 §2 item 1 / Amendment
         2 E3/A-4), mirroring each file's squad-root-relative path.
     #>
@@ -1627,7 +1638,7 @@ function Copy-BaselineSourceFilesLocal {
         $full = Join-Path $SquadRoot $normalizedRel
         if (Test-Path -LiteralPath $full -PathType Leaf) { $sources.Add([pscustomobject]@{ RelativePath = $normalizedRel; FullPath = $full }) }
     }
-    foreach ($name in @('consumption.md', 'state.json')) {
+    foreach ($name in @('consumption.md', 'consumption-sessions.json', 'state.json')) {
         $full = Join-Path $SquadRoot $name
         if (Test-Path -LiteralPath $full -PathType Leaf) { $sources.Add([pscustomobject]@{ RelativePath = $name; FullPath = $full }) }
     }
@@ -1694,8 +1705,8 @@ function Test-SquadLedgerBaselineLocal {
         an append-only file shrink, a prefix edit (first baseline-Length bytes
         no longer hashing to the baseline's recorded full-content SHA-256), a
         protected-artifact hash change not covered by -AllowedWritePath, or a
-        baseline-recorded file that no longer exists. Never checks state.json
-        or consumption.md -- excluded by design.
+        baseline-recorded file that no longer exists. Never checks state.json,
+        consumption.md, or consumption-sessions.json -- excluded by design.
     .DESCRIPTION
         Review fix (coordinator finding): the protected set actually verified is
         the UNION of the baseline's own recorded `protected` map and any caller
@@ -2102,7 +2113,7 @@ function Read-SessionUsageLocal {
 
     [pscustomobject]@{
         Path          = $Path
-        SessionId     = Split-Path -Leaf (Split-Path -Parent $Path)
+        SessionId     = if ($usageSnapshot.sessionId) { [string]$usageSnapshot.sessionId } else { Split-Path -Leaf (Split-Path -Parent $Path) }
         Dispatches    = $dispatches
         FusionSolvers = @($fusionSolvers)
         NanoAiu       = if ($usageSnapshot.status -eq 'complete') { $usageSnapshot.totalNanoAiu } else { $null }
@@ -2110,6 +2121,600 @@ function Read-SessionUsageLocal {
         First         = $first
         Last          = $last
         MemberName    = if ($memberMatch.Success) { $memberMatch.Groups['name'].Value } else { $null }
+    }
+}
+
+function Get-NativeIdentityHashLocal {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Identity)
+    [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Identity)))
+}
+
+function Assert-ExactCacheFieldsLocal {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary]$Object,
+        [Parameter(Mandatory)][string[]]$Required,
+        [Parameter(Mandatory)][string]$Where
+    )
+    foreach ($field in $Required) {
+        if (-not $Object.Contains($field)) { throw "$Where is missing '$field'." }
+    }
+    foreach ($field in $Object.Keys) {
+        if ($field -notin $Required) { throw "$Where contains unsupported field '$field'." }
+    }
+}
+
+function ConvertTo-NonNegativeDecimalLocal {
+    param([Parameter(Mandatory)]$Value, [Parameter(Mandatory)][string]$Where)
+    $number = [decimal]0
+    try { $number = [decimal]$Value }
+    catch { throw "$Where is not numeric." }
+    if ($number -lt 0) { throw "$Where is negative." }
+    $number
+}
+
+function ConvertTo-NonNegativeLongLocal {
+    param([Parameter(Mandatory)]$Value, [Parameter(Mandatory)][string]$Where)
+    $number = 0L
+    if (-not [long]::TryParse([string]$Value, [ref]$number) -or $number -lt 0) {
+        throw "$Where is not a non-negative integer."
+    }
+    $number
+}
+
+function Get-RecordedHistoryCoverageLocal {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$ConsumptionContent)
+    $coverage = [ordered]@{}
+    $derivation = [regex]::Match($ConsumptionContent, '(?ms)^###\s+Derivation\s*?\r?\n.*?```text\r?\n(?<body>.*?)\r?\n```')
+    if (-not $derivation.Success) { return $coverage }
+    foreach ($line in [regex]::Matches($derivation.Groups['body'].Value, '(?m)^(?<file>.+\.md) — \d+ block\(s\) — identities: (?<ids>.*)$')) {
+        $fileName = $line.Groups['file'].Value.Trim()
+        $text = $line.Groups['ids'].Value.Trim()
+        $ids = if (-not $text -or $text -eq '(none)') { @() } else { @($text -split ',' | ForEach-Object { $_.Trim() }) }
+        if (@($ids | Where-Object { $_ -notmatch '^[0-9a-f]{8}$' }).Count -gt 0) {
+            throw "Exact ledger history coverage for '$fileName' contains an invalid identity."
+        }
+        $coverage[$fileName] = @($ids)
+    }
+    $coverage
+}
+
+function Add-HistoryCoverageLocal {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary]$Target,
+        [Parameter(Mandatory)][Collections.IDictionary]$Source
+    )
+    foreach ($fileName in $Source.Keys) {
+        if (-not $Target.Contains($fileName)) {
+            $Target[$fileName] = [Collections.Generic.List[string]]::new()
+        }
+        foreach ($identity in @($Source[$fileName])) { $Target[$fileName].Add([string]$identity) }
+    }
+}
+
+function Get-CumulativeHistoryCoverageLocal {
+    param([AllowEmptyCollection()][object[]]$Sessions = @())
+    $coverage = [ordered]@{}
+    foreach ($session in $Sessions) {
+        Add-HistoryCoverageLocal -Target $coverage -Source $session.historyCoverage
+    }
+    $result = [ordered]@{}
+    foreach ($fileName in $coverage.Keys) { $result[$fileName] = @($coverage[$fileName]) }
+    $result
+}
+
+function Join-HistoryCoverageLocal {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary]$Left,
+        [Parameter(Mandatory)][Collections.IDictionary]$Right
+    )
+    $combined = [ordered]@{}
+    Add-HistoryCoverageLocal -Target $combined -Source $Left
+    Add-HistoryCoverageLocal -Target $combined -Source $Right
+    $result = [ordered]@{}
+    foreach ($fileName in $combined.Keys) { $result[$fileName] = @($combined[$fileName]) }
+    $result
+}
+
+function Test-HistoryCoveragePrefixLocal {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary]$Recorded,
+        [Parameter(Mandatory)][Collections.IDictionary]$Current,
+        [switch]$RequireComplete
+    )
+    foreach ($fileName in $Recorded.Keys) {
+        $expected = @($Recorded[$fileName])
+        $actual = @(if ($Current.Contains($fileName)) { $Current[$fileName] } else { @() })
+        if ($expected.Count -gt $actual.Count) {
+            throw "Exact session cache covers $($expected.Count) '$fileName' entries but history now has only $($actual.Count)."
+        }
+        for ($i = 0; $i -lt $expected.Count; $i++) {
+            if ([string]$expected[$i] -cne [string]$actual[$i]) {
+                throw "Exact session cache coverage for '$fileName' is not a prefix of current history."
+            }
+        }
+    }
+    if ($RequireComplete) {
+        foreach ($fileName in $Current.Keys) {
+            $expected = @(if ($Recorded.Contains($fileName)) { $Recorded[$fileName] } else { @() })
+            $actual = @($Current[$fileName])
+            if ($expected.Count -ne $actual.Count) {
+                throw "Exact session cache covers $($expected.Count) of $($actual.Count) '$fileName' entries."
+            }
+        }
+    }
+    $true
+}
+
+function Read-ExactSessionCacheLocal {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @() }
+    try { $document = [IO.File]::ReadAllText($Path) | ConvertFrom-Json -AsHashtable -Depth 100 }
+    catch { throw "consumption-sessions.json is not valid JSON: $($_.Exception.Message)" }
+    if ($document -isnot [Collections.IDictionary]) { throw 'consumption-sessions.json must contain one object.' }
+    Assert-ExactCacheFieldsLocal -Object $document -Required @('schemaVersion', 'sessions') -Where 'consumption-sessions.json'
+    if ([int]$document.schemaVersion -ne 1) { throw "consumption-sessions.json schemaVersion '$($document.schemaVersion)' is unsupported." }
+
+    $seenSessions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $seenRequests = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $sessions = [Collections.Generic.List[object]]::new()
+    $sessionIndex = 0
+    foreach ($rawSession in @($document.sessions)) {
+        $sessionIndex++
+        if ($rawSession -isnot [Collections.IDictionary]) { throw "consumption-sessions.json session $sessionIndex is not an object." }
+        Assert-ExactCacheFieldsLocal -Object $rawSession -Required @(
+            'sessionId', 'source', 'first', 'last', 'through', 'records', 'identityDigest',
+            'requestDetailStatus', 'historyCoverage', 'rows', 'contentDigest'
+        ) -Where "consumption-sessions.json session $sessionIndex"
+        $sessionId = [string]$rawSession.sessionId
+        if (-not $sessionId -or -not $seenSessions.Add($sessionId)) {
+            throw "consumption-sessions.json session $sessionIndex has an empty or duplicate sessionId."
+        }
+        if ([string]$rawSession.source -notin @('native-log', 'legacy-ledger')) {
+            throw "consumption-sessions.json session '$sessionId' has unsupported source '$($rawSession.source)'."
+        }
+        if ([string]$rawSession.requestDetailStatus -notin @('complete', 'unavailable')) {
+            throw "consumption-sessions.json session '$sessionId' has unsupported requestDetailStatus '$($rawSession.requestDetailStatus)'."
+        }
+        $records = ConvertTo-NonNegativeLongLocal -Value $rawSession.records -Where "session '$sessionId' records"
+        if ([string]$rawSession.identityDigest -notmatch '^[A-F0-9]{64}$') {
+            throw "consumption-sessions.json session '$sessionId' has an invalid identityDigest."
+        }
+        if ([string]$rawSession.contentDigest -notmatch '^[A-F0-9]{64}$') {
+            throw "consumption-sessions.json session '$sessionId' has an invalid contentDigest."
+        }
+        if ($rawSession.historyCoverage -isnot [Collections.IDictionary]) {
+            throw "consumption-sessions.json session '$sessionId' historyCoverage is not an object."
+        }
+        $coverage = [ordered]@{}
+        foreach ($fileName in $rawSession.historyCoverage.Keys) {
+            if ([string]$fileName -notmatch '\.md$') { throw "Session '$sessionId' historyCoverage key '$fileName' is not a Markdown file." }
+            $ids = @($rawSession.historyCoverage[$fileName])
+            if (@($ids | Where-Object { [string]$_ -notmatch '^[0-9a-f]{8}$' }).Count -gt 0) {
+                throw "Session '$sessionId' historyCoverage for '$fileName' contains an invalid identity."
+            }
+            $coverage[[string]$fileName] = @($ids | ForEach-Object { [string]$_ })
+        }
+
+        $rows = [Collections.Generic.List[object]]::new()
+        $sessionRequests = 0L
+        foreach ($rawRow in @($rawSession.rows)) {
+            if ($rawRow -isnot [Collections.IDictionary]) { throw "Session '$sessionId' contains a non-object row." }
+            Assert-ExactCacheFieldsLocal -Object $rawRow -Required @(
+                'role', 'member', 'agent', 'models', 'tier', 'runs', 'requests',
+                'inputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'outputTokens',
+                'nanoAiu', 'descendants', 'requestDetails'
+            ) -Where "session '$sessionId' row"
+            $requests = ConvertTo-NonNegativeLongLocal -Value $rawRow.requests -Where "session '$sessionId' row requests"
+            $details = [Collections.Generic.List[object]]::new()
+            foreach ($rawRequest in @($rawRow.requestDetails)) {
+                if ($rawRequest -isnot [Collections.IDictionary]) { throw "Session '$sessionId' contains a non-object request detail." }
+                Assert-ExactCacheFieldsLocal -Object $rawRequest -Required @(
+                    'identityHash', 'timestamp', 'model', 'inputTokens', 'cacheReadTokens',
+                    'cacheWriteTokens', 'outputTokens', 'nanoAiu'
+                ) -Where "session '$sessionId' request detail"
+                $identityHash = [string]$rawRequest.identityHash
+                if ($identityHash -notmatch '^[A-F0-9]{64}$' -or -not $seenRequests.Add($identityHash)) {
+                    throw "Session '$sessionId' contains an invalid or duplicate native request identity hash."
+                }
+                $details.Add([pscustomobject][ordered]@{
+                        identityHash = $identityHash
+                        timestamp = [string]$rawRequest.timestamp
+                        model = [string]$rawRequest.model
+                        inputTokens = ConvertTo-NonNegativeLongLocal -Value $rawRequest.inputTokens -Where "session '$sessionId' request inputTokens"
+                        cacheReadTokens = ConvertTo-NonNegativeLongLocal -Value $rawRequest.cacheReadTokens -Where "session '$sessionId' request cacheReadTokens"
+                        cacheWriteTokens = ConvertTo-NonNegativeLongLocal -Value $rawRequest.cacheWriteTokens -Where "session '$sessionId' request cacheWriteTokens"
+                        outputTokens = ConvertTo-NonNegativeLongLocal -Value $rawRequest.outputTokens -Where "session '$sessionId' request outputTokens"
+                        nanoAiu = ConvertTo-NonNegativeDecimalLocal -Value $rawRequest.nanoAiu -Where "session '$sessionId' request nanoAiu"
+                    })
+            }
+            if ([string]$rawSession.requestDetailStatus -eq 'complete' -and $details.Count -ne $requests) {
+                throw "Session '$sessionId' row '$($rawRow.agent)' has $($details.Count) request details for $requests requests."
+            }
+            $rowInput = ConvertTo-NonNegativeLongLocal -Value $rawRow.inputTokens -Where "session '$sessionId' row inputTokens"
+            $rowCached = ConvertTo-NonNegativeLongLocal -Value $rawRow.cacheReadTokens -Where "session '$sessionId' row cacheReadTokens"
+            $rowCacheWrite = ConvertTo-NonNegativeLongLocal -Value $rawRow.cacheWriteTokens -Where "session '$sessionId' row cacheWriteTokens"
+            $rowOutput = ConvertTo-NonNegativeLongLocal -Value $rawRow.outputTokens -Where "session '$sessionId' row outputTokens"
+            $rowNanoAiu = ConvertTo-NonNegativeDecimalLocal -Value $rawRow.nanoAiu -Where "session '$sessionId' row nanoAiu"
+            if ([string]$rawSession.requestDetailStatus -eq 'complete') {
+                foreach ($metric in @(
+                        @{ Name = 'inputTokens'; Actual = $rowInput; Expected = [long](($details | Measure-Object inputTokens -Sum).Sum) },
+                        @{ Name = 'cacheReadTokens'; Actual = $rowCached; Expected = [long](($details | Measure-Object cacheReadTokens -Sum).Sum) },
+                        @{ Name = 'cacheWriteTokens'; Actual = $rowCacheWrite; Expected = [long](($details | Measure-Object cacheWriteTokens -Sum).Sum) },
+                        @{ Name = 'outputTokens'; Actual = $rowOutput; Expected = [long](($details | Measure-Object outputTokens -Sum).Sum) },
+                        @{ Name = 'nanoAiu'; Actual = $rowNanoAiu; Expected = [decimal](($details | Measure-Object nanoAiu -Sum).Sum) }
+                    )) {
+                    if ($metric.Actual -ne $metric.Expected) {
+                        throw "Session '$sessionId' row '$($rawRow.agent)' $($metric.Name) does not equal its request-detail sum."
+                    }
+                }
+            }
+            $sessionRequests += $requests
+            $rows.Add([pscustomobject][ordered]@{
+                    Label = [string]$rawRow.role
+                    Member = [string]$rawRow.member
+                    Agent = [string]$rawRow.agent
+                    Models = @($rawRow.models | ForEach-Object { [string]$_ })
+                    Tier = [string]$rawRow.tier
+                    Runs = ConvertTo-NonNegativeLongLocal -Value $rawRow.runs -Where "session '$sessionId' row runs"
+                    Requests = $requests
+                    Input = $rowInput
+                    Cached = $rowCached
+                    CacheWrite = $rowCacheWrite
+                    Output = $rowOutput
+                    NanoAiu = $rowNanoAiu
+                    Descendants = @($rawRow.descendants | ForEach-Object { [string]$_ })
+                    RequestDetails = $details.ToArray()
+                })
+        }
+        if ($sessionRequests -ne $records) {
+            throw "Session '$sessionId' rows total $sessionRequests requests, not the recorded $records."
+        }
+        $normalizedSession = [pscustomobject][ordered]@{
+                sessionId = $sessionId
+                source = [string]$rawSession.source
+                first = [string]$rawSession.first
+                last = [string]$rawSession.last
+                through = [string]$rawSession.through
+                records = $records
+                identityDigest = [string]$rawSession.identityDigest
+                requestDetailStatus = [string]$rawSession.requestDetailStatus
+                historyCoverage = $coverage
+                rows = $rows.ToArray()
+            }
+        $normalizedRecord = ConvertTo-ExactCacheSessionRecordLocal -Session $normalizedSession -IncludeContentDigest
+        if ([string]$normalizedRecord.contentDigest -cne [string]$rawSession.contentDigest) {
+            throw "consumption-sessions.json session '$sessionId' contentDigest does not match its persisted fields."
+        }
+        $sessions.Add($normalizedSession)
+    }
+    $sessions.ToArray()
+}
+
+function ConvertTo-ExactCacheSessionRecordLocal {
+    param(
+        [Parameter(Mandatory)]$Session,
+        [switch]$IncludeContentDigest
+    )
+    $coverage = [ordered]@{}
+    foreach ($fileName in @($Session.historyCoverage.Keys | Sort-Object)) {
+        $coverage[$fileName] = @($Session.historyCoverage[$fileName])
+    }
+    $record = [ordered]@{
+        sessionId = [string]$Session.sessionId
+        source = [string]$Session.source
+        first = [string]$Session.first
+        last = [string]$Session.last
+        through = [string]$Session.through
+        records = [long]$Session.records
+        identityDigest = [string]$Session.identityDigest
+        requestDetailStatus = [string]$Session.requestDetailStatus
+        historyCoverage = $coverage
+        rows = @(
+            foreach ($row in @($Session.rows)) {
+                [ordered]@{
+                    role = [string]$row.Label
+                    member = [string]$row.Member
+                    agent = [string]$row.Agent
+                    models = @($row.Models)
+                    tier = [string]$row.Tier
+                    runs = [long]$row.Runs
+                    requests = [long]$row.Requests
+                    inputTokens = [long]$row.Input
+                    cacheReadTokens = [long]$row.Cached
+                    cacheWriteTokens = [long]$row.CacheWrite
+                    outputTokens = [long]$row.Output
+                    nanoAiu = [decimal]$row.NanoAiu
+                    descendants = @($row.Descendants)
+                    requestDetails = @(
+                        foreach ($request in @($row.RequestDetails)) {
+                            [ordered]@{
+                                identityHash = [string]$request.identityHash
+                                timestamp = [string]$request.timestamp
+                                model = [string]$request.model
+                                inputTokens = [long]$request.inputTokens
+                                cacheReadTokens = [long]$request.cacheReadTokens
+                                cacheWriteTokens = [long]$request.cacheWriteTokens
+                                outputTokens = [long]$request.outputTokens
+                                nanoAiu = [decimal]$request.nanoAiu
+                            }
+                        }
+                    )
+                }
+            }
+        )
+    }
+    if ($IncludeContentDigest) {
+        $material = $record | ConvertTo-Json -Compress -Depth 20
+        $record['contentDigest'] = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($material)))
+    }
+    $record
+}
+
+function ConvertTo-ExactSessionCacheDocumentLocal {
+    param([AllowEmptyCollection()][object[]]$Sessions = @())
+    $document = [ordered]@{
+        schemaVersion = 1
+        sessions = @($Sessions | ForEach-Object { ConvertTo-ExactCacheSessionRecordLocal -Session $_ -IncludeContentDigest })
+    }
+    ($document | ConvertTo-Json -Depth 20) + "`n"
+}
+
+function ConvertTo-CacheRequestLocal {
+    param([Parameter(Mandatory)]$Request)
+    $identityHash = if ($Request.PSObject.Properties['identityHash'] -and $Request.identityHash) {
+        [string]$Request.identityHash
+    }
+    elseif ($Request.PSObject.Properties['identity'] -and $Request.identity) {
+        Get-NativeIdentityHashLocal -Identity ([string]$Request.identity)
+    }
+    else {
+        throw 'Exact native request has no accounting identity.'
+    }
+    [pscustomobject][ordered]@{
+        identityHash = $identityHash
+        timestamp = [string]$Request.timestamp
+        model = [string]$Request.model
+        inputTokens = [long]$Request.inputTokens
+        cacheReadTokens = [long]$Request.cacheReadTokens
+        cacheWriteTokens = [long]$Request.cacheWriteTokens
+        outputTokens = [long]$Request.outputTokens
+        nanoAiu = [decimal]$Request.nanoAiu
+    }
+}
+
+function ConvertTo-CacheSessionLocal {
+    param(
+        [Parameter(Mandatory)]$Exact,
+        [Parameter(Mandatory)][Collections.IDictionary]$HistoryCoverage
+    )
+    [pscustomobject][ordered]@{
+        sessionId = [string]$Exact.Session.SessionId
+        source = 'native-log'
+        first = [string]$Exact.Session.First
+        last = [string]$Exact.Session.Last
+        through = [string]$Exact.SnapshotTimestamp
+        records = [long]$Exact.SnapshotRecords
+        identityDigest = [string]$Exact.SnapshotDigest
+        requestDetailStatus = 'complete'
+        historyCoverage = $HistoryCoverage
+        rows = @(
+            foreach ($row in @($Exact.Rows)) {
+                [pscustomobject][ordered]@{
+                    Label = [string]$row.Label
+                    Member = [string]$row.Member
+                    Agent = [string]$row.Agent
+                    Models = @($row.Models)
+                    Tier = [string]$row.Tier
+                    Runs = [long]$row.Runs
+                    Requests = [long]$row.Requests
+                    Input = [long]$row.Input
+                    Cached = [long]$row.Cached
+                    CacheWrite = [long]$row.CacheWrite
+                    Output = [long]$row.Output
+                    NanoAiu = [decimal]$row.NanoAiu
+                    Descendants = @($row.Descendants)
+                    RequestDetails = @($row.RequestDetails | ForEach-Object { ConvertTo-CacheRequestLocal -Request $_ })
+                }
+            }
+        )
+    }
+}
+
+function Assert-ExactSessionRefreshLocal {
+    param(
+        [Parameter(Mandatory)]$Existing,
+        [Parameter(Mandatory)]$Next
+    )
+    if ([string]$Existing.source -ne 'native-log') { return }
+    if ([long]$Next.records -lt [long]$Existing.records) {
+        throw "Native session '$($Next.sessionId)' regressed from $($Existing.records) to $($Next.records) complete records."
+    }
+    if ([long]$Next.records -eq [long]$Existing.records -and [string]$Next.identityDigest -cne [string]$Existing.identityDigest) {
+        throw "Native session '$($Next.sessionId)' changed its identity digest without adding a complete record."
+    }
+    if ([string]$Existing.requestDetailStatus -eq 'complete') {
+        $nextIdentities = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($row in @($Next.rows)) {
+            foreach ($request in @($row.RequestDetails)) { $null = $nextIdentities.Add([string]$request.identityHash) }
+        }
+        foreach ($row in @($Existing.rows)) {
+            foreach ($request in @($row.RequestDetails)) {
+                if (-not $nextIdentities.Contains([string]$request.identityHash)) {
+                    throw "Native session '$($Next.sessionId)' lost a previously accepted accounting identity."
+                }
+            }
+        }
+    }
+}
+
+function Convert-ExistingExactLedgerToCacheSessionLocal {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ConsumptionContent,
+        [Parameter(Mandatory)][Collections.IDictionary]$CurrentHistoryCoverage
+    )
+    if ($ConsumptionContent -notmatch '(?m)^\| Role \| Requests \| In Tokens \| Cached \| Cache Wr \| Out Tokens \| Exact Cost \(USD\) \| Exact Credits \| Basis \|') {
+        return $null
+    }
+    $single = [regex]::Match($ConsumptionContent, '(?m)^Native usage snapshot — session: (?<session>[^;]+); records: (?<records>\d+); through: (?<through>[^;]+); digest: (?<digest>[A-F0-9]{64})\s*$')
+    if (-not $single.Success) { return $null }
+    $snapshot = $single
+    $coverage = Get-RecordedHistoryCoverageLocal -ConsumptionContent $ConsumptionContent
+    if ($coverage.Count -eq 0) { return $null }
+    $null = Test-HistoryCoveragePrefixLocal -Recorded $coverage -Current $CurrentHistoryCoverage
+
+    $tables = @(Get-MarkdownTableLocal -Content $ConsumptionContent)
+    $attribution = @($tables | Where-Object { 'Agent' -in $_.Header -and 'Model Source' -in $_.Header -and 'Priced As' -in $_.Header } | Select-Object -First 1)
+    $usage = @($tables | Where-Object { 'Requests' -in $_.Header -and 'Exact Cost (USD)' -in $_.Header } | Select-Object -First 1)
+    if ($attribution.Count -ne 1 -or $usage.Count -ne 1) { return $null }
+    $attributionRows = @($attribution[0].Rows)
+    $usageRows = @($usage[0].Rows | Where-Object { ([string]$_[$usage[0].Header[0]]) -notmatch 'Total' })
+    if ($attributionRows.Count -ne $usageRows.Count -or $usageRows.Count -eq 0) { return $null }
+
+    $nanoLines = @([regex]::Matches($ConsumptionContent, '(?m)^(?<role>.+?)\s+requests\s+(?<requests>\d+)\s+input\s+(?<input>\d+)\s+cached\s+(?<cached>\d+)\s+cache-write\s+(?<cacheWrite>\d+)\s+output\s+(?<output>\d+)\s+nano-AIU\s+(?<nano>\d+(?:\.\d+)?)\s+='))
+    if ($nanoLines.Count -ne $usageRows.Count) { return $null }
+    $rows = [Collections.Generic.List[object]]::new()
+    $recordTotal = 0L
+    $nanoTotal = [decimal]0
+    for ($i = 0; $i -lt $usageRows.Count; $i++) {
+        $a = $attributionRows[$i]
+        $u = $usageRows[$i]
+        $n = $nanoLines[$i]
+        $role = ([string]$u['Role']).Trim('*', ' ')
+        if ($role -cne ([string]$a['Role']).Trim('*', ' ') -or $role -cne $n.Groups['role'].Value.Trim()) { return $null }
+        $requests = [long](ConvertTo-LedgerNumberLocal $u['Requests'])
+        $nanoAiu = [decimal]::Parse($n.Groups['nano'].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $recordTotal += $requests
+        $nanoTotal += $nanoAiu
+        $rows.Add([pscustomobject][ordered]@{
+                Label = $role
+                Member = ([string]$a['Member']).Trim()
+                Agent = ([string]$a['Agent']).Trim()
+                Models = @(([string]$a['Model'] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }))
+                Tier = ([string]$a['Tier']).Trim()
+                Runs = 0L
+                Requests = $requests
+                Input = [long](ConvertTo-LedgerNumberLocal $u['In Tokens'])
+                Cached = [long](ConvertTo-LedgerNumberLocal $u['Cached'])
+                CacheWrite = [long](ConvertTo-LedgerNumberLocal $u['Cache Wr'])
+                Output = [long](ConvertTo-LedgerNumberLocal $u['Out Tokens'])
+                NanoAiu = $nanoAiu
+                Descendants = @()
+                RequestDetails = @()
+            })
+    }
+    if ($recordTotal -ne [long]$snapshot.Groups['records'].Value) { return $null }
+    $totalLine = [regex]::Match($ConsumptionContent, '(?m)^total nano-AIU (?<nano>\d+(?:\.\d+)?)\s+=')
+    if (-not $totalLine.Success -or [decimal]::Parse($totalLine.Groups['nano'].Value, [Globalization.CultureInfo]::InvariantCulture) -ne $nanoTotal) { return $null }
+    $digest = [string]$snapshot.Groups['digest'].Value
+    $sessionId = [string]$single.Groups['session'].Value
+    [pscustomobject][ordered]@{
+        sessionId = $sessionId
+        source = 'legacy-ledger'
+        first = ''
+        last = [string]$snapshot.Groups['through'].Value
+        through = [string]$snapshot.Groups['through'].Value
+        records = $recordTotal
+        identityDigest = $digest
+        requestDetailStatus = 'unavailable'
+        historyCoverage = $coverage
+        rows = $rows.ToArray()
+    }
+}
+
+function Get-ExactCoveragePlanLocal {
+    param(
+        [AllowEmptyCollection()][object[]]$Sessions = @(),
+        [Parameter(Mandatory)][AllowEmptyString()][string]$CurrentSessionId,
+        [Parameter(Mandatory)][Collections.IDictionary]$CurrentHistoryCoverage
+    )
+    $currentIndex = -1
+    for ($i = 0; $i -lt $Sessions.Count; $i++) {
+        if ([string]$Sessions[$i].sessionId -ceq $CurrentSessionId) { $currentIndex = $i; break }
+    }
+    if ($currentIndex -ge 0 -and $currentIndex -ne $Sessions.Count - 1) {
+        throw "Native session '$CurrentSessionId' is not the latest cached session; exact accumulation cannot rewrite an older session after later sessions were recorded."
+    }
+    $priorSessions = if ($currentIndex -eq 0) { @() }
+    elseif ($currentIndex -gt 0) { @($Sessions[0..($currentIndex - 1)]) }
+    else { @($Sessions) }
+    $priorCoverage = Get-CumulativeHistoryCoverageLocal -Sessions $priorSessions
+    $null = Test-HistoryCoveragePrefixLocal -Recorded $priorCoverage -Current $CurrentHistoryCoverage
+
+    $currentCoverage = [ordered]@{}
+    foreach ($fileName in @($CurrentHistoryCoverage.Keys | Sort-Object)) {
+        $all = @($CurrentHistoryCoverage[$fileName])
+        $offset = @(if ($priorCoverage.Contains($fileName)) { $priorCoverage[$fileName] } else { @() }).Count
+        $currentCoverage[$fileName] = if ($offset -lt $all.Count) { @($all[$offset..($all.Count - 1)]) } else { @() }
+    }
+    $existing = if ($currentIndex -ge 0) { $Sessions[$currentIndex] } else { $null }
+    $existingCoverage = if ($existing) { $existing.historyCoverage } else { [ordered]@{} }
+    $null = Test-HistoryCoveragePrefixLocal -Recorded $existingCoverage -Current $currentCoverage
+    $newHistoryCount = 0
+    foreach ($fileName in $currentCoverage.Keys) {
+        $oldCount = @(if ($existingCoverage.Contains($fileName)) { $existingCoverage[$fileName] } else { @() }).Count
+        $newHistoryCount += @($currentCoverage[$fileName]).Count - $oldCount
+    }
+    $allCoverage = Get-CumulativeHistoryCoverageLocal -Sessions $Sessions
+    $cacheCoversAll = $false
+    try {
+        $null = Test-HistoryCoveragePrefixLocal -Recorded $allCoverage -Current $CurrentHistoryCoverage -RequireComplete
+        $cacheCoversAll = $true
+    }
+    catch {
+        $cacheCoversAll = $false
+    }
+    [pscustomobject][ordered]@{
+        ExistingIndex = $currentIndex
+        ExistingSession = $existing
+        CurrentCoverage = $currentCoverage
+        NewHistoryCount = $newHistoryCount
+        CacheCoversAll = $cacheCoversAll
+    }
+}
+
+function Get-ExpectedNativeCoverageLocal {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary]$HistoryCoverage,
+        [Parameter(Mandatory)][Collections.IDictionary]$MeteredHistoryCoverage,
+        [AllowEmptyCollection()][string[]]$MeteredAgents = @(),
+        [AllowEmptyCollection()][object[]]$HistoryEntries = @()
+    )
+    $meteredAgentsSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($agent in $MeteredAgents) { if ($agent) { $null = $meteredAgentsSet.Add([string]$agent) } }
+    $agents = [Collections.Generic.List[string]]::new()
+    $entries = [Collections.Generic.List[object]]::new()
+    $requireOrchestration = $false
+    $meteredEntryCount = 0
+    foreach ($fileName in $HistoryCoverage.Keys) {
+        $covered = @($HistoryCoverage[$fileName])
+        $meteredIdentitySet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        if ($MeteredHistoryCoverage.Contains($fileName)) {
+            foreach ($identity in @($MeteredHistoryCoverage[$fileName])) { $null = $meteredIdentitySet.Add([string]$identity) }
+        }
+        $coveredMetered = @($covered | Where-Object { $meteredIdentitySet.Contains([string]$_) })
+        $count = $coveredMetered.Count
+        if ($count -eq 0) { continue }
+        $meteredEntryCount += $count
+        $agent = [IO.Path]::GetFileNameWithoutExtension([string]$fileName)
+        $coveredSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($identity in $coveredMetered) { $null = $coveredSet.Add([string]$identity) }
+        $candidates = @($HistoryEntries | Where-Object { $_.Agent -CEQ $agent -and $coveredSet.Contains([string]$_.Identity) })
+        if ($count -ne $candidates.Count) {
+            throw "Current native session coverage names $count metered '$agent' history entries but $($candidates.Count) parsed entries match."
+        }
+        foreach ($entry in $candidates) { $entries.Add($entry) }
+        if ($agent -ceq 'Squad Scribe') {
+            $requireOrchestration = $true
+            continue
+        }
+        if (-not $meteredAgentsSet.Contains($agent)) { continue }
+        $agents.Add($agent)
+    }
+    [pscustomobject][ordered]@{
+        Agents = @($agents | Select-Object -Unique)
+        HistoryEntries = $entries.ToArray()
+        RequireOrchestration = $requireOrchestration
+        MeteredEntryCount = $meteredEntryCount
     }
 }
 
@@ -2158,6 +2763,10 @@ function Get-ExactLedgerUsageLocal {
         [AllowEmptyCollection()][object[]]$OrderedAggregates = @(),
         $OrchestrationAggregate,
         [AllowEmptyCollection()][object[]]$HistoryEntries = @(),
+        [AllowEmptyCollection()][string[]]$ExpectedAgentNames = @(),
+        [switch]$RequireOrchestration,
+        [switch]$EnforceExpectedSet,
+        [switch]$RequireSessionBoundary,
         [AllowEmptyString()][string]$BaselineModel,
         [System.Collections.Generic.List[string]]$Warnings
     )
@@ -2179,7 +2788,7 @@ function Get-ExactLedgerUsageLocal {
         $Warnings.Add("WARN: exact per-role ledger replacement is unavailable for member-scoped roots because coordinator usage cannot be assigned to one member; estimates remain the fallback.")
         return $null
     }
-    if ($Session.First) {
+    if ($RequireSessionBoundary -and $Session.First) {
         try {
             $sessionStart = [DateTimeOffset]::Parse([string]$Session.First, [Globalization.CultureInfo]::InvariantCulture)
             $olderEntries = @(
@@ -2288,13 +2897,32 @@ function Get-ExactLedgerUsageLocal {
         return $null
     }
     $exactAgents = @($rows | Where-Object Label -ne 'orchestration' | ForEach-Object Agent | Select-Object -Unique)
-    $missingAgents = @($OrderedAggregates | ForEach-Object AgentName | Where-Object { $_ -notin $exactAgents } | Select-Object -Unique)
+    $expectedAgents = if ($ExpectedAgentNames.Count -gt 0) {
+        @($ExpectedAgentNames | Where-Object { $_ } | Select-Object -Unique)
+    }
+    else {
+        @($OrderedAggregates | ForEach-Object AgentName | Where-Object { $_ } | Select-Object -Unique)
+    }
+    $missingAgents = @($expectedAgents | Where-Object { $_ -notin $exactAgents })
     if ($missingAgents.Count -gt 0) {
         $Warnings.Add("WARN: exact native usage has no attributed records for history-backed agent(s): $($missingAgents -join ', '); estimates remain the fallback.")
         return $null
     }
-    if ($OrchestrationAggregate -and @($rows | Where-Object Label -eq 'orchestration').Count -eq 0) {
+    if ($EnforceExpectedSet) {
+        $extraAgents = @($exactAgents | Where-Object { $_ -notin $expectedAgents })
+        if ($extraAgents.Count -gt 0) {
+            $Warnings.Add("WARN: exact native usage contains agent(s) without history coverage in this session: $($extraAgents -join ', '); estimates remain the fallback.")
+            return $null
+        }
+    }
+    $needsOrchestration = $RequireOrchestration -or $null -ne $OrchestrationAggregate
+    $hasOrchestration = @($rows | Where-Object Label -eq 'orchestration').Count -gt 0
+    if ($needsOrchestration -and -not $hasOrchestration) {
         $Warnings.Add('WARN: exact native usage has no coordinator or Scribe records for the history-backed orchestration row; estimates remain the fallback.')
+        return $null
+    }
+    if ($EnforceExpectedSet -and -not $needsOrchestration -and $hasOrchestration) {
+        $Warnings.Add('WARN: exact native usage contains coordinator or Scribe records without matching orchestration history coverage in this session; estimates remain the fallback.')
         return $null
     }
     $totalNanoAiu = [decimal](($rows | Measure-Object NanoAiu -Sum).Sum)
@@ -2363,6 +2991,220 @@ function Get-ExactLedgerUsageLocal {
         SnapshotRecords = [int]$snapshot.records
         SnapshotDigest = [string]$snapshot.identityDigest
         SnapshotTimestamp = [string]$snapshot.lastUsageTimestamp
+    }
+}
+
+function Merge-ExactSessionUsageLocal {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Sessions,
+        [Parameter(Mandatory)]$Rates,
+        [Parameter(Mandatory)]$Roster,
+        [AllowEmptyString()][string]$BaselineModel,
+        $ActiveSession,
+        [System.Collections.Generic.List[string]]$Warnings
+    )
+    if ($Sessions.Count -eq 0) { return $null }
+    $rowsByKey = @{}
+    $seenRequestIdentities = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $requestDetailsComplete = $true
+    foreach ($session in $Sessions) {
+        if ([string]$session.requestDetailStatus -ne 'complete') { $requestDetailsComplete = $false }
+        foreach ($storedRow in @($session.rows)) {
+            $isOrchestration = [string]$storedRow.Label -eq 'orchestration' -or [string]$storedRow.Agent -eq 'Coordinator+Scribe'
+            if ($isOrchestration) {
+                $index = [int]::MaxValue
+                $label = 'orchestration'
+                $member = ''
+                $tier = 'mixed'
+                $agent = 'Coordinator+Scribe'
+            }
+            else {
+                $resolved = Resolve-RoleForAgentLocal -AgentName ([string]$storedRow.Agent) -MemberName ([string]$storedRow.Member) -Roster $Roster
+                if ($resolved.Status -eq 'member-not-found') {
+                    $resolved = Resolve-RoleForAgentLocal -AgentName ([string]$storedRow.Agent) -Roster $Roster
+                }
+                if ($resolved.Status -notin @('ok', 'unmapped')) {
+                    throw "Cached exact usage for '$($storedRow.Agent)' cannot be mapped to one current roster row (status: $($resolved.Status))."
+                }
+                $index = if ($null -ne $resolved.Index) { [int]$resolved.Index } else { [int]::MaxValue }
+                $label = [string]$resolved.Role
+                $member = [string]$resolved.MemberName
+                $tier = [string]$resolved.Tier
+                $agent = [string]$storedRow.Agent
+            }
+            $key = "$label`n$member`n$agent"
+            if (-not $rowsByKey.ContainsKey($key)) {
+                $rowsByKey[$key] = @{
+                    Index = $index
+                    Label = $label
+                    Member = $member
+                    Agent = $agent
+                    Tier = $tier
+                    Models = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                    Descendants = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                    Runs = 0L
+                    Requests = 0L
+                    Input = 0L
+                    Cached = 0L
+                    CacheWrite = 0L
+                    Output = 0L
+                    NanoAiu = [decimal]0
+                    RequestDetails = [Collections.Generic.List[object]]::new()
+                }
+            }
+            $row = $rowsByKey[$key]
+            $row.Index = [math]::Min([int]$row.Index, $index)
+            if ($row.Tier -and $tier -and $row.Tier -cne $tier) { $row.Tier = 'mixed' }
+            elseif (-not $row.Tier) { $row.Tier = $tier }
+            foreach ($model in @($storedRow.Models)) { if ($model) { $null = $row.Models.Add([string]$model) } }
+            foreach ($name in @($storedRow.Descendants)) { if ($name) { $null = $row.Descendants.Add([string]$name) } }
+            $row.Runs += [long]$storedRow.Runs
+            $row.Requests += [long]$storedRow.Requests
+            $row.Input += [long]$storedRow.Input
+            $row.Cached += [long]$storedRow.Cached
+            $row.CacheWrite += [long]$storedRow.CacheWrite
+            $row.Output += [long]$storedRow.Output
+            $row.NanoAiu += [decimal]$storedRow.NanoAiu
+            foreach ($request in @($storedRow.RequestDetails)) {
+                $identityHash = [string]$request.identityHash
+                if (-not $identityHash -or -not $seenRequestIdentities.Add($identityHash)) {
+                    throw "Exact session cache repeats native request identity '$identityHash' across sessions."
+                }
+                $row.RequestDetails.Add($request)
+            }
+        }
+    }
+
+    $rows = @(
+        foreach ($row in @($rowsByKey.Values | Sort-Object Index, Label, Agent)) {
+            if ($row.Models.Count -eq 0) { throw "Cached exact usage has no model identity for '$($row.Agent)'." }
+            [pscustomobject][ordered]@{
+                Index = $row.Index
+                Label = $row.Label
+                Member = $row.Member
+                Agent = $row.Agent
+                Models = @($row.Models | Sort-Object)
+                ModelSources = @('host-reported')
+                PricedAsUsed = @('native credits')
+                Tier = $row.Tier
+                Runs = $row.Runs
+                Requests = $row.Requests
+                Input = $row.Input
+                Cached = $row.Cached
+                CacheWrite = $row.CacheWrite
+                Output = $row.Output
+                NanoAiu = $row.NanoAiu
+                Cost = [double]($row.NanoAiu / [decimal]1e11)
+                Credits = [double]($row.NanoAiu / [decimal]1e9)
+                Basis = 'exact-native'
+                Descendants = @($row.Descendants | Sort-Object)
+                RequestDetails = $row.RequestDetails.ToArray()
+            }
+        }
+    )
+    $records = [long](($rows | Measure-Object Requests -Sum).Sum)
+    $sessionRecords = [long](($Sessions | Measure-Object records -Sum).Sum)
+    if ($records -ne $sessionRecords) {
+        throw "Exact session cache rows total $records requests, not the session total $sessionRecords."
+    }
+    $totalNanoAiu = [decimal](($rows | Measure-Object NanoAiu -Sum).Sum)
+    $roleRows = @($rows | Where-Object Label -ne 'orchestration')
+    $baseline = $BaselineModel
+    if (-not $baseline) {
+        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -ne 'hydrafusion-max' } | Select-Object -Unique)
+        if ($candidateModels.Count -eq 0 -and $Rates.ByNormalized.ContainsKey('claude-sonnet-4.6')) {
+            $candidateModels = @('claude-sonnet-4.6')
+        }
+        $baseline = @(
+            $candidateModels |
+                Sort-Object {
+                    $rate = Get-BlendedRateLocal -Model $_ -Rates $Rates
+                    if ($null -eq $rate) { -1 } else { $rate }
+                } -Descending |
+                Select-Object -First 1
+        ) | Select-Object -First 1
+    }
+
+    $baselineCost = [double]0
+    $baselineComplete = [bool]$baseline -and $requestDetailsComplete
+    if ($baselineComplete) {
+        foreach ($row in $roleRows) {
+            if (@($row.RequestDetails).Count -ne [long]$row.Requests) {
+                $baselineComplete = $false
+                break
+            }
+            foreach ($request in @($row.RequestDetails)) {
+                $cost = Get-ExactRequestCounterfactualCostLocal -Request $request -Model $baseline -Rates $Rates
+                if ($null -eq $cost) {
+                    $baselineComplete = $false
+                    break
+                }
+                $baselineCost += [double]$cost
+            }
+            if (-not $baselineComplete) { break }
+        }
+    }
+    if (-not $requestDetailsComplete) {
+        $Warnings.Add('WARN: cumulative exact actuals include a migrated session without request-level token details; the exact single-model counterfactual is unavailable, but native credits and token totals remain exact.')
+    }
+    elseif ($baseline -and -not $baselineComplete) {
+        $Warnings.Add("WARN: baseline model '$baseline' has no complete rate row; the exact-traffic counterfactual is unavailable.")
+    }
+
+    $snapshotMaterial = @(
+        foreach ($session in $Sessions) {
+            "$($session.sessionId)|$($session.identityDigest)|$($session.records)|$($session.through)"
+        }
+    ) -join "`n"
+    $snapshotDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($snapshotMaterial)))
+    $snapshotTimestamp = @($Sessions | ForEach-Object through | Where-Object { $_ } | Select-Object -Last 1)
+    $totalCost = [double]($totalNanoAiu / [decimal]1e11)
+    $totalCredits = [double]($totalNanoAiu / [decimal]1e9)
+    $orchestration = @($rows | Where-Object Label -eq 'orchestration' | Select-Object -First 1)
+    $latest = $Sessions[-1]
+    [pscustomobject][ordered]@{
+        Session = if ($ActiveSession) {
+            $ActiveSession
+        }
+        else {
+            [pscustomobject]@{
+                SessionId = [string]$latest.sessionId
+                Path = ''
+                First = [string]$latest.first
+                Last = [string]$latest.last
+            }
+        }
+        Sessions = @($Sessions | ForEach-Object {
+                [pscustomobject][ordered]@{
+                    SessionId = [string]$_.sessionId
+                    Source = [string]$_.source
+                    Records = [long]$_.records
+                    Through = [string]$_.through
+                    IdentityDigest = [string]$_.identityDigest
+                }
+            })
+        Rows = $rows
+        TotalRequests = [int]$records
+        TotalInput = [long](($rows | Measure-Object Input -Sum).Sum)
+        TotalCached = [long](($rows | Measure-Object Cached -Sum).Sum)
+        TotalCacheWrite = [long](($rows | Measure-Object CacheWrite -Sum).Sum)
+        TotalOutput = [long](($rows | Measure-Object Output -Sum).Sum)
+        TotalNanoAiu = $totalNanoAiu
+        TotalCostUsd = $totalCost
+        TotalCredits = $totalCredits
+        OrchestrationCredits = if ($orchestration.Count) { [double]$orchestration[0].Credits } else { 0.0 }
+        BaselineModel = $baseline
+        BaselineCostUsd = if ($baselineComplete) { $baselineCost } else { $null }
+        BaselineCredits = if ($baselineComplete) { $baselineCost / 0.01 } else { $null }
+        SavingsUsd = if ($baselineComplete) { $baselineCost - $totalCost } else { $null }
+        SavingsPct = if ($baselineComplete -and $baselineCost -gt 0) { 100.0 * ($baselineCost - $totalCost) / $baselineCost } else { $null }
+        AgentCount = $roleRows.Count
+        SnapshotRecords = [int]$records
+        SnapshotDigest = $snapshotDigest
+        SnapshotTimestamp = if ($snapshotTimestamp.Count) { [string]$snapshotTimestamp[0] } else { '' }
+        SessionCount = $Sessions.Count
+        RequestDetailStatus = if ($requestDetailsComplete) { 'complete' } else { 'partial' }
+        CacheSessions = $Sessions
     }
 }
 
@@ -2836,8 +3678,24 @@ function Get-ExactCostComparisonSectionLinesLocal {
         $lines.Add('The exact HVE Squad total is available, but the without-Squad counterfactual is unavailable because no complete baseline-model rate row resolved.')
     }
     $lines.Add('')
-    $lines.Add(('> The HVE Squad row is exact as of the native snapshot: {0} complete accounting records, digest `{1}`. The without-Squad row is not an observed alternate run; it holds every exact role request''s uncached input, cache read, cache write, and output counts constant, reprices them on one model, and excludes coordinator/Scribe overhead. It therefore measures routing savings on identical traffic and does not invent context growth, rework, or behavioral differences for a hypothetical manual run.' -f
-            $Exact.SnapshotRecords, $Exact.SnapshotDigest))
+    $snapshotLabel = if ([int]$Exact.SessionCount -gt 1) { "$($Exact.SessionCount) accumulated native session snapshots" } else { 'the native session snapshot' }
+    if ($null -ne $Exact.BaselineCostUsd) {
+        $lines.Add(('> The HVE Squad row is exact as of {0}: {1} complete accounting records, cumulative digest `{2}`. The without-Squad row is not an observed alternate run; it holds every exact role request''s uncached input, cache read, cache write, and output counts constant, reprices them on one model, and excludes coordinator/Scribe overhead. It therefore measures routing savings on identical traffic and does not invent context growth, rework, or behavioral differences for a hypothetical manual run.' -f
+                $snapshotLabel, $Exact.SnapshotRecords, $Exact.SnapshotDigest))
+    }
+    else {
+        $unavailableReason = if ($Exact.RequestDetailStatus -ne 'complete') {
+            'at least one accepted snapshot lacks the request-level token detail needed for an identical-traffic counterfactual'
+        }
+        elseif ([int]$Exact.AgentCount -eq 0) {
+            'there is no role traffic to reprice without coordinator/Scribe overhead'
+        }
+        else {
+            'no complete baseline-model rate row resolved'
+        }
+        $lines.Add(('> The HVE Squad row is exact as of {0}: {1} complete accounting records, cumulative digest `{2}`. No without-Squad row is claimed because {3}.' -f
+                $snapshotLabel, $Exact.SnapshotRecords, $Exact.SnapshotDigest, $unavailableReason))
+    }
     $lines.Add('')
     $lines.ToArray()
 }
@@ -2874,6 +3732,8 @@ function Get-HistoryEntryRecordsLocal {
             Start              = $start
             End                = $end
             Timestamp          = if ($stamp -match '^\d{4}-\d\d-\d\dT') { $stamp } else { '' }
+            Identity           = Get-ShortIdentityHashLocal -Text $headings[$i].Groups['title'].Value.Trim()
+            HasConsumption     = $false
             Turn               = (& $field 'Turn')
             Workstream         = (& $field 'Workstream').ToLowerInvariant()
             MemberName         = (& $field 'Member Name')
@@ -2894,7 +3754,10 @@ function Get-HistoryEntryRecordsLocal {
 function Add-BlockCostToEntryLocal {
     param([AllowEmptyCollection()][object[]]$Entries = @(), [Parameter(Mandatory)][int]$Offset, [Parameter(Mandatory)][double]$Cost)
     $entry = $Entries | Where-Object { $Offset -ge $_.Start -and $Offset -lt $_.End } | Select-Object -First 1
-    if ($entry) { $entry.Cost += $Cost }
+    if ($entry) {
+        $entry.Cost += $Cost
+        $entry.HasConsumption = $true
+    }
 }
 
 function Get-UnitEconomicsLocal {
@@ -3136,7 +3999,7 @@ if ($suppliedLookupParamNames.Count -gt 0) {
 # ---------------------------------------------------------------------------
 # -EmitBaseline / -BaselinePath / -ProtectedPath preconditions (Amendment 3 §2
 # item 1): a baseline path must resolve entirely outside any
-# `.copilot-tracking/squad` tree, and state.json/consumption.md can never be
+# `.copilot-tracking/squad` tree, and state.json/consumption.md/consumption-sessions.json can never be
 # named as a protected artifact -- both checked before anything else runs.
 # ---------------------------------------------------------------------------
 if ($EmitBaseline -and (Test-PathUnderSquadTrackingLocal -Path $EmitBaseline)) {
@@ -3230,6 +4093,7 @@ $attributionIssues = [System.Collections.Generic.List[string]]::new()
 foreach ($issue in $connectorIdentityIssues) { $attributionIssues.Add("Connector identity: $issue") }
 $historyCounts = @{}
 $historyIdentitiesByFile = @{}
+$meteredHistoryIdentitiesByFile = @{}
 $enumerationLines = [System.Collections.Generic.List[string]]::new()
 
 
@@ -3239,6 +4103,7 @@ $enumerationLines = [System.Collections.Generic.List[string]]::new()
 $ordered = [System.Collections.Generic.List[pscustomobject]]::new()
 $orchestrationAggregate = $null
 $unitEntries = [System.Collections.Generic.List[pscustomobject]]::new()
+$exactHistoryEntries = [System.Collections.Generic.List[pscustomobject]]::new()
 
 foreach ($file in $historyFiles) {
     $agentName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
@@ -3252,7 +4117,9 @@ foreach ($file in $historyFiles) {
     $identityLabel = if ($identities.Count -gt 0) { $identities -join ',' } else { '(none)' }
 
     $blocks = @(Get-ConsumptionBlockLocal -Content $content -SourceName $file.Name)
-    $fileEntries = if ($agentName -eq 'Squad Scribe') { @() } else { @(Get-HistoryEntryRecordsLocal -Content $content -AgentName $agentName) }
+    $allFileEntries = @(Get-HistoryEntryRecordsLocal -Content $content -AgentName $agentName)
+    $fileEntries = if ($agentName -eq 'Squad Scribe') { @() } else { $allFileEntries }
+    $meteredIdentities = [Collections.Generic.List[string]]::new()
     if ($agentName -ceq 'Squad Connector') {
         foreach ($entry in $fileEntries) {
             $requiredMetadata = [ordered]@{
@@ -3309,6 +4176,12 @@ foreach ($file in $historyFiles) {
 
         if ($block.CollapsedFence) {
             $warnings.Add("WARN: $($block.Source): consumption block $($block.Ordinal) has a collapsed code fence (fewer than three backticks, the mark of a write through a PowerShell double-quoted string); its JSON is intact, so it is counted. Leave the entry as it is -- never edit it in place -- and write future entries with the file edit or create tool.")
+        }
+
+        $meteredEntry = @($allFileEntries | Where-Object { $block.Offset -ge $_.Start -and $block.Offset -lt $_.End } | Select-Object -First 1)
+        if ($meteredEntry.Count -eq 1 -and $meteredEntry[0].Identity -notin $meteredIdentities) {
+            $meteredEntry[0].HasConsumption = $true
+            $meteredIdentities.Add([string]$meteredEntry[0].Identity)
         }
 
         if ($agentName -eq 'Squad Scribe') {
@@ -3373,6 +4246,8 @@ foreach ($file in $historyFiles) {
         Add-BlockToAggregateLocal -Aggregate $existing.Aggregate -Block $block -Rates $rates -CalibrationFactor $calibrationFactor -Warnings $warnings -TreatUnresolvedRateAsWarning $isLegacyBlock
         Add-BlockCostToEntryLocal -Entries $fileEntries -Offset $block.Offset -Cost $existing.Aggregate.Blocks[-1].Cost
     }
+    $meteredHistoryIdentitiesByFile[$file.Name] = $meteredIdentities.ToArray()
+    foreach ($entryRecord in $allFileEntries) { $exactHistoryEntries.Add($entryRecord) }
     foreach ($entryRecord in $fileEntries) { $entryRecord.Seq = $unitEntries.Count; $unitEntries.Add($entryRecord) }
 }
 
@@ -3445,6 +4320,7 @@ $isFederationRoot = Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md'
 # ---------------------------------------------------------------------------
 
 $consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$sessionCachePath = Join-Path $SquadRoot 'consumption-sessions.json'
 $existingConsumptionContent = $null
 $identityGuardResult = $null
 # Post-write mode is the Scribe's own self-check shape: -Check combined with
@@ -3501,9 +4377,9 @@ if ($Check) {
     # -BaselinePath append-only/protected-artifact verification (Amendment 3 §2
     # item 1), only meaningful paired with -Check: shrink, prefix-hash mismatch,
     # protected-hash mismatch (unless in the allowed write set), and a missing
-    # baseline file are all FAILs here; state.json/consumption.md rewrites are
-    # explicitly not checked by this helper (they are expected to change and are
-    # covered by C3 and the structural checks below instead).
+    # baseline file are all FAILs here; state.json/consumption.md/
+    # consumption-sessions.json rewrites are explicitly not checked by this helper
+    # (they are expected to change and are covered by C3 and the structural checks below instead).
     if ($BaselinePath) {
         if ($baselineFileMissing) {
             $mismatches.Add("Baseline file '$BaselinePath' not found.")
@@ -3692,12 +4568,36 @@ if ($Check) {
             if (([string]$totalRow['Basis']).Trim('*', ' ') -cne 'exact-native') {
                 $mismatches.Add('Exact Usage & Cost Total row does not use basis exact-native.')
             }
-            $snapshotLine = [regex]::Match($consumptionContent, '(?m)^Native usage snapshot — session: (?<session>[^;]+); records: (?<records>\d+); through: (?<through>[^;]+); digest: (?<digest>[A-F0-9]{64})\s*$')
+            $singleSnapshotLine = [regex]::Match($consumptionContent, '(?m)^Native usage snapshot — session: (?<session>[^;]+); records: (?<records>\d+); through: (?<through>[^;]+); digest: (?<digest>[A-F0-9]{64})\s*$')
+            $multiSnapshotLine = [regex]::Match($consumptionContent, '(?m)^Native usage snapshots — sessions: (?<sessions>\d+); records: (?<records>\d+); through: (?<through>[^;]+); digest: (?<digest>[A-F0-9]{64})\s*$')
+            $snapshotLine = if ($singleSnapshotLine.Success) { $singleSnapshotLine } else { $multiSnapshotLine }
             if (-not $snapshotLine.Success) {
-                $mismatches.Add('Exact Derivation is missing its native session, record count, timestamp, or SHA-256 digest.')
+                $mismatches.Add('Exact Derivation is missing its native session snapshot count, record count, timestamp, or SHA-256 digest.')
             }
             elseif ([int]$snapshotLine.Groups['records'].Value -ne [int]$actualRequests) {
                 $mismatches.Add('Exact Derivation native record count differs from the Usage & Cost Total requests.')
+            }
+            if (Test-Path -LiteralPath $sessionCachePath -PathType Leaf) {
+                try {
+                    $checkedSessions = @(Read-ExactSessionCacheLocal -Path $sessionCachePath)
+                    $checkedCoverage = Get-CumulativeHistoryCoverageLocal -Sessions $checkedSessions
+                    $null = Test-HistoryCoveragePrefixLocal -Recorded $checkedCoverage -Current $historyIdentitiesByFile -RequireComplete
+                    $checkedExact = Merge-ExactSessionUsageLocal -Sessions $checkedSessions -Rates $rates -Roster $roster `
+                        -BaselineModel '' -ActiveSession $null -Warnings $warnings
+                    if ([int]$checkedExact.SnapshotRecords -ne [int]$actualRequests) {
+                        $mismatches.Add('consumption-sessions.json record total differs from the exact Usage & Cost Total requests.')
+                    }
+                    if ($snapshotLine.Success -and [string]$checkedExact.SnapshotDigest -cne [string]$snapshotLine.Groups['digest'].Value) {
+                        $mismatches.Add('consumption-sessions.json cumulative digest differs from the Exact Derivation digest.')
+                    }
+                    $declaredSessionCount = if ($multiSnapshotLine.Success) { [int]$multiSnapshotLine.Groups['sessions'].Value } else { 1 }
+                    if ([int]$checkedExact.SessionCount -ne $declaredSessionCount) {
+                        $mismatches.Add('consumption-sessions.json session count differs from the Exact Derivation session count.')
+                    }
+                }
+                catch {
+                    $mismatches.Add("consumption-sessions.json failed exact-ledger validation: $($_.Exception.Message)")
+                }
             }
 
             $totalTurns = $expectedRequests
@@ -3842,21 +4742,143 @@ if ($Check) {
 # ---------------------------------------------------------------------------
 
 $exactUsage = $null
+$exactCacheUpdate = $null
 if ($SessionLog) {
-    $sessionPath = Resolve-SessionLogPathLocal -SessionLog $SessionLog -SquadRoot $SquadRoot
-    if ($sessionPath) {
-        try {
-            $session = Read-SessionUsageLocal -Path $sessionPath -SquadRoot $SquadRoot
-            $exactUsage = Get-ExactLedgerUsageLocal -Session $session -Rates $rates -Roster $roster -OrderedAggregates @($ordered) `
-                -OrchestrationAggregate $orchestrationAggregate -HistoryEntries @($unitEntries) -BaselineModel $BaselineModel -Warnings $warnings
-        }
-        catch {
-            $exactUsage = $null
-            $warnings.Add("WARN: exact per-role usage from '$sessionPath' was unavailable; estimates remain the fallback: $($_.Exception.Message)")
+    $cacheSessions = @()
+    $cacheAvailable = $true
+    $cacheChanged = $false
+    $legacyMigrated = $false
+    try {
+        $cacheSessions = @(Read-ExactSessionCacheLocal -Path $sessionCachePath)
+        if ($cacheSessions.Count -eq 0 -and -not (Test-Path -LiteralPath $sessionCachePath -PathType Leaf) -and $existingConsumptionContent) {
+            $legacySession = Convert-ExistingExactLedgerToCacheSessionLocal -ConsumptionContent $existingConsumptionContent -CurrentHistoryCoverage $historyIdentitiesByFile
+            if ($legacySession) {
+                $cacheSessions = @($legacySession)
+                $cacheChanged = $true
+                $legacyMigrated = $true
+            }
         }
     }
-    else {
-        $warnings.Add("WARN: -SessionLog auto found no Copilot session whose workspace is this squad root's repository; estimates remain the fallback.")
+    catch {
+        $cacheAvailable = $false
+        $warnings.Add("WARN: consumption-sessions.json is unavailable or inconsistent; it was left unchanged and estimates remain the fallback: $($_.Exception.Message)")
+    }
+
+    if ($cacheAvailable) {
+        $sessionPath = Resolve-SessionLogPathLocal -SessionLog $SessionLog -SquadRoot $SquadRoot
+        $session = $null
+        if ($sessionPath) {
+            try { $session = Read-SessionUsageLocal -Path $sessionPath -SquadRoot $SquadRoot }
+            catch {
+                $warnings.Add("WARN: exact per-role usage from '$sessionPath' was unavailable: $($_.Exception.Message)")
+            }
+        }
+
+        if ($session) {
+            try {
+                $coveragePlan = Get-ExactCoveragePlanLocal -Sessions $cacheSessions -CurrentSessionId ([string]$session.SessionId) -CurrentHistoryCoverage $historyIdentitiesByFile
+                $currentCoverageCount = [int](($coveragePlan.CurrentCoverage.Values | ForEach-Object { @($_).Count } | Measure-Object -Sum).Sum)
+                $refreshCurrentSession = $coveragePlan.ExistingSession -or $currentCoverageCount -gt 0
+                if ($refreshCurrentSession) {
+                    $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coveragePlan.CurrentCoverage `
+                        -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
+                        -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
+                    if ([int]$expected.MeteredEntryCount -eq 0 -and $cacheSessions.Count -gt 0) {
+                        if ($coveragePlan.ExistingIndex -ge 0) {
+                            $cacheSessions[$coveragePlan.ExistingIndex].historyCoverage = $coveragePlan.CurrentCoverage
+                        }
+                        else {
+                            $lastIndex = $cacheSessions.Count - 1
+                            $cacheSessions[$lastIndex].historyCoverage = Join-HistoryCoverageLocal `
+                                -Left $cacheSessions[$lastIndex].historyCoverage -Right $coveragePlan.CurrentCoverage
+                        }
+                        $cacheChanged = $true
+                        $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                            -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
+                    }
+                    else {
+                        $sessionExact = Get-ExactLedgerUsageLocal -Session $session -Rates $rates -Roster $roster `
+                            -HistoryEntries @($expected.HistoryEntries) -ExpectedAgentNames @($expected.Agents) `
+                            -RequireOrchestration:$expected.RequireOrchestration -EnforceExpectedSet -RequireSessionBoundary `
+                            -BaselineModel $BaselineModel -Warnings $warnings
+                        if ($sessionExact) {
+                            $cacheSession = ConvertTo-CacheSessionLocal -Exact $sessionExact -HistoryCoverage $coveragePlan.CurrentCoverage
+                            if ($coveragePlan.ExistingIndex -ge 0) {
+                                Assert-ExactSessionRefreshLocal -Existing $cacheSessions[$coveragePlan.ExistingIndex] -Next $cacheSession
+                                $nextSessions = [Collections.Generic.List[object]]::new()
+                                for ($i = 0; $i -lt $cacheSessions.Count; $i++) {
+                                    $nextSessions.Add($(if ($i -eq $coveragePlan.ExistingIndex) { $cacheSession } else { $cacheSessions[$i] }))
+                                }
+                                $cacheSessions = $nextSessions.ToArray()
+                            }
+                            else {
+                                $cacheSessions = @($cacheSessions) + @($cacheSession)
+                            }
+                            $cacheChanged = $true
+                            $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                                -BaselineModel $BaselineModel -ActiveSession $session -Warnings $warnings
+                        }
+                        elseif ($coveragePlan.CacheCoversAll) {
+                            $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                                -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
+                            $warnings.Add("WARN: the live native session could not refresh its cached snapshot, so the last fully reconciled cumulative exact snapshot was retained.")
+                        }
+                    }
+                }
+                elseif ($coveragePlan.CacheCoversAll) {
+                    $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                        -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
+                }
+            }
+            catch {
+                $exactUsage = $null
+                $warnings.Add("WARN: exact cross-session accumulation was unavailable; estimates remain the fallback: $($_.Exception.Message)")
+            }
+        }
+        elseif ($cacheSessions.Count -gt 0) {
+            try {
+                $coveragePlan = Get-ExactCoveragePlanLocal -Sessions $cacheSessions -CurrentSessionId '__no-active-native-session__' -CurrentHistoryCoverage $historyIdentitiesByFile
+                if ($coveragePlan.CacheCoversAll) {
+                    $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                        -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
+                }
+                else {
+                    $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coveragePlan.CurrentCoverage `
+                        -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
+                        -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
+                    if ([int]$expected.MeteredEntryCount -ne 0) {
+                        throw 'new metered history exists without an available native session snapshot'
+                    }
+                    $lastIndex = $cacheSessions.Count - 1
+                    $cacheSessions[$lastIndex].historyCoverage = Join-HistoryCoverageLocal `
+                        -Left $cacheSessions[$lastIndex].historyCoverage -Right $coveragePlan.CurrentCoverage
+                    $cacheChanged = $true
+                    $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                        -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
+                }
+            }
+            catch {
+                $exactUsage = $null
+                $warnings.Add("WARN: cached exact sessions do not cover current history; estimates remain the fallback: $($_.Exception.Message)")
+            }
+        }
+
+        if (-not $sessionPath -and -not $exactUsage) {
+            $warnings.Add("WARN: -SessionLog auto found no Copilot session whose workspace is this squad root's repository; estimates remain the fallback.")
+        }
+        elseif ($sessionPath -and -not $exactUsage -and $cacheSessions.Count -eq 0) {
+            $warnings.Add("WARN: exact per-role usage from '$sessionPath' did not fully reconcile; estimates remain the fallback.")
+        }
+        if ($legacyMigrated -and @($cacheSessions | Where-Object source -eq 'legacy-ledger').Count -gt 0) {
+            $warnings.Add('WARN: migrated the existing exact ledger into consumption-sessions.json; exact historical actuals are preserved, while the single-model counterfactual remains unavailable for that migrated session because request-level details were not stored in consumption.md.')
+        }
+        if ($cacheChanged) {
+            $exactCacheUpdate = [pscustomobject]@{
+                Path = $sessionCachePath
+                Text = ConvertTo-ExactSessionCacheDocumentLocal -Sessions $cacheSessions
+                Encoding = [Text.UTF8Encoding]::new($false)
+            }
+        }
     }
 }
 
@@ -3928,8 +4950,14 @@ $fragmentLines.Add('')
 $fragmentLines.Add('```text')
 foreach ($line in $enumerationLines) { $fragmentLines.Add($line) }
 if ($exactUsage) {
-    $fragmentLines.Add(("Native usage snapshot — session: {0}; records: {1}; through: {2}; digest: {3}" -f
-            $exactUsage.Session.SessionId, $exactUsage.SnapshotRecords, $exactUsage.SnapshotTimestamp, $exactUsage.SnapshotDigest))
+    if ([int]$exactUsage.SessionCount -gt 1) {
+        $fragmentLines.Add(("Native usage snapshots — sessions: {0}; records: {1}; through: {2}; digest: {3}" -f
+                $exactUsage.SessionCount, $exactUsage.SnapshotRecords, $exactUsage.SnapshotTimestamp, $exactUsage.SnapshotDigest))
+    }
+    else {
+        $fragmentLines.Add(("Native usage snapshot — session: {0}; records: {1}; through: {2}; digest: {3}" -f
+                $exactUsage.Session.SessionId, $exactUsage.SnapshotRecords, $exactUsage.SnapshotTimestamp, $exactUsage.SnapshotDigest))
+    }
     foreach ($agg in $ledgerRows) {
         $fragmentLines.Add(('{0,-18} requests {1,-6} input {2,-10} cached {3,-10} cache-write {4,-10} output {5,-10} nano-AIU {6} = {7} credits / {8} USD' -f
                 $agg.Label,
@@ -3974,6 +5002,7 @@ if ($Write) {
         Get-ConsumptionFragmentUpdateLocal -ConsumptionPath $consumptionPath -FragmentLines $fragmentLines.ToArray()
         Get-StateRunTotalUpdateLocal -StatePath $statePath -CostUsd $totalCost -Credits $totalCredits
     )
+    if ($exactCacheUpdate) { $updates += $exactCacheUpdate }
     $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines @() -HeadingPattern '^##\s+Observed Usage \(host-reported\)\s*$' -InsertBeforePatterns @('(?!)')
     $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines (Get-UnitEconomicsSectionLinesLocal -Ue $unitEconomics) -HeadingPattern '^##\s+Unit Economics \(value\)\s*$' -InsertBeforePatterns @('^##\s+Cost Comparison')
     if ($initializationOnly) {
@@ -3986,8 +5015,9 @@ if ($Write) {
         $comparison = Get-CostComparisonUpdateLocal -Text $updates[0].Text -CostUsd $totalCost -Credits $totalCredits -AgentCount (@($roleAggregates | Where-Object Label -ne 'orchestration').Count)
         $updates[0].Text = $comparison.Text
     }
-    # Each file is written to a temp file beside it and moved into place; when the second move fails,
-    # the first file gets its original bytes back, so a direct -Write never leaves one file updated alone.
+    # Each file is written to a temp file beside it and moved into place; when a later move fails,
+    # every earlier file gets its original bytes back, so the ledger, state totals, and exact-session
+    # cache are one transaction.
     $applied = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($u in $updates) {
         $tmp = Join-Path (Split-Path -Path $u.Path -Parent) (".$([System.IO.Path]::GetFileName($u.Path)).$([guid]::NewGuid().ToString('N')).tmp")
@@ -4099,10 +5129,13 @@ if ($Format -eq 'json') {
             [ordered]@{
                 sessionId = $exactUsage.Session.SessionId
                 sessionLog = $exactUsage.Session.Path
+                sessionCount = $exactUsage.SessionCount
+                sessionIds = @($exactUsage.Sessions | ForEach-Object SessionId)
                 records = $exactUsage.SnapshotRecords
                 identityDigest = $exactUsage.SnapshotDigest
                 through = $exactUsage.SnapshotTimestamp
                 totalNanoAiu = $exactUsage.TotalNanoAiu
+                requestDetailStatus = $exactUsage.RequestDetailStatus
                 baselineModel = $exactUsage.BaselineModel
                 baselineCostUsd = if ($null -ne $exactUsage.BaselineCostUsd) { [math]::Round($exactUsage.BaselineCostUsd, 4) } else { $null }
                 savingsUsd = if ($null -ne $exactUsage.SavingsUsd) { [math]::Round($exactUsage.SavingsUsd, 4) } else { $null }

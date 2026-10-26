@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-25"
+  last_updated: "2026-10-26"
 ---
 
 # Squad Reference Index
@@ -45,7 +45,7 @@ load only references that contract conditionally requires.
 | [scribe-cold-federation.md](scribe-cold-federation.md) | Unsupported-host federation lifecycle, repairs and root history |
 | [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) | Unsupported verdict fallback, summaries, notifications |
 | [seed-templates.md](seed-templates.md) | Init roster/routing templates |
-| [consumption.md](consumption.md) | Ledger, estimator, Cost Preflight |
+| [consumption.md](consumption.md) | Ledger, exact-session journal, estimator, Cost Preflight |
 | [consumption-rates-template.md](consumption-rates-template.md) | Init/reseed rates without the script |
 | [model-catalog.md](model-catalog.md) | Capability, pricing, availability |
 | [model-benchmarks.md](model-benchmarks.md) | Offline evidence, provenance, and source versions |

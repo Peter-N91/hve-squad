@@ -13,7 +13,7 @@
     sealed file and history digest, writes only team.md, routing.md, and an appended
     decisions.md entry, then checks the ledger read-only.
 
-    consumption.md, state.json, consumption-rates.md, notifications.md, and history/
+    consumption.md, optional consumption-sessions.json, state.json, consumption-rates.md, notifications.md, and history/
     must remain byte-identical. A stale plan, lock timeout, failed ledger check, or
     write/read-back failure restores owned files and returns nonzero.
 .PARAMETER PlanPath
@@ -86,6 +86,10 @@ function Get-Baseline {
         $path = Join-Path $Root $name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing required squad state: $name" }
         $files[$name] = Get-FileSnapshot $path
+    }
+    $sessionCache = Join-Path $Root 'consumption-sessions.json'
+    if (Test-Path -LiteralPath $sessionCache -PathType Leaf) {
+        $files['consumption-sessions.json'] = Get-FileSnapshot $sessionCache
     }
     $history = Join-Path $Root 'history'
     if (-not (Test-Path -LiteralPath $history -PathType Container)) { throw 'Missing required squad state: history' }

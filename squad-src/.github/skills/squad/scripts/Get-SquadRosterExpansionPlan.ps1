@@ -212,6 +212,10 @@ function Get-Baseline {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing required squad state: $name" }
         $files[$name] = Get-FileSnapshot $path
     }
+    $sessionCache = Join-Path $Root 'consumption-sessions.json'
+    if (Test-Path -LiteralPath $sessionCache -PathType Leaf) {
+        $files['consumption-sessions.json'] = Get-FileSnapshot $sessionCache
+    }
     $history = Join-Path $Root 'history'
     if (-not (Test-Path -LiteralPath $history -PathType Container)) { throw 'Missing required squad state: history' }
     $baseline = [ordered]@{
@@ -469,7 +473,7 @@ try {
         "* Previous provenance: $provenance"
         "* Provenance: $nextProvenance"
         "* Rationale: $rationale"
-        '* Accounting: no model or Scribe dispatch; consumption.md, state.json, rates, notifications, and history are preserved byte-for-byte.'
+        '* Accounting: no model or Scribe dispatch; consumption.md, consumption-sessions.json when present, state.json, rates, notifications, and history are preserved byte-for-byte.'
     ) -join "`n"
     $finalDecisions = Add-DecisionEntry -Before ([IO.File]::ReadAllBytes($decisionsPath)) -Entry $entry
 

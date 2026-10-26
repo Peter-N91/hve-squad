@@ -2010,11 +2010,13 @@ Describe 'Measure-SquadLedger -EmitBaseline / -BaselinePath (U1 item 1)' {
         $result.Output | Should -Match '\.copilot-tracking/squad'
     }
 
-    It 'refuses (throws) naming state.json or consumption.md as -ProtectedPath' {
+    It 'refuses (throws) naming a replace-semantics ledger file as -ProtectedPath' {
         $root = New-BaselineTestRootLocal
-        $result = Invoke-Ledger -SquadRoot $root -EmitBaseline (Join-Path $TestDrive 'baseline-guard.json') -ProtectedPath 'state.json'
-        $result.ExitCode | Should -Not -Be 0
-        $result.Output | Should -Match 'must not name'
+        foreach ($name in @('state.json', 'consumption.md', 'consumption-sessions.json')) {
+            $result = Invoke-Ledger -SquadRoot $root -EmitBaseline (Join-Path $TestDrive "baseline-guard-$($name.Replace('.', '-')).json") -ProtectedPath $name
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'must not name'
+        }
     }
 }
 
@@ -2447,6 +2449,62 @@ Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exac
             } | ConvertTo-Json -Depth 12 -Compress
         }
 
+        function Add-SecondSessionHistoryLocal {
+            param([Parameter(Mandatory)][string]$Root)
+            Add-Content -LiteralPath (Join-Path $Root 'history/Squad Researcher.md') -Encoding utf8NoBOM -Value @'
+
+### 2026-10-02T10:00:00Z Surveying the next fixture increment
+
+* Turn: 3
+* Request: Survey the next fixture increment.
+* Deliverable: `research/2026-10-02-fixture-topic.md`
+* Outcome: Recorded the next exact-session increment.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "session-inherited",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 4,
+  "input_tokens": 2000,
+  "cached_tokens": 8000,
+  "cache_write_tokens": 0,
+  "output_tokens": 2000,
+  "basis": "estimated"
+}
+```
+'@
+            Add-Content -LiteralPath (Join-Path $Root 'history/Squad Scribe.md') -Encoding utf8NoBOM -Value @'
+
+### 2026-10-02T10:05:00Z Recording the next fixture increment
+
+* Turn: 3
+* Request: Record the next fixture increment and advance state.
+* Deliverable: `state.json`, `consumption.md`, `history/Squad Researcher.md`
+* Outcome: Recorded the next exact-session increment.
+
+#### Consumption — Orchestration
+
+```json
+{
+  "model": "Claude Haiku 4.5",
+  "model_source": "agent-pinned",
+  "priced_as": "Claude Haiku 4.5",
+  "model_tier": "fast",
+  "internal_turns": 2,
+  "input_tokens": 1000,
+  "cached_tokens": 1000,
+  "cache_write_tokens": 0,
+  "output_tokens": 1000,
+  "basis": "estimated"
+}
+```
+'@
+        }
+
         $script:BaseEvents = @(
             '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-09-27T09:59:00.000Z"}'
             '{"type":"tool.execution_start","data":{"toolCallId":"t1","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/research/x.md"}},"timestamp":"2026-10-01T10:00:01.000Z"}'
@@ -2537,6 +2595,44 @@ Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exac
         @([regex]::Matches($second, '(?m)^## Cost Comparison \(exact native actual\)')).Count | Should -Be 1
         @([regex]::Matches($second, '(?m)^Native usage snapshot')).Count | Should -Be 1
         $second | Should -Be $first
+    }
+
+    It 'accumulates exact native usage across sessions without requiring the older session log or double counting a replay' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+        Test-Path -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -PathType Leaf | Should -BeTrue
+
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        Remove-Item -LiteralPath $f.SessionDir -Recurse -Force
+        $session2 = Join-Path $f.Home 'session-state/sess-0002'
+        New-Item -ItemType Directory -Path $session2 -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $session2 'workspace.yaml') -Value "id: sess-0002`ncwd: $($f.Repo)`n"
+        $events2 = @(
+            '{"type":"session.start","data":{"sessionId":"sess-0002"},"timestamp":"2026-10-02T09:59:00.000Z"}'
+            '{"type":"subagent.started","agentId":"research-2","data":{"toolCallId":"t3","agentName":"Squad Researcher","agentDisplayName":"researcher","model":"claude-sonnet-4.6"},"timestamp":"2026-10-02T10:00:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'research-2' -SourceSessionId 'research-session-2' -UsageId 'three' -Model 'claude-sonnet-4.6' -FreshInput 20000 -Cached 10000 -CacheWrite 0 -Output 2000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-02T10:02:00.000Z')
+            '{"type":"subagent.started","agentId":"scribe-2","data":{"toolCallId":"t4","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-02T10:02:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'scribe-2' -SourceSessionId 'scribe-session-2' -UsageId 'four' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-02T10:03:00.000Z')
+        )
+        Set-Content -LiteralPath (Join-Path $session2 'events.jsonl') -Value ($events2 -join "`n")
+
+        $secondWrite = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session2 -Write
+        $secondWrite.ExitCode | Should -Be 0 -Because $secondWrite.Output
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+        $ledger | Should -Match '\| \*\*Total\*\* \| \*\*4\*\* \| \*\*131,000\*\* \| \*\*131,000\*\* \| \*\*10,000\*\* \| \*\*18,000\*\* \| \*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\* \|'
+        $cacheText = Get-Content -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -Raw
+        $cacheText | Should -Not -Match 'research-session|scribe-session'
+        $cache = $cacheText | ConvertFrom-Json
+        @($cache.sessions).Count | Should -Be 2
+        @($cache.sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002')
+        @($cache.sessions.contentDigest | Where-Object { $_ -match '^[A-F0-9]{64}$' }).Count | Should -Be 2
+
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session2 -Write).ExitCode | Should -Be 0
+        $replayed = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $replayed | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+        @((Get-Content -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -Raw | ConvertFrom-Json).sessions).Count | Should -Be 2
+        (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
     }
 
     It 'finds the session with -SessionLog auto through COPILOT_HOME and the workspace cwd' {

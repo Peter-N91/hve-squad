@@ -30,7 +30,8 @@
          refuses with exit 4 and nothing written.
       3. Append each history entry with its consumption block, the Squad Scribe
          orchestration entry, and the optional decision entry; advance `state.json`.
-      4. Run `Measure-SquadLedger.ps1 -Write` (child process: it calls `exit`), refresh the
+      4. Run `Measure-SquadLedger.ps1 -Write` (child process: it calls `exit`) to
+         refresh the ledger, run totals, and optional exact-session journal; refresh the
          ledger heading run id, then run `Measure-SquadLedger.ps1 -Check
          -ExpectedHistoryCounts` with counts taken before step 3. The script exits 0 only
          when that check passes. The ledger helper finalizes Cost Comparison figures,
@@ -976,6 +977,7 @@ $scriptsRoot = $PSScriptRoot
 $statePath = Join-Path $SquadRoot 'state.json'
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$sessionCachePath = Join-Path $SquadRoot 'consumption-sessions.json'
 $ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
 $teamPath = Join-Path $SquadRoot 'team.md'
 $historyDir = Join-Path $SquadRoot 'history'
@@ -1000,6 +1002,7 @@ $SquadRoot = Get-CanonicalPath $SquadRoot
 $statePath = Join-Path $SquadRoot 'state.json'
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$sessionCachePath = Join-Path $SquadRoot 'consumption-sessions.json'
 $ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
 $teamPath = Join-Path $SquadRoot 'team.md'
 $historyDir = Join-Path $SquadRoot 'history'
@@ -2139,6 +2142,7 @@ try {
     $written.Add('WROTE state.json (turn, updated, mode, activeRoles, openEscalations)')
 
     Register-Original $consumptionPath
+    Register-Original $sessionCachePath
     # consumption.md is derived from history; a file with none of the ledger's headings was classified above and is re-seeded from the template.
     if ($reseedLedger) {
         $templateText = [System.IO.File]::ReadAllText((Join-Path $scriptsRoot '../references/consumption.md'))
@@ -2149,7 +2153,7 @@ try {
         $written.Add('RESEEDED consumption.md from the references/consumption.md template (it lacked the ledger sections)')
     }
     $ledger = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Write', '-SessionLog', $SessionLog)
-    Update-OwnedHash $consumptionPath, $statePath
+    Update-OwnedHash $consumptionPath, $statePath, $sessionCachePath
     if ($ledger.ExitCode -ne 0) { throw "Measure-SquadLedger -Write failed: $($ledger.Text)" }
     $childWarnings = @(Get-ChildWarnings -Text $ledger.Text)
     foreach ($warning in $childWarnings) {

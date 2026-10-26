@@ -461,6 +461,7 @@ function Get-SquadAgentUsageAttribution {
     $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($digestBytes))
     [pscustomobject][ordered]@{
         status = if ($problems.Count -eq 0) { 'complete' } else { 'incomplete' }
+        sessionId = $rootSessionId
         records = $records.Count
         identityDigest = $digest
         lastTimestamp = if ($records.Count -gt 0) { [string]$records[$records.Count - 1].timestamp } else { '' }
@@ -597,6 +598,7 @@ function Get-SquadUsageSnapshot {
         }
         if ($IncludeAgentRuns) {
             $attribution = Get-SquadAgentUsageAttribution -EventsPath $source -ExpectedNanoAiu $totals.nanoAiu
+            if ($attribution.sessionId) { $sessionId = [string]$attribution.sessionId }
         }
     }
 
