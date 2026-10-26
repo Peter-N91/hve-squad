@@ -23,6 +23,13 @@ function git(repositoryRoot, args, allowFailure = false) {
   }
 }
 
+function addedCommit(repositoryRoot, path) {
+  const args = ["log", "-1", "--format=%H", "--no-patch", "--diff-filter=A"];
+  // Ordinary history preserves blame identity; merge-only additions need a parent diff.
+  return git(repositoryRoot, [...args, "--", path])
+    || git(repositoryRoot, [...args, "--diff-merges=first-parent", "--", path]);
+}
+
 export function readPendingChangeCommits(release, repositoryRoot = root) {
   const commits = new Set();
   if (!release.previewTag) return commits;
@@ -35,7 +42,7 @@ export function readPendingChangeCommits(release, repositoryRoot = root) {
   for (const id of release.pendingChanges) {
     const path = `.changes/unreleased/${id}.md`;
     if (git(repositoryRoot, ["ls-files", "--error-unmatch", "--", path], true) === null) continue;
-    const commit = git(repositoryRoot, ["log", "-1", "--format=%H", "--diff-filter=A", "--", path]);
+    const commit = addedCommit(repositoryRoot, path);
     if (!commitId.test(commit)) throw new Error(`${path}: could not resolve the commit that added this pending fragment.`);
     commits.add(commit);
   }
@@ -132,10 +139,10 @@ function pendingLinesForSource(repositoryRoot, sourcePath, pendingCommits) {
     const header = line.match(/^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/);
     if (header && pendingCommits.has(header[1])) changedLines.add(Number(header[2]));
   }
-  const addedCommit = git(repositoryRoot, ["log", "-1", "--format=%H", "--diff-filter=A", "--", sourcePath]);
+  const sourceAddedCommit = addedCommit(repositoryRoot, sourcePath);
   return {
     changedLines,
-    fileAddedByPendingChange: pendingCommits.has(addedCommit),
+    fileAddedByPendingChange: pendingCommits.has(sourceAddedCommit),
   };
 }
 
