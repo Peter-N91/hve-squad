@@ -151,6 +151,15 @@ function Assert-Baseline {
 
 function Write-AtomicFile {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][byte[]]$Bytes)
+    if (Test-Path -LiteralPath $Path) {
+        $probe = $null
+        try {
+            $probe = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        }
+        finally {
+            if ($probe) { $probe.Dispose() }
+        }
+    }
     $temporary = Join-Path (Split-Path -Parent $Path) (".$([IO.Path]::GetFileName($Path)).$([guid]::NewGuid().ToString('N')).tmp")
     try {
         [IO.File]::WriteAllBytes($temporary, $Bytes)

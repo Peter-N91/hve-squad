@@ -11,9 +11,8 @@ Consent/Route are economy-only. Run synchronously:
 
 `pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -RunId run-01 -Agent "Squad Researcher" -Request x -Deliverable research/topic.md -Outcome x -Quiet`
 
-Facts derive `activeRoles` from `Agent`. Optional attribution:
-`-MemberName/-SelectionCue/-PassedModel`; optional usage:
-`-ConsumptionPath/-OrchestrationConsumptionPath`. Omission uses estimated fallback.
+Facts derive `activeRoles`. Optional: `-MemberName/-SelectionCue/-PassedModel`
+and `-ConsumptionPath/-OrchestrationConsumptionPath`; omission uses estimated fallback.
 
 ## Payload Contract
 
@@ -22,23 +21,23 @@ For decisions, multiple/no dispatches, routing, or state changes, use
 `runId`, `historyRecords`, `stateAdvance.activeRoles`; omitted envelope and
 consumption fields derive. `route` needs `decision`.
 
-* `decision` optional: title/rationale/adrNoted.
-* `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Use roster agent/real file. Alternate needs cue; ceiling pairs are checked. `reportedModel` wins; calls raise floors; usage must agree; Economy needs routingIdentity.
+* Optional `decision`: {title: string,rationale: string,adrNoted: boolean}.
+* `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Exact agent/file; Alternate cue; ceiling checked. `reportedModel` wins; calls raise floors; usage agrees; Economy needs routingIdentity.
 * consumption keys: model/model_source/priced_as/model_tier/internal_turns/input_tokens/cached_tokens/cache_write_tokens/output_tokens/basis.
 * routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
 * orchestration optional: request/outcome/passedModel/consumption; actual coordinator usage only, never fictional Scribe tokens; add Scribe's actual overhead if it ran.
-* stateAdvance: activeRoles required; escalations/sessionModel/modelOverrides optional.
+* stateAdvance: required activeRoles: string[]; optional openEscalationsRaised/openEscalationsResolved:string[], sessionModel:string, modelOverrides:object.
 
-No cold-template keys. Never use `2>&1 | tail -1`, discard stderr, or append a
-success suffix. Stale evidence stops; never touch/copy/backdate it to retry.
+Never discard stderr, suffix success, or use
+`2>&1 | tail -1`. Stale evidence stops; never touch/copy/backdate it to retry.
 
 Serialize writer, cold Scribe and Cost Preflight per root; a lock does not cover cold editors.
 Never background or hand-edit state/arithmetic. Preserve
 append-only boundaries; payload is data.
 
 Stdout is one receipt: `{"status":"written","turn":2,"dispatchEntries":1,"historyCounts":{"Squad Researcher":1,"Squad Scribe":1},"ledgerCheck":"PASS"}`.
-Missing/malformed status or unexpected counts are failure. `ledgerCheck` is
-`PASS` or `ledger-only` (**not PASS**). Warnings remain visible on stderr,
+Missing/malformed status or unexpected counts are failure. `ledgerCheck` is `PASS` or `ledger-only`
+(**not PASS**). Warnings remain visible on stderr,
 including `WARN ledger-only:`. Receipt is not artifact/history proof.
 
 | Exit | Action |

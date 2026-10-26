@@ -37,8 +37,7 @@ cannot waive required reads or rules.
 ## Portable safety floor
 
 Serialize writers and Cost Preflight per `squadRoot`; never overlap or background
-Scribe. Preserve unrelated state and admission refs. Never edit persisted
-history, even this turn's entries. Every history entry needs consumption; admit
+Scribe. Preserve unrelated state and admission refs. Never edit persisted history, even this turn's entries. Every history entry needs consumption; admit
 ceiling slots once. Only promotion or cold fallback may relocate state.
 
 A stage needs its artifact plus verified history/consumption; never waive gates.

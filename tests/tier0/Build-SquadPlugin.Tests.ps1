@@ -170,12 +170,14 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         $generated -join ',' | Should -BeExactly ($registered -join ',')
     }
 
-    It 'rewrites compact coordinator conventions for the plugin instructions channel' {
+    It 'keeps compact coordinator conventions portable in the plugin instructions channel' {
         $coordinator = Get-Content -LiteralPath (Join-Path $script:OutputRoot 'agents/squad/squad-coordinator.agent.md') -Raw
         $coordinator | Should -Not -Match '\.github/instructions/squad/|auto-apply through'
-        $coordinator | Should -Match 'skills/squad/references/rules/'
-        $coordinator | Should -Match 'they do not auto-apply at all'
-        $coordinator | Should -Match 'Give each active pack'
+        $coordinator | Should -Match 'references/coordinator-runtime\.md'
+        $runtime = Get-Content -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/references/coordinator-runtime.md') -Raw
+        $runtime | Should -Match 'Get-SquadProcedure\.ps1'
+        $profiles = Get-Content -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/references/profiles-and-packs.md') -Raw
+        $profiles | Should -Match 'The optional `Guidance` column is the only pack-to-context mechanism'
     }
 
     It 'ships the measured inline progress contract without an extra reference read' {

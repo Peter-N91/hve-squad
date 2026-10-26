@@ -207,6 +207,15 @@ function Write-Atomic {
         if (Test-Path -LiteralPath $Path) { $script:originalFiles.Add($Path, [IO.File]::ReadAllBytes($Path)) }
         else { $script:originalFiles.Add($Path, $null) }
     }
+    if (Test-Path -LiteralPath $Path) {
+        $probe = $null
+        try {
+            $probe = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        }
+        finally {
+            if ($probe) { $probe.Dispose() }
+        }
+    }
     $null = [IO.Directory]::CreateDirectory((Split-Path -Parent $Path))
     $temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
     try {
