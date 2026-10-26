@@ -421,7 +421,7 @@ function Invoke-EfficiencyCompaction {
         [hashtable]$EnvironmentVariables = @{}
     )
     $Info = [Diagnostics.ProcessStartInfo]::new()
-    $Arguments = @('--acp', '--model', $Model, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--available-tools', 'view,glob,grep', '--deny-tool', 'shell(*)', '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+    $Arguments = @('--acp', '--model', $Model, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--available-tools', 'view,glob,grep', '--deny-tool', 'shell(*)', '--no-ask-user', '--disable-builtin-mcps', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
     foreach ($Server in $DisabledServers) { $Arguments += @('--disable-mcp-server', $Server) }
     $Info.FileName = $CliPath
     if ($CliPath.EndsWith('.ps1')) { $Info.FileName = (Get-Command pwsh).Source; $Arguments = @('-NoProfile', '-File', $CliPath) + $Arguments }
@@ -775,7 +775,7 @@ function Invoke-EfficiencyJudge {
     $Session = [guid]::NewGuid().ToString()
     $Events = Join-Path $HOME ".copilot/session-state/$Session/events.jsonl"
     $Prompt += ' Also count unresolved critical/high findings from closingReview. Copy ALL documentHashes, including closingReview. Do not count findings explicitly resolved by the closing review.'
-    $Arguments = @('--model', $Model, '--session-id', $Session, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--available-tools', 'view', '--deny-tool', 'view', '--output-format', 'json', '--usage-output-file', (Join-Path $Out 'judge-usage.json'))
+    $Arguments = @('--model', $Model, '--session-id', $Session, '--max-ai-credits', $MaxCredits.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--no-ask-user', '--no-custom-instructions', '--disable-builtin-mcps', '--available-tools', 'view', '--deny-tool', 'view', '--output-format', 'json', '--usage-output-file', (Join-Path $Out 'judge-usage.json'))
     $Executable = $CliPath
     if ($CliPath.EndsWith('.ps1')) { $Executable = (Get-Command pwsh).Source; $Arguments = @('-NoProfile', '-File', $CliPath) + $Arguments }
     $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $Arguments -WorkingDirectory $Out -OutputPath (Join-Path $Out 'judge-stdout.jsonl') -TimeoutSeconds $TimeoutSeconds -EventsPath $Events -MaxRequests 10 -MaxCredits $MaxCredits -InputText ($Prompt + "`n`n" + $Payload)

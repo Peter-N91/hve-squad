@@ -8,6 +8,7 @@ BeforeAll {
     function Get-FakeEfficiencyAcpText {
         @'
 $ErrorActionPreference='Stop'
+if ($args -contains '--no-remote' -or $args -contains '--no-remote-export') { throw 'Unsupported retired CLI option' }
 $Mode=$env:HVE_FAKE_ACP_MODE
 while($null -ne ($Line=[Console]::In.ReadLine())) {
     Add-Content -LiteralPath $env:HVE_FAKE_ACP_TRACE -Value $Line
@@ -325,7 +326,8 @@ Describe 'Efficiency recovery end to end' -Tag 'Unit' {
         $Fake = @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-recovery-cli'; exit 0 }
-if ($args -contains '--help') { '--acp --session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+if ($args -contains '--help') { '--acp --session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --add-dir'; exit 0 }
+if ($args -contains '--no-remote' -or $args -contains '--no-remote-export') { throw 'Unsupported retired CLI option' }
 if ($args -contains '--acp') {
     $env:HVE_FAKE_ACP_MODE='success'
     $env:HVE_FAKE_ACP_TRACE=Join-Path $PWD 'acp-trace.jsonl'
@@ -714,8 +716,11 @@ exit 37
         foreach ($BroadPermission in @('--allow-all', '--yolo', '--allow-all-tools', '--allow-all-paths', '--allow-all-urls')) {
             $Arguments | Should -Not -Contain $BroadPermission
         }
-        foreach ($PreservedOption in @('--no-custom-instructions', '--disable-builtin-mcps', '--no-remote', '--no-remote-export')) {
+        foreach ($PreservedOption in @('--no-custom-instructions', '--disable-builtin-mcps')) {
             $Arguments | Should -Contain $PreservedOption
+        }
+        foreach ($RetiredOption in @('--no-remote', '--no-remote-export')) {
+            $Arguments | Should -Not -Contain $RetiredOption
         }
     }
 
@@ -884,7 +889,8 @@ exit 0
         @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-incomplete-cli'; exit 0 }
-if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --add-dir'; exit 0 }
+if ($args -contains '--no-remote' -or $args -contains '--no-remote-export') { throw 'Unsupported retired CLI option' }
 Add-Content 'stage-launches.txt' 'one invocation'
 $Session = $args[[array]::IndexOf($args, '--session-id') + 1]
 $SessionRoot = Join-Path $HOME ".copilot/session-state/$Session"
@@ -917,7 +923,7 @@ exit 0
         @'
 if ($args -contains 'mcp') { '{"mcpServers":{}}'; exit 0 }
 if ($args -contains '--version') { 'offline-argv-cli'; exit 0 }
-if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --no-remote --no-remote-export --add-dir'; exit 0 }
+if ($args -contains '--help') { '--session-id --max-ai-credits --no-ask-user --max-autopilot-continues --usage-output-file --add-dir'; exit 0 }
 @{ arguments = @($args); repoHooks = $env:GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS; stateParentsReady = (Test-Path -LiteralPath '.copilot-tracking/squad/history' -PathType Container); stateFiles = if(Test-Path -LiteralPath '.copilot-tracking/squad'){@(Get-ChildItem -LiteralPath '.copilot-tracking/squad' -Recurse -File).Count}else{-1} } | ConvertTo-Json -Depth 6 -Compress
 exit 37
 '@ | Set-Content -LiteralPath $Cli -Encoding utf8NoBOM
@@ -931,6 +937,8 @@ exit 37
         $Captured.arguments | Should -Contain '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN'
         $Captured.arguments | Should -Not -Contain 'GITHUB_TOKEN'
         $Captured.arguments | Should -Not -Contain '--trust-folder'
+        $Captured.arguments | Should -Not -Contain '--no-remote'
+        $Captured.arguments | Should -Not -Contain '--no-remote-export'
         $Captured.arguments | Should -Contain '--session-id'
         $Captured.arguments | Should -Contain '--allow-all-tools'
         $DirectoryIndex = [array]::IndexOf($Captured.arguments, '--add-dir')
