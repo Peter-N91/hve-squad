@@ -248,7 +248,11 @@
     journal exists and current history spans earlier sessions, `auto` may bootstrap
     the journal from complete matching logs whose non-overlapping event windows
     uniquely cover every metered history entry; missing or ambiguous coverage keeps
-    the estimator in place. Complete
+    the estimator in place. The selected active session receives a bounded 30-second
+    open-tail allowance because the outer host cannot append the tool-completion event
+    while this child writer is still running. On the next session, the latest cached
+    native session is refreshed from its completed log before new usage is appended.
+    Complete
     `session.usage_record` and native compaction records are deduplicated by host
     accounting identity. Event `agentId` joins to `subagent.started`; nested
     `parentAgentId` chains roll into their owning top-level role. Native token
@@ -3377,10 +3381,13 @@ function Get-ExactSessionBootstrapLocal {
     $orderedCandidates = @($candidates | Sort-Object Start, End, { $_.Session.SessionId })
     $sessionByEntry = @{}
     $selectedSessionIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $activeTailGrace = [TimeSpan]::FromSeconds(30)
     foreach ($meteredEntry in $meteredEntries) {
         $matches = @(
             $orderedCandidates | Where-Object {
-                $meteredEntry.Timestamp -ge $_.Start -and $meteredEntry.Timestamp -le $_.End
+                $isActive = [string]$_.Session.SessionId -ceq [string]$ActiveSession.SessionId
+                $effectiveEnd = if ($isActive) { $_.End.Add($activeTailGrace) } else { $_.End }
+                $meteredEntry.Timestamp -ge $_.Start -and $meteredEntry.Timestamp -le $effectiveEnd
             }
         )
         if ($matches.Count -eq 0) {
@@ -5048,6 +5055,46 @@ if ($SessionLog) {
 
         if ($session) {
             try {
+                if ($cacheSessions.Count -gt 0 -and $SessionLog -eq 'auto') {
+                    $latestCachedIndex = $cacheSessions.Count - 1
+                    $latestCached = $cacheSessions[$latestCachedIndex]
+                    if ([string]$latestCached.source -eq 'native-log' -and
+                        [string]$latestCached.sessionId -cne [string]$session.SessionId) {
+                        $priorPath = @(
+                            $sessionPaths | Where-Object {
+                                (Split-Path -Leaf (Split-Path -Parent $_)) -ceq [string]$latestCached.sessionId
+                            } | Select-Object -First 1
+                        )
+                        if ($priorPath.Count -eq 1) {
+                            try {
+                                $priorSession = Read-SessionUsageLocal -Path $priorPath[0] -SquadRoot $SquadRoot
+                                if ([string]$priorSession.SessionId -cne [string]$latestCached.sessionId) {
+                                    throw "Repository session path '$($priorPath[0])' reports '$($priorSession.SessionId)', not cached session '$($latestCached.sessionId)'."
+                                }
+                                $priorExpected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $latestCached.historyCoverage `
+                                    -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
+                                    -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
+                                $priorExact = Get-ExactLedgerUsageLocal -Session $priorSession -Rates $rates -Roster $roster `
+                                    -HistoryEntries @($priorExpected.HistoryEntries) -ExpectedAgentNames @($priorExpected.Agents) `
+                                    -RequireOrchestration:$priorExpected.RequireOrchestration -EnforceExpectedSet -RequireSessionBoundary `
+                                    -BaselineModel $BaselineModel -Warnings $warnings
+                                if ($priorExact) {
+                                    $refreshedPrior = ConvertTo-CacheSessionLocal -Exact $priorExact -HistoryCoverage $latestCached.historyCoverage
+                                    Assert-ExactSessionRefreshLocal -Existing $latestCached -Next $refreshedPrior
+                                    $cacheSessions[$latestCachedIndex] = $refreshedPrior
+                                    $cacheChanged = $true
+                                }
+                                else {
+                                    $warnings.Add("WARN: the previous native session '$($latestCached.sessionId)' could not be finalized from its completed log; its last accepted exact snapshot was retained.")
+                                }
+                            }
+                            catch {
+                                $warnings.Add("WARN: the previous native session '$($latestCached.sessionId)' could not be finalized; its last accepted exact snapshot was retained: $($_.Exception.Message)")
+                            }
+                        }
+                    }
+                }
+
                 $bootstrapped = $false
                 if ($cacheSessions.Count -eq 0 -and $SessionLog -eq 'auto' -and $sessionPaths.Count -gt 1) {
                     try {

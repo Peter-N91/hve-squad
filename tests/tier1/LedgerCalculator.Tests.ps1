@@ -2506,17 +2506,26 @@ Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exac
         }
 
         function Add-SecondSessionLogLocal {
-            param([Parameter(Mandatory)]$Fixture)
+            param(
+                [Parameter(Mandatory)]$Fixture,
+                [switch]$CloseAfterHistory
+            )
             $session2 = Join-Path $Fixture.Home 'session-state/sess-0002'
             New-Item -ItemType Directory -Path $session2 -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $session2 'workspace.yaml') -Value "id: sess-0002`ncwd: $($Fixture.Repo)`n"
-            $events2 = @(
+            $events2 = [Collections.Generic.List[string]]::new()
+            foreach ($line in @(
                 '{"type":"session.start","data":{"sessionId":"sess-0002"},"timestamp":"2026-10-02T09:59:00.000Z"}'
                 '{"type":"subagent.started","agentId":"research-2","data":{"toolCallId":"t3","agentName":"Squad Researcher","agentDisplayName":"researcher","model":"claude-sonnet-4.6"},"timestamp":"2026-10-02T10:00:01.000Z"}'
                 (New-ExactUsageEventLocal -AgentId 'research-2' -SourceSessionId 'research-session-2' -UsageId 'three' -Model 'claude-sonnet-4.6' -FreshInput 20000 -Cached 10000 -CacheWrite 0 -Output 2000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-02T10:02:00.000Z')
                 '{"type":"subagent.started","agentId":"scribe-2","data":{"toolCallId":"t4","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-02T10:02:01.000Z"}'
                 (New-ExactUsageEventLocal -AgentId 'scribe-2' -SourceSessionId 'scribe-session-2' -UsageId 'four' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-02T10:03:00.000Z')
-            )
+            )) {
+                $events2.Add($line)
+            }
+            if ($CloseAfterHistory) {
+                $events2.Add('{"type":"assistant.turn_end","timestamp":"2026-10-02T10:05:01.000Z","data":{}}')
+            }
             $eventsPath = Join-Path $session2 'events.jsonl'
             Set-Content -LiteralPath $eventsPath -Value ($events2 -join "`n")
             $session1Events = Join-Path $Fixture.SessionDir 'events.jsonl'
@@ -2650,7 +2659,7 @@ Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exac
     It 'bootstraps a missing journal from complete auto-selected sessions that uniquely cover existing history' {
         $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
         Add-SecondSessionHistoryLocal -Root $f.Root
-        $null = Add-SecondSessionLogLocal -Fixture $f
+        $null = Add-SecondSessionLogLocal -Fixture $f -CloseAfterHistory
 
         $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Write
         $write.ExitCode | Should -Be 0 -Because $write.Output
@@ -2666,6 +2675,39 @@ Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exac
         $replay.ExitCode | Should -Be 0 -Because $replay.Output
         $replay.Output | Should -Not -Match 'consumption-sessions\.json is unavailable or inconsistent'
         (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+    }
+
+    It 'accepts a bounded active-session tail while the outer host tool has not emitted its completion event yet' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        $scribeHistory = Join-Path $f.Root 'history/Squad Scribe.md'
+        $scribe = Get-Content -LiteralPath $scribeHistory -Raw
+        Set-Content -LiteralPath $scribeHistory -Value $scribe.Replace('2026-10-02T10:05:00Z', '2026-10-02T10:03:02Z') -NoNewline
+        $null = Add-SecondSessionLogLocal -Fixture $f
+
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $write.Output | Should -Not -Match 'No complete native session covers metered history entry'
+        (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+    }
+
+    It 'finalizes the latest cached session from its completed log before starting a later session' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+        Add-Content -LiteralPath (Join-Path $f.SessionDir 'events.jsonl') -Encoding utf8NoBOM -Value (
+            New-ExactUsageEventLocal -AgentId '' -SourceSessionId 'sess-0001' -UsageId 'late-coordinator' `
+                -Model 'claude-sonnet-4.6' -FreshInput 1000 -Cached 0 -CacheWrite 0 -Output 0 `
+                -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-01T10:06:00.000Z'
+        )
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        $null = Add-SecondSessionLogLocal -Fixture $f -CloseAfterHistory
+
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $cache = Get-Content -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -Raw | ConvertFrom-Json
+        @($cache.sessions).Count | Should -Be 2
+        ($cache.sessions | Where-Object sessionId -eq 'sess-0001').records | Should -Be 3
+        (($cache.sessions | Measure-Object records -Sum).Sum) | Should -Be 5
     }
 
     It 'finds the session with -SessionLog auto through COPILOT_HOME and the workspace cwd' {

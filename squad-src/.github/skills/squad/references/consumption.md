@@ -108,7 +108,11 @@ metered history timestamp must fall inside exactly one complete, attributable na
 session window, the active session must cover current metered history, and the
 resulting per-file history partitions must remain chronological. Missing logs,
 overlapping session windows, incomplete attribution, or any other ambiguity leaves
-the estimator in place rather than guessing.
+the estimator in place rather than guessing. The active session alone receives a
+bounded 30-second open-tail allowance: while the ledger runs inside the outer host's
+PowerShell tool call, that host cannot yet append the tool-completion event even
+though the handoff timestamp has already been written. This allowance binds the
+history entry to the selected active session; it does not invent usage records.
 
 The journal carries one closed-schema snapshot per native host session:
 
@@ -126,7 +130,11 @@ then sums every cached session into `consumption.md`. This makes session changes
 additive without double counting and keeps old exact totals available after a host log
 is rotated or no longer selected by `auto`. Journal timestamps are parsed as JSON
 strings rather than culture-formatted dates so the persisted content digest remains
-stable across write/read/replay.
+stable across write/read/replay. Because an active-session snapshot is necessarily
+`as of` the host log's current tail, the next Copilot session refreshes the latest
+cached native session from its now-completed log before it adds the new session. Late
+coordinator records therefore accumulate instead of being stranded in the closed
+session.
 
 `consumption.md`, `state.json`, and `consumption-sessions.json` are one atomic writer
 transaction. A malformed journal, changed history prefix, duplicate native identity,
