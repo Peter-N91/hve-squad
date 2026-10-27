@@ -113,15 +113,16 @@ Require final model identity, tool-call count,
 actual paths, outcome and unresolved questions. Review only after owners' final
 returns. Use the write-set snapshot/verify mode for a closing review when needed.
 
-Run `Write-SquadHandoff.ps1 -Quiet` synchronously per `economy-scribe.md`.
-Supply actual usage; `activeRoles` names dispatched agents, never Scribe.
-After it, gate verdicts use `Write-SquadVerdict.ps1 -Quiet` at the same root per
-`verdict-writer.md`; validate its Decision Ref before advancing.
+After a worker, call `Write-SquadHandoff.ps1 -Quiet` via `economy-scribe.md`.
+Exit 0 requires Section 5 proof before progress/next task; routing/artifact is
+no handoff. Exit 2 takes the cold path. Supply actual usage;
+`activeRoles` lists workers, not Scribe. Gate verdicts use
+`Write-SquadVerdict.ps1 -Quiet` at that root per
+`verdict-writer.md`; validate its Decision Ref first.
 
-Exit 2 uses `scribe-payload-template.md` and cold Scribe. Other failures never
-permit manual fallback; cold-only work includes memory, notifications,
-`routing=off`, non-additive roster changes and summaries.
-Serialize handoff writer, verdict writer, cold Scribe and Cost Preflight at each root.
+Exit 2 uses `scribe-payload-template.md` and cold Scribe; other failures have no
+manual fallback. Memory, notifications, `routing=off`, non-additive roster
+changes/summaries stay cold. Serialize writers/Cost Preflight per root.
 For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
 
 ## 5. Complete Mechanically

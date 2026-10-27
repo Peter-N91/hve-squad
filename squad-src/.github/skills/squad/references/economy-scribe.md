@@ -6,20 +6,21 @@ license: MIT
 
 # Deterministic Ordinary Handoff
 
-**off, ranked, economy, and manual**; no marker required.
-Consent/Route are economy-only. Run synchronously:
+After each worker completes in **off, ranked, economy, or manual**, run before
+progress completion or another dispatch:
 
 `pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -RunId run-01 -Agent "Squad Researcher" -Request x -Deliverable research/topic.md -Outcome x -Quiet`
 
-Facts derive `activeRoles`. Optional: `-MemberName/-SelectionCue/-PassedModel`
-and `-ConsumptionPath/-OrchestrationConsumptionPath`; omission uses estimated fallback.
+Receipt+proof gate progress/next worker; routing/artifacts do not.
+Facts derive `activeRoles`. Optional:
+`-MemberName/-SelectionCue/-PassedModel` and consumption paths; omission estimates.
 
 ## Payload Contract
 
-For decisions, multiple/no dispatches, routing, or state changes, use
-`-PayloadPath`/`-PayloadJson` outside the root. Closed keys require:
+For decisions, multiple/no dispatches, routing, or state changes, pass
+`-PayloadPath`/`-PayloadJson` outside the root. Required closed keys:
 `runId`, `historyRecords`, `stateAdvance.activeRoles`; omitted envelope and
-consumption fields derive. `route` needs `decision`.
+consumption derive. `route` requires `decision`.
 
 * Optional `decision`: {title: string,rationale: string,adrNoted: boolean}.
 * `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Exact agent/file; Alternate cue; ceiling checked. `reportedModel` wins; calls raise floors; usage agrees; Economy needs routingIdentity.
@@ -50,6 +51,5 @@ including `WARN ledger-only:`. Receipt is not artifact/history proof.
 | 5/6 | Re-establish completion/review. |
 | 8 | Wait, verify, retry. |
 
-Never bypass a refusal by hand; there is no exit 7 guard. After timeout verify
-history before resend. Unsupported operations need `scribe-cold-charter.md`;
-supported writes use runtime contracts.
+Never bypass a refusal by hand. After timeout verify history before resend.
+Unsupported operations need `scribe-cold-charter.md`; supported writes use runtime.

@@ -337,7 +337,7 @@ try {
                 }
             }
         }
-        $waves.Add([ordered]@{ order = $waves.Count + 1; units = @($batch | ForEach-Object id); barrier = 'artifact-before-dependent-dispatch; history-consumption-state-before-completion' })
+        $waves.Add([ordered]@{ order = $waves.Count + 1; units = @($batch | ForEach-Object id); barrier = 'artifact-before-handoff; verified-ordinary-handoff-before-dependent-dispatch; cold-exit-2-follows-pipelining-contract; history-consumption-state-before-completion' })
         foreach ($node in $batch) { $null = $completed.Add($node.id) }
     }
 

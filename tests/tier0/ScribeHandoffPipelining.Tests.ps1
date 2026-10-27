@@ -7,7 +7,7 @@
 # P03-T02/P03-T03 (routing-performance plan, Scribe Hand-off Pipelining, Amendment 3
 # Unit U4): pins the pipelining contract text the prompt-engineer landed in Unit U3
 # against the built plugin output, and pins that the pre-pipelining sequential-only
-# wording it replaced does not resurface. GATE-22..GATE-28 in
+# wording it replaced does not resurface. GATE-22..GATE-28 and GATE-47 in
 # tests/squad-behavior-contract.md are this file's contract IDs.
 #
 # Every positive assertion below quotes text confirmed present in squad-src this
@@ -47,9 +47,12 @@ BeforeAll {
     $script:WatchModeInstructions = @($script:Model.Instructions | Where-Object Name -eq 'squad-watch-mode.instructions.md')[0]
     $script:GatesAndModesBody = Get-SquadReferenceBody -Name 'gates-and-modes.md'
     $script:OperatingProcedureBody = Get-SquadReferenceBody -Name 'operating-procedure.md'
+    $script:CoordinatorRuntimeBody = Get-SquadReferenceBody -Name 'coordinator-runtime.md'
+    $script:FederationRuntimeBody = Get-SquadReferenceBody -Name 'federation-runtime.md'
     $script:FederationReferenceBody = Get-SquadReferenceBody -Name 'federation.md'
     $script:ConsumptionReferenceBody = Get-SquadReferenceBody -Name 'consumption.md'
     $script:OrdinaryHandoffBody = Get-SquadReferenceBody -Name 'economy-scribe.md'
+    $script:DispatchPlanBody = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/New-SquadDispatchPlan.ps1') -Raw
 }
 
 Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GATE-28)' {
@@ -202,9 +205,10 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $script:OperatingProcedureBody | Should -Match ([regex]::Escape('it dispatches a new, append-only Scribe correction entry'))
         }
 
-        It 'resume re-sends the Scribe hand-off for the affected stage rather than re-running it' {
+        It 'resume reruns ordinary persistence or re-sends a cold fallback without re-running the producer' {
             $script:OperatingProcedureBody | Should -Match ([regex]::Escape('re-send the hand-off for that stage only; never re-run the stage that produced the artifact'))
-            $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('re-send the Scribe hand-off for that stage — never re-run the stage that produced the artifact'))
+            $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('run the missing ordinary handoff; re-send Scribe only when that stage used cold fallback'))
+            $script:AutopilotInstructions.Body | Should -Match ([regex]::Escape('Never re-run the stage that produced the artifact'))
         }
 
         It 'a host whose subagent-dispatch tool cannot be called more than once per block stays fully sequential' {
@@ -280,6 +284,35 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $script:FederationInstructions.Body | Should -Not -Match ([regex]::Escape('always evaluates that predicate false and stays sequential'))
             $script:FederationAutopilotInstructions.Body | Should -Not -Match ([regex]::Escape('keeps every selected inner run''s Scribe hand-off pipelining disabled'))
             $script:FederationReferenceBody | Should -Not -Match ([regex]::Escape('an inner run under an untargeted aggregate ceiling stays sequential'))
+        }
+    }
+
+    Context 'GATE-47: a worker completion cannot skip its verified ordinary handoff barrier' {
+        It 'marks every planned wave with a verified handoff before dependent dispatch' {
+            $script:DispatchPlanBody | Should -Match ([regex]::Escape('artifact-before-handoff; verified-ordinary-handoff-before-dependent-dispatch; cold-exit-2-follows-pipelining-contract; history-consumption-state-before-completion'))
+        }
+
+        It 'blocks progress completion and the next worker until ordinary proof succeeds' {
+            $script:OrdinaryHandoffBody | Should -Match 'Receipt\+proof gate progress/next worker'
+            $script:CoordinatorRuntimeBody | Should -Match '(?s)After a worker.+Exit 0 requires Section 5 proof before progress/next task'
+            $script:CoordinatorRuntimeBody | Should -Match 'routing/artifact is\s+no handoff'
+            $script:CoordinatorRuntimeBody | Should -Match 'Exit 2 takes the cold path'
+        }
+
+        It 'applies the same per-stage barrier inside targeted federation autopilot' {
+            $federation = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
+            $federation.Body | Should -Match '(?s)After each member worker returns.+before updating\s+progress or dispatching any later/dependent worker'
+            $federation.Body | Should -Match 'Apply this per stage in targeted autopilot'
+            $script:FederationRuntimeBody | Should -Match 'Supported member stages use this sequence in ordinary/targeted-autopilot runs'
+            $script:FederationRuntimeBody | Should -Match '(?s)Before proof succeeds.+dispatch\s+a later/dependent worker, or run the root handoff'
+            $federation.Body | Should -Match 'Exit 2 keeps the existing cold-Scribe pipeline'
+        }
+
+        It 'removes wording that permits deferring ordinary persistence to a later Scribe pass' {
+            $script:AutopilotInstructions.Body | Should -Not -Match 'Scribe-recorded stage'
+            $script:GatesAndModesBody | Should -Not -Match 'Scribe-recorded stage'
+            $script:AutopilotInstructions.Body | Should -Match 'runs and verifies its ordinary handoff'
+            $script:GatesAndModesBody | Should -Match 'followed by a verified ordinary handoff'
         }
     }
 }

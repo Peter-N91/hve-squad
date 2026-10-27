@@ -316,6 +316,7 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan = $result.Output | ConvertFrom-Json
         $plan.waves[0].units | Should -Be @('producer')
         $plan.waves[1].units | Should -Be @('consumer')
+        $plan.waves[0].barrier | Should -BeExactly 'artifact-before-handoff; verified-ordinary-handoff-before-dependent-dispatch; cold-exit-2-follows-pipelining-contract; history-consumption-state-before-completion'
         $plan.units[0].endpoint.agent | Should -BeExactly 'Squad Reviewer'
         $plan.units[0].endpoint.deliverableRoot | Should -Be '.copilot-tracking/reviews/'
         $plan.admission | Should -Be 'not-requested'

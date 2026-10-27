@@ -113,9 +113,13 @@ as explicit read-only `inputs=`. Preserve current roster output roots, forwardin
 `cost-ceiling`, and `routing`; execution is member-local and routing may only
 narrow. Ask discovery once at federation level, never on unattended paths.
 
-Use `Write-SquadHandoff.ps1 -Quiet` directly and synchronously with minimal JSON
-inside members, followed by the same `Write-SquadVerdict.ps1 -Quiet` used by a
-plain squad for Council, Intake Readiness, and Discovery Verdicts. Supported ordinary root writes use
+After each member worker returns, confirm its artifact, run
+`Write-SquadHandoff.ps1 -Quiet`, and on exit 0 verify inner completion before
+updating progress or dispatching any later/dependent worker. Routing refresh, an
+artifact, or a todo update is not a handoff. Apply this per stage in targeted
+autopilot. Exit 2 keeps the existing cold-Scribe pipeline; other failures stop.
+Then use `Write-SquadVerdict.ps1 -Quiet` for Council, Intake Readiness, and
+Discovery Verdicts. Supported ordinary root writes use
 `Write-SquadFederationHandoff.ps1` with its pre-dispatch snapshot and inner proofs.
 Promotion uses `Get-SquadPromotionPlan.ps1` before confirmation and
 `Promote-SquadFederation.ps1` afterward; pass the exact plan hash and an exhaustive

@@ -86,9 +86,11 @@ Never let a consumer invent the producer's requirements.
 
 ## Ordinary Persistence and Two-Level Proof
 
-Member ordinary writes use `Write-SquadHandoff.ps1 -Quiet` directly and
-synchronously, with minimal JSON and the standard inner completion check.
-Retain each actual inner handoff/proof and receipt turn, not only its summary.
+Supported member stages use this sequence in ordinary/targeted-autopilot runs:
+artifact check, `Write-SquadHandoff.ps1 -Quiet`, then the standard inner
+completion check. Before proof succeeds, never mark progress complete, dispatch
+a later/dependent worker, or run the root handoff; routing refresh/artifacts are
+not handoffs. Retain each actual handoff/proof and receipt turn.
 Member Council, Intake Readiness, and Discovery Verdicts then use the same
 `Write-SquadVerdict.ps1 -Quiet` call a plain squad uses, targeted at that member's
 root, with `verdict-writer.md` as the payload contract. Never route a member
