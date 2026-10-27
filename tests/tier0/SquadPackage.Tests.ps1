@@ -133,17 +133,18 @@ Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'Requ
     BeforeAll {
         $script:RequirementsGuide = Join-Path $script:Model.SquadSkillRoot 'references/requirements-quality.md'
         $script:RequirementsCoordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
+        $script:RequirementsRuntime = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/coordinator-runtime.md') -Raw
     }
 
     It 'RQ-01 delivers a conditionally reachable guide without adding a startup read' {
         Test-Path -LiteralPath $script:RequirementsGuide | Should -BeTrue
         $index = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/00-index.md') -Raw
-        $index | Should -Match '\[requirements-quality\.md\]\(requirements-quality\.md\).+Only BRD/PRD or requirements authoring/review; not startup or code-only reviews'
-        $contract = [regex]::Match($script:RequirementsCoordinator, '(?s)## Skill Reference Contract(.*?)## Governing Conventions').Groups[1].Value
-        $contract | Should -Match 'Read `references/requirements-quality\.md` only for BRD/PRD or requirements authoring/review, not startup or code-only reviews\..+No other references:'
-        $startup = [regex]::Match($contract, '(?s)At run start,(.*?)Read `references/economy-scribe\.md`').Groups[1].Value
-        $startup | Should -Not -BeNullOrEmpty
-        $startup | Should -Not -Match 'requirements-quality\.md'
+        $index | Should -Match '\[requirements-quality\.md\]\(requirements-quality\.md\).+Requirements authoring/review only'
+        $contract = [regex]::Match($script:RequirementsCoordinator, '(?s)## Skill Reference Contract(.*?)## Dispatch Discipline').Groups[1].Value
+        $contract | Should -Match 'Read only `references/coordinator-runtime\.md` at startup'
+        $contract | Should -Not -Match 'requirements-quality\.md'
+        $script:RequirementsCoordinator | Should -Match 'conditionally uses `references/requirements-quality\.md`'
+        $script:RequirementsRuntime | Should -Match 'BRD/PRD also `requirements-quality\.md`'
     }
 
     It 'RQ-02 carries canonical author checks, exact relationships and honest business gaps' {
@@ -276,8 +277,8 @@ Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'Requ
 
     It 'RQ-10 separates required runtime scratch writes from review-only durable output' {
         $reviewer = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-reviewer.agent.md')[0].Body
-        $script:RequirementsCoordinator | Should -Match 'Runtime reviews: pass absolute source/plan/research/report paths.+authorized workspace scratch root'
-        $script:RequirementsCoordinator | Should -Match 'permit probe files, not source edits'
+        $script:RequirementsCoordinator | Should -Match '(?s)pass literal source,.*research, plan and report paths.*unique authorized workspace-contained'
+        $script:RequirementsCoordinator | Should -Match '(?s)probe scratch directory.*implementation/state read-only'
         $reviewer | Should -Match 'Review-only durable output does not prohibit transient probe files'
         $reviewer | Should -Match 'conflicting or missing allowance is a blocker to resolve before execution'
         $reviewer | Should -Match 'supplied implementation exists.+scratch path is inside the authorized workspace and separate from implementation/squad state'
@@ -382,14 +383,18 @@ Describe 'PKG-12 Cost ceiling is exposed by both squad entrypoints' {
 Describe 'PKG-13 Cost ceiling ownership is mode-specific' {
     It 'keeps initialization outside Cost Preflight' {
         $coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0]
-        $coordinator.Body | Should -Match 'Initialization is outside Cost Preflight'
-        $coordinator.Body | Should -Match 'after initialization completes'
+        $coordinator.Body | Should -Match 'references/coordinator-init\.md'
+        $init = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/coordinator-init.md') -Raw
+        $init | Should -Match 'Initialization is outside Cost Preflight'
+        $init | Should -Match '(?s)evaluate the original request before its first work dispatch afterward'
     }
 
     It 'applies an ordinary federation ceiling independently to each selected sub-squad' {
         $coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
-        $coordinator.Body | Should -Match 'independent per-sub-squad ceiling'
-        $coordinator.Body | Should -Match 'forwarding.+cost-ceiling'
+        $coordinator.Body | Should -Match 'references/federation-runtime\.md'
+        $runtime = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/federation-runtime.md') -Raw
+        $runtime | Should -Match '(?s)Ordinary/targeted runs use independent member ceilings'
+        $runtime | Should -Match '(?s)Forward.*cost-ceiling'
 
         $scribeReference = Join-Path $script:Model.SquadSkillRoot 'references/scribe-procedure.md'
         Get-Content -LiteralPath $scribeReference -Raw | Should -Match 'ordinary or targeted federation routing replaces root `costPreflight` with the exact `not-requested` object'
@@ -397,8 +402,10 @@ Describe 'PKG-13 Cost ceiling ownership is mode-specific' {
 
     It 'reserves aggregate admission for untargeted federation autopilot' {
         $coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
-        $coordinator.Body | Should -Match 'aggregate ceiling only when mode=autopilot has no squad= target'
-        $coordinator.Body | Should -Match 'seed root.+consumption-rates\.md'
+        $coordinator.Body | Should -Match 'references/federation-runtime\.md'
+        $runtime = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/federation-runtime.md') -Raw
+        $runtime | Should -Match 'Without a single `squad=` target'
+        $runtime | Should -Match 'Aggregate ceiling exists only here'
 
         $federationReference = Join-Path $script:Model.SquadSkillRoot 'references/federation-templates.md'
         Get-Content -LiteralPath $federationReference -Raw | Should -Match 'consumption-rates\.md \(federation root\)'
@@ -529,6 +536,10 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
             $script:Model.SquadAgents |
                 Where-Object Name -eq 'squad-coordinator.agent.md'
         )[0]
+        $script:DefaultProgressCoordinator = $script:ProgressCoordinator
+        $script:ProgressCoordinator = [pscustomobject]@{
+            Body = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/coordinator-legacy.md') -Raw
+        }
         $script:ProgressPrompt = @(
             $script:Model.Prompts |
                 Where-Object Name -eq 'squad.prompt.md'
@@ -548,7 +559,7 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
             $route = [regex]::Match($Procedure, '(?ms)^## Route\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
             $contract = [regex]::Match($Coordinator, '(?ms)^## Skill Reference Contract\r?\n(?<Body>.*?)(?=^## |\z)').Groups['Body'].Value
             $routePattern = (
-                '(?ms)^1\. Read `team\.md` and `routing\.md`\..*?^2\. Match the request against the routing table;.*?^4\. For `team\.md` `Model routing: ranked\|economy\|manual` or `routing=`, resolve ids per `references/model-routing\.md`.*?^' +
+                '(?ms)^1\. Read state/routing once with `Get-SquadDispatchBrief\.ps1`; JSON defers model scoring\..*?^2\. Match the request against the routing table;.*?^4\. For `team\.md` `Model routing: ranked\|economy\|manual` or `routing=`, send actual units/host models to `New-SquadDispatchPlan\.ps1`.*?^' +
                 [regex]::Escape($script:ProgressRoutePointer) + '\r?\n6\. Dispatch all parallel-eligible roles'
             )
             return (
@@ -586,10 +597,21 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
         $script:ProgressBody | Should -Match 'For every non-trivial request, after state, route, and gate classification'
     }
 
+    It 'wires modern progress through the compact runtime and the actual canonical section query' {
+        $script:DefaultProgressCoordinator.Body | Should -Match 'references/coordinator-runtime\.md'
+        $runtime = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/coordinator-runtime.md') -Raw
+        $runtime | Should -Match 'Before nontrivial work load `Get-SquadProcedure\.ps1 -Name progress`'
+        $scriptPath = Join-Path $script:Model.SquadSkillRoot 'scripts/Get-SquadProcedure.ps1'
+        $output = & pwsh -NoProfile -File $scriptPath -Name progress
+        $LASTEXITCODE | Should -Be 0
+        ($output -join "`n") | Should -Match '### Progress Presentation'
+        (($output -join "`n") -replace "`r`n", "`n") | Should -Match ([regex]::Escape(($script:ProgressBody.Trim() -replace "`r`n", "`n")))
+    }
+
     It 'preserves cost-first tiers, per-turn override, routed modes, and off behavior' {
         $script:ProgressProcedure | Should -Match '`fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`'
         $script:ProgressProcedure | Should -Match 'user tier hints override per-role defaults for this turn'
-        $script:ProgressProcedure | Should -Match 'For `team.md` `Model routing: ranked\|economy\|manual` or `routing=`, resolve ids per `references/model-routing.md`'
+        $script:ProgressProcedure | Should -Match 'For `team.md` `Model routing: ranked\|economy\|manual` or `routing=`, send actual units/host models to `New-SquadDispatchPlan\.ps1`'
         $script:ProgressProcedure | Should -Match '`off` keeps cost-first selection'
     }
 

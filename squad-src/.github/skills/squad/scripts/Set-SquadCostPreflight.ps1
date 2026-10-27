@@ -34,12 +34,8 @@
 
     Exit codes: 0 written or already current; 1 validation or usage error (no write);
     2 `updated` collision (no write); 3 write or read-back failure (original content
-    restored where possible); 7 refused: `team.md` under -SquadRoot does not record
-    `Model routing: economy` (nothing read or written; the coordinator performs the
-    transaction itself as in v0.18.1). On any other non-zero exit the coordinator
-    dispatches nothing.
-
-    Economy only (references/economy-mode.md).
+    restored where possible). On any non-zero exit the coordinator dispatches nothing.
+    The same transaction applies under off, ranked, economy, and manual routing.
 .PARAMETER SquadRoot
     A squad root: `.copilot-tracking/squad/` or `.copilot-tracking/squad/members/<name>/`
     (or the federation root). Both `state.json` and `decisions.md` must exist.
@@ -89,7 +85,7 @@ $StringKeys = @('runId', 'roundId', 'confidence', 'basis', 'decision', 'reason')
 $NumberKeys = @('evaluatedSpendUsd', 'plannedDispatches', 'projectedCostUsd', 'reserveMultiplier', 'admissionCostUsd')
 $Decisions = @('not-requested', 'within-ceiling', 'over-ceiling', 'approved-over-ceiling', 'cannot-confirm')
 $Confidences = @('not-applicable', 'low', 'medium')
-$Bases = @('not-requested', 'estimated', 'calibrated')
+$Bases = @('not-requested', 'estimated', 'calibrated', 'host-observed+estimated-reservation', 'host-exact+estimated-reservation')
 
 function Stop-Preflight {
     param([int]$Code, [string]$Message)
@@ -163,7 +159,7 @@ function Test-PreflightObject {
     elseif ($decision -in $Decisions) {
         if ($null -eq $ceiling -or $ceiling -le 0) { $problems.Add("$decision requires a finite positive ceilingUsd.") }
         if ((Get-JsonString $Node['confidence']) -notin @('low', 'medium')) { $problems.Add("$decision requires confidence 'low' or 'medium'.") }
-        if ((Get-JsonString $Node['basis']) -eq 'not-requested') { $problems.Add("$decision requires basis 'estimated' or 'calibrated'.") }
+        if ((Get-JsonString $Node['basis']) -eq 'not-requested') { $problems.Add("$decision requires a consumed-spend and reservation basis.") }
         if ((Get-JsonString $Node['runId']).Length -eq 0 -or (Get-JsonString $Node['roundId']).Length -eq 0) { $problems.Add("$decision requires non-empty runId and roundId.") }
     }
     return $problems
@@ -182,15 +178,6 @@ function Write-FileAtomic {
 }
 
 $SquadRoot = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($SquadRoot)
-$teamPath = Join-Path $SquadRoot 'team.md'
-$routingMode = 'off'
-if (Test-Path -LiteralPath $teamPath -PathType Leaf) {
-    $routingMatch = [regex]::Match([System.IO.File]::ReadAllText($teamPath), '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
-    if ($routingMatch.Success) { $routingMode = $routingMatch.Groups['mode'].Value }
-}
-if ($routingMode -ne 'economy') {
-    Stop-Preflight 7 "refused: $teamPath records Model routing: $routingMode, not economy. The scripted Cost Preflight write is economy-only; perform the transaction as gates-and-modes.md describes."
-}
 $statePath = Join-Path $SquadRoot 'state.json'
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 

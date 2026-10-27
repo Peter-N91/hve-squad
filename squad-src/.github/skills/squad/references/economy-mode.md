@@ -16,7 +16,7 @@ Read this file only while `team.md` records `Model routing: economy`, or on the 
 
 ## Consent
 
-The first time a user switches to `economy`, before any dispatch under it, the coordinator says once, plainly, what changes: allowlisted implementation roles run on the cheapest model that fits their work well enough within their floor, and each moves once to its `ranked` pick after a failed review; the economy-only Cost Preflight helper applies (*Scripted Writes*); in interactive mode a fully specified, low-risk request may skip Research and Plan (*Bounded Lane*) and owners with disjoint write sets may run concurrently (*Plan-Driven Parallelism*); and a missing intake verdict may be waived with a recorded decision (*Intake Waiver*). Ordinary deterministic handoffs and rate seeding are universal, not an economy consent trade. It also says what does not change (*Never Weakened* below). The switch is a roster change, so the coordinator hands the Scribe the new mode together with a decision entry headed `## Economy Mode Accepted`, and the Scribe writes that entry with the roster-refresh payload, in exactly this shape:
+The first time a user switches to `economy`, before any dispatch under it, the coordinator says once, plainly, what changes: allowlisted implementation roles run on the cheapest model that fits their work well enough within their floor, and each moves once to its `ranked` pick after a failed review; in interactive mode a fully specified, low-risk request may skip Research and Plan (*Bounded Lane*) and owners with disjoint write sets may run concurrently (*Plan-Driven Parallelism*); and a missing intake verdict may be waived with a recorded decision (*Intake Waiver*). Deterministic handoffs, Cost Preflight, rate seeding, and routing refresh are universal, not an economy consent trade. Pass the stated trade as `economyConsent`; `Set-SquadModelRouting.ps1` writes the mode, selected cells, refresh decision, and this exact entry atomically:
 
 ```markdown
 ## Economy Mode Accepted <timestamp>
@@ -27,7 +27,7 @@ The first time a user switches to `economy`, before any dispatch under it, the c
 * Never weakened: <the *Never Weakened* list the coordinator stated>
 ```
 
-`<timestamp>` is the payload's UTC timestamp (`yyyy-MM-ddTHH:mm:ssZ`). The Scribe writes that decision once; a later turn that still reads `Model routing: economy` needs no new one. Switching away from `economy` and back again records a new one. Missing consent is reported, never enforced: `scripts/Resolve-SquadModelRoute.ps1` reports `consent: missing` when `decisions.md` has no such heading, and the coordinator then states the trade and records it before the next dispatch.
+`<timestamp>` is the consent's UTC timestamp. The writer records it once per switch; a later turn still in economy needs no new one. Switching away and back records another. Missing consent fails a scripted switch before dispatch.
 
 An unattended run never accepts economy for the user: see *Watch and Unattended Runs*.
 
@@ -49,11 +49,11 @@ Among qualified candidates take the lowest **Blended** rate first, then higher g
 For example, B meets both primary minimums and costs less than A: Economy selects B even if A is substantially stronger. Ranked may select A on that same evidence. The modes can also select the same model; neither price nor a model name guarantees a different winner.
 
 * **Floors hold.** The pick never leaves `model-routing.md` *Consequence Floors*; running a `default`-floor role on a `fast-lightweight` model takes a `team.md` Model Tier edit, never a routing input.
-* **Model cell.** As under `ranked`: the coordinator computes each pick, the Scribe writes it into the `Model` cell, and every dispatch copies the cell.
+* **Model cell.** As under `ranked`: the actual dispatch plan computes each selected role's pick, `Set-SquadModelRouting.ps1` applies changed cells through an exact hash check, and every dispatch copies the cell.
 
 ## One Escalation
 
-After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that owner once on its ranked pick, then re-run the review. Ranked means the new capability-first destination, not a fit-bucket cost winner. The coordinator hands the Scribe that id for the role's `Model` cell before the re-dispatch, so dispatch still copies the cell; a costlier id with an active ceiling needs a new Cost Preflight round. When the two picks coincide, report **no higher-ranked escalation target exists**. A second failure follows `gates-and-modes.md` *Review Follow-Through*, and the next turn's re-rank resets the cell.
+After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that owner once on its ranked pick, then re-run the review. Ranked means the new capability-first destination, not a fit-bucket cost winner. Re-plan that actual role as `ranked` and persist the cell through `Set-SquadModelRouting.ps1`; a costlier id with an active ceiling needs a new Cost Preflight round. When the picks coincide, report **no higher-ranked escalation target exists**. A second failure follows `gates-and-modes.md` *Review Follow-Through*, and the next economy plan resets the cell.
 
 ## Route Markers
 
@@ -79,7 +79,7 @@ Interactive mode only (no `mode=`). Besides the `Parallel-Eligible` flag, owners
 
 ## Dispatch Brief
 
-With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` (add `-AvailableModels <host enum>` on CLI/app) prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, roster, versioned routing report and Route rationales, ready consumption objects, the direct ordinary-writer command, and the *Bounded Lane*, *Plan-Driven Parallelism*, and *Scripted Writes* sections. The report distinguishes proposed picks from persisted cells; the Scribe must persist changes before dispatch. It reports host execution as unreported. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
+With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, roster, ready consumption objects, the direct ordinary-writer command, and the *Bounded Lane*, *Plan-Driven Parallelism*, and *Scripted Writes* sections. JSON discovery defers model scoring; `New-SquadDispatchPlan.ps1` receives the actual selected roles and host model enum, then returns Route rationales and any hash-bound refresh. It reports host execution as unreported. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
 
 ## Never Weakened
 
@@ -87,11 +87,12 @@ Economy changes allowlisted model picks and, on the *Bounded Lane*, whether Rese
 
 ## Scripted Writes
 
-Ordinary handoffs and rate seeding work in **off, ranked, economy, and manual**, without an economy marker or consent dependency. Only the economy Cost Preflight helper below retains its economy guard. The scripts make writes deterministic and checkable.
+Ordinary handoffs, Cost Preflight, rate seeding, and routine active-policy Model-cell refresh work in **off, ranked, economy, and manual** without an economy consent dependency. The scripts make writes deterministic and checkable.
 
 * **Ordinary hand-off.** Coordinators may run `Write-SquadHandoff.ps1 -Quiet` directly and synchronously using minimal structured JSON per [economy-scribe.md](economy-scribe.md); a dispatched Scribe uses the same small contract. `"handoff":"script"` remains optional compatibility metadata. No full cold charter/procedure/schema/payload reads or Scribe startup for a supported ordinary handoff; no hand-authored ordinary arithmetic. Failures never trigger an automatic manual fallback.
 * **Rate table.** At Init, Scribe may seed with `scripts/Initialize-SquadConsumptionRates.ps1 -SquadRoot <squadRoot>` in every mode; the retained `-Mode` parameter does not affect rates. Afterwards the handoff script checks/reseeds the full template.
-* **Cost Preflight (economy only helper).** The coordinator may run `scripts/Set-SquadCostPreflight.ps1 -SquadRoot <squadRoot> -ExpectedUpdated <updated read> -PreflightJson <object> [-DecisionText <entry>]`. Its exit 7 means this economy-only helper is unavailable; use the existing Cost Preflight transaction, never dispatch on a failed/missing admission.
+* **Cost Preflight.** The coordinator persists the actual-plan proposal with `scripts/Set-SquadCostPreflight.ps1 -SquadRoot <squadRoot> -ExpectedUpdated <updated read> -PreflightJson <object> [-DecisionText <entry>]` in every routing mode. Never dispatch on a failed or missing admission.
+* **Model refresh.** Save the successful dispatch-plan JSON outside squad state and run `scripts/Set-SquadModelRouting.ps1 -RepoRoot <repo> -PlanPath <plan.json>` when `routingRefresh.required=true`.
 
 **Status and warnings.** `-Quiet` emits one compact JSON success status with turn, dispatch count, per-agent history counts, and `ledgerCheck` (`PASS` or accepted `ledger-only`, never conflated); warnings remain visible on stderr. Nonzero exit, invalid status, `history-integrity`, and restore failures fail closed per [economy-scribe.md](economy-scribe.md). Only under economy, the writer warns for missing consent, prepends the economy/bounded Route marker when needed, and warns for absent `routingIdentity`; these rules do not apply to other modes.
 

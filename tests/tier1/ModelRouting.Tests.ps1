@@ -653,7 +653,20 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
     It 'narrows a VS Code session to models priced at or below the session model' {
         $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ SessionModel = 'claude-sonnet-5.5'; Mode = 'ranked'; Role = @('researcher', 'architect') }
         $result.availability | Should -Match 'unverified'
+        $result.availabilityResolved | Should -BeTrue
         foreach ($entry in $result.roles) { $entry.suggested | Should -Not -BeIn @('claude-opus-5.5', 'gpt-5.5', 'gpt-5.6-sol') }
+    }
+
+    It 'does not treat auto or an unpriced session model as the host model inventory' -ForEach @(
+        @{ SessionModel = 'auto' }
+        @{ SessionModel = 'not-in-the-catalog' }
+    ) {
+        $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ SessionModel = $SessionModel; Mode = 'ranked'; Role = @('researcher') }
+        $result.availability | Should -Match '^unresolved'
+        $result.availabilityResolved | Should -BeFalse
+        $result.roles[0].suggested | Should -BeNullOrEmpty
+        @($result.roles[0].candidates).Count | Should -Be 0
+        $result.warnings -join "`n" | Should -Match 'cannot replace the host availableModels enum'
     }
 
     It 'falls back to static tiers on a stale catalog' {

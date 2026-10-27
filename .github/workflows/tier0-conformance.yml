@@ -80,7 +80,18 @@ jobs:
       # suite is authored and verified against 5.
       - name: Install Pester
         shell: pwsh
-        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Write-Warning "Pester install attempt $attempt failed; retrying."
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
 
       - name: Run Tier 0
         shell: pwsh

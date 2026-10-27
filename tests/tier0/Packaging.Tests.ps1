@@ -213,9 +213,9 @@ BeforeAll {
     }
 
     # Measure the ordinary read set and keep the legacy cold surface budget too.
-    $indexText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/00-index.md') -Raw
-    $hotCoreSentence = [regex]::Match($indexText, 'The ordinary hot path reads only (.+?);')
-    $script:ScribeHotCoreReferenceFiles = @([regex]::Matches($hotCoreSentence.Groups[1].Value, '`([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value })
+    $scribeText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw
+    $ordinarySection = [regex]::Match($scribeText, '(?s)## Ordinary handoff.*?(?=\r?\n## )')
+    $script:ScribeHotCoreReferenceFiles = @([regex]::Matches($ordinarySection.Value, '`references/([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
     $script:ScribeHotCoreFiles = @(
         'squad-src/.github/agents/squad/squad-scribe.agent.md'
     ) + @($script:ScribeHotCoreReferenceFiles | ForEach-Object { "squad-src/.github/skills/squad/references/$_" })
@@ -255,6 +255,27 @@ Describe 'Shared scoring is delivered with the plugin runtime (SQ-33c)' {
     It 'delivers the scorer unchanged beside the resolver' {
         $source = Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/scripts/ModelBenchmarkScoring.ps1'
         $delivered = Join-Path $script:PluginOutputRoot 'skills/squad/scripts/ModelBenchmarkScoring.ps1'
+        Test-Path -LiteralPath $delivered -PathType Leaf | Should -BeTrue
+        (Get-FileHash -LiteralPath $delivered).Hash | Should -Be (Get-FileHash -LiteralPath $source).Hash
+    }
+}
+
+Describe 'Deterministic coordinator transactions ship with the runtime' {
+    It 'delivers <Name> unchanged beside the coordinator scripts' -ForEach @(
+        @{ Name = 'SquadUsage.psm1' }
+        @{ Name = 'Get-SquadUsage.ps1' }
+        @{ Name = 'Set-SquadModelRouting.ps1' }
+        @{ Name = 'Write-SquadVerdict.ps1' }
+        @{ Name = 'SquadPromotion.psm1' }
+        @{ Name = 'Get-SquadPromotionPlan.ps1' }
+        @{ Name = 'Promote-SquadFederation.ps1' }
+        @{ Name = 'Get-SquadFederationInitPlan.ps1' }
+        @{ Name = 'Initialize-SquadFederation.ps1' }
+        @{ Name = 'Get-SquadRosterExpansionPlan.ps1' }
+        @{ Name = 'Expand-SquadRoster.ps1' }
+    ) {
+        $source = Join-Path $script:SourceRootResolved "squad-src/.github/skills/squad/scripts/$Name"
+        $delivered = Join-Path $script:PluginOutputRoot "skills/squad/scripts/$Name"
         Test-Path -LiteralPath $delivered -PathType Leaf | Should -BeTrue
         (Get-FileHash -LiteralPath $delivered).Hash | Should -Be (Get-FileHash -LiteralPath $source).Hash
     }

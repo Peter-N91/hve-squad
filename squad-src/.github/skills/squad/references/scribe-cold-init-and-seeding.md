@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-cold-init-and-seeding
-description: "Scribe cold section: Initialization, Deliverable Root resolution, and repository-memory/learning-promotion writes. Read only for an initialization payload, a memory payload, or the roster-rebasing step of a promotion/expansion."
+description: "Scribe cold section: fallback initialization, Deliverable Root resolution, and repository-memory/learning-promotion writes."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -11,14 +11,21 @@ metadata:
 # Scribe Cold Section: Init, Seeding, and Repository Memory
 
 Fresh single-squad or member-root Init with the required runtime uses only
-[scribe-init.md](scribe-init.md) and `scripts/Initialize-Squad.ps1`. This file
-remains the fallback/explicit-refresh, memory, and promotion-rebasing contract;
-do not load it on a successful helper Init. The helper refuses existing roots,
-so it never resets history or performs an unrequested refresh. Whenever `pwsh`
-is available, seed rates with `Initialize-SquadConsumptionRates.ps1`, not a
-model-authored template copy.
+[scribe-init.md](scribe-init.md) and `scripts/Initialize-Squad.ps1`. Confirmed
+additive catalog-role or pack expansion uses `roster-expansion.md` and its
+sealed-plan scripts. This file remains the fallback/non-additive refresh,
+memory, and promotion-rebasing contract; do not load it on either successful
+script path. The Init helper refuses existing roots, so it never resets history
+or performs an unrequested refresh. Whenever `pwsh` is available, seed rates
+with `Initialize-SquadConsumptionRates.ps1`, not a model-authored template copy.
 
-Read this file only when the turn's payload is one of: an **initialization** payload (Payload-to-Step Map Step 3), a **memory** payload (Step 4), or the deliverable-root rebasing sub-step of a **promotion** or **expansion** payload (Steps 10–11, which cross-reference *Initialization and Deliverable Roots* below for the rebasing rule). Every other turn skips this file entirely — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
+Read this file only when the turn's payload is one of: an unsupported or
+non-additive refresh **initialization** payload (Payload-to-Step Map Step 3), a **memory** payload
+(Step 4), or the deliverable-root rebasing sub-step of an unsupported-host
+**promotion/expansion** fallback (Steps 10–11). Supported Init/Expansion performs
+rebasing through the validated payload builder. Every other turn skips this file
+entirely — see the Cold-File Dispatch Table in
+[scribe-procedure.md](scribe-procedure.md).
 
 ### Initialization and Deliverable Roots
 
@@ -41,6 +48,11 @@ On initialization, write payload `packs` as one `Packs: <comma-separated names>`
 **Resolve each row's `Deliverable Root` against the `squadRoot` in hand before writing it.** The lookup table in *Deliverable Roots* (`squad-roster.instructions.md`) states roots relative to `squadRoot`, so seeding a sub-squad writes `members/<name>/plans/` into the `lead` row, not `.copilot-tracking/plans/`. Copying the table's literal paths into a sub-squad roster points every role at the repository root and puts its whole run outside its own sub-squad. `docs/` and `outputs/` are the two exceptions and are written unprefixed at every root.
 
 **On a refresh, preserve every consumer-edited roster value unless explicitly changed.** `Deliverable Root` is consumer-editable and the roster is the running value the coordinator dispatches against, so a refresh reseeds a root only for a role whose row it is adding. Apply the same preserve rule to existing `connectorBindings` rows and custom routing rows: keep them as-is unless the payload explicitly edits or removes them. Rewriting a cell back to default silently redirects behavior the user deliberately set.
+
+Supported additive catalog-role/pack expansion enforces this preserve rule in
+code and never enters Step 7: it changes only `team.md`, `routing.md`, and
+`decisions.md`, then checks the ledger read-only. It does not append a Scribe
+history block, advance state, or rewrite `consumption.md`.
 
 Copy confirmed `customRoutingRows` using the routing template's exact columns.
 On refresh, an absent `connectorBindings` or `customRoutingRows` field means

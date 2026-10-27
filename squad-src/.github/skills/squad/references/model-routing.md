@@ -28,19 +28,19 @@ metadata:
 Everywhere below that says `ranked`, `economy` behaves the same except for its pick.
 
 * **Where the mode lives.** A single line beneath `team.md`'s H1, after the `Packs:` line when one exists: `Model routing: ranked` or `Model routing: manual`. No line means `off`, so every roster written before this contract reads as `off` unchanged.
-* **Changing it.** A `routing=` input different from the recorded mode is a roster change: before any dispatch, the coordinator hands the new mode, and the `Model` column values it resolved, to the Scribe as a roster refresh, then continues the turn under the new mode. `routing=off` removes both the line and the column; the Scribe records the removed picks in that turn's decision entry so a later switch back to `manual` can offer them as the suggestion.
+* **Changing it.** `routing=` with an active mode is passed as `requestedModelRouting` with the actual selected units. The plan resolves only those roles and `Set-SquadModelRouting.ps1` atomically adds or changes the mode line, Model column, selected cells, and decision before dispatch. `routing=off` remains a cold roster change: Scribe removes the line and column and records removed picks for later manual suggestions.
 * **Legacy `models=`.** The comma-separated `models=` input is retired. When a turn still passes it, apply none of its pairs, tell the user once that per-role models now live in `team.md`'s `Model` column under `routing=manual`, and offer to switch.
 
 ## The Model Column
 
 The `Model` column sits between `Model Tier` and `Deliverable Root` and exists only while a routing policy is active. Each cell holds one **Model ID** — the exact lowercase id in `consumption-rates.md`'s `Model ID` column and `model-catalog.md`'s `Catalog ID` (for example `claude-sonnet-5.5`) — never a display name, a tier, or a list.
 
-* **Under `ranked`** the cell is a readout: the coordinator writes the role's ranked pick so the user can see what each role will run on. It re-ranks on every turn and hands the Scribe any cell whose pick changed (a different host, catalog, floor, or roster). A hand edit is overwritten on the next re-rank; to pin a model, switch to `manual`.
+* **Under `ranked`** the cell is a readout. The plan ranks only actual selected roles; first activation adds empty cells for the rest, filled lazily before their first dispatch. `Set-SquadModelRouting.ps1` applies changes without a model dispatch. A hand edit is overwritten on that role's next re-rank; to pin, switch to `manual`.
 * **Under `manual`** the cell is the user's choice and the coordinator never rewrites it. An empty cell, or one refused under *Allowlist* below, triggers *Manual Model Selection* before that role's first dispatch.
 
 ## Manual Model Selection
 
-Run this when the mode becomes `manual` — at Init when `routing=manual` is supplied, or on the turn that switches to it — and whenever a role the turn will dispatch has an empty or refused `manual` cell. It asks the questions; the Scribe writes the answers.
+Run this when the mode becomes `manual` — at Init when `routing=manual` is supplied, or on the turn that switches to it — and whenever a role the turn will dispatch has an empty or refused `manual` cell. It asks the questions; the routing writer persists the answers.
 
 1. **Build this host's available set** per *Availability Derivation* below. Offer only those ids, never the whole catalog.
 2. **Compute a suggestion per role** with *Ranking Algorithm* over that set — or, when an earlier `routing=off` decision entry recorded this role's previous manual pick and that id is still available and admitted, that pick — and the candidate list per role: every available id admitted by the role's floor, ordered the same way.
@@ -48,7 +48,7 @@ Run this when the mode becomes `manual` — at Init when `routing=manual` is sup
 4. **By class**: one question per assignment class present on the roster, offering that class's candidates admitted by the highest floor among its roles, suggestion first. The answer applies to every role in the class.
 5. **Per-role exceptions**: then ask whether any single role should differ; for each role named, offer that role's own candidates, suggestion first. Stop when the user has no further exception.
 6. **Show each choice as** `<Model ID> — <display name>, capability <score or fallback>, evidence <status>, $<blended or unpriced>/1M`, suggestion first, then by rank; list advertised-but-uncatalogued ids last, labeled `unevaluated, unpriced`. Limit each question to the eight best-ranked choices and let the user type any other available id, which is validated under *Allowlist* before use.
-7. **Hand the picks to the Scribe** as a roster refresh with the `Model routing: manual` line, and record the choices in a decision entry.
+7. **Pass the answered picks as `manualModels` in the actual dispatch-plan input.** The plan validates them against availability and floors; `Set-SquadModelRouting.ps1` persists the mode, cells, and decision before dispatch.
 
 Use the host's question tool (`ask_user` on the Copilot CLI and the GitHub Copilot app, the chat question prompt in VS Code); without one, present the same choices as a numbered list and wait. **Never prompt on an unattended run** — see *Watch and Unattended Runs*.
 
@@ -65,7 +65,7 @@ Highest wins, per role, evaluated independently for every dispatch:
 3. `tier=` (the existing static-tier input) or the seeded `team.md` Model Tier — today's fallback, unchanged.
 4. Omit the parameter — the no-policy default.
 
-**Dispatch copies the cell; it never retypes it.** Under `ranked` or `manual`, every dispatch to a roster agent (Primary or Alternate) passes that row's `Model` cell, copied character for character from `team.md` as read this turn — never recalled, never omitted, never adjusted to a "similar" id. The Scribe is the one exception: its own model pin governs. In the plugin distribution, the `dispatch-guards` `preToolUse` hook denies a mismatched dispatch and names the cell to copy; it only compares and never fills or changes a cell. **Requested model** in the identity bullets is the value actually passed, never the cell it should have been.
+**Dispatch copies the verified refreshed cell; it never retypes it.** Under an active routing policy, `New-SquadDispatchPlan.ps1` resolves the actual selected role units and `Set-SquadModelRouting.ps1` persists any changed cells first. Every later dispatch passes that row's `Model` cell character for character — never recalled, omitted, or adjusted to a "similar" id. The Scribe is the one exception: its own model pin governs. In the plugin distribution, the `dispatch-guards` `preToolUse` hook denies a mismatched dispatch and names the cell to copy; it only compares and never fills or changes a cell. **Requested model** in the identity bullets is the value actually passed, never the cell it should have been.
 
 ## Assignment Classes
 
@@ -90,9 +90,11 @@ Availability precedence is `model-catalog.md`'s own (host-advertised enum ∩ ca
 | Host                                                        | Dispatch tool   | Available set                                                                                                                                                                                                                  | Value passed as `model`                             |
 |-------------------------------------------------------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|
 | Copilot CLI, GitHub Copilot app, VS Code Copilot CLI harness | `task`          | The tool's advertised `model` enum — exactly what this user can run                                                                                                                                                            | The Model ID                                        |
-| VS Code, Local agent                                        | `runSubagent`   | No list is advertised. VS Code rejects a model above the session model's cost tier, so treat catalog ids whose `Input` rate is at or below the session model's as available, unverified. With `sessionModel: auto` or an unpriced session model, every catalog id is unverified. A rejection reports the models this session can use; that list replaces the derived set for the rest of the run | The display name from `consumption-rates.md`'s `Model (as routed)` column |
+| VS Code, Local agent                                        | `runSubagent`   | No list is advertised. VS Code rejects a model above the session model's cost tier, so treat catalog ids whose `Input` rate is at or below a **concrete, priced** session model as available, unverified. `sessionModel: auto`, `unknown`, a tier label, or an unpriced model proves no availability and yields no automatic ranked/manual suggestion; wait for a concrete picker value or the model list returned by a rejected dispatch. That returned list replaces the derived set for the rest of the run | The display name from `consumption-rates.md`'s `Model (as routed)` column |
 
 Never offer or rank an id outside the host's available set, and label an unverified set as such in the question the user sees.
+
+On `task` hosts, `sessionModel` is metadata only: the coordinator must pass the tool's actual advertised `model` enum as `availableModels`. `New-SquadDispatchPlan.ps1` fails closed before any Model-cell refresh when that enum is missing and the session model cannot establish the VS Code cost ceiling.
 
 ## Ranking Algorithm
 
@@ -108,7 +110,7 @@ For a role resolving under `routing=ranked`, or to suggest a pick under `routing
 
 `Blended` is the catalog's precomputed USD per 1M tokens of a representative agentic dispatch: `0.20 × Input + 0.80 × Cached + 0.08 × Cache write + 0.02 × Output`, the split `consumption-rates.md`'s dispatch-size estimator produces, since a dispatch reads mostly cached context. It breaks genuine capability and confidence ties; Cost Preflight still prices the real dispatch. A budget conflict never silently changes this objective.
 
-**Deterministic helper.** Run `scripts/Resolve-SquadModelRoute.ps1 -SquadRoot <squadRoot>` with `pwsh` 7+, `-AvailableModels` for the host enum or `-SessionModel` on VS Code. It writes nothing; copy `rationale` into **Route rationale** without changing the consumption schema. [model-scoring.md](model-scoring.md) defines all report fields and the no-shell calculation. Scribe/session exceptions are explicit; host execution is `unreported`.
+**Deterministic helper.** `New-SquadDispatchPlan.ps1` invokes `Resolve-SquadModelRoute.ps1` with the actual selected roles, `-AvailableModels` host enum or `-SessionModel` on VS Code, and answered manual picks. The resolver writes nothing; the plan carries `rationale` into **Route rationale** and emits a hash-bound refresh for `Set-SquadModelRouting.ps1`. [model-scoring.md](model-scoring.md) defines all report fields and the no-shell calculation. Scribe/session exceptions are explicit; host execution is `unreported`.
 
 ## Consequence Floors
 
@@ -130,8 +132,8 @@ An id the host advertises but `model-catalog.md` does not carry (catalog's `Adve
 
 ## Re-Rank and Substitution
 
-* **Pre-dispatch, `ranked`**: when the host advertises no `model` enum (VS Code's Local agent) and the dispatch call rejects the resolved id, re-rank from the list the rejection reported, under the same floor and class, and record the substitution (requested id, id actually used, and why) in that dispatch's identity bullets and the refreshed `Model` cell.
-* **Pre-dispatch, `manual`**: a rejected user pick is never replaced silently. Re-run *Manual Model Selection* for that role with the list the rejection reported; on an unattended run, fall back per *Floor exhaustion* and record why.
+* **Pre-dispatch, `ranked`**: when the host advertises no `model` enum (VS Code's Local agent) and the dispatch call rejects the resolved id, re-run the actual-unit plan from the list the rejection reported, under the same floor and class, then persist its refreshed `Model` cell before retrying.
+* **Pre-dispatch, `manual`**: a rejected user pick is never replaced silently. Re-run *Manual Model Selection* for that role with the list the rejection reported and pass the answer back through the plan and routing writer; on an unattended run, fall back per *Floor exhaustion* and record why.
 * **Mid-run**: a later re-rank that would price higher than the admitted Cost Preflight round requires a **new** Cost Preflight round before it dispatches — never a silent re-price of the admitted one.
 
 ## Stale-Catalog Fallback

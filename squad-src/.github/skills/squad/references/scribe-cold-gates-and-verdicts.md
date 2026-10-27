@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-cold-gates-and-verdicts
-description: "Scribe cold section: Council/Intake/Discovery verdict placeholders, the autonomous-loop-cycle history variant and its summary file, the single-squad autopilot-run summary, and notifications.md. Read only when the turn's payload is a verdict, an autonomous-loop or autopilot-run summary, or a notification."
+description: "Scribe cold fallback for unsupported Council/Intake/Discovery verdict writes, plus autonomous-loop/autopilot summaries and notifications."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -10,7 +10,13 @@ metadata:
 
 # Scribe Cold Section: Gates, Verdicts, and Run Summaries
 
-Read this file only when the turn's payload is one of: a **Council Verdict**, **Intake Readiness Verdict**, or **Discovery Verdict** (Payload-to-Step Map Steps 5, 9, 12), an **autonomous-loop summary** (Step 6), an **autopilot-run summary** at the single-squad root (Step 8), or a **notification**. An ordinary decision or history dispatch never needs this file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
+Read this file for a Council, Intake Readiness, or Discovery Verdict only after
+`Write-SquadVerdict.ps1` returns unsupported exit 2. Supported verdicts use the
+validated writer after the ordinary handoff and never dispatch Scribe. Also read
+it for an **autonomous-loop summary** (Step 6), an **autopilot-run summary** at
+the single-squad root (Step 8), or a **notification**. An ordinary decision or
+history dispatch never needs this file — see the Cold-File Dispatch Table in
+[scribe-procedure.md](scribe-procedure.md).
 
 ## Verdict Entries in decisions.md
 

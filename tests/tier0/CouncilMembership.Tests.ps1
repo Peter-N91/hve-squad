@@ -59,6 +59,7 @@ BeforeAll {
     $script:Routing = Get-InstructionBody -Name 'squad-routing.instructions.md'
     $script:Roster = Get-InstructionBody -Name 'squad-roster.instructions.md'
     $script:Coordinator = Get-AgentBody -Name 'squad-coordinator.agent.md'
+    $script:CoordinatorRuntime = Get-SquadReferenceBody -Name 'coordinator-runtime.md'
     $script:ModernizationPlanner = Get-AgentBody -Name 'squad-modernization-planner.agent.md'
     $script:GatesAndModes = Get-SquadReferenceBody -Name 'gates-and-modes.md'
     $script:OperatingProcedure = Get-SquadReferenceBody -Name 'operating-procedure.md'
@@ -207,7 +208,7 @@ Describe 'Task-fit council and council extension wording pins (GATE-29..GATE-37)
             $script:Council | Should -Match ([regex]::Escape('* A `## Council Waiver` for the topic, recorded on the user''s decline'))
             $script:Routing | Should -Match ([regex]::Escape('A non-`Stop` Council Verdict, or a user''s `## Council Waiver`, exists for the topic'))
             $script:GatesAndModes | Should -Match ([regex]::Escape('a non-`Stop` Council Verdict, or a user''s `## Council Waiver`, for the topic'))
-            $script:Coordinator | Should -Match ([regex]::Escape('a non-`Stop` Council Verdict or a user''s Council Waiver'))
+            $script:CoordinatorRuntime | Should -Match 'non-Stop Council Verdict or recorded waiver'
         }
     }
 
@@ -223,7 +224,8 @@ Describe 'Task-fit council and council extension wording pins (GATE-29..GATE-37)
         It 'the council still never invents a finding or substitutes an agent' {
             $script:Council | Should -Match ([regex]::Escape('never synthesizes a Council Verdict from its own reasoning to cover a lens it did not dispatch'))
             $script:Council | Should -Match ([regex]::Escape('never substitutes a non-mapped agent for an absent council member'))
-            $script:Coordinator | Should -Match ([regex]::Escape('Dispatch in one parallel batch only the task-fit roles the work needs'))
+            $script:GatesAndModes | Should -Match 'dispatches a \*\*task-fit\*\* council in a single parallel batch'
+            $script:CoordinatorRuntime | Should -Match 'Get-SquadProcedure\.ps1.+Name'
         }
 
         It 'no fixed four-role council remains in the contract text' {

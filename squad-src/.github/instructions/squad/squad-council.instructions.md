@@ -1,13 +1,13 @@
 ---
 description: "Pre-implementation council protocol with parallel dispatch, most-restrictive-wins synthesis, and durable Council Verdict"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/decisions.md'
 ---
 
 # Squad Council Conventions
 
-These conventions define the pre-implementation council that the Squad Coordinator dispatches before any implementation-tier role acts on a non-trivial plan, design, or change. The council surfaces the architecture, security, cost, product-fit, and responsible-AI concerns the work actually touches, in parallel, so that the Squad Scribe can record a single, auditable verdict that downstream implementers consult.
+These conventions define the pre-implementation council that the Squad Coordinator dispatches before any implementation-tier role acts on a non-trivial plan, design, or change. The council surfaces the architecture, security, cost, product-fit, and responsible-AI concerns the work actually touches, in parallel, so that the validated verdict writer can record a single, auditable verdict that downstream implementers consult.
 
-A council run produces exactly one durable artifact: a `## Council Verdict` entry appended to `.copilot-tracking/squad/decisions.md` by the Squad Scribe. The coordinator never writes that entry itself; the single-writer rule from `.github/instructions/squad/squad-state.instructions.md` still holds.
+A council run produces exactly one durable artifact: a `## Council Verdict` entry appended to `.copilot-tracking/squad/decisions.md` by `Write-SquadVerdict.ps1` after the ordinary handoff. The coordinator supplies data to the validated writer rather than hand-editing the entry; the single-writer rule from `.github/instructions/squad/squad-state.instructions.md` still holds. Only unsupported writer exit 2 takes the cold Squad Scribe fallback.
 
 ## Trigger Conditions
 
@@ -57,7 +57,7 @@ The coordinator dispatches all council roles in a single turn through one batch 
 
 1. All council roles run concurrently against the same scoped input (the plan, design, or change under review).
 2. Each role returns a structured finding that names: its verdict label (`Approve`, `Conditional`, `Concern`, `Block`), its risk label (`Risk: Low`, `Risk: Medium`, `Risk: High`), the blocking issues it raised (may be empty), the conditions it requires (may be empty), and any suggested follow-ups.
-3. No council role writes squad state directly. Findings flow back to the coordinator and the coordinator hands them to the Squad Scribe for the verdict write.
+3. No council role writes squad state directly. Findings flow back to the coordinator, which records their dispatches through `Write-SquadHandoff.ps1` and then passes the closed finding payload to `Write-SquadVerdict.ps1`.
 4. When the dispatched role has an MCP-capability hint relevant to its work (per `.github/instructions/squad/squad-mcp-capability.instructions.md`), the coordinator passes `capability=<hint>` in the dispatch payload.
 5. Council dispatch is parallel-eligible by definition; the coordinator does not serialize council roles.
 
@@ -65,7 +65,7 @@ The coordinator does not begin implementation dispatch on the same turn as a cou
 
 ## Most-Restrictive-Wins Synthesis
 
-The Scribe applies a single synthesis rule across all council findings:
+The verdict writer applies a single deterministic synthesis rule across all council findings:
 
 * Any `Block` verdict from any council role drives the Council Verdict to `Stop`.
 * Any `Risk: High` finding from any council role drives the Council Verdict to `Stop`, even when that role's own verdict label is softer (a `Concern` carrying `Risk: High` still blocks).
@@ -76,7 +76,7 @@ Cost-impacting findings stay restrictive even inside autonomous mode: the `auto-
 
 ## Council Verdict Schema
 
-The Squad Scribe writes the verdict to `.copilot-tracking/squad/decisions.md` under a new `## Council Verdict` H2. The entry is append-only and uses this shape:
+`Write-SquadVerdict.ps1` writes the verdict to `<squadRoot>/decisions.md` under a new `## Council Verdict` H2. The entry is append-only and uses this shape:
 
 ```markdown
 ## Council Verdict <timestamp> <topic-id>
@@ -117,7 +117,7 @@ Required fields:
 * The `Verdict` value is one of exactly `Go`, `Go-With-Conditions`, or `Stop`.
 * The Blocking Issues, Conditions, and Suggested Follow-ups lists carry role attribution inline (for example, `(security) rotate secrets weekly`).
 
-The schema is the contract: any Scribe write that omits one of these sections fails the council protocol and the coordinator escalates rather than proceeding.
+The schema is the contract: any writer result that omits one of these sections fails the council protocol and the coordinator escalates rather than proceeding.
 
 ## Verdict Anchor and Decision Ref
 
@@ -133,9 +133,14 @@ Whenever the coordinator reports a verdict to the user — in a chat reply, at a
 
 ## Single-Writer Rule
 
-The Squad Scribe is the only agent that writes the Council Verdict entry. The coordinator assembles the synthesis prompt (raw findings, council membership, topic id, timestamp) and hands it to the Scribe through the normal dispatch contract. Council roles never edit `decisions.md`. This preserves the parallel-dispatch race-prevention guarantee from `.github/instructions/squad/squad-state.instructions.md`.
-
-When the Scribe receives a Council Verdict payload it writes the entry as an append (never edits or removes prior entries) and returns a confirmation listing the verdict label, the topic id, the file path, and the **Decision Ref** (the file path plus the entry's heading anchor, per *Verdict Anchor and Decision Ref* above) so the coordinator can link straight to the section when it reports the verdict or opens a gate.
+Council roles never edit `decisions.md`. The coordinator first persists their
+history, consumption, and state through `Write-SquadHandoff.ps1`, then passes the
+closed council payload to `Write-SquadVerdict.ps1` at the same `squadRoot`. The
+script holds the shared per-root writer lock, derives the most-restrictive
+verdict and attributed synthesis, appends once, rejects replays, and returns the
+verdict label, topic id, file path, and **Decision Ref**. It works unchanged for
+a federation member root. Only unsupported exit 2 dispatches the Squad Scribe
+through the cold fallback contract.
 
 ## Implementation Gate
 
@@ -146,4 +151,4 @@ Implementation-tier roles (`developer`, `tester` when it acts as an implementer,
 * `Stop` blocks dispatch entirely. The coordinator escalates to the user with the verdict, the blocking issues, the council membership, and the **Decision Ref** (per *Verdict Anchor and Decision Ref*) so the user can open the full verdict section directly.
 * A `## Council Waiver` for the topic, recorded on the user's decline (per *Council Extension*), permits dispatch in place of a verdict, unless a Risk Gate trigger applies.
 
-The coordinator does not bypass the gate. When a user explicitly overrides a `Stop` verdict, the coordinator records the override decision through the Scribe before any implementer dispatches, so the audit trail shows both the verdict and the override.
+The coordinator does not bypass the gate. When a user explicitly overrides a `Stop` verdict, the coordinator records the override decision through the validated ordinary handoff writer (or cold Scribe fallback) before any implementer dispatches, so the audit trail shows both the verdict and the override.

@@ -30,7 +30,8 @@
          refuses with exit 4 and nothing written.
       3. Append each history entry with its consumption block, the Squad Scribe
          orchestration entry, and the optional decision entry; advance `state.json`.
-      4. Run `Measure-SquadLedger.ps1 -Write` (child process: it calls `exit`), refresh the
+      4. Run `Measure-SquadLedger.ps1 -Write` (child process: it calls `exit`) to
+         refresh the ledger, run totals, and optional exact-session journal; refresh the
          ledger heading run id, then run `Measure-SquadLedger.ps1 -Check
          -ExpectedHistoryCounts` with counts taken before step 3. The script exits 0 only
          when that check passes. The ledger helper finalizes Cost Comparison figures,
@@ -60,13 +61,18 @@
       since (optional ISO time: the dispatch start; a parallel wave passes it),
       decision {title, rationale, adrNoted} (optional),
       historyRecords [ {agent, title?, request, deliverable, outcome, memberName?,
-        selectionCue? (required for an Alternate agent), passedModel? (required with
-        cli-pinned and must equal model), costPreflightRef?/costPreflightSlot? (refused:
-        a ceiling slot needs the Scribe), consumption? {ten fields}, routingIdentity?{
+        selectionCue? (required for an Alternate agent), reportedModel? (actual host/
+        worker identity), internalToolCalls? (nonnegative reported count), passedModel? (required with
+        cli-pinned and must equal model), costPreflightRef?/costPreflightSlot? (required
+        together under an active ceiling), consumption? {ten fields}, routingIdentity?{
         requestedModel, effectiveModel, observedModel, routeRationale}} ] (may be empty),
       orchestration? {request?, outcome?, passedModel?, consumption? {ten fields}},
       stateAdvance {activeRoles[], openEscalationsRaised[]?, openEscalationsResolved[]?,
         sessionModel?, modelOverrides?}.
+
+    Actual reportedModel outranks the requested model and predicted pin. Internal
+    tool-call facts raise estimator turns without model arithmetic; supplied blocks
+    must agree with these stronger facts. Neither field changes the stored ten-key schema.
 
     Derived consumption (a record's `consumption`, or `orchestration.consumption`, omitted
     entirely; a supplied block is never altered): the five token fields are the estimator
@@ -103,8 +109,8 @@
 
     Exit codes: 0 written and verified (or snapshot unchanged); 1 validation or usage
     error, nothing written (correct the one field named and rerun once); 2 the Scribe composes
-    this hand-off itself (unsupported payload or state: cost ceiling here or at the federation
-    root, ceiling slot fields, federation root, legacy schema, agent not on the roster,
+    this hand-off itself (unsupported payload or state: aggregate federation ceiling,
+    federation root, legacy schema, agent not on the roster,
     secret-like text, unseeded ledger, a consumption.md with some but not all ledger headings,
     an omitted block the estimator cannot derive), nothing
     written; 3 write or ledger failure, files restored (or unreadable input, nothing
@@ -443,6 +449,51 @@ function Get-NodeString {
     return $Node.GetValue[string]()
 }
 
+function Get-EntryFieldLocal {
+    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Name)
+    $match = [regex]::Match($Text, '(?m)^\* ' + [regex]::Escape($Name) + ':[ \t]*(?<value>[^\r\n]*)')
+    if ($match.Success) { return $match.Groups['value'].Value.Trim().Trim('`') }
+    return ''
+}
+
+function Get-CostDecisionLocal {
+    param(
+        [Parameter(Mandatory)][string]$Reference,
+        [Parameter(Mandatory)][string]$DecisionsPath
+    )
+    if ($Reference -notmatch '^decisions\.md#(?<anchor>[a-z0-9][a-z0-9_-]*)$') {
+        throw "Cost Preflight Ref '$Reference' must target decisions.md at this squad root."
+    }
+    $anchor = $Matches.anchor
+    $sections = @(
+        foreach ($section in [regex]::Matches([IO.File]::ReadAllText($DecisionsPath), '(?ms)^## (?<heading>[^\r\n]+)\r?\n(?<body>.*?)(?=^## |\z)')) {
+            $slug = ($section.Groups['heading'].Value.ToLowerInvariant() -replace '[^\p{L}\p{Nd}_ -]', '') -replace ' ', '-'
+            if ($slug -ceq $anchor) { $section }
+        }
+    )
+    if ($sections.Count -ne 1) { throw "Cost Preflight Ref '$Reference' is missing or ambiguous." }
+    $sections[0]
+}
+
+function Get-ExistingAdmissionUseCountLocal {
+    param(
+        [Parameter(Mandatory)][string]$HistoryDirectory,
+        [Parameter(Mandatory)][string]$Reference,
+        [Parameter(Mandatory)][string]$Slot
+    )
+    $count = 0
+    foreach ($file in Get-ChildItem -LiteralPath $HistoryDirectory -File -Filter '*.md') {
+        foreach ($entry in [regex]::Matches([IO.File]::ReadAllText($file.FullName), '(?ms)^### (?<heading>[^\r\n]+)\r?\n(?<body>.*?)(?=^### |\z)')) {
+            $body = $entry.Groups['body'].Value
+            if ((Get-EntryFieldLocal $body 'Cost Preflight Ref') -ceq $Reference -and
+                (Get-EntryFieldLocal $body 'Cost Preflight Slot') -ceq $Slot) {
+                $count++
+            }
+        }
+    }
+    $count
+}
+
 function Get-NodeInt {
     param($Node)
     if ((Get-Kind $Node) -ne 'Number') { return $null }
@@ -740,7 +791,7 @@ function Test-Attribution {
         }
     }
     # A passedModel that repeats the recorded model is redundant, not evidence of a passed override.
-    if ($Map['model_source'] -ne 'cli-pinned' -and $PassedModel -and (ConvertFrom-ModelPin $PassedModel) -ne (ConvertFrom-ModelPin $Map['model'])) { $problems.Add("$Where passedModel '$PassedModel' differs from model '$($Map['model'])'; a passed override is model_source cli-pinned.") }
+    if ($Map['model_source'] -notin @('cli-pinned', 'dispatch-reported') -and $PassedModel -and (ConvertFrom-ModelPin $PassedModel) -ne (ConvertFrom-ModelPin $Map['model'])) { $problems.Add("$Where passedModel '$PassedModel' differs from model '$($Map['model'])'; a passed override is model_source cli-pinned.") }
     switch ($Map['model_source']) {
         'cli-pinned' {
             if (-not $PassedModel) { $problems.Add("$Where.model_source cli-pinned needs the dispatch's passedModel recorded in the payload.") }
@@ -784,7 +835,7 @@ function Get-EstimatorFloors {
 function Get-DerivedConsumption {
     # Fills an omitted consumption block from the role class's estimator floors, the model attribution ladder, and the rate row;
     # $null with the reason recorded for the Scribe when a figure cannot be produced.
-    param([string]$Agent, [string]$Role, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration)
+    param([string]$Agent, [string]$Role, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration, [string]$ReportedModel, [long]$InternalToolCalls = 0)
     $class = 'bookkeeping'
     if (-not $Orchestration) {
         $resolvedRole = if ($Role) { $Role } elseif ($agentRoles.ContainsKey($Agent)) { $agentRoles[$Agent] } else { '' }
@@ -794,7 +845,8 @@ function Get-DerivedConsumption {
     if ($null -eq $floors) { $needsScribe.Add("$Where was omitted and the $class dispatch-size estimator row cannot be read from consumption-rates.md or its template; the Scribe composes the block."); return $null }
     if ($SessionModel -and (Test-ModelLabel $SessionModel)) { $SessionModel = '' }
     if ($PassedModel -and (Test-ModelLabel $PassedModel)) { $problems.Add("$Where passedModel '$PassedModel' is a routing label, not an actual model."); return $null }
-    if ($Orchestration) {
+    if ($ReportedModel) { $model = $ReportedModel; $source = 'dispatch-reported' }
+    elseif ($Orchestration) {
         if ($SessionModel) { $model = $SessionModel; $source = 'session-inherited' } else { $model = 'unknown'; $source = 'unresolved' }
     }
     elseif ($PassedModel) { $model = $PassedModel; $source = 'cli-pinned' }
@@ -815,19 +867,20 @@ function Get-DerivedConsumption {
     $pricedRow = @($RateRows | Where-Object { $_.Name -eq $priced }) | Select-Object -First 1
     $writesCache = ($pricedRow -and $pricedRow.CacheWrite -gt 0)
     $tokenFactor = if ((ConvertFrom-ModelPin $model) -eq 'hydrafusion-max') { 0.35 } else { 1.0 }
-    $average = $floors.Base + $floors.Growth * ($floors.Turns - 1) / 2.0
-    $gross = $floors.Turns * $average * $tokenFactor
+    $turns = [Math]::Max([long]$floors.Turns, $InternalToolCalls)
+    $average = $floors.Base + $floors.Growth * ($turns - 1) / 2.0
+    $gross = $turns * $average * $tokenFactor
     return [ordered]@{
         model              = $model
         model_source       = $source
         priced_as          = $priced
         model_tier         = $tier
-        internal_turns     = [long]$floors.Turns
+        internal_turns     = $turns
         input_tokens       = [long][Math]::Round($gross * 0.20)
         cached_tokens      = [long][Math]::Round($gross * 0.80)
-        cache_write_tokens = $(if ($writesCache) { [long][Math]::Round(($floors.Base + $floors.Growth * ($floors.Turns - 1)) * $tokenFactor) } else { 0L })
-        output_tokens      = [long][Math]::Round($floors.Turns * $floors.Output)
-        basis              = 'estimated'
+        cache_write_tokens = $(if ($writesCache) { [long][Math]::Round(($floors.Base + $floors.Growth * ($turns - 1)) * $tokenFactor) } else { 0L })
+        output_tokens      = [long][Math]::Round($turns * $floors.Output)
+        basis              = $(if ($model -eq 'unknown') { 'tier-default' } else { 'estimated' })
     }
 }
 
@@ -843,6 +896,9 @@ function Get-ChildWarnings {
             $warning = $Matches['message'].Trim()
         }
         elseif ($line -match '^\s*WARN(?:ING)?(?::|\s+)(?<message>.+)$') {
+            $warning = "WARN: $($Matches['message'].Trim())"
+        }
+        elseif ($line -match '(?:^|:\s+)WARN:\s*(?<message>.+)$') {
             $warning = "WARN: $($Matches['message'].Trim())"
         }
         if ($warning -and -not $warnings.Contains($warning)) { $warnings.Add($warning) }
@@ -921,6 +977,7 @@ $scriptsRoot = $PSScriptRoot
 $statePath = Join-Path $SquadRoot 'state.json'
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$sessionCachePath = Join-Path $SquadRoot 'consumption-sessions.json'
 $ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
 $teamPath = Join-Path $SquadRoot 'team.md'
 $historyDir = Join-Path $SquadRoot 'history'
@@ -945,6 +1002,7 @@ $SquadRoot = Get-CanonicalPath $SquadRoot
 $statePath = Join-Path $SquadRoot 'state.json'
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$sessionCachePath = Join-Path $SquadRoot 'consumption-sessions.json'
 $ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
 $teamPath = Join-Path $SquadRoot 'team.md'
 $historyDir = Join-Path $SquadRoot 'history'
@@ -1477,7 +1535,7 @@ else {
     foreach ($node in $recordNodes) {
         $where = "historyRecords[$index]"
         $index++
-        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity', 'externalProvenance') -Where $where)) { continue }
+        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'reportedModel', 'internalToolCalls', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity', 'externalProvenance') -Where $where)) { continue }
         $agent = Get-TextField -Node $node -Key 'agent' -Where $where
         $request = Get-TextField -Node $node -Key 'request' -Where $where
         $deliverable = Get-TextField -Node $node -Key 'deliverable' -Where $where
@@ -1486,10 +1544,16 @@ else {
         $memberName = Get-TextField -Node $node -Key 'memberName' -Where $where -Optional
         $selectionCue = Get-TextField -Node $node -Key 'selectionCue' -Where $where -Optional
         $passedModel = Get-TextField -Node $node -Key 'passedModel' -Where $where -Optional
+        $reportedModel = Get-TextField -Node $node -Key 'reportedModel' -Where $where -Optional
+        $internalToolCalls = if ($null -ne $node['internalToolCalls']) { Get-NodeInt -Node $node['internalToolCalls'] } else { 0L }
+        if ($null -ne $node['internalToolCalls'] -and ($null -eq $internalToolCalls -or $internalToolCalls -lt 0)) { $problems.Add("$where.internalToolCalls must be a nonnegative integer."); $internalToolCalls = 0L }
+        if ($reportedModel -and ((Test-ModelLabel $reportedModel) -or $reportedModel -eq 'unknown')) { $problems.Add("$where.reportedModel must be an actual host/worker-reported model, not a routing label or unknown.") }
         $ref = Get-TextField -Node $node -Key 'costPreflightRef' -Where $where -Optional
         $slot = Get-TextField -Node $node -Key 'costPreflightSlot' -Where $where -Optional
         $consumption = $null
         if ($null -ne $node['consumption']) { $consumption = Test-Consumption -Node $node['consumption'] -Where "$where.consumption" }
+        if ($consumption -and $reportedModel -and ((ConvertFrom-ModelPin $consumption.model) -ne (ConvertFrom-ModelPin $reportedModel) -or $consumption.model_source -ne 'dispatch-reported')) { $problems.Add("$where.consumption contradicts stronger reportedModel evidence.") }
+        if ($consumption -and $consumption.internal_turns -lt $internalToolCalls) { $problems.Add("$where.consumption internal_turns is below the reported tool-call count.") }
         if ($consumption -and $consumption['model_source'] -eq 'cli-pinned' -and -not $passedModel) {
             $passedModel = $consumption['model']
             $handoffWarnings.Add("WARN $where.passedModel omitted; recorded as the cli-pinned model '$passedModel'")
@@ -1516,7 +1580,7 @@ else {
                 }
             }
         }
-        if ($null -ne $ref -or $null -ne $slot) { $needsScribe.Add("$where carries a Cost Preflight ref or slot; slot admission and the replay check need the Scribe.") }
+        if (($null -eq $ref) -ne ($null -eq $slot)) { $problems.Add("$where must supply costPreflightRef and costPreflightSlot together.") }
         if ($null -eq $agent -or $null -eq $request -or $null -eq $deliverable -or $null -eq $outcome -or ($null -ne $node['consumption'] -and $null -eq $consumption)) { continue }
         if ($agent -eq $ScribeAgent) { $problems.Add("$where.agent must not be '$ScribeAgent'; its orchestration entry is written from payload.orchestration."); continue }
         if ($agent -match '[\\/:*?"<>|=;,]' -or $agent -match '^\.') { $problems.Add("$where.agent '$agent' is not a valid history file name."); continue }
@@ -1550,7 +1614,7 @@ else {
             }
         }
         if ($null -eq $node['consumption']) {
-            $consumption = Get-DerivedConsumption -Agent $agent -Role $identity.ClassRole -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession
+            $consumption = Get-DerivedConsumption -Agent $agent -Role $identity.ClassRole -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession -ReportedModel $reportedModel -InternalToolCalls $internalToolCalls
             if ($null -eq $consumption) { continue }
         }
         Test-Attribution -Map $consumption -Where "$where.consumption" -PinAgent $agent -PassedModel $passedModel
@@ -1682,8 +1746,43 @@ foreach ($key in @('sessionModel', 'modelOverrides', 'estCostUsd', 'estCreditsTo
     if ($null -eq $run[$key]) { Stop-Handoff 2 "state.json currentRun lacks '$key'; the Squad Scribe repairs state." }
 }
 $preflight = $run['costPreflight']
-if ($null -ne $preflight['ceilingUsd'] -or (Get-NodeString $preflight['decision']) -ne 'not-requested') {
-    Stop-Handoff 2 'a cost ceiling is configured; a ceiling-admitted hand-off (slot and replay checks) needs the Squad Scribe.'
+$preflightDecision = Get-NodeString $preflight['decision']
+$ceilingActive = $null -ne $preflight['ceilingUsd'] -or $preflightDecision -ne 'not-requested'
+$seenAdmissionSlots = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($record in $records) {
+    if ($ceilingActive) {
+        if (-not $record.Ref -or -not $record.Slot) {
+            Stop-Handoff 1 "an active ceiling requires Cost Preflight Ref and Slot for '$($record.Agent)'."
+        }
+        if ($preflightDecision -notin @('within-ceiling', 'approved-over-ceiling')) {
+            Stop-Handoff 1 "current Cost Preflight decision '$preflightDecision' does not admit a dispatch."
+        }
+        $costDecisionSection = Get-CostDecisionLocal -Reference $record.Ref -DecisionsPath $decisionsPath
+        $heading = $costDecisionSection.Groups['heading'].Value
+        $headingPattern = '^Cost Preflight \S+ ' + [regex]::Escape($runId) + ' ' + [regex]::Escape((Get-NodeString $preflight['roundId'])) + '$'
+        if ($heading -notmatch $headingPattern) {
+            Stop-Handoff 1 "Cost Preflight Ref for '$($record.Agent)' does not match the active run and round."
+        }
+        $decisionBody = $costDecisionSection.Groups['body'].Value
+        $recordedDecision = Get-EntryFieldLocal $decisionBody 'Decision'
+        if ($recordedDecision -cne $preflightDecision -or $recordedDecision -notin @('within-ceiling', 'approved-over-ceiling')) {
+            Stop-Handoff 1 "Cost Preflight Ref for '$($record.Agent)' is not the active admitting decision."
+        }
+        $permitted = @((Get-EntryFieldLocal $decisionBody 'Permitted Next Dispatch Set') -split ',\s*' | ForEach-Object { $_.Trim('`') } | Where-Object { $_ })
+        if ($record.Slot -cnotin $permitted) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' is not permitted by '$($record.Ref)'."
+        }
+        $identity = $record.Ref + ':' + $record.Slot
+        if (-not $seenAdmissionSlots.Add($identity)) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' is duplicated in this payload."
+        }
+        if ((Get-ExistingAdmissionUseCountLocal -HistoryDirectory $historyDir -Reference $record.Ref -Slot $record.Slot) -ne 0) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' was already consumed."
+        }
+    }
+    elseif ($record.Ref -or $record.Slot) {
+        Stop-Handoff 1 "Cost Preflight Ref/Slot was supplied for '$($record.Agent)' but no ceiling is active."
+    }
 }
 $stateTurn = Get-NodeInt $state['turn']
 if ($null -eq $stateTurn -or $turn -ne ($stateTurn + 1)) { Stop-Handoff 1 "payload.turn $turn must equal state.json turn + 1 ($stateTurn + 1); a replayed or stale payload writes nothing." }
@@ -2043,6 +2142,7 @@ try {
     $written.Add('WROTE state.json (turn, updated, mode, activeRoles, openEscalations)')
 
     Register-Original $consumptionPath
+    Register-Original $sessionCachePath
     # consumption.md is derived from history; a file with none of the ledger's headings was classified above and is re-seeded from the template.
     if ($reseedLedger) {
         $templateText = [System.IO.File]::ReadAllText((Join-Path $scriptsRoot '../references/consumption.md'))
@@ -2053,7 +2153,7 @@ try {
         $written.Add('RESEEDED consumption.md from the references/consumption.md template (it lacked the ledger sections)')
     }
     $ledger = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Write', '-SessionLog', $SessionLog)
-    Update-OwnedHash $consumptionPath, $statePath
+    Update-OwnedHash $consumptionPath, $statePath, $sessionCachePath
     if ($ledger.ExitCode -ne 0) { throw "Measure-SquadLedger -Write failed: $($ledger.Text)" }
     $childWarnings = @(Get-ChildWarnings -Text $ledger.Text)
     foreach ($warning in $childWarnings) {
