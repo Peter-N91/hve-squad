@@ -10,6 +10,9 @@ metadata:
 
 # Squad Operating Procedure — Turn Stages
 
+`coordinator-runtime.md` and `coordinator-init.md` supersede legacy startup,
+Init ownership, and read-back below; gates and fallback remain.
+
 ## Init
 
 Init once; verify each turn. Propose → confirm → create; write only after confirmation. Offer unsure users Squad Coach once before first Init; pause for manual selection if accepted.
@@ -24,10 +27,10 @@ Init once; verify each turn. Propose → confirm → create; write only after co
 
 ## Route
 
-1. Read `team.md` and `routing.md`. Use `Packs:` per `profiles-and-packs.md`.
+1. Read state/routing once with `Get-SquadDispatchBrief.ps1`; JSON defers model scoring. Apply `Packs:` per `profiles-and-packs.md`.
 2. Match the request against the routing table; select the most specific pattern, preferring the role that most directly owns the requested outcome.
 3. Resolve work roles through the roster, then persisted connector defaults per `references/connector-role-modes.md`, including autopilot and setup for manual bindings. Governance stays internal. A role marked **thin charter needed** or missing capability escalates, never substitutes.
-4. For `team.md` `Model routing: ranked|economy|manual` or `routing=`, resolve ids per `references/model-routing.md`; otherwise `off` keeps cost-first selection: `fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`; user tier hints override per-role defaults for this turn.
+4. For `team.md` `Model routing: ranked|economy|manual` or `routing=`, send actual units/host models to `New-SquadDispatchPlan.ps1` and apply its hash-bound refresh with `Set-SquadModelRouting.ps1`. Otherwise `off` keeps cost-first selection: `fast` for read-heavy `auto`, `default` for reasoning-heavy `confirm`; user tier hints override per-role defaults for this turn.
 5. Determine which gates apply and establish the actual stage shape. Apply Progress Presentation before the first work dispatch.
 6. Dispatch all parallel-eligible roles concurrently through `runSubagent` or `task`; run non-parallel roles (such as planning before implementation) sequentially.
 
@@ -64,7 +67,7 @@ State which path — `scripted` or `manual` — this reconciliation used in the 
 ## Decide
 
 1. Collect each dispatched agent's structured findings and reconcile conflicts.
-2. Persist ordinary decisions with the validated writer below; cold decisions/verdicts go to Scribe. `decisions.md` remains append-only.
+2. Persist ordinary decisions with `Write-SquadHandoff.ps1`; after that turn's handoff, persist Council, Intake Readiness, and Discovery Verdicts with `Write-SquadVerdict.ps1`. Unsupported verdict exit 2 and other cold decisions go to Scribe. `decisions.md` remains append-only.
 3. When a decision is architecturally significant, additionally capture it as an Architecture Decision Record via the `adr-author` skill and reference that ADR from the decision entry.
 4. Persist durable, role-scoped learnings to `/memories/repo/squad-<agent>.md` through the Squad Scribe and the memory tool.
 5. Read learnings in order: local memory, shipped `learnings/shared-learnings.md` (skill-root-relative within the deployed `squad` skill), then `.agents/skills/squad-learnings-tenant/tenant-learnings.md` only when the organization configured the tenant-internal APM dependency. Both playbooks are read-only, authoritative context; apply entries matching the current scenario and never write either from a run. Local learnings are Scribe-owned as above; promotion to shared playbooks uses only the human-reviewed fork-and-PR paths in `CONTRIBUTING.md`.
@@ -81,7 +84,7 @@ The direct ordinary route above runs synchronously and does not use Scribe pipel
 
 Under `mode=autopilot`, once stage N's own artifact is confirmed on disk, the coordinator must include stage N's Scribe hand-off and stage N+1's role dispatch in the same parallel tool-call block — two dispatch calls in one assistant turn — whenever `PipeliningEnabled` holds, per the Enablement Predicate in `references/gates-and-modes.md`. Dispatching stage N's Scribe alone and waiting for it is a defect while the predicate holds and stage N+1 is not behind a barrier, because it spends the whole Scribe duration on the critical path. Hosts whose subagent-dispatch tool cannot be called more than once in one parallel tool-call block (the Enablement Predicate's host signal) keep dispatching stage N's Scribe hand-off, waiting for it, and only then dispatching stage N+1 — exactly as today.
 
-Each pipelined step runs in this order: the block holding stage N's role returns (with stage N-1's Scribe hand-off beside it); verify that hand-off and confirm stage N's artifact; evaluate every Risk-Gate trigger for stage N; run the Cost Preflight round admitting stage N+1, counting stage N as a pending reservation; then issue one block holding stage N's Scribe hand-off and stage N+1's role. The preflight transaction therefore never overlaps a Scribe write, and a configured ceiling keeps pipelining available.
+Each pipelined step verifies the prior hand-off and stage N artifact, evaluates its Risk Gate, preflights N+1 while retaining N's reservation until exact usage appears, then batches N's Scribe hand-off with N+1. Preflight never overlaps Scribe; ceilings keep pipelining available.
 
 The unit of concurrency is one synchronous block, depth exactly one: the Scribe is never dispatched in the background, and stage N+2 is never dispatched before stage N's Scribe hand-off has returned and passed verification (stage N+1's role dispatch runs alongside stage N's hand-off by design, not stage N+2's). Each stage still gets exactly one Scribe subagent invocation, queued strictly in stage order behind any hand-off for the same squad root that is still in flight or still unverified — **never merge two stages' Scribe payloads into one hand-off.** A returned fan-out wave or council drains in deliverable-list order (fan-out) or roster order (council), one Scribe call per block, each verified before the next is queued. A Scribe call that times out or returns nothing stays in flight until the next `-Check`/`-BaselinePath` read shows whether its entry landed — it is neither assumed written nor assumed lost.
 

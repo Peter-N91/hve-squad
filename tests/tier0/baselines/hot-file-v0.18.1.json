@@ -45,8 +45,8 @@
   },
   "everyMode": {
     "squad-src/.github/skills/squad/references/consumption.md": {
-      "bytes": 1506,
-      "reason": "FinOps unit economics (#143) applies in every routing mode by design: the Unit economics paragraph tells the Scribe and the Cost Manager how Measure-SquadLedger counts accepted deliverables, first-pass yield, and rework. It is not an economy-mode change."
+      "bytes": 4200,
+      "reason": "FinOps unit economics (#143) plus cumulative exact native accounting apply in every routing mode by design. The reference documents accepted-value metrics, the cross-session journal, active-tail finalization, promotion preservation, plugin/APM identity reconciliation, and fail-closed federation-member attribution."
     },
     "squad-src/.github/skills/squad/references/model-routing.md": {
       "bytes": 1086,
@@ -55,6 +55,10 @@
     "squad-src/.github/skills/squad/SKILL.md": {
       "bytes": 210,
       "reason": "The model-benchmarks.md reference row (#166) ships in the skill reference table for ranked and manual model routing across all modes."
+    },
+    "squad-src/.github/instructions/squad/squad-state.instructions.md": {
+      "bytes": 256,
+      "reason": "Script-backed ordinary and federation writes preserve the same state and ledger invariants in every routing mode, including exact-session journal transactionality and deterministic completion proof."
     }
   }
 }

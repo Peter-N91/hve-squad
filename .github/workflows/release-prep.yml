@@ -29,9 +29,9 @@ name: Release Prep
 # hotfix section in CONTRIBUTING.md.
 #
 # Step 3 is explicit because pushes authored by GITHUB_TOKEN do not trigger
-# other workflows — the same reason sync-hve-core.yml dispatches rather than
-# relying on release.yml's push trigger. Requires the SYNC_DEPS_TOKEN PAT with
-# Contents: read and write and Actions: read and write.
+# other workflows. Release Prep dispatches release.yml instead of relying on a
+# push trigger. Requires the SYNC_DEPS_TOKEN PAT with Contents: read and write
+# and Actions: read and write.
 
 on:
   workflow_dispatch:

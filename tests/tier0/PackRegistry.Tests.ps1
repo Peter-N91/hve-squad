@@ -18,6 +18,7 @@ BeforeAll {
     $script:RoutingPath = Join-Path $SourceRoot 'squad-src/.github/instructions/squad/squad-routing.instructions.md'
     $script:PromptPath = Join-Path $SourceRoot 'squad-src/.github/prompts/squad/squad.prompt.md'
     $script:CoordinatorPath = Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-coordinator.agent.md'
+    $script:CoordinatorInitPath = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/coordinator-init.md'
     $script:FederationPath = Join-Path $SourceRoot 'squad-src/.github/instructions/squad/squad-federation.instructions.md'
     $script:FoundryBlueprintPath = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/foundry-blueprint.md'
     $script:ReferenceRoot = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references'
@@ -28,6 +29,7 @@ BeforeAll {
     $script:RoutingBody = Get-Content -LiteralPath $script:RoutingPath -Raw
     $script:PromptBody = Get-Content -LiteralPath $script:PromptPath -Raw
     $script:CoordinatorBody = Get-Content -LiteralPath $script:CoordinatorPath -Raw
+    $script:CoordinatorInitBody = Get-Content -LiteralPath $script:CoordinatorInitPath -Raw
     $script:FederationBody = Get-Content -LiteralPath $script:FederationPath -Raw
     $script:FoundryBlueprintBody = Get-Content -LiteralPath $script:FoundryBlueprintPath -Raw
     $script:EnglishDocs = Get-Content -LiteralPath (Join-Path $SourceRoot 'docs/usage.html') -Raw
@@ -101,18 +103,9 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
 
         $promptPacks = [regex]::Match($script:PromptBody, '\[pack=([^\]]+)\]').Groups[1].Value -split '\|'
         @($promptPacks | Sort-Object) -join ',' | Should -BeExactly (@($packs.Keys | Sort-Object) -join ',')
-        $coordinatorPackLine = [regex]::Match(
-            $script:CoordinatorBody,
-            '(?m)^\* \(Optional\) `pack=`[^\r\n]+\r?$'
-        ).Value
-        $coordinatorPackLine | Should -Not -BeNullOrEmpty
-        $coordinatorPacks = @(
-            [regex]::Matches($coordinatorPackLine, '`([^`]+)`') |
-                ForEach-Object { $_.Groups[1].Value } |
-                Where-Object { $_ -ne 'pack=' } |
-                Sort-Object -Unique
-        )
-        $coordinatorPacks -join ',' | Should -BeExactly (@($packs.Keys | Sort-Object) -join ',')
+        $script:CoordinatorBody | Should -Match 'references/coordinator-init\.md'
+        $script:CoordinatorInitBody | Should -Match 'profiles,\s+packs'
+        $script:CoordinatorInitBody | Should -Match 'Offer packs'
 
         $discoveryRows = @(Get-MarkdownTableRows `
                 -Body (Get-MarkdownSectionBody -Body $script:ProfilesBody -Heading 'Pack Discovery') `
@@ -139,7 +132,7 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
             foreach ($guidance in $packs[$name].guidance) {
                 Test-Path -LiteralPath (Join-Path $script:ReferenceRoot $guidance) | Should -BeTrue
             }
-            $packCell = '<td><code>{0}</code></td>' -f [regex]::Escape($name)
+            $packCell = '<td(?:\s+[^>]*)?><code>{0}</code></td>' -f [regex]::Escape($name)
             $script:EnglishDocs | Should -MatchExactly $packCell
             $script:FrenchDocs | Should -MatchExactly $packCell
             $script:FederationBody | Should -MatchExactly ('`{0}`' -f [regex]::Escape($name))

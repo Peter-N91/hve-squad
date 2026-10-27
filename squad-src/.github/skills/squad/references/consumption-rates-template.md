@@ -133,7 +133,7 @@ estimator_revision: 2
 calibration_basis: "<observed-on>|2"
 ```
 
-The factor is the running mean of `observed_credits / estimated_credits` across reconciled runs, clamped to the range 0.25-10.0. To reconcile: read the per-user aggregate `ai_credits_used` from the Copilot usage-metrics REST API immediately before and after a run, take the delta as `observed_credits`, divide by the run's `est_credits` total, fold that ratio into the mean, and rewrite this block. Until `observations` is at least 1 the factor stays 1.00 and the ledger carries an "uncalibrated" note.
+The factor is the running mean of legacy `observed_credits / estimated_credits` across reconciled runs, clamped to the range 0.25-10.0. It applies only to fallback estimates and future reservations; exact-native completed-work rows are never multiplied by it. To reconcile fallback behavior: read the per-user aggregate `ai_credits_used` before and after a run, divide the delta by that run's estimated credits, fold the ratio into the mean, and rewrite this block. Until `observations` is at least 1 the factor stays 1.00 and fallback output carries an "uncalibrated" note.
 
 `calibration_basis` binds those observations to the rate table's `Observed-on` value and `estimator_revision`, joined with `|`. A calibration is eligible for Cost Preflight only when `observations` is positive, `last_reconciled` is not `never`, and the stored basis exactly matches the current rate and estimator basis. When a rate-table reseed or estimator revision changes that basis, reset `calibration_factor` to `1.00`, `last_reconciled` to `never`, and `observations` to `0` rather than applying an old factor to a new calculation.
 ````

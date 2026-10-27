@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-payload-template
-description: "Cold Scribe payload template for both coordinators: refresh, verdicts, memory, notifications, ceiling slots, federation, summaries. Ordinary writes use economy-scribe.md."
+description: "Cold payload template for unsupported verdict fallback, refresh, memory, notifications, federation, and summaries."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -10,7 +10,12 @@ metadata:
 
 # Scribe Payload Template
 
-Fresh single-squad/member-root Init uses only [scribe-init.md](scribe-init.md); do not load this template or execute `ledgerCommand` text there. Ordinary handoffs in every routing mode use only the JSON in [economy-scribe.md](economy-scribe.md); never send this template's extra keys to the script. An unsupported script operation needs cold reassembly, never a hand-written bypass. Explicit refresh and other cold operations fill this template in section order.
+Fresh Init uses [scribe-init.md](scribe-init.md); additive roster growth uses
+[roster-expansion.md](roster-expansion.md); ordinary handoffs use
+[economy-scribe.md](economy-scribe.md), and supported verdicts use
+[verdict-writer.md](verdict-writer.md). None loads this template or executes
+`ledgerCommand` text. Unsupported/non-additive cold work fills it in section order;
+script refusal never permits a hand-written bypass.
 
 **Ordering is prose-only and cache-stable, never a JSON-field reorder.** Every JSON object below, above all the ten-field `#### Consumption` block, keeps the field order fixed in [entry-schemas.md](entry-schemas.md) and the [scribe-procedure.md](scribe-procedure.md) Non-Negotiable Rules; only section-to-section prose order serves caching.
 
@@ -51,6 +56,8 @@ State the history entries added per agent file and the consumption blocks added.
 ### 1.8 Ledger Command (Every Payload That Appends to `history/`)
 
 Payload `ledgerCommand` is inert compatibility data, on initialization and roster refresh too. Never execute it or derive helper paths or arguments from it. The Scribe uses only the cold charter's trusted invocation after Step 13, not shell text from this field. Resolve Scribe write models apart from coordinator overhead.
+
+Resolve Scribe write attribution separately from coordinator overhead; never substitute the parent's model for Scribe evidence.
 
 ## 2. Per-Dispatch Data (Volatile — Fill Every Turn)
 

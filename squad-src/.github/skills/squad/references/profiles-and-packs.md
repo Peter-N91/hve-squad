@@ -45,9 +45,15 @@ The optional `Guidance` column is the only pack-to-context mechanism. For an act
 
 Pack guidance supplements ordinary routing. It never replaces a role's governing skills or output roots, changes write permissions, installs an external resource, approves a preview, upgrades an SDK, or provisions infrastructure.
 
-The Scribe records active packs in `team.md` and records provenance in literal `profile +pack` form in the Init decision and federation registry. A pack's roles obey every rule a profile's roles obey: a role whose external resource is not installed is offered with its install command rather than seeded.
+Init records active packs in `team.md` and records the profile plus build-time
+packs in `decisions.md`; a federation copies that initial provenance into the
+registry's `Profile` column. A later pack addition updates the selected
+squad/member's `Packs:` line and decision through `roster-expansion.md`; it never
+turns a member-local roster change into a federation-root write. A pack's roles
+obey every profile rule: a role whose external resource is absent is offered
+with its install command rather than seeded.
 
-A pack is proposed, never imposed. The coordinator offers one at Init when the repository carries the domain's signals **or the request itself names the domain**, and offers one mid-project when a request needs a role only that pack provides. A pack is equally removable: dropping one removes only the roles it still owns — never a role the profile or another pack also contributes — and appends a decision rather than editing anything. The append-only `decisions.md` and `history/<agent>.md` are untouched by a removal, the removed member's row stays in `consumption.md` marked removed so the run total stays truthful, and deliverables already written stay on disk. See *Removing a Pack* in `.github/instructions/squad/squad-roster.instructions.md`.
+A pack is proposed, never imposed. The coordinator offers one at Init when the repository carries the domain's signals **or the request itself names the domain**, and offers one mid-project when a request needs a role only that pack provides. Confirmed mid-project additions use the sealed `roster-expansion.md` transaction for a plain squad or one selected federation member; it adds no model consumption and preserves the existing ledger, state, rates, notifications, and history byte-for-byte. A pack is equally removable: dropping one removes only the roles it still owns — never a role the profile or another pack also contributes — and appends a decision rather than editing anything. The append-only `decisions.md` and `history/<agent>.md` are untouched by a removal, the removed member's row stays in `consumption.md` marked removed so the run total stays truthful, and deliverables already written stay on disk. See *Removing a Pack* in `.github/instructions/squad/squad-roster.instructions.md`.
 
 ### Pack Discovery
 

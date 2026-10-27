@@ -133,10 +133,28 @@ $containers = @(
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'SetSquadCostPreflight.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'SquadUsage.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'SetSquadModelRouting.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'WriteSquadHandoff.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'Invoke-SquadPowerShellProbe.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'WriteSquadVerdict.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'PromoteSquadFederation.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'InitializeSquadFederation.Tests.ps1') -Data @{
+        PackageRoot = $PackageRoot
+    }
+    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ExpandSquadRoster.Tests.ps1') -Data @{
         PackageRoot = $PackageRoot
     }
     New-PesterContainer -Path (Join-Path $PSScriptRoot 'BoundedLane.Tests.ps1') -Data @{
@@ -184,6 +202,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Source') {
         SourceRoot = $SourceRoot
     }
     $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'SquadBuilder.Tests.ps1') -Data @{
+        SourceRoot = $SourceRoot
+    }
+    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'CoordinatorRuntime.Tests.ps1') -Data @{
         SourceRoot = $SourceRoot
     }
 }

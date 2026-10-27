@@ -3,7 +3,7 @@ title: Squad Skill Security Model
 description: STRIDE model for local squad routing, connector file exchanges, and state persistence.
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-23
+ms.date: 2026-10-26
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
@@ -15,8 +15,14 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `Resolve-SquadConnectorHistory.ps1`,
 `Resolve-SquadModelRoute.ps1`, its shared `ModelBenchmarkScoring.ps1`,
 `Get-SquadDispatchBrief.ps1`,
-`Write-SquadHandoff.ps1`, `Measure-SquadLedger.ps1`,
-`Set-SquadCostPreflight.ps1`, and `Initialize-SquadConsumptionRates.ps1`.
+`New-SquadDispatchPlan.ps1`, `Set-SquadModelRouting.ps1`,
+`Get-SquadPromotionPlan.ps1`, `Promote-SquadFederation.ps1`, and their shared
+`SquadPromotion.psm1`,
+`Get-SquadFederationInitPlan.ps1`, `Initialize-SquadFederation.ps1`,
+`Get-SquadRosterExpansionPlan.ps1`, `Expand-SquadRoster.ps1`,
+`Write-SquadHandoff.ps1`, `Write-SquadVerdict.ps1`, `Measure-SquadLedger.ps1`,
+the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`, and
+`Initialize-SquadConsumptionRates.ps1`.
 The two buckets below cover configuration/dispatch and file exchange/persistence.
 Each enumerates all six STRIDE categories. Agent instructions are procedural
 controls, not a sandbox or a substitute for host filesystem permissions.
@@ -31,10 +37,10 @@ controls, not a sandbox or a substitute for host filesystem permissions.
 
 | Surface | Current controls | Residual boundary |
 |---|---|---|
-| Routing and registration | Explicit roster bindings, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
+| Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell and additive roster expansion, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
 | Offline capability evidence | Exact model/configuration checks, explicit verification dates, common versioned panels, digest validation and visible fallback | Curated verification facts and source hashes are not authenticated measurement signatures. |
 | External file exchange | Closed schemas, request/result identity matching, output allowlists, structural path containment | A matching envelope does not authenticate its author. |
-| Persistence | Scribe payload validation, binding-matched provenance, distinct member accounting, ledger checks | History is local and editable by principals with repository write access. |
+| Persistence | Closed handoff/verdict payload validation, shared per-root writer locks, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, cumulative exact-session journal with history-prefix and native-identity deduplication, unique APM/plugin agent-name canonicalization, ledger checks | History, verdicts, lifecycle plans, and exact-session snapshots are local and editable by principals with repository write access; hashes detect changes but do not authenticate authors. |
 | Domain execution | Consumer-owned adapter; no connector command execution | Host permissions and consumer automation govern actual source changes. |
 
 Ratings are qualitative under the assumption that an external producer can
@@ -59,6 +65,10 @@ Different filesystem permissions or unattended policies change the risk.
 * The coordinator classifies work and retains governance and admission.
 * Connector/model resolvers and the dispatch brief read roster, manifests,
   packaged model metadata, and local availability information.
+* The dispatch planner resolves only selected role units. Its routing writer may
+  add/change an active mode, Model column/cells, and supplied economy consent under
+  the exact team hash; roster membership, routing rows, `routing=off`, and state
+  remain outside its authority.
 * The shared benchmark scorer validates pinned evidence and recalculates
   verification expiry offline. The repository's maintainer-only
   `Sync-ModelBenchmarks.ps1` acquires original-source evidence; dispatch never
@@ -73,9 +83,47 @@ Different filesystem permissions or unattended policies change the risk.
   reject in both readers. It cannot register a removed endpoint or authorize
   later work.
 * The consumer's adapter runs its own agents or workflow outside this package.
-* The handoff writer, ledger calculator, preflight helper, and rate seeder write
-  their declared local state/output files. The ledger can read local host usage
-  logs for accounting; those logs are not connector identity evidence.
+* The handoff writer, routing writer, ledger calculator, preflight helper, and
+  rate seeder write their declared local state/output files. `SquadUsage.psm1`
+  streams local host usage logs, deduplicates complete accounting identities,
+  exposes native per-top-level-agent token categories and credits, and rolls nested
+  agents up through host parent identities. `Measure-SquadLedger.ps1` stores only
+  closed-schema per-session aggregates, hashed accounting identities, and ordered
+  history coverage in `consumption-sessions.json`; repeated writes replace one
+  native session and cross-session merges reject overlaps or history-prefix drift.
+  If the journal is absent, bootstrap reads only repository-matching local logs and
+  accepts them only when complete native event windows uniquely cover every metered
+  history timestamp; overlapping or missing coverage fails closed. Only the selected
+  active session receives a bounded open-tail allowance while its outer tool completion
+  is pending. A later session revalidates and refreshes the latest cached native session
+  from the completed log before appending. JSON timestamps remain strings during digest
+  validation, avoiding culture-dependent replay drift.
+  The ledger, run totals, and journal publish as one rollback-capable transaction.
+  These helpers never emit prompts, responses, tool arguments, or raw log lines;
+  host logs and the journal are not connector identity evidence.
+* The promotion planner writes only a transport plan outside squad state. It hashes
+  the complete plain-squad tree and every candidate directory. The promotion writer
+  requires that exact plan hash plus an exhaustive relocate/keep partition, stages
+  the final federation, revalidates under the ordinary writer lock, refuses linked
+  paths/collisions/replay, and publishes only verified local copies. The plan and
+  lock establish local integrity and serialization, not user identity.
+* The federation Init preparer validates every new member through the standard
+  Init payload builder and seals either a fresh root or the existing federation
+  snapshot. The initializer runs member transactions in parallel inside an
+  isolated stage and requires all receipts/ledgers. Fresh Init lock-publishes one
+  complete tree; Expansion validates an additive projection, then moves only new
+  members and owned root files under the same lock. A member failure or stale root
+  discards the stage. `Initialize-Squad.ps1` accepts a distinct agent validation
+  root only for the initializer's owned `.squad-federation-init-*` repository
+  stage, preventing general cross-repository roster validation.
+* The roster expansion planner resolves only confirmed shipped catalog roles and
+  packs, validates installed dispatchable Primaries, seals the selected root's
+  state/accounting/history and (for a member) its registry row, and emits exact
+  final roster/routing/decision bytes. The apply helper requires that plan hash,
+  revalidates under the plain lock or ordered federation/member locks, writes only those three files,
+  preserves accounting/state/history byte-for-byte, and checks the ledger
+  read-only. Recasting, removal, duplicate-role members, connectors, and existing
+  root edits remain outside this writer.
 
 ### Data Flow
 
@@ -84,7 +132,7 @@ flowchart TD
   subgraph Operator["Operator-controlled host"]
     Config["Roster, manifests, pinned evidence, installed scripts"]
     Shell["Coordinator and resolver helpers"]
-    Scribe["Handoff, preflight, rates, ledger"]
+    Scribe["Handoff, routing refresh, preflight, rates, ledger"]
   end
   subgraph Exchange["Untrusted producer boundary"]
     Mailbox["Request and result files"]
@@ -138,8 +186,8 @@ flowchart TD
 | A1 | Governance, council, and Scribe ownership | External work cannot acquire these authorities. |
 | A2 | Declared reports and authorized source worktree | No undeclared overwrite or cross-squad write |
 | A3 | Task/binding/member identity | Results stay attached to the intended request and squad. |
-| A4 | History and accounting | External work stays unverified and unmetered; shim spend remains attributable. |
-| A5 | Local inputs and host usage records | No unintended credential or raw-log disclosure |
+| A4 | History and accounting | External work stays unverified and unmetered; shim spend remains attributable; accepted exact sessions cannot overlap or detach from their covered history prefix. |
+| A5 | Local inputs, host usage records, and exact-session journal | Expose only hashed accounting identity, session/agent/model labels, token categories, and credits; no prompts, responses, tool arguments, credentials, or raw-log disclosure |
 
 ## Adversaries
 
@@ -168,6 +216,29 @@ digests. Acquisition and genuine verification remain separate from publication
 and generation dates. These checks constrain a curated record's use; they do
 not authenticate its publisher or make operator-supplied verification facts
 cryptographic proof. Protect the pinned evidence and review refreshes as code.
+Model refresh additionally requires the exact planned `team.md` hash, unchanged
+source cells, one unambiguous roster row per role, and a safe lowercase model id.
+Cost admission never trusts a lagging checkpoint as exact spend: native usage
+records require complete status and stable host accounting identities. Cumulative
+accounting additionally requires a unique native session id, non-overlapping hashed
+request identities, a closed cache schema, and cached history identities that remain
+an ordered prefix of current append-only history. Any mismatch keeps the journal
+unchanged and returns to the all-history estimator.
+
+Native role attribution does not trust a package-qualified host label by itself.
+The raw `agentName`, `agentDisplayName`, and final namespace/path segment may resolve
+only to one history-backed canonical agent name. This gives APM and plugin dispatches
+the same accounting identity while refusing collisions or ambiguous aliases.
+
+One legacy writer defect encoded an intentionally empty per-file session coverage
+suffix as `[null]`. The reader recognizes only a one-null coverage array whose
+persisted snapshot content digest still validates, normalizes it to empty in memory,
+and rewrites canonical `[]` on the next ordinary transaction. Other nulls, invalid
+identity strings, or digest drift remain rejected. Promotion's full-tree digest
+already seals the journal; the apply path additionally verifies its presence in the
+staged and published member. Its journal-only lifecycle advance accepts only newly
+appended identities with no consumption block and revalidates unchanged exact totals
+before publication.
 
 ### Repudiation
 
@@ -176,18 +247,27 @@ configuration. They are not a signed record of who authored that configuration.
 Pending identity hashes include the external member and owning roster, so a
 rename or cross-squad resume cannot silently relabel a result. Retirement records
 retain historical attribution only while the trusted local record remains intact.
+Routing refresh and Cost Preflight decisions record their selected roles/slots and
+inputs. Exact-session snapshots record native session and history coverage but remain
+local evidence rather than signed audit events.
 
 ### Information Disclosure
 
 Dispatch metadata and bounded inputs reach the selected endpoint. Limit those
 inputs and output roots to the approved task. Required skill names are local
 consumer configuration; manifests intentionally contain no credentials.
+Usage parsing returns aggregate accounting fields. The persistent journal hashes
+native accounting identities and never writes raw event content into squad state;
+host-log and journal access, retention, and repository visibility remain deployment
+concerns.
 
 ### Denial of Service
 
 Unknown bindings and ambiguous execution stop or request clarification.
 Unattended ambiguity fails closed. Invalid configuration can therefore block
 work deliberately; it must not cause an inline substitute.
+Incomplete or malformed native metering also blocks capped dispatch. Usage logs are
+streamed rather than loaded whole, but very large local logs still consume host I/O.
 
 ### Elevation of Privilege
 
@@ -220,6 +300,21 @@ The wrapper supplies the real workspace and immutable collision baseline,
 checks hashes, and publishes without overwrite. A stateless validation call
 alone does not prove replay protection or request/snapshot immutability.
 Use distinct write scopes; separate report roots do not isolate source writers.
+Promotion additionally rejects a changed plan hash, source/candidate digest,
+candidate set, required-directory omission, existing federation or destination
+collision before publish. Federation Init/Expansion binds the exact payload hash
+to either an absent/empty root or a snapshot of every root/history file, registered
+member state total and member-directory name. Expansion validates a staged final
+projection, refuses name/route/history collisions, revalidates under the root
+writer lock, never replaces existing member trees, and rolls back only files and
+member moves whose owned hashes still match. A principal able to replace both the
+installed scripts and the confirmed plan remains inside the trusted operator
+boundary.
+Roster expansion similarly binds exact final bytes to the current roster,
+routing, decisions, state, accounting, rates, notifications, history, and
+optional federation registry hashes. It refuses stale baselines and restores
+only files still matching its planned output, so it cannot silently overwrite a
+concurrent writer or reprice an exact ledger.
 
 ### Repudiation
 
@@ -270,6 +365,8 @@ least-privilege worktrees and isolation outside the prompt layer.
 | Escaping/undeclared report path | Medium | High | Medium | Wrapper filesystem/content checks tested; filesystem races and host permissions remain deployment boundaries |
 | Duplicate/partial or absent delivery | Medium | Medium | Medium | Consumer/shim lifecycle and atomic publication required |
 | Sensitive report/log disclosure | Deployment-dependent | High | Medium | Data minimization, content checks, and host ACLs required |
+| Stale or tampered federation promotion plan | Low | High | Low | Exact plan SHA-256, full-tree digests, explicit candidate partition, linked-path refusal, locked revalidation and staged publish |
+| Partial or conflicting federation initialization/expansion | Low | High | Low | Exact payload SHA-256, fresh/existing root snapshot, isolated parallel member staging, all-member receipt gate, root CAS lock, additive publish and owned-hash rollback |
 
 ## Enterprise Readiness Gaps
 
@@ -288,5 +385,12 @@ least-privilege worktrees and isolation outside the prompt layer.
 * [Connector resolver](scripts/Resolve-SquadConnectorDispatch.ps1)
 * [Connector lifecycle wrapper](scripts/Invoke-SquadConnectorDispatch.ps1)
 * [Handoff writer](scripts/Write-SquadHandoff.ps1)
+* [Verdict writer](scripts/Write-SquadVerdict.ps1)
+* [Promotion planner](scripts/Get-SquadPromotionPlan.ps1)
+* [Promotion transaction](scripts/Promote-SquadFederation.ps1)
+* [Federation Init preparer](scripts/Get-SquadFederationInitPlan.ps1)
+* [Federation Init transaction](scripts/Initialize-SquadFederation.ps1)
+* [Roster expansion planner](scripts/Get-SquadRosterExpansionPlan.ps1)
+* [Roster expansion transaction](scripts/Expand-SquadRoster.ps1)
 * [Consumer guide and examples](https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/CONSUMER-GUIDE.md)
 * [Repository security policy](https://github.com/Peter-N91/hve-squad/blob/main/SECURITY.md)
