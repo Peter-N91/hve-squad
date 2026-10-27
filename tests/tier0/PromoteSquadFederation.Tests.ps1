@@ -259,6 +259,22 @@ BeforeAll {
         $result = Invoke-Local $script:Ledger $Fixture.Repo @('-SquadRoot', $Fixture.Root, '-SessionLog', $session, '-Write')
         if ($result.ExitCode -ne 0) { throw $result.Output }
     }
+
+    function Set-LegacyNullCoverage {
+        param(
+            [Parameter(Mandatory)][string]$Path,
+            [Parameter(Mandatory)][string]$FileName
+        )
+        $document = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable -Depth 100 -DateKind String
+        $session = @($document.sessions)[-1]
+        $session.historyCoverage[$FileName] = @($null)
+        $null = $session.Remove('contentDigest')
+        $material = $session | ConvertTo-Json -Compress -Depth 20
+        $session['contentDigest'] = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($material))
+        )
+        [IO.File]::WriteAllText($Path, (($document | ConvertTo-Json -Depth 20) + "`n"), [Text.UTF8Encoding]::new($false))
+    }
 }
 
 AfterAll { $env:COPILOT_HOME = $script:OriginalCopilotHome }
@@ -436,11 +452,21 @@ Describe 'Deterministic federation promotion transaction' {
         Set-ExactLedger $fixture
         $stateBefore = Get-Content -LiteralPath (Join-Path $fixture.Root 'state.json') -Raw | ConvertFrom-Json
         $ledgerBefore = [IO.File]::ReadAllBytes((Join-Path $fixture.Root 'consumption.md'))
+        $journalPath = Join-Path $fixture.Root 'consumption-sessions.json'
+        Set-LegacyNullCoverage -Path $journalPath -FileName 'Squad Lead.md'
+        $journalBeforeText = [IO.File]::ReadAllText($journalPath)
+        $journalBeforeText | Should -Match '"Squad Lead\.md"\s*:\s*\[\s*null\s*\]'
+        $journalBefore = $journalBeforeText | ConvertFrom-Json
+        $recordsBefore = ($journalBefore.sessions | Measure-Object records -Sum).Sum
+        $sessionIdsBefore = @($journalBefore.sessions.sessionId)
         $plan = New-Plan $fixture
+        $plan.Result.exactSessionJournal | Should -Be 'included'
 
         $result = Invoke-Promotion $fixture $plan
 
         $result.ExitCode | Should -Be 0 -Because $result.Output
+        $receipt = $result.Output | ConvertFrom-Json
+        $receipt.exactSessionJournal | Should -Be 'preserved'
         $member = Join-Path $fixture.Root 'members/product'
         $memberState = Get-Content -LiteralPath (Join-Path $member 'state.json') -Raw | ConvertFrom-Json
         $rootState = Get-Content -LiteralPath (Join-Path $fixture.Root 'state.json') -Raw | ConvertFrom-Json
@@ -449,6 +475,11 @@ Describe 'Deterministic federation promotion transaction' {
         $rootState.currentRun.estCostUsd | Should -Be $stateBefore.currentRun.estCostUsd
         $rootState.currentRun.estCreditsTotal | Should -Be $stateBefore.currentRun.estCreditsTotal
         [IO.File]::ReadAllBytes((Join-Path $member 'consumption.md')) | Should -Be $ledgerBefore
+        $journalAfterText = [IO.File]::ReadAllText((Join-Path $member 'consumption-sessions.json'))
+        $journalAfterText | Should -Not -Match '"Squad Lead\.md"\s*:\s*\[\s*null\s*\]'
+        $journalAfter = $journalAfterText | ConvertFrom-Json
+        ($journalAfter.sessions | Measure-Object records -Sum).Sum | Should -Be $recordsBefore
+        @($journalAfter.sessions.sessionId) | Should -Be $sessionIdsBefore
         $ledger = [IO.File]::ReadAllText((Join-Path $member 'consumption.md'))
         $ledger | Should -Match 'Exact Cost \(USD\)'
         $ledger | Should -Not -Match 'Est\. Cost \(USD\)'

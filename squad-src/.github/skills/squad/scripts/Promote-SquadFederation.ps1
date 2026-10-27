@@ -67,6 +67,8 @@ $committed = $false
 $sourceMoved = $false
 $movedCandidates = [Collections.Generic.List[string]]::new()
 $finalSnapshot = $null
+$exactSessionJournalPresent = $false
+$journalAdvance = $null
 $exitCode = 1
 $stopwatch = [Diagnostics.Stopwatch]::StartNew()
 
@@ -342,6 +344,11 @@ try {
     $sourceRoot = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $plan.squadRoot
     $trackingRoot = Split-Path -Parent $sourceRoot
     Assert-LivePlan -Plan $plan -CandidateMap $candidateMap -SourceRoot $sourceRoot -TrackingRoot $trackingRoot
+    $sourceSessionJournal = Join-Path $sourceRoot 'consumption-sessions.json'
+    if ((Test-Path -LiteralPath $sourceSessionJournal) -and -not (Test-Path -LiteralPath $sourceSessionJournal -PathType Leaf)) {
+        throw 'Plain squad consumption-sessions.json must be a file when present.'
+    }
+    $exactSessionJournalPresent = Test-Path -LiteralPath $sourceSessionJournal -PathType Leaf
 
     $transactionId = [guid]::NewGuid().ToString('N')
     $stageContainer = Join-Path $trackingRoot ".squad-promotion-$transactionId"
@@ -352,6 +359,9 @@ try {
     $null = [IO.Directory]::CreateDirectory((Split-Path -Parent $stageMember))
 
     Copy-SquadPromotionTree -Source $sourceRoot -Destination $stageMember -ExpectedSnapshot $plan.source
+    if ((Test-Path -LiteralPath (Join-Path $stageMember 'consumption-sessions.json') -PathType Leaf) -ne $exactSessionJournalPresent) {
+        throw 'Staged member did not preserve the exact-session journal state.'
+    }
     foreach ($name in $relocated) {
         $destination = Join-Path $stageMember $name
         if (Test-Path -LiteralPath $destination) { throw "Relocated directory '$name' collides with existing squad state." }
@@ -379,6 +389,13 @@ try {
     $historyPath = Join-Path $stageMember 'history' 'Squad Scribe.md'
     [IO.File]::WriteAllBytes($historyPath, (Add-SquadPromotionEntry -Path $historyPath -Header "---`ndescription: `"Append-only dispatch history for a single squad agent`"`n---`n`n# History: Squad Scribe" -Entry $entry))
 
+    if ($exactSessionJournalPresent) {
+        $journalAdvance = Invoke-SquadLocalScript -Name 'Measure-SquadLedger.ps1' `
+            -Arguments @('-SquadRoot', $stageMember, '-AdvanceUnmeteredHistory') -TimeoutSeconds 180
+        if ($journalAdvance.exitCode -ne 0) {
+            throw "Promotion exact-session journal advance failed: $($journalAdvance.stderr.Trim()) $($journalAdvance.stdout.Trim())"
+        }
+    }
     $ledgerCheck = Invoke-SquadLocalScript -Name 'Measure-SquadLedger.ps1' -Arguments @('-SquadRoot', $stageMember, '-Check') -TimeoutSeconds 180
     if ($ledgerCheck.exitCode -ne 0 -or $ledgerCheck.stdout -notmatch 'Measure-SquadLedger -Check: PASS') {
         throw "Promotion ledger check failed: $($ledgerCheck.stderr.Trim()) $($ledgerCheck.stdout.Trim())"
@@ -416,6 +433,9 @@ try {
     if ($federationSnapshot.members.Count -ne 1 -or -not $federationSnapshot.members.Contains($plan.name)) {
         throw 'Published federation member verification failed.'
     }
+    if ((Test-Path -LiteralPath (Join-Path $sourceRoot 'members' $plan.name 'consumption-sessions.json') -PathType Leaf) -ne $exactSessionJournalPresent) {
+        throw 'Published member did not preserve the exact-session journal state.'
+    }
     foreach ($name in $relocated) {
         if (Test-Path -LiteralPath (Join-Path $trackingRoot $name)) { throw "Relocated source still exists: $name" }
         if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot 'members' $plan.name $name) -PathType Container)) {
@@ -445,6 +465,9 @@ try {
     foreach ($text in @($ledgerCheck.stderr.Trim())) {
         if ($text) { $warnings.Add($text) }
     }
+    if ($journalAdvance -and $journalAdvance.stderr.Trim()) {
+        $warnings.Add($journalAdvance.stderr.Trim())
+    }
     foreach ($text in $cleanupWarnings) { $warnings.Add($text) }
     [ordered]@{
         status = $(if ($cleanupWarnings.Count) { 'promoted-cleanup-required' } else { 'promoted' })
@@ -457,6 +480,7 @@ try {
         federationTurn = $publishedState.turn
         costUsd = $memberState.currentRun.estCostUsd
         credits = $memberState.currentRun.estCreditsTotal
+        exactSessionJournal = $(if ($exactSessionJournalPresent) { 'preserved' } else { 'absent' })
         elapsedMs = $stopwatch.ElapsedMilliseconds
         warnings = $warnings.ToArray()
         cleanupRequired = $cleanupWarnings.Count -gt 0

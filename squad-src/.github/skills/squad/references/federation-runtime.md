@@ -45,8 +45,8 @@ members, and its accounting/state/history.
 
 Promotion plans name/transport, presents candidates/reasons, then waits; Watch
 selects all. Apply the hash and exhaustive relocate/keep partition with
-`Promote-SquadFederation.ps1 -Confirmed`. It preserves ledger totals, revalidates
-under lock, swaps, and carries costs. Nonzero has no fallback; Watch exit 4
+`Promote-SquadFederation.ps1 -Confirmed`. It preserves ledger totals and the optional
+exact-session journal, revalidates under lock, swaps, and carries costs. Nonzero has no fallback; Watch exit 4
 re-detects once.
 
 Watch bootstrap follows opt-in/authorization before classification. Names come

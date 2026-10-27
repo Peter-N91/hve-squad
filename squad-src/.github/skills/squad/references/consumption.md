@@ -136,6 +136,19 @@ cached native session from its now-completed log before it adds the new session.
 coordinator records therefore accumulate instead of being stranded in the closed
 session.
 
+Earlier cumulative writers could serialize a session's intentionally empty
+per-file history suffix as `[null]` after prior sessions had already covered that
+file. The reader accepts only that exact one-null legacy shape after the snapshot's
+persisted content digest validates, treats it as an empty array in memory, and the
+next ordinary write replaces it with canonical `[]` plus a refreshed digest. Any
+other null or invalid identity still fails closed.
+
+Script-only lifecycle transactions that append history without a consumption block
+use `-AdvanceUnmeteredHistory`. That mode proves the new suffix contains no metered
+entry, attaches only its identities to the latest accepted snapshot, revalidates the
+cumulative exact totals, and atomically rewrites only the journal. It cannot change
+requests, tokens, credits, `consumption.md`, or `state.json`.
+
 `consumption.md`, `state.json`, and `consumption-sessions.json` are one atomic writer
 transaction. A malformed journal, changed history prefix, duplicate native identity,
 missing native coverage, or incomplete current session leaves the journal unchanged

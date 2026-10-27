@@ -2536,6 +2536,102 @@ Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exac
             $session2
         }
 
+        function Add-ThirdSessionHistoryLocal {
+            param([Parameter(Mandatory)][string]$Root)
+            Set-Content -LiteralPath (Join-Path $Root 'history/Squad Lead.md') -Encoding utf8NoBOM -Value @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Lead
+
+### 2026-10-03T10:00:00Z Planning the third fixture increment
+
+* Turn: 4
+* Request: Plan the third fixture increment.
+* Deliverable: `plans/2026-10-03-fixture-plan.md`
+* Outcome: Recorded the third exact-session increment.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "session-inherited",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 4,
+  "input_tokens": 2000,
+  "cached_tokens": 8000,
+  "cache_write_tokens": 0,
+  "output_tokens": 2000,
+  "basis": "estimated"
+}
+```
+'@
+            Add-Content -LiteralPath (Join-Path $Root 'history/Squad Scribe.md') -Encoding utf8NoBOM -Value @'
+
+### 2026-10-03T10:05:00Z Recording the third fixture increment
+
+* Turn: 4
+* Request: Record the third fixture increment and advance state.
+* Deliverable: `state.json`, `consumption.md`, `history/Squad Lead.md`
+* Outcome: Recorded the third exact-session increment.
+
+#### Consumption — Orchestration
+
+```json
+{
+  "model": "Claude Haiku 4.5",
+  "model_source": "agent-pinned",
+  "priced_as": "Claude Haiku 4.5",
+  "model_tier": "fast",
+  "internal_turns": 2,
+  "input_tokens": 1000,
+  "cached_tokens": 1000,
+  "cache_write_tokens": 0,
+  "output_tokens": 1000,
+  "basis": "estimated"
+}
+```
+'@
+        }
+
+        function Add-ThirdSessionLogLocal {
+            param([Parameter(Mandatory)]$Fixture)
+            $session3 = Join-Path $Fixture.Home 'session-state/sess-0003'
+            New-Item -ItemType Directory -Path $session3 -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $session3 'workspace.yaml') -Value "id: sess-0003`ncwd: $($Fixture.Repo)`n"
+            Set-Content -LiteralPath (Join-Path $session3 'events.jsonl') -Value (@(
+                    '{"type":"session.start","data":{"sessionId":"sess-0003"},"timestamp":"2026-10-03T09:59:00.000Z"}'
+                    '{"type":"subagent.started","agentId":"lead-3","data":{"toolCallId":"t5","agentName":"Squad Lead","agentDisplayName":"lead","model":"claude-sonnet-4.6"},"timestamp":"2026-10-03T10:00:01.000Z"}'
+                    (New-ExactUsageEventLocal -AgentId 'lead-3' -SourceSessionId 'lead-session-3' -UsageId 'five' -Model 'claude-sonnet-4.6' -FreshInput 20000 -Cached 10000 -CacheWrite 0 -Output 2000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-03T10:02:00.000Z')
+                    '{"type":"subagent.started","agentId":"scribe-3","data":{"toolCallId":"t6","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-03T10:02:01.000Z"}'
+                    (New-ExactUsageEventLocal -AgentId 'scribe-3' -SourceSessionId 'scribe-session-3' -UsageId 'six' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-03T10:03:00.000Z')
+                ) -join "`n")
+            (Get-Item -LiteralPath (Join-Path $session3 'events.jsonl')).LastWriteTimeUtc = [datetime]'2026-10-03T10:03:00Z'
+            $session3
+        }
+
+        function Set-LegacyNullCoverageLocal {
+            param(
+                [Parameter(Mandatory)][string]$Path,
+                [Parameter(Mandatory)][string]$SessionId,
+                [Parameter(Mandatory)][string]$FileName
+            )
+            $document = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable -Depth 100 -DateKind String
+            $session = @($document.sessions | Where-Object sessionId -eq $SessionId)
+            if ($session.Count -ne 1) { throw "Expected one journal session '$SessionId'." }
+            $session = $session[0]
+            $session.historyCoverage[$FileName] = @($null)
+            $null = $session.Remove('contentDigest')
+            $material = $session | ConvertTo-Json -Compress -Depth 20
+            $session['contentDigest'] = [Convert]::ToHexString(
+                [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($material))
+            )
+            [IO.File]::WriteAllText($Path, (($document | ConvertTo-Json -Depth 20) + "`n"), [Text.UTF8Encoding]::new($false))
+        }
+
         $script:BaseEvents = @(
             '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-09-27T09:59:00.000Z"}'
             '{"type":"tool.execution_start","data":{"toolCallId":"t1","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/research/x.md"}},"timestamp":"2026-10-01T10:00:01.000Z"}'
@@ -2678,6 +2774,46 @@ Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exac
         $replayed | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
         @((Get-Content -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -Raw | ConvertFrom-Json).sessions).Count | Should -Be 2
         (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+    }
+
+    It 'writes canonical empty history suffix arrays for later sessions and migrates the legacy null encoding' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        $session2 = Add-SecondSessionLogLocal -Fixture $f
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session2 -Write).ExitCode | Should -Be 0
+
+        Add-ThirdSessionHistoryLocal -Root $f.Root
+        $session3 = Add-ThirdSessionLogLocal -Fixture $f
+        $thirdWrite = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session3 -Write
+        $thirdWrite.ExitCode | Should -Be 0 -Because $thirdWrite.Output
+
+        $cachePath = Join-Path $f.Root 'consumption-sessions.json'
+        $cacheText = Get-Content -LiteralPath $cachePath -Raw
+        $cacheText | Should -Not -Match '"Squad Researcher\.md"\s*:\s*\[\s*null\s*\]'
+        $document = [System.Text.Json.JsonDocument]::Parse($cacheText)
+        try {
+            $third = @($document.RootElement.GetProperty('sessions').EnumerateArray()) |
+                Where-Object { $_.GetProperty('sessionId').GetString() -eq 'sess-0003' }
+            @($third).Count | Should -Be 1
+            $third.GetProperty('historyCoverage').GetProperty('Squad Researcher.md').GetArrayLength() | Should -Be 0
+        }
+        finally {
+            $document.Dispose()
+        }
+
+        Set-LegacyNullCoverageLocal -Path $cachePath -SessionId 'sess-0003' -FileName 'Squad Researcher.md'
+        (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{
+                'Squad Lead' = 1
+                'Squad Researcher' = 2
+                'Squad Scribe' = 3
+            }).ExitCode | Should -Be 0
+
+        $migration = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session3 -Write
+        $migration.ExitCode | Should -Be 0 -Because $migration.Output
+        $migration.Output | Should -Match 'normalized legacy null historyCoverage arrays'
+        (Get-Content -LiteralPath $cachePath -Raw) | Should -Not -Match '"Squad Researcher\.md"\s*:\s*\[\s*null\s*\]'
     }
 
     It 'bootstraps a missing journal from complete auto-selected sessions that uniquely cover existing history' {

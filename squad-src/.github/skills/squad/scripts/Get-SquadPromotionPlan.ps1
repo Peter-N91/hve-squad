@@ -71,6 +71,11 @@ try {
     foreach ($required in @('team.md', 'routing.md', 'decisions.md', 'notifications.md', 'state.json', 'consumption.md', 'consumption-rates.md', 'history')) {
         if (-not (Test-Path -LiteralPath (Join-Path $root $required))) { throw "Plain squad is missing required state: $required" }
     }
+    $sessionJournalPath = Join-Path $root 'consumption-sessions.json'
+    if ((Test-Path -LiteralPath $sessionJournalPath) -and -not (Test-Path -LiteralPath $sessionJournalPath -PathType Leaf)) {
+        throw 'Plain squad consumption-sessions.json must be a file when present.'
+    }
+    $sessionJournalPresent = Test-Path -LiteralPath $sessionJournalPath -PathType Leaf
     if (Test-Path -LiteralPath (Join-Path $root 'federation.md')) { throw 'This repository is already a federation.' }
     if (Test-Path -LiteralPath (Join-Path $root 'members' $Name)) { throw "Federation member '$Name' already exists." }
     if (Test-Path -LiteralPath (Join-Path $root 'members')) { throw 'A plain squad cannot be promoted while a top-level members directory already exists.' }
@@ -159,6 +164,7 @@ try {
                     reasons = $_.reasons
                 }
             })
+        exactSessionJournal = $(if ($sessionJournalPresent) { 'included' } else { 'absent' })
         notify = $plan.member.notify
         confirmationRequired = -not [bool]$watchCount
         stateWritten = $false

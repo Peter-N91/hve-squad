@@ -230,6 +230,16 @@ The raw `agentName`, `agentDisplayName`, and final namespace/path segment may re
 only to one history-backed canonical agent name. This gives APM and plugin dispatches
 the same accounting identity while refusing collisions or ambiguous aliases.
 
+One legacy writer defect encoded an intentionally empty per-file session coverage
+suffix as `[null]`. The reader recognizes only a one-null coverage array whose
+persisted snapshot content digest still validates, normalizes it to empty in memory,
+and rewrites canonical `[]` on the next ordinary transaction. Other nulls, invalid
+identity strings, or digest drift remain rejected. Promotion's full-tree digest
+already seals the journal; the apply path additionally verifies its presence in the
+staged and published member. Its journal-only lifecycle advance accepts only newly
+appended identities with no consumption block and revalidates unchanged exact totals
+before publication.
+
 ### Repudiation
 
 Binding/member ids and Scribe-rendered provenance identify the selected

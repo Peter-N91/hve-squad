@@ -239,6 +239,14 @@
     embed it is a separate, contract-text task outside this script's scope.
     No other switch (`-Check`, `-EmitBaseline`, `-BaselinePath`, `-Format`
     aside) is honored in this mode.
+.PARAMETER AdvanceUnmeteredHistory
+    Journal-only deterministic lifecycle mode. It requires an existing exact-session
+    journal, proves that every newly appended history identity has no consumption
+    block, attaches that zero-consumption suffix to the latest accepted session,
+    validates cumulative coverage and exact totals, then atomically rewrites only
+    `consumption-sessions.json`. Promotion uses this after appending its script-only
+    lifecycle entry. It never changes `consumption.md`, `state.json`, request totals,
+    or credits.
 .PARAMETER SessionLog
     Optional host session log holding real per-dispatch usage: a Copilot CLI /
     VS Code agent-host `events.jsonl`, the session directory that contains it,
@@ -318,6 +326,8 @@ param(
     [string]$LookupStage,
 
     [string]$LookupSlot,
+
+    [switch]$AdvanceUnmeteredHistory,
 
     [string]$SessionLog,
 
@@ -1073,7 +1083,10 @@ function Test-HistoryIdentityGuardLocal {
         $idsMatch = [regex]::Match($lineMatch.Groups['rest'].Value, '— identities: (?<ids>.*)$')
         if (-not $idsMatch.Success) { continue }
         $idsText = $idsMatch.Groups['ids'].Value.Trim()
-        $ids = if (-not $idsText -or $idsText -eq '(none)') { @() } else { @($idsText -split ',' | ForEach-Object { $_.Trim() }) }
+        $ids = [string[]]@()
+        if ($idsText -and $idsText -ne '(none)') {
+            $ids = [string[]]@($idsText -split ',' | ForEach-Object { $_.Trim() })
+        }
         # Only this script writes identities, always as 8-hex hashes. A hand-written
         # placeholder ('unreported', a model source) carries no record, so the file is
         # treated as unrecorded (the partial-paste path below) instead of as a rewrite.
@@ -2181,7 +2194,10 @@ function Get-RecordedHistoryCoverageLocal {
     foreach ($line in [regex]::Matches($derivation.Groups['body'].Value, '(?m)^(?<file>.+\.md) — \d+ block\(s\) — identities: (?<ids>.*)$')) {
         $fileName = $line.Groups['file'].Value.Trim()
         $text = $line.Groups['ids'].Value.Trim()
-        $ids = if (-not $text -or $text -eq '(none)') { @() } else { @($text -split ',' | ForEach-Object { $_.Trim() }) }
+        $ids = [string[]]@()
+        if ($text -and $text -ne '(none)') {
+            $ids = [string[]]@($text -split ',' | ForEach-Object { $_.Trim() })
+        }
         if (@($ids | Where-Object { $_ -notmatch '^[0-9a-f]{8}$' }).Count -gt 0) {
             throw "Exact ledger history coverage for '$fileName' contains an invalid identity."
         }
@@ -2352,13 +2368,21 @@ function Read-ExactSessionCacheLocal {
             throw "consumption-sessions.json session '$sessionId' historyCoverage is not an object."
         }
         $coverage = [ordered]@{}
+        $digestCoverage = [ordered]@{}
+        $coverageMigrationRequired = $false
         foreach ($fileName in $rawSession.historyCoverage.Keys) {
             if ([string]$fileName -notmatch '\.md$') { throw "Session '$sessionId' historyCoverage key '$fileName' is not a Markdown file." }
             $ids = @($rawSession.historyCoverage[$fileName])
+            $digestCoverage[[string]$fileName] = @($ids)
+            if ($ids.Count -eq 1 -and $null -eq $ids[0]) {
+                $coverage[[string]$fileName] = [string[]]@()
+                $coverageMigrationRequired = $true
+                continue
+            }
             if (@($ids | Where-Object { [string]$_ -notmatch '^[0-9a-f]{8}$' }).Count -gt 0) {
                 throw "Session '$sessionId' historyCoverage for '$fileName' contains an invalid identity."
             }
-            $coverage[[string]$fileName] = @($ids | ForEach-Object { [string]$_ })
+            $coverage[[string]$fileName] = [string[]]@($ids | ForEach-Object { [string]$_ })
         }
 
         $rows = [Collections.Generic.List[object]]::new()
@@ -2446,8 +2470,21 @@ function Read-ExactSessionCacheLocal {
                 requestDetailStatus = [string]$rawSession.requestDetailStatus
                 historyCoverage = $coverage
                 rows = $rows.ToArray()
+                cacheMigrationRequired = $coverageMigrationRequired
             }
-        $normalizedRecord = ConvertTo-ExactCacheSessionRecordLocal -Session $normalizedSession -IncludeContentDigest
+        $digestSession = [pscustomobject][ordered]@{
+                sessionId = $normalizedSession.sessionId
+                source = $normalizedSession.source
+                first = $normalizedSession.first
+                last = $normalizedSession.last
+                through = $normalizedSession.through
+                records = $normalizedSession.records
+                identityDigest = $normalizedSession.identityDigest
+                requestDetailStatus = $normalizedSession.requestDetailStatus
+                historyCoverage = $digestCoverage
+                rows = $normalizedSession.rows
+            }
+        $normalizedRecord = ConvertTo-ExactCacheSessionRecordLocal -Session $digestSession -IncludeContentDigest
         if ([string]$normalizedRecord.contentDigest -cne [string]$rawSession.contentDigest) {
             throw "consumption-sessions.json session '$sessionId' contentDigest does not match its persisted fields."
         }
@@ -2710,7 +2747,10 @@ function Get-ExactCoveragePlanLocal {
     foreach ($fileName in @($CurrentHistoryCoverage.Keys | Sort-Object)) {
         $all = @($CurrentHistoryCoverage[$fileName])
         $offset = @(if ($priorCoverage.Contains($fileName)) { $priorCoverage[$fileName] } else { @() }).Count
-        $currentCoverage[$fileName] = if ($offset -lt $all.Count) { @($all[$offset..($all.Count - 1)]) } else { @() }
+        $currentCoverage[$fileName] = [string[]]@()
+        if ($offset -lt $all.Count) {
+            $currentCoverage[$fileName] = [string[]]@($all[$offset..($all.Count - 1)] | ForEach-Object { [string]$_ })
+        }
     }
     $existing = if ($currentIndex -ge 0) { $Sessions[$currentIndex] } else { $null }
     $existingCoverage = if ($existing) { $existing.historyCoverage } else { [ordered]@{} }
@@ -4384,6 +4424,17 @@ function ConvertTo-ExpectedHistoryCountsLocal {
 }
 $ExpectedHistoryCounts = ConvertTo-ExpectedHistoryCountsLocal -Value $ExpectedHistoryCounts
 
+if ($AdvanceUnmeteredHistory) {
+    foreach ($incompatible in @('Check', 'Write', 'SessionLog', 'EmitBaseline', 'BaselinePath', 'ProtectedPath', 'AllowedWritePath', 'LookupRunId', 'LookupTopic', 'LookupStage', 'LookupSlot', 'BaselineModel')) {
+        if ($PSBoundParameters.ContainsKey($incompatible)) {
+            throw "Measure-SquadLedger: -AdvanceUnmeteredHistory cannot be combined with -$incompatible."
+        }
+    }
+    if ($ExpectedHistoryCounts.Count -gt 0) {
+        throw 'Measure-SquadLedger: -AdvanceUnmeteredHistory cannot be combined with -ExpectedHistoryCounts.'
+    }
+}
+
 if ($Write) {
     if ($Check) {
         throw 'Measure-SquadLedger: -Write cannot be combined with -Check. Run -Write, then run -Check -ExpectedHistoryCounts separately as the self-check.'
@@ -4768,6 +4819,66 @@ if (-not $Check -and $identityGuardResult) {
 
 $initializationOnly = @($historyFiles | Where-Object { $_.Name -ne 'Squad Scribe.md' }).Count -eq 0
 $initializationComparison = 'n/a (initialization). Setup spend is recorded above using the ledger basis; the first comparison follows the first work dispatch.'
+
+if ($AdvanceUnmeteredHistory) {
+    if (-not (Test-Path -LiteralPath $sessionCachePath -PathType Leaf)) {
+        throw 'Measure-SquadLedger: -AdvanceUnmeteredHistory requires consumption-sessions.json.'
+    }
+    $cacheSessions = @(Read-ExactSessionCacheLocal -Path $sessionCachePath)
+    if ($cacheSessions.Count -eq 0) {
+        throw 'Measure-SquadLedger: -AdvanceUnmeteredHistory requires at least one accepted exact-session snapshot.'
+    }
+    $migrationCount = @(
+        $cacheSessions | Where-Object {
+            $_.PSObject.Properties['cacheMigrationRequired'] -and $_.cacheMigrationRequired
+        }
+    ).Count
+    $coveragePlan = Get-ExactCoveragePlanLocal -Sessions $cacheSessions `
+        -CurrentSessionId '__advance-unmetered-history__' -CurrentHistoryCoverage $historyIdentitiesByFile
+    $newHistoryCount = [int]((
+            $coveragePlan.CurrentCoverage.Values |
+                ForEach-Object { @($_).Count } |
+                Measure-Object -Sum
+        ).Sum)
+    if ($newHistoryCount -gt 0) {
+        $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coveragePlan.CurrentCoverage `
+            -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
+            -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
+        if ([int]$expected.MeteredEntryCount -ne 0) {
+            throw 'Measure-SquadLedger: -AdvanceUnmeteredHistory refuses consumption-backed history; use an ordinary exact ledger write.'
+        }
+        $lastIndex = $cacheSessions.Count - 1
+        $cacheSessions[$lastIndex].historyCoverage = Join-HistoryCoverageLocal `
+            -Left $cacheSessions[$lastIndex].historyCoverage -Right $coveragePlan.CurrentCoverage
+    }
+    $cumulativeCoverage = Get-CumulativeHistoryCoverageLocal -Sessions $cacheSessions
+    $null = Test-HistoryCoveragePrefixLocal -Recorded $cumulativeCoverage -Current $historyIdentitiesByFile -RequireComplete
+    $validatedExact = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+        -BaselineModel '' -ActiveSession $null -Warnings $warnings
+    if (-not $validatedExact) {
+        throw 'Measure-SquadLedger: -AdvanceUnmeteredHistory could not validate the cumulative exact-session totals.'
+    }
+
+    $text = ConvertTo-ExactSessionCacheDocumentLocal -Sessions $cacheSessions
+    $tmp = Join-Path (Split-Path -Parent $sessionCachePath) (".$([IO.Path]::GetFileName($sessionCachePath)).$([guid]::NewGuid().ToString('N')).tmp")
+    try {
+        [IO.File]::WriteAllText($tmp, $text, [Text.UTF8Encoding]::new($false))
+        [IO.File]::Move($tmp, $sessionCachePath, $true)
+    }
+    catch {
+        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+        throw "Measure-SquadLedger: -AdvanceUnmeteredHistory could not rewrite consumption-sessions.json: $($_.Exception.Message)"
+    }
+    [ordered]@{
+        status = 'advanced-unmetered-history'
+        historyEntries = $newHistoryCount
+        sessions = $cacheSessions.Count
+        migratedSnapshots = $migrationCount
+        records = [long]$validatedExact.SnapshotRecords
+        credits = [double]($validatedExact.TotalNanoAiu / [decimal]1e9)
+    } | ConvertTo-Json -Compress
+    exit 0
+}
 
 if ($Check) {
     $mismatches = [System.Collections.Generic.List[string]]::new()
@@ -5166,6 +5277,15 @@ if ($SessionLog) {
     $legacyMigrated = $false
     try {
         $cacheSessions = @(Read-ExactSessionCacheLocal -Path $sessionCachePath)
+        $nullCoverageMigrations = @(
+            $cacheSessions | Where-Object {
+                $_.PSObject.Properties['cacheMigrationRequired'] -and $_.cacheMigrationRequired
+            }
+        )
+        if ($nullCoverageMigrations.Count -gt 0) {
+            $cacheChanged = $true
+            $warnings.Add("WARN: normalized legacy null historyCoverage arrays in $($nullCoverageMigrations.Count) exact-session snapshot(s); the next write persists canonical empty arrays and refreshed content digests.")
+        }
         if ($cacheSessions.Count -eq 0 -and -not (Test-Path -LiteralPath $sessionCachePath -PathType Leaf) -and $existingConsumptionContent) {
             $legacySession = Convert-ExistingExactLedgerToCacheSessionLocal -ConsumptionContent $existingConsumptionContent -CurrentHistoryCoverage $historyIdentitiesByFile
             if ($legacySession) {
