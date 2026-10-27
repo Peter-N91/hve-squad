@@ -5,10 +5,10 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Resolve-SquadSessionLogPath {
+function Resolve-SquadSessionLogPaths {
     <#
     .SYNOPSIS
-        Resolves an explicit events.jsonl path or the newest Copilot session for a repository.
+        Resolves an explicit events.jsonl path or every matching Copilot session for a repository.
     #>
     [CmdletBinding()]
     param(
@@ -26,13 +26,13 @@ function Resolve-SquadSessionLogPath {
         if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
             throw "Session log '$SessionLog' does not resolve to an events.jsonl file."
         }
-        return (Resolve-Path -LiteralPath $candidate).ProviderPath
+        return @((Resolve-Path -LiteralPath $candidate).ProviderPath)
     }
 
     $repository = [IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
     $copilotHome = if ($env:COPILOT_HOME) { $env:COPILOT_HOME } else { Join-Path $HOME '.copilot' }
     $stateRoot = Join-Path $copilotHome 'session-state'
-    if (-not (Test-Path -LiteralPath $stateRoot -PathType Container)) { return $null }
+    if (-not (Test-Path -LiteralPath $stateRoot -PathType Container)) { return @() }
 
     $candidates = [Collections.Generic.List[IO.FileInfo]]::new()
     foreach ($directory in [IO.Directory]::EnumerateDirectories($stateRoot)) {
@@ -44,6 +44,7 @@ function Resolve-SquadSessionLogPath {
             $right.LastWriteTimeUtc.CompareTo($left.LastWriteTimeUtc)
         })
 
+    $matches = [Collections.Generic.List[string]]::new()
     foreach ($events in $candidates) {
         $workspace = Join-Path $events.DirectoryName 'workspace.yaml'
         if (-not (Test-Path -LiteralPath $workspace -PathType Leaf)) { continue }
@@ -56,9 +57,25 @@ function Resolve-SquadSessionLogPath {
             continue
         }
         if ([string]::Equals($cwd, $repository, [StringComparison]::OrdinalIgnoreCase)) {
-            return $events.FullName
+            $matches.Add($events.FullName)
         }
     }
+    return $matches.ToArray()
+}
+
+function Resolve-SquadSessionLogPath {
+    <#
+    .SYNOPSIS
+        Resolves an explicit events.jsonl path or the newest Copilot session for a repository.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SessionLog,
+        [Parameter(Mandatory)][string]$RepoRoot
+    )
+
+    $paths = @(Resolve-SquadSessionLogPaths -SessionLog $SessionLog -RepoRoot $RepoRoot)
+    if ($paths.Count -gt 0) { return $paths[0] }
     return $null
 }
 
@@ -647,4 +664,4 @@ function Get-SquadUsageSnapshot {
     }
 }
 
-Export-ModuleMember -Function Resolve-SquadSessionLogPath, Get-SquadUsageSnapshot
+Export-ModuleMember -Function Resolve-SquadSessionLogPath, Resolve-SquadSessionLogPaths, Get-SquadUsageSnapshot

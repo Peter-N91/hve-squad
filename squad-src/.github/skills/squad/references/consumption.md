@@ -101,6 +101,15 @@ lazily by `Measure-SquadLedger.ps1 -Write -SessionLog ...` after the first compl
 native reconciliation; Init does not seed it. `consumption.md` remains the only
 human-readable ledger.
 
+When `-SessionLog auto` encounters an existing run whose history already spans
+multiple Copilot sessions but no journal exists yet, the writer can bootstrap the
+initial journal from the matching repository logs that are still present. Every
+metered history timestamp must fall inside exactly one complete, attributable native
+session window, the active session must cover current metered history, and the
+resulting per-file history partitions must remain chronological. Missing logs,
+overlapping session windows, incomplete attribution, or any other ambiguity leaves
+the estimator in place rather than guessing.
+
 The journal carries one closed-schema snapshot per native host session:
 
 * native session id, first/last timestamps, complete-record count, and identity digest;
@@ -115,7 +124,9 @@ session appends only after all prior coverage is still an ordered prefix of curr
 history, and its native role set matches the newly metered history suffix. The writer
 then sums every cached session into `consumption.md`. This makes session changes
 additive without double counting and keeps old exact totals available after a host log
-is rotated or no longer selected by `auto`.
+is rotated or no longer selected by `auto`. Journal timestamps are parsed as JSON
+strings rather than culture-formatted dates so the persisted content digest remains
+stable across write/read/replay.
 
 `consumption.md`, `state.json`, and `consumption-sessions.json` are one atomic writer
 transaction. A malformed journal, changed history prefix, duplicate native identity,
@@ -299,6 +310,9 @@ When the coordinator has `pwsh` 7+, the trusted ledger invocation uses
 * combines coordinator and Squad Scribe usage as `orchestration`;
 * requires every history-backed agent and orchestration row to have native
   coverage and the role-row nano-AIU sum to equal the session total; and
+* when the journal is absent, can partition existing metered history across complete,
+  uniquely matching repository-session windows before accepting a cumulative exact
+  snapshot; and
 * records the native record count, through-timestamp, and SHA-256 identity digest
   in `### Derivation`.
 

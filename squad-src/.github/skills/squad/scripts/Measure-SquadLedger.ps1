@@ -244,7 +244,11 @@
     VS Code agent-host `events.jsonl`, the session directory that contains it,
     or `auto` to pick the most recently written session under
     `$COPILOT_HOME/session-state` (default `~/.copilot/session-state`) whose
-    `workspace.yaml` `cwd` is this squad root's repository. Complete
+    `workspace.yaml` `cwd` is this squad root's repository. When no exact-session
+    journal exists and current history spans earlier sessions, `auto` may bootstrap
+    the journal from complete matching logs whose non-overlapping event windows
+    uniquely cover every metered history entry; missing or ambiguous coverage keeps
+    the estimator in place. Complete
     `session.usage_record` and native compaction records are deduplicated by host
     accounting identity. Event `agentId` joins to `subagent.started`; nested
     `parentAgentId` chains roll into their owning top-level role. Native token
@@ -2008,11 +2012,10 @@ function Get-StateRunTotalUpdateLocal {
 # estimates only after complete identity, coverage, token-detail, and total checks.
 # ---------------------------------------------------------------------------
 
-function Resolve-SessionLogPathLocal {
+function Resolve-SessionLogPathsLocal {
     <#
     .SYNOPSIS
-        Resolves -SessionLog to an events.jsonl path, or $null when `auto` finds
-        no session whose workspace cwd is this squad root's repository.
+        Resolves every repository-matching events.jsonl path, newest first for `auto`.
     #>
     param(
         [Parameter(Mandatory)][string]$SessionLog,
@@ -2020,14 +2023,19 @@ function Resolve-SessionLogPathLocal {
     )
     $marker = [regex]::Match($SquadRoot, '^(?<repo>.*?)[\\/]\.copilot-tracking([\\/]|$)')
     $repoRoot = if ($marker.Success) { $marker.Groups['repo'].Value } else { (Get-Location).Path }
-    if (-not (Get-Command Resolve-SquadSessionLogPath -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command Resolve-SquadSessionLogPaths -ErrorAction SilentlyContinue)) {
         $usageModule = Join-Path $PSScriptRoot 'SquadUsage.psm1'
         if (-not (Test-Path -LiteralPath $usageModule -PathType Leaf)) {
             throw 'SquadUsage.psm1 is required when -SessionLog is used.'
         }
         Import-Module $usageModule -Force
     }
-    Resolve-SquadSessionLogPath -SessionLog $SessionLog -RepoRoot $repoRoot
+    if (Get-Command Resolve-SquadSessionLogPaths -ErrorAction SilentlyContinue) {
+        return @(Resolve-SquadSessionLogPaths -SessionLog $SessionLog -RepoRoot $repoRoot)
+    }
+    $single = Resolve-SquadSessionLogPath -SessionLog $SessionLog -RepoRoot $repoRoot
+    if ($single) { return @($single) }
+    return @()
 }
 
 function Read-SessionUsageLocal {
@@ -2245,10 +2253,64 @@ function Test-HistoryCoveragePrefixLocal {
     $true
 }
 
+function ConvertFrom-ExactCacheJsonElementLocal {
+    param([Parameter(Mandatory)][System.Text.Json.JsonElement]$Element)
+    switch ($Element.ValueKind) {
+        ([System.Text.Json.JsonValueKind]::Object) {
+            $value = [ordered]@{}
+            foreach ($property in $Element.EnumerateObject()) {
+                $value[$property.Name] = ConvertFrom-ExactCacheJsonElementLocal -Element $property.Value
+            }
+            return $value
+        }
+        ([System.Text.Json.JsonValueKind]::Array) {
+            $items = [Collections.Generic.List[object]]::new()
+            foreach ($item in $Element.EnumerateArray()) {
+                $items.Add((ConvertFrom-ExactCacheJsonElementLocal -Element $item))
+            }
+            return ,$items.ToArray()
+        }
+        ([System.Text.Json.JsonValueKind]::String) {
+            return $Element.GetString()
+        }
+        ([System.Text.Json.JsonValueKind]::Number) {
+            [long]$integer = 0
+            if ($Element.TryGetInt64([ref]$integer)) { return $integer }
+            [decimal]$decimal = 0
+            if ($Element.TryGetDecimal([ref]$decimal)) { return $decimal }
+            return $Element.GetDouble()
+        }
+        ([System.Text.Json.JsonValueKind]::True) {
+            return $true
+        }
+        ([System.Text.Json.JsonValueKind]::False) {
+            return $false
+        }
+        ([System.Text.Json.JsonValueKind]::Null) {
+            return $null
+        }
+        default {
+            throw "consumption-sessions.json contains unsupported JSON value kind '$($Element.ValueKind)'."
+        }
+    }
+}
+
+function ConvertFrom-ExactCacheJsonLocal {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    $document = $null
+    try {
+        $document = [System.Text.Json.JsonDocument]::Parse($Text)
+        ConvertFrom-ExactCacheJsonElementLocal -Element $document.RootElement
+    }
+    finally {
+        if ($document) { $document.Dispose() }
+    }
+}
+
 function Read-ExactSessionCacheLocal {
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @() }
-    try { $document = [IO.File]::ReadAllText($Path) | ConvertFrom-Json -AsHashtable -Depth 100 }
+    try { $document = ConvertFrom-ExactCacheJsonLocal -Text ([IO.File]::ReadAllText($Path)) }
     catch { throw "consumption-sessions.json is not valid JSON: $($_.Exception.Message)" }
     if ($document -isnot [Collections.IDictionary]) { throw 'consumption-sessions.json must contain one object.' }
     Assert-ExactCacheFieldsLocal -Object $document -Required @('schemaVersion', 'sessions') -Where 'consumption-sessions.json'
@@ -3205,6 +3267,215 @@ function Merge-ExactSessionUsageLocal {
         SessionCount = $Sessions.Count
         RequestDetailStatus = if ($requestDetailsComplete) { 'complete' } else { 'partial' }
         CacheSessions = $Sessions
+    }
+}
+
+function Get-ExactSessionBootstrapLocal {
+    <#
+    .SYNOPSIS
+        Reconstructs an initial exact-session journal from uniquely matching native logs.
+    .DESCRIPTION
+        This recovery path is used only when `-SessionLog auto` finds current history
+        spanning more than one host session and no accepted journal exists yet. Every
+        metered history entry must fall inside exactly one complete, attributable
+        repository-session event window. Ambiguous or missing coverage fails closed.
+    #>
+    param(
+        [Parameter(Mandatory)][string[]]$Paths,
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)][Collections.IDictionary]$HistoryCoverage,
+        [Parameter(Mandatory)][Collections.IDictionary]$MeteredHistoryCoverage,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$HistoryEntries,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$OrderedAggregates,
+        [Parameter(Mandatory)]$Rates,
+        [Parameter(Mandatory)]$Roster,
+        [Parameter(Mandatory)]$ActiveSession,
+        [AllowEmptyString()][string]$BaselineModel,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Warnings
+    )
+    if ($Paths.Count -lt 2) { return $null }
+
+    $entryByKey = @{}
+    foreach ($entry in $HistoryEntries) {
+        $fileName = "$($entry.Agent).md"
+        $key = "$fileName`n$($entry.Identity)"
+        if ($entryByKey.ContainsKey($key)) {
+            throw "History entry identity '$($entry.Identity)' is duplicated in '$fileName'."
+        }
+        $entryByKey[$key] = $entry
+    }
+
+    $meteredEntries = [Collections.Generic.List[object]]::new()
+    foreach ($fileName in @($MeteredHistoryCoverage.Keys | Sort-Object)) {
+        foreach ($identity in @($MeteredHistoryCoverage[$fileName])) {
+            $key = "$fileName`n$identity"
+            if (-not $entryByKey.ContainsKey($key)) {
+                throw "Metered history identity '$identity' in '$fileName' has no parsed entry."
+            }
+            $entry = $entryByKey[$key]
+            if (-not $entry.Timestamp) {
+                throw "Metered history entry '$($entry.Title)' in '$fileName' has no ISO timestamp."
+            }
+            try {
+                $timestamp = [DateTimeOffset]::Parse([string]$entry.Timestamp, [Globalization.CultureInfo]::InvariantCulture)
+            }
+            catch {
+                throw "Metered history entry '$($entry.Title)' in '$fileName' has an invalid timestamp."
+            }
+            $meteredEntries.Add([pscustomobject]@{
+                    FileName = [string]$fileName
+                    Identity = [string]$identity
+                    Entry = $entry
+                    Timestamp = $timestamp
+                })
+        }
+    }
+    if ($meteredEntries.Count -eq 0) { return $null }
+
+    $earliest = @($meteredEntries | Sort-Object Timestamp | Select-Object -First 1)[0].Timestamp
+    $latest = @($meteredEntries | Sort-Object Timestamp -Descending | Select-Object -First 1)[0].Timestamp
+    $candidates = [Collections.Generic.List[object]]::new()
+    $seenSessionIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($path in $Paths) {
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        $eventsFile = Get-Item -LiteralPath $path
+        if ($eventsFile.LastWriteTimeUtc -lt $earliest.UtcDateTime) { continue }
+        try {
+            $candidate = if ($ActiveSession.Path -and [string]::Equals(
+                    [IO.Path]::GetFullPath([string]$ActiveSession.Path),
+                    [IO.Path]::GetFullPath([string]$path),
+                    [StringComparison]::OrdinalIgnoreCase
+                )) {
+                $ActiveSession
+            }
+            else {
+                Read-SessionUsageLocal -Path $path -SquadRoot $SquadRoot
+            }
+        }
+        catch { continue }
+        if ($candidate.UsageSnapshot.status -ne 'complete' -or $candidate.UsageSnapshot.attributionStatus -ne 'complete') { continue }
+        if (-not $candidate.First -or -not $candidate.Last) { continue }
+        try {
+            $start = [DateTimeOffset]::Parse([string]$candidate.First, [Globalization.CultureInfo]::InvariantCulture)
+            $end = [DateTimeOffset]::Parse([string]$candidate.Last, [Globalization.CultureInfo]::InvariantCulture)
+        }
+        catch {
+            continue
+        }
+        if ($end -lt $earliest -or $start -gt $latest) { continue }
+        if (-not $seenSessionIds.Add([string]$candidate.SessionId)) {
+            throw "More than one repository session log reports native session id '$($candidate.SessionId)'."
+        }
+        $candidates.Add([pscustomobject]@{
+                Session = $candidate
+                Start = $start
+                End = $end
+            })
+    }
+    if ($candidates.Count -lt 2) { return $null }
+
+    $orderedCandidates = @($candidates | Sort-Object Start, End, { $_.Session.SessionId })
+    $sessionByEntry = @{}
+    $selectedSessionIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($meteredEntry in $meteredEntries) {
+        $matches = @(
+            $orderedCandidates | Where-Object {
+                $meteredEntry.Timestamp -ge $_.Start -and $meteredEntry.Timestamp -le $_.End
+            }
+        )
+        if ($matches.Count -eq 0) {
+            throw "No complete native session covers metered history entry '$($meteredEntry.Entry.Title)' in '$($meteredEntry.FileName)'."
+        }
+        if ($matches.Count -gt 1) {
+            throw "More than one complete native session covers metered history entry '$($meteredEntry.Entry.Title)' in '$($meteredEntry.FileName)'."
+        }
+        $sessionId = [string]$matches[0].Session.SessionId
+        $sessionByEntry["$($meteredEntry.FileName)`n$($meteredEntry.Identity)"] = $sessionId
+        $null = $selectedSessionIds.Add($sessionId)
+    }
+
+    if ($ActiveSession -and -not $selectedSessionIds.Contains([string]$ActiveSession.SessionId)) {
+        throw "The active native session '$($ActiveSession.SessionId)' does not uniquely cover any current metered history entry."
+    }
+    $selected = @($orderedCandidates | Where-Object { $selectedSessionIds.Contains([string]$_.Session.SessionId) })
+    if ($selected.Count -lt 2) { return $null }
+
+    $selectedIndex = @{}
+    $coverageMaps = [Collections.Generic.List[Collections.IDictionary]]::new()
+    for ($i = 0; $i -lt $selected.Count; $i++) {
+        $selectedIndex[[string]$selected[$i].Session.SessionId] = $i
+        $coverage = [ordered]@{}
+        foreach ($fileName in @($HistoryCoverage.Keys | Sort-Object)) {
+            $coverage[$fileName] = [Collections.Generic.List[string]]::new()
+        }
+        $coverageMaps.Add($coverage)
+    }
+
+    foreach ($fileName in @($HistoryCoverage.Keys | Sort-Object)) {
+        $lastIndex = 0
+        foreach ($identity in @($HistoryCoverage[$fileName])) {
+            $key = "$fileName`n$identity"
+            if (-not $entryByKey.ContainsKey($key)) {
+                throw "History identity '$identity' in '$fileName' has no parsed entry."
+            }
+            $entry = $entryByKey[$key]
+            $targetIndex = $lastIndex
+            if ($sessionByEntry.ContainsKey($key)) {
+                $targetIndex = [int]$selectedIndex[[string]$sessionByEntry[$key]]
+                if ($targetIndex -lt $lastIndex) {
+                    throw "Metered history in '$fileName' does not follow native session chronology."
+                }
+            }
+            elseif ($entry.Timestamp) {
+                try {
+                    $timestamp = [DateTimeOffset]::Parse([string]$entry.Timestamp, [Globalization.CultureInfo]::InvariantCulture)
+                    $eligible = @(
+                        for ($i = 0; $i -lt $selected.Count; $i++) {
+                            if ($selected[$i].Start -le $timestamp) { $i }
+                        }
+                    )
+                    if ($eligible.Count -gt 0) {
+                        $targetIndex = [math]::Max($lastIndex, [int]$eligible[-1])
+                    }
+                }
+                catch {
+                    $targetIndex = $lastIndex
+                }
+            }
+            $coverageMaps[$targetIndex][$fileName].Add([string]$identity)
+            $lastIndex = $targetIndex
+        }
+    }
+
+    $cacheSessions = [Collections.Generic.List[object]]::new()
+    for ($i = 0; $i -lt $selected.Count; $i++) {
+        $coverage = [ordered]@{}
+        foreach ($fileName in @($HistoryCoverage.Keys | Sort-Object)) {
+            $coverage[$fileName] = @($coverageMaps[$i][$fileName])
+        }
+        $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coverage `
+            -MeteredHistoryCoverage $MeteredHistoryCoverage `
+            -MeteredAgents @($OrderedAggregates | ForEach-Object AgentName) -HistoryEntries $HistoryEntries
+        if ([int]$expected.MeteredEntryCount -eq 0) {
+            throw "Native session '$($selected[$i].Session.SessionId)' has no metered history coverage."
+        }
+        $sessionExact = Get-ExactLedgerUsageLocal -Session $selected[$i].Session -Rates $Rates -Roster $Roster `
+            -HistoryEntries @($expected.HistoryEntries) -ExpectedAgentNames @($expected.Agents) `
+            -RequireOrchestration:$expected.RequireOrchestration -EnforceExpectedSet -RequireSessionBoundary `
+            -BaselineModel $BaselineModel -Warnings $Warnings
+        if (-not $sessionExact) {
+            throw "Native session '$($selected[$i].Session.SessionId)' did not reconcile with its history window."
+        }
+        $cacheSessions.Add((ConvertTo-CacheSessionLocal -Exact $sessionExact -HistoryCoverage $coverage))
+    }
+
+    $cumulativeCoverage = Get-CumulativeHistoryCoverageLocal -Sessions $cacheSessions.ToArray()
+    $null = Test-HistoryCoveragePrefixLocal -Recorded $cumulativeCoverage -Current $HistoryCoverage -RequireComplete
+    $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions.ToArray() -Rates $Rates -Roster $Roster `
+        -BaselineModel $BaselineModel -ActiveSession $ActiveSession -Warnings $Warnings
+    [pscustomobject][ordered]@{
+        Sessions = $cacheSessions.ToArray()
+        ExactUsage = $exactUsage
     }
 }
 
@@ -4765,7 +5036,8 @@ if ($SessionLog) {
     }
 
     if ($cacheAvailable) {
-        $sessionPath = Resolve-SessionLogPathLocal -SessionLog $SessionLog -SquadRoot $SquadRoot
+        $sessionPaths = @(Resolve-SessionLogPathsLocal -SessionLog $SessionLog -SquadRoot $SquadRoot)
+        $sessionPath = if ($sessionPaths.Count -gt 0) { $sessionPaths[0] } else { $null }
         $session = $null
         if ($sessionPath) {
             try { $session = Read-SessionUsageLocal -Path $sessionPath -SquadRoot $SquadRoot }
@@ -4776,58 +5048,79 @@ if ($SessionLog) {
 
         if ($session) {
             try {
-                $coveragePlan = Get-ExactCoveragePlanLocal -Sessions $cacheSessions -CurrentSessionId ([string]$session.SessionId) -CurrentHistoryCoverage $historyIdentitiesByFile
-                $currentCoverageCount = [int](($coveragePlan.CurrentCoverage.Values | ForEach-Object { @($_).Count } | Measure-Object -Sum).Sum)
-                $refreshCurrentSession = $coveragePlan.ExistingSession -or $currentCoverageCount -gt 0
-                if ($refreshCurrentSession) {
-                    $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coveragePlan.CurrentCoverage `
-                        -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
-                        -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
-                    if ([int]$expected.MeteredEntryCount -eq 0 -and $cacheSessions.Count -gt 0) {
-                        if ($coveragePlan.ExistingIndex -ge 0) {
-                            $cacheSessions[$coveragePlan.ExistingIndex].historyCoverage = $coveragePlan.CurrentCoverage
+                $bootstrapped = $false
+                if ($cacheSessions.Count -eq 0 -and $SessionLog -eq 'auto' -and $sessionPaths.Count -gt 1) {
+                    try {
+                        $bootstrap = Get-ExactSessionBootstrapLocal -Paths $sessionPaths -SquadRoot $SquadRoot `
+                            -HistoryCoverage $historyIdentitiesByFile -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
+                            -HistoryEntries @($exactHistoryEntries) -OrderedAggregates @($ordered) -Rates $rates -Roster $roster `
+                            -ActiveSession $session -BaselineModel $BaselineModel -Warnings $warnings
+                        if ($bootstrap) {
+                            $cacheSessions = @($bootstrap.Sessions)
+                            $cacheChanged = $true
+                            $exactUsage = $bootstrap.ExactUsage
+                            $bootstrapped = $true
                         }
-                        else {
-                            $lastIndex = $cacheSessions.Count - 1
-                            $cacheSessions[$lastIndex].historyCoverage = Join-HistoryCoverageLocal `
-                                -Left $cacheSessions[$lastIndex].historyCoverage -Right $coveragePlan.CurrentCoverage
-                        }
-                        $cacheChanged = $true
-                        $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                            -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
                     }
-                    else {
-                        $sessionExact = Get-ExactLedgerUsageLocal -Session $session -Rates $rates -Roster $roster `
-                            -HistoryEntries @($expected.HistoryEntries) -ExpectedAgentNames @($expected.Agents) `
-                            -RequireOrchestration:$expected.RequireOrchestration -EnforceExpectedSet -RequireSessionBoundary `
-                            -BaselineModel $BaselineModel -Warnings $warnings
-                        if ($sessionExact) {
-                            $cacheSession = ConvertTo-CacheSessionLocal -Exact $sessionExact -HistoryCoverage $coveragePlan.CurrentCoverage
+                    catch {
+                        $warnings.Add("WARN: exact session-journal bootstrap was unavailable; the active session will be reconciled normally: $($_.Exception.Message)")
+                    }
+                }
+
+                if (-not $bootstrapped) {
+                    $coveragePlan = Get-ExactCoveragePlanLocal -Sessions $cacheSessions -CurrentSessionId ([string]$session.SessionId) -CurrentHistoryCoverage $historyIdentitiesByFile
+                    $currentCoverageCount = [int](($coveragePlan.CurrentCoverage.Values | ForEach-Object { @($_).Count } | Measure-Object -Sum).Sum)
+                    $refreshCurrentSession = $coveragePlan.ExistingSession -or $currentCoverageCount -gt 0
+                    if ($refreshCurrentSession) {
+                        $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coveragePlan.CurrentCoverage `
+                            -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
+                            -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
+                        if ([int]$expected.MeteredEntryCount -eq 0 -and $cacheSessions.Count -gt 0) {
                             if ($coveragePlan.ExistingIndex -ge 0) {
-                                Assert-ExactSessionRefreshLocal -Existing $cacheSessions[$coveragePlan.ExistingIndex] -Next $cacheSession
-                                $nextSessions = [Collections.Generic.List[object]]::new()
-                                for ($i = 0; $i -lt $cacheSessions.Count; $i++) {
-                                    $nextSessions.Add($(if ($i -eq $coveragePlan.ExistingIndex) { $cacheSession } else { $cacheSessions[$i] }))
-                                }
-                                $cacheSessions = $nextSessions.ToArray()
+                                $cacheSessions[$coveragePlan.ExistingIndex].historyCoverage = $coveragePlan.CurrentCoverage
                             }
                             else {
-                                $cacheSessions = @($cacheSessions) + @($cacheSession)
+                                $lastIndex = $cacheSessions.Count - 1
+                                $cacheSessions[$lastIndex].historyCoverage = Join-HistoryCoverageLocal `
+                                    -Left $cacheSessions[$lastIndex].historyCoverage -Right $coveragePlan.CurrentCoverage
                             }
                             $cacheChanged = $true
                             $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                                -BaselineModel $BaselineModel -ActiveSession $session -Warnings $warnings
-                        }
-                        elseif ($coveragePlan.CacheCoversAll) {
-                            $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
                                 -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
-                            $warnings.Add("WARN: the live native session could not refresh its cached snapshot, so the last fully reconciled cumulative exact snapshot was retained.")
+                        }
+                        else {
+                            $sessionExact = Get-ExactLedgerUsageLocal -Session $session -Rates $rates -Roster $roster `
+                                -HistoryEntries @($expected.HistoryEntries) -ExpectedAgentNames @($expected.Agents) `
+                                -RequireOrchestration:$expected.RequireOrchestration -EnforceExpectedSet -RequireSessionBoundary `
+                                -BaselineModel $BaselineModel -Warnings $warnings
+                            if ($sessionExact) {
+                                $cacheSession = ConvertTo-CacheSessionLocal -Exact $sessionExact -HistoryCoverage $coveragePlan.CurrentCoverage
+                                if ($coveragePlan.ExistingIndex -ge 0) {
+                                    Assert-ExactSessionRefreshLocal -Existing $cacheSessions[$coveragePlan.ExistingIndex] -Next $cacheSession
+                                    $nextSessions = [Collections.Generic.List[object]]::new()
+                                    for ($i = 0; $i -lt $cacheSessions.Count; $i++) {
+                                        $nextSessions.Add($(if ($i -eq $coveragePlan.ExistingIndex) { $cacheSession } else { $cacheSessions[$i] }))
+                                    }
+                                    $cacheSessions = $nextSessions.ToArray()
+                                }
+                                else {
+                                    $cacheSessions = @($cacheSessions) + @($cacheSession)
+                                }
+                                $cacheChanged = $true
+                                $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                                    -BaselineModel $BaselineModel -ActiveSession $session -Warnings $warnings
+                            }
+                            elseif ($coveragePlan.CacheCoversAll) {
+                                $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                                    -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
+                                $warnings.Add("WARN: the live native session could not refresh its cached snapshot, so the last fully reconciled cumulative exact snapshot was retained.")
+                            }
                         }
                     }
-                }
-                elseif ($coveragePlan.CacheCoversAll) {
-                    $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                        -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
+                    elseif ($coveragePlan.CacheCoversAll) {
+                        $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
+                            -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
+                    }
                 }
             }
             catch {

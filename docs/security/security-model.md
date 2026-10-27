@@ -15,7 +15,7 @@ versions, reporting process, and broader scope remain in the
 
 | Skill | Model | Classification | Current scope |
 |---|---|---|---|
-| squad | [Squad Skill Security Model](../../squad-src/.github/skills/squad/SECURITY.md) | Required: parses separately controlled connector results, local input files, lifecycle/roster/verdict plans, host usage logs, and persisted exact-session snapshots | Persisted work-role defaults, protected coordinators/Scribe, host-bounded actual-unit model routing, hash-bound verdict/roster/federation transactions, cumulative exact per-role native token/credit accounting with history-prefix and identity deduplication, file exchange, and persistence |
+| squad | [Squad Skill Security Model](../../squad-src/.github/skills/squad/SECURITY.md) | Required: parses separately controlled connector results, local input files, lifecycle/roster/verdict plans, host usage logs, and persisted exact-session snapshots | Persisted work-role defaults, protected coordinators/Scribe, host-bounded actual-unit model routing, hash-bound verdict/roster/federation transactions, cumulative exact per-role native token/credit accounting with unique history-window bootstrap, history-prefix and identity deduplication, file exchange, and persistence |
 
 Primary residual gaps are unauthenticated file-drop producers, consumer-owned
 runner/replay lifecycle, host-dependent worktree isolation, and filesystem/content

@@ -91,6 +91,10 @@ Different filesystem permissions or unattended policies change the risk.
   closed-schema per-session aggregates, hashed accounting identities, and ordered
   history coverage in `consumption-sessions.json`; repeated writes replace one
   native session and cross-session merges reject overlaps or history-prefix drift.
+  If the journal is absent, bootstrap reads only repository-matching local logs and
+  accepts them only when complete native event windows uniquely cover every metered
+  history timestamp; overlapping or missing coverage fails closed. JSON timestamps
+  remain strings during digest validation, avoiding culture-dependent replay drift.
   The ledger, run totals, and journal publish as one rollback-capable transaction.
   These helpers never emit prompts, responses, tool arguments, or raw log lines;
   host logs and the journal are not connector identity evidence.
