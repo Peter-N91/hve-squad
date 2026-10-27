@@ -78,7 +78,13 @@ BeforeAll {
     }
 
     function Write-FixtureWork {
-        param([string]$Repo, [string]$Root, [string]$ReportedModel, [int]$InternalToolCalls = -1)
+        param(
+            [string]$Repo,
+            [string]$Root,
+            [string]$ReportedModel,
+            [int]$InternalToolCalls = -1,
+            [string]$ActiveRole = 'Squad Implementor'
+        )
         $relative = [IO.Path]::GetRelativePath($Repo, (Join-Path $Root 'changes' 'result.md')) -replace '\\', '/'
         if (([IO.Path]::GetRelativePath($Repo, $Root) -replace '\\', '/') -eq '.copilot-tracking/squad') {
             $relative = '.copilot-tracking/changes/result.md'
@@ -89,7 +95,7 @@ BeforeAll {
             runId = 'fixture-run'
             historyRecords = @(@{ agent = 'Squad Implementor'; request = 'Implement fixture'; deliverable = $relative; outcome = 'Wrote actual artifact.' })
             decision = @{ title = 'Fixture decision'; rationale = 'Recorded actual fixture work.'; adrNoted = $false }
-            stateAdvance = @{ activeRoles = @('Squad Implementor'); sessionModel = 'claude-sonnet-5.5' }
+            stateAdvance = @{ activeRoles = @($ActiveRole); sessionModel = 'claude-sonnet-5.5' }
         }
         if ($ReportedModel) { $payload.historyRecords[0].reportedModel = $ReportedModel }
         if ($InternalToolCalls -ge 0) { $payload.historyRecords[0].internalToolCalls = $InternalToolCalls }
@@ -597,6 +603,19 @@ Describe 'Actual completion evidence (COORD-07)' {
         $receipt.dispatchEntries | Should -Be 1
         $receipt.ledgerCheck | Should -Be 'PASS'
         Get-FixtureHash $script:ProofFixture.Root | Should -BeExactly $before
+    }
+
+    It 'accepts the canonical roster role id in activeRoles for its mapped agent dispatch' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $work = Write-FixtureWork $repo $fixture.Root -ActiveRole 'developer'
+        $result = Invoke-Local 'Test-SquadTurnCompletion.ps1' $repo @(
+            '-RepoRoot', $repo,
+            '-SquadRoot', $fixture.Root,
+            '-ProofPath', $work.Payload,
+            '-ExpectedTurn', [string]$work.Turn
+        )
+        $result.ExitCode | Should -Be 0 -Because $result.Output
     }
 
     It 'does not count a previous turn as the expected current dispatch' {

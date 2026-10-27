@@ -294,15 +294,15 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
 
         It 'blocks progress completion and the next worker until ordinary proof succeeds' {
             $script:OrdinaryHandoffBody | Should -Match 'Receipt\+proof gate progress/next worker'
-            $script:CoordinatorRuntimeBody | Should -Match '(?s)After a worker.+Exit 0 requires Section 5 proof before progress/next task'
+            $script:CoordinatorRuntimeBody | Should -Match '(?s)Run `Write-SquadHandoff\.ps1 -Quiet` synchronously.+Exit 0 requires Section 5 proof before progress/next task'
             $script:CoordinatorRuntimeBody | Should -Match 'routing/artifact is\s+no handoff'
             $script:CoordinatorRuntimeBody | Should -Match 'Exit 2 takes the cold path'
         }
 
         It 'applies the same per-stage barrier inside targeted federation autopilot' {
             $federation = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
-            $federation.Body | Should -Match '(?s)After each member worker returns.+before updating\s+progress or dispatching any later/dependent worker'
-            $federation.Body | Should -Match 'Apply this per stage in targeted autopilot'
+            $federation.Body | Should -Match '(?s)After each member worker returns.+before updating\s+progress or dispatching any later/dependent\s+worker'
+            $federation.Body | Should -Match 'Apply this\s+per stage in targeted autopilot'
             $script:FederationRuntimeBody | Should -Match 'Supported member stages use this sequence in ordinary/targeted-autopilot runs'
             $script:FederationRuntimeBody | Should -Match '(?s)Before proof succeeds.+dispatch\s+a later/dependent worker, or run the root handoff'
             $federation.Body | Should -Match 'Exit 2 keeps the existing cold-Scribe pipeline'

@@ -6,19 +6,19 @@ license: MIT
 
 # Deterministic Ordinary Handoff
 
-After each worker completes in **off, ranked, economy, or manual**, run before
-progress completion or another dispatch:
+**off, ranked, economy, or manual**: after each worker, run before progress/next
+worker:
 
 `pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -RunId run-01 -Agent "Squad Researcher" -Request x -Deliverable research/topic.md -Outcome x -Quiet`
 
 Receipt+proof gate progress/next worker; routing/artifacts do not.
-Facts derive `activeRoles`. Optional:
-`-MemberName/-SelectionCue/-PassedModel` and consumption paths; omission estimates.
+Facts derive `activeRoles`; optional `-MemberName/-SelectionCue/-PassedModel`,
+`-ConsumptionPath/-OrchestrationConsumptionPath`; omission uses estimated fallback.
 
 ## Payload Contract
 
 For decisions, multiple/no dispatches, routing, or state changes, pass
-`-PayloadPath`/`-PayloadJson` outside the root. Required closed keys:
+`-PayloadPath`/`-PayloadJson` outside the root. Closed keys:
 `runId`, `historyRecords`, `stateAdvance.activeRoles`; omitted envelope and
 consumption derive. `route` requires `decision`.
 

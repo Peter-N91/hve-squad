@@ -45,6 +45,29 @@ function Get-Decision {
     Get-SquadDecision -RepoRoot $RepoRoot -SquadRoot $Root -Reference $Reference
 }
 
+function Get-RecordActiveSet {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary]$Record,
+        [Parameter(Mandatory)][object[]]$Roster
+    )
+    $identities = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $null = $identities.Add([string]$Record.agent)
+    $member = if ($Record.Contains('memberName')) { [string]$Record.memberName } else { '' }
+    $role = if ($Record.Contains('role')) { [string]$Record.role } else { '' }
+    $rows = @(
+        $Roster | Where-Object {
+            $agents = @([string]$_['Agent Name (Primary)']) + @(
+                ([string]$_['Alternate Agents'] -split ',\s*') | Where-Object { $_ -and $_ -notin @('-', [string][char]0x2014) }
+            )
+            $agents -ccontains [string]$Record.agent -and
+            (-not $member -or [string]$_['Member Name'] -ceq $member) -and
+            (-not $role -or [string]$_.Role -ceq $role)
+        }
+    )
+    if ($rows.Count -eq 1) { $null = $identities.Add([string]$rows[0].Role) }
+    @($identities)
+}
+
 try {
     $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath
     $SquadRoot = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $SquadRoot
@@ -107,6 +130,7 @@ try {
     $activeActual = @($state.activeRoles)
     if ($activeActual.Count -ne $activeExpected.Count -or @($activeActual | Where-Object { $_ -cnotin $activeExpected }).Count) { throw 'state.json activeRoles does not match the handoff.' }
     $roster = @(Get-SquadRoster $SquadRoot)
+    $recordedActiveIdentities = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $allHistory = @(
         Get-ChildItem -LiteralPath (Join-Path $SquadRoot 'history') -File -Filter '*.md' |
             ForEach-Object { [IO.File]::ReadAllText($_.FullName) }
@@ -119,7 +143,13 @@ try {
             [string]::IsNullOrWhiteSpace($record.agent) -or $record.agent -ceq 'Squad Scribe') { throw 'A real dispatched agent identity is required.' }
         $turn = if ($record.Contains('turn')) { $record.turn } else { $ExpectedTurn }
         if ($turn -isnot [int] -and $turn -isnot [long] -or $turn -lt 1 -or $turn -gt $ExpectedTurn) { throw 'Invalid dispatch turn.' }
-        if ($turn -eq $ExpectedTurn -and $record.agent -cnotin $activeActual) { throw "Current dispatch '$($record.agent)' is missing from activeRoles." }
+        $activeIdentities = @(Get-RecordActiveSet -Record $record -Roster $roster)
+        if ($turn -eq $ExpectedTurn) {
+            foreach ($identity in $activeIdentities) { $null = $recordedActiveIdentities.Add($identity) }
+            if (@($activeActual | Where-Object { $_ -cin $activeIdentities }).Count -eq 0) {
+                throw "Current dispatch '$($record.agent)' is missing from activeRoles."
+            }
+        }
         $historyPath = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path (Join-Path $SquadRoot 'history' "$($record.agent).md")
         $text = [IO.File]::ReadAllText($historyPath)
         if ($text -cnotmatch ('(?m)^# History: ' + [regex]::Escape($record.agent) + '\r?$')) { throw 'History header does not match the dispatched identity.' }
@@ -209,8 +239,8 @@ try {
         }
         $verified.Add([ordered]@{ agent = $record.agent; turn = $turn; artifact = $artifact; history = $historyPath; heading = $entry.Groups['heading'].Value })
     }
-    foreach ($agent in $activeExpected) {
-        if ($agent -cnotin @($proof.historyRecords | ForEach-Object { $_.agent })) { throw 'activeRoles claims an unrecorded dispatch.' }
+    foreach ($activeRole in $activeExpected) {
+        if (-not $recordedActiveIdentities.Contains([string]$activeRole)) { throw 'activeRoles claims an unrecorded dispatch.' }
     }
     $ledger = Invoke-SquadLocalScript -Name 'Measure-SquadLedger.ps1' -Arguments @('-SquadRoot', $SquadRoot, '-Check')
     $ledgerText = ($ledger.stdout + $ledger.stderr) -replace '\x1b\[[0-9;]*[A-Za-z]', ''

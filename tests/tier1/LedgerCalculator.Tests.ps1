@@ -2698,6 +2698,19 @@ description: "Append-only dispatch history for a single squad agent"
         $ledger | Should -Not -Match 'Without HVE Squad' -Because 'no role work exists to reprice'
     }
 
+    It 'does not treat a coordinator-only session with no history-backed transaction as a Scribe hand-off' {
+        $events = @(
+            '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-10-01T09:59:00.000Z"}'
+            '{"type":"subagent.started","agentId":"coordinator-root","data":{"toolCallId":"t0","agentName":"coordinator","agentDisplayName":"coordinator","model":"claude-haiku-4.5"},"timestamp":"2026-10-01T10:00:00.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'coordinator-root' -SourceSessionId 'coordinator-session' -UsageId 'coordinator-only' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-01T10:01:00.000Z')
+        )
+        $f = New-SessionFixtureLocal -Fixture seed -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw | Should -Not -Match 'exact-native'
+        Test-Path -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') | Should -BeFalse
+    }
+
     It 'writes the ledger when the session has billed units but no completed dispatch' {
         $f = New-SessionFixtureLocal -EventLines @($script:BaseEvents | Where-Object { $_ -notmatch 'subagent\.completed' })
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
@@ -2881,6 +2894,46 @@ description: "Append-only dispatch history for a single squad agent"
         $json.exact.baselineModel | Should -Be 'claude-sonnet-4.6'
         $json.total.estCostUsd | Should -Be $json.total.costUsd
         $json.total.estCredits | Should -Be $json.total.credits
+    }
+
+    It 'records exact native usage for a federation member when every model dispatch names that member root' {
+        $events = @(
+            $script:BaseEvents | ForEach-Object {
+                $_.Replace(
+                    'Write to .copilot-tracking/research/x.md',
+                    'Write to .copilot-tracking/squad/members/product/research/x.md'
+                )
+            }
+        )
+        $f = New-SessionFixtureLocal -Member 'product' -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.basis | Should -Be 'exact-native'
+        $json.exact.sessionId | Should -Be 'sess-0001'
+        $json.exact.records | Should -Be 2
+        ($json.roles | Where-Object role -eq 'researcher').requests | Should -Be 1
+        ($json.roles | Where-Object role -eq 'orchestration').requests | Should -Be 1
+    }
+
+    It 'falls back for a federation member when the native session also dispatches outside that member root' {
+        $events = @(
+            $script:BaseEvents | ForEach-Object {
+                $_.Replace(
+                    'Write to .copilot-tracking/research/x.md',
+                    'Write to .copilot-tracking/squad/members/product/research/x.md'
+                )
+            }
+        ) + @(
+            '{"type":"tool.execution_start","data":{"toolCallId":"other-member","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/squad/members/azure/research/y.md"}},"timestamp":"2026-10-01T10:03:30.000Z"}'
+        )
+        $f = New-SessionFixtureLocal -Member 'product' -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match "requires every model dispatch in the native session to name that member root"
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.basis | Should -Be 'estimated'
+        $json.exact | Should -BeNullOrEmpty
     }
 
     It 'warns and adds nothing when auto finds no session for this repository' {

@@ -136,6 +136,13 @@ cached native session from its now-completed log before it adds the new session.
 coordinator records therefore accumulate instead of being stranded in the closed
 session.
 
+For a federation member root, coordinator usage is accepted only when the native
+session is provably exclusive to that member: every model-dispatch prompt names the
+same `members/<name>` root and no federation-root lifecycle writer ran. Mixed-member,
+unscoped, promotion, initialization, or root-handoff sessions remain estimated. This
+lets targeted member runs keep exact cumulative accounting without assigning shared
+federation orchestration to an arbitrary member.
+
 Earlier cumulative writers could serialize a session's intentionally empty
 per-file history suffix as `[null]` after prior sessions had already covered that
 file. The reader accepts only that exact one-null legacy shape after the snapshot's
@@ -345,8 +352,8 @@ When the coordinator has `pwsh` 7+, the trusted ledger invocation uses
 There is no separate Observed Usage section. Exact native rows replace estimates in
 the main tables and drive state totals, unit economics, and Cost Comparison.
 Incomplete accounting, absent event-level identity, ambiguous native-name or roster
-mapping, member-scoped coordinator attribution, missing history coverage, or a
-reconciliation failure leaves the estimator visibly in place.
+mapping, non-exclusive member-scoped coordinator attribution, missing history
+coverage, or a reconciliation failure leaves the estimator visibly in place.
 
 Every exact ledger is explicitly **as of** its recorded native timestamp. A model
 request emitted after the helper reaches the log's then-current end appears on the

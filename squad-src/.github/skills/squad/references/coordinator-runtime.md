@@ -113,7 +113,7 @@ Require final model identity, tool-call count,
 actual paths, outcome and unresolved questions. Review only after owners' final
 returns. Use the write-set snapshot/verify mode for a closing review when needed.
 
-After a worker, call `Write-SquadHandoff.ps1 -Quiet` via `economy-scribe.md`.
+Run `Write-SquadHandoff.ps1 -Quiet` synchronously per `economy-scribe.md`.
 Exit 0 requires Section 5 proof before progress/next task; routing/artifact is
 no handoff. Exit 2 takes the cold path. Supply actual usage;
 `activeRoles` lists workers, not Scribe. Gate verdicts use

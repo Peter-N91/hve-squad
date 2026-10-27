@@ -268,6 +268,11 @@ BeforeAll {
         $document = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable -Depth 100 -DateKind String
         $session = @($document.sessions)[-1]
         $session.historyCoverage[$FileName] = @($null)
+        $sortedCoverage = [ordered]@{}
+        foreach ($name in @($session.historyCoverage.Keys | Sort-Object)) {
+            $sortedCoverage[[string]$name] = @($session.historyCoverage[$name])
+        }
+        $session['historyCoverage'] = $sortedCoverage
         $null = $session.Remove('contentDigest')
         $material = $session | ConvertTo-Json -Compress -Depth 20
         $session['contentDigest'] = [Convert]::ToHexString(

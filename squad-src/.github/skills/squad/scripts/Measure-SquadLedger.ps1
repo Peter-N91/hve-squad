@@ -2080,6 +2080,9 @@ function Read-SessionUsageLocal {
     $dispatches = [System.Collections.Generic.List[pscustomobject]]::new()
     $fusionSolvers = [System.Collections.Generic.List[string]]::new()
     $prompts = @{}
+    $taskPromptCount = 0
+    $memberTaskPromptCount = 0
+    $memberRootLifecycleWriteSeen = $false
     $usageSnapshot = Get-SquadUsageSnapshot -EventsPath $Path -IncludeAgentRuns
     $first = $null
     $last = $null
@@ -2096,13 +2099,23 @@ function Read-SessionUsageLocal {
             }
             if (-not $typeMatch.Success) { continue }
             $type = $typeMatch.Groups['type'].Value
-            if ($type -eq 'tool.execution_start' -and (-not $memberPattern -or $line -notmatch '"toolName"\s*:\s*"task"')) { continue }
+            if ($type -eq 'tool.execution_start' -and
+                (-not $memberPattern -or $line -notmatch '"toolName"\s*:\s*"(?:task|runSubagent|powershell)"')) { continue }
             try { $sessionEvent = $line | ConvertFrom-Json -AsHashtable } catch { continue }
             $data = $sessionEvent['data']
             if (-not $data) { continue }
             switch ($type) {
                 'tool.execution_start' {
-                    $prompts[[string]$data['toolCallId']] = ($data['arguments'] | ConvertTo-Json -Depth 6 -Compress)
+                    $toolName = [string]$data['toolName']
+                    $arguments = $data['arguments'] | ConvertTo-Json -Depth 6 -Compress
+                    if ($toolName -in @('task', 'runSubagent')) {
+                        $prompts[[string]$data['toolCallId']] = $arguments
+                        $taskPromptCount++
+                        if ($arguments -match $memberPattern) { $memberTaskPromptCount++ }
+                    }
+                    elseif ($arguments -match '(?i)\b(?:Write-SquadFederationHandoff|Promote-SquadFederation|Initialize-SquadFederation)\.ps1\b') {
+                        $memberRootLifecycleWriteSeen = $true
+                    }
                 }
                 'session.fusion_resolved' {
                     $primarySolver = [string]$data['primaryModel']
@@ -2146,6 +2159,15 @@ function Read-SessionUsageLocal {
         First         = $first
         Last          = $last
         MemberName    = if ($memberMatch.Success) { $memberMatch.Groups['name'].Value } else { $null }
+        MemberScopeExclusive = [bool](
+            $memberMatch.Success -and
+            $taskPromptCount -gt 0 -and
+            $memberTaskPromptCount -eq $taskPromptCount -and
+            -not $memberRootLifecycleWriteSeen
+        )
+        MemberTaskPromptCount = $memberTaskPromptCount
+        SessionTaskPromptCount = $taskPromptCount
+        MemberRootLifecycleWriteSeen = $memberRootLifecycleWriteSeen
     }
 }
 
@@ -2979,6 +3001,21 @@ function Resolve-NativeAgentIdentityLocal {
     }
 }
 
+function Test-NativeSessionHasScribeUsageLocal {
+    param(
+        [Parameter(Mandatory)]$Session
+    )
+
+    foreach ($run in @($Session.UsageSnapshot.agentRuns)) {
+        if ([int]$run.records -le 0) { continue }
+        $identity = Resolve-NativeAgentIdentityLocal -Run $run
+        if ($identity.Status -eq 'ok' -and [string]$identity.Name -ceq 'Squad Scribe') {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Get-ExactLedgerUsageLocal {
     <#
     .SYNOPSIS
@@ -3020,8 +3057,9 @@ function Get-ExactLedgerUsageLocal {
         $Warnings.Add('WARN: the session log has no complete native usage records; estimates remain the fallback.')
         return $null
     }
-    if ($Session.MemberName) {
-        $Warnings.Add("WARN: exact per-role ledger replacement is unavailable for member-scoped roots because coordinator usage cannot be assigned to one member; estimates remain the fallback.")
+    $memberScopeExclusive = $Session.PSObject.Properties['MemberScopeExclusive'] -and [bool]$Session.MemberScopeExclusive
+    if ($Session.MemberName -and -not $memberScopeExclusive) {
+        $Warnings.Add("WARN: exact per-role ledger replacement for member '$($Session.MemberName)' requires every model dispatch in the native session to name that member root and no federation-root lifecycle write; estimates remain the fallback.")
         return $null
     }
     if ($RequireSessionBoundary -and $Session.First) {
@@ -5332,9 +5370,11 @@ if ($SessionLog) {
                                 $priorExpected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $latestCached.historyCoverage `
                                     -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
                                     -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
+                                $priorRequiresOrchestration = [bool]$priorExpected.RequireOrchestration -or
+                                    (Test-NativeSessionHasScribeUsageLocal -Session $priorSession)
                                 $priorExact = Get-ExactLedgerUsageLocal -Session $priorSession -Rates $rates -Roster $roster `
                                     -HistoryEntries @($priorExpected.HistoryEntries) -ExpectedAgentNames @($priorExpected.Agents) `
-                                    -RequireOrchestration:$priorExpected.RequireOrchestration -EnforceExpectedSet -RequireSessionBoundary `
+                                    -RequireOrchestration:$priorRequiresOrchestration -EnforceExpectedSet -RequireSessionBoundary `
                                     -BaselineModel $BaselineModel -Warnings $warnings
                                 if ($priorExact) {
                                     $refreshedPrior = ConvertTo-CacheSessionLocal -Exact $priorExact -HistoryCoverage $latestCached.historyCoverage
@@ -5375,12 +5415,13 @@ if ($SessionLog) {
                 if (-not $bootstrapped) {
                     $coveragePlan = Get-ExactCoveragePlanLocal -Sessions $cacheSessions -CurrentSessionId ([string]$session.SessionId) -CurrentHistoryCoverage $historyIdentitiesByFile
                     $currentCoverageCount = [int](($coveragePlan.CurrentCoverage.Values | ForEach-Object { @($_).Count } | Measure-Object -Sum).Sum)
-                    $refreshCurrentSession = $coveragePlan.ExistingSession -or $currentCoverageCount -gt 0
+                    $hasNativeScribeUsage = Test-NativeSessionHasScribeUsageLocal -Session $session
+                    $refreshCurrentSession = $coveragePlan.ExistingSession -or $currentCoverageCount -gt 0 -or $hasNativeScribeUsage
                     if ($refreshCurrentSession) {
                         $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coveragePlan.CurrentCoverage `
                             -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
                             -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
-                        if ([int]$expected.MeteredEntryCount -eq 0 -and $cacheSessions.Count -gt 0) {
+                        if ([int]$expected.MeteredEntryCount -eq 0 -and $cacheSessions.Count -gt 0 -and -not $hasNativeScribeUsage) {
                             if ($coveragePlan.ExistingIndex -ge 0) {
                                 $cacheSessions[$coveragePlan.ExistingIndex].historyCoverage = $coveragePlan.CurrentCoverage
                             }
@@ -5394,9 +5435,10 @@ if ($SessionLog) {
                                 -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
                         }
                         else {
+                            $requiresOrchestration = [bool]$expected.RequireOrchestration -or $hasNativeScribeUsage
                             $sessionExact = Get-ExactLedgerUsageLocal -Session $session -Rates $rates -Roster $roster `
                                 -HistoryEntries @($expected.HistoryEntries) -ExpectedAgentNames @($expected.Agents) `
-                                -RequireOrchestration:$expected.RequireOrchestration -EnforceExpectedSet -RequireSessionBoundary `
+                                -RequireOrchestration:$requiresOrchestration -EnforceExpectedSet -RequireSessionBoundary `
                                 -BaselineModel $BaselineModel -Warnings $warnings
                             if ($sessionExact) {
                                 $cacheSession = ConvertTo-CacheSessionLocal -Exact $sessionExact -HistoryCoverage $coveragePlan.CurrentCoverage

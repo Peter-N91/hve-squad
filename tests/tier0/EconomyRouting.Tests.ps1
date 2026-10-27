@@ -185,9 +185,9 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
 
 Describe 'The ordinary writer is universal while economy consent and routing remain scoped' {
     It 'does not gate ordinary handoffs or rate seeding on economy mode' {
-        $script:OrdinaryWriter | Should -Match '\*\*off, ranked, economy, and manual\*\*'
-        $script:OrdinaryWriter | Should -Match 'no marker required'
-        $script:OrdinaryWriter | Should -Match 'no exit 7 guard'
+        $script:OrdinaryWriter | Should -Match '\*\*off, ranked, economy, (?:and|or) manual\*\*'
+        $script:OrdinaryWriter | Should -Match '(?i)after each worker'
+        $script:OrdinaryWriter | Should -Not -Match '(?m)^\| 7 \|'
         $script:EconomySection | Should -Match 'retained `-Mode` parameter does not affect rates'
         $script:EconomySection | Should -Match 'Only under economy, the writer warns for missing consent'
         $script:EconomySection | Should -Match 'these rules do not apply to other modes'
