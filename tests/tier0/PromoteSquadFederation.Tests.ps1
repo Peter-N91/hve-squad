@@ -129,7 +129,7 @@ BeforeAll {
     }
 
     function Set-ExactLedger {
-        param($Fixture)
+        param($Fixture, [switch]$RoundingBoundary)
         $artifact = Join-Path $Fixture.Root 'research/exact-ledger.md'
         $null = [IO.Directory]::CreateDirectory((Split-Path -Parent $artifact))
         [IO.File]::WriteAllText($artifact, '# Exact ledger fixture', [Text.UTF8Encoding]::new($false))
@@ -254,6 +254,26 @@ BeforeAll {
                 }
             }
         )
+        if ($RoundingBoundary) {
+            $research = $events[2].data.usage
+            $research.inputTokens = 2
+            $research.outputTokens = 95135
+            $research.cacheReadTokens = 0
+            $research.copilotUsage.totalNanoAiu = 142703100000
+            $research.copilotUsage.tokenDetails[0].tokenCount = 2
+            $research.copilotUsage.tokenDetails[1].tokenCount = 0
+            $research.copilotUsage.tokenDetails[3].tokenCount = 95135
+            $scribe = $events[5].data.usage
+            $scribe.inputTokens = 1506204
+            $scribe.outputTokens = 0
+            $scribe.cacheReadTokens = 0
+            $scribe.cacheWriteTokens = 0
+            $scribe.copilotUsage.totalNanoAiu = 150620400000
+            $scribe.copilotUsage.tokenDetails[0].tokenCount = 1506204
+            $scribe.copilotUsage.tokenDetails[1].tokenCount = 0
+            $scribe.copilotUsage.tokenDetails[2].tokenCount = 0
+            $scribe.copilotUsage.tokenDetails[3].tokenCount = 0
+        }
         $eventText = ($events | ForEach-Object { $_ | ConvertTo-Json -Depth 12 -Compress }) -join "`n"
         [IO.File]::WriteAllText((Join-Path $session 'events.jsonl'), $eventText + "`n", [Text.UTF8Encoding]::new($false))
         $result = Invoke-Local $script:Ledger $Fixture.Repo @('-SquadRoot', $Fixture.Root, '-SessionLog', $session, '-Write')
@@ -492,6 +512,50 @@ Describe 'Deterministic federation promotion transaction' {
         $promotionEntry = [regex]::Match($scribe, '(?ms)^###[^\r\n]* Federation promotion[^\r\n]*\r?\n.*\z').Value
         $promotionEntry | Should -Not -BeNullOrEmpty
         $promotionEntry | Should -Not -Match '#### Consumption'
+    }
+
+    It 'promotes a valid Cost Comparison rounding boundary without rewriting native consumption' {
+        $fixture = New-PlainSquad
+        Set-ExactLedger $fixture -RoundingBoundary
+        $ledgerPath = Join-Path $fixture.Root 'consumption.md'
+        [IO.File]::ReadAllText($ledgerPath) | Should -Match ([regex]::Escape('1.5062 USD (105.5%) higher'))
+        $ledgerBefore = [IO.File]::ReadAllBytes($ledgerPath)
+        $stateBefore = Get-Content -LiteralPath (Join-Path $fixture.Root 'state.json') -Raw | ConvertFrom-Json
+        $journalBefore = Get-Content -LiteralPath (Join-Path $fixture.Root 'consumption-sessions.json') -Raw | ConvertFrom-Json
+        $plan = New-Plan $fixture
+
+        $result = Invoke-Promotion $fixture $plan
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $member = Join-Path $fixture.Root 'members/product'
+        [IO.File]::ReadAllBytes((Join-Path $member 'consumption.md')) | Should -Be $ledgerBefore
+        $stateAfter = Get-Content -LiteralPath (Join-Path $member 'state.json') -Raw | ConvertFrom-Json
+        $stateAfter.currentRun.estCostUsd | Should -Be $stateBefore.currentRun.estCostUsd
+        $stateAfter.currentRun.estCreditsTotal | Should -Be $stateBefore.currentRun.estCreditsTotal
+        $journalAfter = Get-Content -LiteralPath (Join-Path $member 'consumption-sessions.json') -Raw | ConvertFrom-Json
+        @($journalAfter.sessions.identityDigest) | Should -Be @($journalBefore.sessions.identityDigest)
+        ($journalAfter.sessions | Measure-Object records -Sum).Sum | Should -Be ($journalBefore.sessions | Measure-Object records -Sum).Sum
+        $nativeBefore = ($journalBefore.sessions.rows | Measure-Object nanoAiu -Sum).Sum
+        $nativeBefore | Should -Be 293323500000
+        ($journalAfter.sessions.rows | Measure-Object nanoAiu -Sum).Sum | Should -Be $nativeBefore
+    }
+
+    It 'rejects a corrupted Cost Comparison rounding boundary without changing the source' {
+        $fixture = New-PlainSquad
+        Set-ExactLedger $fixture -RoundingBoundary
+        $ledgerPath = Join-Path $fixture.Root 'consumption.md'
+        $text = [IO.File]::ReadAllText($ledgerPath).Replace('1.5062 USD (105.5%) higher', '1.5062 USD (106.5%) higher')
+        [IO.File]::WriteAllText($ledgerPath, $text, [Text.UTF8Encoding]::new($false))
+        $plan = New-Plan $fixture
+        $before = Get-TreeHash $fixture.Tracking
+
+        $result = Invoke-Promotion $fixture $plan
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'Exact Cost Comparison saving differs'
+        Get-TreeHash $fixture.Tracking | Should -BeExactly $before
+        Test-Path -LiteralPath (Join-Path $fixture.Root 'federation.md') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $fixture.Root 'members') | Should -BeFalse
     }
 
     It 'supports an ordinary deterministic member handoff immediately after promotion' {

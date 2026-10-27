@@ -2689,6 +2689,63 @@ description: "Append-only dispatch history for a single squad agent"
         $ledger | Should -Not -Match 'hve-squad:squad-scribe'
     }
 
+    It 'accepts Cost Comparison rounding for <Scenario>' -ForEach @(
+        @{ Scenario = 'higher cost at the reported percentage boundary'; FreshInput = 2; OutputTokens = 95135; InputRate = 3; ScribeInput = 1506204; Baseline = ''; Saving = '1.5062 USD (105.5%) higher'; KeepJournal = $true }
+        @{ Scenario = 'the same higher-cost boundary without a journal'; FreshInput = 2; OutputTokens = 95135; InputRate = 3; ScribeInput = 1506204; Baseline = ''; Saving = '1.5062 USD (105.5%) higher'; KeepJournal = $false }
+        @{ Scenario = 'lower cost at a percentage boundary'; FreshInput = 2; OutputTokens = 95135; InputRate = 3; ScribeInput = 1200; Baseline = 'Claude Opus 5'; Saving = '0.9502 USD (39.9%) lower'; KeepJournal = $true }
+        @{ Scenario = 'the same lower-cost boundary without a journal'; FreshInput = 2; OutputTokens = 95135; InputRate = 3; ScribeInput = 1200; Baseline = 'Claude Opus 5'; Saving = '0.9502 USD (39.9%) lower'; KeepJournal = $false }
+        @{ Scenario = 'nonzero higher costs displayed as zero'; FreshInput = 1; OutputTokens = 0; InputRate = 3; ScribeInput = 1; Baseline = ''; Saving = '0.0000 USD (33.3%) higher'; KeepJournal = $true }
+        @{ Scenario = 'nonzero lower costs displayed as zero'; FreshInput = 1; OutputTokens = 0; InputRate = 3; ScribeInput = 1; Baseline = 'Claude Opus 5'; Saving = '0.0000 USD (20.0%) lower'; KeepJournal = $true }
+        @{ Scenario = 'a saving smaller than the displayed USD precision'; FreshInput = 17; OutputTokens = 0; InputRate = 1; ScribeInput = 32; Baseline = ''; Saving = '0.0000 USD (3.9%) lower'; KeepJournal = $true }
+        @{ Scenario = 'an exactly zero baseline'; FreshInput = 0; OutputTokens = 0; InputRate = 3; ScribeInput = 1; Baseline = ''; Saving = '0.0000 USD (0.0%) higher'; KeepJournal = $true }
+    ) {
+        $events = @(
+            '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-09-27T09:59:00.000Z"}'
+            '{"type":"subagent.started","agentId":"owner-research","data":{"toolCallId":"t1","agentName":"Squad Researcher","model":"claude-sonnet-4.6"},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'owner-research' -SourceSessionId 'research-session' -UsageId 'one' -Model 'claude-sonnet-4.6' -FreshInput $FreshInput -Cached 0 -CacheWrite 0 -Output $OutputTokens -InputRate $InputRate -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-01T10:02:00.000Z')
+            '{"type":"subagent.started","agentId":"owner-scribe","data":{"toolCallId":"t2","agentName":"Squad Scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-01T10:02:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'owner-scribe' -SourceSessionId 'scribe-session' -UsageId 'two' -Model 'claude-haiku-4.5' -FreshInput $ScribeInput -Cached 0 -CacheWrite 0 -Output 0 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-01T10:03:00.000Z')
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -BaselineModel $Baseline -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $ledgerPath = Join-Path $f.Root 'consumption.md'
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $ledger | Should -Match ([regex]::Escape("HVE Squad is **$Saving**"))
+        if (-not $KeepJournal) {
+            Remove-Item -LiteralPath (Join-Path $f.Root 'consumption-sessions.json')
+        }
+        $before = [IO.File]::ReadAllBytes($ledgerPath)
+
+        $check = Invoke-Ledger -SquadRoot $f.Root -Check
+
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        [IO.File]::ReadAllBytes($ledgerPath) | Should -Be $before
+    }
+
+    It 'rejects corrupted Cost Comparison rounding <Field>' -ForEach @(
+        @{ Field = 'amount'; Replacement = '0.0615 USD (10.9%) higher' }
+        @{ Field = 'percentage'; Replacement = '0.0515 USD (11.9%) higher' }
+        @{ Field = 'direction'; Replacement = '0.0515 USD (10.9%) lower' }
+    ) {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $ledgerPath = Join-Path $f.Root 'consumption.md'
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $ledger | Should -Match ([regex]::Escape('HVE Squad is **0.0515 USD (10.9%) higher**'))
+        Set-Content -LiteralPath $ledgerPath -Value ($ledger.Replace(
+                '0.0515 USD (10.9%) higher', $Replacement
+            )) -NoNewline
+        $before = [IO.File]::ReadAllBytes($ledgerPath)
+
+        $check = Invoke-Ledger -SquadRoot $f.Root -Check
+
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match 'Exact Cost Comparison saving differs'
+        [IO.File]::ReadAllBytes($ledgerPath) | Should -Be $before
+    }
+
     It 'writes the ledger when only the Scribe has completed, as at the first hand-off of a run (a live run rolled back on ''Sum'' cannot be found)' {
         $f = New-SessionFixtureLocal -Fixture seed -EventLines @($script:BaseEvents | Where-Object { $_ -notmatch 'owner-research|research-session|toolCallId":"t1"' })
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write

@@ -5192,16 +5192,34 @@ if ($Check) {
             $saving = [regex]::Match($consumptionContent, '(?m)^HVE Squad is \*\*(?<usd>[0-9,.]+) USD \((?<pct>[0-9,.]+)%\) (?<direction>lower|higher)\*\*')
             if ($baselineComparison.Count -eq 1 -and $saving.Success) {
                 $baselineCost = ConvertTo-LedgerNumberLocal $baselineComparison[0]['USD']
-                $expectedSaving = $baselineCost - $totalCost
-                $quotedSaving = [double]::Parse($saving.Groups['usd'].Value.Replace(',', ''), [Globalization.CultureInfo]::InvariantCulture)
-                $quotedPct = [double]::Parse($saving.Groups['pct'].Value.Replace(',', ''), [Globalization.CultureInfo]::InvariantCulture)
-                $expectedPct = if ($baselineCost -gt 0) { 100.0 * [math]::Abs($expectedSaving) / $baselineCost } else { 0.0 }
-                $quotedDirection = $saving.Groups['direction'].Value
-                if ([math]::Abs($quotedSaving - [math]::Abs($expectedSaving)) -gt 0.0001 -or
-                    [math]::Abs($quotedPct - $expectedPct) -gt 0.05 -or
-                    ($expectedSaving -ge 0 -and $quotedDirection -ne 'lower') -or
-                    ($expectedSaving -lt 0 -and $quotedDirection -ne 'higher')) {
-                    $mismatches.Add('Exact Cost Comparison saving differs from the exact actual and calculated counterfactual rows.')
+                if ($null -eq $baselineCost -or $baselineCost -lt 0) {
+                    $mismatches.Add('Exact Cost Comparison calculated counterfactual USD is not a non-negative number.')
+                }
+                else {
+                    # The renderer rounds each USD operand to F4 and the raw ratio to F1.
+                    $usdHalfUnit = [decimal]0.00005
+                    $pctHalfUnit = [decimal]0.05
+                    $actualMin = [math]::Max([decimal]0, [decimal]$totalCost - $usdHalfUnit)
+                    $actualMax = [decimal]$totalCost + $usdHalfUnit
+                    $baselineMin = [math]::Max([decimal]0, [decimal]$baselineCost - $usdHalfUnit)
+                    $baselineMax = [decimal]$baselineCost + $usdHalfUnit
+                    $savingMin = $baselineMin - $actualMax
+                    $savingMax = $baselineMax - $actualMin
+                    $quotedSaving = [decimal]::Parse($saving.Groups['usd'].Value.Replace(',', ''), [Globalization.CultureInfo]::InvariantCulture)
+                    $quotedPct = [decimal]::Parse($saving.Groups['pct'].Value.Replace(',', ''), [Globalization.CultureInfo]::InvariantCulture)
+                    $sign = if ($saving.Groups['direction'].Value -eq 'lower') { 1 } else { -1 }
+                    $signedSaving = $sign * $quotedSaving
+                    $signedPct = $sign * $quotedPct
+                    $pctMin = if ($baselineMin -gt 0) { 100 * (1 - $actualMax / $baselineMin) } else { $null }
+                    $pctMax = 100 * (1 - $actualMin / $baselineMax)
+                    $zeroBaselinePct = $baselineCost -eq 0 -and $quotedPct -eq 0
+                    if ($signedSaving + $usdHalfUnit -lt $savingMin -or
+                        $signedSaving - $usdHalfUnit -gt $savingMax -or
+                        (-not $zeroBaselinePct -and (
+                            ($null -ne $pctMin -and $signedPct + $pctHalfUnit -lt $pctMin) -or
+                            $signedPct - $pctHalfUnit -gt $pctMax))) {
+                        $mismatches.Add('Exact Cost Comparison saving differs from the exact actual and calculated counterfactual rows.')
+                    }
                 }
             }
         }

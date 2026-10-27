@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-26"
+  last_updated: "2026-10-27"
 ---
 
 # Squad Consumption Ledger
@@ -93,6 +93,12 @@ counterfactual, not an observed alternate run; it deliberately adds no hypotheti
 context growth, rework, or behavioral change. When exact attribution is unavailable,
 the historical estimated comparison remains the fallback. Run `-Check` afterward;
 never hand-edit derived comparison figures after a successful check.
+
+Exact savings are calculated before display rounding: USD uses four decimal places
+and percentages use one. `-Check` accounts for the rounding intervals of both USD
+rows when validating the saving amount, percentage, and direction. It does not
+recalculate a supposedly exact percentage from rounded operands. This read-only
+check preserves native totals and journal validation, including during promotion.
 
 ## consumption-sessions.json
 
