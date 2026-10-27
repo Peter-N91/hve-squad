@@ -40,7 +40,7 @@ controls, not a sandbox or a substitute for host filesystem permissions.
 | Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell and additive roster expansion, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
 | Offline capability evidence | Exact model/configuration checks, explicit verification dates, common versioned panels, digest validation and visible fallback | Curated verification facts and source hashes are not authenticated measurement signatures. |
 | External file exchange | Closed schemas, request/result identity matching, output allowlists, structural path containment | A matching envelope does not authenticate its author. |
-| Persistence | Closed handoff/verdict payload validation, shared per-root writer locks, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, cumulative exact-session journal with history-prefix and native-identity deduplication, ledger checks | History, verdicts, lifecycle plans, and exact-session snapshots are local and editable by principals with repository write access; hashes detect changes but do not authenticate authors. |
+| Persistence | Closed handoff/verdict payload validation, shared per-root writer locks, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, cumulative exact-session journal with history-prefix and native-identity deduplication, unique APM/plugin agent-name canonicalization, ledger checks | History, verdicts, lifecycle plans, and exact-session snapshots are local and editable by principals with repository write access; hashes detect changes but do not authenticate authors. |
 | Domain execution | Consumer-owned adapter; no connector command execution | Host permissions and consumer automation govern actual source changes. |
 
 Ratings are qualitative under the assumption that an external producer can
@@ -224,6 +224,11 @@ accounting additionally requires a unique native session id, non-overlapping has
 request identities, a closed cache schema, and cached history identities that remain
 an ordered prefix of current append-only history. Any mismatch keeps the journal
 unchanged and returns to the all-history estimator.
+
+Native role attribution does not trust a package-qualified host label by itself.
+The raw `agentName`, `agentDisplayName`, and final namespace/path segment may resolve
+only to one history-backed canonical agent name. This gives APM and plugin dispatches
+the same accounting identity while refusing collisions or ambiguous aliases.
 
 ### Repudiation
 

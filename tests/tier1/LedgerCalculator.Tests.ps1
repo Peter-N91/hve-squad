@@ -2569,6 +2569,30 @@ Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exac
         $check.ExitCode | Should -Be 0 -Because $check.Output
     }
 
+    It 'canonicalizes plugin-qualified native identities to the same history agents used by APM installs' {
+        $events = @(
+            $script:BaseEvents | ForEach-Object {
+                $line = $_.Replace(
+                    '"agentName":"Squad Researcher","agentDisplayName":"researcher"',
+                    '"agentName":"hve-squad:squad-researcher","agentDisplayName":"researcher"'
+                )
+                $line.Replace(
+                    '"agentName":"Squad Scribe","agentDisplayName":"scribe"',
+                    '"agentName":"hve-squad:squad-scribe","agentDisplayName":"scribe"'
+                )
+            }
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match '\| researcher \| 1 \| 100,000 \| 80,000 \| 0 \| 10,000 \| 0\.4740 \| 47\.40 \| exact-native \|'
+        $ledger | Should -Match '\| orchestration \| 1 \| 10,000 \| 40,000 \| 10,000 \| 5,000 \| 0\.0515 \| 5\.15 \| exact-native \|'
+        $ledger | Should -Not -Match 'hve-squad:squad-researcher'
+        $ledger | Should -Not -Match 'hve-squad:squad-scribe'
+    }
+
     It 'writes the ledger when only the Scribe has completed, as at the first hand-off of a run (a live run rolled back on ''Sum'' cannot be found)' {
         $f = New-SessionFixtureLocal -Fixture seed -EventLines @($script:BaseEvents | Where-Object { $_ -notmatch 'owner-research|research-session|toolCallId":"t1"' })
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write

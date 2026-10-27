@@ -2811,6 +2811,134 @@ function Get-ExactRequestCounterfactualCostLocal {
     ) / 1000000.0
 }
 
+function Get-NativeAgentIdentityVariantsLocal {
+    param([AllowEmptyString()][string]$Identity)
+
+    $variants = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    function Add-VariantLocal {
+        param([AllowEmptyString()][string]$Value)
+        $candidate = ([string]$Value).Trim()
+        if ($candidate -and $seen.Add($candidate)) { $variants.Add($candidate) }
+    }
+
+    $value = ([string]$Identity).Trim()
+    if (-not $value) { return @() }
+    Add-VariantLocal -Value $value
+
+    $namespaceSuffix = @($value -split ':')[-1]
+    Add-VariantLocal -Value $namespaceSuffix
+
+    $pathSuffix = @($namespaceSuffix -split '[\\/]')[-1]
+    Add-VariantLocal -Value $pathSuffix
+
+    foreach ($candidate in @($variants.ToArray())) {
+        Add-VariantLocal -Value ([regex]::Replace($candidate, '(?i)\.agent(?:\.md)?$', ''))
+    }
+    $variants.ToArray()
+}
+
+function ConvertTo-NativeAgentIdentityKeyLocal {
+    param([AllowEmptyString()][string]$Identity)
+    (([string]$Identity).Trim().ToLowerInvariant() -replace '[^a-z0-9]', '')
+}
+
+function Find-NativeAgentIdentityMatchLocal {
+    param(
+        [AllowEmptyCollection()][string[]]$Candidates = @(),
+        [AllowEmptyCollection()][string[]]$KnownNames = @()
+    )
+
+    $known = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $KnownNames) {
+        $trimmed = ([string]$name).Trim()
+        if ($trimmed -and -not $known.ContainsKey($trimmed)) { $known.Add($trimmed, $trimmed) }
+    }
+    if ($known.Count -eq 0) {
+        return [pscustomobject]@{ Status = 'unmapped'; Name = ''; Matches = @() }
+    }
+
+    $candidateVariants = [Collections.Generic.List[string]]::new()
+    $candidateSeen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($candidate in $Candidates) {
+        foreach ($variant in @(Get-NativeAgentIdentityVariantsLocal -Identity $candidate)) {
+            if ($candidateSeen.Add($variant)) { $candidateVariants.Add($variant) }
+        }
+    }
+
+    $exactMatches = [Collections.Generic.List[string]]::new()
+    foreach ($name in $known.Values) {
+        foreach ($candidate in $candidateVariants) {
+            if ([string]::Equals($candidate, $name, [StringComparison]::OrdinalIgnoreCase)) {
+                $exactMatches.Add($name)
+                break
+            }
+        }
+    }
+    if ($exactMatches.Count -eq 1) {
+        return [pscustomobject]@{ Status = 'ok'; Name = $exactMatches[0]; Matches = $exactMatches.ToArray() }
+    }
+    if ($exactMatches.Count -gt 1) {
+        return [pscustomobject]@{ Status = 'ambiguous'; Name = ''; Matches = @($exactMatches | Sort-Object) }
+    }
+
+    $candidateKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($candidate in $candidateVariants) {
+        $key = ConvertTo-NativeAgentIdentityKeyLocal -Identity $candidate
+        if ($key) { $null = $candidateKeys.Add($key) }
+    }
+    $normalizedMatches = [Collections.Generic.List[string]]::new()
+    foreach ($name in $known.Values) {
+        $key = ConvertTo-NativeAgentIdentityKeyLocal -Identity $name
+        if ($key -and $candidateKeys.Contains($key)) { $normalizedMatches.Add($name) }
+    }
+    if ($normalizedMatches.Count -eq 1) {
+        return [pscustomobject]@{ Status = 'ok'; Name = $normalizedMatches[0]; Matches = $normalizedMatches.ToArray() }
+    }
+    if ($normalizedMatches.Count -gt 1) {
+        return [pscustomobject]@{ Status = 'ambiguous'; Name = ''; Matches = @($normalizedMatches | Sort-Object) }
+    }
+    [pscustomobject]@{ Status = 'unmapped'; Name = ''; Matches = @() }
+}
+
+function Resolve-NativeAgentIdentityLocal {
+    param(
+        [Parameter(Mandatory)]$Run,
+        [AllowEmptyCollection()][string[]]$ExpectedAgentNames = @()
+    )
+
+    $rawName = ([string]$Run.agentName).Trim()
+    $displayName = ([string]$Run.displayName).Trim()
+    $candidates = @($rawName, $displayName | Where-Object { $_ })
+    $knownNames = @('coordinator', 'Squad Scribe') + @($ExpectedAgentNames | Where-Object { $_ })
+    $match = Find-NativeAgentIdentityMatchLocal -Candidates $candidates -KnownNames $knownNames
+    if ($match.Status -eq 'ok') {
+        return [pscustomobject]@{
+            Status = 'ok'
+            Name = [string]$match.Name
+            RawName = $rawName
+            DisplayName = $displayName
+            Matches = @($match.Matches)
+        }
+    }
+    if ($match.Status -eq 'ambiguous') {
+        return [pscustomobject]@{
+            Status = 'ambiguous'
+            Name = ''
+            RawName = $rawName
+            DisplayName = $displayName
+            Matches = @($match.Matches)
+        }
+    }
+    [pscustomobject]@{
+        Status = 'unmapped'
+        Name = if ($rawName) { $rawName } else { $displayName }
+        RawName = $rawName
+        DisplayName = $displayName
+        Matches = @()
+    }
+}
+
 function Get-ExactLedgerUsageLocal {
     <#
     .SYNOPSIS
@@ -2818,9 +2946,11 @@ function Get-ExactLedgerUsageLocal {
     .DESCRIPTION
         Each usage event carries the active agentId. SquadUsage.psm1 resolves that
         id through subagent.started parentAgentId links, so nested workers roll into
-        the top-level roster role that owned them. Coordinator and Squad Scribe
-        usage share the orchestration row. The exact row sum must reconcile to the
-        session nano-AIU total or the caller falls back to estimates.
+        the top-level roster role that owned them. APM human names and plugin-qualified
+        identities resolve through one unique history-backed canonical agent name.
+        Coordinator and Squad Scribe usage share the orchestration row. The exact row
+        sum must reconcile to the session nano-AIU total or the caller falls back to
+        estimates.
     #>
     param(
         [Parameter(Mandatory)]$Session,
@@ -2874,10 +3004,24 @@ function Get-ExactLedgerUsageLocal {
         }
     }
 
+    $expectedAgents = if ($ExpectedAgentNames.Count -gt 0) {
+        @($ExpectedAgentNames | Where-Object { $_ } | Select-Object -Unique)
+    }
+    else {
+        @($OrderedAggregates | ForEach-Object AgentName | Where-Object { $_ } | Select-Object -Unique)
+    }
+
     $rowsByKey = @{}
     foreach ($run in @($snapshot.agentRuns)) {
         if ([int]$run.records -le 0) { continue }
-        $isOrchestration = $run.agentName -in @('coordinator', 'Squad Scribe')
+        $nativeIdentity = Resolve-NativeAgentIdentityLocal -Run $run -ExpectedAgentNames $expectedAgents
+        if ($nativeIdentity.Status -eq 'ambiguous') {
+            $reported = @($nativeIdentity.RawName, $nativeIdentity.DisplayName | Where-Object { $_ }) -join ' / '
+            $Warnings.Add("WARN: exact native agent identity '$reported' matches multiple history-backed identities ($(@($nativeIdentity.Matches) -join ', ')); estimates remain the fallback.")
+            return $null
+        }
+        $canonicalAgentName = [string]$nativeIdentity.Name
+        $isOrchestration = $canonicalAgentName -in @('coordinator', 'Squad Scribe')
         if ($isOrchestration) {
             $resolved = [pscustomobject]@{
                 Index = [int]::MaxValue
@@ -2890,12 +3034,12 @@ function Get-ExactLedgerUsageLocal {
             $agentName = 'Coordinator+Scribe'
         }
         else {
-            $resolved = Resolve-RoleForAgentLocal -AgentName ([string]$run.agentName) -Roster $Roster
+            $resolved = Resolve-RoleForAgentLocal -AgentName $canonicalAgentName -Roster $Roster
             if ($resolved.Status -notin @('ok', 'unmapped')) {
-                $Warnings.Add("WARN: exact usage for '$($run.agentName)' cannot be mapped to one roster row (status: $($resolved.Status)); estimates remain the fallback.")
+                $Warnings.Add("WARN: exact usage for '$canonicalAgentName' cannot be mapped to one roster row (status: $($resolved.Status)); estimates remain the fallback.")
                 return $null
             }
-            $agentName = [string]$run.agentName
+            $agentName = $canonicalAgentName
         }
 
         $key = if ($isOrchestration) { 'orchestration' } else { "$($resolved.AggregateKey)`n$agentName" }
@@ -2963,12 +3107,6 @@ function Get-ExactLedgerUsageLocal {
         return $null
     }
     $exactAgents = @($rows | Where-Object Label -ne 'orchestration' | ForEach-Object Agent | Select-Object -Unique)
-    $expectedAgents = if ($ExpectedAgentNames.Count -gt 0) {
-        @($ExpectedAgentNames | Where-Object { $_ } | Select-Object -Unique)
-    }
-    else {
-        @($OrderedAggregates | ForEach-Object AgentName | Where-Object { $_ } | Select-Object -Unique)
-    }
     $missingAgents = @($expectedAgents | Where-Object { $_ -notin $exactAgents })
     if ($missingAgents.Count -gt 0) {
         $Warnings.Add("WARN: exact native usage has no attributed records for history-backed agent(s): $($missingAgents -join ', '); estimates remain the fallback.")

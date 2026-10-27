@@ -312,6 +312,11 @@ When the coordinator has `pwsh` 7+, the trusted ledger invocation uses
   `compactionAttemptId`;
 * reads event-level `agentId`, joins it to `subagent.started`, and follows
   `parentAgentId` so nested workers accrue to their top-level role;
+* canonicalizes each top-level host identity against the unique history-backed
+  agent name using the raw `agentName`, `agentDisplayName`, and the final
+  namespace/path segment. APM names such as `Squad Lead` and plugin-qualified
+  names such as `hve-squad:squad-lead` therefore reconcile to the same row for
+  every dispatched agent; zero or multiple matches fail closed;
 * derives uncached input, cache read, cache write, and output from native
   `copilotUsage.tokenDetails`, requiring those charges to reproduce
   `totalNanoAiu`;
@@ -326,9 +331,9 @@ When the coordinator has `pwsh` 7+, the trusted ledger invocation uses
 
 There is no separate Observed Usage section. Exact native rows replace estimates in
 the main tables and drive state totals, unit economics, and Cost Comparison.
-Incomplete accounting, absent event-level identity, ambiguous roster mapping,
-member-scoped coordinator attribution, missing history coverage, or a reconciliation
-failure leaves the estimator visibly in place.
+Incomplete accounting, absent event-level identity, ambiguous native-name or roster
+mapping, member-scoped coordinator attribution, missing history coverage, or a
+reconciliation failure leaves the estimator visibly in place.
 
 Every exact ledger is explicitly **as of** its recorded native timestamp. A model
 request emitted after the helper reaches the log's then-current end appears on the
