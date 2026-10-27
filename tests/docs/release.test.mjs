@@ -220,8 +220,14 @@ test("both languages track preview renames, hotfixes and consumed feature fragme
 });
 
 test("only explicitly marked pending features receive pre-release badges", () => {
-  const release = readReleaseInfo();
-  assert(release.previewTag);
+  const release = resolveReleaseInfo("version: 0.18.1\n", [
+    fragment(economy, "minor"),
+    fragment("20261015-squad-work-role-connectors"),
+    fragment("20261019-squad-coach"),
+    fragment("20261024-foundry-agent-sync-replacement"),
+    fragment("20261026-scribe-single-dispatch-handoffs"),
+  ]);
+  assert.equal(release.previewTag, "v0.19.0-pre");
   const pages = buildPages(undefined, release);
   for (const language of ["en", "fr"]) {
     const index = load(pages.find(page => page.language === language && page.slug === "index").content);
@@ -241,6 +247,19 @@ test("only explicitly marked pending features receive pre-release badges", () =>
     assert.equal(maintaining("#documentation-site > .prerelease-badge").length, 0);
   }
 });
+
+for (const [state, fragments] of [
+  ["after Release Prep consumes the batch", []],
+  ["when a later unrelated preview opens", [fragment("unrelated")]],
+]) {
+  test(`released documentation stays unbadged ${state}`, () => {
+    const release = resolveReleaseInfo("version: 0.19.0\n", fragments);
+    for (const page of buildPages(undefined, release)) {
+      const $ = load(page.content);
+      assert.equal($(".prerelease-badge").length, 0, page.outputPath);
+    }
+  });
+}
 
 test("explicit release markers stay aligned across translations", () => {
   const pages = buildPages(undefined, resolveReleaseInfo("version: 0.18.1\n", []));
