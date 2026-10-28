@@ -122,16 +122,57 @@ Describe 'CI-02 hve-core sync validates before publication' {
         $script:SyncWorkflow | Should -Match 'refresh the rolling preview'
     }
 
-    It 'retries the exact Pester install used by PR, sync, and release conformance' {
+    It 'retries the exact Pester install shared by PR, sync, and reusable release conformance' {
         foreach ($entry in @(
                 @{ Body = $script:Tier0Workflow; Name = 'Install Pester' }
                 @{ Body = $script:SyncWorkflow; Name = 'Install Pester for candidate conformance' }
-                @{ Body = $script:ReleaseWorkflow; Name = 'Install Pester' }
             )) {
             $step = Get-WorkflowStepBlock -Body $entry.Body -Name $entry.Name
             $step | Should -Match ([regex]::Escape('for ($attempt = 1; $attempt -le 3; $attempt++)'))
             $step | Should -Match 'Install-Module Pester -RequiredVersion 5\.7\.1.+-ErrorAction Stop'
             $step | Should -Match ([regex]::Escape('Start-Sleep -Seconds (5 * $attempt)'))
+        }
+    }
+
+    Describe 'CI-03 Isolated CI shards retain a fail-closed required check' {
+        It 'freezes the planned checkout and preserves the aggregate check name' {
+            $script:Tier0Workflow | Should -Match 'ref: \$\{\{ needs\.plan\.outputs\.sha \}\}'
+            $script:Tier0Workflow | Should -Match 'shard: \$\{\{ fromJSON\(needs\.plan\.outputs\.shards\) \}\}'
+            $script:Tier0Workflow | Should -Match 'fail-fast: true'
+            $script:Tier0Workflow | Should -Match '(?s)required:\s+name: Package conformance\s+if: always\(\)\s+needs: \[plan, conformance\]'
+            $script:Tier0Workflow | Should -Match '\$PLAN_RESULT" != success \|\| "\$SHARD_RESULT" != success'
+            $script:Tier0Workflow | Should -Match 'name: tier0-\$\{\{ inputs.scope \|\| ''All'' \}\}-\$\{\{ matrix.shard \}\}'
+            $script:Tier0Workflow | Should -Match 'path: tests/tier0/tier0-results\.xml'
+        }
+
+        It 'covers shared installer, canonical hooks, and release workflow changes' {
+            foreach ($path in @('tests/lib/**', 'scripts/plugin-hooks/**', '.github/workflows/release.yml')) {
+                @([regex]::Matches($script:Tier0Workflow, [regex]::Escape("'$path'"))).Count | Should -Be 2
+            }
+            $script:Tier0Workflow | Should -Match 'group: \$\{\{ github.workflow \}\}-tier0-'
+        }
+
+        It 'keeps legacy hotfix runners unsharded and passes selectors only to capable runners' {
+            $script:Tier0Workflow | Should -Match 'Parameters\.ContainsKey\(''Scope''\).*Parameters\.ContainsKey\(''Shard''\)'
+            $script:Tier0Workflow | Should -Match ([regex]::Escape('$shards = @(''All'')'))
+            $script:Tier0Workflow | Should -Match '(?s)if \(\$env:MODERN_RUNNER -eq ''true''\).*?\$testArgs\.Scope.*?\$testArgs\.Shard'
+        }
+    }
+
+    Describe 'CI-04 Complementary release validation gates publication' {
+        It 'checks repository contracts at the frozen candidate before creating a tag' {
+            $script:ReleaseWorkflow | Should -Match '(?s)source_conformance:.*?source-ref: \$\{\{ needs.candidate.outputs.sha \}\}\s+scope: Repository'
+            $script:ReleaseWorkflow | Should -Match 'needs: \[candidate, source_conformance\]'
+            $script:ReleaseWorkflow | Should -Match 'needs.source_conformance.result == ''success'''
+        }
+
+        It 'runs all installed-package cases at the tagged identity before publishing' {
+            $script:ReleaseWorkflow | Should -Match '(?s)published_conformance:.*?ref: \$\{\{ needs.tag.outputs.tag \}\}\s+source-ref: \$\{\{ needs.tag.outputs.sha \}\}\s+scope: Package'
+            $script:ReleaseWorkflow | Should -Match 'needs: \[candidate, tag, published_conformance\]'
+            $script:ReleaseWorkflow | Should -Match 'needs.published_conformance.result == ''success'''
+            $script:ReleaseWorkflow | Should -Match '(?s)Checkout verified tag.*?ref: \$\{\{ needs.tag.outputs.sha \}\}'
+            @([regex]::Matches($script:ReleaseWorkflow, 'uses: \./\.github/workflows/tier0-conformance\.yml')).Count | Should -Be 2
+            $script:ReleaseWorkflow | Should -Not -Match 'run: \./tests/tier0/Invoke-Tier0Tests\.ps1'
         }
     }
 }

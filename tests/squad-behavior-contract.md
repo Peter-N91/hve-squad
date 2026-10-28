@@ -45,6 +45,8 @@ Scribe hand-off pipelining (GATE-22 through GATE-28 below) is one more case this
 | Command | Spends requests | What it does |
 |---|---|---|
 | `./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot .` | no | Static conformance of the tree this branch would deliver |
+| `./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Shard Contracts` | no | Reproduce one isolated CI shard; other shards are `Handoff`, `Lifecycle`, and `Coordinator` |
+| `./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Scope Repository` | no | Repository-only contracts without installing APM dependencies |
 | `./tests/tier0/Invoke-Tier0Tests.ps1 -Ref v0.16.0` | no | Static conformance of a published ref, as a consumer receives it |
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck` | no | Mutation controls proving the state contract can fail |
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SquadRoot <path>` | no | State contract against an existing squad tree |
@@ -115,8 +117,15 @@ That parity is evidence, not proof. The cases below are what turn it into proof.
 | ID | Assertion | Source |
 |---|---|---|
 | CI-01 | PR release-state checks use the tested merge commit's first parent: upstream pin changes are not attributed to the PR, while actual PR pin changes still fail | `.github/workflows/pr-validation.yml`, `Compute diff against base` and `Reject an unreviewed hve-core pin move` |
+| CI-03 | Tier 0's default selection retains every registered case; isolated CI shards partition that selection exactly once, preserve the required `Package conformance` check, cancel obsolete/failing work, and retain per-shard result reports | `tests/tier0/Tier0TestPlan.psm1`; `.github/workflows/tier0-conformance.yml` |
+| CI-04 | Release validates repository-only cases before tagging and installed-package cases against the immutable published tag before creating a Release, without repeating either selection; old hotfix runners retain their existing full-suite fallback | `.github/workflows/release.yml`; `tests/tier0/Invoke-Tier0Tests.ps1`, `Scope` |
 
 No Copilot invocation. Install the ref into a scratch directory, then inspect the delivered tree.
+The default selection remains complete. CI partitions it into isolated shards
+with exact-once container coverage and one aggregate required check. Release
+runs repository-only cases before tagging and installed-package cases after
+tagging; `Scope=Package` keeps the published-ref pin assertion. Older hotfix
+runners retain their full-suite fallback.
 
 ### Documentation release availability
 
