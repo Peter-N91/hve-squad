@@ -10,6 +10,69 @@ adversarial and source-capture implementation remains local and is not included 
 this PR. Historical results below describe local development revisions, not the
 current upstream package or validation of this documentation branch.
 
+## Release reassessment: 2026-10-28
+
+This addendum compares the handoff with upstream **v0.19.0**, commit
+`a200b15dd929c1c1045176cae87f1a1ee381a429`. The dated investigation and negative
+results below remain historical evidence, not measurements of this release.
+The documentation PR merges cleanly with that release; the unpublished wiki
+implementation has not been ported or validated against it.
+The Scribe-only ownership blocker described below belongs to the dated upstream
+publication attempt, not v0.19.0's ordinary persistence contract.
+
+* Ordinary persistence is no longer Scribe-only. The coordinator directly runs
+  `Write-SquadHandoff.ps1 -Quiet` synchronously in every routing mode. Supported
+  Council, Intake and Discovery verdicts then use `Write-SquadVerdict.ps1 -Quiet`
+  synchronously at the same root; completion uses
+  `Test-SquadTurnCompletion.ps1`. Scribe remains responsible for cold operations,
+  including memory and unsupported-operation fallback. Preserve these boundaries
+  rather than restoring the old per-stage Scribe dispatch.
+* Read `references/coordinator-runtime.md` and `references/economy-scribe.md`
+  for the ordinary path. `scribe-payload-template.md` describes the cold path;
+  it is not the ordinary writer's JSON schema. The ordinary writer accepts
+  `decision.rationale` but rejects unknown keys. Do not forward the old
+  `payloadType/historyRecords/notesForState` envelope or add an unimplemented wiki
+  field to it. Define any producer-sidecar adapter and transaction boundary
+  explicitly, including rollback, replay, and completion proof.
+* The release contains no wiki ingestion/recall helpers. Its deterministic
+  persistence removes one historical cost mechanism, not the need to validate
+  wiki capture, semantic curation, retrieval or independent review. An actual
+  memory/curation dispatch must still be attributed and charged.
+* Native accounting now uses cumulative, deduplicated session snapshots in
+  `consumption-sessions.json`, reconciled with `consumption.md` and `state.json`.
+  Complete native records supply exact role costs, with nested workers assigned
+  to their owning role and coordinator/Scribe usage assigned to orchestration.
+  Incomplete coverage remains explicitly estimated. Direct script writes must
+  not invent Scribe model usage.
+* The ledger's single-model, identical-traffic Cost Comparison is a derived
+  counterfactual, not an observed no-wiki control. Preserve the historical
+  baseline and add a frozen, measured v0.19.0 no-feature control before testing
+  a port; repricing identical traffic does not measure a feature's causal benefit.
+  Include failed attempts, curation, recall, retries and session tails in any
+  new delivery-economics comparison. Do not equate accepted output with validated
+  business benefit, or treat old model/provider observations as current prices.
+
+**Wiki revival gate:** Before resuming feature experiments or claiming release
+compatibility, the colleague must port and freeze a separate candidate, then
+pass the full applicable v0.19.0 installed-source validation suite, not only the
+historical focused checks. Cover ordinary handoff and supported verdict schemas,
+cold fallback, snapshot/verify/write modes, exact source bytes, rollback, no-op
+replay, writer serialization and completion proof. Define whether wiki sidecars
+participate in the transaction or a separately recoverable transaction; do not
+silently widen either closed writer schema. Preserve atomic reconciliation of
+`consumption.md`, `state.json` and `consumption-sessions.json`, including session
+deduplication, late tails and explicit estimated fallback when coverage is
+incomplete. Prove a complete accepted workflow with real capture/curation calls,
+nonempty role recall, required independent reviews/dispositions and ledger
+closure before admitting fresh independent families under the resume checklist.
+Charge Scribe/curation model usage only when those calls actually occur. These
+are pending integration requirements, not a claim that the paused implementation
+is compatible or that new paid execution is authorized by this handoff.
+
+Release sources: [coordinator runtime](https://github.com/Peter-N91/hve-squad/blob/a200b15dd929c1c1045176cae87f1a1ee381a429/squad-src/.github/skills/squad/references/coordinator-runtime.md),
+[ordinary writer contract](https://github.com/Peter-N91/hve-squad/blob/a200b15dd929c1c1045176cae87f1a1ee381a429/squad-src/.github/skills/squad/references/economy-scribe.md),
+and [accounting contract](https://github.com/Peter-N91/hve-squad/blob/a200b15dd929c1c1045176cae87f1a1ee381a429/squad-src/.github/skills/squad/references/consumption.md).
+
 ## Ownership and scope
 
 The operator has assigned Scribe performance work to a colleague. Do not make
