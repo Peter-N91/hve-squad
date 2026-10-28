@@ -62,12 +62,14 @@ BeforeAll {
         param(
             [string]$Repo,
             [string]$Root = '.copilot-tracking/squad',
-            [ValidateSet('off', 'ranked', 'economy', 'manual')][string]$ModelRouting = 'off'
+            [ValidateSet('off', 'ranked', 'economy', 'manual')][string]$ModelRouting = 'off',
+            [string[]]$Roles = @()
         )
         $suffix = [guid]::NewGuid().ToString('N')
         $choicesPath = Join-Path $Repo "$suffix-choices.json"
         $payloadPath = Join-Path $Repo "$suffix-init.json"
         $choices = New-Choices $Root
+        if ($Roles.Count) { $choices.profile = 'custom'; $choices.roles = $Roles }
         if ($ModelRouting -ne 'off') { $choices.modelRouting = $ModelRouting }
         Write-FixtureJson $choicesPath $choices
         $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $Repo @('-RepoRoot', $Repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
@@ -366,6 +368,158 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $coordinator | Should -Match 'never substitute the pricing model or defer an active route to frontmatter'
     }
 
+    It 'carries requested <Mode> separately from recorded off without mutating discovery' -ForEach @(
+        @{ Mode = 'ranked' }, @{ Mode = 'manual' }, @{ Mode = 'economy' }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $before = Get-FixtureHash $fixture.Root
+        $result = Invoke-Local 'Get-SquadDispatchBrief.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root, '-AsJson', '-RequestedModelRouting', $Mode)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $brief = $result.Output | ConvertFrom-Json
+        $brief.recordedModelRouting | Should -Be 'off'
+        $brief.requestedModelRouting | Should -Be $Mode
+        $brief.modelRouting | Should -Be $Mode
+        $brief.modelRoutingDeferred | Should -BeTrue
+        $brief.dispatchReady | Should -BeFalse
+        $brief.dispatchPreparation | Should -Be 'New-SquadDispatchPlan.ps1 -ApplyModelRouting'
+        $brief.boundedLaneEligible | Should -BeFalse
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+    }
+
+    It 'prepares a quick <Role> dispatch with no ceiling on <HostCase>' -ForEach @(
+        @{ Role = 'researcher'; HostCase = 'CLI/app'; Models = @('gpt-5.6-sol') }
+        @{ Role = 'lead'; HostCase = 'CLI/app'; Models = @('gpt-5.6-sol') }
+        @{ Role = 'intake-validator'; HostCase = 'CLI/app'; Models = @('gpt-5.6-sol') }
+        @{ Role = 'researcher'; HostCase = 'VS Code'; Models = @() }
+        @{ Role = 'lead'; HostCase = 'VS Code'; Models = @() }
+        @{ Role = 'intake-validator'; HostCase = 'VS Code'; Models = @() }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = if ($Role -eq 'intake-validator') {
+            Write-FixtureText (Join-Path $repo '.github/agents/prd-quality-reviewer.agent.md') "---`nname: PRD Quality Reviewer`n---`n"
+            Initialize-Fixture $repo -Roles @('researcher', 'lead', 'developer', 'tester', 'scribe', 'intake-validator')
+        }
+        else { Initialize-Fixture $repo }
+        $stateBefore = [IO.File]::ReadAllText((Join-Path $fixture.Root 'state.json'))
+        $path = Join-Path $repo 'quick-dispatch.json'
+        $inputData = @{
+            squadRoot = $fixture.Root
+            requestedModelRouting = 'ranked'
+            sessionModel = 'gpt-5.6-sol'
+            units = @(@{ id = 'quick'; role = $Role })
+        }
+        if ($Models.Count) { $inputData.availableModels = $Models }
+        Write-FixtureJson $path $inputData
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.routingReady | Should -BeTrue
+        $plan.routingReceipt.status | Should -Be 'written'
+        $plan.stateWritten | Should -BeTrue
+        $plan.admission | Should -Be 'not-requested'
+        $plan.gates | Should -Be 'not-evaluated'
+        $plan.units.Count | Should -Be 1
+        $model = $plan.units[0].endpoint.model
+        $model | Should -Not -BeNullOrEmpty
+        $row = @(Get-SquadRoster $fixture.Root | Where-Object Role -eq $Role)[0]
+        $row.Model | Should -BeExactly $model
+        $team = [IO.File]::ReadAllText((Join-Path $fixture.Root 'team.md'))
+        $team | Should -Match '(?m)^Model routing: ranked$'
+        [IO.File]::ReadAllText((Join-Path $fixture.Root 'state.json')) | Should -BeExactly $stateBefore
+        if (-not $Models.Count) { $plan.modelAvailability | Should -Match '^unverified \(priced at or below session model ' }
+
+        $repeat = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $repeat.ExitCode | Should -Be 0 -Because $repeat.Output
+        ($repeat.Output | ConvertFrom-Json).routingReady | Should -BeTrue
+        ($repeat.Output | ConvertFrom-Json).stateWritten | Should -BeFalse
+        [IO.File]::ReadAllText((Join-Path $fixture.Root 'team.md')) | Should -BeExactly $team
+    }
+
+    It 'keeps no-policy preparation read-only with no override' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $path = Join-Path $repo 'off-dispatch.json'
+        Write-FixtureJson $path @{ squadRoot = $fixture.Root; units = @(@{ id = 'quick'; role = 'researcher' }) }
+        $before = Get-FixtureHash $fixture.Root
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.routingReady | Should -BeTrue
+        $plan.stateWritten | Should -BeFalse
+        $plan.units[0].endpoint.model | Should -BeNullOrEmpty
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+    }
+
+    It 'applies answered <Mode> routing through the same preparation path' -ForEach @(
+        @{ Mode = 'manual' }, @{ Mode = 'economy' }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $path = Join-Path $repo 'answered-routing.json'
+        $inputData = @{
+            squadRoot = $fixture.Root; requestedModelRouting = $Mode
+            sessionModel = 'gpt-5.6-sol'; availableModels = @('gpt-5.6-sol')
+            units = @(@{ id = 'quick'; role = 'developer' })
+        }
+        if ($Mode -eq 'manual') { $inputData.manualModels = @{ developer = 'gpt-5.6-sol' } }
+        else {
+            $inputData.economyConsent = @{
+                user = 'fixture-user'; tradeAccepted = 'Cost-first qualified routing.'
+                neverWeakened = 'Floors and gates remain unchanged.'
+            }
+        }
+        Write-FixtureJson $path $inputData
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.routingReady | Should -BeTrue
+        $plan.routingReceipt.status | Should -Be 'written'
+        [IO.File]::ReadAllText((Join-Path $fixture.Root 'team.md')) | Should -Match "(?m)^Model routing: $Mode$"
+    }
+
+    It 'never reports readiness or edits state after <Failure> during preparation' -ForEach @(
+        @{ Failure = 'unresolved availability'; Mode = 'ranked'; Session = 'auto'; Models = @(); ReadOnly = $false }
+        @{ Failure = 'missing manual choice'; Mode = 'manual'; Session = 'gpt-5.6-sol'; Models = @('gpt-5.6-sol'); ReadOnly = $false }
+        @{ Failure = 'routing writer refusal'; Mode = 'ranked'; Session = 'gpt-5.6-sol'; Models = @('gpt-5.6-sol'); ReadOnly = $true }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $path = Join-Path $repo 'blocked-dispatch.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root; requestedModelRouting = $Mode
+            sessionModel = $Session; availableModels = $Models
+            units = @(@{ id = 'quick'; role = 'lead' })
+        }
+        $team = Get-Item -LiteralPath (Join-Path $fixture.Root 'team.md')
+        $before = Get-FixtureHash $fixture.Root
+        try {
+            if ($ReadOnly) { $team.IsReadOnly = $true }
+            $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Not -Match '"routingReady":true'
+            Get-FixtureHash $fixture.Root | Should -BeExactly $before
+        }
+        finally { $team.IsReadOnly = $false }
+    }
+
+    It 'requires preparation in both coordinators and scoped APM routing guidance' {
+        foreach ($name in @('squad-coordinator', 'squad-federation-coordinator')) {
+            $body = [IO.File]::ReadAllText((Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md"))
+            $body | Should -Match '-ApplyModelRouting'
+            $body | Should -Match 'routingReady: true'
+        }
+        $rules = [IO.File]::ReadAllText((Join-Path $SourceRoot 'squad-src/.github/instructions/squad/squad-routing.instructions.md'))
+        $rules | Should -Match 'requestedModelRouting'
+        $rules | Should -Match 'quick single-role gates'
+        $floor = [IO.File]::ReadAllText((Join-Path $SourceRoot 'squad-src/.github/instructions/squad/squad-floor.instructions.md'))
+        $floor | Should -Match 'New-SquadDispatchPlan\.ps1 -ApplyModelRouting'
+        $floor | Should -Match 'gates workers with\s+`routingReady: true`'
+        $runtime = [IO.File]::ReadAllText((Join-Path $script:References 'coordinator-runtime.md'))
+        $runtime | Should -Match '-RequestedModelRouting'
+        $runtime | Should -Match 'cannot accept a model override, stop'
+    }
+
     It 'refuses active routing when sessionModel auto is supplied without the host model enum' {
         $repo = New-FixtureRepo
         $fixture = Initialize-Fixture $repo -ModelRouting ranked
@@ -418,6 +572,8 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan.routingRefresh.recordedMode | Should -Be 'off'
         $plan.routingRefresh.mode | Should -Be $Mode
         $plan.routingRefresh.changes.Count | Should -Be 1
+        $plan.routingReady | Should -BeFalse
+        $plan.stateWritten | Should -BeFalse
         if ($Mode -eq 'economy') { $plan.routingRefresh.economyConsent.user | Should -Be 'fixture-user' }
     }
 
@@ -639,6 +795,34 @@ Describe 'Federation scheduling and deterministic persistence (COORD-08, COORD-1
     BeforeAll {
         $script:Federation = New-FederationFixture
         $script:FedTurn = New-FederationTurn $script:Federation
+    }
+
+    It 'forwards trusted routing intent and prepares only the selected member' {
+        $fixture = New-FederationFixture
+        $path = Join-Path $fixture.Repo 'federation-routing.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root; requestedModelRouting = 'ranked'
+            units = @(@{ id = 'product-work'; squad = 'product' })
+        }
+        $untouched = Get-FixtureHash $fixture.Members.azure.Root
+        $planned = Invoke-Local 'New-SquadDispatchPlan.ps1' $fixture.Repo @('-RepoRoot', $fixture.Repo, '-InputPath', $path, '-ApplyModelRouting')
+        $planned.ExitCode | Should -Be 0 -Because $planned.Output
+        $federationPlan = $planned.Output | ConvertFrom-Json
+        $federationPlan.routingReady | Should -BeFalse
+        $endpoint = $federationPlan.units[0].endpoint
+        $endpoint.requestedModelRouting | Should -Be 'ranked'
+        $briefResult = Invoke-Local 'Get-SquadDispatchBrief.ps1' $fixture.Repo @('-RepoRoot', $fixture.Repo, '-SquadRoot', $fixture.Root, '-RequestedModelRouting', 'ranked', '-AsJson')
+        ($briefResult.Output | ConvertFrom-Json).requestedModelRouting | Should -Be 'ranked'
+        Write-FixtureJson $path @{
+            squadRoot = $endpoint.squadRoot; requestedModelRouting = $endpoint.requestedModelRouting
+            sessionModel = 'gpt-5.6-sol'; availableModels = @('gpt-5.6-sol')
+            units = @(@{ id = 'quick-plan'; role = 'lead' })
+        }
+        $prepared = Invoke-Local 'New-SquadDispatchPlan.ps1' $fixture.Repo @('-RepoRoot', $fixture.Repo, '-InputPath', $path, '-ApplyModelRouting')
+        $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
+        ($prepared.Output | ConvertFrom-Json).routingReady | Should -BeTrue
+        [IO.File]::ReadAllText((Join-Path $endpoint.squadRoot 'team.md')) | Should -Match '(?m)^Model routing: ranked$'
+        Get-FixtureHash $fixture.Members.azure.Root | Should -BeExactly $untouched
     }
 
     It 'rejects root mutation after the pre-dispatch snapshot without changing any other bytes' {

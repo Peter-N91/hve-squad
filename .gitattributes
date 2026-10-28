@@ -1,1 +1,2 @@
 tests/tier2/live-benchmark/invoke-benchmark.sh text eol=lf
+scripts/plugin-hooks/*.sh text eol=lf

@@ -405,7 +405,8 @@ Describe 'PKG-13 Cost ceiling ownership is mode-specific' {
         $coordinator.Body | Should -Match 'references/federation-runtime\.md'
         $runtime = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/federation-runtime.md') -Raw
         $runtime | Should -Match 'Without a single `squad=` target'
-        $runtime | Should -Match 'Aggregate ceiling exists only here'
+        $runtime | Should -Match '(?s)Only here use the aggregate\s+ceiling.*never forward it as member\s+ceilings'
+        $runtime | Should -Match 'Targeted autopilot forwards the ordinary member ceiling'
 
         $federationReference = Join-Path $script:Model.SquadSkillRoot 'references/federation-templates.md'
         Get-Content -LiteralPath $federationReference -Raw | Should -Match 'consumption-rates\.md \(federation root\)'

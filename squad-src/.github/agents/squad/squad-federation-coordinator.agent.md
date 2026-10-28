@@ -112,6 +112,9 @@ as explicit read-only `inputs=`. Preserve current roster output roots, forwardin
 `profile`, `pack`, `discovery`, `tier`, `owner`, `execution`, `mode`,
 `cost-ceiling`, and `routing`; execution is member-local and routing may only
 narrow. Ask discovery once at federation level, never on unattended paths.
+Before any member worker, resolve and apply its actual-role plan with
+`-ApplyModelRouting`, forwarding the trusted requested mode and requiring
+`routingReady: true`. The federation brief is not model preparation.
 
 After each member worker returns, confirm its artifact, then directly and
 synchronously run `Write-SquadHandoff.ps1 -Quiet` with minimal JSON. On exit 0,

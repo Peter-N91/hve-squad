@@ -28,7 +28,7 @@ metadata:
 Everywhere below that says `ranked`, `economy` behaves the same except for its pick.
 
 * **Where the mode lives.** A single line beneath `team.md`'s H1, after the `Packs:` line when one exists: `Model routing: ranked` or `Model routing: manual`. No line means `off`, so every roster written before this contract reads as `off` unchanged.
-* **Changing it.** `routing=` with an active mode is passed as `requestedModelRouting` with the actual selected units. The plan resolves only those roles and `Set-SquadModelRouting.ps1` atomically adds or changes the mode line, Model column, selected cells, and decision before dispatch. `routing=off` remains a cold roster change: Scribe removes the line and column and records removed picks for later manual suggestions.
+* **Changing it.** Pass trusted `routing=` into the read-only brief as `-RequestedModelRouting` and into the actual-role plan as `requestedModelRouting`. Run `New-SquadDispatchPlan.ps1 -ApplyModelRouting`: it resolves those roles and invokes `Set-SquadModelRouting.ps1` to atomically update mode, Model cells and decision before returning `routingReady: true`. This applies to quick/single-role gates and each selected federation member, not only parallel or capped work. A brief's recorded `off` never cancels the request. Without the switch the plan is read-only. `routing=off` stays cold: Scribe removes the mode/Model column and records previous picks for manual reuse.
 * **Legacy `models=`.** The comma-separated `models=` input is retired. When a turn still passes it, apply none of its pairs, tell the user once that per-role models now live in `team.md`'s `Model` column under `routing=manual`, and offer to switch.
 
 ## The Model Column
