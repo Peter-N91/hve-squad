@@ -7,6 +7,7 @@ export default function (config) {
   config.addWatchTarget("docs");
   config.addWatchTarget("scripts/docs-content.mjs");
   config.addWatchTarget("scripts/docs-release.mjs");
+  config.addWatchTarget(".docs-releases.json");
   config.addWatchTarget("scripts/diagram-locales.mjs");
   config.addWatchTarget("apm.yml");
   config.addWatchTarget(".changes/unreleased");

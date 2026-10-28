@@ -118,6 +118,17 @@ That parity is evidence, not proof. The cases below are what turn it into proof.
 
 No Copilot invocation. Install the ref into a scratch directory, then inspect the delivered tree.
 
+### Documentation release availability
+
+These repository-site cases run with `npm run docs:test`, not the installed-package Pester suite.
+
+| ID | Assertion | Source |
+|---|---|---|
+| SITE-REL-01 | The stable version and installation command use GitHub's latest published release, not the manifest version or a pending version bump | `docs/maintaining.html`, Documentation site; `scripts/docs-release.mjs` |
+| SITE-REL-02 | Only a published, non-draft pre-release is advertised; without one, pending fragments produce neither feature badges nor preview installation commands | `docs/maintaining.html`, Documentation site; `scripts/docs-release.mjs` |
+| SITE-REL-03 | Release publication, edits and deletion refresh Pages; automated publishers explicitly dispatch a refresh even after partial failures, without writing during Release Prep dry runs; release events build the default branch, not the release tag | `.github/workflows/docs.yml`, triggers and Checkout; `.github/workflows/{release,release-prep,preview}.yml`, Refresh published documentation |
+| SITE-REL-04 | Rendering and validation share one fetched release snapshot; lookup failures fail the build instead of guessing availability | `docs/maintaining.html`, Documentation site; `package.json`, `docs:build` |
+
 ### Script-backed coordinators
 
 | ID | Assertion | Source |
