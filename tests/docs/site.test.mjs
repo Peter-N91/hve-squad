@@ -31,7 +31,7 @@ function assertNoPartnerWorkshopLinks(document) {
   }
 }
 
-const invocation = /^\s*\/squad(?:-federation|-document|-governance-report|-learn)?(?:\s|$)/m;
+const invocation = /^\s*\/squad(?:-coach|-federation|-document|-governance-report|-learn)?(?:\s|$)/m;
 
 for (const name of pages) {
   for (const locale of ['en', 'fr']) {
@@ -68,7 +68,7 @@ for (const name of pages) {
         assert.ok(scripts.some(script => script.src.endsWith('/assets/site.js') && script.defer));
         for (const code of document.querySelectorAll('code')) {
           if (code.closest('pre, [data-host-reference]')) continue;
-          assert.doesNotMatch(code.textContent, /^\/squad(?:-federation|-document|-governance-report|-learn)?\s+(?:request=|init\b|promote\b|profile=|mode=|squad=)/,
+          assert.doesNotMatch(code.textContent, /^\/squad(?:-coach|-federation|-document|-governance-report|-learn)?\s+(?:request=|init\b|promote\b|profile=|mode=|squad=)/,
             'Runnable examples belong in local command blocks, not inline prose');
         }
       } finally { dom.window.close(); }
@@ -117,20 +117,17 @@ for (const name of pages) {
           const examples = [...document.querySelectorAll('.command-example')];
           assert.equal(examples.length, commands.length, 'Every runnable block gets local tabs');
           examples.forEach((example, index) => {
-            const canonical = example.querySelector('[data-host="vscode"] pre code').textContent;
-            assert.equal(canonical, commands[index], 'VS Code keeps the exact original example');
+            const canonical = commands[index];
             const selected = example.querySelector('[role="tabpanel"]:not([hidden])');
             assert.equal(selected.dataset.host, host);
-            if (host !== 'vscode') {
-              const inputs = [...selected.querySelectorAll('pre code')].map(code => code.textContent);
-              for (const input of inputs) {
-                assert.ok(input.trim() && input !== 'undefined');
-                assert.doesNotMatch(input, invocation, 'App and CLI inputs have no VS Code invocation prefix');
-                assert.doesNotMatch(input, /^#|^\/agent/m, 'Selection instructions stay outside copyable inputs');
-              }
-              const argumentLines = canonical.split('\n').filter(line => !line.trimStart().startsWith('#')).map(line => line.replace(/^[ \t]*\/squad(?:-federation|-document|-governance-report|-learn)?(?=\s|$)[ \t]?/, '')).filter(line => line.trim());
-              for (const line of argumentLines) assert.ok(inputs.join('\n').includes(line), `Preserve arguments: ${line}`);
+            const inputs = [...selected.querySelectorAll('pre code')].map(code => code.textContent);
+            for (const input of inputs) {
+              assert.ok(input.trim() && input !== 'undefined');
+              assert.doesNotMatch(input, invocation, 'Agent inputs have no slash-command prefix');
+              assert.doesNotMatch(input, /^#|^\/agent/m, 'Selection instructions stay outside copyable inputs');
             }
+            const argumentLines = canonical.split('\n').filter(line => !line.trimStart().startsWith('#')).map(line => line.replace(/^[ \t]*\/squad(?:-coach|-federation|-document|-governance-report|-learn)?(?=\s|$)[ \t]?/, '')).filter(line => line.trim());
+            for (const line of argumentLines) assert.ok(inputs.join('\n').includes(line), `Preserve arguments: ${line}`);
           });
           const unchanged = [...document.querySelectorAll('pre > code')].filter(code => !code.closest('.command-example')).map(code => code.textContent);
           assert.deepEqual(unchanged, otherExamples, 'Shell commands, config and paths stay unchanged');
@@ -151,6 +148,7 @@ function renderExample(text, lang = 'en') {
 test('each workflow selects its own agent, including requests with no arguments', () => {
   const workflows = [
     ['/squad init', 'Squad Coordinator', 'init'],
+    ['/squad-coach', 'Squad Coach', 'Help me choose the simplest HVE Squad setup for my goal.'],
     ['/squad-federation promote', 'Squad Federation Coordinator', 'promote'],
     ['/squad-document request="summarize" format=html', 'Squad Document', 'request="summarize" format=html'],
     ['/squad-governance-report', 'Squad Governance Report', 'Generate the governance report with default settings.'],
@@ -158,7 +156,7 @@ test('each workflow selects its own agent, including requests with no arguments'
   ];
   const dom = renderExample(workflows.map(([command]) => command).join('\n'));
   try {
-    for (const host of ['cli', 'app']) {
+    for (const host of ['cli', 'app', 'vscode']) {
       const panel = dom.window.document.querySelector(`[data-host="${host}"]`);
       assert.deepEqual([...panel.querySelectorAll('strong')].map(agent => agent.textContent), workflows.map(([, agent]) => agent));
       assert.deepEqual([...panel.querySelectorAll('pre code')].map(code => code.textContent), workflows.map(([, , input]) => input));
@@ -171,12 +169,86 @@ test('multiline quoted content, embedded slash commands and escaped quotes remai
   const argumentsText = 'request="Keep this exact text:\n\n/squad-learn is a literal example\n# not a comment here\nUse \\"quoted\\" text and .copilot-tracking/squad/." mode=autopilot cost-ceiling=20';
   const dom = renderExample(`/squad ${argumentsText}`);
   try {
-    for (const host of ['cli', 'app']) {
+    for (const host of ['cli', 'app', 'vscode']) {
       const inputs = dom.window.document.querySelectorAll(`[data-host="${host}"] pre code`);
       assert.equal(inputs.length, 1);
       assert.equal(inputs[0].textContent, argumentsText);
     }
   } finally { dom.window.close(); }
+});
+
+test('Squad Coach is prominent and documented in both languages', () => {
+  for (const [locale, label] of [['', 'New here? Chat with the Squad Coach'], ['fr/', 'Vous débutez ? Discutez avec le Squad Coach']]) {
+    for (const page of [`${locale}index.html`, `${locale}getting-started.html`]) {
+      const dom = openPage(page, { scripts: false });
+      try {
+        assert.ok(dom.window.document.body.textContent.includes(label), `${page} includes the Coach entry`);
+      } finally { dom.window.close(); }
+    }
+  }
+});
+
+test('Coach onboarding uses agents on every host and shows a complete, conditional lifecycle example', () => {
+  let englishMessages;
+  for (const locale of ['', 'fr/']) {
+    const dom = openPage(`${locale}getting-started.html`, { query: '?host=vscode' });
+    try {
+      const document = dom.window.document;
+      const content = document.body.textContent;
+      assert.doesNotMatch(content, /VS Code uses the APM package and slash prompts|VS Code utilise le package APM et les prompts slash/);
+      assert.doesNotMatch(content, /choose the \/squad-coach prompt|choisissez le \/squad-coach prompt/);
+      const runbook = document.getElementById('coach-runbook');
+      assert.ok(runbook);
+      assert.equal(runbook.querySelectorAll(':scope > li').length, 7);
+      const panels = [...runbook.querySelectorAll('[data-host="vscode"]')];
+      assert.equal(panels.length, 6);
+      const messages = panels.map(panel => panel.querySelector('pre code').textContent);
+      if (!locale) englishMessages = messages;
+      else assert.deepEqual(messages, englishMessages, 'Runnable inputs are identical across translations');
+      assert.match(messages[0], /^init profile=default routing=ranked$/);
+      assert.match(messages[1], /calibration run.*explicit approval before any uncapped dispatch/);
+      assert.match(messages[2], /mode=autopilot cost-ceiling=10$/);
+      assert.match(messages[4], / promote$/);
+      assert.match(messages[5], /squad=<confirmed-member> mode=autopilot$/);
+      assert.deepEqual(panels.map(panel => panel.querySelector('strong').textContent), [
+        'Squad Coordinator', 'Squad Coordinator', 'Squad Coordinator', 'Squad Coordinator',
+        'Squad Federation Coordinator', 'Squad Federation Coordinator'
+      ]);
+      const readiness = document.getElementById('coach-cost-readiness');
+      assert.equal(readiness, runbook.children[2], 'First-ceiling preparation follows initialization');
+      assert.ok(readiness.querySelector('a[href="usage.html#first-capped-run"]'));
+      const cappedStep = panels[2].closest('li');
+      assert.equal(cappedStep, runbook.children[3], 'Capped work follows preparation');
+      assert.match(cappedStep.textContent, locale ? /Uniquement après/ : /Only after/);
+      for (const message of messages) assert.doesNotMatch(message, invocation);
+      assert.match(runbook.textContent, locale ? /Uniquement si les responsabilités se séparent/ : /Only if ownership later splits/);
+    } finally { dom.window.close(); }
+  }
+});
+
+test('first-ceiling guidance explains seed ineligibility, real reconciliation and the non-waivable blocker', () => {
+  const seed = readFileSync(new URL('../../squad-src/.github/skills/squad/references/consumption-rates-template.md', import.meta.url), 'utf8');
+  assert.match(seed, /observations: 0/);
+  assert.match(seed, /last_reconciled: never/);
+  for (const locale of ['', 'fr/']) {
+    for (const [page, section] of [['getting-started.html', 'coach-cost-readiness'], ['usage.html', 'first-capped-run']]) {
+      const dom = openPage(`${locale}${page}`, { scripts: false });
+      try {
+        const element = dom.window.document.getElementById(section);
+        assert.ok(element, `${locale}${page}: first-ceiling preparation exists`);
+        const text = section === 'first-capped-run'
+          ? element.nextElementSibling.textContent + element.nextElementSibling.nextElementSibling.textContent
+          : element.textContent;
+        for (const field of ['observations: 0', 'last_reconciled: never', 'cannot-confirm', 'calibration_basis', 'Observed-on', 'estimator_revision']) {
+          assert.ok(text.includes(field), `${locale}${page}: explains ${field}`);
+        }
+        assert.match(text, locale ? /avant et après/ : /before and after/);
+        assert.match(text, locale ? /approbation explicite/ : /explicit approval/);
+        assert.match(text, locale ? /jamais.*approbation|approbation.*ne.*pas/ : /approval cannot|cannot be approved/);
+        assert.match(text, locale ? /reste.*bloqu/ : /remain.*blocked/);
+      } finally { dom.window.close(); }
+    }
+  }
 });
 
 test('usage.html documents roster-catalog.md and the routing= modes', () => {
@@ -271,26 +343,26 @@ test('non-command snippets and explicit host references are not converted', () =
   finally { dom.window.close(); }
 });
 
-test('local command examples select the correct agent and preserve request arguments', () => {
-  const dom = openPage('fr/usage.html', { query: '?host=app' });
+test('VS Code command examples select the correct agent and preserve request arguments', () => {
+  const dom = openPage('fr/usage.html', { query: '?host=vscode' });
   try {
     const document = dom.window.document;
     assert.equal(document.querySelector('.hero [role="tablist"]'), null);
     const examples = [...document.querySelectorAll('.command-example')];
     assert.ok(examples.length > 1);
-    const documentExample = examples.find(example => example.querySelector('[data-host="vscode"]').textContent.includes('/squad-document request='));
-    const governanceExample = examples.find(example => example.querySelector('[data-host="vscode"]').textContent.includes('/squad-governance-report'));
-    const app = documentExample.querySelector('[data-host="app"]');
-    const governanceApp = governanceExample.querySelector('[data-host="app"]');
-    assert.equal(app.hidden, false);
-    assert.equal(governanceApp.hidden, false);
-    assert.match(app.textContent, /Squad Document/);
-    assert.match(governanceApp.textContent, /Squad Governance Report/);
-    for (const panel of [app, governanceApp]) {
+    const documentExample = examples.find(example => example.querySelector('[data-host="vscode"] strong')?.textContent === 'Squad Document');
+    const governanceExample = examples.find(example => example.querySelector('[data-host="vscode"] strong')?.textContent === 'Squad Governance Report');
+    const documentPanel = documentExample.querySelector('[data-host="vscode"]');
+    const governancePanel = governanceExample.querySelector('[data-host="vscode"]');
+    assert.equal(documentPanel.hidden, false);
+    assert.equal(governancePanel.hidden, false);
+    assert.match(documentPanel.textContent, /Squad Document/);
+    assert.match(governancePanel.textContent, /Squad Governance Report/);
+    for (const panel of [documentPanel, governancePanel]) {
       for (const code of panel.querySelectorAll('pre code')) assert.doesNotMatch(code.textContent, /^\/squad/m);
     }
-    assert.match(app.textContent, /format=docx outputPath=docs\/briefing.docx/);
-    assert.match(governanceApp.textContent, /output=docs\/governance.html period=30d/);
+    assert.match(documentPanel.textContent, /format=docx outputPath=docs\/briefing.docx/);
+    assert.match(governancePanel.textContent, /output=docs\/governance.html period=30d/);
   } finally { dom.window.close(); }
 });
 

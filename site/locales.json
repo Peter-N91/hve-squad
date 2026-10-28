@@ -44,6 +44,18 @@
       "builtOn": "Built on",
       "ecosystem": "Part of the HVE Squad family",
       "version": "Version",
+      "release": {
+        "availability": "Release availability",
+        "docsTrackMain": "Documentation follows main",
+        "stable": "Latest stable",
+        "preview": "Pre-release",
+        "previewOnly": "Pre-release only",
+        "notice": "Badged features are not included in the latest stable release.",
+        "tryPreview": "Install and test the pre-release",
+        "noPreview": "No pre-release is currently published.",
+        "installPreview": "Install the rolling pre-release in a scratch project:",
+        "installStable": "Install the stable release, or return to it after testing:"
+      },
       "themeStorageError": "This browser cannot save your appearance preference. It will apply for this page only.",
       "searchTranslations": {
         "placeholder": "Search documentation",
@@ -67,6 +79,7 @@
       "demo-3": "Product squad",
       "demo-4": "Modernize .NET",
       "ecosystem": "Ecosystem",
+      "connector": "Connector",
       "maintaining": "Maintaining",
       "troubleshooting": "Troubleshooting",
       "contributing": "Contributing"
@@ -117,6 +130,18 @@
       "builtOn": "Basé sur",
       "ecosystem": "Un membre de la famille HVE Squad",
       "version": "Version",
+      "release": {
+        "availability": "Disponibilité par version",
+        "docsTrackMain": "La documentation suit main",
+        "stable": "Dernière version stable",
+        "preview": "Préversion",
+        "previewOnly": "Préversion uniquement",
+        "notice": "Les fonctionnalités portant un badge ne sont pas incluses dans la dernière version stable.",
+        "tryPreview": "Installer et tester la préversion",
+        "noPreview": "Aucune préversion n'est actuellement publiée.",
+        "installPreview": "Installer la préversion glissante dans un projet de test :",
+        "installStable": "Installer la version stable, ou y revenir après les tests :"
+      },
       "themeStorageError": "Ce navigateur ne peut pas enregistrer votre préférence d’apparence. Elle s’applique uniquement à cette page.",
       "searchTranslations": {
         "placeholder": "Rechercher dans la documentation",
@@ -140,6 +165,7 @@
       "demo-3": "Squad produit",
       "demo-4": "Modernisation .NET",
       "ecosystem": "Écosystème",
+      "connector": "Connecteur",
       "maintaining": "Maintenance",
       "troubleshooting": "Dépannage",
       "contributing": "Contribuer"

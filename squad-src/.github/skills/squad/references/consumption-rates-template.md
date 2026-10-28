@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-30"
+  last_updated: "2026-10-15"
 ---
 
 # Squad Consumption Rates Template
@@ -22,25 +22,26 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 # Consumption Rates (verify against the current GitHub Copilot "Models and pricing" docs)
 
 * Billing model: usage-based billing (UBB), token-metered, effective 2026-06-01.
-* Observed-on: 2026-09-30. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
+* Observed-on: 2026-10-15. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
 * Credit conversion: 1 AI credit = $0.01 USD (fixed).
 * All rates are USD per 1M tokens. Anthropic models bill a separate cache-write rate on top of cached input; models without one leave the column at 0.
-* `Observed-on:` above must equal `model-catalog.md`'s `Retrieved:` date exactly, not merely "close" — both are `2026-09-30` as of this snapshot; a future re-verification that updates one must update the other in the same change.
+* `Observed-on:` above must equal `model-catalog.md`'s `Retrieved:` date exactly, not merely "close" — both are `2026-10-15` as of this snapshot; a future re-verification that updates one must update the other in the same change.
 
 ## Per-model token rates in USD per 1M tokens (volatile, verify before commit)
 
-`Model ID` is the exact dispatch id the Copilot CLI and the GitHub Copilot app accept, and the only value a `team.md` `Model` cell may hold under `routing=ranked`, `routing=economy`, or `routing=manual` (see `model-routing.md`); `Model (as routed)` stays the row key and the display name VS Code's picker shows. `—` marks a retired row no host can dispatch. `LC Threshold` and the `LC *` columns record GitHub's own long-context tier: an explicit higher input-token threshold and a second, higher rate above it. Only OpenAI and xAI publish one. Anthropic and Google publish no threshold column at all for any model in this table — `none (flat rate)` is a positive confirmation of that absence, never a blank cell standing in for "unknown." `Tier` here is this table's own cost-based routing bucket (`fast`/`default`/`extended`), independent of the vendor's own capability category on the official page; a model's `Tier` need not match its `model-catalog.md` capability class.
+`Model ID` is the exact Copilot dispatch id and the only value a `team.md` `Model` cell may hold under `routing=ranked`, `routing=economy`, or `routing=manual`; `Model (as routed)` is the rate key and VS Code display name. `—` marks a retired row. `LC Threshold` and `LC *` record documented long-context thresholds and higher rates. OpenAI, xAI, and Claude Haiku 5.5 publish them; every other row uses `none (flat rate)`, never a blank for "unknown." `Tier` is this table's cost bucket, independent of `model-catalog.md`'s capability class.
 
 | Model (as routed) | Model ID             | Tier     | Input | Cached | Cache write | Output | LC Threshold      | LC Input | LC Cached | LC Cache write | LC Output | Notes                      |
 | ------------------ | -------------------- | -------- | ----- | ------ | ----------- | ------ | ----------------- | -------- | --------- | --------------- | --------- | -------------------------- |
 | GPT-5.4 nano        | `gpt-5.4-nano`       | fast     | 0.20  | 0.02   | 0           | 1.25   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | lightweight, read-heavy    |
 | GPT-5.4 mini        | `gpt-5.4-mini`       | fast     | 0.75  | 0.075  | 0           | 4.50   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | lightweight                |
 | Claude Haiku 4.5    | `claude-haiku-4.5`   | fast     | 1.00  | 0.10   | 1.25        | 5.00   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | lightweight reasoning      |
+| Claude Haiku 5.5    | `claude-haiku-5.5`   | fast     | 0.10  | 0.01   | 0.125       | 0.50   | \<=100K / >100K   | 0.50     | 0.05      | 0.625           | 2.50      | lightweight reasoning      |
 | Claude Sonnet 4.6   | `claude-sonnet-4.6`  | default  | 3.00  | 0.30   | 3.75        | 15.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile                  |
 | Claude Sonnet 5     | `claude-sonnet-5`    | default  | 2.00  | 0.20   | 2.50        | 10.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile (promo pricing)  |
-| Claude Sonnet 5.5   | `claude-sonnet-5.5`  | default  | 2.00  | 0.20   | 2.50        | 10.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile                  |
+| Claude Sonnet 5.5   | `claude-sonnet-5.5`  | default  | 2.00  | 0.10   | 2.50        | 10.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | versatile                  |
 | GPT-5.4             | `gpt-5.4`            | default  | 2.50  | 0.25   | 0           | 15.00  | \<=272K / >272K   | 5.00     | 0.50      | n/a             | 22.50     | versatile                  |
-| Gemini 3.1 Pro (retired) | —                    | default  | 2.00  | 0.20   | 0           | 12.00  | not currently listed | n/a  | n/a       | n/a             | n/a       | Deprecated 2026-09-27; no longer in official GitHub Copilot offering. Preserved for backward compatibility with existing consumption ledgers referencing this rate row. |
+| Gemini 3.1 Pro (retired) | —                    | default  | 2.00  | 0.20   | 0           | 12.00  | not currently listed | n/a  | n/a       | n/a             | n/a       | Deprecated 2026-09-27; kept for backward compatibility |
 | Claude Opus 4.8     | `claude-opus-4.8`    | extended | 5.00  | 0.50   | 6.25        | 25.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning  |
 | Claude Opus 5       | `claude-opus-5`      | extended | 5.00  | 0.50   | 6.25        | 25.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning  |
 | GPT-5.5             | `gpt-5.5`            | extended | 5.00  | 0.50   | 0           | 30.00  | \<=272K / >272K   | 10.00    | 1.00      | n/a             | 45.00     | high-capability reasoning  |
@@ -56,7 +57,7 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 | Claude Opus 4.7     | `claude-opus-4.7`    | extended | 5.00  | 0.50   | 6.25        | 25.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning  |
 | Claude Opus 4.8 (fast mode) | `claude-opus-4.8-fast` | extended | 10.00 | 1.00 | 12.50   | 50.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability reasoning, preview, latency-optimized |
 | Claude Opus 5.5     | `claude-opus-5.5`    | extended | 4.00  | 0.20   | 5.00        | 20.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability, long-running agentic |
-| Claude Sonnet 4     | `claude-sonnet-4`    | default  | 3.00  | 0.30   | 3.75        | 15.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | Priced per official GitHub Copilot billing docs but not in current "Supported AI models" list as of 2026-09-27. Preserved for backward compatibility; new routing should prefer Claude Sonnet 4.6 or Claude Sonnet 5. See model-catalog.md Contradictions. |
+| Claude Sonnet 4     | `claude-sonnet-4`    | default  | 3.00  | 0.30   | 3.75        | 15.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | Priced in billing docs; prefer Sonnet 4.6/5 (see model-catalog.md) |
 | Claude Fable 5      | `claude-fable-5`     | extended | 10.00 | 1.00   | 12.50       | 50.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability, enterprise data-retention gating (ZDR/EFS) |
 | Claude Fable 5.1    | `claude-fable-5.1`   | extended | 10.00 | 0.25   | 12.50       | 50.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | high-capability, same data-retention gating as Claude Fable 5 |
 | Gemini 3.5 Flash    | `gemini-3.5-flash`   | fast     | 1.50  | 0.15   | 0           | 9.00   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | lightweight                |
@@ -69,6 +70,7 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 | Grok 4.7            | `grok-4.7`           | default  | 2.00  | 0.50   | 0           | 6.00   | \<=200K / >200K   | 4.00     | 1.00      | n/a             | 12.00     | versatile                  |
 | Kimi K2.7 Code      | `kimi-k2.7-code`     | fast     | 0.95  | 0.19   | 0           | 4.00   | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | code-specialized           |
 | Kimi K3             | `kimi-k3`            | default  | 3.00  | 0.30   | 0           | 15.00  | none (flat rate)  | n/a      | n/a       | n/a             | n/a       | code-specialized, long-context agentic; elevated-risk safeguards per source |
+| HydraFusion Max     | `hydrafusion-max`    | default  | 0.80  | 0.05   | 1.00        | 4.00   | \<=272K / >272K   | 1.60     | 0.10      | 2.00            | 6.00      | cascade solver routing (GPT-6.1 Sol + GPT-6 Luna); ~0.35x token footprint |
 | (additional)        |                      |          |       |        |             |        |                    |          |           |                 |           | update when GitHub changes |
 
 ## Tier fallback rates (used only when `basis: tier-default`)
@@ -99,9 +101,11 @@ Split `gross_input` across the billed rates. Turn 1 is fully uncached; on turns 
 ```text
 cached_tokens      = gross_input × 0.80
 input_tokens       = gross_input × 0.20
-cache_write_tokens = base_context + growth_per_turn × (internal_turns - 1)   (Anthropic models only; 0 otherwise)
+cache_write_tokens = base_context + growth_per_turn × (internal_turns - 1)   (Anthropic and HydraFusion; 0 otherwise)
 output_tokens      = internal_turns × output_per_turn
 ```
+
+For HydraFusion (`hydrafusion-max` / `hydrafusion`), multiply `gross_input` and `cache_write_tokens` by `0.35` (cascade solver routing and incremental WebSocket caching use ~65% fewer tokens).
 
 Estimate `internal_turns` and `base_context` from what the dispatch actually reported. These class rows are **floors, not fallbacks** — start here and raise, never start below:
 
@@ -129,7 +133,7 @@ estimator_revision: 2
 calibration_basis: "<observed-on>|2"
 ```
 
-The factor is the running mean of `observed_credits / estimated_credits` across reconciled runs, clamped to the range 0.25-10.0. To reconcile: read the per-user aggregate `ai_credits_used` from the Copilot usage-metrics REST API immediately before and after a run, take the delta as `observed_credits`, divide by the run's `est_credits` total, fold that ratio into the mean, and rewrite this block. Until `observations` is at least 1 the factor stays 1.00 and the ledger carries an "uncalibrated" note.
+The factor is the running mean of legacy `observed_credits / estimated_credits` across reconciled runs, clamped to the range 0.25-10.0. It applies only to fallback estimates and future reservations; exact-native completed-work rows are never multiplied by it. To reconcile fallback behavior: read the per-user aggregate `ai_credits_used` before and after a run, divide the delta by that run's estimated credits, fold the ratio into the mean, and rewrite this block. Until `observations` is at least 1 the factor stays 1.00 and fallback output carries an "uncalibrated" note.
 
 `calibration_basis` binds those observations to the rate table's `Observed-on` value and `estimator_revision`, joined with `|`. A calibration is eligible for Cost Preflight only when `observations` is positive, `last_reconciled` is not `never`, and the stored basis exactly matches the current rate and estimator basis. When a rate-table reseed or estimator revision changes that basis, reset `calibration_factor` to `1.00`, `last_reconciled` to `never`, and `observations` to `0` rather than applying an old factor to a new calculation.
 ````

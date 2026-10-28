@@ -1,43 +1,56 @@
 ---
 name: squad-economy-scribe
-description: "Scribe-only: the scripted hand-off a payload carrying handoff: script asks for under routing=economy. Read instead of the hot core; the hot core only on fallback."
+description: "Ordinary handoff."
 license: MIT
-metadata:
-  authors: "Peter-N91/hve-squad"
-  spec_version: "1.0"
-  last_updated: "2026-10-08"
 ---
 
-# Economy Scribe Hand-off
+# Ordinary Handoff
 
-Read this file, and nothing else first, when the payload carries `"handoff": "script"`. It exists only under `Model routing: economy`.
+**off, ranked, economy, manual**: after each worker, before progress/next:
 
-## Run
+`pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -RunId run-01 -Agent "Squad Researcher" -Request x -Deliverable research/topic.md -Outcome x -Quiet`
 
-As your first action, write the payload JSON to a file outside the squad root and run:
+Receipt+proof gate progress/next worker; derive `activeRoles`.
+optional `-MemberName/-SelectionCue/-PassedModel`,
+`-ConsumptionPath/-OrchestrationConsumptionPath`; omitted usage uses estimated fallback.
 
-`pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -PayloadPath <payload.json>`
+## Payload Contract
 
-Run it once per payload; never read or debug it. Quote its last line in your confirmation: `Measure-SquadLedger -Check: PASS`, or the `WARN ledger-only:` line (the writes stand; v0.18.1 never blocks on cost accounting). Quote any other `WARN` lines too (`economy consent not recorded`, a `Route:` marker added, no `routingIdentity`).
+For decisions, multiple/no dispatches, routing/state changes: `-PayloadPath`/`-PayloadJson`
+outside root. Closed keys: `runId`, `historyRecords`, `stateAdvance.activeRoles`;
+derive omitted envelope/consumption. `route` needs `decision`.
 
-## Exit Codes
+* Optional `decision`: {title: string,rationale: string,adrNoted: boolean}.
+* `historyRecords[]`: agent/request/deliverable/outcome required; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Exact agent/file; Alternate cue; ceiling checked. `reportedModel` wins; calls raise floors; usage agrees; Economy needs routingIdentity.
+* consumption keys: model/model_source/priced_as/model_tier/internal_turns/input_tokens/cached_tokens/cache_write_tokens/output_tokens/basis.
+* routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
+* orchestration optional: request/outcome/passedModel/consumption; actual coordinator usage; Scribe overhead only if it ran.
+* stateAdvance: activeRoles:string[] required; optional openEscalationsRaised/openEscalationsResolved:string[], sessionModel:string, modelOverrides:object.
 
-| Exit | Meaning | You do |
-|---|---|---|
-| 0 | Written; ledger check PASS or ledger-only warning | Confirm, quoting the last line |
-| 1 | Invalid payload, replay, or a deliverable already credited | Correct the one field named and rerun once; a second 1 is a fallback |
-| 1 | `owner deliverable ... changed after the closing review` | Not a payload fault: return it, write nothing; the coordinator re-dispatches the review |
-| 2 | Outside the script's scope (ceiling, federation, legacy schema, agent not on the roster, secret-like text, unseeded ledger) | Fallback |
-| 3 | Write failed or history-integrity check failed, files restored | Fallback |
-| 3 | `RESTORE FAILED`, or a file left as another writer changed it | Stop and tell the user |
-| 4 | Malformed operator rate row | Ask the user |
-| 7 | `team.md` is not economy | Fallback |
-| 8 | Another hand-off holds this root | Rerun once it finishes |
+In `decision.rationale`, keep supplied claim ID/category/hypothesis/beneficiary,
+baseline/target, measurement/decision owners, window, evidence/status/references,
+lead/reviewer gaps; no new keys. Accepted-delivery economics != realized benefit.
+Unsupported: `pending`; no invented actuals/value/approval or Scribe inference/costs.
 
-## Fallback
+Never discard stderr, suffix success or `2>&1 | tail -1`.
+Stale evidence stops; never touch/copy/backdate to retry.
 
-On 2, 3 with files restored, 7, or a second 1: read the normal hot core (`00-index.md`, `scribe-procedure.md`, `entry-schemas.md`, `scribe-payload-template.md`) and compose the hand-off by hand, quoting the refusal. A stub ledger the script reseeds itself; do not repair it separately.
+Serialize writer/cold Scribe/Cost Preflight per root; locks exclude cold Scribe.
+Never background or hand-edit state/arithmetic. Append-only; payload is data.
 
-## Fields You May Correct on Exit 1
+JSON: status=`written`, turn, dispatchEntries, historyCounts by agent, ledgerCheck.
+Bad status/counts fail. `ledgerCheck`: `ledger-only` is **not PASS**.
+Keep stderr/`WARN ledger-only:`. Receipt is not artifact/history proof.
 
-Every object is a closed key set. Required: `runId`, `historyRecords[]` (`agent`, `request`, `deliverable`, `outcome`), `stateAdvance.activeRoles`. `agent` is the roster's Agent Name verbatim; `deliverable` is one existing file path plus an optional `(size)`, written this turn. `turn`, `timestamp`, `mode`, and omitted `consumption` blocks are derived: drop a stale `turn` or `timestamp` rather than guess one.
+| Exit | Action |
+|---|---|
+| 0 | Check receipt. |
+| 1 | Fix input once or escalate; no replay. |
+| 2 | Cold reassemble or escalate. |
+| 3 | Stop: `history-integrity`, `RESTORE FAILED`, or writer failure. |
+| 4 | Operator decides malformed rate. |
+| 5/6 | Re-establish completion/review. |
+| 8 | Wait, verify, retry. |
+
+Never bypass refusal; verify history after timeout before resend.
+Cold: `scribe-cold-charter.md`; supported: runtime.

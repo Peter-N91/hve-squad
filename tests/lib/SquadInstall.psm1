@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # Provisions the package a consumer actually receives, for any tier to assert against.
+# AI cost: none; package builds/APM dependency downloads do not dispatch models.
 #
 # Both Tier 0 and the Tier 1 live harness need the same tree, and they need it built
 # the same way: a divergence between "the tree Tier 0 inspected" and "the tree Tier 1
@@ -14,7 +15,10 @@ Set-StrictMode -Version Latest
 function Copy-SquadSource {
     <#
     .SYNOPSIS
-        Overlays a working copy's squad-src/ onto an installed tree, matching APM's layout.
+        Replaces squad-owned content with a working copy's squad-src/, matching APM's layout.
+    .PARAMETER NativeCli
+        Uses the plugin builder's lossless rule port for conditional squad instructions.
+        The unconditional floor and all other installed instructions remain active.
     #>
     [CmdletBinding()]
     param(
@@ -22,7 +26,9 @@ function Copy-SquadSource {
         [string]$From,
 
         [Parameter(Mandatory)]
-        [string]$To
+        [string]$To,
+
+        [switch]$NativeCli
     )
 
     # APM flattens agents, prompts, and instructions; skills keep their directory.
@@ -32,22 +38,101 @@ function Copy-SquadSource {
         'instructions' = '.github/instructions'
     }
 
+    $ownershipPath = Join-Path $To '.github/squad-source-ownership.json'
+    $owned = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    if (Test-Path -LiteralPath $ownershipPath) {
+        foreach ($path in (Get-Content -LiteralPath $ownershipPath -Raw | ConvertFrom-Json)) {
+            if ($path -notmatch '^(?:\.github/(?:agents|prompts|instructions)/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.md|\.agents/skills/[A-Za-z0-9_-]+)$') {
+                throw 'Invalid squad source ownership path.'
+            }
+            [void]$owned.Add($path)
+        }
+    }
+    # Pre-manifest APM installs flatten these reserved squad names. The three
+    # non-squad skills and brand instruction also belong to this package, not hve-core.
+    foreach ($kind in $flat.Keys) {
+        $destination = Join-Path $To $flat[$kind]
+        if (Test-Path -LiteralPath $destination) {
+            foreach ($file in Get-ChildItem -LiteralPath $destination -File -Filter '*.md' |
+                    Where-Object { $_.Name -like 'squad-*.md' -or $_.Name -ceq 'squad.prompt.md' }) {
+                [void]$owned.Add("$($flat[$kind])/$($file.Name)")
+            }
+        }
+    }
+    [void]$owned.Add('.github/instructions/pptx-brand-template.instructions.md')
+    foreach ($name in @('squad', 'azure-scaffold', 'python-diagrams', 'sql-migration-advisor')) {
+        [void]$owned.Add(".agents/skills/$name")
+    }
+    foreach ($path in $owned) {
+        $installed = Join-Path $To $path
+        if (Test-Path -LiteralPath $installed) { Remove-Item -LiteralPath $installed -Recurse -Force }
+    }
+    $selected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($kind in $flat.Keys) {
         $source = Join-Path $From ".github/$kind"
         if (-not (Test-Path -LiteralPath $source)) { continue }
 
         $destination = Join-Path $To $flat[$kind]
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
-        Get-ChildItem -LiteralPath $source -Recurse -File -Filter '*.md' |
-            Copy-Item -Destination $destination -Force
+        foreach ($file in Get-ChildItem -LiteralPath $source -Recurse -File -Filter '*.md') {
+            Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+            [void]$selected.Add("$($flat[$kind])/$($file.Name)")
+        }
     }
 
     $skillSource = Join-Path $From '.github/skills'
     if (Test-Path -LiteralPath $skillSource) {
         $skillDestination = Join-Path $To '.agents/skills'
         New-Item -ItemType Directory -Path $skillDestination -Force | Out-Null
-        Get-ChildItem -LiteralPath $skillSource -Directory |
-            Copy-Item -Destination $skillDestination -Recurse -Force
+        foreach ($directory in Get-ChildItem -LiteralPath $skillSource -Directory) {
+            $destination = Join-Path $skillDestination $directory.Name
+            if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
+            Copy-Item -LiteralPath $directory.FullName -Destination $skillDestination -Recurse -Force
+            [void]$selected.Add(".agents/skills/$($directory.Name)")
+        }
+    }
+    New-Item -ItemType Directory -Path (Split-Path $ownershipPath -Parent) -Force | Out-Null
+    ConvertTo-Json -InputObject @($selected | Sort-Object) | Set-Content -LiteralPath $ownershipPath -Encoding utf8NoBOM
+
+    if ($NativeCli) {
+        $sourceRoot = Split-Path -Path ([IO.Path]::GetFullPath($From)) -Parent
+        $builder = Join-Path $sourceRoot 'scripts/Build-SquadPlugin.ps1'
+        if (-not (Test-Path -LiteralPath $builder -PathType Leaf)) {
+            throw "Native CLI preparation requires the canonical plugin builder at '$builder'."
+        }
+        . $builder -SourceRoot $sourceRoot -RepoRoot $sourceRoot
+        $source = Resolve-BuildSource -RepoRoot $sourceRoot `
+            -RefSpecified $false -Ref $null -SourceRootSpecified $true -SourceRoot $sourceRoot
+        $script:OutputRootResolved = Join-Path $To '.agents'
+        $script:GeneratedPaths = [Collections.Generic.List[string]]::new()
+        $script:RuleCitationMap = [ordered]@{}
+        $null = Copy-InstructionRules -Source $source -RepoRoot $sourceRoot -OutputRoot $script:OutputRootResolved
+
+        $markdown = @(
+            Get-ChildItem -LiteralPath (Join-Path $To '.agents/skills/squad') -Recurse -File -Filter '*.md'
+            Get-Item -LiteralPath (Join-Path $To '.github/instructions/squad-floor.instructions.md')
+            Get-ChildItem -LiteralPath (Join-Path $From '.github/agents') -Recurse -File -Filter '*.md' |
+                ForEach-Object { Get-Item -LiteralPath (Join-Path $To ".github/agents/$($_.Name)") }
+        )
+        foreach ($file in $markdown) {
+            $content = Convert-AgentCitations -FileName $file.Name -Content (Get-Content -LiteralPath $file.FullName -Raw)
+            $content = $content -replace '(?<![A-Za-z0-9/._-])skills/squad/', '.agents/skills/squad/'
+            $content = $content.Replace(
+                'In this plugin distribution they do not auto-apply at all — there is no instructions channel to apply them — so read the rule file that owns a decision before making it, and treat `rules/squad-floor.md` as unconditional.',
+                'In this native CLI workspace, conditional squad rules are read on demand; the unconditional floor still auto-applies. Read the rule file that owns a decision before making it.'
+            ).Replace(
+                'the eleven companion instruction files that auto-apply when squad state is touched are catalogued in',
+                'the companion rule references, read before the decisions they govern, are catalogued in'
+            ).Replace(
+                'The `squad` skill complements eleven instruction files that auto-apply when squad state is touched. Their `applyTo` globs only fire in a host that loads modular instructions, so a rule that must hold unconditionally belongs in a reference file above, not only here.',
+                'Conditional squad rules are available in full as references below; read the rule that owns a decision before making it. The unconditional floor still auto-applies, and mandatory gates remain in the floor and the core references.'
+            )
+            Set-Content -LiteralPath $file.FullName -Value $content -Encoding utf8NoBOM -NoNewline
+        }
+        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $From '.github/instructions/squad') -File -Filter '*.instructions.md') {
+            if ($file.Name -eq 'squad-floor.instructions.md') { continue }
+            Remove-Item -LiteralPath (Join-Path $To ".github/instructions/$($file.Name)") -Force
+        }
     }
 }
 
@@ -64,7 +149,8 @@ function Assert-TolerableInstallFailure {
 
         The tolerance is narrow on purpose. Each failure must name a file that exists in
         the working copy, because that is the file the overlay is about to supply. A
-        failure naming anything else is a real one and still throws.
+        failure naming anything else is a real one and still throws. Validate each
+        failed dependency record independently: an agent and prompt can share a package slug.
     #>
     [CmdletBinding()]
     param(
@@ -80,20 +166,29 @@ function Assert-TolerableInstallFailure {
     # APM wraps its output at the terminal width, so the log is flattened before matching.
     $log = ((Get-Content -LiteralPath $InstallLog -Raw) -replace '\s+', ' ')
 
-    # APM 0.29 reports a missing self-reference after its sparse-checkout fallback in a second form.
-    $missing = @(@([regex]::Matches($log, 'File not found: (?<path>\S+) in ')) + @([regex]::Matches($log, "File '(?<path>[^']+)' not found after git sparse checkout")) |
-            ForEach-Object { $_.Groups['path'].Value } | Sort-Object -Unique)
-    $failed = @([regex]::Matches($log, '\+- (?<package>\S+) -- ') |
-            ForEach-Object { $_.Groups['package'].Value } | Sort-Object -Unique)
+    $failed = @([regex]::Matches($log, '\+- (?<package>\S+) -- (?<error>.*?)(?= \+- \S+ -- |\z)'))
+    if ($failed.Count -eq 0) { throw $generic }
 
-    if ($missing.Count -eq 0 -or $failed.Count -ne $missing.Count) { throw $generic }
-
-    $unexplained = @($missing | Where-Object { -not (Test-Path -LiteralPath (Join-Path $SourceRoot $_)) })
+    $missing = @(
+        foreach ($record in $failed) {
+            $errorText = $record.Groups['error'].Value
+            # APM 0.29 uses the second form after its sparse-checkout fallback.
+            $paths = @(@([regex]::Matches($errorText, 'File not found: (?<path>\S+) in ')) +
+                @([regex]::Matches($errorText, "File '(?<path>[^']+)' not found after git sparse checkout")) |
+                ForEach-Object { $_.Groups['path'].Value } | Sort-Object -Unique)
+            if ($paths.Count -ne 1) { throw "$generic Unexplained failure for $($record.Groups['package'].Value)." }
+            $paths[0]
+        }
+    )
+    $unexplained = @($missing | Where-Object {
+        $_ -notmatch '^squad-src/\.github/' -or $_ -match '(?:^|/)\.\.?(?:/|$)' -or
+        -not (Test-Path -LiteralPath (Join-Path $SourceRoot $_))
+    })
     if ($unexplained.Count -gt 0) {
         throw "$generic Not explained by the working copy: $($unexplained -join ', ')."
     }
 
-    Write-Warning ("apm install reported {0} unresolvable self-reference(s); every one names a file this branch adds, and the overlay supplies them: {1}" -f $missing.Count, ($missing -join ', '))
+    Write-Warning ("apm install reported {0} unresolvable self-reference record(s); every one names content this branch supplies through the overlay: {1}" -f $failed.Count, (($missing | Sort-Object -Unique) -join ', '))
 }
 
 function Install-SquadPackage {

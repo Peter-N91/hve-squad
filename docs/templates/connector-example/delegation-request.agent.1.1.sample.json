@@ -1,0 +1,21 @@
+{
+  "taskId": "task-2026-10-15-research-0001",
+  "connectorId": "acme-research-agent",
+  "role": "researcher",
+  "deliverableRoot": ".copilot-tracking/research/consumer",
+  "bindingId": "research-org",
+  "targetKind": "role",
+  "executionChoice": "connector:research-org",
+  "allowedOutputs": [
+    {
+      "outputId": "research-note",
+      "role": "researcher",
+      "memberName": "Org Researcher",
+      "deliverableRoot": ".copilot-tracking/research/consumer"
+    }
+  ],
+  "task": "Research the repository's .NET validation conventions using approved sources and return a cited research note without changing source code.",
+  "deadline": "2026-10-15T18:00:00Z",
+  "retryCap": 2,
+  "createdAt": "2026-10-15T17:00:00Z"
+}

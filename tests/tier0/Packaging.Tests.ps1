@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; inspects source and built-package contents locally.
+
 # D7 (routing-performance plan amendment-1, P04-T05) packaging-parity Tier 0 coverage.
 # Covers: (a) no dangling `.github/instructions/squad/` path prose survives in the
 # built plugin output; (b) every file named in 00-index.md's and SKILL.md's reference
@@ -210,18 +212,23 @@ BeforeAll {
         }
     }
 
-    # (d) Scribe hot-core byte budget. The hot core is parsed from 00-index.md's own
-    # "The Scribe reads ... on every turn" sentence (the reference files) plus the
-    # agent charter file itself, rather than hardcoded, so this test tracks the
-    # contract if it is ever re-worded.
-    $indexText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/00-index.md') -Raw
-    $hotCoreSentence = [regex]::Match($indexText, 'The Scribe reads (.+?) on every turn')
-    $script:ScribeHotCoreReferenceFiles = @([regex]::Matches($hotCoreSentence.Groups[1].Value, '`([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value })
+    # Measure the ordinary read set and keep the legacy cold surface budget too.
+    $scribeText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw
+    $ordinarySection = [regex]::Match($scribeText, '(?s)## Ordinary handoff.*?(?=\r?\n## )')
+    $script:ScribeHotCoreReferenceFiles = @([regex]::Matches($ordinarySection.Value, '`references/([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
     $script:ScribeHotCoreFiles = @(
         'squad-src/.github/agents/squad/squad-scribe.agent.md'
     ) + @($script:ScribeHotCoreReferenceFiles | ForEach-Object { "squad-src/.github/skills/squad/references/$_" })
     $script:ScribeHotCoreBytes = ($script:ScribeHotCoreFiles | ForEach-Object {
-            (Get-Item -LiteralPath (Join-Path $script:SourceRootResolved $_)).Length
+            [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)) -replace "`r`n", "`n"))
+        } | Measure-Object -Sum).Sum
+    $script:ScribeColdCoreFiles = @(
+        'squad-src/.github/agents/squad/squad-scribe.agent.md'
+    ) + @(
+        'scribe-cold-charter.md', '00-index.md', 'scribe-procedure.md', 'entry-schemas.md', 'scribe-payload-template.md'
+    ) | ForEach-Object { if ($_ -like 'squad-src/*') { $_ } else { "squad-src/.github/skills/squad/references/$_" } }
+    $script:ScribeColdCoreBytes = ($script:ScribeColdCoreFiles | ForEach-Object {
+            [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)) -replace "`r`n", "`n"))
         } | Measure-Object -Sum).Sum
 
     $baselinePath = Join-Path $script:SourceRootResolved 'tests/tier0/baselines/prefill-baseline.json'
@@ -235,12 +242,42 @@ Describe 'D7-1 Plugin build succeeds and carries every new reference file' {
     }
 
     It '<_> ships in the built plugin output' -ForEach @(
-        'model-catalog.md', 'model-routing.md', 'scribe-payload-template.md',
+        'model-catalog.md', 'model-benchmarks.md', 'model-routing.md', 'model-scoring.md', 'scribe-payload-template.md',
         'scribe-cold-init-and-seeding.md', 'scribe-cold-federation.md', 'scribe-cold-gates-and-verdicts.md',
-        'consumption-rates-template.md'
+        'consumption-rates-template.md', 'economy-scribe.md', 'scribe-cold-charter.md'
     ) {
         Test-Path -LiteralPath (Join-Path $script:PluginReferencesRoot $_) -PathType Leaf |
             Should -BeTrue -Because 'the deliverable requires every new reference file to ship in the plugin build, not only in squad-src'
+    }
+}
+
+Describe 'Shared scoring is delivered with the plugin runtime (SQ-33c)' {
+    It 'delivers the scorer unchanged beside the resolver' {
+        $source = Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/scripts/ModelBenchmarkScoring.ps1'
+        $delivered = Join-Path $script:PluginOutputRoot 'skills/squad/scripts/ModelBenchmarkScoring.ps1'
+        Test-Path -LiteralPath $delivered -PathType Leaf | Should -BeTrue
+        (Get-FileHash -LiteralPath $delivered).Hash | Should -Be (Get-FileHash -LiteralPath $source).Hash
+    }
+}
+
+Describe 'Deterministic coordinator transactions ship with the runtime' {
+    It 'delivers <Name> unchanged beside the coordinator scripts' -ForEach @(
+        @{ Name = 'SquadUsage.psm1' }
+        @{ Name = 'Get-SquadUsage.ps1' }
+        @{ Name = 'Set-SquadModelRouting.ps1' }
+        @{ Name = 'Write-SquadVerdict.ps1' }
+        @{ Name = 'SquadPromotion.psm1' }
+        @{ Name = 'Get-SquadPromotionPlan.ps1' }
+        @{ Name = 'Promote-SquadFederation.ps1' }
+        @{ Name = 'Get-SquadFederationInitPlan.ps1' }
+        @{ Name = 'Initialize-SquadFederation.ps1' }
+        @{ Name = 'Get-SquadRosterExpansionPlan.ps1' }
+        @{ Name = 'Expand-SquadRoster.ps1' }
+    ) {
+        $source = Join-Path $script:SourceRootResolved "squad-src/.github/skills/squad/scripts/$Name"
+        $delivered = Join-Path $script:PluginOutputRoot "skills/squad/scripts/$Name"
+        Test-Path -LiteralPath $delivered -PathType Leaf | Should -BeTrue
+        (Get-FileHash -LiteralPath $delivered).Hash | Should -Be (Get-FileHash -LiteralPath $source).Hash
     }
 }
 
@@ -300,16 +337,33 @@ Describe 'D7-4 No shipped file leaks the private knowledge-docs guides' {
     }
 }
 
-Describe 'D7-5 Scribe hot-core byte budget holds at or under the BEFORE baseline' {
+Describe 'D7-5 Ordinary hot contract shrinks while legacy cold protections remain budgeted' {
+    It 'measures the complete ordinary reference set rather than silently measuring zero references' {
+        $script:ScribeHotCoreReferenceFiles | Should -Be @('economy-scribe.md')
+        $script:ScribeHotCoreFiles.Count | Should -Be 2
+    }
+
+    It 'keeps the pinned Scribe agent below 3000 normalized UTF-8 bytes' {
+        $path = Join-Path $script:SourceRootResolved 'squad-src/.github/agents/squad/squad-scribe.agent.md'
+        [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText($path) -replace "`r`n", "`n")) | Should -BeLessThan 3000
+    }
+
+    It 'keeps agent plus ordinary contract within 6 KiB' {
+        $script:ScribeHotCoreBytes | Should -BeLessOrEqual 6144
+        $path = Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/economy-scribe.md'
+        [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText($path) -replace "`r`n", "`n")) | Should -BeLessOrEqual 3072
+    }
+
     It 'measured the BEFORE baseline scribe/plugin-cli figure' {
         $script:ScribeBaselineBytes | Should -BeGreaterThan 0 -Because 'tests/tier0/baselines/prefill-baseline.json must carry the BEFORE scribe/plugin-cli row'
     }
 
-    It 'sums to no more than the BEFORE baseline unconditionalBytes' {
-        $script:ScribeHotCoreBytes | Should -BeLessOrEqual $script:ScribeBaselineBytes -Because (
-            "the always-read set ($($script:ScribeHotCoreFiles -join ', ')) totals $($script:ScribeHotCoreBytes) bytes, " +
-            "which must not exceed the BEFORE baseline of $($script:ScribeBaselineBytes) bytes"
-        )
+    It 'retains the full legacy cold charter/procedure/schema/payload within the prior surface budget' {
+        $script:ScribeColdCoreBytes | Should -BeLessOrEqual $script:ScribeBaselineBytes
+        $cold = Get-Content -LiteralPath (Join-Path $script:PluginReferencesRoot 'scribe-cold-charter.md') -Raw
+        foreach ($protection in @('Copy each `team.md` row verbatim', 'unused permitted slot', 'copy → verify → delete-source', 'Never write outside consumer-local memory', 'never invent a model name')) {
+            $cold | Should -Match ([regex]::Escape($protection))
+        }
     }
 }
 
@@ -322,5 +376,3 @@ Describe 'D7-6 Model routing never touches an agent''s own frontmatter model sca
         $Actual | Should -BeExactly $Expected -Because 'a routing/performance change must never add, remove, or alter an agent''s own frontmatter model: scalar'
     }
 }
-
-

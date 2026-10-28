@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squad Connector — hve-squad</title>
+  <meta name="description" content="Configurez vos agents et workflows une fois pour leur sélection automatique en autopilote. Les coordinateurs HVE, le Scribe et le council restent inchangés." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <link rel="alternate" hreflang="en" href="../connector.html" />
+  <script src="../assets/site.js" defer></script>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html">Démonstration</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="connector.html" class="active">Connecteur</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../connector.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Guide d'intégration</div>
+      <h1 data-release-change="20261015-squad-work-role-connectors">Squad Connector</h1>
+      <p class="lead">
+        Conservez vos propres agents, compétences et limites d'exécution. Enregistrez un manifeste de capacité
+        et déléguez les tâches bornées à votre coordinateur externe via le connecteur Squad Connector,
+        sans rien migrer dans ce package.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <h2 id="consumer-walkthrough">Parcours consommateur : votre chercheur et votre coordinateur d'implémentation</h2>
+
+      <p>
+        Votre squad existe déjà. Votre organisation possède un agent de recherche avec ses propres
+        compétences et un coordinateur d'implémentation qui pilote vos agents de code et de validation.
+        Cet exemple en fait les endpoints automatiques des rôles <code>researcher</code> et
+        <code>developer</code>, puis ajoute un spécialiste .NET ou GCP sans remplacer un autre membre.
+      </p>
+      <div class="callout"><p>
+        Utilisez un package Squad compatible avec le contrat connecteur <code>1.1</code> et votre
+        hôte/adaptateur d'agents existant. L'adaptateur exécute vos agents et échange les fichiers
+        de demande/résultat avec HVE. Coordinator, Federation Coordinator, Scribe et council restent
+        inchangés. Votre coordinateur d'implémentation sert le rôle développeur, pas le rôle Coordinator HVE.
+      </p></div>
+
+      <h3>Étape 1 : Créer les dossiers dans votre dépôt</h3>
+      <p>
+        Créez le dossier des manifestes et les boîtes de dépôt ci-dessous. Les fichiers d'agents
+        sont des modèles facultatifs pour votre propre hôte ; réutilisez vos agents et compétences
+        existants. HVE/Scribe gère les fichiers d'état de squad figurant en bas de l'arborescence.
+      </p>
+      <div class="code-block"><div class="code-heading">Arborescence du dépôt</div>
+      <pre><code class="language-text">your-repository\
++-- connectors\                         You create these manifests
+|   +-- research-agent.json
+|   +-- delivery-workflow.json
+|   +-- specialists.json                Optional, Step 5
++-- .connector-drops\                   Mailboxes, not final reports
+|   +-- acme-research-agent\
+|   +-- acme-delivery-orchestrator-v3\
+|   +-- acme-capability-assessor\        Optional, Step 5
++-- .github\
+|   +-- agents\                         Optional consumer-owned starters
+|       +-- consumer-research.agent.md
+|       +-- consumer-implementation-orchestrator.agent.md
+|       +-- consumer-implementation.agent.md
+|       +-- consumer-validation.agent.md
+|       +-- consumer-capability-assessor.agent.md
++-- .copilot-tracking\
+    +-- squad\                          HVE/Scribe-managed squad state
+        +-- team.md                     Members and Connector Bindings
+        +-- routing.md
+        +-- decisions.md
+        +-- state.json
+        +-- history\</code></pre></div>
+      <div class="code-block"><div class="code-heading">Créer les dossiers requis avec PowerShell</div>
+      <pre><code class="language-powershell">New-Item -ItemType Directory -Force -Path `
+    '.\connectors', `
+    '.\.connector-drops\acme-research-agent', `
+    '.\.connector-drops\acme-delivery-orchestrator-v3' | Out-Null</code></pre></div>
+      <p>
+        Conservez les compétences dans leur emplacement pris en charge. Les modèles facultatifs
+        utilisent <code>org-research</code>, <code>org-dotnet</code> et <code>org-validation</code>
+        comme noms d'exemple ; remplacez-les par vos compétences réelles. Copier ces fichiers ne lance aucun endpoint.
+      </p>
+
+      <h3>Étape 2 : Configurer les deux endpoints</h3>
+      <p>
+        Copiez les manifestes complets depuis <a href="#copy-the-templates">Copier les modèles</a>
+        dans les deux fichiers ci-dessous. Un manifeste décrit les capacités et le transport ;
+        l'inscription de l'étape 3 détermine le rôle de squad remplacé.
+      </p>
+      <table><thead><tr><th>Fichier du projet</th><th>Connector ID</th><th>Endpoint Kind</th><th>Rôle de travail</th></tr></thead><tbody>
+        <tr><td><code>connectors/research-agent.json</code></td><td><code>acme-research-agent</code></td><td><code>agent</code></td><td><code>researcher</code></td></tr>
+        <tr><td><code>connectors/delivery-workflow.json</code></td><td><code>acme-delivery-orchestrator-v3</code></td><td><code>orchestrator</code></td><td><code>developer</code></td></tr>
+      </tbody></table>
+      <p>
+        Dans la configuration de confiance de votre adaptateur, associez le premier identifiant à
+        votre chercheur et le second à votre coordinateur d'implémentation. Les noms d'exemple sont
+        Consumer Research Agent et Consumer Implementation Orchestrator. Ce dernier délègue à ses
+        propres agents d'implémentation et de validation, qui conservent leurs compétences.
+      </p>
+      <p>
+        Cette association dépend de l'hôte ; HVE ne lit aucun fichier d'adaptateur inventé et ne déduit
+        pas un agent de son nom de fichier. Le tableau <code>roles</code> du manifeste est une liste
+        d'autorisation des rôles pouvant être liés à ce connecteur, et non un remplacement automatique
+        de tous les rôles listés. Vos fichiers <code>.agent.md</code> et compétences peuvent résider
+        dans le dépôt ou dans un dossier externe partagé : votre script adaptateur surveille
+        <code>.connector-drops/</code>, associe <code>connectorId</code> à votre agent ou workflow,
+        l'exécute sur les sources citées dans <code>request.task</code> (les textes génériques sans
+        citations étant rejetés) et écrit l'enveloppe de résultat. N'ajoutez pas de champ d'exécution
+        de commande ou de fichier d'agent au manifeste. Adaptez l'adresse de contact, les identifiants
+        et les chemins de façon cohérente.
+      </p>
+
+      <h3>Étape 3 : Inscrire les connecteurs et choisir les rôles remplacés</h3>
+      <p>Après avoir enregistré les manifestes, envoyez ceci au Squad Coordinator :</p>
+      <div class="code-block"><div class="code-heading">Démarrer l'inscription des connecteurs</div>
+      <pre><code class="language-text">I added two connector manifests to this repository:
+connectors/research-agent.json
+connectors/delivery-workflow.json
+
+Help me connect them to this initialized squad.
+I want my research agent to perform researcher work, and my implementation
+coordinator to perform developer work. Keep HVE coordination, Scribe, and council unchanged.
+Show the proposed configuration and wait for my confirmation.</code></pre></div>
+      <p>
+        Le coordinateur pose les questions manquantes une à une. La formulation peut varier ;
+        les valeurs déjà fournies dans votre demande ou votre manifeste ne sont pas redemandées.
+        Pour cet exemple, choisissez :
+      </p>
+      <table><thead><tr><th>Décision à confirmer</th><th>Connecteur recherche</th><th>Connecteur livraison</th></tr></thead><tbody>
+        <tr><td>Remplacer un rôle ou ajouter un membre ?</td><td><code>replace</code></td><td><code>replace</code></td></tr>
+        <tr><td>Quel rôle/membre ?</td><td>Membre <code>researcher</code> existant</td><td>Membre <code>developer</code> existant</td></tr>
+        <tr><td>Un agent ou un workflow ?</td><td><code>agent</code>, depuis le manifeste</td><td><code>orchestrator</code>, depuis le manifeste</td></tr>
+        <tr><td>Défaut automatique ou alternative à chaque demande ?</td><td><code>connector</code></td><td><code>connector</code></td></tr>
+        <tr><td>Nom du membre dans l'historique ?</td><td>Org Researcher</td><td>Org Delivery</td></tr>
+        <tr><td>Où placer les rapports ?</td><td>Racine existante du chercheur</td><td>Racine du développeur et emplacements de sortie déclarés</td></tr>
+      </tbody></table>
+      <p>
+        Choisissez <code>ask</code> pour une alternative, plutôt qu'un remplacement automatique.
+        En autopilote non assisté, réglez ce choix à l'inscription : gardez exactement un défaut
+        applicable différent de <code>ask</code>. Si un rôle a plusieurs membres, confirmez lequel est ciblé.
+      </p>
+      <p>
+        Confirmez la proposition. Le Scribe écrit les liaisons dans le <code>team.md</code> de la
+        squad propriétaire en conservant les membres internes et leurs racines de livrables.
+        Les routes recherche/développeur restent en place. N'écrasez pas le roster avec un exemple
+        et ne remplacez pas sa valeur Primary par le nom de votre agent externe.
+      </p>
+      <table><thead><tr><th>Binding ID</th><th>Role Mode</th><th>Cible</th><th>Default Execution</th></tr></thead><tbody>
+        <tr><td><code>research-org</code></td><td><code>replace</code></td><td>Membre chercheur</td><td><code>connector</code></td></tr>
+        <tr><td><code>developer-delivery-orchestrator</code></td><td><code>replace</code></td><td>Membre développeur</td><td><code>connector</code></td></tr>
+      </tbody></table>
+
+      <h3>Étape 4 : Utiliser normalement votre squad</h3>
+      <div class="code-block"><div class="code-heading">Lancer l'autopilote avec les défauts enregistrés</div>
+      <pre><code class="language-text">/squad mode=autopilot Implement the approved validation change and its regression tests. Do not deploy or push.</code></pre></div>
+      <p>
+        Aucun paramètre <code>execution=</code> n'est requis. La recherche utilise votre chercheur ;
+        la planification reste avec le lead ; l'implémentation utilise votre workflow ; la revue
+        finale et les gates council/risque HVE restent applicables. Les autres rôles de travail
+        utilisent le même mécanisme.
+      </p>
+      <p>
+        Votre adaptateur doit fonctionner pour traiter les demandes. Avec le dépôt de fichiers,
+        un résultat non prêt laisse l'étape sur <code>awaiting</code>, sans remplacement silencieux
+        par l'agent interne. Votre automatisation peut reprendre le flux. Pour une remise manuelle,
+        continuez la même tâche :
+      </p>
+      <div class="code-block"><div class="code-heading">Reprendre un échange en attente, si nécessaire</div>
+      <pre><code class="language-text">/squad mode=autopilot Continue the current run. Check the pending connector result using its existing taskId and binding; do not create a new task.</code></pre></div>
+      <p>Le connecteur ne fournit ni runner externe ni service de réveil automatique entre processus.</p>
+
+      <h3>Étape 5 : Ajouter un spécialiste .NET ou GCP sans remplacer personne</h3>
+      <p>
+        Enregistrez le manifeste spécialiste sous <code>connectors/specialists.json</code>, créez
+        sa boîte de dépôt et associez votre évaluateur à ses compétences réelles dans l'adaptateur.
+        Consumer Capability Assessor associe chaque rôle demandé à une compétence configurée explicitement.
+      </p>
+      <div class="code-block"><div class="code-heading">Créer la boîte de dépôt spécialiste facultative</div>
+      <pre><code class="language-powershell">New-Item -ItemType Directory -Force -Path '.\.connector-drops\acme-capability-assessor' | Out-Null</code></pre></div>
+      <div class="code-block"><div class="code-heading">Ajouter un membre chargé des pratiques .NET</div>
+      <pre><code class="language-text">Add an extra specialist from connectors/specialists.json without replacing anyone.
+Use binding dotnet-assessor, member Dotnet Assessor, and added role dotnet-practices.
+Align it to tester for classification only.
+Use .copilot-tracking/squad/dotnet-practices/ for its reports.
+Route "assess dotnet practices" to it and set Default Execution=connector.
+Keep the existing tester, Coordinator, Scribe, and council unchanged.
+Show the proposed member, binding, route, and root before writing.</code></pre></div>
+      <p>
+        Choisissez cette fois <code>add</code>. Confirmez le membre, l'alignement, la racine, la route
+        et le défaut. Le Scribe crée un membre distinct dont le Primary est <code>Squad Connector</code> ;
+        il ne remplace pas <code>tester</code> et n'ajoute aucune lentille de council. Pour GCP, utilisez :
+      </p>
+      <table><thead><tr><th>Champ</th><th>Exemple .NET</th><th>Exemple GCP</th></tr></thead><tbody>
+        <tr><td>Binding ID</td><td><code>dotnet-assessor</code></td><td><code>gcp-assessor</code></td></tr>
+        <tr><td>Added Role</td><td><code>dotnet-practices</code></td><td><code>gcp</code></td></tr>
+        <tr><td>Member Name</td><td>Dotnet Assessor</td><td>GCP Assessor</td></tr>
+        <tr><td>Aligned Role</td><td><code>tester</code></td><td><code>azure-architect</code></td></tr>
+        <tr><td>Deliverable Root</td><td><code>.copilot-tracking/squad/dotnet-practices/</code></td><td><code>.copilot-tracking/squad/gcp-assessments/</code></td></tr>
+        <tr><td>Route</td><td>assess dotnet practices</td><td>assess GCP architecture</td></tr>
+        <tr><td>Default Execution</td><td><code>connector</code></td><td><code>connector</code></td></tr>
+      </tbody></table>
+      <p>
+        L'alignement donne une compatibilité de classification et de sorties, pas des compétences
+        ni de l'autorité. En fédération, utilisez les racines résolues du membre. Vous pouvez aussi
+        ajouter <code>data-quality</code> ou une autre capacité avec son membre, sa liaison, sa racine et sa route.
+      </p>
+      <div class="code-block"><div class="code-heading">Demander une évaluation supplémentaire</div>
+      <pre><code class="language-text">/squad Assess dotnet practices in the implemented change.
+/squad Assess GCP architecture for the proposed design.</code></pre></div>
+      <p>
+        Pour inclure un spécialiste dans l'autopilote, demandez son évaluation comme livrable afin
+        que le plan nomme son rôle propriétaire. Ajouter un membre ne l'exécute pas à chaque pipeline.
+      </p>
+
+      <h3>Étape 6 : Retrouver les sorties et l'historique</h3>
+      <p>
+        Les boîtes contiennent les demandes/résultats, pas l'emplacement final des rapports.
+        La recherche utilise le <code>Deliverable Root</code> actif du chercheur ; le workflow,
+        ses sorties déclarées ; les spécialistes, leurs racines confirmées. Le code et les tests
+        restent dans le worktree autorisé. Le Scribe conserve les références et les identités
+        de membre/liaison dans le <code>squadRoot</code> propriétaire, dont <code>history/Squad Connector.md</code>
+        (où chaque rôle connecté est distingué par son <code>Member Name</code> unique et dispose de sa
+        propre ligne dans <code>consumption.md</code>).
+      </p>
+      <p>
+        Le travail externe reste <code>external, unverified</code> ; ses coûts ne sont pas mesurés
+        par le shim. Les liaisons restent attachées à cette squad après promotion en fédération.
+        La référence sur les sorties et la fédération détaille le rebasage et les échanges en cours.
+      </p>
+
+      <h2 id="copy-the-templates">Copier les modèles</h2>
+      <p>
+        Développez un fichier, copiez son contenu complet et enregistrez-le au chemin affiché.
+        Les boutons copient uniquement le contenu, sans le titre. Les fichiers sont téléchargeables.
+        Ces blocs lisent directement les modèles sources : les versions copiées et téléchargées correspondent.
+      </p>
+      <h3>Manifestes de connecteur</h3>
+      <details data-connector-template="manifest.research-agent.1.1.json"><summary>Manifeste de l'agent de recherche</summary>
+        <p><a href="../templates/connector-example/manifest.research-agent.1.1.json" download="research-agent.json">Télécharger research-agent.json</a></p>
+        <div class="code-block"><div class="code-heading">connectors\research-agent.json</div><pre><code class="language-json">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="manifest.delivery-workflow.1.1.json"><summary>Manifeste du coordinateur d'implémentation</summary>
+        <p><a href="../templates/connector-example/manifest.delivery-workflow.1.1.json" download="delivery-workflow.json">Télécharger delivery-workflow.json</a></p>
+        <div class="code-block"><div class="code-heading">connectors\delivery-workflow.json</div><pre><code class="language-json">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="manifest.capability-assessor.1.1.json"><summary>Manifeste spécialiste .NET, GCP ou qualité des données</summary>
+        <p><a href="../templates/connector-example/manifest.capability-assessor.1.1.json" download="specialists.json">Télécharger specialists.json</a></p>
+        <div class="code-block"><div class="code-heading">connectors\specialists.json</div><pre><code class="language-json">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <h3>Modèles facultatifs d'agents et de workflow</h3>
+      <p>
+        Réutilisez vos agents ou copiez ces modèles dans l'hôte qui exécute vos endpoints.
+        Remplacez les noms de compétences d'exemple ; HVE n'installe ni n'exécute ces fichiers
+        du seul fait de leur présence ici.
+      </p>
+      <details data-connector-template="agents/consumer-research.agent.md"><summary>Agent de recherche</summary>
+        <p><a href="../templates/connector-example/agents/consumer-research.agent.md" download="consumer-research.agent.md">Télécharger le modèle de chercheur</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-research.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="agents/consumer-implementation-orchestrator.agent.md"><summary>Coordinateur d'implémentation</summary>
+        <p><a href="../templates/connector-example/agents/consumer-implementation-orchestrator.agent.md" download="consumer-implementation-orchestrator.agent.md">Télécharger le modèle de coordinateur</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-implementation-orchestrator.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="agents/consumer-implementation.agent.md"><summary>Agent d'implémentation utilisé par le coordinateur</summary>
+        <p><a href="../templates/connector-example/agents/consumer-implementation.agent.md" download="consumer-implementation.agent.md">Télécharger l'agent d'implémentation</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-implementation.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="agents/consumer-validation.agent.md"><summary>Agent de validation utilisé par le coordinateur</summary>
+        <p><a href="../templates/connector-example/agents/consumer-validation.agent.md" download="consumer-validation.agent.md">Télécharger l'agent de validation</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-validation.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <details data-connector-template="agents/consumer-capability-assessor.agent.md"><summary>Spécialiste de domaine facultatif</summary>
+        <p><a href="../templates/connector-example/agents/consumer-capability-assessor.agent.md" download="consumer-capability-assessor.agent.md">Télécharger le modèle de spécialiste</a></p>
+        <div class="code-block"><div class="code-heading">.github\agents\consumer-capability-assessor.agent.md</div><pre><code class="language-markdown">Use the download link when viewing the unbuilt HTML source.</code></pre></div>
+      </details>
+      <p>
+        Une <a href="../templates/connector-example/CONSUMER-GUIDE.md">version Markdown</a> est disponible.
+        La suite détaille les choix d'exécution, les enveloppes et les exigences de sécurité.
+      </p>
+
+      <h2>Qu'est-ce que le Squad Connector ?</h2>
+
+      <p>
+        Le Squad Connector est un contrat d'intégration basé sur fichier qui vous permet de
+        ramener votre propre coordinateur (ou agent unique) dans la méthodologie HVE Squad. Vous
+        enregistrez un <strong>manifeste de capacité</strong> unique décrivant ce que votre
+        coordinateur peut faire, où il réside sur le disque et quels rôles de l'équipe peuvent
+        lui déléguer du travail. Lorsqu'un rôle délégué a besoin de travail externe, le shim
+        Squad Connector écrit une <strong>enveloppe de demande de délégation</strong> au chemin
+        de dépôt de votre manifeste. Votre propre coordinateur (s'exécutant entièrement en dehors
+        de ce package) la lit, effectue le travail et écrit une <strong>enveloppe de résultat</strong>
+        avec le livrable. Le shim valide et signale le résultat, exactement comme il signale le
+        résultat de tout autre rôle.
+      </p>
+
+      <p>
+        <strong>Vous conservez vos propres agents, compétences et limites d'exécution.</strong>
+        Rien dans ce package n'exécute ou n'installe votre code coordinateur. Aucune migration
+        de vos outils, aucune bifurcation de votre méthodologie. Le connecteur est un shim qui
+        transmet le travail à travers une limite et ramène les résultats — rien de plus.
+      </p>
+
+      <div class="callout">
+        <p>
+          <strong>Aucun blocage, aucun MCP, aucun transport en direct.</strong> Le connecteur
+          implémente le mode 2 : dépôt de fichier avec boucle humaine. Le shim écrit la demande
+          de délégation et revient immédiatement ; votre coordinateur s'exécute selon votre
+          propre calendrier (par observateur de fichiers, tâche cron, main humaine ou ce que vous
+          préférez), et le shim récupère le résultat lors d'une délégation ultérieure. C'est le
+          seul mode de transport pris en charge aujourd'hui.
+        </p>
+      </div>
+
+      <h2>Adaptation architecturale : Distribution externe</h2>
+
+      <p>
+        Les modes de rôle du connecteur sont pilotés par le roster. Pendant l'inscription/la
+        construction/le rafraîchissement, les consommateurs ajoutent des entrées dans
+        <code>Connector Bindings</code> et choisissent si chaque liaison
+        <strong>remplace</strong> une surface d'exécution existante ou <strong>ajoute</strong> un
+        nouveau membre d'équipe soutenu par connecteur. Le point de terminaison derrière la liaison
+        peut être un agent externe unique ou un orchestrateur externe.
+      </p>
+
+      <p>
+        <strong>Le mode remplacement conserve l'original interne.</strong> Au moment de la demande,
+        l'exécution peut choisir <code>original</code>, un
+        <code>connector:&lt;binding-id&gt;</code> nommé, ou <code>both</code> quand les sorties sont
+        sans collision. La clarification interactive intervient après la classification ordinaire
+        du rôle si un doute reste. En mode non assisté/autopiloté, toute ambiguïté restante est
+        traitée en échec fermé&nbsp;: arrêt et escalade, jamais de choix implicite.
+      </p>
+
+      <p>
+        <strong>Plusieurs membres connecteur additifs sont pris en charge.</strong> Exemple&nbsp;:
+        une squad Azure peut ajouter un évaluateur d'architecture <code>gcp</code> soutenu par
+        connecteur et aligné sur <code>azure-architect</code>. Cet alignement donne uniquement une
+        compatibilité de routage et de livrables. Il ne donne <strong>pas</strong> de capacité Azure
+        par implication, et il ne donne <strong>aucune</strong> appartenance aux lentilles du council.
+      </p>
+
+      <p>
+        <strong>La coquille de gouvernance et le council restent internes.</strong> Même quand une
+        liaison utilise votre orchestrateur externe pour un rôle de travail, le Squad Coordinator HVE reste la
+        coquille de gouvernance. Les orchestrateurs externes ne peuvent pas détenir les gates, les
+        verdicts de council, les approbations, les écritures d'état de squad, ni l'autorité Scribe.
+        Le council reste canonique/interne et les rôles connecteur ne l'étendent ni ne le remplacent.
+      </p>
+
+      <h2>Le modèle des places : vos agents, la gouvernance HVE</h2>
+
+      <p>
+        HVE pilote la méthode ; vos agents réalisent le travail délimité. Un rôle est une place :
+        gardez l'agent HVE, choisissez votre agent avec ses compétences, ou placez votre workflow
+        complet derrière ce rôle. Votre workflow d'implémentation ne remplace pas le cycle
+        Recherche &rarr; Planification &rarr; Implémentation &rarr; Revue de la squad.
+      </p>
+
+      <table>
+        <thead><tr><th>Place</th><th>Choix du consommateur</th><th>Responsabilité HVE conservée</th></tr></thead>
+        <tbody>
+          <tr><td><code>researcher</code></td><td>Votre chercheur et vos compétences de recherche</td><td>Ordre des étapes et contrôle des livrables</td></tr>
+          <tr><td><code>developer</code></td><td>Votre implémenteur ou votre orchestrateur recherche/code/validation</td><td>Prérequis du plan, council si nécessaire, et revue finale</td></tr>
+          <tr><td>Spécialiste supplémentaire</td><td>GCP, pratiques .NET, qualité des données ou autre capacité déclarée</td><td>Routage, confirmation, preuves et composition inchangée du council</td></tr>
+          <tr><td>Coordinateur et Scribe</td><td>Gouvernance et persistance internes</td><td>Gates, admission, approbations, décisions, historique et synthèse</td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        La revue interne de votre endpoint apporte des preuves, pas un verdict de council ni une
+        autorisation de livraison. Le Coordinator HVE, le Federation Coordinator et le Scribe
+        ne peuvent être ni connectés ni remplacés. Votre orchestrateur prend un rôle de travail
+        tel que <code>developer</code>, jamais la place du coordinateur HVE.
+      </p>
+
+      <h2 id="register-or-extend-an-existing-squad">Référence des choix d'exécution</h2>
+
+      <p>
+        Demandez au Squad Coordinator d'inscrire ou de rafraîchir un connecteur en donnant le
+        chemin du manifeste. Il pose les questions manquantes une à une, valide une configuration
+        manuelle complète sans répéter les décisions déjà fournies, puis demande confirmation
+        avant toute écriture du Scribe. Choisissez <code>replace</code> avec le défaut
+        <code>connector</code> pour utiliser votre endpoint par défaut, ou <code>ask</code>
+        pour en faire une alternative choisie à chaque demande. Choisissez <code>add</code>
+        pour un membre supplémentaire. Ne placez pas les identifiants de connecteur dans
+        <code>Alternate Agents</code>.
+      </p>
+
+      <p>
+        <strong>Configurez une fois, puis lancez l'autopilote sans paramètre d'exécution.</strong>
+        Les défauts du parcours sélectionnent votre chercheur et votre workflow d'implémentation.
+        La planification, la revue, l'architecture, la rédaction et les autres
+        rôles de travail utilisent le même mécanisme. Un rôle sans liaison reste interne ;
+        les délégations de council restent toujours internes.
+      </p>
+
+      <table>
+        <thead><tr><th>Rôle</th><th>Liaison</th><th>Default Execution</th></tr></thead>
+        <tbody>
+          <tr><td><code>researcher</code></td><td><code>research-org</code></td><td><code>connector</code></td></tr>
+          <tr><td><code>developer</code></td><td><code>implementation-org</code></td><td><code>ask</code> (alternative à agent unique)</td></tr>
+          <tr><td><code>developer</code></td><td><code>developer-delivery-orchestrator</code></td><td><code>connector</code></td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        Les capacités additives ne se limitent pas à GCP. Chacune nécessite un rôle autorisé par
+        le manifeste, un nom de membre unique, une liaison, une route et une racine explicites,
+        et un alignement sur une classe existante. Par exemple, <code>gcp</code> s'aligne sur
+        <code>azure-architect</code>, tandis que <code>dotnet-practices</code> et
+        <code>data-quality</code> s'alignent sur <code>tester</code>. Votre endpoint fournit les
+        compétences réelles ; l'alignement ne les crée pas. Coordinateurs, Scribe et council restent réservés.
+      </p>
+
+      <pre><code class="language-text">/squad mode=autopilot Implement the approved validation change and its regression tests. Do not deploy or push.
+/squad Assess GCP architecture
+/squad Assess dotnet practices
+/squad Assess dataset quality</code></pre>
+
+      <p>
+        Pour choisir un agent d'implémentation unique, confirmez un rafraîchissement mettant sa liaison
+        sur <code>connector</code> et celle du workflow sur <code>ask</code>. La commande
+        d'autopilote reste identique. Il faut exactement un défaut applicable différent de
+        <code>ask</code>. <code>execution=</code> reste une surcharge facultative d'un rôle de travail.
+      </p>
+
+      <p>
+        Commencez par le <a href="#consumer-walkthrough">parcours consommateur de cette page</a>.
+        Le <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/CONSUMER-GUIDE.md">guide consommateur</a>
+        en est la version Markdown, avec les mêmes dossiers, décisions d'inscription et destinations des sorties.
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/consumer-team.1.1.md">L'exemple d'équipe</a>
+        propose une variante plus large, avec un implémenteur unique par défaut et trois capacités supplémentaires.
+        Ces modèles restent dans les sources ; ils ne sont ni installés ni exécutés automatiquement.
+        Mettez à jour ou reconstruisez votre package installé pour bénéficier des changements.
+      </p>
+
+      <p>
+        La sélection automatique est distincte du transport. Votre adaptateur exécute l'endpoint
+        externe. Le dépôt de fichiers peut laisser l'étape sur <code>awaiting</code> ; votre
+        automatisation ou une reprise ultérieure vérifie la même tâche. Aucun runner externe
+        ni service de réveil automatique n'est fourni par ce package.
+      </p>
+
+      <h2>Sorties, Scribe et propriété dans une fédération</h2>
+
+      <table>
+        <thead><tr><th>Sortie</th><th>Auteur et destination</th></tr></thead>
+        <tbody>
+          <tr><td>JSON demande/résultat</td><td>Shim/adaptateur consommateur dans <code>dropPath</code> ; l'adaptateur publie atomiquement un résultat complet.</td></tr>
+          <tr><td>Rapport d'un agent unique</td><td>Endpoint/shim dans le <code>Deliverable Root</code> actif ; les chemins de <code>artifacts</code> sont relatifs à cette racine. <code>outputs</code> est facultatif.</td></tr>
+          <tr><td>Rapports d'orchestrateur</td><td>Une enveloppe avec <code>artifacts</code> vide au premier niveau ; chaque entrée <code>outputs[]</code> utilise un <code>outputId</code> déclaré et sa propre racine.</td></tr>
+          <tr><td>Code source et tests</td><td>Votre implémenteur dans le worktree partagé/synchronisé autorisé. L'enveloppe transporte uniquement des rapports Markdown, JSON ou texte.</td></tr>
+          <tr><td>Historique, décisions, état, registre</td><td>Scribe interne dans le <code>squadRoot</code> propriétaire, avec références aux livrables et provenance distincte par membre/liaison.</td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        Les membres connecteur partagent <code>history/Squad Connector.md</code> mais conservent
+        leurs identités de membre et de liaison. Le Scribe marque le travail
+        <code>external, unverified</code> ; les coûts externes ne sont pas mesurés, pas nuls.
+        Il enregistre les sorties sans réécrire votre recherche ni votre code.
+      </p>
+
+      <p>
+        Les liaisons appartiennent au roster d'une seule squad. La promotion les déplace avec
+        celui-ci vers son membre de fédération, sans les rendre globales ni les rattacher aux
+        autres squads. Les racines de suivi sont rebasées pour ce membre ; les chemins de
+        manifeste et de boîte de dépôt restent une configuration de transport distincte.
+        Terminez ou abandonnez les échanges en cours avant la promotion, puis créez de nouvelles
+        demandes avec les nouvelles racines. Isolez les boîtes par squad si nécessaire et chaque
+        tâche par un identifiant neuf, jamais par le seul rôle.
+      </p>
+
+      <h2>Le manifeste de capacité</h2>
+
+      <p>
+        Vous créez un fichier JSON unique, le <strong>manifeste de capacité</strong>, qui décrit
+        votre connecteur. L'équipe n'exécute jamais ce fichier ; elle le lit comme données pour
+        valider et acheminer le travail.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Champ</th>
+            <th>Type</th>
+            <th>Requis</th>
+            <th>Signification</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>connectorId</code></td>
+            <td>string</td>
+            <td>oui</td>
+            <td>Identifiant stable de ce connecteur, utilisé pour lier chaque demande et résultat. Choisissez quelque chose comme <code>acme-coordinator-v2</code>.</td>
+          </tr>
+          <tr>
+            <td><code>schemaVersion</code></td>
+            <td>string</td>
+            <td>oui</td>
+            <td>La version du contrat ciblée par ce manifeste. Utilisez <code>"1.0"</code> pour le flux hérité à rôle unique, <code>"1.1"</code> pour les modes de rôle.</td>
+          </tr>
+          <tr>
+            <td><code>transport</code></td>
+            <td>string</td>
+            <td>oui</td>
+            <td>Le mode d'invocation. Doit être <code>"file"</code> (aucune autre valeur n'est prise en charge). <code>"mcp"</code> est réservé pour un possible futur transport ; ne l'utilisez pas.</td>
+          </tr>
+          <tr>
+            <td><code>endpointKind</code></td>
+            <td>string</td>
+            <td><code>1.1</code> : oui<br /><code>1.0</code> : omettre</td>
+            <td>Ce qui se trouve derrière la limite du connecteur : <code>"agent"</code> ou <code>"orchestrator"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>capabilities</code></td>
+            <td>tableau de string</td>
+            <td>oui</td>
+            <td>Description en prose de ce que votre coordinateur peut faire. Pas exécutable. Exemple : <code>"Implements a bounded development task against our in-house coding standard and returns changed files."</code></td>
+          </tr>
+          <tr>
+            <td><code>roles</code></td>
+            <td>tableau de string</td>
+            <td>oui</td>
+            <td>Quels ID de rôle de l'équipe ce connecteur peut être enregistré. Exemple : <code>["developer", "reviewer"]</code>. Consultez le catalogue du roster pour les ID de rôle valides.</td>
+          </tr>
+          <tr>
+            <td><code>dropPath</code></td>
+            <td>string</td>
+            <td>oui</td>
+            <td>Chemin relatif au dépôt où le shim écrit l'enveloppe de demande de délégation et où votre coordinateur lit et écrit les enveloppes de résultat. Exemple : <code>".connector-drops/acme-coordinator-v2/"</code>. Le répertoire doit exister sur le disque.</td>
+          </tr>
+          <tr>
+            <td><code>deadlineMinutesDefault</code></td>
+            <td>entier</td>
+            <td>oui</td>
+            <td>Combien de minutes le shim attend un résultat avant de déclarer la demande <code>unreachable</code>. Un rôle délégué peut ignorer cela. Exemple : <code>120</code>.</td>
+          </tr>
+          <tr>
+            <td><code>retryCapDefault</code></td>
+            <td>entier</td>
+            <td>oui</td>
+            <td>Combien de tentatives de vérification ou de reprise le shim autorise tant qu'aucun résultat n'existe avant de passer à <code>unreachable</code>. Exemple : <code>3</code>.</td>
+          </tr>
+          <tr>
+            <td><code>contact</code></td>
+            <td>string</td>
+            <td>oui</td>
+            <td>Contact lisible par l'homme pour le responsable du coordinateur. Lu comme données, jamais comme une commande. Exemple : <code>"squad-integrations@example.com"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>version</code></td>
+            <td>string</td>
+            <td>oui</td>
+            <td>Votre propre chaîne de version coordinateur, pour la traçabilité. Exemple : <code>"2.3.1"</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        <strong>Aucun champ supplémentaire.</strong> Le schéma du manifeste est fermé. N'importe
+        quel champ autre que les champs déclarés ci-dessus (incluant <code>command</code>,
+        <code>exec</code>, <code>script</code>, <code>url</code> ou tout autre champ qui nomme
+        une action) sera rejeté lors de la validation.
+      </p>
+
+      <h2>L'enveloppe de demande de délégation</h2>
+
+      <p>
+        Quand un rôle délégué délègue du travail à votre connecteur, le shim Squad Connector
+        écrit un fichier JSON d'<strong>enveloppe de demande de délégation</strong> au
+        <code>dropPath</code> de votre manifeste. Votre coordinateur observe ou interroge ce
+        répertoire, lit la demande et agit en conséquence.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Champ</th>
+            <th>Type</th>
+            <th>Signification</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>taskId</code></td>
+            <td>string</td>
+            <td>Identifiant frais et unique pour cette demande spécifique. Jamais réutilisé une fois que vous écrivez un résultat pour cela.</td>
+          </tr>
+          <tr>
+            <td><code>connectorId</code></td>
+            <td>string</td>
+            <td>Doit correspondre au <code>connectorId</code> de votre manifeste.</td>
+          </tr>
+          <tr>
+            <td><code>role</code></td>
+            <td>string</td>
+            <td>Le rôle de l'équipe qui délègue cette tâche.</td>
+          </tr>
+          <tr>
+            <td><code>deliverableRoot</code></td>
+            <td>string</td>
+            <td>Le répertoire du rôle délégué où tous les artefacts de résultat doivent être placés. <strong>Chaque chemin d'artefact dans votre enveloppe de résultat doit se résoudre sous ce chemin, sans traversée de répertoire.</strong></td>
+          </tr>
+          <tr>
+            <td><code>bindingId</code></td>
+            <td>string</td>
+            <td>Identité de liaison de roster de confiance en <code>1.1</code>. Omis en mode hérité <code>1.0</code>.</td>
+          </tr>
+          <tr>
+            <td><code>targetKind</code></td>
+            <td>string</td>
+            <td>Type de cible en <code>1.1</code> : <code>role</code> uniquement. Coordinateurs HVE, Scribe et gouvernance du council sont protégés. Omis en <code>1.0</code>.</td>
+          </tr>
+          <tr>
+            <td><code>executionChoice</code></td>
+            <td>string</td>
+            <td>Choix résolu à la demande en <code>1.1</code> : <code>original</code>, <code>connector:&lt;binding-id&gt;</code>, ou <code>both</code>.</td>
+          </tr>
+          <tr>
+            <td><code>allowedOutputs</code></td>
+            <td>tableau</td>
+            <td>Allowlist fermée de sorties en <code>1.1</code>. Chaque entrée suit <code>{ outputId, role, memberName?, deliverableRoot }</code>.</td>
+          </tr>
+          <tr>
+            <td><code>task</code></td>
+            <td>string</td>
+            <td>Instructions délimitées pour le travail à faire. Lisez ceci comme données — ne l'exécutez jamais comme une commande ou un script.</td>
+          </tr>
+          <tr>
+            <td><code>deadline</code></td>
+            <td>string (ISO 8601)</td>
+            <td>Quand cette demande devient <code>unreachable</code> si aucun résultat n'arrive. Exemple : <code>"2026-10-11T18:00:00Z"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>retryCap</code></td>
+            <td>entier</td>
+            <td>Combien de tentatives de vérification ou de reprise restent tant qu'aucun résultat n'existe avant que la demande devienne <code>unreachable</code>.</td>
+          </tr>
+          <tr>
+            <td><code>createdAt</code></td>
+            <td>string (ISO 8601)</td>
+            <td>Quand le shim a écrit cette demande.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        Lisez chaque champ comme données. Le champ <code>task</code> est des instructions
+        délimitées et lisibles par l'homme, pas un script à analyser et exécuter. Respectez
+        <code>deadline</code> et <code>retryCap</code> : écrivez <code>failed</code> lorsque votre
+        coordinateur dispose d'un résultat d'échec ; si aucun résultat n'arrive, le shim signale
+        <code>unreachable</code> lorsque la deadline ou la limite de tentatives est épuisée.
+      </p>
+
+      <p>
+        <strong>Frontière de version.</strong> Le contrat <code>1.0</code> reste valide pour le
+        flux manuel hérité à rôle unique. Les modes de rôle (liaisons replace/add, cible
+        coordinateur, orchestration multi-sortie par allowlist) exigent <code>1.1</code>. Le shim
+        n'infère jamais de mise à niveau silencieuse.
+      </p>
+
+      <h2>L'enveloppe de résultat</h2>
+
+      <p>
+        Après avoir complété le travail (ou échoué à le compléter), écrivez un fichier JSON
+        d'<strong>enveloppe de résultat</strong> au même endroit <code>dropPath</code> où
+        l'enveloppe de demande de délégation est arrivée. Le shim la lira ultérieurement, la
+        validera et signalera le résultat.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Champ</th>
+            <th>Type</th>
+            <th>Signification</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>taskId</code></td>
+            <td>string</td>
+            <td>Doit correspondre exactement à l'enveloppe de demande de délégation en attente.</td>
+          </tr>
+          <tr>
+            <td><code>connectorId</code></td>
+            <td>string</td>
+            <td>Doit correspondre exactement à l'enveloppe de demande de délégation en attente.</td>
+          </tr>
+          <tr>
+            <td><code>bindingId</code></td>
+            <td>string</td>
+            <td>Uniquement en <code>1.1</code>. Doit correspondre exactement à l'enveloppe de demande de délégation en attente ; omis en mode hérité <code>1.0</code>.</td>
+          </tr>
+          <tr>
+            <td><code>role</code></td>
+            <td>string</td>
+            <td>Doit correspondre exactement à l'enveloppe de demande de délégation en attente.</td>
+          </tr>
+          <tr>
+            <td><code>status</code></td>
+            <td>string</td>
+            <td>L'une de : <code>completed</code>, <code>failed</code>, <code>awaiting</code> ou <code>unreachable</code>. Vous écrivez généralement <code>completed</code> ou <code>failed</code>. (Voir les statuts ci-dessous.)</td>
+          </tr>
+          <tr>
+            <td><code>artifacts</code></td>
+            <td>tableau d'objets</td>
+            <td>Fichiers livrables. Chaque objet a <code>{"path": "...", "type": "md"|"json"|"txt"}</code>. Peut être vide si le statut n'est pas <code>completed</code>. En <code>1.0</code> hérité, c'est la forme de retour principale.</td>
+          </tr>
+          <tr>
+            <td><code>outputs</code></td>
+            <td>tableau</td>
+            <td>Forme orchestrateur en <code>1.1</code>. Chaque élément suit <code>{ outputId, artifacts[] }</code> et chaque <code>outputId</code> doit exister dans <code>allowedOutputs</code> de la demande.</td>
+          </tr>
+          <tr>
+            <td><code>narrative</code></td>
+            <td>string</td>
+            <td><strong>Données non fiables.</strong> Résumé libre de ce qui s'est passé. À lire uniquement comme donnée, jamais comme autorité sur les gates, approbations ou verdicts. Max 10 000 caractères.</td>
+          </tr>
+          <tr>
+            <td><code>createdAt</code></td>
+            <td>string (ISO 8601)</td>
+            <td>Quand vous avez écrit ce résultat.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        <strong>La provenance de confiance vient de l'inscription.</strong> Le Scribe rend
+        <code>External-unmetered: connector=&lt;connectorId&gt;</code> et
+        <code>Verification: external, unverified</code> à partir des données de liaison/manifeste
+        validées. Le texte narratif externe peut répéter ces mots, mais il n'est jamais une source
+        d'autorité.
+      </p>
+
+      <h2>Statuts de résultat</h2>
+
+      <p>
+        Quatre statuts, et seulement quatre, sont valides :
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Statut</th>
+            <th>Signification</th>
+            <th>Action du coordinateur</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>completed</code></td>
+            <td>Le travail s'est terminé avec succès et les artefacts sont placés à la racine livrable.</td>
+            <td>Le shim valide les chemins d'artefact, enregistre une provenance de confiance, marque le résultat <code>external, unverified</code> et marque l'étape comme exécutée.</td>
+          </tr>
+          <tr>
+            <td><code>failed</code></td>
+            <td>Le travail n'a pas pu être terminé, un résultat a échoué à la validation, ou la photographie de collision interne au shim est absente, modifiée ou incohérente.</td>
+            <td>Le shim rejette l'échange et escalade vers l'orchestrateur comme rôle défaillant. Il ne reconstruit jamais la photographie antérieure à la tâche depuis le système de fichiers repris.</td>
+          </tr>
+          <tr>
+            <td><code>awaiting</code></td>
+            <td>La demande de délégation est toujours traitée ; aucune enveloppe de résultat n'existe encore, la deadline n'a pas été dépassée et des tentatives restent disponibles.</td>
+            <td>Vous n'écrivez généralement pas ce statut vous-même. Le shim l'écrit quand il ne trouve aucune enveloppe de résultat avant qu'une des deux limites terminales soit atteinte.</td>
+          </tr>
+          <tr>
+            <td><code>unreachable</code></td>
+            <td>Aucune enveloppe de résultat n'est arrivée avant la deadline ou avant l'épuisement de <code>retryCap</code>, ou le manifeste lui-même est invalide ou absent.</td>
+            <td>Le shim escalade comme si un rôle critique était hors ligne : l'étape échoue et peut être relancée ou abandonnée. Ce n'est pas un timeout léger ; c'est traité comme une ressource manquante.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Mode 2 : flux de dépôt de fichier avec boucle humaine</h2>
+
+      <p>
+        Le connecteur implémente exactement un mode d'invocation :
+      </p>
+
+      <ol>
+        <li>
+          <strong>La classification de rôle se résout, puis le choix d'exécution se résout.</strong>
+          Le coordinateur classe d'abord le rôle/membre en interne, puis applique les liaisons de
+          connecteur et le choix à la demande (<code>original</code>, connecteur nommé ou
+          <code>both</code> sans collision). La clarification interactive intervient seulement si une
+          ambiguïté subsiste ; en mode non assisté, cette ambiguïté provoque arrêt et escalade.
+        </li>
+        <li>
+          <strong>Le shim photographie l'état, puis écrit la demande de délégation.</strong> Le shim
+          Squad Connector écrit d'abord sa référence de collision fermée et interne
+          <code>&lt;taskId&gt;.snapshot.json</code>, puis publie
+          <code>&lt;taskId&gt;.request.json</code> dans le <code>dropPath</code> de votre manifeste.
+          La demande contient le travail borné, les contraintes temporelles, et en <code>1.1</code>
+          les allowlists fiables de liaison/sortie. Le shim revient immédiatement avec le statut
+          <code>awaiting</code> — il ne bloque pas en attente de votre réponse.
+        </li>
+        <li>
+          <strong>Votre coordinateur observe/interroge.</strong> Votre coordinateur (s'exécutant
+          entièrement en dehors de ce package) observe le <code>dropPath</code> pour les nouveaux
+          fichiers <code>*.request.json</code> par les moyens que vous choisissez — observateur de
+          fichiers, tâche cron, script déclenché manuellement, etc. Il ignore et ne modifie jamais
+          <code>*.snapshot.json</code>. Il n'y a pas de mécanisme prescrit.
+        </li>
+        <li>
+          <strong>Le coordinateur effectue le travail.</strong> Votre coordinateur lit l'enveloppe
+          de demande de délégation, exécute la tâche délimitée et rassemble le résultat (fichiers
+          modifiés, rapports, etc.).
+        </li>
+        <li>
+          <strong>Le coordinateur écrit l'enveloppe de résultat.</strong> Votre coordinateur écrit
+          un fichier JSON d'enveloppe de résultat au même <code>dropPath</code>, avec les identités
+          correspondantes, le statut, les chemins d'artefact et un récit factuel. Le Scribe produit les marqueurs comptables en interne.
+        </li>
+        <li>
+          <strong>Une délégation ultérieure du shim vérifie le résultat.</strong> Une délégation
+          ultérieure du shim Squad Connector (par l'orchestrateur au prochain tour ou chaque fois
+          que l'équipe s'exécute à nouveau) relit la demande inchangée et la photographie de collision
+          d'origine, trouve votre enveloppe de résultat, valide l'échange complet et signale
+          <code>completed</code>, <code>failed</code> ou <code>unreachable</code>. Il ne reconstruit
+          jamais la photographie après que votre producteur a écrit ses fichiers.
+        </li>
+      </ol>
+
+      <p>
+        <strong>Cycle scripté, responsabilités inchangées.</strong> L'agent Squad Connector allégé
+        exécute <code>Invoke-SquadConnectorDispatch.ps1</code> une fois et renvoie son JSON.
+        <code>Resolve-SquadConnectorDispatch.ps1</code> reste sans effet de bord. Le wrapper conserve
+        les empreintes demande/photographie, les tentatives et les identifiants consommés dans
+        <code>dropPath/.squad-connector/&lt;taskId&gt;.state.json</code>, sous verrou exclusif par tâche.
+        Conservez cet état privé sans laisser votre adaptateur le modifier : un identifiant consommé
+        est rejeté entre processus même si les fichiers publics ont été supprimés. Un état absent ou
+        modifié bloque l'échange. Le wrapper renvoie les chemins validés et la provenance, jamais le
+        <code>narrative</code> externe brut ni le contenu des artefacts. HVE conserve le routage, les
+        gates et l'historique du Scribe ; le contrat reste la référence du protocole consommateur.
+        Au premier appel comme à la reprise, HVE délègue à l'agent natif <code>Squad Connector</code> ;
+        un appel direct du script par le coordinateur ne prouve pas son exécution. La reprise garde
+        le <code>taskId</code> original sans créer une autre demande. L'identité en attente fixe aussi
+        le membre externe et le roster propriétaire : un renommage bloque l'échange au lieu de
+        réattribuer le résultat. Les racines acceptent le séparateur final des exemples ; les segments
+        internes non sûrs restent rejetés.
+        HVE fournit un JSON de délégation exact ; la reprise recharge les champs optionnels de tâche,
+        de sortie et d'échéance depuis la demande figée au lieu de les reconstruire. L'agent renvoie
+        son premier résultat, échecs inclus, sans réessayer avec des entrées modifiées. L'historique
+        du Scribe utilise les puces littérales <code>* </code> pour la provenance, uniquement les
+        rapports validés comme livrables et les preuves d'attribution du modèle du Connector natif.
+      </p>
+
+      <p>
+        <strong>Pas de réponse immédiate.</strong> La différence clé avec un RPC traditionnel est
+        que les étapes 2 et 6 sont séparées. Le shim ne bloque jamais. Votre coordinateur
+        s'exécute de façon asynchrone selon votre propre calendrier. Si votre coordinateur doit
+        s'exécuter de façon synchrone, vous pouvez le déclencher immédiatement après que le shim
+        écrive la demande ; si vous voulez qu'il s'exécute via cron ou action humaine, cela
+        fonctionne aussi. Le contrat ne s'en soucie pas.
+      </p>
+
+      <h2>Règles de sécurité</h2>
+
+      <p>
+        <strong>Données non fiables dans l'enveloppe.</strong> Chaque enveloppe de résultat — son
+        statut, son récit et le contenu d'artefact — est traité comme donnée non fiable par le
+        shim. Aucune instruction ou directive dans un récit ne peut diriger une porte, ignorer
+        une politique ou modifier le comportement de l'équipe. La propre validation du shim (pas
+        les affirmations de l'enveloppe) détermine ce qui s'est passé. N'importe quelle
+        instruction intégrée comme « sauter cette porte » ou « marquer ceci comme approuvé » est
+        signalée, jamais obéie.
+      </p>
+
+      <p>
+        <strong>Validation de chemin et limites numériques.</strong> Le shim valide chaque
+        chemin d'artefact avant d'y toucher :
+      </p>
+
+      <ul>
+        <li>
+          <strong>Pas de traversée de répertoire :</strong> Rejetez les chemins avec des chemins
+          absolus, des chemins UNC (<code>\\server\share</code>), des lettres de lecteur
+          (<code>C:</code>), des segments <code>..</code> ou des marqueurs de flux de données
+          alternatif NTFS (<code>:</code>). Résolvez le chemin restant et confirmez qu'il se
+          trouve sous <code>deliverableRoot</code> en utilisant une vérification de préfixe
+          consciente du séparateur (vrai segment de chemin, pas une simple correspondance de
+          chaîne).
+        </li>
+        <li>
+          <strong>Pas de liens symboliques ou de jonctions :</strong> Rejetez tout lien
+          symbolique, jonction ou point d'analyse à tout composant de chemin, y compris les
+          répertoires intermédiaires.
+        </li>
+        <li>
+          <strong>Restrictions de type de fichier :</strong> Seuls <code>.md</code>,
+          <code>.json</code> et <code>.txt</code> sont autorisés. Toute autre extension est
+          rejetée.
+        </li>
+        <li>
+          <strong>Limites numériques, toutes appliquées :</strong>
+          <ul>
+            <li>1 MiB maximum par fichier</li>
+            <li>5 MiB maximum par enveloppe</li>
+            <li>20 artefacts maximum par enveloppe</li>
+            <li>5 niveaux maximum de profondeur d'imbrication sous <code>deliverableRoot</code></li>
+            <li>10 000 caractères maximum pour toute valeur de chaîne unique (y compris le récit)</li>
+          </ul>
+        </li>
+        <li>
+          <strong>Noms de périphériques réservés :</strong> Rejetez les noms réservés Windows
+          (<code>CON</code>, <code>PRN</code>, <code>AUX</code>, <code>NUL</code>,
+          <code>COM1</code>–<code>COM9</code>, <code>LPT1</code>–<code>LPT9</code>) dans
+          n'importe quel composant de chemin, et rejetez tout composant avec des points ou des
+          espaces finaux.
+        </li>
+        <li>
+          <strong>Pas de remplacement automatique ; validation sur place :</strong> Votre producteur
+          écrit chaque nouvel artefact propre à la tâche directement sous
+          <code>deliverableRoot</code> (ou son emplacement
+          <code>allowedOutputs[].deliverableRoot</code> déclaré) avant de publier
+          <code>&lt;taskId&gt;.result.json</code>. Le shim lit les chemins préexistants depuis le
+          fichier fermé <code>&lt;taskId&gt;.snapshot.json</code> qu'il a écrit avant la demande et
+          rejette tout chemin d'artefact déclaré qui existait déjà avant la tâche, duplique un autre
+          chemin du même résultat ou est absent sur le disque lors de la validation. Une photographie
+          absente, modifiée ou incohérente fait échouer l'échange au lieu d'être reconstruite.
+        </li>
+      </ul>
+
+      <p>
+        <strong>Manifeste et enveloppes fermés.</strong> Les schémas du manifeste, de l'enveloppe
+        de demande de délégation et de l'enveloppe de résultat sont tous fermés. N'importe quel
+        champ non déclaré est rejeté lors de la validation.
+      </p>
+
+      <p>
+        <strong>Liaison de l'enveloppe et protection contre la rejeu.</strong> Les
+        <code>connectorId</code>, <code>taskId</code> et <code>role</code> d'une enveloppe de
+        résultat doivent correspondre exactement à l'enveloppe de demande de délégation. Chaque
+        <code>taskId</code> est unique ; une fois consommé, le même <code>taskId</code> n'est
+        jamais accepté à nouveau — une répétition est un rejeu et est rejetée.
+      </p>
+
+      <p>
+        <strong>Pas de secrets.</strong> Un manifeste, une enveloppe de demande de délégation ou
+        une enveloppe de résultat contenant du contenu en forme de donnée d'identification (clés
+        API, jetons, chaînes de connexion, blocs PEM ou d'autres motifs secrets haute entropie)
+        échoue la validation immédiatement. N'intégrez jamais de secrets dans l'un de ces
+        fichiers.
+      </p>
+
+      <h2>Comptabilité : marqueur External-unmetered</h2>
+
+      <p>
+        Le travail du connecteur exécuté de façon externe est enregistré comme entrée d'historique
+        ordinaire dans le grand livre de l'équipe, mais selon une convention spéciale : la sortie
+        Scribe de confiance porte l'expression exacte
+        <code>External-unmetered: connector=&lt;connectorId&gt;</code>. Cette expression est dérivée
+        de la provenance validée de la liaison/inscription afin qu'un examinateur distingue le
+        travail externe non mesuré de l'exécution interne mesurée.
+      </p>
+
+      <p>
+        <strong>Le grand livre sous-signale la dépense externe.</strong> La délégation du shim
+        lui-même est mesurée (une opération fine), mais le travail réel de votre coordinateur
+        n'est pas. Le marqueur comptable documente cette lacune — ce n'est pas une opération à
+        coût zéro, mais plutôt une opération non mesurée. Ne traitez jamais une entrée avec ce
+        marqueur comme économique dans le raisonnement sur budget ou risque ; le marqueur existe
+        précisément pour qu'un examinateur ne mésinterprète pas une figure basse du grand livre
+        comme le vrai coût du travail délégué.
+      </p>
+
+      <p>
+        Le récit externe peut inclure son propre texte de marqueur, mais cette copie reste une
+        donnée non fiable et ne devient jamais la source comptable faisant autorité.
+      </p>
+
+      <p>
+        Exemple de puce d'entrée d'historique :
+      </p>
+
+      <pre><code>* Outcome: Result envelope validated and artifact placed at the Deliverable Root. External-unmetered: connector=acme-coordinator-v2.</code></pre>
+
+      <h2>Liste de vérification de compatibilité pour votre coordinateur</h2>
+
+      <p>
+        Avant d'enregistrer votre connecteur, confirmez que votre coordinateur satisfait à tout
+        ceci :
+      </p>
+
+      <ul>
+        <li>
+          [ ] Vous avez créé un manifeste par connecteur, validant correctement avec le schéma
+          fermé du manifeste (pas de champs supplémentaires, <code>transport: "file"</code>,
+          aucun contenu en forme de secret).
+        </li>
+        <li>
+          [ ] Vous traitez chaque demande comme un travail borné et idempotent. Un
+          <code>taskId</code> dupliqué est un rejeu à rejeter, pas une demande à réexécuter.
+        </li>
+        <li>
+          [ ] Votre coordinateur observe ou interroge le <code>dropPath</code> du manifeste pour
+          une enveloppe de demande de délégation, par les moyens que vous choisissez.
+        </li>
+        <li>
+          [ ] Vous écrivez exactement une enveloppe de résultat par <code>taskId</code>, ne
+          réutilisant jamais un <code>taskId</code> et n'écrivant jamais à un
+          <code>dropPath</code> qui ne vous a pas été donné.
+        </li>
+        <li>
+          [ ] En <code>1.1</code>, vous liez correctement les identités de confiance
+          (<code>connectorId</code>, <code>bindingId</code>, <code>taskId</code>) et ne renvoyez
+          que des <code>outputId</code> déclarés dans <code>allowedOutputs</code>.
+        </li>
+        <li>
+          [ ] Chaque chemin d'artefact est strictement sous le <code>deliverableRoot</code>
+          nommé dans l'enveloppe de demande de délégation, comme l'un de <code>.md</code>,
+          <code>.json</code> ou <code>.txt</code>, dans toutes les limites numériques (1 MiB par
+          fichier, 5 MiB total, 20 artefacts max, 5 niveaux d'imbrication, 10 000 caractères
+          par chaîne).
+        </li>
+        <li>
+          [ ] Vous respectez <code>deadline</code> et <code>retryCap</code> ; lorsque votre
+          coordinateur dispose d'un résultat d'échec, vous écrivez <code>status: "failed"</code>.
+          Si aucun résultat n'arrive, la demande devient <code>unreachable</code> à sa deadline ou
+          à sa limite de tentatives au lieu d'accepter un résultat tardif non sollicité.
+        </li>
+        <li>
+          [ ] Vous n'intégrez jamais de donnée d'identification, de jeton ou d'autre contenu en
+          forme de secret dans le manifeste, la demande ou le résultat.
+        </li>
+        <li>
+          [ ] Vous n'émettez jamais de champs d'action (<code>command</code>, <code>exec</code>,
+          <code>script</code>, <code>url</code>, <code>fetch</code>) ni de champ hors schéma.
+        </li>
+        <li>
+          [ ] Vous ne revendiquez jamais d'autorité de squad : pas de revendication de rôle, de
+          council, de gate ou d'approbation ; pas d'écriture d'état de squad ; pas d'écriture Scribe.
+        </li>
+        <li>
+          [ ] Si votre endpoint fait du fan-out interne, vous le divulguez en
+          récit/provenance tout en renvoyant une seule enveloppe bornée mappée uniquement vers les
+          sorties déclarées.
+        </li>
+        <li>
+          [ ] Vous traitez votre propre <code>narrative</code> comme un résumé qu'un humain et un
+          validateur automatisé lisent comme données — jamais comme un véhicule pour diriger ce
+          que l'équipe fait ensuite.
+        </li>
+      </ul>
+
+      <h2>Exemple travaillé : acme-coordinator-v2</h2>
+
+      <p>
+        Le <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/"
+          >répertoire d'exemple de connecteur</a
+        >
+        contient un exemple travaillé complet de chaque forme de fichier définie par le contrat,
+        plus des modèles vierges que vous pouvez copier et adapter :
+      </p>
+
+      <ul>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/manifest.json"
+            ><code>manifest.json</code></a
+          >
+          — un manifeste de capacité réaliste décrivant un coordinateur qui peut implémenter des
+          tâches de développement pour le rôle <code>developer</code>.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/delegation-request.sample.json"
+            ><code>delegation-request.sample.json</code></a
+          >
+          — ce que le shim écrit au <code>dropPath</code> : une tâche délimitée pour ajouter une
+          validation d'entrée à une calculatrice de facture.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/result-envelope.sample.json"
+            ><code>result-envelope.sample.json</code></a
+          >
+          — ce que le coordinateur renvoie au format hérité 1.0 : un enregistrement de modification
+          décrivant la correction. Si le récit externe répète des mots comptables, cette copie reste
+          une donnée non fiable ; le marqueur autoritatif est rendu par le Scribe depuis la provenance
+          de liaison validée.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/sample-consumer-coordinator.md"
+            ><code>sample-consumer-coordinator.md</code></a
+          >
+          — un croquis de pseudo-code de la façon dont un coordinateur externe pourrait respecter
+          le contrat. C'est à titre illustratif uniquement et n'est jamais exécuté par quoi que ce
+          soit dans ce dépôt.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/manifest.template.json"
+            ><code>manifest.template.json</code></a
+          >,
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/delegation-request.template.json"
+            ><code>delegation-request.template.json</code></a
+          >,
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/result-envelope.template.json"
+            ><code>result-envelope.template.json</code></a
+          >
+          — modèles vierges que vous pouvez copier et remplir pour votre propre connecteur.
+        </li>
+        <li>
+          <a href="https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/COMPATIBILITY-CHECKLIST.md"
+            ><code>COMPATIBILITY-CHECKLIST.md</code></a
+          >
+          — un restatement autonome et copiable de la liste de vérification de ce guide.
+        </li>
+      </ul>
+
+      <p>
+        Copiez ces fichiers comme point de départ. Adaptez-les aux chemins, rôles et capacités
+        propres de votre coordinateur. Lisez
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/squad-src/.github/skills/squad/references/connector-contract.md"
+          ><code>connector-contract.md</code></a
+        >
+        pour la spécification normative de chaque champ et de chaque règle de validation.
+      </p>
+
+      <h2 data-release-change="20261024-user-invocable-builders">Construire avec les builders invocables par l'utilisateur</h2>
+
+      <p>
+        Le package installé expose <strong>Squad Connector Builder</strong> et
+        <strong>Squad External Agent Builder</strong> dans le sélecteur d'agents. Leurs prompts
+        recueillent les décisions ; des scripts PowerShell réutilisables effectuent chaque opération
+        de création de répertoire, de rendu de modèle, de manifeste et de validation. Aucun builder
+        ne demande d'identifiants secrets ni n'inscrit un connecteur dans l'état de la squad.
+      </p>
+
+      <h3>Builder de connecteur : configuré ou modèle modifiable</h3>
+      <p>Pour un connecteur configuré, commencez avec les informations déjà connues :</p>
+      <pre><code>/squad-connector-builder mode=interactive destination=. request="Connect our repository research agent for the researcher role. Use connector id org-research and contact integrations@example.invalid."</code></pre>
+      <ol>
+        <li>Le builder demande uniquement le type d'endpoint, les capacités, rôles, version,
+          échéance et limite de tentatives manquants.</li>
+        <li>Après votre confirmation, <code>New-SquadConnector.ps1</code> crée
+          <code>connectors/&lt;id&gt;.json</code>, la boîte
+          <code>.connector-drops/&lt;id&gt;/</code> avec ses instructions, des exemples de
+          demande/résultat, un runner amovible et un runbook détaillé.</li>
+        <li><code>Test-SquadConnectorManifest.ps1</code> valide le schéma fermé 1.1 généré.
+          Corrigez chaque problème avant l'inscription.</li>
+      </ol>
+      <p>Pour partir d'exemples modifiables, invoquez plutôt :</p>
+      <pre><code>/squad-connector-builder mode=template destination=. request="Create an editable connector starter and identify every value I must replace."</code></pre>
+      <p>
+        Le mode modèle signale <code>REPLACE_CONNECTOR_ID</code>,
+        <code>REPLACE_CAPABILITY</code>, <code>REPLACE_ROLE</code> et
+        <code>REPLACE_CONTACT</code>. La validation échoue volontairement jusqu'à leur remplacement.
+      </p>
+
+      <h3>Builder externe : créer ou adapter un agent ou orchestrateur</h3>
+      <p>
+        Le mode création prend en charge un agent autonome ou un orchestrateur avec un worker borné
+        par responsabilité. Indiquez l'environnement d'exécution et les besoins en compétences ; le
+        builder réutilise une compétence HVE Core ou d'organisation installée et adaptée lorsqu'elle
+        existe, puis génère des instructions de compétence modifiables appartenant au consommateur
+        pour les besoins manquants. <code>New-SquadExternalEndpoint.ps1</code> effectue le rendu du
+        plan confirmé.
+      </p>
+      <pre><code>/squad-external-agent-builder action=create kind=orchestrator destination=. request="Create an implementation orchestrator with separate implementation and validation responsibilities, then connect it to the developer role."</code></pre>
+      <p>
+        La sortie comprend les chartes de l'endpoint et des workers, une compétence, les mêmes
+        artefacts de connecteur et runner amovible, ainsi que des runbooks séparés pour l'endpoint
+        et le connecteur. Les endpoints générés restent hors de la coordination HVE et ne peuvent
+        écrire l'état de la squad ni revendiquer des portes.
+      </p>
+      <p>Pour conserver et envelopper une implémentation dont vous êtes déjà propriétaire :</p>
+      <pre><code>/squad-external-agent-builder action=adapt kind=agent destination=. request="Adapt tools/existing-research-agent for the researcher role without modifying or replacing it."</code></pre>
+      <p>
+        Le mode adaptation vérifie que le chemin existe, le laisse identique octet par octet et ne
+        crée que les artefacts de connecteur et un runbook d'adaptation. Ce runbook associe les
+        champs bornés de demande et les enveloppes de sortie à l'hôte existant et fournit des
+        instructions concrètes pour installer les compétences dans cet hôte.
+      </p>
+
+      <h3>Personnaliser, réexécuter et vérifier de bout en bout</h3>
+      <ol>
+        <li>Installez PowerShell 7.4 ou ultérieur et examinez chaque fichier généré. Conservez les
+          identifiants secrets dans le coffre de l'hôte externe, jamais dans un manifeste, une
+          enveloppe, une charte, une compétence ou un runbook.</li>
+        <li>Validez depuis une installation APM avec
+          <code>.agents/skills/squad/scripts/Test-SquadConnectorManifest.ps1</code> ; les utilisateurs
+          du plugin emploient <code>skills/squad/scripts/Test-SquadConnectorManifest.ps1</code>.</li>
+        <li>Effectuez un passage avec
+          <code>pwsh -File scripts/Run-&lt;id&gt;-Connector.ps1 -Once</code>. Le runner par défaut
+          écrit un reçu de transport clairement étiqueté et ne nécessite aucun identifiant secret.
+          Remplacez sa fonction <code>Invoke-ExampleEndpoint</code> par l'appel de votre hôte/SDK de
+          confiance, remplacez entièrement le runner ou supprimez-le.</li>
+        <li>Testez directement l'endpoint, configurez l'association de confiance entre
+          <code>connectorId</code> et l'endpoint hors du manifeste, puis demandez au Squad
+          Coordinator d'inscrire le manifeste.</li>
+        <li>Exécutez une demande bornée. La première délégation renvoie <code>awaiting</code> ;
+          après publication du résultat par l'adaptateur, reprenez le même identifiant de tâche et
+          examinez la sortie comme <code>external, unverified</code>.</li>
+      </ol>
+      <div class="callout"><p>
+        Les réexécutions sûres n'écrasent jamais silencieusement le travail utilisateur. Les fichiers
+        identiques sont signalés <code>unchanged</code>. Si un fichier généré a été personnalisé, le
+        script prévalide le plan complet, s'arrête avant toute écriture et répertorie les conflits.
+        Il n'existe aucun commutateur de forçage ; comparez et adoptez délibérément le contenu régénéré.
+      </p></div>
+
+      <h2>Ce qui n'est pas encore pris en charge</h2>
+
+      <p>
+        <strong>Migration automatique de 1.0 vers 1.1 non fournie.</strong> Le 1.0 hérité reste
+        valide pour le flux manuel à rôle unique, tandis que les modes de rôle exigent des liaisons
+        et champs de demande 1.1. Migration et rollback sont explicites via le roster : routez vers
+        <code>execution=original</code>, ou supprimez les liaisons et retirez/réaffectez les membres
+        et routes concernés lors d'un rafraîchissement confirmé. Aucune montée de version ni rétrogradation silencieuse.
+      </p>
+
+      <p>
+        Une suppression ou réaffectation confirmée conserve l'historique terminé et les lignes Attribution.
+        Avant de modifier les lignes actives, le Scribe interne ajoute une décision
+        <code>Connector Binding Retirement</code> dans le fichier <code>decisions.md</code>
+        du squad propriétaire, avec l'identité précédemment validée, la confirmation de l'opérateur
+        et les titres exacts des entrées terminées. Cette preuve historique n'autorise aucune nouvelle
+        délégation ni entrée non répertoriée. <code>Measure-SquadLedger.ps1</code> utilise le validateur
+        partagé <code>Resolve-SquadConnectorHistory.ps1</code> pour régénérer le rôle, le membre externe
+        et le niveau de modèle d'origine depuis le roster sauvegardé, sans modifier l'historique ni la
+        tarification des jetons. Une preuve historique invalide bloque la régénération : les valeurs
+        de tentatives et d'échéance sauvegardées doivent être des entiers dans les limites du manifeste.
+        Une autorité de retrait dupliquée ou chevauchante pour une même liaison et un même titre terminé
+        est rejetée même si l'identité active correspond. Les entrées distinctes après réutilisation
+        d'un identifiant restent valides. Modifier seulement le choix par défaut ne change pas l'identité.
+      </p>
+
+      <p>
+        <strong>Transport MCP (réservé, pas encore construit).</strong> Le schéma du manifeste
+        réserve une valeur <code>transport: "mcp"</code> comme espace réservé pour un possible
+        futur mode de transport synchrone. Ce n'est pas implémenté aujourd'hui. Le seul mode de
+        transport qui existe est <code>transport: "file"</code> (mode 2, dépôt de fichier avec
+        boucle humaine). Un manifeste décrivant <code>"mcp"</code> échouera la validation. Le
+        construire nécessite un nouveau plan gardé par la porte d'action impactful et une passe
+        de conseil fraîche.
+      </p>
+
+      <div class="pager">
+        <a class="prev" href="ecosystem.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Écosystème</div>
+        </a>
+        <a class="next" href="maintaining.html">
+          <div class="dir">Suivant →</div>
+          <div class="ttl">Maintenance</div>
+        </a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,12 +1,7 @@
 name: Release
 
-# Triggers:
-#   workflow_dispatch — cuts a GitHub Release for the version in apm.yml.
-#                       If a `version` input is provided, apm.yml is bumped
-#                       to that version (and committed) before tagging.
-#   push to main      — reads version from apm.yml; creates a GitHub Release if
-#                       a matching tag does not exist yet. Expects the CHANGELOG
-#                       to already contain an entry for that version.
+# Triggered explicitly by Release Prep, or manually for a hotfix/direct release.
+# Dependency-pin pushes must not rehearse or cut a release.
 on:
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Manual release trigger (write access required); the version override is validated as semver before use.
@@ -25,12 +20,6 @@ on:
         required: false
         default: main
         type: string
-  push:
-    branches:
-      - main
-    paths:
-      - 'apm.yml'
-      - 'CHANGELOG.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -40,23 +29,35 @@ permissions:
   contents: read
 
 jobs:
+  candidate:
+    name: Freeze release candidate
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - name: Checkout release candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || 'main' }}
+      - name: Record candidate identity
+        id: identity
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   release:
     name: Create Release
+    needs: candidate
     runs-on: ubuntu-latest
-    # Skip commits that were authored by this workflow to prevent push-loop.
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' &&
-       !startsWith(github.event.head_commit.message, 'chore(release):'))
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ${{ inputs.ref || 'main' }}
+          ref: ${{ needs.candidate.outputs.sha }}
 
       # ── Release gate ─────────────────────────────────────────────────────
       #    Tier 0 runs twice, and the two runs assert different things.
@@ -97,7 +98,18 @@ jobs:
       - name: Install Pester
         if: steps.suite.outputs.present == 'true'
         shell: pwsh
-        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Write-Warning "Pester install attempt $attempt failed; retrying."
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
 
       - name: Tier 0 conformance of the ref being released
         if: steps.suite.outputs.present == 'true'
@@ -215,6 +227,7 @@ jobs:
 
       # ── Create GitHub Release (the tag already exists) ────────────
       - name: Create GitHub Release
+        id: publish
         if: steps.tag_check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -242,3 +255,10 @@ jobs:
           fi
 
           gh release create "${ARGS[@]}"
+
+      # GITHUB_TOKEN release writes do not trigger the Pages release event.
+      - name: Refresh published documentation
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main

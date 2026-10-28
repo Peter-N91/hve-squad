@@ -24,6 +24,9 @@ on:
     paths:
       - 'tests/tier2/**'
       - '.github/workflows/tier2-semantic.yml'
+      - '.github/workflows/benchmark-score.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-prep.yml'
   workflow_call:
     inputs:
       artifact-pattern:
@@ -109,6 +112,10 @@ jobs:
       - name: Run the self-check
         shell: pwsh
         run: ./tests/tier2/Invoke-Tier2Tests.ps1 -Output Detailed
+
+      - name: Run benchmark score self-checks
+        shell: pwsh
+        run: ./tests/tier2/live-benchmark/Invoke-BenchmarkEvidenceTests.ps1 -Output Detailed
 
   compare:
     name: Compare against baselines

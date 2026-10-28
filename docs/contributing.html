@@ -21,6 +21,7 @@
         <a href="usage.html">Usage</a>
         <a href="demo.html">Demo</a>
         <a href="ecosystem.html">Ecosystem</a>
+        <a href="connector.html">Connector</a>
         <a href="maintaining.html">Maintaining</a>
         <a href="troubleshooting.html">Troubleshooting</a>
         <a href="contributing.html" class="active">Contributing</a>
@@ -134,13 +135,16 @@ type: Fixed
         that needs time in testing. In the meantime the merge is published to the
         <strong>rolling pre-release</strong>, so your change is installable and testable within minutes:
       </p>
-      <pre><code>apm install "Peter-N91/hve-squad#v0.15.0-pre" --target copilot</code></pre>
+      <div data-release-install="preview"></div>
       <p>
         The exact tag is on the
         <a href="https://github.com/Peter-N91/hve-squad/releases">Releases page</a>, marked as a
         pre-release. It is a channel rather than a fixed point: the tag moves on every merge, and it is
         renamed when a <code>minor</code> fragment lands. Pin a released version for anything
-        you depend on. The full format reference lives in
+        you depend on. When the merge documents unreleased package behavior, mark the smallest affected
+        element in both language guides with that change fragment's <code>data-release-change</code>
+        value. Pages renders the rolling badge only on those explicit markers; Release Prep consumes
+        the fragment, and the next build removes those badges. The full format reference lives in
         <a href="https://github.com/Peter-N91/hve-squad/blob/main/.changes/README.md">.changes/README.md</a>.
       </p>
 

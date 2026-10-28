@@ -1,0 +1,21 @@
+{
+  "connectorId": "acme-delivery-orchestrator-v3",
+  "schemaVersion": "1.1",
+  "transport": "file",
+  "endpointKind": "orchestrator",
+  "capabilities": [
+    "Executes bounded role work behind the HVE Squad Coordinator governance shell.",
+    "Returns only output slots declared by the delegation request.",
+    "Assesses GCP architecture when an additive gcp binding explicitly grants that role."
+  ],
+  "roles": [
+    "developer",
+    "tester",
+    "gcp"
+  ],
+  "dropPath": ".connector-drops/acme-delivery-orchestrator-v3/",
+  "deadlineMinutesDefault": 90,
+  "retryCapDefault": 2,
+  "contact": "squad-integrations@example.com",
+  "version": "3.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "squad-efficiency-v1",
+  "rubricVersion": "requirements-quality-v1",
+  "name": "task-cli-cold-start",
+  "brief": "A small operations team loses follow-up tasks between meetings. Build a local, offline task CLI for one operator. Success means capturing a title, listing open/done tasks, and marking tasks done across separate invocations without losing data. No cloud, users, network, UI, packages, or deployment. Sponsor: synthetic operations manager. All data is synthetic. Budget: existing workstation and PowerShell only. Delivery: this exercise. Routine product choices are delegated to the coordinator; implement the smallest contract, do not add features.",
+  "contract": "Implement src/task.ps1 for PowerShell 7.4+. Parameters: -Action add|list|done, -Store <JSON path>, optional -Title <string>, -Id <positive integer>, -Status all|open|done (default all). stdout must contain one valid UTF-8 JSON value only; explicitly set Console.OutputEncoding to UTF8 on Windows. add returns {id,title,status}, where id is a unique positive increasing integer and status is open. list returns a JSON array ordered by id, including [] for a missing/empty store. done returns the updated object, is idempotent, and preserves the title. Titles containing spaces and Unicode must round-trip. Missing/whitespace titles, unknown IDs, invalid action/filter, and corrupt storage fail with a nonzero exit without modifying stored bytes. Persist valid data across separate process invocations. No executable data or external dependencies.",
+  "documents": ["docs/requirements/brd.md", "docs/requirements/prd.md"],
+  "dimensions": ["businessClarity", "scopeFidelity", "acceptanceCriteria", "traceability", "risksAndDecisions"],
+  "qualityFloor": 90,
+  "improvementPercent": 10,
+  "regressionPercent": 5,
+  "repeats": 3,
+  "maxModelRequests": 1000,
+  "maxDriverDecisions": 8,
+  "maxContinuationsPerStage": 2,
+  "timeoutMinutes": 45,
+  "observationTimeoutMinutes": 180
+}

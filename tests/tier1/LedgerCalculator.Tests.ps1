@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; local calculator checks only, despite the Tier 1 directory.
+
 # Offline, self-contained Pester coverage for the D6b routing-performance remedy's
 # deterministic ledger calculator (squad-src/.github/skills/squad/scripts/Measure-SquadLedger.ps1).
 # Like ModelRouting.Tests.ps1, this reads only shipped references/scripts and static
@@ -136,8 +138,9 @@ Describe 'Measure-SquadLedger reproduces the correct ledger on a fully-applied f
 
     It 'prints the derivation lines in the scribe-procedure.md Step 7 shape, including the per-file block enumeration' {
         $result = Invoke-Ledger -SquadRoot $script:AppliedRoot -Format markdown
-        $result.Output | Should -Match 'Squad Researcher\.md — 1 block\(s\)'
-        $result.Output | Should -Match 'Squad Scribe\.md — 1 block\(s\)'
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'Squad Researcher\.md (?:\u2014|-) 1 block\(s\)'
+        $result.Output | Should -Match 'Squad Scribe\.md (?:\u2014|-) 1 block\(s\)'
         $result.Output | Should -Match 'total = 0\.3171'
     }
 
@@ -151,6 +154,24 @@ Describe 'Measure-SquadLedger reproduces the correct ledger on a fully-applied f
         $result = Invoke-Ledger -SquadRoot $script:AppliedRoot -Format json
         { $result.Output | ConvertFrom-Json } | Should -Not -Throw
         ($result.Output | ConvertFrom-Json).total.estCostUsd | Should -Be 0.3171
+    }
+}
+
+Describe 'Measure-SquadLedger preserves legacy orchestration attribution identity' -Tag 'NF002' {
+    It '-Check passes when consumption.md uses historical Agent `Coordinator+Scribe` for `orchestration`' {
+        $root = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        $ledgerPath = Join-Path $root 'consumption.md'
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $ledger = $ledger.Replace('| orchestration |        | Squad Scribe      |', '| orchestration |        | Coordinator+Scribe |')
+        Set-Content -LiteralPath $ledgerPath -Value $ledger -NoNewline
+
+        $check = Invoke-Ledger -SquadRoot $root -Check
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        $check.Output | Should -Match 'PASS'
+
+        $derived = Invoke-Ledger -SquadRoot $root -Format markdown
+        $derived.Output | Should -Match '\|\s*orchestration\s*\|\s*\|\s*Coordinator\+Scribe\s*\|'
     }
 }
 
@@ -186,6 +207,48 @@ Describe 'Measure-SquadLedger parses an old-shape (no LC-column) consumption-rat
     It '-Check exits 0 against the old-shape fixture too' {
         $result = Invoke-Ledger -SquadRoot $script:OldShapeRoot -Check
         $result.ExitCode | Should -Be 0
+    }
+}
+
+Describe 'Measure-SquadLedger applies documented long-context rates' {
+    BeforeAll {
+        $script:LongContextRoot = Join-Path $TestDrive 'long-context'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $script:LongContextRoot -Recurse
+
+        $templatePath = Join-Path (Split-Path -Parent $script:LedgerScript) '../references/consumption-rates-template.md'
+        $template = (Get-Content -LiteralPath $templatePath -Raw) -replace "`r`n", "`n"
+        $seed = [regex]::Match($template, '(?ms)^````markdown\n(?<body>.*?)\n````[ \t]*$').Groups['body'].Value
+        Set-Content -LiteralPath (Join-Path $script:LongContextRoot 'consumption-rates.md') -Value $seed -NoNewline
+
+        Remove-Item -Path (Join-Path $script:LongContextRoot 'history/*') -Force
+        @'
+# History: Squad Researcher
+
+### Long-context fixture
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Haiku 5.5",
+  "model_source": "agent-pinned",
+  "priced_as": "Claude Haiku 5.5",
+  "model_tier": "fast",
+  "internal_turns": 1,
+  "input_tokens": 30000,
+  "cached_tokens": 80000,
+  "cache_write_tokens": 0,
+  "output_tokens": 0,
+  "basis": "estimated"
+}
+```
+'@ | Set-Content -LiteralPath (Join-Path $script:LongContextRoot 'history/Squad Researcher.md') -NoNewline
+    }
+
+    It 'uses the >100K Haiku 5.5 tier when input plus cached tokens exceed the threshold' {
+        $result = Invoke-Ledger -SquadRoot $script:LongContextRoot -Format json
+        $result.ExitCode | Should -Be 0
+        ($result.Output | ConvertFrom-Json).total.estCostUsd | Should -Be 0.019
     }
 }
 
@@ -253,7 +316,7 @@ Describe 'Measure-SquadLedger -Write splices the derived fragment and run totals
         $state.currentRun.estCreditsTotal | Should -Be 31.71
     }
 
-    It 'leaves the frontmatter, H1, Basis note, and Cost Comparison section byte-identical' {
+    It 'preserves frontmatter, H1, Basis note, comparison context and surrounding notes' {
         $root = Initialize-WriteTestRootLocal
         $ledgerPath = Join-Path $root 'consumption.md'
         $before = Get-Content -LiteralPath $ledgerPath -Raw
@@ -263,9 +326,103 @@ Describe 'Measure-SquadLedger -Write splices the derived fragment and run totals
         $headOf = { param($text) $text.Substring(0, $text.IndexOf('## Attribution')) }
         $tailOf = { param($text) $text.Substring($text.IndexOf('## Cost Comparison')) }
         (& $headOf $after) | Should -Be (& $headOf $before)
-        (& $tailOf $after) | Should -Be (& $tailOf $before)
+        (& $tailOf $after) | Should -Be ((& $tailOf $before).Replace('$0.8854 (~88.54 AI credits)', '$0.3171 (~31.71 AI credits)'))
         $after | Should -Match '(?m)^Squad Researcher\.md — 1 block\(s\) — identities: '
         $after | Should -Match '\*\*0\.3171\*\*'
+    }
+
+    It 'finalizes stale comparison figures and savings without losing baseline assumptions or notes' {
+        $root = Initialize-WriteTestRootLocal -Fixture applied
+        $path = Join-Path $root 'consumption.md'
+        $line = 'This run consumed an estimated **$9.9999 (~999.99 AI credits)** across 1 role. Manually prompting Example Model across roughly 12 turns is estimated at **$20.00 (~2000 AI credits)**, a saving of about **50%**.'
+        $text = [regex]::Replace((Get-Content -LiteralPath $path -Raw), '(?m)^This run consumed[^\r\n]*', { $line })
+        $text += "`nOperator comparison note.`n`n## Operator Notes`n`nThis run consumed an estimated **`$7.0000 (~700.00 AI credits)** elsewhere.`n"
+        Set-Content -LiteralPath $path -Value $text -NoNewline
+        $before = (Get-FileHash -LiteralPath $path).Hash
+        $check = Invoke-Ledger -SquadRoot $root -Check
+        $check.ExitCode | Should -Be 1 -Because 'table/state reconciliation alone must not certify stale prose'
+        $check.Output | Should -Match 'failure class: ledger-only'
+        (Get-FileHash -LiteralPath $path).Hash | Should -Be $before
+        $write = Invoke-Ledger -SquadRoot $root -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $after = Get-Content -LiteralPath $path -Raw
+        $after | Should -Match ([regex]::Escape('$0.3171 (~31.71 AI credits)'))
+        $after | Should -Match ([regex]::Escape('Example Model across roughly 12 turns is estimated at **$20.00 (~2000 AI credits)**, a saving of about **98%**.'))
+        $after | Should -Match 'Operator comparison note\.'
+        $after | Should -Match ([regex]::Escape('**$7.0000 (~700.00 AI credits)** elsewhere.'))
+        (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'reports negative savings and zero baseline honestly while preserving the manual assumptions' {
+        foreach ($baseline in @('0.10', '0.00')) {
+            $root = Initialize-WriteTestRootLocal -Fixture applied
+            $path = Join-Path $root 'consumption.md'
+            $line = 'This run consumed an estimated **$0.3171 (~31.71 AI credits)**. A manual model across 12 turns is estimated at **$' + $baseline + ' (~10 AI credits)**, a saving of about **50.00%**.'
+            Set-Content -LiteralPath $path -Value ([regex]::Replace((Get-Content -LiteralPath $path -Raw), '(?m)^This run consumed[^\r\n]*', { $line })) -NoNewline
+            $write = Invoke-Ledger -SquadRoot $root -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $after = Get-Content -LiteralPath $path -Raw
+            $after | Should -Match ([regex]::Escape("manual model across 12 turns is estimated at **`$$baseline"))
+            if ($baseline -eq '0.10') { $after | Should -Match '\*\*-217\.08%\*\*' }
+            else { $after | Should -Match 'saving unavailable \(non-positive manual baseline\)' }
+            $after | Should -Not -Match 'stale — refreshed|\b(?:NaN|Infinity)\b'
+            (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
+        }
+    }
+
+    It 'replaces seed or missing comparisons with an explicit unavailable baseline and remains idempotent' {
+        foreach ($kind in @('seed', 'missing')) {
+            $root = Initialize-WriteTestRootLocal -Fixture applied
+            $path = Join-Path $root 'consumption.md'
+            $text = Get-Content -LiteralPath $path -Raw
+            if ($kind -eq 'seed') { $text = [regex]::Replace($text, '(?m)^This run consumed[^\r\n]*', 'This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** across <n> agents.') }
+            else { $text = [regex]::Replace($text, '(?s)## Cost Comparison.*$', '## Operator Notes' + "`n`nKeep this note.`n") }
+            Set-Content -LiteralPath $path -Value $text -NoNewline
+            (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 1
+            $write = Invoke-Ledger -SquadRoot $root -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $after = Get-Content -LiteralPath $path -Raw
+            $after | Should -Match ([regex]::Escape('**$0.3171 (~31.71 AI credits)**'))
+            $after | Should -Match 'manual baseline and saving unavailable'
+            $after | Should -Not -Match '<squad-cost>|<squad-credits>|<n>'
+            if ($kind -eq 'missing') { $after | Should -Match 'Keep this note\.' }
+            $hash = (Get-FileHash -LiteralPath $path).Hash
+            (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+            (Get-FileHash -LiteralPath $path).Hash | Should -Be $hash
+            (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
+        }
+    }
+
+    It 'validates comparison numbers semantically even with observed usage and never changes checked files' {
+        $root = Initialize-WriteTestRootLocal -Fixture applied
+        $path = Join-Path $root 'consumption.md'
+        $line = 'This run consumed an estimated **$0.317100 (~31.710 AI credits)**. A manual baseline is estimated at **$20.00 (~2000 AI credits)**, a saving of about **98.41%**.'
+        $text = [regex]::Replace((Get-Content -LiteralPath $path -Raw), '(?m)^This run consumed[^\r\n]*', { $line })
+        $text = $text.Replace('## Cost Comparison', "## Observed Usage (host-reported)`n`nIndependent host telemetry retained.`n`n## Cost Comparison")
+        Set-Content -LiteralPath $path -Value $text -NoNewline
+        (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
+        foreach ($mutation in @(@('$0.317100', '$0.400000'), @('31.710 AI', '39.000 AI'), @('98.41%', '90.00%'))) {
+            Set-Content -LiteralPath $path -Value $text.Replace($mutation[0], $mutation[1]) -NoNewline
+            $hashes = @(Get-FileHash -LiteralPath $path, (Join-Path $root 'state.json') | ForEach-Object Hash)
+            $check = Invoke-Ledger -SquadRoot $root -Check
+            $check.ExitCode | Should -Be 1 -Because $check.Output
+            $check.Output | Should -Match 'Cost Comparison'
+            $check.Output | Should -Match 'failure class: ledger-only'
+            @(Get-FileHash -LiteralPath $path, (Join-Path $root 'state.json') | ForEach-Object Hash) | Should -Be $hashes
+        }
+    }
+
+    It 'preserves a supplied baseline when squad figures are still template placeholders' {
+        $root = Initialize-WriteTestRootLocal -Fixture applied
+        $path = Join-Path $root 'consumption.md'
+        $line = 'This run consumed an estimated **$<squad-cost> (~<squad-credits> AI credits)** across <n> agents. Manually prompting Example Model across 12 turns is estimated at **$20.00 (~2000 AI credits)**, a saving of about **<savings-pct>%**.'
+        Set-Content -LiteralPath $path -Value ([regex]::Replace((Get-Content -LiteralPath $path -Raw), '(?m)^This run consumed[^\r\n]*', { $line })) -NoNewline
+        $write = Invoke-Ledger -SquadRoot $root -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $after = Get-Content -LiteralPath $path -Raw
+        $after | Should -Match ([regex]::Escape('**$0.3171 (~31.71 AI credits)** across 1 agents.'))
+        $after | Should -Match ([regex]::Escape('Example Model across 12 turns is estimated at **$20.00 (~2000 AI credits)**, a saving of about **98%**.'))
+        (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
     }
 
     It 'changes only the two currentRun values in state.json, preserving every other byte' {
@@ -547,6 +704,7 @@ $fragment
 "@
         Set-Content -LiteralPath $ledgerPath -Value $rebuilt -NoNewline
         Sync-LedgerStateLocal -SquadRoot $root
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
 
         $selfCheck = Invoke-Ledger -SquadRoot $root -Check
         $selfCheck.ExitCode | Should -Be 0 -Because "the freshly regenerated ledger must itself pass -Check before corruption: $($selfCheck.Output)"
@@ -781,6 +939,7 @@ description: "Append-only dispatch history for a single squad agent"
         $script:CompositeKeyLedgerPath = Join-Path $script:CompositeKeyRoot 'consumption.md'
         Set-Content -LiteralPath $script:CompositeKeyLedgerPath -Value $script:CompositeKeyLedgerContent -NoNewline
         Sync-LedgerStateLocal -SquadRoot $script:CompositeKeyRoot
+        (Invoke-Ledger -SquadRoot $script:CompositeKeyRoot -Write).ExitCode | Should -Be 0
 
         # Guard: the spliced-together ledger must itself pass -Check before either
         # It below relies on it, so a failure here points at the splice, not the
@@ -817,6 +976,699 @@ description: "Append-only dispatch history for a single squad agent"
         $result.ExitCode | Should -Be 1
         $result.Output | Should -Match "role 'architect' agent 'System Architecture Reviewer' column 'Priced As'"
         $result.Output | Should -Match "role 'architect' agent 'ADR Creator' column 'Priced As'"
+    }
+}
+
+Describe 'Connector member-aware attribution and legacy missing-member behavior' {
+    BeforeAll {
+        function Initialize-ConnectorAttributionManifest {
+            param([string]$Root, [string[]]$Roles)
+            $example = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath '..', 'docs', 'templates', 'connector-example', 'manifest.1.1.json'
+            $manifest = Get-Content -LiteralPath $example -Raw | ConvertFrom-Json -AsHashtable
+            $manifest.roles = $Roles
+            $path = Join-Path $Root 'docs/templates/connector-example/manifest.1.1.json'
+            [void][System.IO.Directory]::CreateDirectory((Split-Path $path -Parent))
+            $manifest | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $path
+        }
+    }
+
+    It 'keeps two Squad Connector members distinct in Attribution by (agent, Member Name)' {
+        $root = Join-Path $TestDrive 'connector-distinct-members'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Initialize-ConnectorAttributionManifest -Root $root -Roles @('gcp')
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+| gcp | GCP Assessor | Squad Connector | — | — | runSubagent / task | default | gcp/assessments/ |
+| gcp | GCP Reviewer | Squad Connector | — | — | runSubagent / task | default | gcp/reviews/ |
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | azure-architect | connector |
+| gcp-reviewer | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Reviewer | GCP Reviewer | gcp | azure-architect | connector |
+'@
+        Set-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Value @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Connector
+
+### 2026-10-12T10:00:00Z Assess gcp architecture
+
+* Turn: 3
+* Request: Assess bounded gcp architecture.
+* Deliverable: `research/2026-09-27-fixture-topic.md`
+* Outcome: Assessed architecture.
+* Member Name: GCP Assessor
+* External provenance: connector=acme-delivery-orchestrator-v3; binding=gcp-assessor; endpoint=orchestrator; mode=add; target=role:gcp/GCP Assessor
+* Verification: external, unverified
+* External-unmetered: connector=acme-delivery-orchestrator-v3
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "dispatch-reported",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 2,
+  "input_tokens": 800,
+  "cached_tokens": 3200,
+  "cache_write_tokens": 400,
+  "output_tokens": 900,
+  "basis": "estimated"
+}
+```
+
+### 2026-10-12T10:05:00Z Review gcp architecture
+
+* Turn: 3
+* Request: Review bounded gcp architecture.
+* Deliverable: `research/2026-09-27-fixture-topic.md`
+* Outcome: Reviewed architecture.
+* Member Name: GCP Reviewer
+* External provenance: connector=acme-delivery-orchestrator-v3; binding=gcp-reviewer; endpoint=orchestrator; mode=add; target=role:gcp/GCP Reviewer
+* Verification: external, unverified
+* External-unmetered: connector=acme-delivery-orchestrator-v3
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "dispatch-reported",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 2,
+  "input_tokens": 900,
+  "cached_tokens": 3600,
+  "cache_write_tokens": 450,
+  "output_tokens": 950,
+  "basis": "estimated"
+}
+```
+'@ -NoNewline
+
+        (Invoke-Ledger -SquadRoot $root -Write).ExitCode | Should -Be 0
+        $check = Invoke-Ledger -SquadRoot $root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1; 'Squad Connector' = 2 }
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+
+        $markdown = (Invoke-Ledger -SquadRoot $root -Format markdown).Output
+        $markdown | Should -Match '\| gcp \| GCP Assessor \| Squad Connector \|'
+        $markdown | Should -Match '\| gcp \| GCP Reviewer \| Squad Connector \|'
+    }
+
+    It 'keeps legacy unique-agent history without Member Name valid' {
+        $result = Invoke-Ledger -SquadRoot (Join-Path $script:FixtureRoot 'applied') -Check
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+    }
+
+    It 'fails closed for ambiguous shared-agent connector history missing Member Name' {
+        $root = Join-Path $TestDrive 'connector-ambiguous-memberless'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+| gcp | GCP Assessor | Squad Connector | — | — | runSubagent / task | default | gcp/assessments/ |
+| gcp | GCP Reviewer | Squad Connector | — | — | runSubagent / task | default | gcp/reviews/ |
+'@
+        Set-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Value @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Connector
+
+### 2026-10-12T10:00:00Z Ambiguous connector history
+
+* Turn: 3
+* Request: Produce a connector note.
+* Deliverable: `research/2026-09-27-fixture-topic.md`
+* Outcome: Produced a connector note.
+* External provenance: connector=legacy-agent; binding=legacy-1.0; endpoint=agent; mode=replace; target=role:gcp
+* Verification: external, unverified
+* External-unmetered: connector=legacy-agent
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "dispatch-reported",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 2,
+  "input_tokens": 700,
+  "cached_tokens": 2800,
+  "cache_write_tokens": 350,
+  "output_tokens": 800,
+  "basis": "estimated"
+}
+```
+'@ -NoNewline
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'Attribution identity:'
+        $result.Output | Should -Match 'ambiguous-missing-member'
+    }
+
+    It 'fails closed when connector Member Name is reused across add/replace/coordinator bindings' {
+        $root = Join-Path $TestDrive 'connector-duplicate-member-collision'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | azure-architect | connector |
+| developer-replace | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | GCP Assessor | — | developer | connector |
+'@
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'globally unique across connector bindings'
+    }
+
+    It 'fails closed when two replacement bindings reuse one connector Member Name' {
+        $root = Join-Path $TestDrive 'connector-duplicate-replace-coordinator-member'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| developer-replace | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | Partner Developer | — | developer | connector |
+| second-developer | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Gamma | Partner Developer | — | developer | ask |
+'@
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'globally unique across connector bindings'
+    }
+
+    It 'rejects a retired coordinator binding regardless of its member identity' {
+        $root = Join-Path $TestDrive 'connector-coordinator-target-collision'
+        Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+        $teamPath = Join-Path $root 'team.md'
+        $team = Get-Content -LiteralPath $teamPath -Raw
+        $team = $team.Replace('| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |', "| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |`n| coordinator | Lead      | Squad Coordinator     | —                  | —              | runSubagent / task | default    | plans/             |")
+        [System.IO.File]::WriteAllText($teamPath, $team, [System.Text.UTF8Encoding]::new($false))
+        Add-Content -LiteralPath (Join-Path $root 'team.md') -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| coordinator-replace | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | coordinator | coordinator:Squad Coordinator | Lead | — | coordinator | connector |
+'@
+        $result = Invoke-Ledger -SquadRoot $root -Check
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'governance are protected'
+    }
+
+    It 'uses the explicit trusted target member tier for replace bindings regardless roster row order' {
+        foreach ($variant in @('gamma-first', 'delta-first')) {
+            $root = Join-Path $TestDrive "connector-deterministic-tier-$variant"
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+            Initialize-ConnectorAttributionManifest -Root $root -Roles @('developer')
+            $teamPath = Join-Path $root 'team.md'
+            $team = Get-Content -LiteralPath $teamPath -Raw
+            $developerRows = if ($variant -eq 'gamma-first') {
+                @(
+                    '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/gamma/ |',
+                    '| developer | Delta | Squad Implementor | — | — | runSubagent / task | extended | changes/delta/ |'
+                )
+            }
+            else {
+                @(
+                    '| developer | Delta | Squad Implementor | — | — | runSubagent / task | extended | changes/delta/ |',
+                    '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/gamma/ |'
+                )
+            }
+            $team = $team.Replace('| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |', "| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |`n$($developerRows[0])`n$($developerRows[1])")
+            [System.IO.File]::WriteAllText($teamPath, $team, [System.Text.UTF8Encoding]::new($false))
+            Add-Content -LiteralPath $teamPath -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| developer-replace-delta | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer/Delta | Partner Developer | — | developer | connector |
+'@
+            Set-Content -LiteralPath (Join-Path $root 'history/Squad Connector.md') -Value @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Connector
+
+### 2026-10-12T10:00:00Z Replace developer execution
+
+* Turn: 3
+* Request: Produce a bounded developer note.
+* Deliverable: `changes/delta-note.md`
+* Outcome: Delivered a bounded developer note.
+* Member Name: Partner Developer
+* External provenance: connector=acme-delivery-orchestrator-v3; binding=developer-replace-delta; endpoint=orchestrator; mode=replace; target=role:developer/Delta
+* Verification: external, unverified
+* External-unmetered: connector=acme-delivery-orchestrator-v3
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "dispatch-reported",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 1,
+  "input_tokens": 120,
+  "cached_tokens": 240,
+  "cache_write_tokens": 0,
+  "output_tokens": 220,
+  "basis": "estimated"
+}
+```
+'@ -NoNewline
+
+            $markdown = (Invoke-Ledger -SquadRoot $root -Format markdown).Output
+            $markdown | Should -Match '\|\s*developer\s*\|\s*Partner Developer\s*\|\s*Squad Connector\s*\|'
+            $markdown | Should -Match '\|\s*developer\s*\|\s*Partner Developer\s*\|\s*Squad Connector\s*\|.*\|\s*extended\s*\|'
+        }
+    }
+
+    It 'fails closed for generic replace targets with mixed internal tiers so roster order cannot change connector tier attribution' {
+        foreach ($variant in @('gamma-first', 'delta-first')) {
+            $root = Join-Path $TestDrive "connector-ambiguous-generic-tier-$variant"
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+            $teamPath = Join-Path $root 'team.md'
+            $team = Get-Content -LiteralPath $teamPath -Raw
+            $developerRows = if ($variant -eq 'gamma-first') {
+                @(
+                    '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/gamma/ |',
+                    '| developer | Delta | Squad Implementor | — | — | runSubagent / task | extended | changes/delta/ |'
+                )
+            }
+            else {
+                @(
+                    '| developer | Delta | Squad Implementor | — | — | runSubagent / task | extended | changes/delta/ |',
+                    '| developer | Gamma | Squad Implementor | — | — | runSubagent / task | default | changes/gamma/ |'
+                )
+            }
+            $team = $team.Replace('| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |', "| scribe     |             | Squad Scribe          | —                  | —              | runSubagent / task | fast       | (squad state)      |`n$($developerRows[0])`n$($developerRows[1])")
+            [System.IO.File]::WriteAllText($teamPath, $team, [System.Text.UTF8Encoding]::new($false))
+            Add-Content -LiteralPath $teamPath -Value @'
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |
+| developer-replace-generic | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | replace | role | role:developer | Partner Developer | — | developer | connector |
+'@
+
+            $result = Invoke-Ledger -SquadRoot $root -Check
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match "developer-replace-generic"
+            $result.Output | Should -Match 'ambiguous'
+        }
+    }
+}
+
+Describe 'CONN-32 production connector ledger regeneration after confirmed binding changes' {
+    BeforeAll {
+        Import-Module (Join-Path $PSScriptRoot 'SquadState.psm1') -Force
+
+        function New-ConnectorLedgerRoot {
+            param([string]$RoleMode = 'replace')
+            $workspace = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            $root = Join-Path $workspace '.copilot-tracking/squad'
+            [void][System.IO.Directory]::CreateDirectory((Split-Path $root -Parent))
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+            $teamPath = Join-Path $root 'team.md'
+            $team = [System.IO.File]::ReadAllText($teamPath).Replace('| default    | research/', '| extended   | research/')
+            $role = if ($RoleMode -eq 'add') { 'gcp' } else { 'researcher' }
+            $target = if ($RoleMode -eq 'add') { 'role:gcp/External Researcher' } else { 'role:researcher/Alpha' }
+            if ($RoleMode -eq 'add') {
+                $team = $team.TrimEnd() + "`n| gcp | External Researcher | Squad Connector | | - | task | extended | research/ |`n"
+            }
+            $addedRole = if ($RoleMode -eq 'add') { 'gcp' } else { '' }
+            $team += @"
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| external-research | external-agent | connectors/manifest.json | agent | $RoleMode | role | $target | External Researcher | $addedRole | researcher | connector |
+"@
+            Set-Content -LiteralPath $teamPath -Value $team -Encoding utf8NoBOM
+            $manifest = [ordered]@{
+                connectorId = 'external-agent'; schemaVersion = '1.1'; transport = 'file'; endpointKind = 'agent'
+                capabilities = @('Bounded research'); roles = @($role); dropPath = '.connector-drops/research/'
+                deadlineMinutesDefault = 60; retryCapDefault = 2; contact = 'Consumer operator'; version = '1.0'
+            }
+            $manifestPath = Join-Path $workspace 'connectors/manifest.json'
+            [void][System.IO.Directory]::CreateDirectory((Split-Path $manifestPath -Parent))
+            $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
+            $oldHistory = Join-Path $root 'history/Squad Researcher.md'
+            $historyPath = Join-Path $root 'history/Squad Connector.md'
+            $history = [System.IO.File]::ReadAllText($oldHistory).Replace('# History: Squad Researcher', '# History: Squad Connector')
+            $history = $history -replace '(?m)^(\* Outcome:[^\r\n]*)', ('$1' + "`n* Member Name: External Researcher" +
+                "`n* External provenance: connector=external-agent; binding=external-research; endpoint=agent; mode=$RoleMode; target=$target" +
+                "`n* Verification: external, unverified`n* External-unmetered: connector=external-agent")
+            Set-Content -LiteralPath $historyPath -Value $history -Encoding utf8NoBOM -NoNewline
+            Remove-Item -LiteralPath $oldHistory
+            [pscustomobject]@{ Root = $root; Workspace = $workspace; Manifest = $manifest; ManifestPath = $manifestPath; Role = $role; RoleMode = $RoleMode; HistoryPath = $historyPath }
+        }
+
+        function Save-LedgerRetirement {
+            param(
+                $Fixture, [string]$Mutation,
+                [string[]]$HistoryEntries,
+                [string]$RetiredAt = '2026-10-21T12:00:00Z'
+            )
+            $record = [ordered]@{
+                team = [System.IO.File]::ReadAllText((Join-Path $Fixture.Root 'team.md'))
+                manifests = @{ 'connectors/manifest.json' = $Fixture.Manifest }
+                confirmed = $true; confirmationRef = 'in-chat:confirmed-ledger-refresh'
+                historyEntries = @([regex]::Matches([System.IO.File]::ReadAllText($Fixture.HistoryPath), '(?m)^###[ \t]+([^\r\n]+)') |
+                    ForEach-Object { $_.Groups[1].Value.Trim() })
+            }
+            if ($PSBoundParameters.ContainsKey('HistoryEntries')) { $record.historyEntries = $HistoryEntries }
+            switch ($Mutation) {
+                'unconfirmed' { $record.confirmed = $false }
+                'missing confirmation' { $record.confirmationRef = '' }
+                'missing snapshot' { $record.manifests = @{} }
+                'wrong manifest' { $record.manifests['connectors/manifest.json'] = @{ connectorId = 'wrong-id' } }
+                'unknown field' { $record.authority = 'external' }
+                'invalid prior target' { $record.team = $record.team.Replace('role:researcher/Alpha', 'role:researcher/Missing') }
+                'postdated entry' { $record.historyEntries = @('2027-01-01T00:00:00Z Future work') }
+                'retry string' { $record.manifests['connectors/manifest.json'].retryCapDefault = 'invalid' }
+                'retry numeric string' { $record.manifests['connectors/manifest.json'].retryCapDefault = '2' }
+                'retry negative' { $record.manifests['connectors/manifest.json'].retryCapDefault = -1 }
+                'retry boolean' { $record.manifests['connectors/manifest.json'].retryCapDefault = $true }
+                'retry overflow' { $record.manifests['connectors/manifest.json'].retryCapDefault = [long][int]::MaxValue + 1 }
+                'deadline string' { $record.manifests['connectors/manifest.json'].deadlineMinutesDefault = 'invalid' }
+                'deadline zero' { $record.manifests['connectors/manifest.json'].deadlineMinutesDefault = 0 }
+                'deadline fraction' { $record.manifests['connectors/manifest.json'].deadlineMinutesDefault = 1.5 }
+            }
+            $decision = "`n## Connector Binding Retirement $RetiredAt external-research`n`n" +
+                '```json' + "`n" + ($record | ConvertTo-Json -Depth 16) + "`n" + '```'
+            Add-Content -LiteralPath (Join-Path $Fixture.Root 'decisions.md') -Value $decision -Encoding utf8NoBOM
+        }
+
+        function Change-LedgerBinding {
+            param($Fixture, [string]$Change = 'unbind')
+            $path = Join-Path $Fixture.Root 'team.md'
+            $team = [System.IO.File]::ReadAllText($path)
+            if ($Change -eq 'unbind') {
+                $team = $team -replace '(?ms)^## Connector Bindings\b.*', ''
+                $team = $team -replace '(?m)^\| gcp \| External Researcher[^\r\n]*\r?\n', ''
+                Remove-Item -LiteralPath $Fixture.ManifestPath
+            }
+            else {
+                $team = $team.Replace('External Researcher', 'New Researcher').Replace('external-agent', 'new-agent')
+                $manifest = $Fixture.Manifest | ConvertTo-Json -Depth 10 | ConvertFrom-Json -AsHashtable
+                $manifest.connectorId = 'new-agent'
+                $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $Fixture.ManifestPath -Encoding utf8NoBOM
+            }
+            Set-Content -LiteralPath $path -Value $team.Replace('extended', 'fast') -Encoding utf8NoBOM
+        }
+    }
+
+    It 'keeps ordinary ledger execution independent of the connector-only helper and its runtime requirement' {
+        $directory = Join-Path $TestDrive 'standalone-ledger'
+        [void][System.IO.Directory]::CreateDirectory($directory)
+        $standalone = Join-Path $directory 'Measure-SquadLedger.ps1'
+        Copy-Item -LiteralPath $script:LedgerScript -Destination $standalone
+        $output = & pwsh -NoProfile -File $standalone -SquadRoot (Join-Path $script:FixtureRoot 'applied') -Check 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $output
+        $output | Should -Match 'PASS'
+    }
+
+    It 'derives binding-free legacy provenance from the actual history entry rather than an array property' {
+        $fixture = New-ConnectorLedgerRoot
+        Change-LedgerBinding $fixture
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath).Replace('binding=external-research', 'binding=legacy-1.0')
+        Set-Content -LiteralPath $fixture.HistoryPath -Value $history -NoNewline
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 0 -Because $rewrite.Output
+        $ledger = [System.IO.File]::ReadAllText((Join-Path $fixture.Root 'consumption.md'))
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|'
+        (Invoke-Ledger -SquadRoot $fixture.Root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'preserves the actual <RoleMode> ledger after <Change>, without changing cost or history' -ForEach @(
+        @{ RoleMode = 'replace'; Change = 'unbind' }, @{ RoleMode = 'replace'; Change = 'rebind' },
+        @{ RoleMode = 'add'; Change = 'unbind' }, @{ RoleMode = 'add'; Change = 'rebind' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot -RoleMode $RoleMode
+        $before = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $before.ExitCode | Should -Be 0 -Because $before.Output
+        $beforeCost = ((Invoke-Ledger -SquadRoot $fixture.Root -Format json).Output | ConvertFrom-Json).total.estCostUsd
+        $historyHash = (Get-FileHash -LiteralPath $fixture.HistoryPath).Hash
+        Save-LedgerRetirement $fixture
+        Change-LedgerBinding $fixture $Change
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 0 -Because $rewrite.Output
+        $ledger = [System.IO.File]::ReadAllText((Join-Path $fixture.Root 'consumption.md'))
+        $ledger | Should -Match "\|\s*$($fixture.Role)\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*extended\s*\|"
+        $ledger | Should -Not -Match '\|\s*Squad Connector\s*\|\s*\|\s*Squad Connector'
+        ((Invoke-Ledger -SquadRoot $fixture.Root -Format json).Output | ConvertFrom-Json).total.estCostUsd | Should -Be $beforeCost
+        (Get-FileHash -LiteralPath $fixture.HistoryPath).Hash | Should -Be $historyHash
+        $check = Invoke-Ledger -SquadRoot $fixture.Root -Check
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+    }
+
+    It 'keeps old and new completed entries distinct after reuse of the binding id' {
+        $fixture = New-ConnectorLedgerRoot
+        Save-LedgerRetirement $fixture
+        Change-LedgerBinding $fixture 'rebind'
+        $old = [System.IO.File]::ReadAllText($fixture.HistoryPath)
+        $newEntry = ($old -split '(?m)(?=^### )', 2)[1].
+            Replace('2026-09-27T10:00:00Z', '2026-10-21T12:30:00Z').
+            Replace('External Researcher', 'New Researcher').Replace('external-agent', 'new-agent')
+        Add-Content -LiteralPath $fixture.HistoryPath -Value $newEntry -Encoding utf8NoBOM
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 0 -Because $rewrite.Output
+        $ledger = [System.IO.File]::ReadAllText((Join-Path $fixture.Root 'consumption.md'))
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*extended\s*\|'
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*New Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*fast\s*\|'
+        (Invoke-Ledger -SquadRoot $fixture.Root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'CONN-34 rejects an archived <Mutation> in state assurance and every calculator mode' -ForEach @(
+        @{ Mutation = 'retry string' }, @{ Mutation = 'retry numeric string' }, @{ Mutation = 'retry negative' },
+        @{ Mutation = 'retry boolean' }, @{ Mutation = 'retry overflow' }, @{ Mutation = 'deadline string' },
+        @{ Mutation = 'deadline zero' }, @{ Mutation = 'deadline fraction' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        Save-LedgerRetirement $fixture $Mutation
+        Change-LedgerBinding $fixture
+        (Get-SquadStateModel -SquadRoot $fixture.Root).ConnectorRetirementIssues.Count | Should -BeGreaterThan 0
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-34 rejects duplicate retirement authority when Active=<Active>' -ForEach @(
+        @{ Active = $true }, @{ Active = $false }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        Save-LedgerRetirement $fixture
+        Save-LedgerRetirement $fixture -RetiredAt '2026-10-21T13:00:00Z'
+        if (-not $Active) { Change-LedgerBinding $fixture }
+        $model = Get-SquadStateModel -SquadRoot $fixture.Root
+        $model.ConnectorRetirementIssues | Should -Not -BeNullOrEmpty
+        $model.ConnectorRetirementIssues -join ',' | Should -Match 'duplicate:history-authority'
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            (Invoke-Ledger -SquadRoot $fixture.Root @options).ExitCode | Should -Be 1
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-34 rejects a malformed <Field> in the active manifest too' -ForEach @(
+        @{ Field = 'retryCapDefault' }, @{ Field = 'deadlineMinutesDefault' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        $fixture.Manifest[$Field] = 'invalid'
+        $fixture.Manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $fixture.ManifestPath
+        (Get-SquadStateModel -SquadRoot $fixture.Root).ConnectorBindingIssues.Count | Should -BeGreaterThan 0
+        $result = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+    }
+
+    It 'CONN-34 permits disjoint retirement records after reuse of a binding id' {
+        $fixture = New-ConnectorLedgerRoot
+        Save-LedgerRetirement $fixture
+        Change-LedgerBinding $fixture 'rebind'
+        $old = [System.IO.File]::ReadAllText($fixture.HistoryPath)
+        $newEntry = ($old -split '(?m)(?=^### )', 2)[1].
+            Replace('2026-09-27T10:00:00Z', '2026-10-21T12:30:00Z').
+            Replace('External Researcher', 'New Researcher').Replace('external-agent', 'new-agent')
+        $newTitle = [regex]::Match($newEntry, '^###[ \t]+([^\r\n]+)').Groups[1].Value.Trim()
+        Add-Content -LiteralPath $fixture.HistoryPath -Value $newEntry -Encoding utf8NoBOM
+        $fixture.Manifest = Get-Content -LiteralPath $fixture.ManifestPath -Raw | ConvertFrom-Json -AsHashtable
+        Save-LedgerRetirement $fixture -HistoryEntries @($newTitle) -RetiredAt '2026-10-21T13:00:00Z'
+        Change-LedgerBinding $fixture
+
+        $model = Get-SquadStateModel -SquadRoot $fixture.Root
+        $model.ConnectorRetirementIssues | Should -BeNullOrEmpty
+        $model.ConnectorRetirements.Count | Should -Be 2
+        $model.ConnectorHistoryIssues | Should -BeNullOrEmpty
+        $model.ConnectorHistoryIdentities.Count | Should -Be 2
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 0 -Because $rewrite.Output
+        $ledger = [System.IO.File]::ReadAllText((Join-Path $fixture.Root 'consumption.md'))
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*External Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*extended\s*\|'
+        $ledger | Should -Match '\|\s*researcher\s*\|\s*New Researcher\s*\|\s*Squad Connector\s*\|[^\r\n]*\|\s*fast\s*\|'
+        (Invoke-Ledger -SquadRoot $fixture.Root -Check).ExitCode | Should -Be 0
+    }
+
+    It 'CONN-35 rejects <Marker> metadata without the fixed bullet prefix, even with a matching active binding' -ForEach @(
+        @{ Marker = 'External provenance' }, @{ Marker = 'Verification' }, @{ Marker = 'External-unmetered' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath).Replace("* ${Marker}:", "${Marker}:")
+        Set-Content -LiteralPath $fixture.HistoryPath -Value $history -NoNewline
+        (Get-SquadStateModel -SquadRoot $fixture.Root).ConnectorHistoryIssues.Count | Should -BeGreaterThan 0
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            (Invoke-Ledger -SquadRoot $fixture.Root @options).ExitCode | Should -Be 1
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-36 rejects missing <Marker> for <RoleMode> history without changing persisted files' -ForEach @(
+        @{ Marker = 'External provenance'; RoleMode = 'replace' },
+        @{ Marker = 'Verification'; RoleMode = 'replace' },
+        @{ Marker = 'External-unmetered'; RoleMode = 'replace' },
+        @{ Marker = 'External provenance'; RoleMode = 'add' },
+        @{ Marker = 'Verification'; RoleMode = 'add' },
+        @{ Marker = 'External-unmetered'; RoleMode = 'add' },
+        @{ Marker = 'External provenance'; RoleMode = 'legacy' },
+        @{ Marker = 'Verification'; RoleMode = 'legacy' },
+        @{ Marker = 'External-unmetered'; RoleMode = 'legacy' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot -RoleMode $(if ($RoleMode -eq 'add') { 'add' } else { 'replace' })
+        if ($RoleMode -eq 'legacy') {
+            Change-LedgerBinding $fixture
+            $legacy = [System.IO.File]::ReadAllText($fixture.HistoryPath).Replace('binding=external-research', 'binding=legacy-1.0')
+            [System.IO.File]::WriteAllText($fixture.HistoryPath, $legacy)
+        }
+        $positive = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $positive.ExitCode | Should -Be 0 -Because $positive.Output
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath) -replace "(?m)^\* ${Marker}:[^\r\n]*\r?\n", ''
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $history)
+        (Get-SquadStateModel -SquadRoot $fixture.Root).ConnectorHistoryIssues.Count | Should -BeGreaterThan 0
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match ([regex]::Escape($Marker))
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-36 rejects an empty <Marker> value rather than falling back to the roster' -ForEach @(
+        @{ Marker = 'External provenance' }, @{ Marker = 'Verification' }, @{ Marker = 'External-unmetered' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath) -replace "(?m)^(\* ${Marker}:)[^\r\n]*", '$1   '
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $history)
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+        }
+    }
+
+    It 'CONN-36 rejects missing provenance after <RoleMode> <Change> without losing valid retired identity' -ForEach @(
+        @{ RoleMode = 'replace'; Change = 'unbind' }, @{ RoleMode = 'replace'; Change = 'rebind' },
+        @{ RoleMode = 'add'; Change = 'unbind' }, @{ RoleMode = 'add'; Change = 'rebind' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot -RoleMode $RoleMode
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        Save-LedgerRetirement $fixture
+        Change-LedgerBinding $fixture $Change
+        $positive = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $positive.ExitCode | Should -Be 0 -Because $positive.Output
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath) -replace '(?m)^\* External provenance:[^\r\n]*\r?\n', ''
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $history)
+        $protected = @('consumption.md', 'state.json', 'history/Squad Connector.md')
+        $before = @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash })
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'External provenance'
+        }
+        @($protected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $fixture.Root $_)).Hash }) | Should -Be $before
+    }
+
+    It 'CONN-36 validates required metadata even when its consumption block is missing' {
+        $fixture = New-ConnectorLedgerRoot
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath) -replace '(?m)^\* External provenance:[^\r\n]*\r?\n', ''
+        $history = $history -replace '(?s)\r?\n#### Consumption.*', ''
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $history)
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'External provenance'
+        }
+    }
+
+    It 'CONN-36 never treats an appended valid entry as authority to ignore earlier missing provenance' {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        $original = [System.IO.File]::ReadAllText($fixture.HistoryPath)
+        $bad = $original -replace '(?m)^\* External provenance:[^\r\n]*\r?\n', ''
+        $newEntry = ($original -split '(?m)(?=^### )', 2)[1].Replace('2026-09-27T10:00:00Z', '2026-10-21T21:00:00Z')
+        [System.IO.File]::WriteAllText($fixture.HistoryPath, $bad + "`n" + $newEntry)
+        $before = (Get-FileHash -LiteralPath $fixture.HistoryPath).Hash
+        foreach ($options in @(@{}, @{ Format = 'json' }, @{ Write = $true }, @{ Check = $true })) {
+            $result = Invoke-Ledger -SquadRoot $fixture.Root @options
+            $result.ExitCode | Should -Be 1 -Because $result.Output
+            $result.Output | Should -Match 'External provenance'
+        }
+        (Get-FileHash -LiteralPath $fixture.HistoryPath).Hash | Should -Be $before
+    }
+
+    It 'refuses <Mutation> retirement evidence without rewriting ledger or state' -ForEach @(
+        @{ Mutation = 'unconfirmed' }, @{ Mutation = 'missing confirmation' }, @{ Mutation = 'missing snapshot' },
+        @{ Mutation = 'wrong manifest' }, @{ Mutation = 'unknown field' }, @{ Mutation = 'invalid prior target' },
+        @{ Mutation = 'postdated entry' }, @{ Mutation = 'unlisted entry' }, @{ Mutation = 'wrong member' },
+        @{ Mutation = 'wrong verification' }, @{ Mutation = 'wrong unmetered marker' }, @{ Mutation = 'invalid active binding' }
+    ) {
+        $fixture = New-ConnectorLedgerRoot
+        (Invoke-Ledger -SquadRoot $fixture.Root -Write).ExitCode | Should -Be 0
+        Save-LedgerRetirement $fixture $Mutation
+        Change-LedgerBinding $fixture $(if ($Mutation -eq 'invalid active binding') { 'rebind' } else { 'unbind' })
+        $history = [System.IO.File]::ReadAllText($fixture.HistoryPath)
+        switch ($Mutation) {
+            'unlisted entry' { $history = $history.Replace('2026-09-27T10:00:00Z', '2026-10-21T13:00:00Z') }
+            'wrong member' { $history = $history.Replace('* Member Name: External Researcher', '* Member Name: Unknown Member') }
+            'wrong verification' { $history = $history.Replace('* Verification: external, unverified', '* Verification: approved') }
+            'wrong unmetered marker' { $history = $history.Replace('External-unmetered: connector=external-agent', 'External-unmetered: connector=other') }
+            'invalid active binding' {
+                $teamPath = Join-Path $fixture.Root 'team.md'
+                Set-Content -LiteralPath $teamPath -Value ([System.IO.File]::ReadAllText($teamPath).Replace('role:researcher/Alpha', 'role:researcher/Missing'))
+            }
+        }
+        Set-Content -LiteralPath $fixture.HistoryPath -Value $history -NoNewline
+        $ledgerPath = Join-Path $fixture.Root 'consumption.md'
+        $statePath = Join-Path $fixture.Root 'state.json'
+        $ledgerHash = (Get-FileHash -LiteralPath $ledgerPath).Hash
+        $stateHash = (Get-FileHash -LiteralPath $statePath).Hash
+        $rewrite = Invoke-Ledger -SquadRoot $fixture.Root -Write
+        $rewrite.ExitCode | Should -Be 1 -Because $rewrite.Output
+        (Get-FileHash -LiteralPath $ledgerPath).Hash | Should -Be $ledgerHash
+        (Get-FileHash -LiteralPath $statePath).Hash | Should -Be $stateHash
     }
 }
 
@@ -1159,11 +2011,13 @@ Describe 'Measure-SquadLedger -EmitBaseline / -BaselinePath (U1 item 1)' {
         $result.Output | Should -Match '\.copilot-tracking/squad'
     }
 
-    It 'refuses (throws) naming state.json or consumption.md as -ProtectedPath' {
+    It 'refuses (throws) naming a replace-semantics ledger file as -ProtectedPath' {
         $root = New-BaselineTestRootLocal
-        $result = Invoke-Ledger -SquadRoot $root -EmitBaseline (Join-Path $TestDrive 'baseline-guard.json') -ProtectedPath 'state.json'
-        $result.ExitCode | Should -Not -Be 0
-        $result.Output | Should -Match 'must not name'
+        foreach ($name in @('state.json', 'consumption.md', 'consumption-sessions.json')) {
+            $result = Invoke-Ledger -SquadRoot $root -EmitBaseline (Join-Path $TestDrive "baseline-guard-$($name.Replace('.', '-')).json") -ProtectedPath $name
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'must not name'
+        }
     }
 }
 
@@ -1516,7 +2370,7 @@ Describe 'Measure-SquadLedger prices spelling variants and falls back to the blo
     }
 }
 
-Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the estimates' {
+Describe 'Measure-SquadLedger -SessionLog replaces completed estimates with exact native role usage' {
     BeforeAll {
         function New-SessionFixtureLocal {
             <#
@@ -1524,12 +2378,12 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
                 A repo with the applied fixture as its squad root, plus a fake
                 session-state directory whose workspace.yaml points at that repo.
             #>
-            param([string]$Member, [string[]]$EventLines)
+            param([string]$Member, [string[]]$EventLines, [string]$Fixture = 'applied')
             $repo = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
             $squad = Join-Path $repo '.copilot-tracking/squad'
             $root = if ($Member) { Join-Path $squad "members/$Member" } else { $squad }
             New-Item -ItemType Directory -Path (Split-Path -Parent $root) -Force | Out-Null
-            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot 'applied') -Destination $root -Recurse
+            Copy-Item -LiteralPath (Join-Path $script:FixtureRoot $Fixture) -Destination $root -Recurse
 
             $copilotHome = Join-Path $repo '_copilot_home'
             $sessionDir = Join-Path $copilotHome 'session-state/sess-0001'
@@ -1551,55 +2405,415 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
             [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
         }
 
+        function New-ExactUsageEventLocal {
+            param(
+                [string]$AgentId,
+                [string]$SourceSessionId,
+                [string]$UsageId,
+                [string]$Model,
+                [long]$FreshInput,
+                [long]$Cached,
+                [long]$CacheWrite,
+                [long]$Output,
+                [double]$InputRate,
+                [double]$CachedRate,
+                [double]$CacheWriteRate,
+                [double]$OutputRate,
+                [string]$Timestamp
+            )
+            $details = @(
+                @{ tokenType = 'input'; tokenCount = $FreshInput; batchSize = 1000000; costPerBatch = [decimal]$InputRate * [decimal]1e11 }
+                @{ tokenType = 'cache_read'; tokenCount = $Cached; batchSize = 1000000; costPerBatch = [decimal]$CachedRate * [decimal]1e11 }
+                @{ tokenType = 'cache_write'; tokenCount = $CacheWrite; batchSize = 1000000; costPerBatch = [decimal]$CacheWriteRate * [decimal]1e11 }
+                @{ tokenType = 'output'; tokenCount = $Output; batchSize = 1000000; costPerBatch = [decimal]$OutputRate * [decimal]1e11 }
+            )
+            $nanoAiu = [decimal]0
+            foreach ($detail in $details) {
+                $nanoAiu += [decimal]$detail.tokenCount * [decimal]$detail.costPerBatch / [decimal]$detail.batchSize
+            }
+            @{
+                type = 'session.usage_record'
+                agentId = $AgentId
+                timestamp = $Timestamp
+                data = @{
+                    usage = @{
+                        model = $Model
+                        inputTokens = $FreshInput + $Cached + $CacheWrite
+                        outputTokens = $Output
+                        cacheReadTokens = $Cached
+                        cacheWriteTokens = $CacheWrite
+                        aiCreditsStatus = 'complete'
+                        copilotUsage = @{ totalNanoAiu = $nanoAiu; tokenDetails = $details }
+                        accounting = @{ sourceSessionId = $SourceSessionId; usageId = $UsageId }
+                    }
+                }
+            } | ConvertTo-Json -Depth 12 -Compress
+        }
+
+        function Add-SecondSessionHistoryLocal {
+            param([Parameter(Mandatory)][string]$Root)
+            Add-Content -LiteralPath (Join-Path $Root 'history/Squad Researcher.md') -Encoding utf8NoBOM -Value @'
+
+### 2026-10-02T10:00:00Z Surveying the next fixture increment
+
+* Turn: 3
+* Request: Survey the next fixture increment.
+* Deliverable: `research/2026-10-02-fixture-topic.md`
+* Outcome: Recorded the next exact-session increment.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "session-inherited",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 4,
+  "input_tokens": 2000,
+  "cached_tokens": 8000,
+  "cache_write_tokens": 0,
+  "output_tokens": 2000,
+  "basis": "estimated"
+}
+```
+'@
+            Add-Content -LiteralPath (Join-Path $Root 'history/Squad Scribe.md') -Encoding utf8NoBOM -Value @'
+
+### 2026-10-02T10:05:00Z Recording the next fixture increment
+
+* Turn: 3
+* Request: Record the next fixture increment and advance state.
+* Deliverable: `state.json`, `consumption.md`, `history/Squad Researcher.md`
+* Outcome: Recorded the next exact-session increment.
+
+#### Consumption — Orchestration
+
+```json
+{
+  "model": "Claude Haiku 4.5",
+  "model_source": "agent-pinned",
+  "priced_as": "Claude Haiku 4.5",
+  "model_tier": "fast",
+  "internal_turns": 2,
+  "input_tokens": 1000,
+  "cached_tokens": 1000,
+  "cache_write_tokens": 0,
+  "output_tokens": 1000,
+  "basis": "estimated"
+}
+```
+'@
+        }
+
+        function Add-SecondSessionLogLocal {
+            param(
+                [Parameter(Mandatory)]$Fixture,
+                [switch]$CloseAfterHistory
+            )
+            $session2 = Join-Path $Fixture.Home 'session-state/sess-0002'
+            New-Item -ItemType Directory -Path $session2 -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $session2 'workspace.yaml') -Value "id: sess-0002`ncwd: $($Fixture.Repo)`n"
+            $events2 = [Collections.Generic.List[string]]::new()
+            foreach ($line in @(
+                '{"type":"session.start","data":{"sessionId":"sess-0002"},"timestamp":"2026-10-02T09:59:00.000Z"}'
+                '{"type":"subagent.started","agentId":"research-2","data":{"toolCallId":"t3","agentName":"Squad Researcher","agentDisplayName":"researcher","model":"claude-sonnet-4.6"},"timestamp":"2026-10-02T10:00:01.000Z"}'
+                (New-ExactUsageEventLocal -AgentId 'research-2' -SourceSessionId 'research-session-2' -UsageId 'three' -Model 'claude-sonnet-4.6' -FreshInput 20000 -Cached 10000 -CacheWrite 0 -Output 2000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-02T10:02:00.000Z')
+                '{"type":"subagent.started","agentId":"scribe-2","data":{"toolCallId":"t4","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-02T10:02:01.000Z"}'
+                (New-ExactUsageEventLocal -AgentId 'scribe-2' -SourceSessionId 'scribe-session-2' -UsageId 'four' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-02T10:03:00.000Z')
+            )) {
+                $events2.Add($line)
+            }
+            if ($CloseAfterHistory) {
+                $events2.Add('{"type":"assistant.turn_end","timestamp":"2026-10-02T10:05:01.000Z","data":{}}')
+            }
+            $eventsPath = Join-Path $session2 'events.jsonl'
+            Set-Content -LiteralPath $eventsPath -Value ($events2 -join "`n")
+            $session1Events = Join-Path $Fixture.SessionDir 'events.jsonl'
+            if (Test-Path -LiteralPath $session1Events -PathType Leaf) {
+                (Get-Item -LiteralPath $session1Events).LastWriteTimeUtc = [datetime]'2026-10-01T10:04:00Z'
+            }
+            (Get-Item -LiteralPath $eventsPath).LastWriteTimeUtc = [datetime]'2026-10-02T10:03:00Z'
+            $session2
+        }
+
+        function Add-ThirdSessionHistoryLocal {
+            param([Parameter(Mandatory)][string]$Root)
+            Set-Content -LiteralPath (Join-Path $Root 'history/Squad Lead.md') -Encoding utf8NoBOM -Value @'
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Lead
+
+### 2026-10-03T10:00:00Z Planning the third fixture increment
+
+* Turn: 4
+* Request: Plan the third fixture increment.
+* Deliverable: `plans/2026-10-03-fixture-plan.md`
+* Outcome: Recorded the third exact-session increment.
+
+#### Consumption
+
+```json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "session-inherited",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 4,
+  "input_tokens": 2000,
+  "cached_tokens": 8000,
+  "cache_write_tokens": 0,
+  "output_tokens": 2000,
+  "basis": "estimated"
+}
+```
+'@
+            Add-Content -LiteralPath (Join-Path $Root 'history/Squad Scribe.md') -Encoding utf8NoBOM -Value @'
+
+### 2026-10-03T10:05:00Z Recording the third fixture increment
+
+* Turn: 4
+* Request: Record the third fixture increment and advance state.
+* Deliverable: `state.json`, `consumption.md`, `history/Squad Lead.md`
+* Outcome: Recorded the third exact-session increment.
+
+#### Consumption — Orchestration
+
+```json
+{
+  "model": "Claude Haiku 4.5",
+  "model_source": "agent-pinned",
+  "priced_as": "Claude Haiku 4.5",
+  "model_tier": "fast",
+  "internal_turns": 2,
+  "input_tokens": 1000,
+  "cached_tokens": 1000,
+  "cache_write_tokens": 0,
+  "output_tokens": 1000,
+  "basis": "estimated"
+}
+```
+'@
+        }
+
+        function Add-ThirdSessionLogLocal {
+            param([Parameter(Mandatory)]$Fixture)
+            $session3 = Join-Path $Fixture.Home 'session-state/sess-0003'
+            New-Item -ItemType Directory -Path $session3 -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $session3 'workspace.yaml') -Value "id: sess-0003`ncwd: $($Fixture.Repo)`n"
+            Set-Content -LiteralPath (Join-Path $session3 'events.jsonl') -Value (@(
+                    '{"type":"session.start","data":{"sessionId":"sess-0003"},"timestamp":"2026-10-03T09:59:00.000Z"}'
+                    '{"type":"subagent.started","agentId":"lead-3","data":{"toolCallId":"t5","agentName":"Squad Lead","agentDisplayName":"lead","model":"claude-sonnet-4.6"},"timestamp":"2026-10-03T10:00:01.000Z"}'
+                    (New-ExactUsageEventLocal -AgentId 'lead-3' -SourceSessionId 'lead-session-3' -UsageId 'five' -Model 'claude-sonnet-4.6' -FreshInput 20000 -Cached 10000 -CacheWrite 0 -Output 2000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-03T10:02:00.000Z')
+                    '{"type":"subagent.started","agentId":"scribe-3","data":{"toolCallId":"t6","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-03T10:02:01.000Z"}'
+                    (New-ExactUsageEventLocal -AgentId 'scribe-3' -SourceSessionId 'scribe-session-3' -UsageId 'six' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-03T10:03:00.000Z')
+                ) -join "`n")
+            (Get-Item -LiteralPath (Join-Path $session3 'events.jsonl')).LastWriteTimeUtc = [datetime]'2026-10-03T10:03:00Z'
+            $session3
+        }
+
+        function Set-LegacyNullCoverageLocal {
+            param(
+                [Parameter(Mandatory)][string]$Path,
+                [Parameter(Mandatory)][string]$SessionId,
+                [Parameter(Mandatory)][string]$FileName
+            )
+            $document = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable -Depth 100 -DateKind String
+            $session = @($document.sessions | Where-Object sessionId -eq $SessionId)
+            if ($session.Count -ne 1) { throw "Expected one journal session '$SessionId'." }
+            $session = $session[0]
+            $session.historyCoverage[$FileName] = @($null)
+            $null = $session.Remove('contentDigest')
+            $material = $session | ConvertTo-Json -Compress -Depth 20
+            $session['contentDigest'] = [Convert]::ToHexString(
+                [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($material))
+            )
+            [IO.File]::WriteAllText($Path, (($document | ConvertTo-Json -Depth 20) + "`n"), [Text.UTF8Encoding]::new($false))
+        }
+
         $script:BaseEvents = @(
-            '{"type":"session.start","data":{},"timestamp":"2026-10-01T10:00:00.000Z"}'
+            '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-09-27T09:59:00.000Z"}'
             '{"type":"tool.execution_start","data":{"toolCallId":"t1","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/research/x.md"}},"timestamp":"2026-10-01T10:00:01.000Z"}'
-            '{"type":"subagent.completed","data":{"toolCallId":"t1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":500000,"durationMs":120000},"timestamp":"2026-10-01T10:02:01.000Z"}'
-            '{"type":"subagent.completed","data":{"toolCallId":"t2","agentName":"Squad Scribe","model":"claude-haiku-4.5","totalTokens":300000,"durationMs":60000},"timestamp":"2026-10-01T10:03:01.000Z"}'
+            '{"type":"subagent.started","agentId":"owner-research","data":{"toolCallId":"t1","agentName":"Squad Researcher","agentDisplayName":"researcher","model":"claude-sonnet-4.6"},"timestamp":"2026-10-01T10:00:02.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'owner-research' -SourceSessionId 'research-session' -UsageId 'one' -Model 'claude-sonnet-4.6' -FreshInput 100000 -Cached 80000 -CacheWrite 0 -Output 10000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-01T10:02:00.000Z')
+            '{"type":"subagent.completed","agentId":"owner-research","data":{"toolCallId":"t1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":190000,"durationMs":120000},"timestamp":"2026-10-01T10:02:01.000Z"}'
+            '{"type":"subagent.started","agentId":"owner-scribe","data":{"toolCallId":"t2","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-01T10:02:02.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'owner-scribe' -SourceSessionId 'scribe-session' -UsageId 'two' -Model 'claude-haiku-4.5' -FreshInput 10000 -Cached 40000 -CacheWrite 10000 -Output 5000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-01T10:03:00.000Z')
+            '{"type":"subagent.completed","agentId":"owner-scribe","data":{"toolCallId":"t2","agentName":"Squad Scribe","model":"claude-haiku-4.5","totalTokens":65000,"durationMs":60000},"timestamp":"2026-10-01T10:03:01.000Z"}'
             '{"type":"session.usage_checkpoint","data":{"totalNanoAiu":123450000000},"timestamp":"2026-10-01T10:04:00.000Z"}'
             '{"type":"assistant.message","data":{"content":"partial'
         )
     }
 
-    It 'writes the observed section with real tokens, blended cost, session AI units, and the without-HVE-Squad comparison, and -Check still passes' {
+    It 'writes one exact ledger, removes the observed section, and compares exact traffic on one baseline model' {
         $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
         $result.ExitCode | Should -Be 0 -Because $result.Output
 
         $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
-        $ledger | Should -Match '(?m)^## Observed Usage \(host-reported\)\s*$'
-        $ledger | Should -Match '\| Squad Researcher \| 1 \| claude-sonnet-4\.6 \| Claude Sonnet 4\.6 \| yes \| 500,000 \|'
-        $ledger | Should -Match '\| Squad Scribe \| 1 \| claude-haiku-4\.5 \|'
-        $ledger | Should -Match '\*\*Subagents total\*\* \| \*\*2\*\* \| \| \| \| \*\*800,000\*\*'
-        $ledger | Should -Match '\*\*0\.8640\*\*'
-        $ledger | Should -Match '\*\*123\.45 AI units\*\*'
-        $ledger | Should -Match 'Without HVE Squad: the same role work on one model, no Scribe \| 500,000 \| claude-sonnet-4\.6 \| 0\.7200'
-        $ledger.IndexOf('## Observed Usage') | Should -BeLessThan $ledger.IndexOf('## Cost Comparison')
-        $ledger | Should -Match '\*\*0\.3171\*\*' -Because 'the estimated tables are kept unchanged'
+        $ledger | Should -Not -Match '(?m)^## Observed Usage'
+        $ledger | Should -Match '\| Role \| Requests \| In Tokens \| Cached \| Cache Wr \| Out Tokens \| Exact Cost \(USD\) \| Exact Credits \| Basis \|'
+        $ledger | Should -Match '\| researcher \| 1 \| 100,000 \| 80,000 \| 0 \| 10,000 \| 0\.4740 \| 47\.40 \| exact-native \|'
+        $ledger | Should -Match '\| orchestration \| 1 \| 10,000 \| 40,000 \| 10,000 \| 5,000 \| 0\.0515 \| 5\.15 \| exact-native \|'
+        $ledger | Should -Match '\| \*\*Total\*\* \| \*\*2\*\* \| \*\*110,000\*\* \| \*\*120,000\*\* \| \*\*10,000\*\* \| \*\*15,000\*\* \| \*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\* \|'
+        $ledger | Should -Match 'Native usage snapshot .* records: 2; .* digest: [A-F0-9]{64}'
+        $ledger | Should -Match '(?m)^## Cost Comparison \(exact native actual\)\s*$'
+        $ledger | Should -Match 'Without HVE Squad: same exact role-request token categories on `claude-sonnet-4\.6`, no coordinator or Scribe'
 
         $check = Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
         $check.ExitCode | Should -Be 0 -Because $check.Output
     }
 
+    It 'keeps benefit metadata outside native accounting without fake Scribe usage or duplicate cost' {
+        $events = @($script:BaseEvents | Select-Object -SkipLast 1 | ForEach-Object {
+            $_.Replace('owner-scribe', 'coordinator-root').Replace('scribe-session', 'coordinator-session').Replace('"agentName":"Squad Scribe","agentDisplayName":"scribe"', '"agentName":"coordinator","agentDisplayName":"coordinator"').Replace('"agentName":"Squad Scribe"', '"agentName":"coordinator"')
+        })
+        $f = New-SessionFixtureLocal -EventLines $events
+        $first = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $first.ExitCode | Should -Be 0 -Because $first.Output
+        $ledgerPath = Join-Path $f.Root 'consumption.md'
+        $journalPath = Join-Path $f.Root 'consumption-sessions.json'
+        $ledgerBefore = Get-Content -LiteralPath $ledgerPath -Raw
+        $journalBefore = Get-Content -LiteralPath $journalPath -Raw
+        $stateBefore = Get-Content -LiteralPath (Join-Path $f.Root 'state.json') -Raw
+        $claim = 'Claim ID: benefit-speed-01; source evidence: evidence/cycle-time.csv; baseline: 12 minutes per case; target: 9 minutes per case; measurement owner: Measurement Owner; business decision owner: Business Owner; status: pending; decision ref: decisions/review-01.'
+        Add-Content -LiteralPath (Join-Path $f.Root 'decisions.md') -Value "`n$claim"
+        $metadataEvent = @{ type = 'assistant.message'; timestamp = '2026-10-01T10:04:00.000Z'; data = @{ content = $claim } } | ConvertTo-Json -Depth 4 -Compress
+        Add-Content -LiteralPath (Join-Path $f.SessionDir 'events.jsonl') -Value (@($events | Where-Object { $_ -match '"type":"session.usage_record"' }) + $metadataEvent)
+
+        $replay = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $replay.ExitCode | Should -Be 0 -Because $replay.Output
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $ledger | Should -BeExactly $ledgerBefore
+        (Get-Content -LiteralPath $journalPath -Raw) | Should -BeExactly $journalBefore
+        (Get-Content -LiteralPath (Join-Path $f.Root 'state.json') -Raw) | Should -BeExactly $stateBefore
+        $journal = $journalBefore | ConvertFrom-Json
+        @($journal.sessions).Count | Should -Be 1
+        $journal.sessions[0].records | Should -Be 2
+        $ledger | Should -Match '\| orchestration \| 1 \| 10,000 \| 40,000 \| 10,000 \| 5,000 \| 0\.0515 \| 5\.15 \| exact-native \|'
+        $ledger | Should -Match '\| \*\*Total\*\* \| \*\*2\*\* \| \*\*110,000\*\* \| \*\*120,000\*\* \| \*\*10,000\*\* \| \*\*15,000\*\* \| \*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\* \|'
+        $ledger | Should -Match 'calculated counterfactual'
+        $ledger | Should -Match 'not an observed alternate run'
+        $ledger | Should -Match 'cost per accepted deliverable remains pending \(n/a\)'
+        $ledger | Should -Match 'does not establish financial business value or imply zero financial business value'
+        (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }).ExitCode | Should -Be 0
+    }
+
+    It 'canonicalizes plugin-qualified native identities to the same history agents used by APM installs' {
+        $events = @(
+            $script:BaseEvents | ForEach-Object {
+                $line = $_.Replace(
+                    '"agentName":"Squad Researcher","agentDisplayName":"researcher"',
+                    '"agentName":"hve-squad:squad-researcher","agentDisplayName":"researcher"'
+                )
+                $line.Replace(
+                    '"agentName":"Squad Scribe","agentDisplayName":"scribe"',
+                    '"agentName":"hve-squad:squad-scribe","agentDisplayName":"scribe"'
+                )
+            }
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match '\| researcher \| 1 \| 100,000 \| 80,000 \| 0 \| 10,000 \| 0\.4740 \| 47\.40 \| exact-native \|'
+        $ledger | Should -Match '\| orchestration \| 1 \| 10,000 \| 40,000 \| 10,000 \| 5,000 \| 0\.0515 \| 5\.15 \| exact-native \|'
+        $ledger | Should -Not -Match 'hve-squad:squad-researcher'
+        $ledger | Should -Not -Match 'hve-squad:squad-scribe'
+    }
+
+    It 'accepts Cost Comparison rounding for <Scenario>' -ForEach @(
+        @{ Scenario = 'higher cost at the reported percentage boundary'; FreshInput = 2; OutputTokens = 95135; InputRate = 3; ScribeInput = 1506204; Baseline = ''; Saving = '1.5062 USD (105.5%) higher'; KeepJournal = $true }
+        @{ Scenario = 'the same higher-cost boundary without a journal'; FreshInput = 2; OutputTokens = 95135; InputRate = 3; ScribeInput = 1506204; Baseline = ''; Saving = '1.5062 USD (105.5%) higher'; KeepJournal = $false }
+        @{ Scenario = 'lower cost at a percentage boundary'; FreshInput = 2; OutputTokens = 95135; InputRate = 3; ScribeInput = 1200; Baseline = 'Claude Opus 5'; Saving = '0.9502 USD (39.9%) lower'; KeepJournal = $true }
+        @{ Scenario = 'the same lower-cost boundary without a journal'; FreshInput = 2; OutputTokens = 95135; InputRate = 3; ScribeInput = 1200; Baseline = 'Claude Opus 5'; Saving = '0.9502 USD (39.9%) lower'; KeepJournal = $false }
+        @{ Scenario = 'nonzero higher costs displayed as zero'; FreshInput = 1; OutputTokens = 0; InputRate = 3; ScribeInput = 1; Baseline = ''; Saving = '0.0000 USD (33.3%) higher'; KeepJournal = $true }
+        @{ Scenario = 'nonzero lower costs displayed as zero'; FreshInput = 1; OutputTokens = 0; InputRate = 3; ScribeInput = 1; Baseline = 'Claude Opus 5'; Saving = '0.0000 USD (20.0%) lower'; KeepJournal = $true }
+        @{ Scenario = 'a saving smaller than the displayed USD precision'; FreshInput = 17; OutputTokens = 0; InputRate = 1; ScribeInput = 32; Baseline = ''; Saving = '0.0000 USD (3.9%) lower'; KeepJournal = $true }
+        @{ Scenario = 'an exactly zero baseline'; FreshInput = 0; OutputTokens = 0; InputRate = 3; ScribeInput = 1; Baseline = ''; Saving = '0.0000 USD (0.0%) higher'; KeepJournal = $true }
+    ) {
+        $events = @(
+            '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-09-27T09:59:00.000Z"}'
+            '{"type":"subagent.started","agentId":"owner-research","data":{"toolCallId":"t1","agentName":"Squad Researcher","model":"claude-sonnet-4.6"},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'owner-research' -SourceSessionId 'research-session' -UsageId 'one' -Model 'claude-sonnet-4.6' -FreshInput $FreshInput -Cached 0 -CacheWrite 0 -Output $OutputTokens -InputRate $InputRate -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-01T10:02:00.000Z')
+            '{"type":"subagent.started","agentId":"owner-scribe","data":{"toolCallId":"t2","agentName":"Squad Scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-01T10:02:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'owner-scribe' -SourceSessionId 'scribe-session' -UsageId 'two' -Model 'claude-haiku-4.5' -FreshInput $ScribeInput -Cached 0 -CacheWrite 0 -Output 0 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-01T10:03:00.000Z')
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -BaselineModel $Baseline -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $ledgerPath = Join-Path $f.Root 'consumption.md'
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $ledger | Should -Match ([regex]::Escape("HVE Squad is **$Saving**"))
+        if (-not $KeepJournal) {
+            Remove-Item -LiteralPath (Join-Path $f.Root 'consumption-sessions.json')
+        }
+        $before = [IO.File]::ReadAllBytes($ledgerPath)
+
+        $check = Invoke-Ledger -SquadRoot $f.Root -Check
+
+        $check.ExitCode | Should -Be 0 -Because $check.Output
+        [IO.File]::ReadAllBytes($ledgerPath) | Should -Be $before
+    }
+
+    It 'rejects corrupted Cost Comparison rounding <Field>' -ForEach @(
+        @{ Field = 'amount'; Replacement = '0.0615 USD (10.9%) higher' }
+        @{ Field = 'percentage'; Replacement = '0.0515 USD (11.9%) higher' }
+        @{ Field = 'direction'; Replacement = '0.0515 USD (10.9%) lower' }
+    ) {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $ledgerPath = Join-Path $f.Root 'consumption.md'
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $ledger | Should -Match ([regex]::Escape('HVE Squad is **0.0515 USD (10.9%) higher**'))
+        Set-Content -LiteralPath $ledgerPath -Value ($ledger.Replace(
+                '0.0515 USD (10.9%) higher', $Replacement
+            )) -NoNewline
+        $before = [IO.File]::ReadAllBytes($ledgerPath)
+
+        $check = Invoke-Ledger -SquadRoot $f.Root -Check
+
+        $check.ExitCode | Should -Be 1
+        $check.Output | Should -Match 'Exact Cost Comparison saving differs'
+        [IO.File]::ReadAllBytes($ledgerPath) | Should -Be $before
+    }
+
     It 'writes the ledger when only the Scribe has completed, as at the first hand-off of a run (a live run rolled back on ''Sum'' cannot be found)' {
-        $f = New-SessionFixtureLocal -EventLines @($script:BaseEvents | Where-Object { $_ -notmatch '"t1"' })
+        $f = New-SessionFixtureLocal -Fixture seed -EventLines @($script:BaseEvents | Where-Object { $_ -notmatch 'owner-research|research-session|toolCallId":"t1"' })
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
-        $ledger | Should -Match '\| Squad Scribe \| 1 \| claude-haiku-4\.5 \|'
-        $ledger | Should -Not -Match 'Without HVE Squad' -Because 'no role work was observed to compare'
+        $ledger | Should -Match '\| orchestration \| 1 \| 10,000 \| 40,000 \| 10,000 \| 5,000 \|'
+        $ledger | Should -Not -Match 'Without HVE Squad' -Because 'no role work exists to reprice'
+    }
+
+    It 'does not treat a coordinator-only session with no history-backed transaction as a Scribe hand-off' {
+        $events = @(
+            '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-10-01T09:59:00.000Z"}'
+            '{"type":"subagent.started","agentId":"coordinator-root","data":{"toolCallId":"t0","agentName":"coordinator","agentDisplayName":"coordinator","model":"claude-haiku-4.5"},"timestamp":"2026-10-01T10:00:00.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'coordinator-root' -SourceSessionId 'coordinator-session' -UsageId 'coordinator-only' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-01T10:01:00.000Z')
+        )
+        $f = New-SessionFixtureLocal -Fixture seed -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw | Should -Not -Match 'exact-native'
+        Test-Path -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') | Should -BeFalse
     }
 
     It 'writes the ledger when the session has billed units but no completed dispatch' {
         $f = New-SessionFixtureLocal -EventLines @($script:BaseEvents | Where-Object { $_ -notmatch 'subagent\.completed' })
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw | Should -Match '\*\*123\.45 AI units\*\*'
+        Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw | Should -Match '\*\*52\.55\*\* \| \*\*exact-native\*\*'
     }
 
-    It 'writes the ledger at every point a live session can be cut, so a hand-off at any moment of a run never fails on observed usage' {
+    It 'writes the ledger at every point a live session can be cut, falling back until exact attribution is complete' {
         # Live order: the Scribe's roster refresh completes and is billed before any owner finishes.
-        $live = @($script:BaseEvents[0], $script:BaseEvents[3], $script:BaseEvents[4], $script:BaseEvents[1], $script:BaseEvents[2], $script:BaseEvents[5])
+        $live = @($script:BaseEvents)
         for ($n = 1; $n -le $live.Count; $n++) {
             $f = New-SessionFixtureLocal -EventLines @($live | Select-Object -First $n)
             $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
@@ -1607,23 +2821,159 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
         }
     }
 
-    It 'leaves observed usage out with a warning, and still writes and checks the ledger, when the session log cannot be read' {
+    It 'falls back to estimates with a warning, and still writes and checks the ledger, when exact native records are unavailable' {
         $f = New-SessionFixtureLocal -EventLines @('{"type":"subagent.completed","data":{"toolCallId":"t9","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":"not-a-number","durationMs":1},"timestamp":"2026-10-01T10:00:00.000Z"}')
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        $result.Output | Should -Match 'observed usage from .* was left out'
+        $result.Output | Should -Match 'estimates remain the fallback'
         Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw | Should -Not -Match '## Observed Usage'
+        Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw | Should -Match 'Est\. Cost \(USD\)'
         (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }).ExitCode | Should -Be 0
     }
 
-    It 'replaces the section on a later rewrite instead of appending a second one' {
+    It 'falls back when the squad history predates the selected host session' {
+        $events = @($script:BaseEvents)
+        $events[0] = $events[0].Replace('2026-09-27T09:59:00.000Z', '2026-10-01T10:00:00.000Z')
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'history predates the selected host session'
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match 'Est\. Cost \(USD\)'
+        $ledger | Should -Not -Match 'Exact Cost \(USD\)'
+    }
+
+    It 'rewrites the exact ledger idempotently instead of appending duplicate exact sections' {
         $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
         (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
         $first = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
         (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
         $second = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
-        @([regex]::Matches($second, '(?m)^## Observed Usage')).Count | Should -Be 1
+        @([regex]::Matches($second, '(?m)^## Cost Comparison \(exact native actual\)')).Count | Should -Be 1
+        @([regex]::Matches($second, '(?m)^Native usage snapshot')).Count | Should -Be 1
         $second | Should -Be $first
+    }
+
+    It 'accumulates exact native usage across sessions without requiring the older session log or double counting a replay' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+        Test-Path -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -PathType Leaf | Should -BeTrue
+
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        Remove-Item -LiteralPath $f.SessionDir -Recurse -Force
+        $session2 = Add-SecondSessionLogLocal -Fixture $f
+
+        $secondWrite = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session2 -Write
+        $secondWrite.ExitCode | Should -Be 0 -Because $secondWrite.Output
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+        $ledger | Should -Match '\| \*\*Total\*\* \| \*\*4\*\* \| \*\*131,000\*\* \| \*\*131,000\*\* \| \*\*10,000\*\* \| \*\*18,000\*\* \| \*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\* \|'
+        $cacheText = Get-Content -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -Raw
+        $cacheText | Should -Not -Match 'research-session|scribe-session'
+        $cache = $cacheText | ConvertFrom-Json
+        @($cache.sessions).Count | Should -Be 2
+        @($cache.sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002')
+        @($cache.sessions.contentDigest | Where-Object { $_ -match '^[A-F0-9]{64}$' }).Count | Should -Be 2
+
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session2 -Write).ExitCode | Should -Be 0
+        $replayed = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $replayed | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+        @((Get-Content -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -Raw | ConvertFrom-Json).sessions).Count | Should -Be 2
+        (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+    }
+
+    It 'writes canonical empty history suffix arrays for later sessions and migrates the legacy null encoding' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        $session2 = Add-SecondSessionLogLocal -Fixture $f
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session2 -Write).ExitCode | Should -Be 0
+
+        Add-ThirdSessionHistoryLocal -Root $f.Root
+        $session3 = Add-ThirdSessionLogLocal -Fixture $f
+        $thirdWrite = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session3 -Write
+        $thirdWrite.ExitCode | Should -Be 0 -Because $thirdWrite.Output
+
+        $cachePath = Join-Path $f.Root 'consumption-sessions.json'
+        $cacheText = Get-Content -LiteralPath $cachePath -Raw
+        $cacheText | Should -Not -Match '"Squad Researcher\.md"\s*:\s*\[\s*null\s*\]'
+        $document = [System.Text.Json.JsonDocument]::Parse($cacheText)
+        try {
+            $third = @($document.RootElement.GetProperty('sessions').EnumerateArray()) |
+                Where-Object { $_.GetProperty('sessionId').GetString() -eq 'sess-0003' }
+            @($third).Count | Should -Be 1
+            $third.GetProperty('historyCoverage').GetProperty('Squad Researcher.md').GetArrayLength() | Should -Be 0
+        }
+        finally {
+            $document.Dispose()
+        }
+
+        Set-LegacyNullCoverageLocal -Path $cachePath -SessionId 'sess-0003' -FileName 'Squad Researcher.md'
+        (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{
+                'Squad Lead' = 1
+                'Squad Researcher' = 2
+                'Squad Scribe' = 3
+            }).ExitCode | Should -Be 0
+
+        $migration = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $session3 -Write
+        $migration.ExitCode | Should -Be 0 -Because $migration.Output
+        $migration.Output | Should -Match 'normalized legacy null historyCoverage arrays'
+        (Get-Content -LiteralPath $cachePath -Raw) | Should -Not -Match '"Squad Researcher\.md"\s*:\s*\[\s*null\s*\]'
+    }
+
+    It 'bootstraps a missing journal from complete auto-selected sessions that uniquely cover existing history' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        $null = Add-SecondSessionLogLocal -Fixture $f -CloseAfterHistory
+
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $write.Output | Should -Not -Match 'estimates remain the fallback'
+
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+        $ledger | Should -Match '\| \*\*Total\*\* \| \*\*4\*\* \| \*\*131,000\*\* \| \*\*131,000\*\* \| \*\*10,000\*\* \| \*\*18,000\*\* \| \*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\* \|'
+        $cache = Get-Content -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -Raw | ConvertFrom-Json
+        @($cache.sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002')
+
+        $replay = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Write
+        $replay.ExitCode | Should -Be 0 -Because $replay.Output
+        $replay.Output | Should -Not -Match 'consumption-sessions\.json is unavailable or inconsistent'
+        (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+    }
+
+    It 'accepts a bounded active-session tail while the outer host tool has not emitted its completion event yet' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        $scribeHistory = Join-Path $f.Root 'history/Squad Scribe.md'
+        $scribe = Get-Content -LiteralPath $scribeHistory -Raw
+        Set-Content -LiteralPath $scribeHistory -Value $scribe.Replace('2026-10-02T10:05:00Z', '2026-10-02T10:03:02Z') -NoNewline
+        $null = Add-SecondSessionLogLocal -Fixture $f
+
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $write.Output | Should -Not -Match 'No complete native session covers metered history entry'
+        (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+    }
+
+    It 'finalizes the latest cached session from its completed log before starting a later session' {
+        $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+        (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+        Add-Content -LiteralPath (Join-Path $f.SessionDir 'events.jsonl') -Encoding utf8NoBOM -Value (
+            New-ExactUsageEventLocal -AgentId '' -SourceSessionId 'sess-0001' -UsageId 'late-coordinator' `
+                -Model 'claude-sonnet-4.6' -FreshInput 1000 -Cached 0 -CacheWrite 0 -Output 0 `
+                -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-01T10:06:00.000Z'
+        )
+        Add-SecondSessionHistoryLocal -Root $f.Root
+        $null = Add-SecondSessionLogLocal -Fixture $f -CloseAfterHistory
+
+        $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Write
+        $write.ExitCode | Should -Be 0 -Because $write.Output
+        $cache = Get-Content -LiteralPath (Join-Path $f.Root 'consumption-sessions.json') -Raw | ConvertFrom-Json
+        @($cache.sessions).Count | Should -Be 2
+        ($cache.sessions | Where-Object sessionId -eq 'sess-0001').records | Should -Be 3
+        (($cache.sessions | Measure-Object records -Sum).Sum) | Should -Be 5
     }
 
     It 'finds the session with -SessionLog auto through COPILOT_HOME and the workspace cwd' {
@@ -1631,9 +2981,52 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog 'auto' -CopilotHome $f.Home -Format json
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
-        $json.observed.sessionId | Should -Be 'sess-0001'
-        $json.observed.observedTokens | Should -Be 800000
-        $json.observed.baselineModel | Should -Be 'claude-sonnet-4.6'
+        $json.basis | Should -Be 'exact-native'
+        $json.exact.sessionId | Should -Be 'sess-0001'
+        $json.exact.records | Should -Be 2
+        $json.exact.baselineModel | Should -Be 'claude-sonnet-4.6'
+        $json.total.estCostUsd | Should -Be $json.total.costUsd
+        $json.total.estCredits | Should -Be $json.total.credits
+    }
+
+    It 'records exact native usage for a federation member when every model dispatch names that member root' {
+        $events = @(
+            $script:BaseEvents | ForEach-Object {
+                $_.Replace(
+                    'Write to .copilot-tracking/research/x.md',
+                    'Write to .copilot-tracking/squad/members/product/research/x.md'
+                )
+            }
+        )
+        $f = New-SessionFixtureLocal -Member 'product' -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.basis | Should -Be 'exact-native'
+        $json.exact.sessionId | Should -Be 'sess-0001'
+        $json.exact.records | Should -Be 2
+        ($json.roles | Where-Object role -eq 'researcher').requests | Should -Be 1
+        ($json.roles | Where-Object role -eq 'orchestration').requests | Should -Be 1
+    }
+
+    It 'falls back for a federation member when the native session also dispatches outside that member root' {
+        $events = @(
+            $script:BaseEvents | ForEach-Object {
+                $_.Replace(
+                    'Write to .copilot-tracking/research/x.md',
+                    'Write to .copilot-tracking/squad/members/product/research/x.md'
+                )
+            }
+        ) + @(
+            '{"type":"tool.execution_start","data":{"toolCallId":"other-member","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/squad/members/azure/research/y.md"}},"timestamp":"2026-10-01T10:03:30.000Z"}'
+        )
+        $f = New-SessionFixtureLocal -Member 'product' -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match "requires every model dispatch in the native session to name that member root"
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.basis | Should -Be 'estimated'
+        $json.exact | Should -BeNullOrEmpty
     }
 
     It 'warns and adds nothing when auto finds no session for this repository' {
@@ -1643,23 +3036,23 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.Output | Should -Match 'found no Copilot session'
         (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Not -Match 'Observed Usage'
+        (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Match 'Est\. Cost \(USD\)'
     }
 
-    It 'flags a dispatch whose observed model differs from the model its history records' {
-        $events = $script:BaseEvents.Clone()
-        $events[2] = $events[2].Replace('"model":"claude-sonnet-4.6"', '"model":"claude-opus-5"')
+    It 'uses the host model as authoritative when it differs from the estimated history model' {
+        $events = @($script:BaseEvents | ForEach-Object { $_.Replace('"model":"claude-sonnet-4.6"', '"model":"claude-opus-5"') })
         $f = New-SessionFixtureLocal -EventLines $events
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
-        $result.Output | Should -Match "observed model for 'Squad Researcher' is claude-opus-5 but its history blocks record Claude Sonnet 4\.6"
-        (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Match '\| Squad Researcher \| 1 \| claude-opus-5 \| Claude Sonnet 4\.6 \| no \|'
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw) | Should -Match '\| researcher \| Alpha \| Squad Researcher \| claude-opus-5 \| host-reported \| native credits \|'
     }
 
     It 'prices the comparison at -BaselineModel when supplied' {
         $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json -BaselineModel 'Claude Opus 5'
         $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
-        $json.observed.baselineModel | Should -Be 'Claude Opus 5'
-        $json.observed.baselineCostUsd | Should -Be 1.2 -Because '500,000 tokens x (0.20x5 + 0.80x0.5 + 0.08x6.25 + 0.02x25 = 2.40) / 1e6'
+        $json.exact.baselineModel | Should -Be 'Claude Opus 5'
+        $json.exact.baselineCostUsd | Should -Be 0.79 -Because '100,000 uncached x 5 + 80,000 cached x 0.5 + 10,000 output x 25, divided by 1e6'
     }
 
     It 'counts only dispatches whose prompt names the sub-squad root' {
@@ -1672,7 +3065,73 @@ Describe 'Measure-SquadLedger -SessionLog adds host-reported usage beside the es
         $f = New-SessionFixtureLocal -Member 'product' -EventLines $events
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
         $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
-        $json.observed.observedTokens | Should -Be 400000
+        $json.basis | Should -Be 'estimated'
+        $json.exact | Should -BeNullOrEmpty
+    }
+
+    It 'records hydrafusion-max native credits exactly and reprices the same exact traffic on the default baseline' {
+        $events = @(
+            '{"type":"session.start","data":{"sessionId":"sess-0001","selectedModel":"hydrafusion-max"},"timestamp":"2026-09-27T09:59:00.000Z"}'
+            '{"type":"subagent.started","agentId":"hydra-owner","data":{"toolCallId":"h1","agentName":"Squad Researcher","agentDisplayName":"researcher","model":"hydrafusion-max"},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'hydra-owner' -SourceSessionId 'hydra-session' -UsageId 'h1' -Model 'hydrafusion-max' -FreshInput 100000 -Cached 80000 -CacheWrite 0 -Output 20000 -InputRate 0.8 -CachedRate 0.05 -CacheWriteRate 1 -OutputRate 4 -Timestamp '2026-10-01T10:02:00.000Z')
+            '{"type":"subagent.completed","agentId":"hydra-owner","data":{"toolCallId":"h1","agentName":"Squad Researcher","model":"hydrafusion-max","totalTokens":200000,"durationMs":60000},"timestamp":"2026-10-01T10:02:01.000Z"}'
+            '{"type":"subagent.started","agentId":"hydra-scribe","data":{"toolCallId":"h2","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-5.5"},"timestamp":"2026-10-01T10:02:02.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'hydra-scribe' -SourceSessionId 'hydra-scribe-session' -UsageId 'h2' -Model 'claude-haiku-5.5' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 0.1 -CachedRate 0.01 -CacheWriteRate 0.125 -OutputRate 0.5 -Timestamp '2026-10-01T10:03:00.000Z')
+            '{"type":"subagent.completed","agentId":"hydra-scribe","data":{"toolCallId":"h2","agentName":"Squad Scribe","model":"claude-haiku-5.5","totalTokens":3000,"durationMs":30000},"timestamp":"2026-10-01T10:03:01.000Z"}'
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+
+        $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
+        $ledger | Should -Match '\| researcher \| Alpha \| Squad Researcher \| hydrafusion-max \| host-reported \| native credits \|'
+        $ledger | Should -Match '\| researcher \| 1 \| 100,000 \| 80,000 \| 0 \| 20,000 \| 0\.1640 \| 16\.40 \| exact-native \|'
+        $ledger | Should -Match 'Without HVE Squad: same exact role-request token categories on `claude-sonnet-4\.6`'
+
+        $jsonResult = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $json = ($jsonResult.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $json.exact.baselineModel | Should -BeIn @('claude-sonnet-4.6', 'Claude Sonnet 4.6')
+        $json.exact.baselineCostUsd | Should -Be 0.624
+    }
+
+    It 'sums mixed native models under the same owning role without a separate observed table' {
+        $events = @(
+            '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-09-27T09:59:00.000Z"}'
+            '{"type":"subagent.started","agentId":"mixed-owner","data":{"toolCallId":"h1","agentName":"Squad Researcher","agentDisplayName":"researcher","model":"hydrafusion-max"},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'mixed-owner' -SourceSessionId 'mixed-session' -UsageId 'h1' -Model 'hydrafusion-max' -FreshInput 10000 -Cached 0 -CacheWrite 0 -Output 1000 -InputRate 0.8 -CachedRate 0.05 -CacheWriteRate 1 -OutputRate 4 -Timestamp '2026-10-01T10:00:02.000Z')
+            (New-ExactUsageEventLocal -AgentId 'mixed-owner' -SourceSessionId 'mixed-session' -UsageId 's1' -Model 'claude-sonnet-4.6' -FreshInput 20000 -Cached 0 -CacheWrite 0 -Output 2000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-01T10:00:03.000Z')
+            '{"type":"subagent.completed","agentId":"mixed-owner","data":{"toolCallId":"h1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":33000,"durationMs":1000},"timestamp":"2026-10-01T10:00:04.000Z"}'
+            '{"type":"subagent.started","agentId":"mixed-scribe","data":{"toolCallId":"h2","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-01T10:00:05.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'mixed-scribe' -SourceSessionId 'mixed-scribe-session' -UsageId 'h2' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 0 -CacheWrite 0 -Output 100 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-01T10:00:06.000Z')
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+
+        $json.basis | Should -Be 'exact-native'
+        $researcher = $json.roles | Where-Object role -eq 'researcher'
+        $researcher.requests | Should -Be 2
+        ($json.attribution | Where-Object role -eq 'researcher').model | Should -Match 'claude-sonnet-4\.6'
+        ($json.attribution | Where-Object role -eq 'researcher').model | Should -Match 'hydrafusion-max'
+    }
+
+    It 'uses exact Hydra token categories directly without applying the old estimated inverse factor' {
+        $events = @(
+            '{"type":"session.start","data":{"sessionId":"sess-0001"},"timestamp":"2026-09-27T09:59:00.000Z"}'
+            '{"type":"subagent.started","agentId":"factor-owner","data":{"toolCallId":"h1","agentName":"Squad Researcher","agentDisplayName":"researcher","model":"hydrafusion-max"},"timestamp":"2026-10-01T10:00:01.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'factor-owner' -SourceSessionId 'factor-session' -UsageId 'h1' -Model 'hydrafusion-max' -FreshInput 415380 -Cached 1661520 -CacheWrite 0 -Output 70000 -InputRate 0.8 -CachedRate 0.05 -CacheWriteRate 1 -OutputRate 4 -Timestamp '2026-10-01T10:00:02.000Z')
+            '{"type":"subagent.started","agentId":"factor-scribe","data":{"toolCallId":"h2","agentName":"Squad Scribe","agentDisplayName":"scribe","model":"claude-haiku-4.5"},"timestamp":"2026-10-01T10:00:03.000Z"}'
+            (New-ExactUsageEventLocal -AgentId 'factor-scribe' -SourceSessionId 'factor-scribe-session' -UsageId 'h2' -Model 'claude-haiku-4.5' -FreshInput 1000 -Cached 0 -CacheWrite 0 -Output 100 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp '2026-10-01T10:00:04.000Z')
+        )
+        $f = New-SessionFixtureLocal -EventLines $events
+
+        $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json
+        $json = ($result.Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+        $researcher = $json.roles | Where-Object role -eq 'researcher'
+        $researcher.input | Should -Be 415380
+        $researcher.cached | Should -Be 1661520
+        $researcher.output | Should -Be 70000
+        $json.exact.baselineCostUsd | Should -Be 2.7946
     }
 }
 Describe 'Measure-SquadLedger names an insert-above-the-end as an ordering defect, not lost content' {
@@ -1696,8 +3155,8 @@ Describe 'Measure-SquadLedger names an insert-above-the-end as an ordering defec
     }
 }
 
-Describe 'Measure-SquadLedger puts the billed session total next to the estimated total' {
-    It 'adds a billed line with the estimate-to-billed ratio under the Usage & Cost total, and -Check still passes' {
+Describe 'Measure-SquadLedger exact mode removes duplicate estimate-versus-observed presentation' {
+    It 'contains one authoritative cost total and no observed section after an exact write' {
         $repo = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
         $root = Join-Path $repo '.copilot-tracking/squad'
         New-Item -ItemType Directory -Path (Split-Path -Parent $root) -Force | Out-Null
@@ -1705,15 +3164,19 @@ Describe 'Measure-SquadLedger puts the billed session total next to the estimate
         $sessionDir = Join-Path $repo 'session'
         New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $sessionDir 'events.jsonl') -Value (@(
-                '{"type":"subagent.completed","data":{"toolCallId":"t1","agentName":"Squad Researcher","model":"claude-sonnet-4.6","totalTokens":100000,"durationMs":1000},"timestamp":"2026-10-01T10:00:00.000Z"}'
-                '{"type":"session.usage_checkpoint","data":{"totalNanoAiu":15855000000},"timestamp":"2026-10-01T10:01:00.000Z"}'
+                '{"type":"session.start","data":{"sessionId":"sess"},"timestamp":"2026-09-27T09:59:00.000Z"}'
+                '{"type":"subagent.started","agentId":"r1","data":{"toolCallId":"t1","agentName":"Squad Researcher","agentDisplayName":"researcher"},"timestamp":"2026-10-01T10:00:00.000Z"}'
+                '{"type":"session.usage_record","agentId":"r1","data":{"usage":{"model":"claude-sonnet-4.6","inputTokens":180000,"outputTokens":10000,"cacheReadTokens":80000,"cacheWriteTokens":0,"aiCreditsStatus":"complete","copilotUsage":{"totalNanoAiu":47400000000,"tokenDetails":[{"tokenType":"input","tokenCount":100000,"batchSize":1000000,"costPerBatch":300000000000},{"tokenType":"cache_read","tokenCount":80000,"batchSize":1000000,"costPerBatch":30000000000},{"tokenType":"cache_write","tokenCount":0,"batchSize":1000000,"costPerBatch":375000000000},{"tokenType":"output","tokenCount":10000,"batchSize":1000000,"costPerBatch":1500000000000}]},"accounting":{"sourceSessionId":"r1-session","usageId":"one"}}},"timestamp":"2026-10-01T10:00:30.000Z"}'
+                '{"type":"subagent.started","agentId":"s1","data":{"toolCallId":"t2","agentName":"Squad Scribe","agentDisplayName":"scribe"},"timestamp":"2026-10-01T10:00:31.000Z"}'
+                '{"type":"session.usage_record","agentId":"s1","data":{"usage":{"model":"claude-haiku-4.5","inputTokens":1000,"outputTokens":100,"cacheReadTokens":0,"cacheWriteTokens":0,"aiCreditsStatus":"complete","copilotUsage":{"totalNanoAiu":150000000,"tokenDetails":[{"tokenType":"input","tokenCount":1000,"batchSize":1000000,"costPerBatch":100000000000},{"tokenType":"cache_read","tokenCount":0,"batchSize":1000000,"costPerBatch":10000000000},{"tokenType":"cache_write","tokenCount":0,"batchSize":1000000,"costPerBatch":125000000000},{"tokenType":"output","tokenCount":100,"batchSize":1000000,"costPerBatch":500000000000}]},"accounting":{"sourceSessionId":"s1-session","usageId":"two"}}},"timestamp":"2026-10-01T10:00:32.000Z"}'
             ) -join "`n")
 
         $output = & pwsh -NoProfile -Command "& '$script:LedgerScript' -SquadRoot '$root' -Write -SessionLog '$sessionDir'" 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $output
         $ledger = Get-Content -LiteralPath (Join-Path $root 'consumption.md') -Raw
-        $ledger | Should -Match '(?s)\*\*0\.3171\*\*.*?> \*\*Billed by the host for this session so far: 15\.86 AI units, about 0\.16 USD\.\*\* The estimate above is 2\.00x that figure\.'
-        $ledger.IndexOf('Billed by the host') | Should -BeLessThan $ledger.IndexOf('### Derivation')
+        @([regex]::Matches($ledger, 'Exact Cost \(USD\)')).Count | Should -Be 1
+        $ledger | Should -Not -Match 'Observed Usage|Exact host usage for this session so far|Est\. Cost \(USD\)'
+        $ledger | Should -Match '(?m)^## Cost Comparison \(exact native actual\)\s*$'
 
         $check = Invoke-Ledger -SquadRoot $root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
         $check.ExitCode | Should -Be 0 -Because $check.Output
@@ -1816,6 +3279,8 @@ Describe 'Unit economics (value) section' {
         $out | Should -Match '\| Accepted by an independent review \| 0 \| derived \|'
         $out | Should -Match '\| Unreviewed \| 1 \| derived \|'
         $out | Should -Match '\| Est\. credits per accepted deliverable \| n/a \| estimated \|'
+        $out | Should -Match 'cost per accepted deliverable remains pending \(n/a\)'
+        $out | Should -Match 'does not establish financial business value or imply zero financial business value'
     }
 
     It 'a review that names deliverables covers only those it names' {
@@ -1898,7 +3363,7 @@ Describe 'Unit economics (value) section' {
     }
     It '-Write reports that it rewrote the Unit Economics section' {
         $root = New-UnitEconomicsRootLocal -Entries $script:AcceptedEntries
-        (Invoke-Ledger -SquadRoot $root -Write).Output | Should -Match ([regex]::Escape('Derivation, and Unit Economics (value) sections of consumption.md'))
+        (Invoke-Ledger -SquadRoot $root -Write).Output | Should -Match ([regex]::Escape('Derivation, Unit Economics, and Cost Comparison sections'))
     }
 
     It '-Format json exposes unitEconomics with numeric fields' {
@@ -1991,20 +3456,23 @@ Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
 Describe 'Benefit hypotheses remain traceable through planning and review' {
     BeforeAll {
         $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
-        $script:IntakeBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-intake-gate.instructions.md') -Raw
-        $script:LeadBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-lead.agent.md') -Raw
-        $script:ReviewerBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-reviewer.agent.md') -Raw
-        $script:ScribeBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw
-        $script:PayloadTemplate = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/scribe-payload-template.md') -Raw
-        $script:CoordinatorBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
-        $script:AutopilotBody = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-autopilot.instructions.md') -Raw
+        $script:IntakeBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-intake-gate.instructions.md') -Raw) -replace '\s+', ' '
+        $script:LeadBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-lead.agent.md') -Raw) -replace '\s+', ' '
+        $script:ReviewerBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-reviewer.agent.md') -Raw) -replace '\s+', ' '
+        $script:ScribeBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw) -replace '\s+', ' '
+        $script:PayloadTemplate = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/scribe-payload-template.md') -Raw) -replace '\s+', ' '
+        $script:CoordinatorBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/coordinator-runtime.md') -Raw) -replace '\s+', ' '
+        $script:OrdinaryHandoff = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/economy-scribe.md') -Raw) -replace '\s+', ' '
+        $script:AutopilotBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-autopilot.instructions.md') -Raw) -replace '\s+', ' '
         $script:BusinessValueReference = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/business-value-measurement.md') -Raw
     }
 
     It 'requires a measurable benefit claim at intake and plans its validation' {
-        $script:IntakeBody | Should -Match 'ID/hypothesis/beneficiary/category'
-        $script:IntakeBody | Should -Match 'measurement owner'
         $script:IntakeBody | Should -Match 'business-value-measurement\.md'
+        $script:BusinessValueReference | Should -Match 'Claim ID, category, and hypothesis'
+        $script:BusinessValueReference | Should -Match 'Beneficiary and scope'
+        $script:BusinessValueReference | Should -Match 'measurement and evidence owners'
+        $script:BusinessValueReference | Should -Match '\*\*Intake\.\*\*'
         $script:LeadBody | Should -Match 'plan instrumentation and outcome validation'
     }
 
@@ -2028,14 +3496,23 @@ Describe 'Benefit hypotheses remain traceable through planning and review' {
 
     It 'distinguishes deliverable acceptance from business outcomes and approvals' {
         $script:ReviewerBody | Should -Match 'deliverable acceptance separately from evidence-based business-outcome validation'
-        $script:AutopilotBody | Should -Match 'Record acceptance separately from each claim''s outcome by ID'
-        $script:CoordinatorBody | Should -Match 'Synthesize findings; keep business approval separate from execution/review'
+        $script:AutopilotBody | Should -Match 'business-value-measurement\.md'
+        $script:BusinessValueReference | Should -Match 'For each claim ID, report deliverable acceptance separately'
+        $script:BusinessValueReference | Should -Match '\*\*Non-waiver\.\*\*'
+        $script:CoordinatorBody | Should -Match 'business-value-measurement\.md'
+        $script:CoordinatorBody | Should -Match 'Accepted-delivery economics != realized benefit or approval'
+        $script:CoordinatorBody | Should -Match 'lead/reviewer gaps through dispatches/returns into `decision\.rationale`'
+        $script:CoordinatorBody | Should -Match 'not new keys'
     }
 
-    It 'persists supplied claim and evidence metadata without creating actuals' {
-        $script:ScribeBody | Should -Match 'retain claim IDs, evidence links, and business decisions'
-        $script:ScribeBody | Should -Match 'never create actuals'
-        $script:PayloadTemplate | Should -Match 'for benefits retain supplied claim IDs, evidence links, and decisions only'
-        $script:PayloadTemplate | Should -Match 'no actuals'
+    It 'routes supplied claim metadata through the closed ordinary rationale and cold payload without inference' {
+        $script:ScribeBody | Should -Match 'supplied claim metadata belongs in `rationale`, not extra keys'
+        $script:ScribeBody | Should -Match 'invent no actuals/value/ROI/approval'
+        $script:OrdinaryHandoff | Should -Match 'no invented actuals/value/approval'
+        $script:OrdinaryHandoff | Should -Match 'Scribe inference/costs'
+        $script:OrdinaryHandoff | Should -Match 'decision\.rationale'
+        $script:PayloadTemplate | Should -Match 'business-value-measurement\.md'
+        $script:BusinessValueReference | Should -Match 'business decision owner/status/reference'
+        $script:BusinessValueReference | Should -Match 'Never invent owners, baselines, targets, evidence, results, decision references, financial actuals, ROI, or approval'
     }
 }

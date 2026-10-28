@@ -21,6 +21,7 @@
         <a href="usage.html">Utilisation</a>
         <a href="demo.html">Démonstration</a>
         <a href="ecosystem.html">Écosystème</a>
+        <a href="connector.html">Connecteur</a>
         <a href="maintaining.html">Maintenance</a>
         <a href="troubleshooting.html">Dépannage</a>
         <a href="contributing.html">Contribuer</a>
@@ -85,8 +86,16 @@ copilot</code></pre>
       </section>
       <section data-host="vscode">
       <h2>VS Code</h2>
-      <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. Cette méthode installe l'ensemble des agents dans le dépôt via APM.</p>
-      <h3>Prérequis</h3>
+      <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. Choisissez ci-dessous l'installation via le plugin ou l'installation du package dans le dépôt.</p>
+
+      <h3>Option 1 — Installer les plugins dans les paramètres de VS Code</h3>
+      <p>Dans VS Code, ouvrez <strong>Paramètres → Extensions → Copilot → Plugins</strong>, enregistrez <code>Peter-N91/hve-squad-plugin</code>, puis installez <code>hve-squad</code> et <code>hve-squad-hve-core</code>. Les noms et emplacements des paramètres peuvent varier selon la version de VS Code ; suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">guide d'installation pour VS Code</a>.</p>
+      <p>Vérifiez la paire dans VS Code lui-même avant le sélecteur d'agents et l'initialisation ci-dessous. Une installation par terminal peut utiliser un autre <code>COPILOT_HOME</code> et ne prouve pas que Copilot Chat dispose des mêmes plugins. Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>.</p>
+      <p>N'installez pas le plugin officiel <code>hve-core</code> à côté de <code>hve-squad-hve-core</code>. Pour les mises à jour, réinstallez l'entrée compagnon au lieu d'utiliser la commande de mise à jour du plugin, comme le décrit le <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">guide d'installation pour VS Code</a>.</p>
+
+      <h3>Option 2 — Installer le package dans le dépôt avec APM</h3>
+      <p>Cette méthode installe l'ensemble des agents dans le dépôt via APM.</p>
+      <h4>Prérequis</h4>
       <ul>
         <li>PowerShell 7 ou version ultérieure (<code>pwsh</code>) sur toutes les plateformes — voir la note ci-dessus ; sous macOS et Linux, les commandes APM ci-dessous s'exécutent dans votre shell <code>zsh</code>/<code>bash</code> habituel</li>
         <li>Git</li>
@@ -195,25 +204,227 @@ targets:
       <h3>Redéployer après une mise à jour</h3>
       <p>Relancez l'installation avec le tag publié souhaité, en incluant <code>--target copilot</code> sauf si votre projet déclare <code>targets:</code> :</p>
       <pre><code>apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
-      <p>Pour tester les modifications fusionnées avant leur publication, utilisez le tag de préversion glissante <code>vX.Y.z-pre</code> indiqué sur <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>. Ce tag évolue ; épinglez une version stable pour les travaux dont vous dépendez. La réinstallation actualise <code>.github/</code>, pas votre état sous <code>.copilot-tracking/squad/</code>.</p>
+      <p>Pour tester les modifications fusionnées avant leur publication, consultez <a href="#testing-the-pre-release">Installer et tester la préversion</a> pour obtenir le tag actuel et la commande exacte. Ce tag évolue ; épinglez une version stable pour les travaux dont vous dépendez. La réinstallation actualise <code>.github/</code>, pas votre état sous <code>.copilot-tracking/squad/</code>.</p>
       </section>
       </div>
 
-      <h2>2. Initialiser la squad</h2>
+      <h2 id="chat-with-the-squad-coach" data-release-change="20261019-squad-coach">2. Vous débutez ? Discutez avec le Squad Coach</h2>
+      <p>
+        Une fois HVE Squad installé, le <strong>Squad Coach fonctionne avant l'initialisation</strong> :
+        ni <code>team.md</code> ni <code>federation.md</code> ne doivent exister. Décrivez le résultat
+        souhaité sans choisir d'abord un profil, un pack ou un mode d'autonomie. Le Coach lit les
+        code, les contrats d'entrée et la documentation de votre version installée, ainsi que tout
+        état déjà présent. Il découvre le parcours adapté à votre demande au lieu de suivre une
+        liste figée de fonctionnalités, puis vous conseille sans rien créer ni modifier.
+      </p>
+      <p>
+        Dans VS Code, sélectionnez <strong>Squad Coach</strong> dans le sélecteur d'agents de Copilot Chat.
+        Dans Copilot CLI, saisissez <code>/agent</code> et choisissez <strong>Squad Coach</strong>.
+        Dans Copilot App, sélectionnez <strong>Squad Coach</strong>. Le plugin peut l'afficher sous le
+        nom <code>hve-squad:squad-coach</code>. Les trois hôtes utilisent des messages sans préfixe dans
+        la conversation de l'agent choisi ; les onglets ci-dessous indiquent l'agent et le texte à envoyer.
+      </p>
+      <pre><code>/squad-coach request="I need to modernize two applications owned by different teams. Help me choose the simplest setup and prepare my first prompt."</code></pre>
+      <div class="callout">
+        <p>
+          <strong>Conseils uniquement.</strong> Le Coach n'initialise aucune squad, ne délègue aucun
+          travail de livraison, ne modifie pas la configuration et ne migre pas l'état. Il fournit un
+          transfert prêt à copier vers le Squad Coordinator ou le Federation Coordinator, que vous
+          invoquez explicitement lorsque vous êtes prêt.
+        </p>
+      </div>
+
+      <h3>Ce que le Coach demande et fournit</h3>
+      <p>
+        Le Coach pose uniquement les questions susceptibles de modifier la recommandation : objectif
+        et critères de réussite, projet et périmètre, livrables requis, responsables et dépendances,
+        contraintes, environnement, catégories d'accès et attentes d'approbation. Il ne vous demande
+        jamais de coller un secret.
+      </p>
+      <p>Une recommandation complète comprend :</p>
+      <ul>
+        <li>un choix justifié entre squad unique et fédération, avec les conditions de réévaluation ;</li>
+        <li>les profils et packs de capacités pris en charge, par membre de fédération si nécessaire, expliqués simplement ;</li>
+        <li>les entrées essentielles et facultatives, avec une marche à suivre sûre pour les informations manquantes ;</li>
+        <li>les commandes et prompts exacts adaptés à votre version installée et à votre hôte ;</li>
+        <li>un parcours détaillé et ordonné de votre étape actuelle au résultat demandé, avec l'agent ou le terminal de chaque étape, les résultats attendus, les validations humaines, les sources et la reprise.</li>
+      </ul>
+
+      <h3>Squad unique ou fédération ?</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Choix</th><th>Quand il suffit</th><th>Compromis et évolution ultérieure</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Squad unique (par défaut)</strong></td>
+              <td>Un objectif, un cycle de livraison, une limite de responsabilité et un ensemble d'artefacts partagés. Ajoutez un pack pris en charge lorsque le travail exige une spécialité technologique.</td>
+              <td>Moins de configuration et de coordination. La complexité ou le nombre de rôles ne justifient pas à eux seuls une fédération.</td>
+            </tr>
+            <tr>
+              <td><strong>Fédération</strong></td>
+              <td>Au moins deux flux durables nécessitent des responsables, périmètres, livrables, règles d'aiguillage, contraintes, limites d'accès ou rythmes indépendants.</td>
+              <td>État et aiguillage indépendants, mais rosters dupliqués et coordination accrue. Chaque membre nécessite son profil et ses éventuels packs.</td>
+            </tr>
+            <tr>
+              <td><strong>Promotion ultérieure</strong></td>
+              <td>Une squad unique existante accueille une équipe ou un flux de travail réellement indépendant.</td>
+              <td>Demandez au Coach de réévaluer, puis utilisez le flux de promotion actuel afin que le coordinateur conserve l'état et les artefacts existants&nbsp;:
+                <pre><code>/squad-federation promote</code></pre>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Liste de préparation</h3>
+      <p><strong>Entrées essentielles</strong> — préparez ce qui détermine le travail et ses limites sûres :</p>
+      <ul>
+        <li>objectif, audience, périmètre, livrables requis et critères de réussite ou d'acceptation ;</li>
+        <li>contexte du dépôt ou du projet, contraintes fermes, dépendances connues et responsables ;</li>
+        <li>prérequis de l'environnement et catégories d'accès nécessaires.</li>
+      </ul>
+      <p><strong>Entrées facultatives</strong> — utiles lorsqu'elles existent, mais sans bloquer une première conversation sûre :</p>
+      <ul>
+        <li>exigences, documents pertinents, architecture actuelle, backlog, exemples et résultats de tests ;</li>
+        <li>délais, préférences des parties prenantes, informations détaillées sur l'environnement et hypothèses non bloquantes.</li>
+      </ul>
+      <p>
+        Si une réponse essentielle peut modifier la topologie ou la sécurité, le Coach questionne avant
+        de recommander. Il signale les lacunes non bloquantes comme hypothèses et précise si le
+        coordinateur peut les découvrir, les différer ou les valider. <strong>Ne collez jamais de
+        jetons, mots de passe, clés privées, chaînes de connexion ou valeurs d'identification.</strong>
+        Indiquez uniquement qu'une catégorie d'accès est disponible, puis configurez sa valeur plus tard
+        via le mécanisme sécurisé de secrets de l'hôte.
+      </p>
+      <p>
+        Le Coach lit la version installée sélectionnée ; il n'installe ni ne met à jour les versions.
+        Mettez d'abord votre installation à jour pour utiliser un contrat plus récent. Il relit les
+        sources concernées lorsque la version ou l'état change, sans garantir tout futur changement non documenté.
+      </p>
+
+      <h3>Exemples de conversations pour débuter</h3>
+      <div class="callout">
+        <p><strong>Une application partagée</strong></p>
+        <p><strong>Utilisateur :</strong> « Nous avons une application Node et voulons un plan testé pour ajouter la validation de connexion. Une seule équipe en est responsable. »</p>
+        <p><strong>Coach :</strong> « Commencez avec une squad <code>default</code>. L'objectif, le responsable, le plan, l'implémentation et la revue sont partagés ; une fédération ajouterait donc des frais sans rien isoler. Préparez le dépôt, les critères d'acceptation, la version Node prise en charge et la commande de test. Si la revue de sécurité devient l'objectif principal, nous pourrons réévaluer le profil. »</p>
+      </div>
+      <div class="callout">
+        <p><strong>Travaux produit et plateforme indépendants</strong></p>
+        <p><strong>Utilisateur :</strong> « Une équipe produit possède les exigences et les supports de lancement. Une équipe plateforme possède indépendamment la landing zone Azure, avec des approbations et dates de publication distinctes. »</p>
+        <p><strong>Coach :</strong> « Utilisez une fédération avec un membre <code>product</code> et un membre <code>azure</code>. Leurs responsables, livrables, accès, approbations et rythmes sont indépendants ; l'aiguillage de la fédération sépare leurs historiques. Consignez leur dépendance — exigences approuvées avant le dimensionnement de la plateforme — et n'initialisez qu'après confirmation des deux propositions de membres. »</p>
+      </div>
+
+      <h3 id="coach-runbook-example">Exemple de parcours de A à Z</h3>
+      <p>
+        Pour une application appartenant à une seule équipe, le Coach peut proposer le parcours
+        suivant. Ces exemples actuels ne sont pas des instructions figées dans le Coach : il lit les
+        contrats installés et adapte le profil, les paramètres et les étapes à votre demande. Ignorez
+        la configuration déjà effectuée. Les commandes shell vont dans le terminal du projet ; les
+        blocs ci-dessous sont des messages pour l'agent indiqué dans l'onglet de l'hôte choisi.
+      </p>
+      <ol id="coach-runbook">
+        <li>
+          <p><strong>Préparer et vérifier l'installation.</strong> Suivez le panneau d'installation ci-dessus dans le dépôt du projet. Vérifiez la disponibilité des agents requis, préparez les critères d'acceptation et la commande de test du projet, puis demandez au Coach les prérequis manquants. Le coaching ne crée aucun état.</p>
+        </li>
+        <li>
+          <p><strong>Initialiser de manière interactive et choisir les modèles classés.</strong> Sélectionnez <strong>Squad Coordinator</strong> et envoyez :</p>
+          <pre><code>/squad init profile=default routing=ranked</code></pre>
+          <p>Confirmez la topologie, le profil, les rôles, les noms des membres et le canal d'approbation proposés. L'outil d'initialisation validé crée ensuite l'état ; les configurations non prises en charge conservent la procédure du Scribe. Inspectez <code>.copilot-tracking/squad/team.md</code> : <code>Model routing: ranked</code> et la colonne <code>Model</code> montrent les modèles choisis. Le classement utilise les modèles disponibles sur votre hôte, sans changer le modèle de session du coordinateur. Consultez <a href="usage.html#model-selection-per-role">Sélection des modèles par rôle</a> et la <a href="usage.html#script-backed-coordination">coordination pilotée par scripts</a>.</p>
+        </li>
+        <li id="coach-cost-readiness">
+          <p><strong>Préparer la première exécution avec plafond.</strong> L'initialisation crée <code>consumption-rates.md</code> avec <code>observations: 0</code> et <code>last_reconciled: never</code>. Un plafond positif produit donc <code>cannot-confirm</code>, qu'une approbation ne peut pas lever. Demandez au coordinateur de préparer une proposition, pas de lancer une exécution sans plafond :</p>
+          <pre><code>/squad request="Explain Cost Preflight prerequisites and propose a small calibration run; wait for my explicit approval before any uncapped dispatch"</code></pre>
+          <p>Si vous donnez votre approbation explicite à cette préparation sans plafond, collectez des mesures réelles par utilisateur <code>ai_credits_used</code> avant et après la petite exécution, isolez sa fenêtre d'utilisation et faites organiser par le coordinateur la réconciliation du Scribe avec les crédits estimés de l'exécution. Vérifiez des observations positives, une date de réconciliation différente de <code>never</code> et un <code>calibration_basis</code> correspondant aux valeurs actuelles <code>Observed-on</code> et <code>estimator_revision</code>. N'inventez jamais de mesures. Si l'accès manque ou si vous refusez la préparation sans plafond, restez bloqué sur le travail plafonné. Consultez <a href="usage.html#first-capped-run">Avant la première exécution plafonnée</a> ; augmenter le plafond ne remplace pas les preuves manquantes.</p>
+        </li>
+        <li>
+          <p><strong>Lancer le travail demandé en autopilot.</strong> Uniquement après avoir vérifié à l'étape précédente une calibration éligible et les autres prérequis de Cost Preflight, envoyez une demande de travail distincte dans la même conversation du coordinateur :</p>
+          <pre><code>/squad request="Add input validation to the login form, with tests for valid and invalid inputs" mode=autopilot cost-ceiling=10</code></pre>
+          <p>La stratégie ranked enregistrée est réutilisée. Autopilot enchaîne recherche, plan, implémentation et revue, sans approuver à votre place les actions importantes ni le résultat final. Le plafond d'exemple contrôle les dépenses estimées des modèles, pas la facture ; choisissez votre valeur positive. Travailler sans cette protection relève d'un choix explicite distinct, pas d'une correction automatique d'une demande plafonnée bloquée. Attendez-vous aux modifications, tests et preuves de revue demandés. Consultez <a href="usage.html#cost-admission-control">Contrôle d'admission par le coût</a>.</p>
+        </li>
+        <li>
+          <p><strong>Inspecter, approuver et continuer.</strong> Lisez le suivi et la synthèse finale, inspectez les livrables et la revue, puis exécutez les tests du projet. Répondez aux validations humaines dans le canal configuré. Pour reprendre sans réinitialiser, envoyez :</p>
+          <pre><code>/squad request="Summarize this run, show any blocked approval, and continue from the last completed stage"</code></pre>
+          <p>Le coordinateur réutilise l'état et identifie la prochaine étape sûre. Revenez au Coach pour une explication ou un parcours révisé.</p>
+        </li>
+        <li>
+          <p><strong>Uniquement si les responsabilités se séparent : préparer une promotion en fédération.</strong> Demandez au Coach de justifier la séparation et de préparer les profils, responsables et dépendances des membres. Sélectionnez <strong>Squad Federation Coordinator</strong> et envoyez :</p>
+          <pre><code>/squad-federation request="Promote the existing squad and propose a separately owned platform workstream" promote</code></pre>
+          <p>Examinez et confirmez la proposition avant toute migration. La promotion adopte la squad existante et conserve son état et ses artefacts ; ce n'est pas une nouvelle initialisation. Vérifiez le registre dans <code>.copilot-tracking/squad/federation.md</code>. Ne promouvez pas une squad uniquement parce qu'une tâche est complexe.</p>
+        </li>
+        <li>
+          <p><strong>Continuer via la fédération.</strong> Remplacez le paramètre ci-dessous par le nom confirmé du membre dans le registre :</p>
+          <pre><code>/squad-federation request="Continue the platform work from its last completed stage" squad=&lt;confirmed-member&gt; mode=autopilot</code></pre>
+          <p>Une demande ciblée exécute le pipeline de ce membre. Une demande autopilot sans cible coordonne plusieurs membres sélectionnés et utilise une admission de coût agrégée. Demandez au Coach le parcours et les approbations adaptés à votre objectif ; consultez <a href="usage.html#federation">Fédération</a>.</p>
+        </li>
+      </ol>
+
+      <h3>Notions essentielles après le coaching</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Sujet</th><th>À quoi s'attendre</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Installation et hôtes</td><td>Tous les hôtes utilisent des agents sélectionnés et des messages sans préfixe. Suivez le panneau d'installation correspondant ; lancer Copilot CLI dans le terminal de VS Code reste une session CLI, pas une session native de VS Code Chat.</td></tr>
+            <tr><td>Initialisation</td><td>Le coordinateur propose d'abord le roster et n'écrit l'état qu'après votre confirmation. Le coaching ne l'initialise pas.</td></tr>
+            <tr><td>Autonomie</td><td>Omettez <code>mode</code> pour des approbations interactives. <code>mode=autonomous</code> exécute une boucle de validation bornée ; <code>mode=autopilot</code> enchaîne le pipeline complet tout en conservant les validations humaines obligatoires.</td></tr>
+            <tr><td>Approbations</td><td>Les actions importantes, résultats à haut risque, contrôles de coût non résolus et décisions finales de publication attendent toujours un humain. L'initialisation demande également comment vous joindre pour les approbations.</td></tr>
+            <tr><td>Modèles</td><td><code>routing=off</code> conserve les valeurs par défaut de l'hôte ; <code>ranked</code>, <code>economy</code> et <code>manual</code> sont des stratégies facultatives. Le Coach explique uniquement les modes présents dans votre version installée.</td></tr>
+            <tr><td>Contrôle des coûts</td><td><code>cost-ceiling</code> est un contrôle d'admission des dépenses modèles estimées, pas une garantie de facture. Le premier plafond positif exige une calibration éligible ; un état neuf produit <code>cannot-confirm</code>, qu'une approbation ne peut lever. La préparation sans plafond exige une approbation explicite ; <code>unset</code> supprime explicitement un plafond actif.</td></tr>
+            <tr><td>Résultats et suivi</td><td>Attendez-vous à une recherche, un plan, une implémentation ou les livrables demandés, des preuves de revue et un suivi concis dans la conversation. Les enregistrements durables résident sous la racine de squad sélectionnée.</td></tr>
+            <tr><td>Revue</td><td>Lisez la synthèse du coordinateur, inspectez les fichiers et artefacts modifiés, exécutez la validation du projet et résolvez les questions ouvertes avant d'approuver les actions importantes.</td></tr>
+            <tr><td>Continuer ou reprendre</td><td>Revenez à la même conversation du coordinateur et décrivez le prochain résultat. L'état existant est réutilisé ; dans une fédération, ciblez un membre si nécessaire au lieu de réinitialiser.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="testing-the-pre-release">Installer et tester la préversion</h2>
+      <p>
+        Cette documentation suit <code>main</code>, qui peut devancer la dernière version stable.
+        Un badge <strong>Préversion uniquement</strong> identifie une fonctionnalité fusionnée mais pas
+        encore publiée dans une version stable. Les auteurs associent chaque fragment en attente au plus
+        petit libellé, paragraphe, élément de liste, titre, cellule de tableau ou bloc de code concerné.
+        Le site affiche un badge uniquement pour ces marqueurs explicites ; une publication officielle
+        consomme les fragments et retire automatiquement les badges. L'encart de chaque page
+        affiche les deux versions, et chaque badge renvoie ici. Utilisez les versions stables pour les
+        travaux dont vous dépendez.
+      </p>
+      <p>
+        Testez dans un dépôt de test distinct avec PowerShell 7+ et APM CLI <code>0.29.0</code> ;
+        vérifiez avec <code>apm --version</code>. Le site publié renseigne la commande actuelle ci-dessous.
+        Vous pouvez aussi trouver le tag marqué comme préversion sur
+        <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>.
+      </p>
+      <div data-release-install="preview"></div>
+      <ol>
+        <li>Installez le package APM complet dans le dépôt de test. Les miroirs plugin et MCP suivent les versions stables ; leur installation ou mise à jour n'installe pas cette préversion. Ne mélangez pas les plugins stables et la préversion APM dans le même environnement de test.</li>
+        <li>Redémarrez votre client Copilot, sélectionnez <strong>Squad Coordinator</strong>, envoyez <code>init</code> et confirmez l'équipe proposée.</li>
+        <li>Envoyez une petite demande qui exerce la fonctionnalité portant un badge et examinez les livrables produits. Signalez les comportements inattendus avec le tag de préversion, le commit résolu dans <code>apm.lock.yaml</code>, les étapes de reproduction et les résultats attendus et observés ; retirez les données privées du projet avant tout partage.</li>
+      </ol>
+      <p>
+        Le tag glissant se déplace à chaque fusion. Relancez l'installation pour l'actualiser et revérifiez
+        l'encart, car une incrémentation de version supérieure peut renommer le tag. Utilisez la commande ci-dessous pour revenir à
+        la version stable ; la réinstallation ne réinitialise pas l'état local de votre squad, donc isolez les tests de préversion.
+      </p>
+      <div data-release-install="stable"></div>
+
+      <h2>3. Initialiser la squad</h2>
       <p>
         La squad repose sur un Squad Coordinator que l'utilisateur peut invoquer pour répartir sa demande entre les agents HVE
         Core et conserver son état sous <code>.copilot-tracking/squad/</code>.
         Commencez par initialiser et confirmer l'équipe proposée :
       </p>
       <pre><code>/squad init</code></pre>
-      <h2>3. Envoyer une demande de travail</h2>
+      <h2>4. Envoyer une demande de travail</h2>
       <p>Après confirmation, envoyez une demande de travail distincte. Utilisez <code>mode=autopilot</code> pour enchaîner le travail tout en conservant les approbations humaines obligatoires, ou omettez ce paramètre pour approuver chaque étape :</p>
       <pre><code>/squad request="add input validation to the login form" mode=autopilot</code></pre>
       <p>
-        Dans VS Code, le sélecteur <code>/</code> affiche deux entrées nommées <code>squad</code> : le <strong>prompt</strong>
-        (<em>"Hands a request to the Squad Coordinator…"</em>), qui lance la squad, et le
-        <strong>skill</strong> (<em>"Operating procedure for…"</em>), qui charge uniquement la procédure comme
-        contexte. Choisissez le prompt.
+        Dans Copilot Harness pour VS Code, ouvrez le sélecteur d'agents et choisissez <strong>Squad Coordinator</strong>
+        avant d'envoyer chaque demande. Envoyez le texte de la demande affiché ci-dessus sans le préfixe
+        <code>/squad</code>. La voie <code>@squad.prompt.md</code> reste disponible, mais elle ajoute des appels
+        d'agents intermédiaires et est plus lente.
       </p>
       <p>
         Dans un nouveau projet, le coordinateur examine votre dépôt et propose un profil avant de créer
@@ -226,6 +437,9 @@ targets:
         Ajoutez <code>cost-ceiling=&lt;positive USD&gt;</code> pour demander à la squad d'estimer le coût du
         travail restant avant de le déléguer. Le plafond porte sur les dépenses estimées des modèles pour
         l'exécution en cours ; il ne garantit pas le montant de la facture GitHub et ne régit pas le coût des charges de travail Azure.
+        Effectuez la <a href="#coach-cost-readiness">préparation du premier plafond</a> avant cet exemple :
+        les fichiers de tarifs neufs ne sont pas calibrés ; la première demande plafonnée reste donc
+        bloquée par <code>cannot-confirm</code> tant qu'une réconciliation réelle et éligible manque.
       </p>
       <pre><code>/squad request="add input validation to the login form" cost-ceiling=10</code></pre>
       <p>

@@ -8,14 +8,14 @@
     Writes an ordinary squad hand-off (history, decision, orchestration, state advance)
     deterministically from a JSON payload, then verifies the ledger.
 .DESCRIPTION
+    AI cost: none; writes the supplied payload and runs local rate/ledger helpers, not a model.
     A hand-off that only transcribes a payload into append-only entries, a state advance,
     and a derived ledger needs no model. This script performs exactly that write, with the
-    same formats `references/entry-schemas.md` defines. The Squad Scribe runs it as its
-    deterministic write path for an ordinary payload, so the Scribe remains the only writer
-    of squad state; a payload this script refuses (initialization, memory, verdicts, summaries,
-    promotion, expansion, notifications, a ceiling-admitted history write) is composed by the
-    Scribe itself. The coordinator never runs it. It is synchronous; run it once at a time
-    per squad root.
+    same formats `references/entry-schemas.md` defines. The coordinator runs it directly
+    for ordinary payloads in every routing mode; the Squad Scribe handles unsupported
+    operations (initialization, memory, verdicts, summaries, promotion, expansion,
+    notifications, a ceiling-admitted history write). It is synchronous; serialize it
+    with every other state writer, including the Scribe, once at a time per squad root.
 
     Order of operations:
       1. Validate the payload (closed field sets, legal values, roster agent names, model
@@ -30,37 +30,49 @@
          refuses with exit 4 and nothing written.
       3. Append each history entry with its consumption block, the Squad Scribe
          orchestration entry, and the optional decision entry; advance `state.json`.
-      4. Run `Measure-SquadLedger.ps1 -Write` (child process: it calls `exit`), refresh the
+      4. Run `Measure-SquadLedger.ps1 -Write` (child process: it calls `exit`) to
+         refresh the ledger, run totals, and optional exact-session journal; refresh the
          ledger heading run id, then run `Measure-SquadLedger.ps1 -Check
          -ExpectedHistoryCounts` with counts taken before step 3. The script exits 0 only
-         when that check passes. An existing Cost Comparison keeps its manual-baseline figures;
-         this script rewrites its squad cost and credits to the new total and recomputes the saving
-         percentage from the stated baseline (a baseline below the cost marks the paragraph
-         `stale — refreshed at run end` for the Scribe). The seed placeholder is replaced by a
-         squad-figure line the Scribe completes.
+         when that check passes. The ledger helper finalizes Cost Comparison figures,
+         preserving supplied manual-baseline assumptions and deriving signed savings.
+         Without a supplied baseline it records unavailable, never invented savings.
     Appended files keep their existing bytes (BOM, line endings); entries are only appended.
     Every file is replaced through a temp file and move. On any failure after step 2 begins,
     every changed file is restored to its original bytes (a file the script created is
     removed) and the script exits 3.
 
+    For one completed dispatch, pass -RunId, -Agent, -Request, -Deliverable and -Outcome
+    instead of preparing JSON. This builds the same payload with that agent as activeRoles
+    and uses the same validation and write path. Optional -MemberName, -SelectionCue and
+    -PassedModel retain actual dispatch attribution. Optional -ConsumptionPath and
+    -OrchestrationConsumptionPath supply existing consumption JSON objects unchanged;
+    omit them only when no usage block was supplied, to use the existing estimated fallback.
+    This mode never captures a review, refreshes an artifact or repairs dispatch order.
+
     Payload (JSON object; every object is a closed key set). Only `runId`, `historyRecords`
     (each with agent, request, deliverable, outcome) and `stateAdvance.activeRoles` are
     required; everything marked "derived" is filled in when omitted and strictly validated
     when supplied:
-      runId, handoff (optional, only `script`: the economy marker the coordinator sends),
+      runId, handoff (optional, only `script`: the deterministic hand-off marker),
       route (optional, requires decision),
       turn (derived: state turn + 1), timestamp (derived: the current UTC time),
       mode (derived: the state.json mode),
       since (optional ISO time: the dispatch start; a parallel wave passes it),
       decision {title, rationale, adrNoted} (optional),
       historyRecords [ {agent, title?, request, deliverable, outcome, memberName?,
-        selectionCue? (required for an Alternate agent), passedModel? (required with
-        cli-pinned and must equal model), costPreflightRef?/costPreflightSlot? (refused:
-        a ceiling slot needs the Scribe), consumption? {ten fields}, routingIdentity?{
+        selectionCue? (required for an Alternate agent), reportedModel? (actual host/
+        worker identity), internalToolCalls? (nonnegative reported count), passedModel? (required with
+        cli-pinned and must equal model), costPreflightRef?/costPreflightSlot? (required
+        together under an active ceiling), consumption? {ten fields}, routingIdentity?{
         requestedModel, effectiveModel, observedModel, routeRationale}} ] (may be empty),
       orchestration? {request?, outcome?, passedModel?, consumption? {ten fields}},
       stateAdvance {activeRoles[], openEscalationsRaised[]?, openEscalationsResolved[]?,
         sessionModel?, modelOverrides?}.
+
+    Actual reportedModel outranks the requested model and predicted pin. Internal
+    tool-call facts raise estimator turns without model arithmetic; supplied blocks
+    must agree with these stronger facts. Neither field changes the stored ten-key schema.
 
     Derived consumption (a record's `consumption`, or `orchestration.consumption`, omitted
     entirely; a supplied block is never altered): the five token fields are the estimator
@@ -97,15 +109,14 @@
 
     Exit codes: 0 written and verified (or snapshot unchanged); 1 validation or usage
     error, nothing written (correct the one field named and rerun once); 2 the Scribe composes
-    this hand-off itself (unsupported payload or state: cost ceiling here or at the federation
-    root, ceiling slot fields, federation root, legacy schema, agent not on the roster,
+    this hand-off itself (unsupported payload or state: aggregate federation ceiling,
+    federation root, legacy schema, agent not on the roster,
     secret-like text, unseeded ledger, a consumption.md with some but not all ledger headings,
     an omitted block the estimator cannot derive), nothing
     written; 3 write or ledger failure, files restored (or unreadable input, nothing
     changed); 4 rate table refused (malformed operator row), operator decision needed,
     nothing written; 5 snapshot differs; 6 write set not stable before the timeout;
-    7 refused: `team.md` does not record `Model routing: economy` (every mode, nothing
-    written; the Scribe composes the hand-off by hand, as in v0.18.1); 8 another hand-off
+    8 another hand-off
     holds this squad root's lock past -LockTimeoutSeconds, nothing written.
 
     Ledger check (v0.18.1 failure classes): after the writes, `Measure-SquadLedger -Check`
@@ -114,13 +125,13 @@
     first mismatch lines. A `history-integrity` failure, a missing `failure class:` line, or
     a crash rolls the writes back and exits 3.
 
-    Warnings (never refusals): `WARN economy consent not recorded` when decisions.md has no
+    Economy-only warnings (never refusals): `WARN economy consent not recorded` when decisions.md has no
     `## Economy Mode Accepted` entry; a history record whose routeRationale does not start
     with `Route: ` is prefixed with `Route: bounded` (payload route `bounded`) or
     `Route: economy`, with a WARN; a record without routingIdentity gets a WARN.
 
-    Economy only (references/economy-mode.md): every parameter set reads `team.md` under
-    -SquadRoot first and refuses with exit 7 unless it records `Model routing: economy`.
+    Routing selects models and admission policy, not the persistence mechanism.
+    off, ranked, economy, and manual all use this writer.
 
     Concurrency: a hand-off holds an exclusive per-root lock (an OS file handle in the temp
     directory, released when the process exits, so a crashed holder never leaves a stale
@@ -136,13 +147,37 @@
 
 .PARAMETER SquadRoot
     A single-squad root: `.copilot-tracking/squad/` or `.copilot-tracking/squad/members/<name>/`.
-    Required in every mode, because the economy check reads its `team.md`.
+    Required in every parameter set.
 .PARAMETER PayloadPath
     Path to a JSON payload file, instead of -PayloadJson.
 .PARAMETER PayloadJson
     The payload as a JSON string.
+.PARAMETER RunId
+    Single-dispatch mode: the actual run identifier, not inferred from cost-preflight state.
+.PARAMETER Agent
+    Single-dispatch mode: the actual dispatched agent's roster-exact name.
+.PARAMETER Request
+    Single-dispatch mode: the actual request.
+.PARAMETER Deliverable
+    Single-dispatch mode: the existing artifact path, never a copy made to renew freshness.
+.PARAMETER Outcome
+    Single-dispatch mode: the actual returned outcome, not an inferred approval or finding.
+.PARAMETER MemberName
+    Single-dispatch mode: the actual roster member, when needed to disambiguate identity.
+.PARAMETER SelectionCue
+    Single-dispatch mode: the actual cue that selected an Alternate.
+.PARAMETER PassedModel
+    Single-dispatch mode: the actual CLI-pinned model, when applicable.
+.PARAMETER ConsumptionPath
+    Single-dispatch mode: a file containing the supplied ten-field dispatch consumption object.
+.PARAMETER OrchestrationConsumptionPath
+    Single-dispatch mode: a file containing supplied coordinator consumption, not fictional Scribe usage.
 .PARAMETER SessionLog
     Passed to `Measure-SquadLedger.ps1 -Write`; defaults to `auto`.
+.PARAMETER Quiet
+    Hand-off mode: emit one compact JSON status line on stdout after successful writes.
+    Warnings remain visible on stderr. ledgerCheck is PASS or ledger-only, never a
+    fabricated PASS for a tolerated accounting mismatch. Failures retain nonzero exits.
 .PARAMETER LockTimeoutSeconds
     Longest wait for another hand-off on the same root to finish; exit 8 when exceeded (default 120).
 .PARAMETER SnapshotPath
@@ -166,6 +201,8 @@
 .EXAMPLE
     ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -PayloadPath $env:TEMP/handoff.json
 .EXAMPLE
+    ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -RunId r1 -Agent 'Squad Researcher' -Request 'Survey conventions.' -Deliverable research/topic.md -Outcome 'Survey complete.' -Quiet
+.EXAMPLE
     ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -SnapshotPath $env:TEMP/deliverables.json -Path src/app.py, .copilot-tracking/changes/x.md
 .EXAMPLE
     ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad -VerifySnapshotPath $env:TEMP/deliverables.json
@@ -173,6 +210,7 @@
 [CmdletBinding(DefaultParameterSetName = 'Handoff')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Handoff')]
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
     [Parameter(Mandatory, ParameterSetName = 'Snapshot')]
     [Parameter(Mandatory, ParameterSetName = 'Verify')]
     [string]$SquadRoot,
@@ -183,10 +221,46 @@ param(
     [Parameter(ParameterSetName = 'Handoff')]
     [string]$PayloadJson,
 
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$RunId,
+
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$Agent,
+
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$Request,
+
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$Deliverable,
+
+    [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
+    [string]$Outcome,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$MemberName,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$SelectionCue,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$PassedModel,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$ConsumptionPath,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [string]$OrchestrationConsumptionPath,
+
     [Parameter(ParameterSetName = 'Handoff')]
+    [Parameter(ParameterSetName = 'SingleDispatch')]
     [string]$SessionLog = 'auto',
 
     [Parameter(ParameterSetName = 'Handoff')]
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [switch]$Quiet,
+
+    [Parameter(ParameterSetName = 'Handoff')]
+    [Parameter(ParameterSetName = 'SingleDispatch')]
     [ValidateRange(1, 3600)]
     [int]$LockTimeoutSeconds = 120,
 
@@ -228,15 +302,6 @@ function Get-FileSha256 {
 }
 
 $SquadRoot = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($SquadRoot)
-$routingTeam = Join-Path $SquadRoot 'team.md'
-$routingMode = 'off'
-if (Test-Path -LiteralPath $routingTeam -PathType Leaf) {
-    $routingMatch = [regex]::Match([System.IO.File]::ReadAllText($routingTeam), '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
-    if ($routingMatch.Success) { $routingMode = $routingMatch.Groups['mode'].Value }
-}
-if ($routingMode -ne 'economy') {
-    Stop-Handoff 7 "refused: $routingTeam records Model routing: $routingMode, not economy. The script hand-off is economy-only; the Squad Scribe composes this hand-off itself."
-}
 
 function ConvertTo-NormalPath {
     # GetFullPath expands 8.3 short names; an existing path is then read back in its long form.
@@ -384,6 +449,51 @@ function Get-NodeString {
     return $Node.GetValue[string]()
 }
 
+function Get-EntryFieldLocal {
+    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Name)
+    $match = [regex]::Match($Text, '(?m)^\* ' + [regex]::Escape($Name) + ':[ \t]*(?<value>[^\r\n]*)')
+    if ($match.Success) { return $match.Groups['value'].Value.Trim().Trim('`') }
+    return ''
+}
+
+function Get-CostDecisionLocal {
+    param(
+        [Parameter(Mandatory)][string]$Reference,
+        [Parameter(Mandatory)][string]$DecisionsPath
+    )
+    if ($Reference -notmatch '^decisions\.md#(?<anchor>[a-z0-9][a-z0-9_-]*)$') {
+        throw "Cost Preflight Ref '$Reference' must target decisions.md at this squad root."
+    }
+    $anchor = $Matches.anchor
+    $sections = @(
+        foreach ($section in [regex]::Matches([IO.File]::ReadAllText($DecisionsPath), '(?ms)^## (?<heading>[^\r\n]+)\r?\n(?<body>.*?)(?=^## |\z)')) {
+            $slug = ($section.Groups['heading'].Value.ToLowerInvariant() -replace '[^\p{L}\p{Nd}_ -]', '') -replace ' ', '-'
+            if ($slug -ceq $anchor) { $section }
+        }
+    )
+    if ($sections.Count -ne 1) { throw "Cost Preflight Ref '$Reference' is missing or ambiguous." }
+    $sections[0]
+}
+
+function Get-ExistingAdmissionUseCountLocal {
+    param(
+        [Parameter(Mandatory)][string]$HistoryDirectory,
+        [Parameter(Mandatory)][string]$Reference,
+        [Parameter(Mandatory)][string]$Slot
+    )
+    $count = 0
+    foreach ($file in Get-ChildItem -LiteralPath $HistoryDirectory -File -Filter '*.md') {
+        foreach ($entry in [regex]::Matches([IO.File]::ReadAllText($file.FullName), '(?ms)^### (?<heading>[^\r\n]+)\r?\n(?<body>.*?)(?=^### |\z)')) {
+            $body = $entry.Groups['body'].Value
+            if ((Get-EntryFieldLocal $body 'Cost Preflight Ref') -ceq $Reference -and
+                (Get-EntryFieldLocal $body 'Cost Preflight Slot') -ceq $Slot) {
+                $count++
+            }
+        }
+    }
+    $count
+}
+
 function Get-NodeInt {
     param($Node)
     if ((Get-Kind $Node) -ne 'Number') { return $null }
@@ -457,6 +567,7 @@ function Test-Consumption {
         }
     }
     if ($problems.Count -gt $before) { return $null }
+    if (Test-ModelLabel $map['model']) { $problems.Add("$Where.model '$($map['model'])' is a routing label, not an actual model; use unknown with model_source unresolved when unreported.") }
     if ($map['model_source'] -notin $ModelSources) { $problems.Add("$Where.model_source '$($map['model_source'])' is not one of: $($ModelSources -join ', ').") }
     if ($map['model_tier'] -notin $ModelTiers) { $problems.Add("$Where.model_tier must be one of: $($ModelTiers -join ', ').") }
     if ($map['basis'] -notin $Bases) { $problems.Add("$Where.basis must be exactly one of: $($Bases -join ', ').") }
@@ -519,8 +630,27 @@ function Update-OwnedHash {
 
 function Invoke-ChildScript {
     param([string]$ScriptPath, [string[]]$Arguments)
-    $output = & $PwshPath -NoProfile -File $ScriptPath @Arguments 2>&1
-    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Text = (($output | ForEach-Object { "$_" }) -join "`n").Trim() }
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new($PwshPath)
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in @('-NoProfile', '-File', $ScriptPath) + $Arguments) {
+        $startInfo.ArgumentList.Add($argument)
+    }
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw "Could not start child PowerShell process for '$ScriptPath'." }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        $text = (@($stdout.Result, $stderr.Result) | Where-Object { $_ }) -join "`n"
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Text = $text.Trim() }
+    }
+    finally {
+        $process.Dispose()
+    }
 }
 
 function Test-NodeStrings {
@@ -546,7 +676,15 @@ function Test-NodeStrings {
 function ConvertFrom-ModelPin {
     # 'Claude Haiku 4.5 (copilot)' and 'claude-haiku-4.5' both -> 'claude-haiku-4.5'; only a trailing vendor suffix is dropped, so '(fast mode)' stays part of the name.
     param([string]$Text)
-    return (($Text.Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() -replace '\s+', '-').ToLowerInvariant()
+    $key = (($Text.Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() -replace '\s+', '-').ToLowerInvariant()
+    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    return $key
+}
+
+function Test-ModelLabel {
+    # auto and the tier names are routing labels, never actual models; '(fast mode)' style names do not normalize to them.
+    param([string]$Text)
+    return (ConvertFrom-ModelPin $Text) -in @('auto', 'fast', 'default', 'extended')
 }
 
 function Find-AgentPin {
@@ -653,7 +791,7 @@ function Test-Attribution {
         }
     }
     # A passedModel that repeats the recorded model is redundant, not evidence of a passed override.
-    if ($Map['model_source'] -ne 'cli-pinned' -and $PassedModel -and (ConvertFrom-ModelPin $PassedModel) -ne (ConvertFrom-ModelPin $Map['model'])) { $problems.Add("$Where passedModel '$PassedModel' differs from model '$($Map['model'])'; a passed override is model_source cli-pinned.") }
+    if ($Map['model_source'] -notin @('cli-pinned', 'dispatch-reported') -and $PassedModel -and (ConvertFrom-ModelPin $PassedModel) -ne (ConvertFrom-ModelPin $Map['model'])) { $problems.Add("$Where passedModel '$PassedModel' differs from model '$($Map['model'])'; a passed override is model_source cli-pinned.") }
     switch ($Map['model_source']) {
         'cli-pinned' {
             if (-not $PassedModel) { $problems.Add("$Where.model_source cli-pinned needs the dispatch's passedModel recorded in the payload.") }
@@ -697,22 +835,28 @@ function Get-EstimatorFloors {
 function Get-DerivedConsumption {
     # Fills an omitted consumption block from the role class's estimator floors, the model attribution ladder, and the rate row;
     # $null with the reason recorded for the Scribe when a figure cannot be produced.
-    param([string]$Agent, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration)
+    param([string]$Agent, [string]$Role, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration, [string]$ReportedModel, [long]$InternalToolCalls = 0)
     $class = 'bookkeeping'
     if (-not $Orchestration) {
-        $role = if ($agentRoles.ContainsKey($Agent)) { $agentRoles[$Agent] } else { '' }
-        $class = if ($role -and $RoleClassMap.ContainsKey($role)) { $RoleClassMap[$role] } else { 'implementation' }
+        $resolvedRole = if ($Role) { $Role } elseif ($agentRoles.ContainsKey($Agent)) { $agentRoles[$Agent] } else { '' }
+        $class = if ($resolvedRole -and $RoleClassMap.ContainsKey($resolvedRole)) { $RoleClassMap[$resolvedRole] } else { 'implementation' }
     }
     $floors = Get-EstimatorFloors $class
     if ($null -eq $floors) { $needsScribe.Add("$Where was omitted and the $class dispatch-size estimator row cannot be read from consumption-rates.md or its template; the Scribe composes the block."); return $null }
-    if ($Orchestration) {
+    if ($SessionModel -and (Test-ModelLabel $SessionModel)) { $SessionModel = '' }
+    if ($PassedModel -and (Test-ModelLabel $PassedModel)) { $problems.Add("$Where passedModel '$PassedModel' is a routing label, not an actual model."); return $null }
+    if ($ReportedModel) { $model = $ReportedModel; $source = 'dispatch-reported' }
+    elseif ($Orchestration) {
         if ($SessionModel) { $model = $SessionModel; $source = 'session-inherited' } else { $model = 'unknown'; $source = 'unresolved' }
     }
     elseif ($PassedModel) { $model = $PassedModel; $source = 'cli-pinned' }
     else {
         $pin = Find-AgentPin $Agent
         if (-not $pin.Found) { $needsScribe.Add("$Where was omitted and no agent file named '$Agent' was found to read its model pin; the Scribe composes the block."); return $null }
-        if ($pin.Models.Count -gt 0) { $model = $pin.Models[0]; $source = 'agent-pinned' }
+        if ($pin.Models.Count -gt 0) {
+            if (Test-ModelLabel $pin.Models[0]) { $problems.Add("$Where pin '$($pin.Models[0])' of '$Agent' is a routing label, not an actual model."); return $null }
+            $model = $pin.Models[0]; $source = 'agent-pinned'
+        }
         elseif ($SessionModel) { $model = $SessionModel; $source = 'session-inherited' }
         else { $model = 'unknown'; $source = 'unresolved' }
     }
@@ -722,24 +866,46 @@ function Get-DerivedConsumption {
     if (-not $priced) { $needsScribe.Add("$Where was omitted and model '$model' has no rate row and no '$tier' tier fallback row; the Scribe composes the block."); return $null }
     $pricedRow = @($RateRows | Where-Object { $_.Name -eq $priced }) | Select-Object -First 1
     $writesCache = ($pricedRow -and $pricedRow.CacheWrite -gt 0)
-    $average = $floors.Base + $floors.Growth * ($floors.Turns - 1) / 2.0
-    $gross = $floors.Turns * $average
+    $tokenFactor = if ((ConvertFrom-ModelPin $model) -eq 'hydrafusion-max') { 0.35 } else { 1.0 }
+    $turns = [Math]::Max([long]$floors.Turns, $InternalToolCalls)
+    $average = $floors.Base + $floors.Growth * ($turns - 1) / 2.0
+    $gross = $turns * $average * $tokenFactor
     return [ordered]@{
         model              = $model
         model_source       = $source
         priced_as          = $priced
         model_tier         = $tier
-        internal_turns     = [long]$floors.Turns
+        internal_turns     = $turns
         input_tokens       = [long][Math]::Round($gross * 0.20)
         cached_tokens      = [long][Math]::Round($gross * 0.80)
-        cache_write_tokens = $(if ($writesCache) { [long][Math]::Round($floors.Base + $floors.Growth * ($floors.Turns - 1)) } else { 0L })
-        output_tokens      = [long][Math]::Round($floors.Turns * $floors.Output)
-        basis              = 'estimated'
+        cache_write_tokens = $(if ($writesCache) { [long][Math]::Round(($floors.Base + $floors.Growth * ($turns - 1)) * $tokenFactor) } else { 0L })
+        output_tokens      = [long][Math]::Round($turns * $floors.Output)
+        basis              = $(if ($model -eq 'unknown') { 'tier-default' } else { 'estimated' })
     }
 }
 
 # A stamp later than now + 120 s cannot be real (typically local time labelled Z); it is never an ordering floor.
 $handoffWarnings = [System.Collections.Generic.List[string]]::new()
+function Get-ChildWarnings {
+    param([string]$Text)
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $plainText = [regex]::Replace($Text, '\x1B\[[0-?]*[ -/]*[@-~]', '')
+    foreach ($line in ($plainText -split '\r?\n')) {
+        $warning = $null
+        if ($line -match '^\s*(?:WARNING:|Write-Warning:)\s*(?<message>.+)$') {
+            $warning = $Matches['message'].Trim()
+        }
+        elseif ($line -match '^\s*WARN(?:ING)?(?::|\s+)(?<message>.+)$') {
+            $warning = "WARN: $($Matches['message'].Trim())"
+        }
+        elseif ($line -match '(?:^|:\s+)WARN:\s*(?<message>.+)$') {
+            $warning = "WARN: $($Matches['message'].Trim())"
+        }
+        if ($warning -and -not $warnings.Contains($warning)) { $warnings.Add($warning) }
+    }
+    return $warnings.ToArray()
+}
+
 $futureLimit = [DateTimeOffset]::UtcNow.AddSeconds(120)
 function Test-FutureStamp {
     param([string]$Value, [DateTimeOffset]$Time, [string]$Where)
@@ -766,21 +932,52 @@ function Get-LastEntryTimestamp {
 $PwshPath = (Get-Process -Id $PID).Path
 
 # --- Inputs ------------------------------------------------------------------------------------
-if ($PSBoundParameters.ContainsKey('PayloadJson') -eq $PSBoundParameters.ContainsKey('PayloadPath')) {
-    Stop-Handoff 1 'supply exactly one of -PayloadJson or -PayloadPath.'
+if ($PSCmdlet.ParameterSetName -eq 'SingleDispatch') {
+    $record = [ordered]@{ agent = $Agent; request = $Request; deliverable = $Deliverable; outcome = $Outcome }
+    foreach ($field in @('memberName', 'selectionCue', 'passedModel')) {
+        if ($PSBoundParameters.ContainsKey($field)) { $record[$field] = $PSBoundParameters[$field] }
+    }
+    $PayloadJson = [ordered]@{
+        runId          = $RunId
+        historyRecords = @($record)
+        stateAdvance   = [ordered]@{ activeRoles = @($Agent) }
+    } | ConvertTo-Json -Depth 8
 }
-if ($PSBoundParameters.ContainsKey('PayloadPath')) {
-    $PayloadPath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($PayloadPath)
-    if (-not (Test-Path -LiteralPath $PayloadPath -PathType Leaf)) { Stop-Handoff 1 "missing $PayloadPath." }
-    $PayloadJson = [System.IO.File]::ReadAllText($PayloadPath)
+else {
+    if ($PSBoundParameters.ContainsKey('PayloadJson') -eq $PSBoundParameters.ContainsKey('PayloadPath')) {
+        Stop-Handoff 1 'supply exactly one of -PayloadJson or -PayloadPath.'
+    }
+    if ($PSBoundParameters.ContainsKey('PayloadPath')) {
+        $PayloadPath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($PayloadPath)
+        if (-not (Test-Path -LiteralPath $PayloadPath -PathType Leaf)) { Stop-Handoff 1 "missing $PayloadPath." }
+        $PayloadJson = [System.IO.File]::ReadAllText($PayloadPath)
+    }
 }
 try { $payload = [System.Text.Json.Nodes.JsonNode]::Parse($PayloadJson) }
 catch { Stop-Handoff 1 "payload is not valid JSON (duplicate keys are rejected): $($_.Exception.Message)" }
+
+if ($PSCmdlet.ParameterSetName -eq 'SingleDispatch') {
+    foreach ($parameter in @('ConsumptionPath', 'OrchestrationConsumptionPath')) {
+        if (-not $PSBoundParameters.ContainsKey($parameter)) { continue }
+        try {
+            $usagePath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($PSBoundParameters[$parameter])
+            $usage = [System.Text.Json.Nodes.JsonNode]::Parse([System.IO.File]::ReadAllText($usagePath))
+        }
+        catch { Stop-Handoff 1 "$parameter cannot be read as JSON: $($_.Exception.Message)" }
+        if ((Get-Kind $usage) -ne 'Object') { Stop-Handoff 1 "$parameter must contain a consumption object; supplied usage cannot fall back to estimates." }
+        if ($parameter -eq 'ConsumptionPath') { $payload['historyRecords'][0]['consumption'] = $usage }
+        else {
+            $payload['orchestration'] = [System.Text.Json.Nodes.JsonObject]::new()
+            $payload['orchestration']['consumption'] = $usage
+        }
+    }
+}
 
 $scriptsRoot = $PSScriptRoot
 $statePath = Join-Path $SquadRoot 'state.json'
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$sessionCachePath = Join-Path $SquadRoot 'consumption-sessions.json'
 $ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
 $teamPath = Join-Path $SquadRoot 'team.md'
 $historyDir = Join-Path $SquadRoot 'history'
@@ -805,6 +1002,7 @@ $SquadRoot = Get-CanonicalPath $SquadRoot
 $statePath = Join-Path $SquadRoot 'state.json'
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $consumptionPath = Join-Path $SquadRoot 'consumption.md'
+$sessionCachePath = Join-Path $SquadRoot 'consumption-sessions.json'
 $ratesPath = Join-Path $SquadRoot 'consumption-rates.md'
 $teamPath = Join-Path $SquadRoot 'team.md'
 $historyDir = Join-Path $SquadRoot 'history'
@@ -823,9 +1021,9 @@ if (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') -PathType Leaf
     Stop-Handoff 2 'federation roots need the Squad Scribe.'
 }
 
-# economy-mode.md Consent: a missing acceptance is reported, never refused (refusing would only push the Scribe to the manual path).
-$consentText = try { [System.IO.File]::ReadAllText($decisionsPath) } catch { '' }
-if ($consentText -notmatch '(?m)^## Economy Mode Accepted\b') {
+$routingMatch = [regex]::Match([System.IO.File]::ReadAllText($teamPath), '(?m)^Model routing:\s*`?(?<mode>off|ranked|economy|manual)`?\s*$')
+$routingMode = if ($routingMatch.Success) { $routingMatch.Groups['mode'].Value } else { 'off' }
+if ($routingMode -eq 'economy' -and [System.IO.File]::ReadAllText($decisionsPath) -notmatch '(?m)^## Economy Mode Accepted\b') {
     $handoffWarnings.Add('WARN economy consent not recorded: decisions.md has no ## Economy Mode Accepted entry (economy-mode.md Consent); the hand-off continues. The coordinator states the trade and records it before the next dispatch.')
 }
 
@@ -933,48 +1131,400 @@ $rosterAgents = [System.Collections.Generic.HashSet[string]]::new([System.String
 $primaryAgents = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $agentRoles = @{}
 $ReviewRoles = @('tester', 'qa-engineer', 'challenger', 'fact-checker', 'supply-chain', 'vuln-manager', 'privacy', 'accessibility', 'risk-manager')
-$memberNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+$rowsByAgent = @{}
+$connectorBindingsByRoleMember = @{}
+$connectorBindingsByConnectorMember = @{}
+$connectorBindingsByMemberAll = @{}
+$allConnectorBindings = [System.Collections.Generic.List[object]]::new()
+$allRosterRows = [System.Collections.Generic.List[object]]::new()
 $rosterLines = [System.IO.File]::ReadAllLines($teamPath)
 $primaryHeaders = 'Agent Name (Primary)', 'Primary Agent', 'Primary', 'Agent'
-# The roster is the one table with a Role column and a primary-agent header (the template's exact header wins over a drifted
-# spelling); it ends at the first non-table line, so another table earlier or later never admits an agent.
-$rosterTables = [System.Collections.Generic.List[hashtable]]::new()
-$tableLines = $null
-foreach ($line in ($rosterLines + @(''))) {
-    if ($line -match '^\s*\|') {
-        if ($null -eq $tableLines) { $tableLines = [System.Collections.Generic.List[string]]::new() }
-        $tableLines.Add($line)
-        continue
-    }
-    if ($null -eq $tableLines) { continue }
-    $headerCells = @($tableLines[0].Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim().Trim('`').Trim() })
-    $column = -1
-    foreach ($header in $primaryHeaders) { $column = [array]::IndexOf($headerCells, $header); if ($column -ge 0) { break } }
-    if ('Role' -in $headerCells -and $column -ge 0) { $rosterTables.Add(@{ Header = $headerCells; Column = $column; Lines = $tableLines }) }
-    $tableLines = $null
+
+function Split-TableCellsLocal {
+    param([string]$Line)
+    @($Line.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim().Trim('`').Trim() })
 }
-$rosterTable = @($rosterTables | Where-Object { 'Agent Name (Primary)' -in $_.Header }) + @($rosterTables) | Select-Object -First 1
-if ($rosterTable) {
-    $primaryColumn = $rosterTable.Column
-    $alternateColumn = [array]::IndexOf($rosterTable.Header, 'Alternate Agents')
-    $memberColumn = [array]::IndexOf($rosterTable.Header, 'Member Name')
-    $roleColumn = [array]::IndexOf($rosterTable.Header, 'Role')
-    foreach ($line in ($rosterTable.Lines | Select-Object -Skip 1)) {
-        $cells = @($line.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
-        if ($cells.Count -le $primaryColumn -or $cells[$primaryColumn] -match '^[-: ]*$') { continue }
-        [void]$rosterAgents.Add($cells[$primaryColumn].Trim('`'))
-        [void]$primaryAgents.Add($cells[$primaryColumn].Trim('`'))
-        $rowRole = if ($cells.Count -gt $roleColumn) { $cells[$roleColumn].Trim('`').ToLowerInvariant() } else { '' }
-        $agentRoles[$cells[$primaryColumn].Trim('`')] = $rowRole
-        if ($memberColumn -ge 0 -and $cells.Count -gt $memberColumn -and $cells[$memberColumn]) { [void]$memberNames.Add($cells[$memberColumn]) }
-        if ($alternateColumn -ge 0 -and $cells.Count -gt $alternateColumn) {
-            foreach ($alternate in ($cells[$alternateColumn] -split '[,;]|\s/\s')) {
-                $name = $alternate.Trim().Trim('`')
-                if ($name -and $name -ne '—' -and $name -ne '-') { [void]$rosterAgents.Add($name); if (-not $agentRoles.ContainsKey($name)) { $agentRoles[$name] = $rowRole } }
+
+function Get-MarkdownTablesLocal {
+    param([string[]]$Lines)
+    $tables = [System.Collections.Generic.List[pscustomobject]]::new()
+    $tableLines = $null
+    foreach ($line in ($Lines + @(''))) {
+        if ($line -match '^\s*\|') {
+            if ($null -eq $tableLines) { $tableLines = [System.Collections.Generic.List[string]]::new() }
+            $tableLines.Add($line)
+            continue
+        }
+        if ($null -eq $tableLines) { continue }
+        $header = Split-TableCellsLocal $tableLines[0]
+        $rows = [System.Collections.Generic.List[hashtable]]::new()
+        foreach ($rowLine in ($tableLines | Select-Object -Skip 1)) {
+            if ($rowLine -match '^\s*\|\s*:?-') { continue }
+            $cells = Split-TableCellsLocal $rowLine
+            $row = @{}
+            for ($i = 0; $i -lt $header.Count; $i++) { $row[$header[$i]] = if ($i -lt $cells.Count) { $cells[$i] } else { '' } }
+            $rows.Add($row)
+        }
+        $tables.Add([pscustomobject]@{ Header = $header; Rows = $rows })
+        $tableLines = $null
+    }
+    $tables
+}
+
+function Get-RoleMemberKeyLocal {
+    param([string]$Role, [string]$MemberName)
+    return ("{0}`n{1}" -f ([string]$Role).Trim().ToLowerInvariant(), ([string]$MemberName).Trim())
+}
+
+function Get-ConnectorTargetRoleLocal {
+    param([AllowEmptyString()][string]$Target)
+    $text = ([string]$Target).Trim()
+    if ($text -match '^(?i)role:(?<role>[a-z0-9-]+)(?:/(?<member>.+))?$') {
+        return [pscustomobject]@{
+            Kind       = 'role'
+            Role       = $Matches['role'].ToLowerInvariant()
+            MemberName = if ($Matches['member']) { ([string]$Matches['member']).Trim() } else { '' }
+        }
+    }
+    if ($text -match '^(?i)coordinator:Squad Coordinator$') {
+        return [pscustomobject]@{ Kind = 'coordinator'; Role = 'coordinator'; MemberName = '' }
+    }
+    [pscustomobject]@{ Kind = 'invalid'; Role = ''; MemberName = '' }
+}
+
+function Resolve-ConnectorBindingForRowLocal {
+    param([Parameter(Mandatory)]$Row, [Parameter(Mandatory)][string]$Where)
+    $member = ([string]$Row.MemberName).Trim()
+    $role = ([string]$Row.Role).Trim().ToLowerInvariant()
+    $key = Get-RoleMemberKeyLocal -Role $role -MemberName $member
+    $matches = @(if ($connectorBindingsByRoleMember.ContainsKey($key)) { $connectorBindingsByRoleMember[$key] } else { @() })
+    if ($matches.Count -eq 0) {
+        $problems.Add("$Where.memberName '$member' on agent '$($Row.PrimaryAgent)' has no matching Connector Bindings row for role '$($Row.Role)'.")
+        return $null
+    }
+    if ($matches.Count -gt 1) {
+        $problems.Add("$Where.memberName '$member' on role '$($Row.Role)' matches $($matches.Count) Connector Bindings rows; binding identity is ambiguous.")
+        return $null
+    }
+    return $matches[0]
+}
+
+function Resolve-ConnectorBindingForMemberLocal {
+    param(
+        [Parameter(Mandatory)][string]$MemberName,
+        [AllowNull()]$ExternalProvenance,
+        [Parameter(Mandatory)][string]$Where
+    )
+    $member = ([string]$MemberName).Trim()
+    $matches = @(if ($connectorBindingsByConnectorMember.ContainsKey($member)) { $connectorBindingsByConnectorMember[$member] } else { @() })
+    if ($null -ne $ExternalProvenance -and $ExternalProvenance.Contains('bindingId')) {
+        $bindingId = ([string]$ExternalProvenance['bindingId']).Trim()
+        if ($bindingId) { $matches = @($matches | Where-Object { $_.BindingId -ceq $bindingId }) }
+    }
+    if ($matches.Count -eq 0) {
+        $problems.Add("$Where.memberName '$member' has no matching replacement Connector Bindings identity.")
+        return $null
+    }
+    if ($matches.Count -gt 1) {
+        $problems.Add("$Where.memberName '$member' matches $($matches.Count) replacement Connector Bindings rows; connector identity is ambiguous.")
+        return $null
+    }
+    return $matches[0]
+}
+
+function Resolve-RosterIdentityLocal {
+    param(
+        [string]$Agent,
+        [string]$MemberName,
+        [AllowNull()]$ExternalProvenance,
+        [string]$Where
+    )
+    $candidates = @(if ($rowsByAgent.ContainsKey($Agent)) { $rowsByAgent[$Agent] } else { @() })
+
+    $member = if ($MemberName) { $MemberName.Trim() } else { '' }
+    if ($member -and $candidates.Count -gt 0 -and $Agent -cne 'Squad Connector') {
+        $candidates = @($candidates | Where-Object { ([string]$_.MemberName).Trim() -ceq $member })
+        if ($candidates.Count -eq 0) {
+            $problems.Add("$Where.memberName '$MemberName' does not match agent '$Agent' in team.md.")
+            return $null
+        }
+    }
+
+    if ($Agent -ceq 'Squad Connector') {
+        if (-not $member) {
+            $problems.Add("$Where.memberName is required when agent is 'Squad Connector'.")
+            return $null
+        }
+        $isLegacy10Provenance = $false
+        if ($null -ne $ExternalProvenance -and $ExternalProvenance.Contains('bindingId')) {
+            $provBindingId = ([string]$ExternalProvenance['bindingId']).Trim()
+            if ($provBindingId -in @('legacy-1.0', 'none (legacy-1.0)')) {
+                $isLegacy10Provenance = $true
             }
+        }
+        if ($isLegacy10Provenance) {
+            if ([string]$ExternalProvenance['endpointKind'] -ne 'agent') {
+                $problems.Add("$Where.externalProvenance.endpointKind must be 'agent' for legacy 1.0 provenance.")
+                return $null
+            }
+            if ([string]$ExternalProvenance['roleMode'] -ne 'replace') {
+                $problems.Add("$Where.externalProvenance.roleMode must be 'replace' for legacy 1.0 provenance.")
+                return $null
+            }
+            if ([string]$ExternalProvenance['targetKind'] -ne 'role') {
+                $problems.Add("$Where.externalProvenance.targetKind must be 'role'; coordinator and Scribe cannot be connected.")
+                return $null
+            }
+            $target = Get-ConnectorTargetRoleLocal -Target ([string]$ExternalProvenance['target'])
+            if ($target.Kind -ne 'role' -or $target.Role -in @('scribe', 'coordinator', 'federation-coordinator', 'council')) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' is not a valid legacy 1.0 work-role target.")
+                return $null
+            }
+            if (-not $RoleClassMap.ContainsKey($target.Role)) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' requires a 1.1 Connector Bindings row with Aligned Role.")
+                return $null
+            }
+            $existingRoleBindings = @(
+                $allConnectorBindings | Where-Object {
+                    $bt = Get-ConnectorTargetRoleLocal -Target $_.Target
+                    ($_.RoleMode -eq 'add' -and $_.AddedRole -eq $target.Role) -or
+                    ($_.RoleMode -eq 'replace' -and $bt.Kind -eq 'role' -and $bt.Role -eq $target.Role -and (-not $target.MemberName -or -not $bt.MemberName -or $bt.MemberName -ceq $target.MemberName))
+                }
+            )
+            if ($existingRoleBindings.Count -gt 0) {
+                $problems.Add("$Where.externalProvenance.bindingId '$($ExternalProvenance['bindingId'])' cannot bypass existing Connector Bindings for role '$($target.Role)'.")
+                return $null
+            }
+            $roleRows = @($allRosterRows | Where-Object { $_.Role -eq $target.Role })
+            if ($target.MemberName) {
+                $roleRows = @($roleRows | Where-Object { ([string]$_.MemberName).Trim() -ceq $target.MemberName })
+            }
+            if ($roleRows.Count -eq 0) {
+                $problems.Add("$Where.externalProvenance.target '$($ExternalProvenance['target'])' has no matching roster row in team.md.")
+                return $null
+            }
+            return [pscustomobject]@{
+                Row              = [pscustomobject]@{ Role = $target.Role; MemberName = $member; PrimaryAgent = 'Squad Connector' }
+                Role             = $target.Role
+                ClassRole        = $target.Role
+                IsPrimary        = $true
+                Binding          = $null
+                LegacyProvenance = [ordered]@{
+                    connectorId  = [string]$ExternalProvenance['connectorId']
+                    bindingId    = [string]$ExternalProvenance['bindingId']
+                    endpointKind = 'agent'
+                    roleMode     = 'replace'
+                    targetKind   = 'role'
+                    target       = [string]$ExternalProvenance['target']
+                    verification = 'external-unverified'
+                    metering     = 'external-unmetered'
+                }
+            }
+        }
+        if ($candidates.Count -gt 0) {
+            $candidates = @($candidates | Where-Object { ([string]$_.MemberName).Trim() -ceq $member })
+        }
+        $candidates = @($candidates | Where-Object { $_.PrimaryAgent -ceq 'Squad Connector' })
+        if ($candidates.Count -eq 0) {
+            $binding = Resolve-ConnectorBindingForMemberLocal -MemberName $member -ExternalProvenance $ExternalProvenance -Where $Where
+            if ($null -eq $binding) { return $null }
+            $classRole = ''
+            $role = ''
+            if ($binding.TargetKind -eq 'role') {
+                $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+                if ($target.Kind -ne 'role') {
+                    $problems.Add("$Where.externalProvenance.target '$($binding.Target)' is not a valid role target.")
+                    return $null
+                }
+                if ($target.MemberName -and $target.MemberName -ceq $member) {
+                    $problems.Add("$Where.memberName '$member' must stay distinct from the internal target member '$($target.MemberName)' for replace provenance.")
+                    return $null
+                }
+                $role = $target.Role
+                $classRole = $target.Role
+            }
+            else {
+                $problems.Add("$Where.memberName '$member' matched binding '$($binding.BindingId)' with unsupported target kind '$($binding.TargetKind)'.")
+                return $null
+            }
+            return [pscustomobject]@{
+                Row       = [pscustomobject]@{ Role = $role; MemberName = $member; PrimaryAgent = 'Squad Connector' }
+                Role      = $role
+                ClassRole = $classRole
+                IsPrimary = $true
+                Binding   = $binding
+            }
+        }
+        if ($candidates.Count -ne 1) {
+            $problems.Add("$Where.agent '$Agent' with memberName '$MemberName' matches $($candidates.Count) roster rows; connector identity must be exact.")
+            return $null
+        }
+        $row = $candidates[0]
+        $binding = Resolve-ConnectorBindingForRowLocal -Row $row -Where $Where
+        if ($null -eq $binding) { return $null }
+        $alignedRole = ([string]$binding.AlignedRole).Trim().ToLowerInvariant()
+        if (-not $alignedRole) {
+            $problems.Add("$Where.memberName '$MemberName' matched binding '$($binding.BindingId)' with no Aligned Role.")
+            return $null
+        }
+        return [pscustomobject]@{
+            Row       = $row
+            Role      = $row.Role
+            ClassRole = $alignedRole
+            IsPrimary = $row.PrimaryAgent -ceq $Agent
+            Binding   = $binding
+        }
+    }
+
+    if (-not $member -and $candidates.Count -gt 1) {
+        $problems.Add("$Where.memberName is required for agent '$Agent' because it maps to multiple roster rows.")
+        return $null
+    }
+    if ($candidates.Count -gt 1) {
+        $problems.Add("$Where.memberName '$MemberName' is ambiguous for agent '$Agent'.")
+        return $null
+    }
+
+    $row = $candidates[0]
+    return [pscustomobject]@{
+        Row       = $row
+        Role      = $row.Role
+        ClassRole = $row.Role
+        IsPrimary = $row.PrimaryAgent -ceq $Agent
+        Binding   = $null
+    }
+}
+
+$tables = @(Get-MarkdownTablesLocal -Lines $rosterLines)
+$rosterTables = @(
+    $tables | Where-Object {
+        $column = -1
+        foreach ($header in $primaryHeaders) { $column = [array]::IndexOf($_.Header, $header); if ($column -ge 0) { break } }
+        ('Role' -in $_.Header) -and ($column -ge 0)
+    }
+)
+$rosterTable = @($rosterTables | Where-Object { 'Agent Name (Primary)' -in $_.Header }) + @($rosterTables) | Select-Object -First 1
+
+$connectorHeader = @('Binding ID', 'Connector ID', 'Manifest', 'Endpoint Kind', 'Role Mode', 'Target Kind', 'Target', 'Member Name', 'Added Role', 'Aligned Role', 'Default Execution')
+$connectorTable = @(
+    $tables | Where-Object {
+        $table = $_
+        @($connectorHeader | Where-Object { $_ -in $table.Header }).Count -eq $connectorHeader.Count
+    } | Select-Object -First 1
+)
+if ($connectorTable.Count -gt 0) {
+    foreach ($row in $connectorTable[0].Rows) {
+        $bindingId = ([string]$row['Binding ID']).Trim()
+        if (-not $bindingId -or $bindingId -in '—', '-') { continue }
+        $binding = [pscustomobject]@{
+            BindingId    = $bindingId
+            ConnectorId  = ([string]$row['Connector ID']).Trim()
+            EndpointKind = ([string]$row['Endpoint Kind']).Trim().ToLowerInvariant()
+            RoleMode     = ([string]$row['Role Mode']).Trim().ToLowerInvariant()
+            TargetKind   = ([string]$row['Target Kind']).Trim().ToLowerInvariant()
+            Target       = ([string]$row['Target']).Trim()
+            MemberName   = ([string]$row['Member Name']).Trim()
+            AddedRole    = ([string]$row['Added Role']).Trim().ToLowerInvariant()
+            AlignedRole  = ([string]$row['Aligned Role']).Trim().ToLowerInvariant()
+        }
+        $allConnectorBindings.Add($binding)
+        $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+        $protectedRoles = @('scribe', 'coordinator', 'federation-coordinator', 'council')
+        if ($binding.TargetKind -ne 'role' -or $target.Kind -ne 'role' -or $target.Role -in $protectedRoles -or $binding.AddedRole -in $protectedRoles -or $binding.AlignedRole -in $protectedRoles) {
+            $problems.Add("Connector Bindings row '$($binding.BindingId)' must target an ordinary work role; coordinator, Scribe, and council governance are protected.")
+            continue
+        }
+        if ($binding.RoleMode -eq 'replace' -and -not $binding.MemberName) {
+            $problems.Add("Connector Bindings row '$($binding.BindingId)' uses role mode 'replace' and must set a trusted Member Name.")
+            continue
+        }
+        if ($binding.RoleMode -eq 'replace' -and $binding.TargetKind -eq 'role' -and $binding.Target) {
+            $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+            if ($target.Kind -eq 'role' -and $target.MemberName -and $target.MemberName -ceq $binding.MemberName) {
+                $problems.Add("Connector Bindings row '$($binding.BindingId)' must use a trusted Member Name distinct from target member '$($target.MemberName)'.")
+                continue
+            }
+        }
+        if ($binding.MemberName) {
+            if (-not $connectorBindingsByMemberAll.ContainsKey($binding.MemberName)) { $connectorBindingsByMemberAll[$binding.MemberName] = [System.Collections.Generic.List[object]]::new() }
+            $connectorBindingsByMemberAll[$binding.MemberName].Add($binding)
+        }
+        if ($binding.RoleMode -eq 'add' -and $binding.AddedRole -and $binding.MemberName) {
+            $key = Get-RoleMemberKeyLocal -Role $binding.AddedRole -MemberName $binding.MemberName
+            if (-not $connectorBindingsByRoleMember.ContainsKey($key)) { $connectorBindingsByRoleMember[$key] = [System.Collections.Generic.List[object]]::new() }
+            $connectorBindingsByRoleMember[$key].Add($binding)
+        }
+        if ($binding.MemberName -and $binding.RoleMode -eq 'replace') {
+            if (-not $connectorBindingsByConnectorMember.ContainsKey($binding.MemberName)) { $connectorBindingsByConnectorMember[$binding.MemberName] = [System.Collections.Generic.List[object]]::new() }
+            $connectorBindingsByConnectorMember[$binding.MemberName].Add($binding)
         }
     }
 }
+
+if ($rosterTable) {
+    $primaryHeader = @($primaryHeaders | Where-Object { $_ -in $rosterTable.Header } | Select-Object -First 1)
+    $alternateHeader = @('Alternate Agents' | Where-Object { $_ -in $rosterTable.Header } | Select-Object -First 1)
+    $memberHeader = @('Member Name' | Where-Object { $_ -in $rosterTable.Header } | Select-Object -First 1)
+    foreach ($row in $rosterTable.Rows) {
+        $primaryAgent = ([string]$row[$primaryHeader]).Trim()
+        if (-not $primaryAgent -or $primaryAgent -in '—', '-') { continue }
+        $roleId = ([string]$row['Role']).Trim().ToLowerInvariant()
+        $member = if ($memberHeader) { ([string]$row[$memberHeader]).Trim() } else { '' }
+        $alternates = [System.Collections.Generic.List[string]]::new()
+        if ($alternateHeader) {
+            foreach ($alternate in (([string]$row[$alternateHeader]) -split '[,;]|\s/\s')) {
+                $name = $alternate.Trim()
+                if ($name -and $name -notin '—', '-') { $alternates.Add($name) }
+            }
+        }
+        $agentNames = [System.Collections.Generic.List[string]]::new()
+        $agentNames.Add($primaryAgent)
+        foreach ($alt in $alternates) { $agentNames.Add($alt) }
+
+        $rosterRow = [pscustomobject]@{
+            Role        = $roleId
+            MemberName  = $member
+            PrimaryAgent = $primaryAgent
+            AgentNames  = @($agentNames)
+        }
+        $allRosterRows.Add($rosterRow)
+        [void]$rosterAgents.Add($primaryAgent)
+        [void]$primaryAgents.Add($primaryAgent)
+        $agentRoles[$primaryAgent] = $roleId
+        if (-not $rowsByAgent.ContainsKey($primaryAgent)) { $rowsByAgent[$primaryAgent] = [System.Collections.Generic.List[object]]::new() }
+        $rowsByAgent[$primaryAgent].Add($rosterRow)
+
+        foreach ($alt in $alternates) {
+            [void]$rosterAgents.Add($alt)
+            if (-not $agentRoles.ContainsKey($alt)) { $agentRoles[$alt] = $roleId }
+            if (-not $rowsByAgent.ContainsKey($alt)) { $rowsByAgent[$alt] = [System.Collections.Generic.List[object]]::new() }
+            $rowsByAgent[$alt].Add($rosterRow)
+        }
+    }
+}
+
+foreach ($member in @($connectorBindingsByMemberAll.Keys)) {
+    $bindings = @($connectorBindingsByMemberAll[$member])
+    if ($bindings.Count -le 1) { continue }
+    $bindingList = @($bindings | ForEach-Object { $_.BindingId }) -join ', '
+    $problems.Add("Connector Bindings Member Name '$member' is reused by $($bindings.Count) rows ($bindingList); connector member identities must be globally unique across connector bindings.")
+}
+
+foreach ($binding in @($allConnectorBindings)) {
+    if (-not $binding.MemberName) { continue }
+    $target = Get-ConnectorTargetRoleLocal -Target $binding.Target
+    $targetRows = @()
+    if ($binding.TargetKind -eq 'role' -and $target.Kind -eq 'role') {
+        $targetRows = @($allRosterRows | Where-Object { $_.Role -eq $target.Role -and $_.PrimaryAgent -cne 'Squad Connector' })
+        if ($target.MemberName) {
+            $targetRows = @($targetRows | Where-Object { ([string]$_.MemberName).Trim() -ceq $target.MemberName })
+        }
+    }
+    if (@($targetRows | Where-Object { ([string]$_.MemberName).Trim() -and ([string]$_.MemberName).Trim() -ceq $binding.MemberName }).Count -gt 0) {
+        $problems.Add("Connector Bindings row '$($binding.BindingId)' must use a trusted Member Name distinct from targeted internal roster identities.")
+    }
+}
+
 $derivationSession = $preState.SessionModel
 if ((Get-Kind $payload['stateAdvance']) -eq 'Object' -and (Get-Kind $payload['stateAdvance']['sessionModel']) -eq 'String') { $derivationSession = Get-NodeString $payload['stateAdvance']['sessionModel'] }
 $records = [System.Collections.Generic.List[hashtable]]::new()
@@ -985,7 +1535,7 @@ else {
     foreach ($node in $recordNodes) {
         $where = "historyRecords[$index]"
         $index++
-        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity') -Where $where)) { continue }
+        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'reportedModel', 'internalToolCalls', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity', 'externalProvenance') -Where $where)) { continue }
         $agent = Get-TextField -Node $node -Key 'agent' -Where $where
         $request = Get-TextField -Node $node -Key 'request' -Where $where
         $deliverable = Get-TextField -Node $node -Key 'deliverable' -Where $where
@@ -994,10 +1544,16 @@ else {
         $memberName = Get-TextField -Node $node -Key 'memberName' -Where $where -Optional
         $selectionCue = Get-TextField -Node $node -Key 'selectionCue' -Where $where -Optional
         $passedModel = Get-TextField -Node $node -Key 'passedModel' -Where $where -Optional
+        $reportedModel = Get-TextField -Node $node -Key 'reportedModel' -Where $where -Optional
+        $internalToolCalls = if ($null -ne $node['internalToolCalls']) { Get-NodeInt -Node $node['internalToolCalls'] } else { 0L }
+        if ($null -ne $node['internalToolCalls'] -and ($null -eq $internalToolCalls -or $internalToolCalls -lt 0)) { $problems.Add("$where.internalToolCalls must be a nonnegative integer."); $internalToolCalls = 0L }
+        if ($reportedModel -and ((Test-ModelLabel $reportedModel) -or $reportedModel -eq 'unknown')) { $problems.Add("$where.reportedModel must be an actual host/worker-reported model, not a routing label or unknown.") }
         $ref = Get-TextField -Node $node -Key 'costPreflightRef' -Where $where -Optional
         $slot = Get-TextField -Node $node -Key 'costPreflightSlot' -Where $where -Optional
         $consumption = $null
         if ($null -ne $node['consumption']) { $consumption = Test-Consumption -Node $node['consumption'] -Where "$where.consumption" }
+        if ($consumption -and $reportedModel -and ((ConvertFrom-ModelPin $consumption.model) -ne (ConvertFrom-ModelPin $reportedModel) -or $consumption.model_source -ne 'dispatch-reported')) { $problems.Add("$where.consumption contradicts stronger reportedModel evidence.") }
+        if ($consumption -and $consumption.internal_turns -lt $internalToolCalls) { $problems.Add("$where.consumption internal_turns is below the reported tool-call count.") }
         if ($consumption -and $consumption['model_source'] -eq 'cli-pinned' -and -not $passedModel) {
             $passedModel = $consumption['model']
             $handoffWarnings.Add("WARN $where.passedModel omitted; recorded as the cli-pinned model '$passedModel'")
@@ -1009,28 +1565,100 @@ else {
                 foreach ($key in $RoutingKeys) { $routing[$key] = Get-TextField -Node $node['routingIdentity'] -Key $key -Where "$where.routingIdentity" }
             }
         }
-        if ($null -ne $ref -or $null -ne $slot) { $needsScribe.Add("$where carries a Cost Preflight ref or slot; slot admission and the replay check need the Scribe.") }
+        $externalProvenance = $null
+        if ($null -ne $node['externalProvenance']) {
+            $requiredProvenance = @('connectorId', 'bindingId', 'endpointKind', 'roleMode', 'targetKind', 'target', 'verification', 'metering')
+            if (Test-ObjectKeys -Node $node['externalProvenance'] -Required $requiredProvenance -Optional @() -Where "$where.externalProvenance") {
+                $externalProvenance = [ordered]@{}
+                foreach ($field in $requiredProvenance) { $externalProvenance[$field] = Get-TextField -Node $node['externalProvenance'] -Key $field -Where "$where.externalProvenance" }
+                if ($externalProvenance) {
+                    if ($externalProvenance['endpointKind'] -notin @('agent', 'orchestrator')) { $problems.Add("$where.externalProvenance.endpointKind must be 'agent' or 'orchestrator'.") }
+                    if ($externalProvenance['roleMode'] -notin @('replace', 'add')) { $problems.Add("$where.externalProvenance.roleMode must be 'replace' or 'add'.") }
+                    if ($externalProvenance['targetKind'] -ne 'role') { $problems.Add("$where.externalProvenance.targetKind must be 'role'; coordinator and Scribe cannot be connected.") }
+                    if ($externalProvenance['verification'] -ne 'external-unverified') { $problems.Add("$where.externalProvenance.verification must be 'external-unverified'.") }
+                    if ($externalProvenance['metering'] -ne 'external-unmetered') { $problems.Add("$where.externalProvenance.metering must be 'external-unmetered'.") }
+                }
+            }
+        }
+        if (($null -eq $ref) -ne ($null -eq $slot)) { $problems.Add("$where must supply costPreflightRef and costPreflightSlot together.") }
         if ($null -eq $agent -or $null -eq $request -or $null -eq $deliverable -or $null -eq $outcome -or ($null -ne $node['consumption'] -and $null -eq $consumption)) { continue }
         if ($agent -eq $ScribeAgent) { $problems.Add("$where.agent must not be '$ScribeAgent'; its orchestration entry is written from payload.orchestration."); continue }
         if ($agent -match '[\\/:*?"<>|=;,]' -or $agent -match '^\.') { $problems.Add("$where.agent '$agent' is not a valid history file name."); continue }
-        if (-not $rosterAgents.Contains($agent)) { $needsScribe.Add("$where.agent '$agent' is not an Agent Name (Primary) or Alternate in team.md (history file names are the frontmatter name verbatim).") ; continue }
-        if (-not $primaryAgents.Contains($agent) -and -not $selectionCue) { $problems.Add("$where.agent '$agent' is an Alternate; selectionCue must name the cue that selected it.") }
-        if ($primaryAgents.Contains($agent) -and $selectionCue) { $problems.Add("$where.selectionCue is only for an Alternate; '$agent' is the Primary.") }
-        if ($memberName -and -not $memberNames.Contains($memberName)) { $problems.Add("$where.memberName '$memberName' is not a Member Name in team.md.") }
+        if (-not $rosterAgents.Contains($agent) -and $agent -ne 'Squad Connector') { $needsScribe.Add("$where.agent '$agent' is not an Agent Name (Primary) or Alternate in team.md (history file names are the frontmatter name verbatim).") ; continue }
+        if ($agent -eq 'Squad Connector' -and -not $externalProvenance) {
+            $problems.Add("$where.externalProvenance is required when agent is 'Squad Connector'.")
+            continue
+        }
+        $identity = Resolve-RosterIdentityLocal -Agent $agent -MemberName $memberName -ExternalProvenance $externalProvenance -Where $where
+        if ($null -eq $identity) { continue }
+        if (-not $identity.IsPrimary -and -not $selectionCue) { $problems.Add("$where.agent '$agent' is an Alternate; selectionCue must name the cue that selected it.") }
+        if ($identity.IsPrimary -and $selectionCue) { $problems.Add("$where.selectionCue is only for an Alternate; '$agent' is the Primary.") }
+        if ($externalProvenance -and $agent -ne 'Squad Connector') {
+            $problems.Add("$where.externalProvenance is allowed only when agent is 'Squad Connector'.")
+        }
+        if ($agent -eq 'Squad Connector') {
+            if (-not $memberName) { $problems.Add("$where.memberName is required when agent is 'Squad Connector'.") }
+            if ($externalProvenance -and $identity.Binding) {
+                foreach ($pair in @(
+                        @{ Payload = 'connectorId'; Binding = 'ConnectorId' },
+                        @{ Payload = 'bindingId'; Binding = 'BindingId' },
+                        @{ Payload = 'endpointKind'; Binding = 'EndpointKind' },
+                        @{ Payload = 'roleMode'; Binding = 'RoleMode' },
+                        @{ Payload = 'targetKind'; Binding = 'TargetKind' },
+                        @{ Payload = 'target'; Binding = 'Target' }
+                    )) {
+                    $expected = [string]$identity.Binding.($pair.Binding)
+                    $actual = [string]$externalProvenance[$pair.Payload]
+                    if ($actual -cne $expected) { $problems.Add("$where.externalProvenance.$($pair.Payload) '$actual' does not match Connector Bindings '$expected'.") }
+                }
+            }
+        }
         if ($null -eq $node['consumption']) {
-            $consumption = Get-DerivedConsumption -Agent $agent -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession
+            $consumption = Get-DerivedConsumption -Agent $agent -Role $identity.ClassRole -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession -ReportedModel $reportedModel -InternalToolCalls $internalToolCalls
             if ($null -eq $consumption) { continue }
         }
         Test-Attribution -Map $consumption -Where "$where.consumption" -PinAgent $agent -PassedModel $passedModel
         $deliverablePath = ($deliverable -replace '\s+\([^)]*\)\s*$', '').Trim().Trim('`')
         $deliverableSize = if ($deliverable -match '\s+\(([^)]*)\)\s*$') { $Matches[1] } else { $null }
         if ($deliverablePath -match '^(?i)(n/?a|none|inline.*|no artifact.*)$') { $problems.Add("$where.deliverable names no artifact; a stage that wrote no file did not run."); continue }
-        $records.Add(@{ Agent = $agent; Title = $(if ($title) { $title } else { $request.Substring(0, [Math]::Min(80, $request.Length)) }); Request = $request; DeliverablePath = $deliverablePath; DeliverableSize = $deliverableSize; Outcome = $outcome; MemberName = $memberName; SelectionCue = $selectionCue; Ref = $ref; Slot = $slot; Consumption = $consumption; Routing = $routing })
+        $trustedProvenance = $null
+        if ($agent -eq 'Squad Connector' -and $identity.Binding) {
+            $trustedProvenance = [ordered]@{
+                connectorId  = [string]$identity.Binding.ConnectorId
+                bindingId    = [string]$identity.Binding.BindingId
+                endpointKind = [string]$identity.Binding.EndpointKind
+                roleMode     = [string]$identity.Binding.RoleMode
+                targetKind   = [string]$identity.Binding.TargetKind
+                target       = [string]$identity.Binding.Target
+                verification = 'external-unverified'
+                metering     = 'external-unmetered'
+            }
+        }
+        elseif ($agent -eq 'Squad Connector' -and $identity.PSObject.Properties['LegacyProvenance'] -and $identity.LegacyProvenance) {
+            $trustedProvenance = $identity.LegacyProvenance
+        }
+        $renderedOutcome = if ($agent -eq 'Squad Connector') { 'external, unverified' } else { $outcome }
+        $records.Add(@{
+                Agent              = $agent
+                Title              = $(if ($title) { $title } else { $request.Substring(0, [Math]::Min(80, $request.Length)) })
+                Request            = $request
+                DeliverablePath    = $deliverablePath
+                DeliverableSize    = $deliverableSize
+                Outcome            = $renderedOutcome
+                MemberName         = $memberName
+                SelectionCue       = $selectionCue
+                Ref                = $ref
+                Slot               = $slot
+                Consumption        = $consumption
+                Routing            = $routing
+                ExternalProvenance = $trustedProvenance
+                ResolvedRole       = $identity.Role
+            })
     }
 }
 
 # economy-mode.md Route Markers: every economy history entry starts its Route rationale with Route: economy or Route: bounded.
-foreach ($record in $records) {
+foreach ($record in $records | Where-Object { $routingMode -eq 'economy' }) {
     if ($null -eq $record.Routing) {
         $handoffWarnings.Add("WARN $($record.Agent): no routingIdentity; under economy every history entry carries Route: economy (or Route: bounded) in its Route rationale bullet (economy-mode.md Route Markers).")
         continue
@@ -1118,8 +1746,43 @@ foreach ($key in @('sessionModel', 'modelOverrides', 'estCostUsd', 'estCreditsTo
     if ($null -eq $run[$key]) { Stop-Handoff 2 "state.json currentRun lacks '$key'; the Squad Scribe repairs state." }
 }
 $preflight = $run['costPreflight']
-if ($null -ne $preflight['ceilingUsd'] -or (Get-NodeString $preflight['decision']) -ne 'not-requested') {
-    Stop-Handoff 2 'a cost ceiling is configured; a ceiling-admitted hand-off (slot and replay checks) needs the Squad Scribe.'
+$preflightDecision = Get-NodeString $preflight['decision']
+$ceilingActive = $null -ne $preflight['ceilingUsd'] -or $preflightDecision -ne 'not-requested'
+$seenAdmissionSlots = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($record in $records) {
+    if ($ceilingActive) {
+        if (-not $record.Ref -or -not $record.Slot) {
+            Stop-Handoff 1 "an active ceiling requires Cost Preflight Ref and Slot for '$($record.Agent)'."
+        }
+        if ($preflightDecision -notin @('within-ceiling', 'approved-over-ceiling')) {
+            Stop-Handoff 1 "current Cost Preflight decision '$preflightDecision' does not admit a dispatch."
+        }
+        $costDecisionSection = Get-CostDecisionLocal -Reference $record.Ref -DecisionsPath $decisionsPath
+        $heading = $costDecisionSection.Groups['heading'].Value
+        $headingPattern = '^Cost Preflight \S+ ' + [regex]::Escape($runId) + ' ' + [regex]::Escape((Get-NodeString $preflight['roundId'])) + '$'
+        if ($heading -notmatch $headingPattern) {
+            Stop-Handoff 1 "Cost Preflight Ref for '$($record.Agent)' does not match the active run and round."
+        }
+        $decisionBody = $costDecisionSection.Groups['body'].Value
+        $recordedDecision = Get-EntryFieldLocal $decisionBody 'Decision'
+        if ($recordedDecision -cne $preflightDecision -or $recordedDecision -notin @('within-ceiling', 'approved-over-ceiling')) {
+            Stop-Handoff 1 "Cost Preflight Ref for '$($record.Agent)' is not the active admitting decision."
+        }
+        $permitted = @((Get-EntryFieldLocal $decisionBody 'Permitted Next Dispatch Set') -split ',\s*' | ForEach-Object { $_.Trim('`') } | Where-Object { $_ })
+        if ($record.Slot -cnotin $permitted) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' is not permitted by '$($record.Ref)'."
+        }
+        $identity = $record.Ref + ':' + $record.Slot
+        if (-not $seenAdmissionSlots.Add($identity)) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' is duplicated in this payload."
+        }
+        if ((Get-ExistingAdmissionUseCountLocal -HistoryDirectory $historyDir -Reference $record.Ref -Slot $record.Slot) -ne 0) {
+            Stop-Handoff 1 "Cost Preflight slot '$($record.Slot)' was already consumed."
+        }
+    }
+    elseif ($record.Ref -or $record.Slot) {
+        Stop-Handoff 1 "Cost Preflight Ref/Slot was supplied for '$($record.Agent)' but no ceiling is active."
+    }
 }
 $stateTurn = Get-NodeInt $state['turn']
 if ($null -eq $stateTurn -or $turn -ne ($stateTurn + 1)) { Stop-Handoff 1 "payload.turn $turn must equal state.json turn + 1 ($stateTurn + 1); a replayed or stale payload writes nothing." }
@@ -1209,10 +1872,10 @@ foreach ($record in $records) {
 if ($problems.Count -gt 0) { Stop-Handoff 1 ("invalid payload: " + ($problems -join ' ')) }
 
 # Review-saw-final-files: no owner deliverable may change after the closing review's own deliverable.
-$reviewRecords = @($records | Where-Object { $agentRoles[$_.Agent] -in $ReviewRoles -and $_.Modified })
+$reviewRecords = @($records | Where-Object { $_.ResolvedRole -in $ReviewRoles -and $_.Modified })
 if ($reviewRecords.Count -gt 0) {
     $reviewTime = ($reviewRecords | ForEach-Object { $_.Modified } | Sort-Object | Select-Object -Last 1)
-    foreach ($record in @($records | Where-Object { $agentRoles[$_.Agent] -notin $ReviewRoles -and $_.Modified })) {
+    foreach ($record in @($records | Where-Object { $_.ResolvedRole -notin $ReviewRoles -and $_.Modified })) {
         if ($record.Modified -gt $reviewTime.AddSeconds(2)) {
             Stop-Handoff 1 "owner deliverable $($record.DeliverablePath) changed after the closing review; re-dispatch the review on the final files before the hand-off. Editing the payload does not clear this; re-dispatch the review, then rerun."
         }
@@ -1352,6 +2015,12 @@ foreach ($record in $records) {
         $lines.Add("* **Observed model** — $($record.Routing['observedModel'])")
         $lines.Add("* **Route rationale** — $($record.Routing['routeRationale'])")
     }
+    if ($record.ExternalProvenance) {
+        $lines.Add('')
+        $lines.Add("* External provenance: connector=$($record.ExternalProvenance['connectorId']); binding=$($record.ExternalProvenance['bindingId']); endpoint=$($record.ExternalProvenance['endpointKind']); mode=$($record.ExternalProvenance['roleMode']); target=$($record.ExternalProvenance['target'])")
+        $lines.Add('* Verification: external, unverified')
+        $lines.Add("* External-unmetered: connector=$($record.ExternalProvenance['connectorId'])")
+    }
     $entryPlans.Add(@{ Agent = $record.Agent; Heading = $heading; Lines = $lines })
 }
 
@@ -1379,7 +2048,7 @@ $orchHeading = "$timestamp Coordinator hand-off, turn $turn"
 $orchLines = [System.Collections.Generic.List[string]]::new()
 $orchLines.Add("### $orchHeading"); $orchLines.Add('')
 $orchLines.Add("* Turn: $turn")
-$orchLines.Add("* Request: $(if ($orchestration.Request) { $orchestration.Request } else { 'Coordinator hand-off recorded by the Squad Scribe through scripts/Write-SquadHandoff.ps1.' })")
+$orchLines.Add("* Request: $(if ($orchestration.Request) { $orchestration.Request } else { 'Coordinator hand-off recorded deterministically through scripts/Write-SquadHandoff.ps1.' })")
 $orchLines.Add("* Deliverable: $($deliverableList -join ', ')")
 $orchLines.Add("* Outcome: $(if ($orchestration.Outcome) { $orchestration.Outcome } else { "Recorded $($entryPlans.Count) dispatch entr$(if ($entryPlans.Count -eq 1) { 'y' } else { 'ies' }) and advanced state." })")
 $orchLines.Add('')
@@ -1416,9 +2085,9 @@ $ledgerScript = Join-Path $scriptsRoot 'Measure-SquadLedger.ps1'
 foreach ($dependency in @($ratesScript, $ledgerScript)) { if (-not (Test-Path -LiteralPath $dependency -PathType Leaf)) { Stop-Handoff 1 "missing sibling script $dependency." } }
 
 Register-Original $ratesPath
-$ratesCheck = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Check', '-Mode', 'economy')
+$ratesCheck = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Check')
 if ($ratesCheck.ExitCode -ne 0) {
-    $seed = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot, '-Mode', 'economy')
+    $seed = Invoke-ChildScript -ScriptPath $ratesScript -Arguments @('-SquadRoot', $SquadRoot)
     Update-OwnedHash $ratesPath
     if ($seed.ExitCode -ne 0) {
         $failed = @(Restore-Originals)
@@ -1473,6 +2142,7 @@ try {
     $written.Add('WROTE state.json (turn, updated, mode, activeRoles, openEscalations)')
 
     Register-Original $consumptionPath
+    Register-Original $sessionCachePath
     # consumption.md is derived from history; a file with none of the ledger's headings was classified above and is re-seeded from the template.
     if ($reseedLedger) {
         $templateText = [System.IO.File]::ReadAllText((Join-Path $scriptsRoot '../references/consumption.md'))
@@ -1483,66 +2153,31 @@ try {
         $written.Add('RESEEDED consumption.md from the references/consumption.md template (it lacked the ledger sections)')
     }
     $ledger = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Write', '-SessionLog', $SessionLog)
-    Update-OwnedHash $consumptionPath, $statePath
+    Update-OwnedHash $consumptionPath, $statePath, $sessionCachePath
     if ($ledger.ExitCode -ne 0) { throw "Measure-SquadLedger -Write failed: $($ledger.Text)" }
+    $childWarnings = @(Get-ChildWarnings -Text $ledger.Text)
+    foreach ($warning in $childWarnings) {
+        if (-not $handoffWarnings.Contains($warning)) { $handoffWarnings.Add($warning) }
+    }
     $written.Add("WROTE consumption.md ($(($ledger.Text -split "`n" | Select-Object -Last 1).Trim()))")
+    if ($ledger.Text -match 'APPENDED Cost Comparison') { $written.Add('APPENDED Cost Comparison section to consumption.md') }
 
-    # The ledger helper leaves the heading run id and the Cost Comparison section as written. The seed placeholder and this script's own
-    # squad-figure line are replaced; a full comparison keeps its manual baseline and gets its squad figures and saving recomputed.
-    $afterState = [System.Text.Json.Nodes.JsonNode]::Parse((Get-FileText $statePath))
-    $cost = [double]::Parse($afterState['currentRun']['estCostUsd'].ToJsonString(), [System.Globalization.CultureInfo]::InvariantCulture)
-    $credits = [double]::Parse($afterState['currentRun']['estCreditsTotal'].ToJsonString(), [System.Globalization.CultureInfo]::InvariantCulture)
-    $agentCount = @(Get-ChildItem -LiteralPath $historyDir -Filter '*.md' -File | Where-Object { $_.BaseName -ne $ScribeAgent -and $_.Name -notmatch '^(autonomous-loop|autopilot-run)-' }).Count
+    # Only this writer knows the payload run id; state.json has no general run-id field.
     $ledgerBytes = [System.IO.File]::ReadAllBytes($consumptionPath)
     $ledgerHasBom = ($ledgerBytes.Length -ge 3 -and $ledgerBytes[0] -eq 0xEF -and $ledgerBytes[1] -eq 0xBB -and $ledgerBytes[2] -eq 0xBF)
     $ledgerText = Get-FileText $consumptionPath
     $ledgerText = [regex]::Replace($ledgerText, '(?m)^# Squad Consumption Ledger \(Run: [^)\r\n]*\)', "# Squad Consumption Ledger (Run: $runId)")
-    $comparison = 'This run consumed an estimated **${0} (~{1} AI credits)** across {2} specialized agent(s) (squad figure only; the host-reported comparison is in Observed Usage when a session log exists).' -f $cost.ToString('F4', [System.Globalization.CultureInfo]::InvariantCulture), $credits.ToString('F2', [System.Globalization.CultureInfo]::InvariantCulture), $agentCount
-    $comparisonPattern = '(?m)^(?:This run has not yet dispatched|This run consumed an estimated \*\*\$<squad-cost>|This run consumed an estimated [^\r\n]*\(squad figure only;)[^\r\n]*'
-    $comparisonRefreshed = [regex]::IsMatch($ledgerText, $comparisonPattern)
-    if ($comparisonRefreshed) { $ledgerText = [regex]::Replace($ledgerText, $comparisonPattern, { param($m) $comparison }) }
-    else {
-        # A full comparison keeps its manual baseline; its squad figures and the saving percentage are recomputed from the new total.
-        $invariantCulture = [System.Globalization.CultureInfo]::InvariantCulture
-        $figure = '\*\*\$[0-9][0-9,]*(?:\.\d+)? \(~[0-9][0-9,]*(?:\.\d+)? AI credits\)\*\*'
-        $fullMatch = [regex]::Match($ledgerText, "(?m)^This run consumed an estimated $figure[^\r\n]*")
-        if ($fullMatch.Success -and $ledgerText -notmatch '(?m)^#{2,3}\s+Observed Usage') {
-            $squadFigure = '**${0} (~{1} AI credits)**' -f $cost.ToString('F4', $invariantCulture), $credits.ToString('F2', $invariantCulture)
-            $line = [regex]::Replace($fullMatch.Value, "^This run consumed an estimated $figure", { param($m) "This run consumed an estimated $squadFigure" })
-            $line = $line -replace ' \(stale — refreshed at run end\)$', ''
-            $baseline = [regex]::Match($line, 'estimated at \*\*\$(?<m>[0-9][0-9,]*(?:\.\d+)?) \(~[0-9][0-9,]*(?:\.\d+)? AI credits\)\*\*(?<mid>[^*]*?)about \*\*(?<p>\d+(?:\.\d+)?)%\*\*')
-            if ($baseline.Success) {
-                $manual = [double]::Parse($baseline.Groups['m'].Value.Replace(',', ''), $invariantCulture)
-                if ($manual -gt 0 -and $manual -ge $cost) {
-                    $decimals = if ($baseline.Groups['p'].Value.Contains('.')) { $baseline.Groups['p'].Value.Split('.')[1].Length } else { 0 }
-                    $saving = (100.0 * ($manual - $cost) / $manual).ToString("F$decimals", $invariantCulture)
-                    $line = $line.Substring(0, $baseline.Groups['p'].Index) + $saving + $line.Substring($baseline.Groups['p'].Index + $baseline.Groups['p'].Length)
-                }
-                else { $line += ' (stale — refreshed at run end)' }
-            }
-            $ledgerText = $ledgerText.Substring(0, $fullMatch.Index) + $line + $ledgerText.Substring($fullMatch.Index + $fullMatch.Length)
-            $comparisonRefreshed = $true
-        }
-        elseif ($fullMatch.Success) { $comparisonRefreshed = $true }
-    }
-    if (-not $comparisonRefreshed) {
-        # No Cost Comparison section at all: append the template's section with this script's own squad-figure line.
-        $templateForComparison = [System.IO.File]::ReadAllText((Join-Path $scriptsRoot '../references/consumption.md'))
-        $estimatesNote = [regex]::Match($templateForComparison, '(?m)^> Estimates only\.[^\r\n]*').Value
-        $nl = Get-NewlineOf $ledgerText
-        $section = "## Cost Comparison (illustrative)$nl$nl$comparison$nl"
-        if ($estimatesNote) { $section += "$nl$estimatesNote$nl" }
-        $ledgerText = $ledgerText.TrimEnd() + "$nl$nl" + $section
-        $comparisonRefreshed = $true
-        $written.Add('APPENDED Cost Comparison section to consumption.md')
-    }
     $ledgerOut = [System.Text.UTF8Encoding]::new($false).GetBytes($ledgerText)
     if ($ledgerHasBom) { $ledgerOut = [byte[]](@(0xEF, 0xBB, 0xBF) + $ledgerOut) }
     Write-FileAtomic -FullPath $consumptionPath -Bytes $ledgerOut
 
     $countsArgument = (@($expectedCounts.Keys | ForEach-Object { "$_=$($expectedCounts[$_])" })) -join ';'
     $check = Invoke-ChildScript -ScriptPath $ledgerScript -Arguments @('-SquadRoot', $SquadRoot, '-Check', '-ExpectedHistoryCounts', $countsArgument)
+    $checkLine = @($check.Text -split "`n" | Where-Object { $_.Trim() -eq 'Measure-SquadLedger -Check: PASS' })
     $ledgerOnly = $null
+    if ($check.ExitCode -eq 0 -and $checkLine.Count -ne 1) {
+        throw "Measure-SquadLedger -Check returned exit 0 without exactly one PASS status: $($check.Text)"
+    }
     if ($check.ExitCode -ne 0) {
         # v0.18.1: only a history-integrity failure stops; a ledger-only mismatch is cost accounting the next -Write re-derives.
         $failureClass = [regex]::Match($check.Text, '(?m)Measure-SquadLedger -Check: failure class: (?<class>[a-z-]+)').Groups['class'].Value
@@ -1550,17 +2185,27 @@ try {
         $firstMismatches = @($check.Text -split "`n" | Where-Object { $_ -match '^\s+- ' } | Select-Object -First 3 | ForEach-Object { ($_ -replace '^\s+- ', '').Trim() })
         $ledgerOnly = "WARN ledger-only: $($firstMismatches -join ' | ') (writes kept; the next Measure-SquadLedger -Write re-derives consumption.md from history)"
     }
-
-    # A comparison that still quotes a squad total other than the ledger's own is self-refuting; the hand-off does not stand.
-    $finalLedger = Get-FileText $consumptionPath
-    $quoted = [regex]::Match($finalLedger, '(?m)^This run consumed an estimated \*\*\$(?<n>[0-9][0-9,]*(?:\.\d+)?) \(~')
-    if ($quoted.Success -and $finalLedger -notmatch '(?m)^#{2,3}\s+Observed Usage') {
-        $quotedCost = [double]::Parse($quoted.Groups['n'].Value.Replace(',', ''), [System.Globalization.CultureInfo]::InvariantCulture)
-        if ([math]::Abs($quotedCost - [math]::Round($cost, 4)) -gt 0.00005) { throw "the Cost Comparison quotes `$$($quoted.Groups['n'].Value) but the ledger total is `$$($cost.ToString('F4', [System.Globalization.CultureInfo]::InvariantCulture)) (self-refuting)." }
+    $childWarnings = @(Get-ChildWarnings -Text $check.Text)
+    foreach ($warning in $childWarnings) {
+        if (-not $handoffWarnings.Contains($warning)) { $handoffWarnings.Add($warning) }
     }
+
 }
 catch {
     Stop-WithRollback 3 "write failed: $($_.Exception.Message)"
+}
+
+if ($Quiet) {
+    foreach ($warning in $handoffWarnings) { [Console]::Error.WriteLine($warning) }
+    if ($ledgerOnly) { [Console]::Error.WriteLine($ledgerOnly) }
+    [ordered]@{
+        status          = 'written'
+        turn            = $turn
+        dispatchEntries = $entryPlans.Count
+        historyCounts   = $expectedCounts
+        ledgerCheck     = $(if ($ledgerOnly) { 'ledger-only' } else { 'PASS' })
+    } | ConvertTo-Json -Depth 4 -Compress
+    exit 0
 }
 
 $written | ForEach-Object { Write-Output $_ }
@@ -1569,6 +2214,5 @@ if ($ledgerOnly) {
     Write-Output $ledgerOnly
     exit 0
 }
-$checkLine = @($check.Text -split "`n" | Where-Object { $_ -match 'Measure-SquadLedger -Check: PASS' } | Select-Object -Last 1)
-Write-Output $(if ($checkLine.Count -gt 0) { $checkLine[0].Trim() } else { 'Measure-SquadLedger -Check: PASS' })
+Write-Output $checkLine[0].Trim()
 exit 0

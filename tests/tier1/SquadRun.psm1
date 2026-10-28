@@ -130,20 +130,35 @@ function Invoke-SquadTurn {
         [Parameter(Mandatory)]
         [string]$TranscriptPath,
 
+        [string]$LogDir,
+
+        [switch]$CaptureDispatchEvents,
+
         [int]$TimeoutMinutes = 20
     )
 
     $errorPath = [System.IO.Path]::ChangeExtension($TranscriptPath, '.err.log')
     $started = Get-Date
+    if ($LogDir) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
 
     # Start-Process joins its argument list with spaces, so the prompt has to arrive
     # already quoted or the CLI reads each word as a separate argument.
-    $arguments = @(
+    $argumentValues = @(
         '-p', (ConvertTo-ProcessArgument $Prompt)
         '--model', (ConvertTo-ProcessArgument $Model)
         '--allow-all-tools'
         '--deny-tool', (ConvertTo-ProcessArgument 'shell(rm)')
-    ) -join ' '
+    )
+    if ($CaptureDispatchEvents) {
+        $argumentValues += @('--output-format', 'json')
+    }
+    if ($LogDir) {
+        $argumentValues += @(
+            '--log-dir', (ConvertTo-ProcessArgument $LogDir)
+            '--log-level', 'debug'
+        )
+    }
+    $arguments = $argumentValues -join ' '
 
     $process = Start-Process -FilePath 'copilot' -ArgumentList $arguments `
         -WorkingDirectory $Workspace -NoNewWindow -PassThru `
@@ -165,6 +180,273 @@ function Invoke-SquadTurn {
         Transcript = $transcript
         Answer     = $transcript
         ErrorLog   = if (Test-Path -LiteralPath $errorPath) { Get-Content -LiteralPath $errorPath -Raw } else { '' }
+        LogDir     = $LogDir
+    }
+}
+
+function Publish-ConnectorConsumerResult {
+    <#
+    .SYNOPSIS
+        Writes one deterministic external result for the Tier 1 connector resume scenario.
+    .DESCRIPTION
+        This helper is the consumer side only. It requires the real Squad Connector
+        dispatch to have published both request and snapshot first, preserves both
+        byte-for-byte, writes the requested task-owned artifact, and then publishes the
+        matching result envelope.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Workspace,
+        [Parameter(Mandatory)][string]$ConnectorId,
+        [Parameter(Mandatory)][string]$ArtifactPath,
+        [Parameter(Mandatory)][string]$ArtifactContent,
+        [Parameter(Mandatory)][string]$Narrative
+    )
+
+    $dropPath = Join-Path $Workspace '.connector-drops' $ConnectorId
+    $requests = @(Get-ChildItem -LiteralPath $dropPath -Filter '*.request.json' -File -ErrorAction SilentlyContinue)
+    if ($requests.Count -ne 1) {
+        throw "Expected one request in '$dropPath', found $($requests.Count)."
+    }
+
+    $requestPath = $requests[0].FullName
+    $request = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json
+    if ([string]$request.connectorId -cne $ConnectorId) {
+        throw "Request connectorId '$($request.connectorId)' does not match '$ConnectorId'."
+    }
+    if (-not $request.taskId -or -not $request.deliverableRoot -or -not $request.bindingId) {
+        throw 'The connector request is missing taskId, deliverableRoot, or bindingId.'
+    }
+
+    $snapshotPath = Join-Path $dropPath "$($request.taskId).snapshot.json"
+    if (-not (Test-Path -LiteralPath $snapshotPath -PathType Leaf)) {
+        throw "The connector request has no durable snapshot at '$snapshotPath'."
+    }
+    $snapshot = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json
+    if ([string]$snapshot.taskId -cne [string]$request.taskId -or
+        [string]$snapshot.deliverableRoot -cne [string]$request.deliverableRoot -or
+        $snapshot.PSObject.Properties.Name -notcontains 'preExistingPaths') {
+        throw 'The connector snapshot does not bind to the request or omits preExistingPaths.'
+    }
+
+    $requestHash = (Get-FileHash -LiteralPath $requestPath -Algorithm SHA256).Hash
+    $snapshotHash = (Get-FileHash -LiteralPath $snapshotPath -Algorithm SHA256).Hash
+    $artifactRoot = if ([System.IO.Path]::IsPathRooted([string]$request.deliverableRoot)) {
+        [string]$request.deliverableRoot
+    }
+    else {
+        Join-Path $Workspace ([string]$request.deliverableRoot)
+    }
+    $deliveredPath = Join-Path $artifactRoot $ArtifactPath
+    New-Item -ItemType Directory -Path (Split-Path -Parent $deliveredPath) -Force | Out-Null
+    Set-Content -LiteralPath $deliveredPath -Value $ArtifactContent -Encoding utf8NoBOM -NoNewline
+
+    $result = [ordered]@{
+        taskId      = [string]$request.taskId
+        connectorId = [string]$request.connectorId
+        bindingId   = [string]$request.bindingId
+        role        = [string]$request.role
+        status      = 'completed'
+        artifacts   = @(
+            [ordered]@{
+                path = $ArtifactPath -replace '\\', '/'
+                type = [System.IO.Path]::GetExtension($ArtifactPath).TrimStart('.').ToLowerInvariant()
+            }
+        )
+        narrative   = $Narrative
+        createdAt   = [DateTime]::UtcNow.ToString('o')
+    }
+    $resultPath = Join-Path $dropPath "$($request.taskId).result.json"
+    $result | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $resultPath -Encoding utf8NoBOM
+
+    [pscustomobject]@{
+        TaskId       = [string]$request.taskId
+        RequestPath  = $requestPath
+        RequestHash  = $requestHash
+        SnapshotPath = $snapshotPath
+        SnapshotHash = $snapshotHash
+        ResultPath   = $resultPath
+        ArtifactPath = $deliveredPath
+    }
+}
+
+function Get-SquadRunEvents {
+    param(
+        [Parameter(Mandatory)][string]$TranscriptPath,
+        [string]$LogDir
+    )
+
+    $sources = @(
+        if (Test-Path -LiteralPath $TranscriptPath -PathType Leaf) { $TranscriptPath }
+        if ($LogDir -and (Test-Path -LiteralPath $LogDir -PathType Container)) {
+            Get-ChildItem -LiteralPath $LogDir -Filter '*.jsonl' -File -Recurse -Force | ForEach-Object FullName
+        }
+    ) | Sort-Object -Unique
+    foreach ($source in $sources) {
+        foreach ($line in (Get-Content -LiteralPath $source)) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed.StartsWith('{')) { continue }
+            try { $trimmed | ConvertFrom-Json -Depth 64 }
+            catch [System.ArgumentException] { continue }
+        }
+    }
+}
+
+function Get-SquadDispatchEvidence {
+    <#
+    .SYNOPSIS
+        Finds machine-generated dispatch-start evidence for one agent.
+    .DESCRIPTION
+        Accepts native subagent-start events or task/runSubagent tool-start events
+        with a matching agent identifier, never a name mentioned in a shell command,
+        tool result, or prompt for another agent. TaskId optionally binds a resume
+        to the original task in the native dispatch arguments.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TranscriptPath,
+        [string]$LogDir,
+        [Parameter(Mandatory)][string]$AgentName,
+        [string]$TaskId
+    )
+
+    $evidence = [System.Collections.Generic.List[string]]::new()
+    foreach ($event in (Get-SquadRunEvents -TranscriptPath $TranscriptPath -LogDir $LogDir)) {
+        $type = @('type', 'event', 'kind') |
+            ForEach-Object { $event.PSObject.Properties[$_]?.Value } |
+            Where-Object { $_ } |
+            Select-Object -First 1
+        $details = $event.PSObject.Properties['data']?.Value
+        if ($null -eq $details) { $details = $event }
+        $arguments = $null
+        $agent = ''
+        if ($type -in @('subagent.started', 'subagent.start')) {
+            $agent = [string]$details.PSObject.Properties['agentName']?.Value
+            $arguments = $details.PSObject.Properties['prompt']?.Value
+        }
+        elseif ($type -in @('tool.execution_start', 'tool.start', 'tool.invoke')) {
+            $tool = @('toolName', 'tool', 'name') | ForEach-Object { $details.PSObject.Properties[$_]?.Value } |
+                Where-Object { $_ } |
+                Select-Object -First 1
+            if ([string]$tool -notmatch '^(?:[^.]+\.)?(?:task|runSubagent)$') { continue }
+            $arguments = $details.PSObject.Properties['arguments']?.Value
+            if ($arguments -is [string]) {
+                try { $arguments = $arguments | ConvertFrom-Json -Depth 64 }
+                catch [System.ArgumentException] { continue }
+            }
+            if ($null -eq $arguments) { continue }
+            $agent = @('agent_type', 'agent', 'agentName') | ForEach-Object { $arguments.PSObject.Properties[$_]?.Value } |
+                Where-Object { $_ } | Select-Object -First 1
+        }
+        else { continue }
+        $agentKey = ConvertTo-ComparableName (([string]$agent -split ':')[-1])
+        if (-not $agentKey -or $agentKey -cne (ConvertTo-ComparableName $AgentName)) { continue }
+        if ($TaskId -and -not ($arguments | ConvertTo-Json -Depth 64 -Compress).Contains($TaskId, [StringComparison]::Ordinal)) { continue }
+        $evidence.Add("json:$type")
+    }
+    $evidence.ToArray()
+}
+
+function Get-ConnectorWrapperCommandCount {
+    param([AllowEmptyString()][string]$Command)
+
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($Command, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        Write-Warning 'Connector execution evidence cannot parse this shell command; no wrapper invocation is established.'
+        return 0
+    }
+    $count = 0
+    foreach ($node in $ast.FindAll({ param($candidate) $candidate -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+        $deferred = $false
+        for ($parent = $node.Parent; $null -ne $parent; $parent = $parent.Parent) {
+            if ($parent -is [System.Management.Automation.Language.FunctionDefinitionAst]) { $deferred = $true; break }
+            if ($parent -is [System.Management.Automation.Language.ScriptBlockExpressionAst] -and
+                ($parent.Parent -isnot [System.Management.Automation.Language.CommandAst] -or
+                -not [object]::ReferenceEquals($parent.Parent.CommandElements[0], $parent) -or
+                $parent.Parent.InvocationOperator -notin @(
+                    [System.Management.Automation.Language.TokenKind]::Ampersand,
+                    [System.Management.Automation.Language.TokenKind]::Dot
+                ))) { $deferred = $true; break }
+        }
+        if ($deferred) { continue }
+        $elements = @($node.CommandElements)
+        $name = ([string]$node.GetCommandName()).Replace('\', '/').Split('/')[-1]
+        if ($name -ieq 'Invoke-SquadConnectorDispatch.ps1') { $count++; continue }
+        if ($name -notin @('pwsh', 'pwsh.exe', 'powershell', 'powershell.exe')) { continue }
+        for ($i = 1; $i -lt $elements.Count; $i++) {
+            $parameter = $elements[$i]
+            if ($parameter -isnot [System.Management.Automation.Language.CommandParameterAst] -or $parameter.ParameterName -notin @('File', 'Command')) { continue }
+            $argument = $parameter.Argument
+            if ($null -eq $argument -and $i + 1 -lt $elements.Count) { $argument = $elements[$i + 1] }
+            if ($argument -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                if ($parameter.ParameterName -ieq 'Command') { $count += Get-ConnectorWrapperCommandCount -Command $argument.Value }
+                elseif ($argument.Value.Replace('\', '/').Split('/')[-1] -ieq 'Invoke-SquadConnectorDispatch.ps1') { $count++ }
+            }
+            break
+        }
+    }
+    return $count
+}
+
+function Get-SquadConnectorExecutionEvidence {
+    <#
+    .SYNOPSIS
+        Joins native Connector children to explicit wrapper commands in their shell calls.
+    .DESCRIPTION
+        Counts literal command positions, including rejected calls without input arguments.
+        Comments and printed strings are not commands. This is not a shell interpreter:
+        dynamic command construction, runtime branches and completion require other evidence.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TranscriptPath,
+        [string]$LogDir
+    )
+
+    $events = @(Get-SquadRunEvents -TranscriptPath $TranscriptPath -LogDir $LogDir |
+        Where-Object { $_.PSObject.Properties['type']?.Value -in @('subagent.started', 'subagent.start', 'tool.execution_start', 'tool.start', 'tool.invoke') })
+    $seenAgents = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($event in $events) {
+        if ($event.PSObject.Properties['type']?.Value -notin @('subagent.started', 'subagent.start')) { continue }
+        $details = $event.PSObject.Properties['data']?.Value
+        if ($null -eq $details) { $details = $event }
+        $agent = [string]$details.PSObject.Properties['agentName']?.Value
+        if ((ConvertTo-ComparableName (($agent -split ':')[-1])) -cne 'squadconnector') { continue }
+        $agentId = [string]$event.PSObject.Properties['agentId']?.Value
+        $dispatchId = [string]$details.PSObject.Properties['toolCallId']?.Value
+        if (-not $agentId -or -not $dispatchId -or -not $seenAgents.Add($agentId)) { continue }
+        $calls = [System.Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
+        foreach ($toolEvent in $events) {
+            if ($toolEvent.PSObject.Properties['type']?.Value -notin @('tool.execution_start', 'tool.start', 'tool.invoke')) { continue }
+            $data = $toolEvent.PSObject.Properties['data']?.Value
+            if ($null -eq $data) { $data = $toolEvent }
+            $childId = [string]$toolEvent.PSObject.Properties['agentId']?.Value
+            $parentId = [string]$data.PSObject.Properties['parentToolCallId']?.Value
+            if ($childId -cne $agentId -and ($childId -or $parentId -cne $dispatchId)) { continue }
+            $tool = [string]$data.PSObject.Properties['toolName']?.Value
+            if ($tool -notmatch '^(?:[^.]+\.)?(?:powershell|bash|shell|terminal|execute)$') { continue }
+            $arguments = $data.PSObject.Properties['arguments']?.Value
+            if ($arguments -is [string]) {
+                try { $arguments = $arguments | ConvertFrom-Json -Depth 64 }
+                catch [System.ArgumentException] { continue }
+            }
+            if ($null -eq $arguments) { continue }
+            $command = [string]$arguments.PSObject.Properties['command']?.Value
+            $invocations = Get-ConnectorWrapperCommandCount -Command $command
+            if ($invocations -eq 0) { continue }
+            $callId = [string]$data.PSObject.Properties['toolCallId']?.Value
+            if ($callId -and -not $calls.ContainsKey($callId)) { $calls.Add($callId, $invocations) }
+        }
+        [pscustomobject]@{
+            AgentId = $agentId
+            DispatchId = $dispatchId
+            Model = [string]$details.PSObject.Properties['model']?.Value
+            TaskModelSource = [string]$details.PSObject.Properties['taskModelSource']?.Value
+            ModelSelectionSource = [string]$details.PSObject.Properties['modelSelectionSource']?.Value
+            WrapperCallCount = [int]($calls.Values | Measure-Object -Sum).Sum
+        }
     }
 }
 
@@ -336,4 +618,4 @@ function Get-RunObservation {
     }
 }
 
-Export-ModuleMember -Function New-SquadWorkspace, Invoke-SquadTurn, Get-RunObservation, Get-RosterMap, Get-GateVerdict, ConvertTo-ComparableName
+Export-ModuleMember -Function New-SquadWorkspace, Invoke-SquadTurn, Publish-ConnectorConsumerResult, Get-SquadDispatchEvidence, Get-SquadConnectorExecutionEvidence, Get-RunObservation, Get-RosterMap, Get-GateVerdict, ConvertTo-ComparableName
