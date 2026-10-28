@@ -10,6 +10,7 @@ Federation is additive; scripts/autopilot grant no approval or specialist result
 ## Detect and Load Only Active Policy
 
 Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root> -AsJson`.
+Forward trusted `routing=` via `-RequestedModelRouting <mode>`.
 `federation.md` takes precedence over `team.md`; absent federation plus an
 existing plain squad offers promotion, otherwise offer Init/plain squad.
 Do not seed merely because the entrypoint was invoked.
@@ -26,16 +27,14 @@ Do not seed merely because the entrypoint was invoked.
 | Native notification delivery | `squad-notifications.instructions.md` |
 | No supported runtime | `federation-coordinator-legacy.md`, `state-write-contract.md` |
 
-Resolve instruction filenames in the selected host or plugin `references/rules`;
-auto-loading gaps waive no policy.
+Resolve instructions through the host or plugin `references/rules`; loading gaps waive no policy.
 
 ## Lifecycle Invariants
 
-Human lifecycle changes propose, wait, then create a request/repository-driven
-set. Names are unique lower-kebab-case, checked case-insensitively against
-registry/directories and never auto-suffixed on human collision. Present
-profiles/packs/Primaries; capture naming/approval once with expansion overrides.
-Promotion preserves adopted member names.
+Propose human lifecycle changes and wait before creating the request-driven set.
+Names are unique lower-kebab-case, checked case-insensitively against registry and
+directories; never auto-suffix human collisions. Present profiles/packs/Primaries;
+capture naming/approval once with expansion overrides. Preserve promoted names.
 
 `federation-init.md` publishes fresh members/root metadata or adds only confirmed
 members while preserving existing bytes; member roots rebase except
@@ -57,15 +56,17 @@ event-scoped member (not the meta-pipeline), and report failure to the source.
 
 ## Route and Order
 
-An explicit registered `squad=<name>` wins. Otherwise match the most specific
-meta-pattern, preferring the direct owner. Unknown, ambiguous or equally specific
-conflicts require clarification, not guessed routing.
+Registered `squad=<name>` wins; otherwise prefer the most specific meta-pattern/direct
+owner. Clarify unknown, ambiguous or equally specific conflicts; never guess.
 
 Put selected squads, explicit producer dependencies and proven write sets into
 `New-SquadDispatchPlan.ps1` input. Its waves are scheduling data, not admission.
 Dependencies override generic `Parallel-Eligible`. Source and target are members,
 not user-invocable coordinator agents: drive each selected member's standard
 protocol by native worker dispatch at its own root.
+Forward `endpoint.requestedModelRouting` into each member's actual-role plan with
+`-ApplyModelRouting`; require `routingReady: true` before workers, including quick
+single-role/targeted-autopilot work. Root plans do not activate member models.
 
 Before child dispatch take the script snapshot with
 `Get-SquadDispatchBrief.ps1 ... -AsJson -SnapshotPath <transport>`. Keep it
@@ -76,9 +77,9 @@ Forward `profile`, `pack`, `discovery`, `tier`, `owner`, `execution`, `mode`,
 Ordinary/targeted runs use independent member ceilings. Ask qualifying discovery
 once, never unattended. Expand a confirmed member roster before its new role.
 
-Run producer to verified completion before its consumer. Resolve real paths from
-the producer's current roster roots, verify files and current decision references,
-then forward explicit read-only `inputs=`. Missing input means recover: one
+Verify the producer before its consumer. Resolve paths from current roster roots,
+verify files/decision references, then forward read-only `inputs=`. Missing input
+means recover: one
 producer run, only the producing stage for partial/stale output, offer expansion
 when unowned, or a user-named input/explicit gap decision. Interactive recovery
 waits; planned autopilot recovery proceeds. A second consecutive miss escalates.
@@ -110,12 +111,11 @@ For an ordinary or single-target-autopilot root turn, run
   arrays, `handoffs: [{producer,consumer,paths}]`, and ten-field coordinator
   `orchestration` usage. Never fabricate Scribe usage.
 
-The writer independently verifies inner artifacts/history/consumption, checks
-decision/input paths, refuses stale snapshots and unselected concurrent changes,
-appends root decisions and `history/<name>.md` without child consumption, records
-only real coordinator overhead, sums member totals, resets ordinary root
-preflight to exact `not-requested`, and advances root state. Existing unrelated
-fields and append-only bytes survive. Its verified receipt is two-level evidence;
+The writer verifies inner artifacts/history/consumption and decision/input paths,
+rejects stale snapshots and unselected concurrent changes, appends root decisions
+and `history/<name>.md` without child consumption, records real coordinator overhead,
+sums member totals, resets root preflight to `not-requested` and advances state.
+Unrelated fields and append-only bytes survive. Its receipt proves both levels;
 do not reread files or spawn another audit.
 
 For cold root writes run `Test-SquadTurnCompletion.ps1` once with the root proof
@@ -128,16 +128,14 @@ failure is not a manual fallback. Serialize writers per root.
 ## Federation Autopilot
 
 Without a single `squad=` target, use the full federation meta-pipeline, not the
-ordinary root writer. Verify registry, meta-routing and every member built first.
-Its dependency plan governs inner order; each inner pipeline and artifact gate
-remain unchanged. Aggregate ceiling exists only here, is not forwarded as member
-ceilings, and prices inner plus federation orchestration once. Targeted autopilot
-forwards the ordinary member ceiling instead.
+ordinary root writer. Verify registry/meta-routing and member builds. Its dependency
+plan and all inner pipelines/artifact gates remain. Only here use the aggregate
+ceiling, pricing inner work plus federation overhead once; never forward it as member
+ceilings. Targeted autopilot forwards the ordinary member ceiling.
 
 Impactful-Action and Risk gates pause the whole meta-run with attributed human
 approvals, most-restrictive-wins for simultaneous gates. `Stop`, relevant
 `Risk: High`, compliance, divergence and non-admitting cost decisions remain
 blocking; approved overage clears only its own cost gate. Finish with one
 consolidated final-outcome notification and human validation, never auto-release.
-Return selected squads/why, attributed outcomes, verified paths/receipts and
-remaining gates. Long run detail stays on disk.
+Return selected squads/why, attributed outcomes, verified paths/receipts and gates.

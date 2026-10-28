@@ -19,7 +19,7 @@
     agentTypes is the exact host-advertised custom-agent enum. When supplied,
     native type IDs are resolved by installed filename/name, never guessed from a
     display label or replaced with a built-in agent.
-    No model is launched and no state is written. Ranked, economy, and manual routing
+    No model is launched. The default preview writes no state. Ranked, economy, and manual routing
     are resolved only for the actual role units in this input. Changed Model cells are
     returned as a compare-and-swap routing refresh for Set-SquadModelRouting.ps1.
     When cost is supplied, complete native usage records are authoritative consumed
@@ -29,12 +29,18 @@
     coordinator. Dependencies always override parallel eligibility.
     Unproven write independence serializes; declared overlapping parallel writes,
     invalid endpoints, unknown dependencies and cycles fail before a wave is returned.
+.PARAMETER ApplyModelRouting
+    Apply the validated plan's routing refresh through Set-SquadModelRouting.ps1
+    before returning routingReady: true. Does not admit cost slots, evaluate gates,
+    change routing to off, or launch workers. Federation plans forward routing intent
+    to member plans; only member plans can apply role models.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$InputPath,
     [string]$RepoRoot = (Get-Location).ProviderPath,
-    [ValidateRange(0, 2147483647)][int]$MaxConcurrent = 0
+    [ValidateRange(0, 2147483647)][int]$MaxConcurrent = 0,
+    [switch]$ApplyModelRouting
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -217,7 +223,7 @@ try {
             }
             $matchingRoutes = @($routing | Where-Object { $_['Sub-squad'] -ceq $name })
             $eligible = @($matchingRoutes | Where-Object { $_['Parallel-Eligible'] -eq 'yes' }).Count -gt 0
-            $endpoint = [ordered]@{ squad = $name; squadRoot = $memberRoot; protocol = 'scoped-single-squad'; inputsReadOnly = $true }
+            $endpoint = [ordered]@{ squad = $name; squadRoot = $memberRoot; protocol = 'scoped-single-squad'; inputsReadOnly = $true; requestedModelRouting = $requestedModelRouting }
         }
         else {
             if (-not $unit.Contains('role') -or $unit.Contains('squad')) { throw 'A squad unit selects role, not squad.' }
@@ -536,7 +542,7 @@ try {
         ) -join "`n"
     }
 
-    [ordered]@{
+    $result = [ordered]@{
         status = 'ok'
         kind = $(if ($federation) { 'federation' } else { 'squad' })
         gates = 'not-evaluated'
@@ -552,12 +558,30 @@ try {
         modelAvailability = $(if ($routeReport) { $routeReport.availability } else { 'not-evaluated' })
         modelWarnings = @(if ($routeReport) { $routeReport.warnings })
         routingRefresh = $routingRefresh
+        routingReady = -not $federation -and -not $routingRefresh.required
+        routingReceipt = $null
         costPreflight = $preflight
         costDecisionText = $decisionText
         usage = $usageSnapshot
         reservations = $reservations.ToArray()
         stateWritten = $false
-    } | ConvertTo-Json -Depth 30 -Compress
+    }
+    if ($ApplyModelRouting -and -not $federation -and $routingRefresh.required) {
+        $transport = Write-SquadTransportJson -SquadRoot $root -Value $result -Path (Join-Path ([IO.Path]::GetTempPath()) "hve-squad-model-plan-$([guid]::NewGuid().ToString('N')).json")
+        try {
+            $written = Invoke-SquadLocalScript -Name 'Set-SquadModelRouting.ps1' -Arguments @('-RepoRoot', $RepoRoot, '-PlanPath', $transport)
+            if ($written.exitCode -ne 0) { throw "Model routing was not applied: $($written.stderr.Trim())" }
+            $receipt = $written.stdout | ConvertFrom-Json -AsHashtable
+            if ($receipt.status -ne 'written') { throw 'Model routing writer returned no written receipt.' }
+            $result.routingReceipt = $receipt
+            $result.routingReady = $true
+            $result.stateWritten = $true
+        }
+        finally {
+            if (Test-Path -LiteralPath $transport) { Remove-Item -LiteralPath $transport -Force }
+        }
+    }
+    $result | ConvertTo-Json -Depth 30 -Compress
 }
 catch {
     [Console]::Error.WriteLine("New-SquadDispatchPlan: $($_.Exception.Message)")

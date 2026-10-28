@@ -45,6 +45,8 @@ Scribe hand-off pipelining (GATE-22 through GATE-28 below) is one more case this
 | Command | Spends requests | What it does |
 |---|---|---|
 | `./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot .` | no | Static conformance of the tree this branch would deliver |
+| `./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Shard Contracts` | no | Reproduce one isolated CI shard; other shards are `Handoff`, `Lifecycle`, and `Coordinator` |
+| `./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Scope Repository` | no | Repository-only contracts without installing APM dependencies |
 | `./tests/tier0/Invoke-Tier0Tests.ps1 -Ref v0.16.0` | no | Static conformance of a published ref, as a consumer receives it |
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck` | no | Mutation controls proving the state contract can fail |
 | `./tests/tier1/Invoke-Tier1Tests.ps1 -SquadRoot <path>` | no | State contract against an existing squad tree |
@@ -115,8 +117,15 @@ That parity is evidence, not proof. The cases below are what turn it into proof.
 | ID | Assertion | Source |
 |---|---|---|
 | CI-01 | PR release-state checks use the tested merge commit's first parent: upstream pin changes are not attributed to the PR, while actual PR pin changes still fail | `.github/workflows/pr-validation.yml`, `Compute diff against base` and `Reject an unreviewed hve-core pin move` |
+| CI-03 | Tier 0's default selection retains every registered case; isolated CI shards partition that selection exactly once, preserve the required `Package conformance` check, cancel obsolete/failing work, and retain per-shard result reports | `tests/tier0/Tier0TestPlan.psm1`; `.github/workflows/tier0-conformance.yml` |
+| CI-04 | Release validates repository-only cases before tagging and installed-package cases against the immutable published tag before creating a Release, without repeating either selection; old hotfix runners retain their existing full-suite fallback | `.github/workflows/release.yml`; `tests/tier0/Invoke-Tier0Tests.ps1`, `Scope` |
 
 No Copilot invocation. Install the ref into a scratch directory, then inspect the delivered tree.
+The default selection remains complete. CI partitions it into isolated shards
+with exact-once container coverage and one aggregate required check. Release
+runs repository-only cases before tagging and installed-package cases after
+tagging; `Scope=Package` keeps the published-ref pin assertion. Older hotfix
+runners retain their full-suite fallback.
 
 ### Documentation release availability
 
@@ -403,6 +412,8 @@ Precondition: an initialized squad. These cases check the opt-in `routing=` laye
 | SQ-35b | **Qualification is panel-specific and versioned.** Full implementation requires each primary percentile >= 0.50; reduced SciCode requires >= 0.75 under a distinct qualification version. Ranked selects the stronger expensive model; Economy chooses a cheaper one only when it meets the selected panel's minimum. Neither mode is forced to differ, and the allowlist, floors, consent and review gates are unchanged | `model-scoring.md`, Selection Objectives; `economy-mode.md`, Pick |
 | SQ-36 | **Active routing fails closed on unresolved host availability.** Copilot CLI/app planning must pass the exact advertised `task.model` enum; `sessionModel: auto`, `unknown`, a tier label, or an unpriced model never widens eligibility to the catalog. The resolver returns no automatic suggestion, the dispatch plan writes nothing, and an existing invalid Model cell is not dispatched. A concrete priced session model remains the documented unverified VS Code-only ceiling fallback | `model-routing.md`, Availability Derivation; `Resolve-SquadModelRoute.ps1`; `New-SquadDispatchPlan.ps1` |
 | SQ-37 | **A resolved route controls execution.** For every non-Scribe planned endpoint whose `model` is non-empty, the coordinator copies that exact value into the native `task`/`runSubagent` `model` argument. It never substitutes `pricingModel`, omits the argument, or lets the target agent's frontmatter pin replace the active route. An empty planned model is the only case that omits the argument | `coordinator-runtime.md`, Native Work and Persistence; `squad-coordinator.agent.md`, Dispatch Discipline |
+| SQ-38 | **Requested routing reaches preparation.** Discovery preserves trusted requested policy separately from recorded `off` and never authorizes dispatch. Every actual-role plan, including quick single-role gates and each selected federation member, uses `-ApplyModelRouting` and returns `routingReady: true` only after any required routing transaction succeeds. Preview, unresolved availability and refused picks cannot masquerade as applied routes; off without a request remains unchanged | `Get-SquadDispatchBrief.ps1`; `New-SquadDispatchPlan.ps1`; `coordinator-runtime.md`; `federation-runtime.md` |
+| SQ-39 | **Plugin guards resolve native identities.** The generated dispatch guard compares active ranked, economy and manual cells against native CLI IDs via installed agent definitions. Missing/wrong overrides and unresolved cells are denied; matching overrides, Scribe pins and no-policy dispatches retain their behavior. Legacy and batched hook payloads share the same checks | `scripts/plugin-hooks/dispatch-guards.ps1`; `scripts/Build-SquadPlugin.ps1` |
 
 ## Tier 1 — Consumption integrity
 

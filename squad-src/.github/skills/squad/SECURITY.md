@@ -3,7 +3,7 @@ title: Squad Skill Security Model
 description: STRIDE model for local squad routing, connector file exchanges, and state persistence.
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-26
+ms.date: 2026-10-28
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
@@ -69,6 +69,12 @@ Different filesystem permissions or unattended policies change the risk.
   add/change an active mode, Model column/cells, and supplied economy consent under
   the exact team hash; roster membership, routing rows, `routing=off`, and state
   remain outside its authority.
+  `-ApplyModelRouting` delegates that same hash-bound transaction to the existing
+  writer after plan validation and returns readiness only on its written receipt.
+  Discovery carries trusted requested policy separately from recorded policy and
+  grants no dispatch authority. Plugin dispatch guards resolve native agent IDs
+  through installed definitions; they compare active Model cells, not routing
+  intent, and cannot enforce activation when a coordinator skips preparation.
 * The shared benchmark scorer validates pinned evidence and recalculates
   verification expiry offline. The repository's maintainer-only
   `Sync-ModelBenchmarks.ps1` acquires original-source evidence; dispatch never

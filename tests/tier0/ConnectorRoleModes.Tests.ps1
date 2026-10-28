@@ -228,7 +228,7 @@ Describe 'CONN-22 and Consumption shape: trusted provenance extends history with
             $choice | Should -Match 'including planning, review'
             $choice | Should -Match 'with `unattended=true`'
             $choice | Should -Match 'An external `awaiting`\s+result holds the current stage'
-            $script:CoordinatorRuntime | Should -Match 'helper honors connector defaults'
+            $script:CoordinatorRuntime | Should -Match 'Honor connector defaults'
             $selection = $script:DispatchPlan.IndexOf('Resolve-SquadConnectorExecution')
             $models = $script:DispatchPlan.IndexOf('$persistedModel = if')
             $selection | Should -BeGreaterThan 0

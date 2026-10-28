@@ -60,7 +60,9 @@ state. Required fields:
 Use only actual confirmed values. Optional fields: `packs` array; `roles` for
 `profile: custom`; `excludeRoles` for explicitly dropped non-spine roles;
 `names` role-to-name map; `modelRouting`, confirmed `models` map; `mode`,
-`modelOverrides`, and actual coordinator `usage`. Naming is `skip`, `aliases`,
+`modelOverrides`, and actual coordinator `usage`. Carry trusted active `routing=`
+into `modelRouting`; do not lose it when Init interrupts the original request.
+Naming is `skip`, `aliases`,
 `custom` or `mixed`; custom supplies all names, mixed supplies selected ones.
 The helper assigns aliases in canonical order, skipping supplied names and
 cycling `-2`, `-3`; never retype the wordlist.

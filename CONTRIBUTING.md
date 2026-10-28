@@ -147,10 +147,35 @@ Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPubl
 ```
 
 Tier 0 gates every pull request that touches `squad-src/`, `apm.yml`, or
-`tests/tier0/`, and the same workflow is reused as the release gate. Tier 1 and
-Tier 2 are dispatched by hand because they are nondeterministic and cost
+the packaging/test harness, and runs again on `main` to check the merged tree.
+CI uses four isolated file-level shards; the existing **Package conformance**
+required check passes only when every selected shard succeeds. New pushes
+cancel obsolete runs, and a failed shard cancels unfinished peers. Each shard
+retains its Pester XML report for seven days, so failures and slow cases can be
+inspected without another run.
+
+Local commands still run the complete selection by default. To reproduce one
+CI shard or run repository checks without downloading a package:
+
+```powershell
+./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Shard Contracts
+./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Scope Repository
+```
+
+The other shards are `Handoff`, `Lifecycle`, and `Coordinator`. Sharding changes
+scheduling, not coverage; every registered container belongs to exactly one shard.
+
+A release checks repository-only cases at its frozen candidate before tagging,
+then checks all installed-package cases against the published tag before creating
+the GitHub Release. These selections are complementary: runtime regressions are
+not run twice, and the published package still has to prove its self-reference
+pins and delivered contents. A failing package check leaves a tag but no Release.
+Hotfix branches with an older runner fall back to their complete, unsharded
+source/ref checks rather than silently dropping unsupported selections.
+
+Tier 1 and Tier 2 remain manual because they are nondeterministic and cost
 requests. [tests/squad-behavior-contract.md](tests/squad-behavior-contract.md)
-explains that split and records the suite's known gaps.
+records the cases and known gaps.
 
 ## Testing before a release
 

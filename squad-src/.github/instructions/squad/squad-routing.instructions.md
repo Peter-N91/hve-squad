@@ -119,7 +119,7 @@ Eleven rows never survive the initial filter in most projects, because no profil
 * Match the most specific pattern first. When several patterns match, prefer the one whose role most directly owns the requested outcome.
 * Dispatch all parallel-eligible roles for a turn concurrently; run non-parallel roles (such as planning and implementation) sequentially.
 * Resolve every matched role through the roster before dispatch. If a role maps to **thin charter needed**, escalate rather than guessing a substitute.
-* Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles.
+* Run every dispatch, including quick single-role gates, through `New-SquadDispatchPlan.ps1 -ApplyModelRouting`; require `routingReady: true`. Forward active `routing=` as `requestedModelRouting`. Active `endpoint.model` wins over pins and static tiers; without a policy retain cost-first tiers.
 
 ### Discovery Gate
 
