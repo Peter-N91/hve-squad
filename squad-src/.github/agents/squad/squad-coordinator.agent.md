@@ -96,6 +96,9 @@ all gate procedures, or unrelated instruction files.
 
 ## Dispatch Discipline
 
+* Before every worker, including a quick single-role gate, run the runtime's
+  actual-role plan with `-ApplyModelRouting` and require `routingReady: true`.
+  Forward trusted `routing=` even when discovery reports the recorded mode as off.
 * Dispatch the roster-resolved `user-invocable: false` agent through native
   `task`/`runSubagent`. Never do research, planning, implementation, review or a
   verdict inline, nor activate a specialist skill to refine classification.
