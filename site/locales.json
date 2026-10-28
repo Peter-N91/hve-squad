@@ -52,7 +52,7 @@
         "previewOnly": "Pre-release only",
         "notice": "Badged features are not included in the latest stable release.",
         "tryPreview": "Install and test the pre-release",
-        "noPreview": "No package changes are currently pending release.",
+        "noPreview": "No pre-release is currently published.",
         "installPreview": "Install the rolling pre-release in a scratch project:",
         "installStable": "Install the stable release, or return to it after testing:"
       },
@@ -138,7 +138,7 @@
         "previewOnly": "Préversion uniquement",
         "notice": "Les fonctionnalités portant un badge ne sont pas incluses dans la dernière version stable.",
         "tryPreview": "Installer et tester la préversion",
-        "noPreview": "Aucune modification du package n'est actuellement en attente de publication.",
+        "noPreview": "Aucune préversion n'est actuellement publiée.",
         "installPreview": "Installer la préversion glissante dans un projet de test :",
         "installStable": "Installer la version stable, ou y revenir après les tests :"
       },
