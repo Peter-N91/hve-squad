@@ -25,6 +25,14 @@ $script:Dimensions = [ordered]@{
 }
 $script:Marker = '<!-- squad-benchmark-score -->'
 $script:RefreshCommand = 'pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-Benchmark.ps1'
+$script:ActivityLabels = [ordered]@{
+    scribeDispatches = 'Scribe dispatches'
+    scribeModelRequests = 'Scribe model requests'
+    scribeSeconds = 'Time inside Scribe dispatches'
+    scribeCredits = 'Scribe credits'
+    coordinatorModelRequests = 'Coordinator model requests'
+    authorModelRequests = 'BRD/PRD author model requests'
+}
 
 # --- Small helpers -----------------------------------------------------------
 
@@ -101,8 +109,10 @@ function ConvertTo-BenchmarkRunSummary {
         functional = $false; workflow = $false; criticalHighFindings = $null
         seconds = $null; credits = $null; failedChecks = @()
         note = if ($Note) { Format-SafeText $Note 120 } else { '' }
+        activity = $null
     }
     if ($null -eq $Result) { return $trial }
+    $trial['activity'] = Read-ScoreActivity (Get-ScoreField $Result 'metrics', 'activity')
 
     $stages = @(Get-ScoreList $Result 'stages')
     $stagesPassed = $true
@@ -191,8 +201,14 @@ function ConvertTo-BenchmarkScore {
         functional = @($Trial | Where-Object { $_['functional'] }).Count
         workflow = @($Trial | Where-Object { $_['workflow'] }).Count
         criticalHighFindings = $null; averageSeconds = $null; averageCredits = $null
+        activity = $null
     }
     if ($scored.Count) {
+        $summary['activity'] = [ordered]@{}
+        foreach ($key in $script:ActivityLabels.Keys) {
+            $values = @($scored | ForEach-Object { Get-ScoreField $_ 'activity', $key } | Where-Object { $null -ne $_ })
+            $summary['activity'][$key] = if ($values.Count -eq $scored.Count) { [double]($values | Measure-Object -Average).Average } else { $null }
+        }
         $summary['quality'] = Get-ScoreMedian @($scored | ForEach-Object { $_['quality'] })
         $summary['dimensions'] = [ordered]@{}
         foreach ($name in $script:Dimensions.Keys) {
@@ -286,15 +302,38 @@ function Get-ScoreRow {
     }
 }
 
+function Get-ActivityReportMarkdown {
+    param([AllowNull()][Collections.IDictionary]$Earlier, [AllowNull()][Collections.IDictionary]$Latest)
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.AddRange([string[]]@('## Observed activity', '', '| Observed activity | Earlier run | Latest run |', '| --- | --- | --- |'))
+    foreach ($key in $script:ActivityLabels.Keys) {
+        $cells = foreach ($score in @($Earlier, $Latest)) {
+            $value = Get-ScoreField $score 'summary', 'activity', $key
+            if ($null -eq $value) { 'unavailable' }
+            elseif ($key -eq 'scribeSeconds') { Format-ScoreDuration $value }
+            else { Format-ScoreNumber $value }
+        }
+        $lines.Add("| $($script:ActivityLabels[$key]) | $($cells -join ' | ') |")
+    }
+    $lines.Add('')
+    $lines.Add('Activity is averaged per scored run; a metric is unavailable if any scored run lacks it. Dispatch time is summed per Scribe dispatch, not elapsed benchmark time. Requests count unique usage records; credits cover those records, excluding separate compaction charges and the judge.')
+    $lines.Add('')
+    $lines -join "`n"
+}
+
 function Get-BenchmarkReportMarkdown {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][Collections.IDictionary]$Score)
+    param([Parameter(Mandatory)][Collections.IDictionary]$Score, [AllowNull()][Collections.IDictionary]$EarlierScore)
     $lines = [Collections.Generic.List[string]]::new()
     $lines.AddRange([string[]]@('# Benchmark score', '', "Measured: $(Get-ScoreProvenance $Score)."))
     if ($Score['source']['uncommittedChanges']) { $lines.Add('The squad source had uncommitted changes when this was measured.') }
     $lines.AddRange([string[]]@('', '| Measure | Result |', '| --- | --- |'))
     $rows = Get-ScoreRow $Score
     foreach ($row in $rows.Values) { $lines.Add("| $($row.Label) | $($row.Text) |") }
+    $lines.Add('')
+    $lines.Add((Get-ActivityReportMarkdown -Earlier $EarlierScore -Latest $Score))
+    if ($null -ne $EarlierScore) { $lines.Add("Earlier run: $(Get-ScoreProvenance $EarlierScore).") }
+    else { $lines.Add('Earlier run: no previous local score was available.') }
     if ($Score['runs']['scored'] -gt 0) {
         $lines.AddRange([string[]]@('', '## Document quality by dimension (median, out of 20)', '', '| Dimension | Score |', '| --- | --- |'))
         foreach ($name in $script:Dimensions.Keys) { $lines.Add("| $($script:Dimensions[$name]) | $(Format-ScoreNumber $Score['summary']['dimensions'][$name]) |") }
@@ -327,13 +366,14 @@ function Write-BenchmarkScore {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][Collections.IDictionary]$Score,
-        [Parameter(Mandatory)][string]$Directory
+        [Parameter(Mandatory)][string]$Directory,
+        [AllowNull()][Collections.IDictionary]$EarlierScore
     )
     [void][IO.Directory]::CreateDirectory($Directory)
     $files = [ordered]@{
         'score.json' = ($Score | ConvertTo-Json -Depth 8) + "`n"
         'badge.svg' = (Get-BenchmarkBadgeSvg $Score) + "`n"
-        'report.md' = Get-BenchmarkReportMarkdown $Score
+        'report.md' = Get-BenchmarkReportMarkdown -Score $Score -EarlierScore $EarlierScore
     }
     foreach ($name in $files.Keys) {
         $path = Join-Path $Directory $name
@@ -357,6 +397,17 @@ function ConvertTo-ScoreDouble {
     [double]$Value
 }
 
+function Read-ScoreActivity {
+    param($Activity)
+    if ($null -eq $Activity) { return $null }
+    if ($Activity -isnot [Collections.IDictionary]) { throw 'Invalid activity metrics.' }
+    $result = [ordered]@{}
+    foreach ($key in $script:ActivityLabels.Keys) {
+        $result[$key] = ConvertTo-ScoreDouble (Get-ScoreField $Activity $key) 0 10000000
+    }
+    $result
+}
+
 function Read-BenchmarkScore {
     <# .SYNOPSIS
     Reads a score.json and returns only validated numbers and sanitised strings. Throws when it is not a valid score.
@@ -377,6 +428,7 @@ function Read-BenchmarkScore {
         criticalHighFindings = ConvertTo-ScoreDouble (Get-ScoreField $raw 'summary', 'criticalHighFindings') 0 1000000
         averageSeconds = ConvertTo-ScoreDouble (Get-ScoreField $raw 'summary', 'averageSeconds') 0 10000000
         averageCredits = ConvertTo-ScoreDouble (Get-ScoreField $raw 'summary', 'averageCredits') 0 10000000
+        activity = Read-ScoreActivity (Get-ScoreField $raw 'summary', 'activity')
     }
     if ($scored -gt 0) {
         if ($null -eq $summary['quality'] -or $null -eq $summary['criticalHighFindings']) { throw 'A scored run needs quality and findings.' }
@@ -502,6 +554,8 @@ function Compare-BenchmarkScore {
         $source = if ($null -ne $headRows) { $headRows } else { $baseRows }
         foreach ($key in $source.Keys) { $labels[$key] = $source[$key].Label }
         & $table @($source.Keys) $labels $baseRows $headRows
+        $lines.Add('')
+        $lines.Add((Get-ActivityReportMarkdown -Earlier $Base -Latest $Head))
         $shown = if ($null -ne $Head) { $Head } else { $Base }
         if ($shown['runs']['scored'] -gt 0 -and ($mode -ne 'compare' -or ($Base['runs']['scored'] -gt 0 -and $Head['runs']['scored'] -gt 0))) {
             $dimension = {

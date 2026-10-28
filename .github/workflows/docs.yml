@@ -32,12 +32,14 @@ on:
       - '.changes/unreleased/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
+  release:
+    types: [published, edited, deleted]
 
 permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.ref }}
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: false
 
 jobs:
@@ -50,13 +52,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
+          ref: ${{ github.event_name == 'release' && github.event.repository.default_branch || github.ref }}
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
-          cache: npm
+          package-manager-cache: false
 
       - name: Install documentation dependencies
         run: npm ci
@@ -65,10 +67,12 @@ jobs:
         run: npm run docs:test
 
       - name: Build bilingual site and search
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: npm run docs:build
 
       - name: Upload artifact
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: (github.ref == 'refs/heads/main' || github.event_name == 'release') && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: _site
@@ -77,7 +81,7 @@ jobs:
   deploy:
     name: Build and Deploy
     needs: validate
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: (github.ref == 'refs/heads/main' || github.event_name == 'release') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

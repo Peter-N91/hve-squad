@@ -9,8 +9,7 @@ import { JSDOM } from "jsdom";
 import { buildPages, enhanceContent, headingIds, readLocales } from "../../scripts/docs-content.mjs";
 import {
   addReleaseBadges,
-  annotateReleaseSource,
-  createAutomaticReleaseAnnotator,
+  fetchPublishedReleases,
   populateReleaseInstalls,
   readPendingChangeCommits,
   readReleaseInfo,
@@ -21,39 +20,68 @@ const economy = "20261005-routing-economy";
 const fragment = (id, bump = "patch") => ({
   name: `${id}.md`, content: `---\nbump: ${bump}\ntype: Added\n---\n\n- A documented change.\n`,
 });
-const pending = resolveReleaseInfo("version: 0.18.1\n", [fragment(economy, "minor")]);
+const releaseRecord = (tag, prerelease = false, publishedAt = "2024-01-01T00:00:00Z") => ({
+  tag_name: tag, draft: false, prerelease, published_at: publishedAt,
+});
+const published = (previewTag = "v2.5.0-pre", stableTag = "v2.4.7") => {
+  const latest = releaseRecord(stableTag);
+  return { latest, releases: previewTag ? [releaseRecord(previewTag, true), latest] : [latest] };
+};
+const pending = resolveReleaseInfo(published(), [fragment(economy, "minor")]);
 
-test("the highest pending bump determines the rolling tag, not the stable manifest version", () => {
-  for (const [bumps, tag] of [
-    [["patch"], "v0.18.2-pre"],
-    [["minor", "patch"], "v0.19.0-pre"],
-    [["patch", "major", "minor"], "v1.0.0-pre"],
-  ]) {
-    const release = resolveReleaseInfo("version: 0.18.1\n", bumps.map((bump, i) => fragment(`change-${i}`, bump)));
-    assert.equal(release.stableTag, "v0.18.1");
-    assert.equal(release.previewTag, tag);
-    assert.equal(release.previewUrl, `https://github.com/Peter-N91/hve-squad/releases/tag/${tag}`);
+test("published release tags are authoritative regardless of pending version bumps", () => {
+  const metadata = published("v8.4.0-rc.2", "v8.3.6");
+  for (const bumps of [["patch"], ["minor", "patch"], ["patch", "major", "minor"]]) {
+    const release = resolveReleaseInfo(metadata, bumps.map((bump, i) => fragment(`change-${i}`, bump)));
+    assert.equal(release.stableTag, metadata.latest.tag_name);
+    assert.equal(release.previewTag, metadata.releases[0].tag_name);
+    assert.equal(release.previewUrl, `https://github.com/Peter-N91/hve-squad/releases/tag/${metadata.releases[0].tag_name}`);
   }
+});
+
+test("GitHub's latest stable and the newest published non-draft pre-release are selected independently", () => {
+  const metadata = published();
+  metadata.releases = [
+    releaseRecord("v2.5.0-pre", true, "2024-01-02T00:00:00Z"),
+    releaseRecord("v1.9.9", false, "2024-01-05T00:00:00Z"),
+    { ...releaseRecord("v9.0.0-pre", true, "2024-01-06T00:00:00Z"), draft: true },
+    releaseRecord("v3.0.0-rc.1", true, "2024-01-04T00:00:00Z"),
+  ];
+  const release = resolveReleaseInfo(metadata, []);
+  assert.equal(release.stableTag, metadata.latest.tag_name);
+  assert.equal(release.previewTag, "v3.0.0-rc.1");
 });
 
 test("release fragment parsing accepts the quoted, case-insensitive and CRLF forms used by Release Prep", () => {
   const change = fragment("quoted");
   change.content = "---\r\nBump: 'MINOR'\r\nType: \"Changed\"\r\n---\r\n\r\n- Change.\r\n";
-  assert.equal(resolveReleaseInfo("version: 1.8.9\r\n", [change]).previewTag, "v1.9.0-pre");
+  assert.deepEqual(resolveReleaseInfo(published(), [change]).pendingChanges, ["quoted"]);
 });
 
-test("an empty pending batch has no pre-release, even after a version override", () => {
-  const release = resolveReleaseInfo("version: 0.18.2\n", []);
-  assert.equal(release.stableTag, "v0.18.2");
+test("pre-release availability follows publication, not whether fragments are pending", () => {
+  assert.equal(resolveReleaseInfo(published(), []).previewTag, published().releases[0].tag_name);
+  const release = resolveReleaseInfo(published(null), [fragment(economy, "major")]);
+  assert.equal(release.stableTag, published(null).latest.tag_name);
   assert.equal(release.previewTag, null);
   assert.equal(release.previewUrl, null);
-  assert.deepEqual(release.pendingChanges, []);
+  assert.deepEqual(release.pendingChanges, [economy]);
 });
 
 test("invalid release metadata fails instead of advertising a guessed version", () => {
-  for (const manifest of ["", "version: latest\n", "version: 0.18.1-pre\n"]) {
-    assert.throws(() => resolveReleaseInfo(manifest, []), /APM version/);
+  for (const latest of [
+    null,
+    { ...releaseRecord("v2.4.7"), tag_name: "latest" },
+    { ...releaseRecord("v2.4.7"), draft: true },
+    { ...releaseRecord("v2.4.7"), prerelease: true },
+    { ...releaseRecord("v2.4.7"), published_at: null },
+  ]) {
+    assert.throws(() => resolveReleaseInfo({ ...published(), latest }, []), /published/);
   }
+  assert.throws(() => resolveReleaseInfo({ ...published(), releases: null }, []), /release list/);
+  assert.throws(() => resolveReleaseInfo({ ...published(), releases: [null] }, []), /release list entry/);
+  assert.throws(() => resolveReleaseInfo({
+    ...published(), releases: [{ ...releaseRecord("v2.5.0-pre", true), published_at: "invalid" }],
+  }, []), /published pre-release/);
   for (const [content, message] of [
     ["bump: minor", /frontmatter/],
     ["---\nbump: tiny\ntype: Added\n---\n- Change.", /bump/],
@@ -61,14 +89,18 @@ test("invalid release metadata fails instead of advertising a guessed version", 
     ["---\nbump: patch\ntype: Added\n---\nNot a bullet.", /bullets/],
     ["---\nbump: patch\ntype: Added\n---\n- \n", /bullets/],
   ]) {
-    assert.throws(() => resolveReleaseInfo("version: 0.18.1", [{ name: "invalid.md", content }]), message);
+    assert.throws(() => resolveReleaseInfo(published(), [{ name: "invalid.md", content }]), message);
   }
 });
 
-test("metadata reads only pending markdown files and supports a consumed fragment directory", () => {
+test("published snapshots override the local manifest and support pending or consumed fragment directories", () => {
   const directory = mkdtempSync(join(tmpdir(), "hve-docs-release-"));
   try {
-    writeFileSync(join(directory, "apm.yml"), "version: 0.18.1\n");
+    writeFileSync(join(directory, "apm.yml"), "version: 99.0.0\n");
+    assert.throws(() => readReleaseInfo(directory), /Missing published release snapshot/);
+    const snapshot = join(directory, ".docs-releases.json");
+    writeFileSync(snapshot, JSON.stringify(published(null)));
+    assert.equal(readReleaseInfo(directory).stableTag, published(null).latest.tag_name);
     assert.equal(readReleaseInfo(directory).previewTag, null);
     const fragments = join(directory, ".changes", "unreleased");
     mkdirSync(fragments, { recursive: true });
@@ -76,87 +108,53 @@ test("metadata reads only pending markdown files and supports a consumed fragmen
     writeFileSync(join(fragments, "notes.txt"), "Not a fragment.");
     mkdirSync(join(fragments, "nested.md"));
     writeFileSync(join(fragments, `${economy}.md`), fragment(economy, "minor").content);
-    assert.equal(readReleaseInfo(directory).previewTag, "v0.19.0-pre");
+    assert.equal(readReleaseInfo(directory).previewTag, null);
     assert.deepEqual(readReleaseInfo(directory).pendingChanges, [economy]);
+    writeFileSync(snapshot, JSON.stringify(published()));
+    assert.equal(readReleaseInfo(directory).previewTag, published().releases[0].tag_name);
+    rmSync(join(fragments, `${economy}.md`));
+    writeFileSync(snapshot, JSON.stringify(published(null, "v3.0.0")));
+    assert.equal(readReleaseInfo(directory).stableTag, "v3.0.0");
+    assert.equal(readReleaseInfo(directory).previewTag, null);
+    assert.deepEqual(readReleaseInfo(directory).pendingChanges, []);
   } finally {
     rmSync(directory, { recursive: true });
   }
 });
 
-test("merge-added fragments and pages retain their release provenance", () => {
-  const directory = mkdtempSync(join(tmpdir(), "hve-docs-merge-"));
-  const git = (...args) => execFileSync("git", [
-    "-c", "user.name=Test", "-c", "user.email=test@example.invalid", ...args,
-  ], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  try {
-    git("init", "-q", "-b", "main");
-    writeFileSync(join(directory, "apm.yml"), "version: 0.18.1\n");
-    git("add", ".");
-    git("commit", "-qm", "Base");
-    git("checkout", "-qb", "feature");
-    writeFileSync(join(directory, "feature.txt"), "Feature\n");
-    git("add", ".");
-    git("commit", "-qm", "Feature");
-    git("checkout", "-q", "main");
-    git("merge", "--no-ff", "--no-commit", "feature");
-    const fragments = join(directory, ".changes", "unreleased");
-    mkdirSync(fragments, { recursive: true });
-    writeFileSync(join(fragments, "merge-added.md"), fragment("merge-added").content);
-    const raw = "<header class=\"hero\"><h1>New guide</h1></header>\n<main><h2>Details</h2></main>\n";
-    writeFileSync(join(directory, "guide.html"), raw);
-    git("add", ".");
-    git("commit", "-qm", "Merge with release documentation");
-    const commit = git("rev-parse", "HEAD");
-    const release = readReleaseInfo(directory);
-    assert.deepEqual([...readPendingChangeCommits(release, directory)], [commit]);
-    const annotated = load(createAutomaticReleaseAnnotator(release, directory)("guide.html", raw));
-    assert.equal(annotated("h1[data-release-auto]").length, 1);
-    assert.equal(annotated("h2[data-release-auto]").length, 0);
-  } finally {
-    rmSync(directory, { recursive: true });
+test("published metadata fetches GitHub's latest endpoint and paginates the release list", async () => {
+  const metadata = published();
+  const urls = [];
+  const response = body => new Response(JSON.stringify(body), { status: 200 });
+  const fetched = await fetchPublishedReleases(async (url, options) => {
+    urls.push(url);
+    assert.equal(options.headers.Accept, "application/vnd.github+json");
+    assert(options.signal instanceof AbortSignal);
+    if (url.endsWith("/latest")) return response({ ...metadata.latest, body: "Release notes are not cached." });
+    if (url.endsWith("page=1")) return response(Array.from({ length: 100 }, () => metadata.latest));
+    assert(url.endsWith("page=2"));
+    return response([metadata.releases[0]]);
+  });
+  assert.equal(urls.length, 3);
+  assert.equal(fetched.releases.length, 101);
+  assert.equal(fetched.latest.tag_name, metadata.latest.tag_name);
+  assert.equal(Object.hasOwn(fetched.latest, "body"), false);
+  assert.equal(resolveReleaseInfo(fetched, []).previewTag, metadata.releases[0].tag_name);
+});
+
+test("API failures and malformed responses cannot masquerade as an absent pre-release", async () => {
+  for (const status of [403, 404, 500]) {
+    await assert.rejects(fetchPublishedReleases(async () => new Response("", { status })), /GitHub release lookup failed/);
   }
+  await assert.rejects(fetchPublishedReleases(async url => new Response(JSON.stringify(
+    url.endsWith("/latest") ? published().latest : { unexpected: "not a release list" },
+  ), { status: 200 })), /Invalid GitHub release list/);
 });
 
-test("automatic annotations group pending content under the nearest safe section heading", () => {
-  const lines = [
-    "<body>",
-    "<nav><a href=\"usage.html\">Changed navigation</a></nav>",
-    "<header class=\"hero\">",
-    "  <h1>Guide</h1>",
-    "</header>",
-    "<main>",
-    "  <h2 id=\"stable\">Stable section</h2>",
-    "  <p>Changed stable copy.</p>",
-    "  <h2 id=\"new\">New feature</h2>",
-    "  <p>New feature detail.</p>",
-    "  <a href=\"elsewhere.html\"><h3 id=\"card\">Changed card</h3></a>",
-    "</main>",
-    "</body>",
-  ];
-  const line = text => lines.indexOf(text) + 1;
-  const annotated = annotateReleaseSource(lines.join("\n"), new Set([
-    line("<nav><a href=\"usage.html\">Changed navigation</a></nav>"),
-    line("  <p>Changed stable copy.</p>"),
-    line("  <h2 id=\"new\">New feature</h2>"),
-    line("  <p>New feature detail.</p>"),
-    line("  <a href=\"elsewhere.html\"><h3 id=\"card\">Changed card</h3></a>"),
-  ]));
-  const $ = load(annotated);
-  assert.equal($("#stable").attr("data-release-auto"), "");
-  assert.equal($("#new").attr("data-release-auto"), "");
-  assert.equal($("h1, #card").filter("[data-release-auto]").length, 0);
-});
-
-test("a documentation page added by a pending change gets one page-level annotation", () => {
-  const raw = [
-    "<body>",
-    "<header class=\"hero\"><h1>New guide</h1></header>",
-    "<main><h2>First section</h2><p>New content.</p><h2>Second section</h2></main>",
-    "</body>",
-  ].join("\n");
-  const $ = load(annotateReleaseSource(raw, new Set([2, 3]), true));
-  assert.equal($("h1[data-release-auto]").length, 1);
-  assert.equal($("h2[data-release-auto]").length, 0);
+test("unmarked stable sections are never inferred as pre-release content", () => {
+  const $ = load(`<main><h2 id="stable">Stable section</h2><p>Edited stable copy.</p></main>`);
+  addReleaseBadges($, pending, readLocales().en.ui.release);
+  assert.equal($(".prerelease-badge").length, 0);
 });
 
 for (const language of ["en", "fr"]) {
@@ -176,8 +174,8 @@ for (const language of ["en", "fr"]) {
     $(".prerelease-badge").each((index, element) => {
       assert.equal(element.tagName, "a");
       assert.equal($(element).attr("href"), "getting-started.html#testing-the-pre-release");
-      assert.equal($(element).text(), `${ui.previewOnly} v0.19.0-pre`);
-      assert($(element).attr("title").includes("v0.18.1"));
+      assert.equal($(element).text(), `${ui.previewOnly} ${pending.previewTag}`);
+      assert($(element).attr("title").includes(pending.stableTag));
       assert.equal($(element).find("svg").attr("aria-hidden"), "true");
     });
   });
@@ -185,21 +183,30 @@ for (const language of ["en", "fr"]) {
   test(`${language}: exact preview and stable install commands are rendered without browser JavaScript`, () => {
     const $ = load('<main><div data-release-install="preview"></div><div data-release-install="stable"></div></main>');
     populateReleaseInstalls($, pending, ui);
-    assert.equal($('[data-release-install="preview"] pre code').text(), 'apm install "Peter-N91/hve-squad#v0.19.0-pre" --target copilot');
-    assert.equal($('[data-release-install="stable"] pre code').text(), 'apm install "Peter-N91/hve-squad#v0.18.1" --target copilot');
+    assert.equal($('[data-release-install="preview"] pre code').text(), `apm install "Peter-N91/hve-squad#${pending.previewTag}" --target copilot`);
+    assert.equal($('[data-release-install="stable"] pre code').text(), `apm install "Peter-N91/hve-squad#${pending.stableTag}" --target copilot`);
     assert.equal($('[data-release-install="preview"] a').attr("href"), pending.previewUrl);
   });
 
   test(`${language}: a shipped feature stays unbadged when the next, unrelated preview opens`, () => {
     const $ = load(`<main><p data-release-change="${economy}">Economy</p><div data-release-install="preview"></div></main>`);
-    const stable = resolveReleaseInfo("version: 0.18.2\n", []);
+    const stable = resolveReleaseInfo(published(null), []);
     addReleaseBadges($, stable, ui);
     populateReleaseInstalls($, stable, ui);
     assert.equal($(".prerelease-badge, pre").length, 0);
     assert.equal($("[data-release-install]").text(), ui.noPreview);
-    const nextPreview = resolveReleaseInfo("version: 0.18.2\n", [fragment("unrelated")]);
+    const nextPreview = resolveReleaseInfo(published(), [fragment("unrelated")]);
     addReleaseBadges($, nextPreview, ui);
     assert.equal($(".prerelease-badge").length, 0);
+  });
+
+  test(`${language}: pending changes do not advertise a preview that has not been published`, () => {
+    const $ = load(`<main><h2 data-release-change="${economy}">Feature</h2><div data-release-install="preview"></div></main>`);
+    const release = resolveReleaseInfo(published(null), [fragment(economy, "major")]);
+    addReleaseBadges($, release, ui);
+    populateReleaseInstalls($, release, ui);
+    assert.equal($(".prerelease-badge, pre").length, 0);
+    assert.equal($("[data-release-install]").text(), ui.noPreview);
   });
 }
 
@@ -263,20 +270,20 @@ for (const hiddenPanel of [false, true]) {
   });
 }
 
-test("both languages track preview renames, hotfixes and consumed feature fragments", () => {
+test("both languages track published preview renames, hotfixes and consumed feature fragments", () => {
   for (const release of [
     pending,
-    resolveReleaseInfo("version: 0.18.1\n", [fragment(economy, "minor"), fragment("breaking", "major")]),
-    resolveReleaseInfo("version: 0.18.2\n", [fragment(economy, "minor")]),
-    resolveReleaseInfo("version: 0.18.2\n", []),
+    resolveReleaseInfo(published("v3.0.0-pre"), [fragment(economy, "minor"), fragment("breaking", "major")]),
+    resolveReleaseInfo(published("v2.5.0-pre", "v2.4.8"), [fragment(economy, "minor")]),
+    resolveReleaseInfo(published(null, "v2.5.0"), []),
   ]) {
     const pages = buildPages(undefined, release);
     for (const language of ["en", "fr"]) {
       const usage = pages.find(page => page.language === language && page.slug === "usage");
       const $ = load(usage.content);
-      assert.equal($("#model-selection-per-role .prerelease-badge").length, release.previewTag ? 1 : 0);
+      assert.equal($("#routing-economy .prerelease-badge").length, release.previewTag ? 1 : 0);
       if (release.previewTag) {
-        assert($("#model-selection-per-role .prerelease-badge").text().includes(release.previewTag));
+        assert($("#routing-economy .prerelease-badge").text().includes(release.previewTag));
         assert($(".prerelease-badge").length > 0);
       } else {
         assert.equal($(".prerelease-badge").length, 0);
@@ -293,23 +300,80 @@ test("both languages track preview renames, hotfixes and consumed feature fragme
   }
 });
 
-test("all currently documented pending features receive automatic pre-release badges", () => {
-  const release = readReleaseInfo();
-  assert(release.previewTag);
-  const pages = buildPages(undefined, release);
-  for (const language of ["en", "fr"]) {
-    const connector = load(pages.find(page => page.language === language && page.slug === "connector").content);
-    const gettingStarted = load(pages.find(page => page.language === language && page.slug === "getting-started").content);
-    const usage = load(pages.find(page => page.language === language && page.slug === "usage").content);
-    assert.equal(connector("h1 .prerelease-badge").length, 1);
-    assert.equal(gettingStarted("#chat-with-the-squad-coach .prerelease-badge").length, 1);
-    assert.equal(gettingStarted("#testing-the-pre-release .prerelease-badge").length, 1);
-    assert.equal(usage("#model-selection-per-role .prerelease-badge").length, 1);
+test("only explicitly marked pending features receive pre-release badges", () => {
+  const unbadgedPages = buildPages(undefined, resolveReleaseInfo(published(null), []));
+  const markers = new Map(unbadgedPages.map(page => {
+    const $ = load(page.content);
+    return [page.outputPath, $("[data-release-change]").toArray().map(element => $(element).attr("data-release-change"))];
+  }));
+  const changes = [...new Set([...markers.values()].flat())];
+  assert(changes.length > 0);
+  for (const offset of [0, 1]) {
+    const fragments = changes.filter((id, index) => index % 2 === offset).map(id => fragment(id));
+    const release = resolveReleaseInfo(published(), fragments);
+    for (const page of buildPages(undefined, release)) {
+      const $ = load(page.content);
+      const expected = markers.get(page.outputPath).filter(id => release.pendingChanges.includes(id)).length;
+      assert.equal($(".prerelease-badge").length, expected, page.outputPath);
+      $("h1, h2, h3, h4").each((index, element) => {
+        const marked = release.pendingChanges.includes($(element).attr("data-release-change"));
+        assert.equal($(element).children(".prerelease-badge").length, marked ? 1 : 0, page.outputPath);
+      });
+    }
+  }
+});
+
+for (const [state, metadata, fragments] of [
+  ["after Release Prep consumes the batch", published(null), []],
+  ["when a later unrelated preview opens", published(), [fragment("unrelated")]],
+]) {
+  test(`released documentation stays unbadged ${state}`, () => {
+    const release = resolveReleaseInfo(metadata, fragments);
+    for (const page of buildPages(undefined, release)) {
+      const $ = load(page.content);
+      assert.equal($(".prerelease-badge").length, 0, page.outputPath);
+      assert.equal(load(page.previewBadge)(".prerelease-badge").length, release.previewTag ? 1 : 0, page.outputPath);
+      $("[data-release-install]").each((index, element) => {
+        const tag = $(element).attr("data-release-install") === "preview" ? release.previewTag : release.stableTag;
+        assert.deepEqual($(element).find("pre code").toArray().map(code => $(code).text()),
+          tag ? [`apm install "Peter-N91/hve-squad#${tag}" --target copilot`] : [], page.outputPath);
+      });
+    }
+  });
+}
+
+test("explicit release markers stay aligned across translations", () => {
+  const pages = buildPages(undefined, resolveReleaseInfo(published(null), []));
+  for (const english of pages.filter(page => page.language === "en")) {
+    const translated = pages.find(page => page.language === "fr" && page.slug === english.slug);
+    const markers = page => {
+      const $ = load(page.content);
+      return $("[data-release-change]").toArray().map(element => $(element).attr("data-release-change"));
+    };
+    assert.deepEqual(markers(translated), markers(english), english.slug);
   }
 });
 
 test("fragment-only merges rebuild the published version notice", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/docs.yml", import.meta.url), "utf8");
   assert.equal(workflow.match(/- '\.changes\/unreleased\/\*\*'/g)?.length, 2);
-  assert.match(workflow, /fetch-depth:\s*0/);
+  assert.doesNotMatch(workflow, /fetch-depth:\s*0/);
+});
+
+test("release lifecycle refreshes Pages from the default branch, including GITHUB_TOKEN publishers", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/docs.yml", import.meta.url), "utf8");
+  assert.match(workflow, /release:\s*\n\s+types: \[published, edited, deleted\]/);
+  assert.doesNotMatch(workflow, /workflow_run:/);
+  assert.match(workflow, /ref:.*github\.event_name == 'release' && github\.event\.repository\.default_branch/);
+  assert.equal(workflow.match(/if: \(github\.ref == 'refs\/heads\/main' \|\| github\.event_name == 'release'\)/g)?.length, 2);
+  for (const name of ["release", "release-prep", "preview"]) {
+    const publisher = readFileSync(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), "utf8");
+    assert.match(publisher, /actions: write/);
+    assert.match(publisher, /name: Refresh published documentation\s*\n\s*if: always\(\)/);
+    assert.match(publisher, /run: gh workflow run docs\.yml --repo "\$GITHUB_REPOSITORY" --ref main/);
+  }
+  const prep = readFileSync(new URL("../../.github/workflows/release-prep.yml", import.meta.url), "utf8");
+  assert.match(prep, /if: always\(\).*has_changes == 'true'.*inputs\.dry_run != true.*inputs\.ref == 'main'/);
+  const scripts = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).scripts;
+  assert(scripts["docs:build"].startsWith("node scripts/docs-release.mjs --refresh && "));
 });

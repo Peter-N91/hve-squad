@@ -138,7 +138,7 @@ Dark navy gradient with white text:
 
 * Title: "Squad Governance Report" — large bold white.
 * Subtitle: mode · Period: start to end (N days) · Sub-squad (if applicable).
-* Stats grid: 6 metrics in a row — Coordination Turns, Role Dispatches, Est. Cost (note calibration state), Total Tokens (approximate with ~), Human Gates Fired, Escalations. White numbers with smaller uppercase labels below.
+* Stats grid: 6 metrics in a row — Coordination Turns, Role Dispatches, Cost (label `exact-native` or estimated fallback), Total Tokens (exact billed categories when native; otherwise approximate with ~), Human Gates Fired, Escalations. White numbers with smaller uppercase labels below.
 
 #### Section 1: Governance Gates
 
@@ -295,7 +295,7 @@ Report to the caller:
 
 * **Path** — the file written.
 * **Period** — the time window applied.
-* **Metrics summary** — one-line summary of headline numbers (e.g., "12 coordination turns, 8 dispatches, $1.87 est. cost, 2 human gates, 0 escalations").
+* **Metrics summary** — one-line summary of headline numbers with basis (e.g., "12 coordination turns, 8 dispatches, $1.87 exact-native cost, 2 human gates, 0 escalations").
 * **Grounding** — the squad artifacts that sourced the data.
 * **Gaps** — any sections rendered as "Not activated" or "No data" because the state files lacked the entries.
 

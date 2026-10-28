@@ -166,8 +166,10 @@ you, and does not use the paired `Establish`/`Series` modes.
 ### Live prerequisites
 
 * PowerShell 7.4+, Git, and an authenticated Copilot CLI supporting `--add-dir`, `--session-id`,
-	`--max-ai-credits`, `--max-autopilot-continues`, `--no-ask-user`, `--no-remote`,
-	`--no-remote-export`, and `--usage-output-file`
+	`--max-ai-credits`, `--max-autopilot-continues`, `--no-ask-user`,
+	and `--usage-output-file`. Retired `--no-remote` and `--no-remote-export`
+	options are neither required nor passed. MCP disabling, tool deny rules,
+	secret masking and workspace/budget controls remain in place.
 	ACP session loading and the advertised `compact` command are required only for
 	eligible context recovery; hosts without them stop with `unsupported-host`.
 * A clean, prepared full squad/hve-core installation containing deployed BRD

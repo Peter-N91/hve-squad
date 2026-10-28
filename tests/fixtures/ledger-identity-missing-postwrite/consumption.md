@@ -28,4 +28,6 @@ researcher     turns 1     100000 × 3.00 = 300000.0 / 1e6 = 0.3000
 
 ## Cost Comparison (illustrative)
 
+This run consumed an estimated **$0.3000 (~30.00 AI credits)**; manual baseline and saving unavailable.
+
 Fixture for the F3 review-fix: the C2 history-identity guard's post-write ("`-Check` + `-ExpectedHistoryCounts`") mode must fail on a fully-missing-identities Derivation, never only warn.

@@ -39,6 +39,7 @@ param(
     [switch]$IsolatedEnvironment,
     [string[]]$RunPaths,
     [string]$AcceptedPath,
+    [string]$ProgressPath = '',
     [switch]$ObservationOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -47,6 +48,7 @@ Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
 
 if ($MyInvocation.InvocationName -ne '.') {
     $Out = $null
+    $ProgressStep = $null; $ProgressLabel = ''
     try {
         if ($Mode -eq 'Analyze') {
             if (-not $EventsPath -or -not $OutputPath) { throw 'Analyze requires EventsPath and a new OutputPath directory.' }
@@ -209,6 +211,8 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
             exit $Series.exitCode
         }
+        $ProgressStep = 1; $ProgressLabel = 'Preparing workspace'
+        Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
         if (-not $TrialRoot -or -not $SourceRoot -or -not $InstallRoot) { throw 'Run requires TrialRoot, SourceRoot and a prepared full InstallRoot.' }
         if (Test-Path -LiteralPath $TrialRoot) { throw 'TrialRoot must not exist.' }
         $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
@@ -223,7 +227,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (-not $CliPath) { $CliPath = (Get-Command copilot -ErrorAction Stop).Source }
         $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
         $HelpText = (& $CliPath --help | Out-String)
-        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--no-remote', '--no-remote-export', '--add-dir')) {
+        foreach ($Flag in @('--session-id', '--max-ai-credits', '--no-ask-user', '--max-autopilot-continues', '--usage-output-file', '--add-dir')) {
             if (-not $HelpText.Contains($Flag)) { throw "Installed CLI does not support $Flag" }
         }
         $Revision = (& git -C $SourceRoot rev-parse HEAD).Trim()
@@ -271,7 +275,11 @@ if ($MyInvocation.InvocationName -ne '.') {
         $WorkflowRequestCeiling = if ($ObservationOnly) { [int]::MaxValue } else { [int]$Scenario.maxModelRequests - 10 }
         $WorkflowSeconds = if ($ObservationOnly) { [int]$Scenario.observationTimeoutMinutes * 60 } else { [int]$Scenario.timeoutMinutes * 60 }
         $Watch = [Diagnostics.Stopwatch]::StartNew()
+        Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
+        $StageLabels = [ordered]@{ init = 'Initializing squad'; requirements = 'Writing requirements'; build = 'Building product' }
         foreach ($Stage in $Prompts.Keys) {
+            $ProgressStep++; $ProgressLabel = $StageLabels[$Stage]
+            Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
             $StageWatch = [Diagnostics.Stopwatch]::StartNew()
             $StageStartLine = $StartLine; $PreviousMetrics = $Metrics
             $PriorRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests } else { 0 }
@@ -279,7 +287,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Attempts = [Collections.Generic.List[object]]::new()
             $Recovery = @{ count = 0; status = 'not-needed'; reason = $null; resolvedDiscoveryDenials = 0 }
             $UsagePath = Join-Path $Out "$Stage-usage.json"
-            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--no-remote', '--no-remote-export', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
+            $CliArgs = @('-p', $Prompts[$Stage], '--agent', 'squad-coordinator', '--model', $Model, '--session-id', $Session, '--autopilot', '--max-autopilot-continues', '2', '--max-ai-credits', $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '--allow-all-tools', '--add-dir', $Workspace, '--no-ask-user', '--disable-builtin-mcps', '--output-format', 'json', '--usage-output-file', $UsagePath, '--secret-env-vars=GH_TOKEN,GITHUB_TOKEN,COPILOT_GITHUB_TOKEN')
             if ($ObservationOnly) { $CliArgs[[array]::IndexOf($CliArgs, '--max-autopilot-continues') + 1] = '1000'; $StageRequestCeiling = 0 }
             foreach ($Server in $DisabledServers) { $CliArgs += @('--disable-mcp-server', $Server) }
             foreach ($Denied in @('shell(git push)', 'shell(gh)', 'shell(az)', 'shell(curl)', 'shell(wget)', 'shell(Invoke-WebRequest)', 'shell(Invoke-RestMethod)', 'shell(Start-Process)')) { $CliArgs += @('--deny-tool', $Denied) }
@@ -301,6 +309,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 $Recovery.resolvedDiscoveryDenials = $Decision.resolvedDiscoveryDenials
                 if ($Decision.allowed -and [Math]::Floor($RemainingSeconds) -ge 1) {
                     $Recovery.count = 1; $Recovery.status = 'attempted'
+                    Write-EfficiencyProgress -Step $ProgressStep -Label "$ProgressLabel (context recovery)" -Path $ProgressPath
                     $Compact = Invoke-EfficiencyCompaction -CliPath $CliPath -SessionId $Session -Workspace $Workspace -EventsPath $SessionEvents -OutputPath (Join-Path $Out "$Stage-compaction-stdout.jsonl") -UsagePath (Join-Path $Out "$Stage-compaction-usage.json") -MaxCredits $SessionCreditCeiling -Model $Model -TimeoutSeconds ([int][Math]::Min(300, [Math]::Floor($RemainingSeconds))) -StartLine $StageStartLine -MaxRequests $StageRequestCeiling -DisabledServers $DisabledServers -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
                     $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix "$Stage-compaction"
                     $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
@@ -308,6 +317,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                     $RemainingSeconds = $WorkflowSeconds - $Watch.Elapsed.TotalSeconds
                     $WithinRequests = $Metrics -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -lt $WorkflowRequestCeiling
                     if ($Compact.succeeded -and $Metrics -and $Metrics.complete -and $Metrics.counts.questions -eq 0 -and $WithinRequests -and [Math]::Floor($RemainingSeconds) -ge 1) {
+                        Write-EfficiencyProgress -Step $ProgressStep -Label "$ProgressLabel (continuation)" -Path $ProgressPath
                         $ContinueArgs = @($CliArgs)
                         $ContinueArgs[[array]::IndexOf($ContinueArgs, '-p') + 1] = $Prompts[$Stage] + ' This is a continuation of this same stage after verified context compaction, not a new run. Resume only the interrupted Scribe handoff first; inspect existing history and do not duplicate it or rerun completed specialist roles. After the handoff verifies, finish only the pending stage work. Preserve run identity, artifacts and safety gates. If still blocked, record the remaining blocker and stop; no further recovery is allowed.'
                         $ContinueArgs[[array]::IndexOf($ContinueArgs, '--max-ai-credits') + 1] = $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
@@ -334,21 +344,36 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
             $StageProcess = @{ exitCode = $Result.exitCode; stopCause = $Result.stopCause; seconds = [Math]::Round($StageWatch.Elapsed.TotalSeconds, 3); observedRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests - $PriorRequests } else { $null } }
             $Stages.Add(@{ name = $Stage; process = $StageProcess; readiness = $Readiness; attempts = @($Attempts); recovery = $Recovery; metrics = $Metrics; metricScope = 'cumulative-session'; stageTokenDelta = $Delta; passed = $StagePassed })
+            Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
             if (-not $StagePassed) {
                 $AllPassed = $false
                 if (-not $ObservationOnly -or $Result.stopCause -ne 'none' -or -not $Metrics -or -not $Metrics.credits.complete) { break }
             }
         }
+        foreach ($SkippedStage in @($StageLabels.Keys | Select-Object -Skip $Stages.Count)) {
+            $ProgressStep++
+            Write-EfficiencyProgress -Step $ProgressStep -Label $StageLabels[$SkippedStage] -Status skipped -Path $ProgressPath
+        }
+        $ProgressStep = 5; $ProgressLabel = 'Checking acceptance and workflow'
+        Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
         $Acceptance = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json -AsHashtable
         $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics }
+        Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
+        $ProgressStep = 6; $ProgressLabel = 'Judging documents'
         $Judge = $null
         if (($ObservationOnly -or ($AllPassed -and $Acceptance.passed -and $Workflow.passed)) -and $Watch.Elapsed.TotalSeconds -lt $WorkflowSeconds) {
+            Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
             $Judge = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $CliPath -Model $Model -MaxCredits $RecoveryPolicy.judgeCredits -ReviewPath ([string]$Workflow.reviewPath) -TimeoutSeconds ([Math]::Max(1, [Math]::Min(300, $WorkflowSeconds - $Watch.Elapsed.TotalSeconds))) -ObservationOnly:$ObservationOnly
+            Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
         }
+        else { Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status skipped -Path $ProgressPath }
+        $ProgressStep = 7; $ProgressLabel = 'Saving run evidence'
+        Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
         $Run = @{ schemaVersion = $Scenario.schemaVersion; metadata = $Metadata; stages = @($Stages); metrics = $Metrics; acceptance = $Acceptance; workflow = $Workflow; judge = $Judge; completed = ($AllPassed -and $Acceptance.passed -and $Workflow.passed -and $null -ne $Judge -and $Judge.valid) }
         if ($ObservationOnly) { $Run.collection = @{ policy = 'baseline-observation-v1'; recorded = $true; stagesAttempted = $Stages.Count; judgeAvailable = ($null -ne $Judge -and $Judge.valid) } }
         $Run | ConvertTo-Json -Depth 45 | Set-Content -LiteralPath (Join-Path $Out 'run.json') -Encoding utf8NoBOM
         $Succeeded = Test-EfficiencyRun $Run -ObservationOnly:$ObservationOnly
+        Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
         Write-Host "Run complete: $($Run.completed). Independent checks passed: $Succeeded. Report: $(Join-Path $Out 'run.json')"
         if ($ObservationOnly) {
             $Recorded = Test-EfficiencyObservation $Run
@@ -358,6 +383,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         elseif (-not $Succeeded) { exit 2 }
     }
     catch {
+        if ($null -ne $ProgressStep) { Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status failed -Path $ProgressPath }
         if ($Out -and (Test-Path -LiteralPath $Out)) {
             @{ schemaVersion = 'efficiency-error-v1'; outcome = 'incomplete'; reason = 'execution-or-evidence-error'; acceptedBaselineChanged = $false } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Out 'error.json') -Encoding utf8NoBOM
         }

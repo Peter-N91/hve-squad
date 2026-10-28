@@ -67,7 +67,7 @@
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code> ou <code>pack=foundry</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code> ou <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>
           &mdash; ajoute au profil
           les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
@@ -80,7 +80,7 @@
           <code>routing=off|ranked|economy|manual</code> — la méthode de sélection du modèle de chaque rôle, enregistrée dans
           <code>team.md</code> jusqu'à ce que vous la changiez. <code>off</code> (par défaut) n'applique aucune politique ;
           <code>ranked</code> choisit le modèle le mieux adapté au travail de chaque rôle parmi ceux
-          que propose votre hôte ; <code>economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
+          que propose votre hôte ; <code data-release-change="20261005-routing-economy">economy</code> est <code>ranked</code> avec des choix moins chers pour cinq
           rôles d'implémentation, après votre accord ; <code>manual</code> vous demande de choisir, avec des suggestions préremplies. Voir
           <a href="#model-selection-per-role">Sélection du modèle par rôle</a> ci-dessous.
         </li>
@@ -155,7 +155,49 @@
       </p>
 
 
+      <h2 id="script-backed-coordination">Coordination pilotée par scripts</h2>
+      <p>
+        Les coordinateurs Squad et Federation chargent des contrats compacts, pas tous les catalogues,
+        modèles de fichiers et procédures au démarrage. Avec PowerShell 7.4+, les choix confirmés de
+        profil, packs, noms et notifications sont convertis en données d'initialisation par
+        <code>Get-SquadInitContext.ps1</code> ; <code>Initialize-Squad.ps1 -Direct</code> prépare,
+        valide et publie l'état. Les questions obligatoires et la confirmation restent requises.
+        L'exécution directe comptabilise le coordinateur, jamais un lancement fictif du Scribe.
+      </p>
+      <p>
+        <code>Get-SquadDispatchBrief.ps1 -AsJson</code> fournit les métadonnées dans chaque mode.
+        <code>New-SquadDispatchPlan.ps1</code> ordonne les dépendances explicites et les travaux
+        indépendants, sans accorder d'approbation ni d'admission budgétaire.
+        <code>Test-SquadTurnCompletion.ps1</code> vérifie les artefacts, historiques, consommations
+        et états réels en un appel en lecture seule. Le parcours borné reste réservé à Economy.
+        Les autres contrôles et les lancements natifs des spécialistes ne changent pas ; les
+        instructions spécialisées ont des portées limitées à leurs artefacts.
+      </p>
+      <p>
+        Les écritures ordinaires à la racine d'une fédération utilisent
+        <code>Write-SquadFederationHandoff.ps1</code>, avec un instantané produit par script avant
+        les lancements et les preuves des exécutions internes. Il vérifie les deux niveaux,
+        préserve les octets et champs existants, consigne les entrées interéquipes en lecture seule
+        et agrège les coûts sans compter deux fois l'orchestration. Promotion, extension, autopilot
+        agrégé et écritures non prises en charge conservent la procédure spécialisée. Aucune migration
+        d'état n'est nécessaire ; sans le runtime, le protocole historique reste disponible.
+        Les scripts retirent le travail mécanique du modèle, pas la méthodologie ni les validations
+        humaines ; la durée réelle dépend toujours de l'hôte et du modèle.
+      </p>
+
       <h2 id="autopilot-hand-off-pipelining">Chevauchement des transmissions en mode autopilot</h2>
+      <p data-release-change="20261026-scribe-single-dispatch-handoffs">
+        Les transmissions ordinaires utilisent désormais <code>Write-SquadHandoff.ps1 -Quiet</code>
+        de manière synchrone, directement depuis le coordinateur dans tous les modes de routage, sans
+        lancer de sous-agent Scribe. Le résultat JSON sur une ligne indique le tour, le nombre d'entrées
+        d'historique et le contrôle du registre ; les avertissements restent sur stderr. Un code de sortie
+        non nul arrête la transmission. Les formats de l'historique, des décisions, du registre et de
+        l'état ne changent pas. Les verdicts, notifications, mémoire, créneaux budgétaires, changements
+        explicites d'équipe, cycles de vie de fédération, autopilot agrégé et résumés gardent la procédure
+        spécialisée du Scribe. L'initialisation neuve prise en charge et les écritures ordinaires à la
+        racine d'une fédération passent par leurs outils validés. Toutes les écritures restent sérialisées par racine.
+        Les règles de chevauchement ci-dessous concernent ces transmissions au Scribe, pas les écritures directes ordinaires.
+      </p>
       <p>
         En <code>mode=autopilot</code>, le coordinateur lance simultanément la transmission au Scribe de l'étape N et
         le rôle de l'étape N+1, sous forme de deux appels dans un même bloc d'appels d'outils parallèles, lorsqu'aucune barrière
@@ -182,7 +224,7 @@
         <li>Après l'échec de vérification d'une transmission en chevauchement (exécutée parallèlement à un rôle) pendant cette exécution ; l'échec d'une transmission exécutée seule est corrigé sans désactiver le chevauchement</li>
       </ul>
       <p>
-        Lorsque le chevauchement est désactivé, le coordinateur lance la transmission au Scribe de l'étape N, attend
+        Pour une transmission spécialisée au Scribe lorsque le chevauchement est désactivé, le coordinateur lance la transmission de l'étape N, attend
         qu'elle soit terminée et vérifiée, puis lance l'étape N+1 — exactement comme dans les versions précédentes.
         Lorsque le chevauchement est actif, l'étape N+1 commence pendant la transmission de l'étape N, mais l'étape
         N+2 ne commence qu'après le retour de cette transmission et la réussite de sa vérification.
@@ -1149,7 +1191,7 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
-          <tr><td><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
+          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
         </tbody>
       </table>
       <p>
@@ -1187,7 +1229,7 @@ flowchart TD
         rôle que ce pack apporterait. Foundry réutilise les rôles existants et les oriente vers des compétences Microsoft et Azure
         enregistrées, au lieu de copier dans la squad une documentation produit qui évolue rapidement.
       </p>
-      <h3>Installer les compétences du pack Foundry</h3>
+      <h3 data-release-change="20261024-foundry-agent-sync-replacement">Installer les compétences du pack Foundry</h3>
       <p>
         Lorsque vous appliquez <code>foundry</code>, le coordinateur regroupe dans un seul message
         toutes les compétences enregistrées manquantes et leurs prérequis. N'installez que les
@@ -1210,7 +1252,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
         CLI, un compte ou projet Azure et une gateway existante. L'authentification de déploiement
         reste exclusivement OIDC.
       </p>
-      <h3>Consignes de projet Microsoft Foundry</h3>
+      <h3 data-release-change="20261008-foundry-agentic-pack">Consignes de projet Microsoft Foundry</h3>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
@@ -1611,7 +1653,7 @@ layouts:
           de chaque rôle parmi ceux proposés par votre hôte, et affiche chaque choix dans une colonne <code>Model</code>
           sous une ligne <code>Model routing: ranked</code>.
         </li>
-        <li>
+        <li data-release-change="20261005-routing-economy">
           <strong><code>economy</code></strong> — comme <code>ranked</code>, sauf que cinq rôles d'implémentation
           à faible impact reçoivent le modèle le moins cher suffisamment adapté à leur travail ; affiché sous une ligne
           <code>Model routing: economy</code>. Sur option, et seulement après que vous avez accepté le compromis. Voir
@@ -1622,7 +1664,7 @@ layouts:
           sont enregistrés dans la colonne <code>Model</code> sous une ligne <code>Model routing: manual</code>.
         </li>
       </ul>
-      <p>
+      <p data-release-change="20261018-benchmark-backed-model-routing-and-daily-sync">
         <strong>Comment les choix classés sont établis.</strong> Chaque rôle correspond à une classe de mission
         (<code>research</code>, <code>planning</code>, <code>implementation</code>, <code>review</code>,
         <code>council</code>, <code>intake</code>, <code>bookkeeping</code>). Ranked donne la
@@ -1651,7 +1693,7 @@ layouts:
         squad propose donc des modèles du catalogue dont le prix est inférieur ou égal à celui du modèle de votre session ; si VS Code refuse un
         choix, la question vous est reposée avec la liste signalée par VS Code.
       </p>
-      <p id="routing-economy">
+      <p id="routing-economy" data-release-change="20261005-routing-economy">
         <strong>Mode economy (<code>routing=economy</code>).</strong> Seuls ces cinq rôles changent de
         modèle : <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
         <code>prompt-engineer</code> et <code>data-scientist</code>. Chacun reçoit le modèle du catalogue le
@@ -1697,7 +1739,7 @@ layouts:
       <p><strong>Ordre de priorité</strong> (le plus élevé l'emporte, pour chaque rôle) :</p>
       <ol>
         <li><code>routing=manual</code> : la cellule <code>Model</code> valide du rôle.</li>
-        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code>routing=economy</code> : le choix economy).</li>
+        <li><code>routing=ranked</code> : le choix classé pour ce rôle (<code data-release-change="20261005-routing-economy">routing=economy</code> : le choix economy).</li>
         <li>
           <code>tier=</code> (le paramètre de niveau statique existant) ou le niveau de modèle initialisé dans <code>team.md</code>
           — le mécanisme de repli actuel, inchangé.
@@ -1705,7 +1747,7 @@ layouts:
         <li>Omettre le paramètre — le comportement par défaut sans politique.</li>
       </ol>
       <p>
-        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code>economy</code> ou <code>manual</code>, chaque
+        <strong>Le lancement copie la cellule :</strong> en <code>ranked</code>, <code data-release-change="20261005-routing-economy">economy</code> ou <code>manual</code>, chaque
         lancement d'un agent de l'équipe transmet exactement la cellule <code>Model</code> de sa ligne, sauf pour le Scribe,
         dont le propre modèle fixé prévaut. Dans la distribution plugin, le hook <code>dispatch-guards</code>
         refuse un lancement dont le <code>model</code> manque ou diffère de la cellule, et indique la
@@ -1739,7 +1781,7 @@ layouts:
       <p><strong>Exemples :</strong></p>
       <pre><code># Switch to ranked selection; team.md gains a Model column showing each role's pick.
 /squad request="implement the design" routing=ranked</code></pre>
-      <pre><code># Switch to economy; the squad states the trade and records your consent first.
+      <pre data-release-change="20261005-routing-economy"><code># Switch to economy; the squad states the trade and records your consent first.
 /squad request="update the getting-started guide" routing=economy</code></pre>
       <pre><code># Switch to manual selection; you are asked for the models before the request runs.
 /squad request="design the data layer" routing=manual

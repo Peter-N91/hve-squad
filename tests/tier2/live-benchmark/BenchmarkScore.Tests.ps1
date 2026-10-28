@@ -62,6 +62,14 @@ BeforeAll {
 }
 
 Describe 'ConvertTo-BenchmarkRunSummary' {
+    It 'uses final cumulative activity rather than adding repeated stage snapshots' {
+        $result = New-RunResult
+        $result.metrics.activity = @{ scribeDispatches = 1; scribeModelRequests = 7; scribeSeconds = 68.818; scribeCredits = 1.39; coordinatorModelRequests = 59; authorModelRequests = 34 }
+        foreach ($stage in $result.stages) { $stage.metrics = $result.metrics }
+        $summary = ConvertTo-BenchmarkRunSummary -Run 1 -Result $result
+        $summary.activity.scribeModelRequests | Should -Be 7
+        $summary.activity.coordinatorModelRequests | Should -Be 59
+    }
     It 'derives quality, outcomes, time and credits from a run result' {
         $summary = ConvertTo-BenchmarkRunSummary -Run 1 -Result (New-RunResult)
         $summary.scored | Should -BeTrue
@@ -110,6 +118,22 @@ Describe 'ConvertTo-BenchmarkRunSummary' {
 }
 
 Describe 'ConvertTo-BenchmarkScore' {
+    It 'averages activity only when every scored run has that metric' {
+        $first = New-RunResult
+        $first.metrics.activity = @{ scribeDispatches = 1; scribeModelRequests = 7; scribeSeconds = 69; scribeCredits = 1.39; coordinatorModelRequests = 59; authorModelRequests = 34 }
+        $second = New-RunResult
+        $second.metrics.activity = @{ scribeDispatches = 3; scribeModelRequests = 9; scribeSeconds = $null; scribeCredits = 2.39; coordinatorModelRequests = 61; authorModelRequests = 36 }
+        $runs = @((ConvertTo-BenchmarkRunSummary -Run 1 -Result $first), (ConvertTo-BenchmarkRunSummary -Run 2 -Result $second), (ConvertTo-BenchmarkRunSummary -Run 3 -Result $null))
+        $score = ConvertTo-BenchmarkScore -Trial $runs -Requested 3 -Commit 'abc1234'
+        $score.summary.activity.scribeDispatches | Should -Be 2
+        $score.summary.activity.scribeModelRequests | Should -Be 8
+        $score.summary.activity.scribeSeconds | Should -BeNullOrEmpty
+        [math]::Abs($score.summary.activity.scribeCredits - 1.89) | Should -BeLessThan 1e-9
+        $score.summary.activity.authorModelRequests | Should -Be 35
+        $runs[1].activity = $null
+        $incomplete = ConvertTo-BenchmarkScore -Trial $runs -Requested 3 -Commit 'abc1234'
+        $incomplete.summary.activity.scribeModelRequests | Should -BeNullOrEmpty
+    }
     It 'takes medians over scored runs and counts outcomes over the requested runs' {
         $runs = @(
             (ConvertTo-BenchmarkRunSummary -Run 1 -Result (New-RunResult -Dimensions @(18, 17, 16, 17, 15) -Seconds 300)),
@@ -152,6 +176,26 @@ Describe 'ConvertTo-BenchmarkScore' {
 }
 
 Describe 'Badge, report and files' {
+    It 'persists per-trial activity and compares the report with a previous local score' {
+        $result = New-RunResult
+        $result.metrics.activity = @{ scribeDispatches = 1; scribeModelRequests = 7; scribeSeconds = 68.818; scribeCredits = 1.39; coordinatorModelRequests = 59; authorModelRequests = 34 }
+        $score = ConvertTo-BenchmarkScore -Trial @((ConvertTo-BenchmarkRunSummary -Run 1 -Result $result)) -Requested 1 -Commit 'abc1234'
+        $directory = Join-Path $TestDrive 'activity-output'
+        [void](Write-BenchmarkScore -Score $score -Directory $directory)
+        $raw = Get-Content (Join-Path $directory 'score.json') -Raw | ConvertFrom-Json -AsHashtable
+        $raw.trials[0].activity.scribeModelRequests | Should -Be 7
+        $read = Read-BenchmarkScore -Path (Join-Path $directory 'score.json')
+        $read.summary.activity.scribeCredits | Should -Be 1.39
+        Get-Content (Join-Path $directory 'report.md') -Raw | Should -Match '\| Scribe dispatches \| unavailable \| 1 \|'
+        $earlier = Read-BenchmarkScore (New-ScoreFile -Name 'earlier-activity')
+        $earlier.summary.activity = @{ scribeDispatches = 11; scribeSeconds = 796.06; scribeCredits = 21.02 }
+        [void](Write-BenchmarkScore -Score $score -Directory $directory -EarlierScore $earlier)
+        $report = Get-Content (Join-Path $directory 'report.md') -Raw
+        $report | Should -Match '\| Scribe dispatches \| 11 \| 1 \|'
+        $report | Should -Match '\| Scribe credits \| 21.02 \| 1.39 \|'
+        $report | Should -Match '\| Time inside Scribe dispatches \| 13 min 16.1 s \| 1 min 8.8 s \|'
+        $report | Should -Match 'Earlier run: 2026-10-25 12:00 UTC'
+    }
     BeforeAll {
         $dimensions = @(@(18, 17, 16, 17, 15), @(18, 16, 14, 18, 17), @(17, 17, 15, 17, 16))
         $seconds = 1159.972, 1271.579, 1134.002
@@ -210,6 +254,10 @@ Describe 'Read-BenchmarkScore' {
         @{ Name = 'a text quality'; Edit = { param($j) $j.summary.quality = '83' } }
         @{ Name = 'a missing dimension'; Edit = { param($j) $j.summary.dimensions.Remove('traceability') } }
         @{ Name = 'a fractional run count'; Edit = { param($j) $j.summary.functional = 1.5 } }
+        @{ Name = 'non-object activity'; Edit = { param($j) $j.summary.activity = 'invalid' } }
+        @{ Name = 'negative activity'; Edit = { param($j) $j.summary.activity = @{ scribeModelRequests = -1 } } }
+        @{ Name = 'text activity'; Edit = { param($j) $j.summary.activity = @{ scribeCredits = '1.39' } } }
+        @{ Name = 'boolean activity'; Edit = { param($j) $j.summary.activity = @{ scribeDispatches = $true } } }
     ) {
         { Read-Edited $Edit } | Should -Throw
     }
@@ -218,6 +266,11 @@ Describe 'Read-BenchmarkScore' {
         $path = Join-Path $TestDrive 'garbage.json'
         Set-Content -LiteralPath $path -Value '{ not json'
         { Read-BenchmarkScore -Path $path } | Should -Throw
+    }
+    It 'accepts historic scores without activity without fabricating zeroes' {
+        $read = Read-Edited { param($j) $j.summary.Remove('activity') }
+        $read.summary.activity | Should -BeNullOrEmpty
+        (Compare-BenchmarkScore -Head $read).Markdown | Should -Match '\| Scribe credits \| unavailable \| unavailable \|'
     }
 
     It 'keeps only sanitized text from the file' {
@@ -234,6 +287,18 @@ Describe 'Read-BenchmarkScore' {
 }
 
 Describe 'Compare-BenchmarkScore' {
+    It 'shows unavailable historic activity alongside current measurements without adding warnings' {
+        $base = Read-BenchmarkScore (New-ScoreFile -Name 'activity-base')
+        $head = Read-BenchmarkScore (New-ScoreFile -Name 'activity-head')
+        $head.summary.activity = @{ scribeDispatches = 1; scribeModelRequests = 7; scribeSeconds = 68.818; scribeCredits = 1.39; coordinatorModelRequests = 59; authorModelRequests = 34 }
+        $comparison = Compare-BenchmarkScore -Base $base -Head $head
+        $comparison.Markdown | Should -Match '\| Scribe dispatches \| unavailable \| 1 \|'
+        $comparison.Markdown | Should -Match '\| Coordinator model requests \| unavailable \| 59 \|'
+        $comparison.Warnings | Should -BeNullOrEmpty
+        $base.summary.activity = @{ scribeDispatches = 11; authorModelRequests = 6 }
+        (Compare-BenchmarkScore -Base $base -Head $head).Markdown | Should -Match '\| Scribe dispatches \| 11 \| 1 \|'
+        (Compare-BenchmarkScore -Head $head).Markdown | Should -Match '\| BRD/PRD author model requests \| unavailable \| 34 \|'
+    }
     BeforeAll {
         $script:Base = New-ScoreFile -Name 'base'
     }
@@ -376,10 +441,13 @@ Describe 'Invoke-Benchmark.ps1' {
             Set-Content (Join-Path $script:Repo 'squad-src/.github/agents/squad-test.md') '# test'
             New-RunResult | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $live 'fake-run.json')
             Set-Content (Join-Path $live 'Invoke-EfficiencyExercise.ps1') @'
-param($Mode, $TrialRoot, $SourceRoot, $InstallRoot, $Arm, $Pair, $MaxCredits, [switch]$Live, [switch]$IsolatedEnvironment, [switch]$ObservationOnly)
+param($Mode, $TrialRoot, $SourceRoot, $InstallRoot, $Arm, $Pair, $MaxCredits, $ProgressPath, [switch]$Live, [switch]$IsolatedEnvironment, [switch]$ObservationOnly)
+Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
+Write-EfficiencyProgress -Step 1 -Label 'Preparing workspace' -Path $ProgressPath
 if ($env:FAKE_ENGINE_FAIL_PAIR -eq $Pair) { [Console]::Error.WriteLine('stand-in engine failure'); exit 1 }
 New-Item -ItemType Directory -Path (Join-Path $TrialRoot 'out') -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'fake-run.json') (Join-Path $TrialRoot 'out/run.json')
+Write-EfficiencyProgress -Step 7 -Label 'Saving run evidence' -Status finished -Path $ProgressPath
 '@
             foreach ($tool in 'apm', 'copilot') {
                 $path = Join-Path $TestDrive "bin/$tool"
@@ -412,6 +480,11 @@ Copy-Item (Join-Path $PSScriptRoot 'fake-run.json') (Join-Path $TrialRoot 'out/r
             $score.runs.failed | Should -Be 1
             $output | Should -Match 'Run 2 did not produce a score'
             $output | Should -Match 'stand-in engine failure'
+            $output | Should -Match '\[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d[+-]\d\d:\d\d\] Installation finished; 2 runs'
+            $output | Should -Match 'Run 1 of 2 started; 7 planned steps, 1 later runs'
+            $output | Should -Match 'Step 1/7: Preparing workspace - started; 6 steps remaining'
+            $output | Should -Match 'Step 7/7: Saving run evidence - finished; 0 steps remaining'
+            $output | Should -Match 'Saved score.json.*0 steps remaining'
         }
 
         It 'leaves the saved score alone when no run produced one' {
@@ -421,6 +494,28 @@ Copy-Item (Join-Path $PSScriptRoot 'fake-run.json') (Join-Path $TrialRoot 'out/r
             $null = & pwsh -NoProfile -File $script:Runner -Runs 1 2>&1
             $LASTEXITCODE | Should -Be 1
             (Get-Content $path -Raw).Trim() | Should -Be 'previous score'
+        }
+        It 'automatically compares the replaced local score and tolerates unreadable earlier evidence' {
+            $directory = Join-Path $script:Repo 'benchmarks/efficiency'
+            $path = Join-Path $directory 'score.json'
+            Copy-Item (New-ScoreFile -Name 'previous-local') $path -Force
+            $previous = Get-Content $path -Raw | ConvertFrom-Json -AsHashtable
+            $previous.summary.activity = @{ scribeDispatches = 11 }
+            $previous | ConvertTo-Json -Depth 8 | Set-Content $path
+            $live = Split-Path $script:Runner
+            $run = New-RunResult
+            $run.metrics.activity = @{ scribeDispatches = 1; scribeModelRequests = 7 }
+            $run | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $live 'fake-run.json')
+            $env:FAKE_ENGINE_FAIL_PAIR = $null
+            $null = & pwsh -NoProfile -File $script:Runner -Runs 1 2>&1
+            $LASTEXITCODE | Should -Be 0
+            Get-Content (Join-Path $directory 'report.md') -Raw | Should -Match '\| Scribe dispatches \| 11 \| 1 \|'
+
+            Set-Content $path '{bad-json'
+            $output = & pwsh -NoProfile -File $script:Runner -Runs 1 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0
+            $output | Should -Match 'Earlier score could not be read'
+            Get-Content (Join-Path $directory 'report.md') -Raw | Should -Match '\| Scribe dispatches \| unavailable \| 1 \|'
         }
     }
 }

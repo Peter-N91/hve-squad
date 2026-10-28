@@ -161,7 +161,7 @@ After confirming the proposed team, send the work request separately in the same
 request="add input validation to the login form"
 ```
 
-Add an optional model-spend ceiling when you want a conservative forecast before work starts:
+Add an optional model-spend ceiling when you want exact consumed-to-date accounting plus a conservative reservation for the actual next dispatch wave:
 
 ```text
 request="add input validation to the login form" cost-ceiling=10
@@ -170,8 +170,8 @@ request="add input validation to the login form" cost-ceiling=10
 Within the same run, omitting the argument preserves an active ceiling. Use
 `cost-ceiling=unset` to remove it explicitly. See
 [Cost admission control](https://peter-n91.github.io/hve-squad/usage.html#cost-admission-control)
-for estimation, approval, stopping, and federation behavior. Fresh-squad initialization is outside
-admission. Ordinary federation routing applies the ceiling independently to each selected sub-squad;
+for exact metering, reservation, approval, stopping, and federation behavior. Fresh-squad initialization is outside
+admission. Complete host usage records are deduplicated in native credits; lagging checkpoints are diagnostics only. Ordinary federation routing applies the ceiling independently to each selected sub-squad;
 only untargeted federation autopilot uses one aggregate federation ceiling.
 
 ### Choosing models per role (`routing=`)
@@ -189,13 +189,15 @@ only untargeted federation autopilot uses one aggregate federation ceiling.
 
 **Ranked is capability-first; Economy is cost-first after qualification.** Policy `squad-capability-v3` uses a common versioned comparison panel, selected by independent snapshot-wide coverage, never scores, prices or host availability (`references/model-scoring.md`). Implementation retains SciCode/Terminal-Bench and a visibly reduced SciCode panel. Economy requires each full-panel percentile to reach `0.50`, or reduced SciCode to reach `0.75`, then selects the lowest known Blended price. Confidence and cost only break genuine Ranked capability ties. The 90-day safeguard applies to genuine verification, not publication age; result, acquisition, verification and generation dates stay distinct, and legacy unknowns are not silently refreshed. Reports expose panels and precise exclusions; unsupported comparisons fall back explicitly. Modes may agree. A `fast` floor is a minimum, not a frontier ceiling. Coordinators keep the selected session model, and the Scribe keeps its pin.
 
+The compact discovery brief no longer ranks the whole roster. `New-SquadDispatchPlan.ps1` receives the real selected units and host model list, resolves only those roles, and returns the active-mode transition or changed cells. `Set-SquadModelRouting.ps1` applies it through an exact `team.md` hash check, so first activation and refresh of ranked, economy, or manual routing do not spend a Scribe model turn. On `task` hosts, `sessionModel: auto` is metadata rather than an availability list: active routing now fails before changing `team.md` unless the coordinator supplies the tool's advertised model enum. This prevents catalog-only IDs from being persisted and then silently losing to an agent's default pin.
+
 **How manual picks are made.** When you switch to `routing=manual`, whether at squad creation or later, the coordinator asks before dispatching anything:
 
 1. Accept the suggested model for every role (the ranked picks), or
 2. choose one model per assignment class, then
 3. override any individual role.
 
-Every question lists only models **your host can run** and that meet the role's `Model Tier` floor. On the Copilot CLI and the GitHub Copilot app, that is the exact list the `task` tool advertises. VS Code does not advertise a list, so the squad offers catalog models priced at or below your session model; VS Code rejects a subagent model above the session's cost tier. If VS Code rejects a pick, you are asked again with the list VS Code reports. You can also edit a `Model` cell by hand; the squad validates it on every read.
+Every question lists only models **your host can run** and that meet the role's `Model Tier` floor. On the Copilot CLI and the GitHub Copilot app, that is the exact list the `task` tool advertises. VS Code does not advertise a list, so the squad offers catalog models priced at or below a concrete, priced session model; `auto`, `unknown`, tier labels, and unpriced session models produce no automatic suggestion until a concrete picker value or rejection-reported list is available. If VS Code rejects a pick, you are asked again with the list VS Code reports. You can also edit a `Model` cell by hand; the squad validates it on every read.
 
 **What a `Model` cell holds.** One exact model id from the `Model ID` column of `consumption-rates.md` (for example `claude-sonnet-5.5`). A cell below the role's floor, an unknown id, or an id containing shell or prompt metacharacters is refused and logged, never guessed. That role then falls back to its `Model Tier`, and the next interactive turn asks again.
 
@@ -245,7 +247,7 @@ The squad records which model routing requested, which model actually ran (if th
 
 **Important notes:**
 
-- **Estimates, not bills** — Token counts and cost figures are estimated from a dispatch-size model, not from runtime telemetry. Premium-request multipliers and long-context pricing come from the catalog and are estimates. See `squad-src/.github/skills/squad/references/model-catalog.md` and `consumption-rates.md` for methodology.
+- **Exact per-role tokens and credits** — Complete native usage records carry the active `agentId`, four billed token categories, and nano-AIU. The ledger rolls nested workers into their top-level role, combines coordinator/Scribe as orchestration, and replaces estimates only when every row reconciles to the exact session total. Estimates remain solely as a visible fallback and for future Cost Preflight reservations, which cannot be exact before execution.
 - **Availability sources** — The catalog cites three GitHub official documentation pages (fetched at catalog build time): Supported AI models, Models and pricing, and AI model comparison. URLs are listed in the catalog header.
 
 **Optional ledger check:**
@@ -262,7 +264,77 @@ Or, for a sub-squad in a federation:
 .github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/<name> -Check
 ```
 
-This script (PowerShell 7+) validates that every recorded dispatch has a consumption block, that token counts and cost derivations round-trip correctly, and that the aggregated ledger totals match the sum of all recorded history entries. The `-Check` audit is optional, never required, and is useful for post-run audits or when troubleshooting cost reporting. During a run the Scribe calls the same script with `-Write`, which rewrites the ledger sections and the two `state.json` run totals from the history files, so no model copies a derived figure by hand. Add `-SessionLog auto` (the Scribe's `ledgerCommand` already does) to also record real host-reported usage beside the estimates: the model each dispatch actually ran on, real token totals, the session's billed AI units, and a comparison with the same work run on one model without HVE Squad.
+This script (PowerShell 7+) validates history integrity and the persisted ledger. With `-SessionLog auto` (the handoff default), it writes exact per-role uncached input, cache-read, cache-write, output, USD, and AI-credit rows from complete native records; nested subagents accrue to their owning role, and the native row sum must equal the session total. It removes the former duplicate Observed Usage section and drives Cost Comparison from the same exact snapshot. If identity or coverage is incomplete, it leaves the estimator visibly in place. The two historical `state.json` estimator fields receive whichever basis the ledger actually used. A federation root is not written by `-Write`; its aggregate follows the federation procedure over member ledgers.
+
+Ordinary handoffs use the same deterministic writer in `off`, `ranked`, `economy`,
+and `manual` routing modes. The coordinator runs
+[`Write-SquadHandoff.ps1`](squad-src/.github/skills/squad/scripts/Write-SquadHandoff.ps1)
+directly with `-SquadRoot <root> -PayloadPath <payload.json> -Quiet`, without
+starting a Scribe subagent. Quiet mode returns one JSON status line containing
+`status`, `turn`, `dispatchEntries`, `historyCounts`, and `ledgerCheck`; warnings
+remain on stderr. `ledgerCheck: ledger-only` preserves the existing tolerated
+accounting-warning behavior and is not reported as `PASS`. Nonzero exits stop the
+handoff; they are not permission to bypass validation with handwritten state.
+
+Council, Intake Readiness, and Discovery Verdicts are deterministic too. After
+the handoff writer records the turn's history, consumption, and state, the
+coordinator runs
+[`Write-SquadVerdict.ps1`](squad-src/.github/skills/squad/scripts/Write-SquadVerdict.ps1)
+at the same root. It validates the complete verdict schema, derives council
+most-restrictive-wins synthesis, appends `decisions.md` under the same writer
+lock, rejects replays, and returns the stable Decision Ref without starting a
+Scribe subagent. Federation members use the identical script with their
+`members/<name>/` root; verdicts never land at the federation meta-root.
+
+Confirmed fresh initialization can now run directly through the same staged
+initializer with `-Direct`. `Get-SquadInitContext.ps1` prepares the full payload
+from confirmed profile, packs, names and notification choices; no model retypes
+the roster or rate template. The legacy Scribe input remains supported.
+Federation initialization follows the same rule:
+`Get-SquadFederationInitPlan.ps1` validates every confirmed member through that
+single-squad payload builder, and `Initialize-SquadFederation.ps1` builds new
+member trees in parallel, validates their ledgers and publishes under one lock
+without a Scribe model call. On a fresh root it publishes the complete federation;
+on an existing federation it preserves every existing member byte and commits
+only the new members plus additive registry, routing, history and aggregate state.
+Making an existing team larger is script-backed too:
+`Get-SquadRosterExpansionPlan.ps1` resolves confirmed catalog roles/packs and
+seals the current root, then `Expand-SquadRoster.ps1` applies the exact plan under
+the ordinary writer lock for either a plain squad or one registered federation
+member. It writes only `team.md`, `routing.md`, and one decision; it launches no
+Scribe, preserves `consumption.md`, `state.json`, rates, notifications, and
+history byte-for-byte, and checks the ledger read-only. This prevents a roster
+addition from replacing exact native accounting with the former estimated and
+observed refresh output. Verdicts, notifications, memory, `routing=off`,
+removal/recasting, duplicate-role members, connector changes, repairs, aggregate
+federation autopilot and run summaries keep their cold procedure.
+Direct and Scribe writes are serialized per squad root, and completion still
+requires dispatch history, consumption blocks, and an advanced state turn.
+Existing Markdown and JSON artifact formats are unchanged; no migration is needed.
+The historical Scribe orchestration file records actual coordinator overhead and
+Scribe usage only when the Scribe ran, not a fictional model call for script execution.
+
+Both coordinators now start from compact runtime contracts. The
+`Get-SquadDispatchBrief.ps1 -AsJson` metadata path works in every routing mode;
+it does not enable Economy's bounded lane elsewhere. `New-SquadDispatchPlan.ps1`
+orders explicit dependencies into safe waves, while `Test-SquadTurnCompletion.ps1`
+checks the actual turn's files, history, accounting and state in one read-only call.
+These scripts do not launch models, choose a specialist's answer or grant approval.
+Cold instructions have artifact-specific scopes rather than all loading on any
+squad-state access.
+
+Ordinary federation-root writes use `Write-SquadFederationHandoff.ps1` with a
+pre-dispatch snapshot and verified inner proofs. It preserves append-only bytes,
+records cross-member inputs, carries prior root overhead once and sums member
+totals without changing the existing federation schema. Promotion is also
+script-backed: `Get-SquadPromotionPlan.ps1` seals the read-only source/candidate
+inventory, then `Promote-SquadFederation.ps1` requires its exact hash plus an
+explicit relocate/keep decision for every candidate, stages and ledger-checks the
+complete federation, and publishes it under the ordinary writer lock. Stale plans,
+replay and collisions write nothing. Unsupported operations retain the cold path.
+PowerShell 7.4+ is required for the new coordinator helpers;
+hosts without it retain the full legacy procedure. Smaller prompts and offline
+script execution are not a claim about a particular live model's elapsed time.
 
 In VS Code Copilot Harness, use the agents dropdown to select the matching Squad agent. Send only
 the request text and arguments shown above; do not add a slash-command prefix.

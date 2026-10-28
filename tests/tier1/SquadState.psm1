@@ -3,6 +3,7 @@
 
 # Reads a squad state tree into the model the Tier 1 contract asserts on, and can
 # generate a schema-correct fixture.
+# AI cost: none; reads or creates local state without running the squad.
 #
 # The fixture exists to prove the assertions fire, not to prove the squad works: a
 # fixture the author wrote to satisfy their own assertions is circular evidence. Its
@@ -398,6 +399,29 @@ function Get-MarkdownTable {
     $tables
 }
 
+function ConvertTo-LongContextThreshold {
+    <#
+    .SYNOPSIS
+        Converts a ledger long-context threshold such as '<=100K / >100K' to tokens.
+    .DESCRIPTION
+        Returns $null for text that is not the ledger's threshold form. Backslash escapes
+        are stripped and K, M and G are decimal multipliers.
+    #>
+    [CmdletBinding()]
+    [OutputType([double])]
+    param([AllowEmptyString()][AllowNull()][string]$Value)
+
+    $clean = ("$Value" -replace '\\', '').Trim()
+    if ($clean -notmatch ('(?:' + [char]0x2264 + '|<=)\s*(?<amount>\d+(?:\.\d+)?)\s*(?<unit>[KMGkmg]?)')) { return $null }
+    $multiplier = switch ($Matches.unit.ToUpperInvariant()) {
+        'K' { 1000.0 }
+        'M' { 1000000.0 }
+        'G' { 1000000000.0 }
+        default { 1.0 }
+    }
+    [double]$Matches.amount * $multiplier
+}
+
 function Resolve-ConnectorManifestPath {
     param(
         [AllowEmptyString()][string]$ManifestPath,
@@ -785,6 +809,13 @@ function Get-RateTable {
         on the four rate headers also keeps the dispatch-size estimator's class rows out:
         they are five numeric-looking columns that a looser match would happily register
         as a price.
+
+        Long-context metadata is optional. A table without any LC header yields flat
+        rates. With the complete LC header set, 'none' (e.g. 'none (flat rate)') declares
+        flat pricing, and any other threshold must be the ledger form with four numeric LC
+        rates, surfaced as long_context_threshold and lc_input/lc_cached/lc_cache_write/
+        lc_output. Partial headers or an unparseable threshold or LC rate set lc_error on
+        the rate rather than silently falling back, so a verifier can refuse to price it.
     #>
     [CmdletBinding()]
     param(
@@ -797,9 +828,11 @@ function Get-RateTable {
     if (-not $Content) { return $rates }
 
     $rateColumns = @('Input', 'Cached', 'Cache write', 'Output')
+    $lcColumns = @('LC Input', 'LC Cached', 'LC Cache write', 'LC Output')
 
     foreach ($table in (Get-MarkdownTable -Content $Content)) {
         if (@($rateColumns | Where-Object { $_ -notin $table.Header }).Count -gt 0) { continue }
+        $lcHeaders = @(@('LC Threshold') + $lcColumns | Where-Object { $_ -in $table.Header })
 
         # 'Priced as' names the rate row on the tier-fallback table, whose first column is
         # the tier. Everywhere else the first column is the model itself.
@@ -821,6 +854,32 @@ function Get-RateTable {
                 cache_write = $numbers[2]
                 output      = $numbers[3]
                 tier        = if ('Tier' -in $table.Header) { $row['Tier'] } else { $null }
+            }
+
+            if ($lcHeaders.Count -gt 0) {
+                if ($lcHeaders.Count -lt 5) {
+                    $rates[$key].lc_error = "partial long-context columns (found: $($lcHeaders -join ', '))"
+                }
+                elseif (("$($row['LC Threshold'])" -replace '[\\`*]', '').Trim() -match '^(?i)none\b') {
+                    # Explicit flat-rate declaration.
+                }
+                else {
+                    $threshold = ConvertTo-LongContextThreshold $row['LC Threshold']
+                    $lcNumbers = @($lcColumns | ForEach-Object { ConvertTo-LedgerNumber $row[$_] })
+                    if ($null -eq $threshold) {
+                        $rates[$key].lc_error = "unparseable LC Threshold '$($row['LC Threshold'])'"
+                    }
+                    elseif ($lcNumbers -contains $null) {
+                        $rates[$key].lc_error = 'non-numeric long-context rate'
+                    }
+                    else {
+                        $rates[$key].long_context_threshold = $threshold
+                        $rates[$key].lc_input = $lcNumbers[0]
+                        $rates[$key].lc_cached = $lcNumbers[1]
+                        $rates[$key].lc_cache_write = $lcNumbers[2]
+                        $rates[$key].lc_output = $lcNumbers[3]
+                    }
+                }
             }
         }
     }
@@ -1232,4 +1291,4 @@ function Get-SquadStateModel {
     }
 }
 
-Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-RoutingIdentityBullets, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, Get-RateTable, Get-DispatchClassTable, Get-CostPreflightRecord, ConvertTo-LedgerNumber, Get-LedgerDecimal
+Export-ModuleMember -Function Get-SquadStateModel, Get-ConsumptionBlock, Get-RoutingIdentityBullets, Get-DeliverableEntry, Get-DeliverableTail, Get-HistoryEntry, Get-LedgerTable, Get-LedgerRoleKey, Get-MarkdownTable, ConvertTo-LongContextThreshold, Get-RateTable, Get-DispatchClassTable, Get-CostPreflightRecord, ConvertTo-LedgerNumber, Get-LedgerDecimal

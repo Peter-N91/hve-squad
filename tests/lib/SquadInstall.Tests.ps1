@@ -3,6 +3,9 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# Tests package overlays and dependency-install retry/error handling.
+# AI cost: none; throttling and manifest errors are simulated fixture output, not live APM failures.
+
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'SquadInstall.psm1') -Force
     function Write-InstallFixture([string]$Root, [string]$Path, [string]$Value = 'fixture') {

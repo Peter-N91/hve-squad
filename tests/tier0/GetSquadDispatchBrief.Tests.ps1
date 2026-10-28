@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; checks the read-only brief using local fixture repositories.
+
 # Behavioral coverage for the read-only dispatch brief, squad skill
 # scripts/Get-SquadDispatchBrief.ps1. Runs the script as a child process against TestDrive
 # repositories, because it calls `exit`. Invokes no model.
@@ -126,13 +128,14 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         Test-Path -LiteralPath $script:Script | Should -BeTrue
     }
 
-    It 'refuses an uninitialized squad (no team.md) with exit 7' {
-        $result = Invoke-Brief -Repo (New-BriefRepo -Uninitialized)
-        $result.ExitCode | Should -Be 7 -Because $result.Output
-        $result.Output | Should -Not -Match 'Squad Dispatch Brief'
+    It 'returns an explicit Init pointer for an uninitialized JSON request' {
+        $result = Invoke-Brief -Repo (New-BriefRepo -Uninitialized) -Extra @('-AsJson')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        ($result.Output | ConvertFrom-Json).kind | Should -Be 'uninitialized'
+        ($result.Output | ConvertFrom-Json).action | Should -Be 'initialize'
     }
 
-    It 'refuses with exit 7 and prints no brief when team.md records <Case> (G2)' -ForEach @(
+    It 'returns universal metadata without economy consent or bounded procedure for <Case>' -ForEach @(
         @{ Case = 'Model routing: ranked'; Routing = 'ranked' }
         @{ Case = 'Model routing: manual'; Routing = 'manual' }
         @{ Case = 'no Model routing line'; Routing = '' }
@@ -140,9 +143,9 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $repo = New-BriefRepo -Routing $Routing
         $before = Get-TreeHash -Root $repo
         $result = Invoke-Brief -Repo $repo
-        $result.ExitCode | Should -Be 7 -Because $result.Output
-        $result.Output | Should -Match 'economy-only'
-        $result.Output | Should -Not -Match 'Squad Dispatch Brief'
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'Squad Dispatch Brief'
+        $result.Output | Should -Not -Match '(?m)^## Bounded Lane|WARN economy consent|(?m)^consent:'
         Get-TreeHash -Root $repo | Should -Be $before
     }
 
@@ -176,8 +179,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match '(?m)^## Bounded Lane'
         $result.Output | Should -Match '(?m)^## Plan-Driven Parallelism'
         $result.Output | Should -Match '(?m)^## Scripted Writes'
-        $result.Output | Should -Match ([regex]::Escape('This is a complete, valid payload:'))
-        $result.Output | Should -Match '(?m)^```json'
+        $result.Output | Should -Match 'minimal structured JSON per `references/economy-scribe\.md`'
         $result.Output | Should -Not -Match 'not found in'
         Get-TreeHash -Root $repo | Should -Be $before
     }
@@ -207,10 +209,16 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match ([regex]::Escape('roster precheck (Step 1b): PASS'))
     }
 
-    It 'gives the Scribe the hand-off command line and tells the coordinator never to run it' {
+    It 'gives the coordinator the direct ordinary-writer command and keeps cold writes with the Scribe' {
         $result = Invoke-Brief -Repo (New-BriefRepo)
-        $result.Output | Should -Match ([regex]::Escape('Dispatch the Squad Scribe with the payload JSON and this exact command line, which the Scribe runs as its first action; never run it yourself:'))
-        $result.Output | Should -Match '`pwsh -File ''[^'']+Write-SquadHandoff\.ps1'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json>`'
+        $result.Output | Should -Match 'run the validated writer directly and synchronously\. Do not dispatch the Scribe for this write:'
+        $result.Output | Should -Match '`pwsh -NoProfile -File ''[^'']+Write-SquadHandoff\.ps1'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json> -Quiet`'
+        $result.Output | Should -Match '(?m)^## Payload Contract\r?$'
+        $result.Output | Should -Match 'Optional `decision`:.*adrNoted: boolean'
+        $result.Output | Should -Match 'historyRecords\[\].*passedModel.*routingIdentity'
+        $result.Output | Should -Match 'routingIdentity.*requestedModel, effectiveModel, observedModel, routeRationale'
+        $result.Output | Should -Match 'stateAdvance.*required.*activeRoles: string\[\]'
+        $result.Output | Should -Match 'Use the Squad Scribe for cold operations\.'
         $result.Output | Should -Not -Match ([regex]::Escape('-PayloadJson $p'))
         $result.Output | Should -Not -Match '(?m)^### Script Hand-off'
     }
@@ -314,9 +322,9 @@ Describe 'Get-SquadDispatchBrief.ps1 consent and Route markers (B1)' {
         (Invoke-Brief -Repo (New-BriefRepo)).Output | Should -Match ([regex]::Escape('route markers: every history record needs routingIdentity whose routeRationale starts with Route: economy, or Route: bounded on the Bounded Lane'))
     }
 
-    It 'still refuses outside economy with exit 7 before any consent check' {
+    It 'does not apply the economy consent check outside economy' {
         $result = Invoke-Brief -Repo (New-BriefRepo -Routing 'ranked')
-        $result.ExitCode | Should -Be 7
+        $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.Output | Should -Not -Match 'consent:'
     }
 }

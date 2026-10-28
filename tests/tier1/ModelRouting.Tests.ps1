@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; validates routing rules without dispatching the named models.
+
 # Static, offline checks for the opt-in routing/model-override contract in
 # model-routing.md (SQ-25 through SQ-34 in squad-behavior-contract.md) and the D9
 # identity-bullet wiring into the Scribe's history-entry and state.json shapes. Every
@@ -434,12 +436,13 @@ Describe 'model-routing.md phrase-survival for security- and precedence-critical
         }
     }
 
-    It 'carries the default routing=off behavior statement verbatim' {
-        $script:RoutingRaw | Should -Match $([regex]::Escape('No policy is the default and is byte-for-byte today''s behavior'))
+    It 'leaves dispatch model selection unchanged when no routing policy applies' {
+        $script:RoutingRaw | Should -Match $([regex]::Escape('**No policy is the default; dispatch model selection is unchanged.**'))
+        $script:RoutingRaw | Should -Match 'omits the dispatch `model` parameter entirely'
     }
 
-    It 'carries the new "Scribe must not inherit the frontier session model" sentence, consistent with its pin and floor' {
-        $script:RoutingRaw | Should -Match $([regex]::Escape('The Scribe must not inherit the frontier session model'))
+    It 'keeps the dispatched Scribe on its pin rather than the frontier session model' {
+        $script:RoutingRaw | Should -Match $([regex]::Escape('Never substitute the frontier session model for a dispatched Scribe'))
 
         $scribeAgentRaw = Get-Content -LiteralPath (Join-Path $script:AgentsRoot 'squad-scribe.agent.md') -Raw
         $scribeAgentRaw | Should -Match '(?m)^model:\s*Claude Haiku 5\.5'
@@ -650,7 +653,20 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
     It 'narrows a VS Code session to models priced at or below the session model' {
         $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ SessionModel = 'claude-sonnet-5.5'; Mode = 'ranked'; Role = @('researcher', 'architect') }
         $result.availability | Should -Match 'unverified'
+        $result.availabilityResolved | Should -BeTrue
         foreach ($entry in $result.roles) { $entry.suggested | Should -Not -BeIn @('claude-opus-5.5', 'gpt-5.5', 'gpt-5.6-sol') }
+    }
+
+    It 'does not treat auto or an unpriced session model as the host model inventory' -ForEach @(
+        @{ SessionModel = 'auto' }
+        @{ SessionModel = 'not-in-the-catalog' }
+    ) {
+        $result = Invoke-Resolver -Root $script:FullRoot -Extra @{ SessionModel = $SessionModel; Mode = 'ranked'; Role = @('researcher') }
+        $result.availability | Should -Match '^unresolved'
+        $result.availabilityResolved | Should -BeFalse
+        $result.roles[0].suggested | Should -BeNullOrEmpty
+        @($result.roles[0].candidates).Count | Should -Be 0
+        $result.warnings -join "`n" | Should -Match 'cannot replace the host availableModels enum'
     }
 
     It 'falls back to static tiers on a stale catalog' {

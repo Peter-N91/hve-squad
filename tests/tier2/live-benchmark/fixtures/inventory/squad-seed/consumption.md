@@ -20,3 +20,7 @@ description: "Squad consumption ledger: members, models, estimated tokens, cost,
 ```text
                                                                                         total = 0.0000
 ```
+
+## Cost Comparison (illustrative)
+
+n/a (initialization). Setup spend is recorded above using the ledger basis; the first comparison follows the first work dispatch.

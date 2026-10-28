@@ -1,114 +1,74 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-10-21T10:23:20Z",
+  "measuredAt": "2026-10-26T16:26:36Z",
   "source": {
-    "commit": "59880d5c0417e99a7fe6ab5f12670f8bd9b7401b",
-    "squadSourceHash": "c69a057c35921bd53843bf407f9e135c30f655b6d301c69b9d5fa939b05a3e98",
+    "commit": "3bf61f082aa96ff195caba6d68efc7bb22c62e36",
+    "squadSourceHash": "19670b6ad9395846fef577c0c367be5d4fc951ebe0fa7e3c5029b0e835dfce0c",
     "uncommittedChanges": false
   },
   "environment": {
     "model": "claude-sonnet-5.5",
-    "cli": "1.0.101-0",
+    "cli": "GitHub Copilot CLI 1.0.104-3. Run 'copilot update' to check for updates.",
     "powershell": "7.6.7"
   },
   "runs": {
-    "requested": 3,
-    "scored": 3,
+    "requested": 1,
+    "scored": 1,
     "failed": 0
   },
   "summary": {
-    "quality": 83.0,
+    "quality": 82.0,
     "dimensions": {
-      "businessClarity": 18.0,
-      "scopeFidelity": 17.0,
-      "acceptanceCriteria": 16.0,
-      "traceability": 17.0,
-      "risksAndDecisions": 15.0
+      "businessClarity": 16.0,
+      "scopeFidelity": 15.0,
+      "acceptanceCriteria": 17.0,
+      "traceability": 18.0,
+      "risksAndDecisions": 16.0
     },
-    "functional": 3,
+    "functional": 1,
     "workflow": 0,
-    "criticalHighFindings": 2,
-    "averageSeconds": 1188.5176666666666,
-    "averageCredits": 287.1999151666667
+    "criticalHighFindings": 0,
+    "averageSeconds": 1308.813,
+    "averageCredits": 496.355651,
+    "activity": {
+      "scribeDispatches": 1.0,
+      "scribeModelRequests": 3.0,
+      "scribeSeconds": 11.481,
+      "scribeCredits": 0.37845,
+      "coordinatorModelRequests": 46.0,
+      "authorModelRequests": 40.0
+    }
   },
   "trials": [
     {
       "run": 1,
       "scored": true,
-      "quality": 83.0,
+      "quality": 82.0,
       "dimensions": {
-        "businessClarity": 18.0,
-        "scopeFidelity": 17.0,
-        "acceptanceCriteria": 16.0,
-        "traceability": 17.0,
-        "risksAndDecisions": 15.0
-      },
-      "functional": true,
-      "workflow": false,
-      "criticalHighFindings": 1,
-      "seconds": 1159.972,
-      "credits": 300.4319185,
-      "failedChecks": [
-        "build/stateVerifier",
-        "requirements/BRD Quality Reviewer",
-        "requirements/PRD Quality Reviewer",
-        "requirements/reviewOutcome",
-        "requirements/stateVerifier"
-      ],
-      "note": ""
-    },
-    {
-      "run": 2,
-      "scored": true,
-      "quality": 83.0,
-      "dimensions": {
-        "businessClarity": 18.0,
-        "scopeFidelity": 18.0,
-        "acceptanceCriteria": 16.0,
-        "traceability": 17.0,
-        "risksAndDecisions": 14.0
+        "businessClarity": 16.0,
+        "scopeFidelity": 15.0,
+        "acceptanceCriteria": 17.0,
+        "traceability": 18.0,
+        "risksAndDecisions": 16.0
       },
       "functional": true,
       "workflow": false,
       "criticalHighFindings": 0,
-      "seconds": 1271.579,
-      "credits": 300.503642,
+      "seconds": 1308.813,
+      "credits": 496.355651,
       "failedChecks": [
-        "requirements/BRD Quality Reviewer",
-        "requirements/PRD Quality Reviewer",
         "requirements/reviewOutcome"
       ],
-      "note": ""
-    },
-    {
-      "run": 3,
-      "scored": true,
-      "quality": 82.0,
-      "dimensions": {
-        "businessClarity": 17.0,
-        "scopeFidelity": 17.0,
-        "acceptanceCriteria": 17.0,
-        "traceability": 16.0,
-        "risksAndDecisions": 15.0
-      },
-      "functional": true,
-      "workflow": false,
-      "criticalHighFindings": 1,
-      "seconds": 1134.002,
-      "credits": 260.664185,
-      "failedChecks": [
-        "build/developer",
-        "build/lead",
-        "build/researcher",
-        "build/reviewOutcome",
-        "build/tester",
-        "requirements/BRD Quality Reviewer",
-        "requirements/PRD Quality Reviewer",
-        "requirements/reviewOutcome",
-        "requirements/tester"
-      ],
-      "note": ""
+      "note": "",
+      "activity": {
+        "scribeDispatches": 1.0,
+        "scribeModelRequests": 3.0,
+        "scribeSeconds": 11.481,
+        "scribeCredits": 0.37845,
+        "coordinatorModelRequests": 46.0,
+        "authorModelRequests": 40.0
+      }
     }
   ]
 }

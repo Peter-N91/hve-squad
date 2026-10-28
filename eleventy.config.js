@@ -1,3 +1,5 @@
+// Builds the static documentation site, including recorded benchmark summaries.
+// AI cost: none; reads checked-in content and evidence without collecting new observations.
 import { validatePublicInputs } from "./scripts/docs-inputs.mjs";
 
 export default function (config) {
@@ -5,6 +7,7 @@ export default function (config) {
   config.addWatchTarget("docs");
   config.addWatchTarget("scripts/docs-content.mjs");
   config.addWatchTarget("scripts/docs-release.mjs");
+  config.addWatchTarget(".docs-releases.json");
   config.addWatchTarget("scripts/diagram-locales.mjs");
   config.addWatchTarget("apm.yml");
   config.addWatchTarget(".changes/unreleased");

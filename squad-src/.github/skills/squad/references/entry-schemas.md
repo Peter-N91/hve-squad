@@ -1,6 +1,6 @@
 ---
 name: squad-entry-schemas
-description: "Recurring squad write schemas read every dispatch: decisions.md base entries, history/<agent>.md, and state.json. Verdict placeholders, the autonomous-loop and autopilot-run summaries, and notifications.md moved to scribe-cold-gates-and-verdicts.md."
+description: "Recurring Markdown/state schemas for cold Scribe operations and compatibility reference. Ordinary handoffs use the small deterministic writer contract, not this full schema read."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -10,17 +10,18 @@ metadata:
 
 # Entry Schemas
 
-The shapes the Squad Scribe writes on an ordinary turn. Initialization is outside admission. Before later work dispatch, Cost Preflight is the one exception: the coordinator appends its decision and compare-and-swap updates only `currentRun.costPreflight`, then reads both back. Every later write remains Scribe-owned.
+These historical shapes are preserved by the validated ordinary writer and cold Scribe. Ordinary handoffs in every routing mode read only [economy-scribe.md](economy-scribe.md); coordinators may run the writer synchronously with `-Quiet` without Scribe startup. Cold operations load this full schema. Serialize all writers with Cost Preflight; never hand-author ordinary state or arithmetic.
 
-These schemas are separate from [seed-templates.md](seed-templates.md), which stamps `team.md` and `routing.md` once during Init: every file below is written or appended to repeatedly for the life of a squad, so the Scribe reads this file on every turn while it reads the seed templates only when it is actually seeding.
+These schemas are separate from [seed-templates.md](seed-templates.md), which stamps `team.md` and `routing.md` only during Init. Scribe reads full schemas for cold operations; seed templates remain seeding-only.
 
 Write semantics follow the state layout: `decisions.md`, `history/<agent>.md`, `history/autonomous-loop-<id>.md`, `history/autopilot-run-<id>.md`, and `notifications.md` are append-only; `state.json` uses replace semantics.
 
-**This file now carries only the shapes read every dispatch.** The Cost Preflight, Council Verdict, and Intake Readiness Verdict placeholders, the autonomous-loop-cycle history variant, the `history/autonomous-loop-<id>.md` and `history/autopilot-run-<id>.md` full schemas, and `notifications.md` moved to [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md) — read that file only for the payload types named in its own trigger note (also enumerated in the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md)).
+**This file carries recurring compatibility shapes, not a mandatory ordinary read.** Supported gate verdicts use [verdict-writer.md](verdict-writer.md); cold verdict fallback, summaries, and notifications use [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md).
 
 ## decisions.md
 
-Append-only log. The header is written once; every decision is appended below it and prior entries are never edited. Council Verdicts (from the Council Procedure) use the same append-only contract but a fixed schema; the placeholder shapes are in [scribe-cold-gates-and-verdicts.md](scribe-cold-gates-and-verdicts.md).
+Append-only log. The header is written once; prior entries are never edited.
+Gate verdicts use fixed schemas validated by `Write-SquadVerdict.ps1`.
 
 ```markdown
 ---
@@ -38,9 +39,9 @@ No append-only file ends with a marker comment: the last entry is the last thing
 
 One append-only file per dispatched agent. Replace `<agent>` with the agent's `name:` frontmatter value **verbatim** — the display name, spaces and capitalization intact, as in `history/Squad Researcher.md` or `history/BRD Builder.md`. Never slugify it, never lowercase it, and never substitute the role id: the file name is how a later turn matches a history entry back to the roster row it came from, so `squad-researcher.md` and `researcher.md` both read as a missing entry and the ledger rewrite drops that agent. Autonomous-loop runs add per-cycle dispatch entries to each role's history file using the placeholder shape below.
 
-**The file is created by the first dispatch to that agent, never before it.** Init seeds the `history/` directory and nothing inside it. A header-only file seeded for every roster member at Init destroys the one signal this directory exists to carry — a file's presence is the proof a stage ran — and turns "which roles have been dispatched" into a question the state can no longer answer. Create the file with its header at the moment the first entry is appended, in the same write.
+**The role file is created by its first dispatch, never before it.** Init writes only `history/Squad Scribe.md` with initialization overhead, not header-only role files. Create each role file and its first history/consumption entry together.
 
-`history/Squad Scribe.md` follows the same naming rule but holds `#### Consumption — Orchestration` blocks rather than dispatch records, because the coordinator's own turns and the Scribe's writes need somewhere in `history/` for the ledger rewrite to read them back from. It is not a dispatched stage and is not counted as one.
+`history/Squad Scribe.md` retains `#### Consumption — Orchestration` blocks on both routes. Count actual coordinator usage plus Scribe usage only when dispatched; the filename never implies fictional Scribe tokens or a completed stage.
 
 An orchestration entry uses the dispatch entry shape below with the `#### Consumption — Orchestration` heading in place of `#### Consumption`, and `Deliverable:` naming the state files that turn wrote:
 
@@ -168,6 +169,16 @@ Machine-readable squad status. Uses replace semantics. The Scribe owns ordinary 
   }
 }
 ```
+
+Cost Preflight `basis` is `not-requested`, legacy `estimated` / `calibrated`,
+legacy `host-observed+estimated-reservation`, or
+`host-exact+estimated-reservation`. The last value means
+`evaluatedSpendUsd` came from complete native host records plus pending admitted
+reservations while `projectedCostUsd` remains the actual next-wave estimate.
+
+`currentRun.estCostUsd` and `estCreditsTotal` are legacy names. Their values follow
+the ledger `basis`: exact-native after full role reconciliation, estimated
+otherwise.
 
 `currentRun.modelOverrides` is always present as a key — it is never omitted — and its value is `{}` unless the user volunteered a model for a role this run; a populated map (`{"<role or agent>": "<id>"}`) records that declaration. Routed ids live in `team.md`'s `Model` column instead — see [model-routing.md](model-routing.md).
 

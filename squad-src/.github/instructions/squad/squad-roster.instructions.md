@@ -1,17 +1,19 @@
 ---
-description: "Squad roster schema and cast catalog mapping squad roles to deployed HVE Core agents"
-applyTo: '**/.copilot-tracking/squad/**'
+description: "Squad roster schema, casting and profile conventions"
+applyTo: '**/.copilot-tracking/squad/**/team.md'
 ---
 
 # Squad Roster Conventions
 
-The roster binds dispatchable roles to HVE Core agents. At each turn, the coordinator reads it for availability, invocation, and preferred model tier.
+Roster data maps roles to dispatchable agents, invocation and model preferences.
 
-The roster is data, not behavior. It records identities and invocation details. Routing logic lives in `squad-routing.instructions.md`, and persistence rules live in `squad-state.instructions.md`.
+Routing lives in `squad-routing.instructions.md`; persistence in `squad-state.instructions.md`.
 
 ## Roster File
 
-The roster lives at `.copilot-tracking/squad/team.md`. The coordinator creates it on first use from the cast catalog below and updates it only through the Squad Scribe.
+The roster lives at `.copilot-tracking/squad/team.md`. Confirmed Init and
+additive catalog expansion use validated writers; other refreshes use cold
+Scribe. All use the cast catalog.
 
 The file begins with YAML frontmatter and a single H1 title, then a `## Members` table. Each row binds a squad role to a concrete agent.
 
@@ -137,7 +139,7 @@ Each role writes its artifact into a fixed directory so the Artifact Gate in `.g
 | researcher                                        | `.copilot-tracking/research/<date>/`                |
 | lead                                              | `.copilot-tracking/plans/`                          |
 | developer, iac-author, pp-connector, m365-agent-integrator | `.copilot-tracking/changes/`               |
-| tester, challenger                                | `.copilot-tracking/reviews/`                        |
+| tester, challenger, intake-validator              | `.copilot-tracking/reviews/`                        |
 | qa-engineer                                       | `.copilot-tracking/qa/<date>/`                      |
 | prompt-engineer                                   | `.copilot-tracking/prompts/`                        |
 | security                                          | `.copilot-tracking/security-plans/`                 |
@@ -162,7 +164,9 @@ Each role writes its artifact into a fixed directory so the Artifact Gate in `.g
 
 **Some agents build their own output path, so the root must be passed as an argument rather than as context.** `presenter` is the clearest case: the `powerpoint` skill pipeline derives `<date>/<deck-slug>/` itself and takes the parent as an explicit output argument. Naming the roster cell in the dispatch prose is not enough — pass it as the pipeline's output path, or the agent composes its own and a hand-edited cell is silently ignored. Verify at the roster cell afterwards: an artifact found at the agent's default path instead is a failed dispatch to report, not a location to accept.
 
-**A role absent from this table returns its findings to the coordinator rather than writing a standalone artifact, and that is the correct shape for it rather than a gap.** `cost-manager`, `deployer`, `fact-checker`, `intake-validator`, `asbuilt-author`, `azure-diagnose`, and `aws-diagnose` each hand a structured result back — an estimate, a deploy result, a verification verdict, an intake verdict, drafted as-built content, or a ranked hypothesis — and the durable record is either the Scribe's history entry or the artifact of the role that publishes it, usually `technical-writer`. The Artifact Gate therefore has nothing to look up for them, which is why the lookup table stays silent rather than naming a directory none of them writes. `qa-engineer` is a hybrid worth stating plainly: its test *code* lands in the project's existing test tree, and only its test plan and defect report land in the root above.
+**A role absent from this table returns its findings to the coordinator rather than writing a standalone artifact, and that is the correct shape for it rather than a gap.** `cost-manager`, `deployer`, `fact-checker`, `asbuilt-author`, `azure-diagnose`, and `aws-diagnose` return structured results; their durable record is the Scribe's history entry or the publishing role's artifact. `qa-engineer` writes test code in the project's test tree and its test plan and defect report in the root above.
+
+**`intake-validator` has a capture root, not reviewer write authority.** Its read-only BRD/PRD reviewers return complete payloads; the coordinator serializes the actual return at that resolved roster root under `requirements-quality.md`. History names the actual reviewer, not the serializer. Seed this table's root for every newly added row, whether from a profile, pack or custom roster; the seed template is not a separate root authority. A missing root cannot be replaced by an author's root.
 
 **In a federation, deliverable roots are rebased.** A sub-squad's `squadRoot` is `.copilot-tracking/squad/members/<name>/`, and every root in the table above is written relative to it — a `product` sub-squad's plan lands at `.copilot-tracking/squad/members/product/plans/`, and its deck at `.copilot-tracking/squad/members/product/ppt/<date>/<deck-slug>/`. Only `docs/` and `outputs/` stay at the repository root, because published documentation, architecture, and data-science artifacts are repository-wide outputs rather than per-sub-squad working state — and the notebook and dashboard agents resolve `outputs/` relative to the project root regardless of which squad ran them. A sub-squad that writes a deliverable to the repository-root tracking path has escaped its root; the coordinator treats that as a failed stage and re-dispatches with the rebased path stated explicitly.
 
@@ -210,7 +214,7 @@ roles and their explicit artifact roots.
 
 A squad profile is a named, project-tailored subset of the cast catalog. Profiles let a project choose the squad that fits its work instead of always seeding the full cast. The coordinator selects a profile during Init Mode (see the Squad Coordinator agent), and the Squad Scribe stamps the chosen profile's members into `team.md`.
 
-The `scribe` role is always included in every profile — it owns every ordinary squad-state write after Cost Preflight and is never proposed as an optional member. The `intake-validator` role is seeded into the `product` and `full` profiles, where requirement and input artifacts are most central; other profiles can add it on demand, and when the conditional intake gate (`.github/instructions/squad/squad-intake-gate.instructions.md`) would fire in a squad that does not carry the role, the coordinator offers to add it rather than skipping the readiness check.
+The `scribe` role is always included for cold state operations and is never optional. Ordinary writes may instead invoke the validated deterministic writer directly in every routing mode; serialize Scribe, script, and Cost Preflight. The `intake-validator` role is seeded into the `product` and `full` profiles, where requirement and input artifacts are most central; other profiles can add it on demand, and when the conditional intake gate (`.github/instructions/squad/squad-intake-gate.instructions.md`) would fire in a squad that does not carry the role, the coordinator offers to add it rather than skipping the readiness check.
 
 The opt-in discovery gate (`.github/instructions/squad/squad-discovery-gate.instructions.md`) introduces **no role of its own**: it dispatches `analyst`, `designer`, `challenger`, and `experimenter`, which already own requirements authoring, facilitated ideation, pressure-testing, and hypothesis design respectively. It is therefore **offered only in `product` and `full`**, the two profiles whose rosters can run it — `analyst` writes the brief at every depth and no other profile seeds it. In every other profile the gate is silent rather than escalating, which is the deliberate difference from `intake-validator` above: an unvalidated input that exists is a skipped check worth interrupting for, while an unrequested brainstorm is not. `deep` additionally needs `challenger`, which only `full` seeds, so choosing it in a `product` squad prompts the coordinator to offer to add the role or to run `standard` instead.
 
@@ -310,8 +314,8 @@ A compliance-plus-Power-Platform project is therefore `profile=compliance pack=p
 * **A pack never introduces a role that duplicates work an existing role already owns.** Check the catalog first and widen the existing role instead — the same rule that gave the incident lifecycle to `azure-diagnose` rather than to a second `sre` role. Two roles claiming one phase is worse than a missing role, and that stays true across packs.
 * **Exactly one profile, zero or more packs.** A pack is never chosen *instead of* a profile, because a pack carries no methodology spine and cannot research, plan, implement, and review on its own.
 * **A pack's roles obey every rule a profile's roles obey.** In particular, a role whose registered external resource is not installed is offered with its `Install or Entry` command rather than seeded, per *Building a Custom Roster* below.
-* **The Scribe records active packs and roster provenance when it seeds.** A roster is a profile plus zero or more packs, or `custom`. Write active packs on the `team.md` `Packs:` line, and write the Init decision and federation `Profile` column in literal `profile +pack` form (for example, `default +foundry` or `azure +power-platform`). A pack applied later updates the `Packs:` line and appends a decision, exactly like an added opt-in role.
-* **A pack can be applied to a roster that already exists**, and it is offered rather than assumed. When a request matches the routing pattern of a role that belongs to a registered pack the roster does not carry — or names the pack's domain plainly, which is the same signal arriving in words rather than keywords — the coordinator escalates and proposes applying the pack, naming its roles, what they would add, and the install command for any registered resource that is not yet present. This is the same offer the coordinator already makes for `intake-validator` and for an opt-in role, one level up: a group of roles instead of one. For any pack, collect all missing registered resources and their prerequisites into one offer rather than prompting once per resource. On acceptance the Scribe appends the pack's roles to `team.md`, updates `Packs:`, appends their rows to `routing.md`, and records the applied pack in a decision; on decline the coordinator reports what it cannot do rather than substituting a role that cannot do the work. Nothing is installed automatically.
+* **The deterministic writer records active packs and roster provenance.** A roster is a profile plus zero or more packs, or `custom`. Init writes active packs on the `team.md` `Packs:` line and records literal `profile +pack` provenance (for example, `default +foundry` or `azure +power-platform`) in `decisions.md`; a federation also copies build-time provenance to its `Profile` column. Later pack changes update only the selected squad or member's `Packs:` line and decision, not federation-root metadata.
+* **A pack can be applied to an existing roster**, and it is offered rather than assumed. When a request matches a missing pack role or names the pack's domain, propose the pack, its roles, what they add, and one consolidated list of install commands and prerequisites for missing registered resources. On acceptance use the sealed plan/apply transaction in `references/roster-expansion.md` to add roster and routing rows, update `Packs:`, and append the decision without changing ledger, state, rates, notifications, history, federation metadata, or siblings. On decline report the capability gap rather than substituting. Nothing is installed automatically.
 
 #### Removing a Pack
 
@@ -334,7 +338,7 @@ Removing a single role follows the first four rules. A pack is only the convenie
 Optional `Guidance` files go only to the accepted pack's roles and the methodology spine, per `references/profiles-and-packs.md`; blank means roles only. The `team.md` `Packs:` line establishes current activation, while accepted decisions preserve its audit trail. Guidance is passed only for work that touches the pack and is scoped to the relevant section. Removal stops guidance without removing roles another roster source owns.
 
 | Pack             | Adds (roles)               | Guidance | Choose when the project is…                                                                          | Arrival                                                                                                       |
-|------------------|----------------------------|----------|-------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+|---|---|---|---|---|
 | `power-platform` | pp-architect, pp-connector |          | Built on Power Platform — Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio        | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
 | `m365-copilot`   | m365-agent-architect, m365-agent-integrator |          | Built on Microsoft 365 Copilot — declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
 | `aws`            | aws-architect, aws-diagnose |          | Built on AWS — Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |

@@ -1,168 +1,35 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const releasesUrl = "https://github.com/Peter-N91/hve-squad/releases/tag/";
-const bumpRank = { patch: 1, minor: 2, major: 3 };
+const releasesApi = "https://api.github.com/repos/Peter-N91/hve-squad/releases";
+const releaseBumps = new Set(["patch", "minor", "major"]);
 const changeId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const commitId = /^[0-9a-f]{40}$/;
 
-function git(repositoryRoot, args, allowFailure = false) {
-  try {
-    return execFileSync("git", args, {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-  } catch (error) {
-    if (allowFailure) return null;
-    const detail = error.stderr?.toString().trim();
-    throw new Error(`Automatic pre-release documentation detection failed${detail ? `: ${detail}` : "."}`);
+function publishedTag(release, prerelease) {
+  if (!release || release.draft !== false || release.prerelease !== prerelease
+    || typeof release.tag_name !== "string"
+    || !/^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(release.tag_name)
+    || typeof release.published_at !== "string" || !Number.isFinite(Date.parse(release.published_at))) {
+    throw new Error(`Invalid published ${prerelease ? "pre-release" : "stable release"} metadata.`);
   }
+  return release.tag_name;
 }
 
-function addedCommit(repositoryRoot, path) {
-  const args = ["log", "-1", "--format=%H", "--no-patch", "--diff-filter=A"];
-  // Ordinary history preserves blame identity; merge-only additions need a parent diff.
-  return git(repositoryRoot, [...args, "--", path])
-    || git(repositoryRoot, [...args, "--diff-merges=first-parent", "--", path]);
-}
-
-export function readPendingChangeCommits(release, repositoryRoot = root) {
-  const commits = new Set();
-  if (!release.previewTag) return commits;
-  if (git(repositoryRoot, ["rev-parse", "--is-inside-work-tree"], true) !== "true") {
-    throw new Error("Automatic pre-release documentation detection requires a Git checkout.");
-  }
-  if (git(repositoryRoot, ["rev-parse", "--is-shallow-repository"]) === "true") {
-    throw new Error("Automatic pre-release documentation detection requires full Git history. Use fetch-depth: 0.");
-  }
-  for (const id of release.pendingChanges) {
-    const path = `.changes/unreleased/${id}.md`;
-    if (git(repositoryRoot, ["ls-files", "--error-unmatch", "--", path], true) === null) continue;
-    const commit = addedCommit(repositoryRoot, path);
-    if (!commitId.test(commit)) throw new Error(`${path}: could not resolve the commit that added this pending fragment.`);
-    commits.add(commit);
-  }
-  return commits;
-}
-
-function countMatches(value, pattern) {
-  return value.match(pattern)?.length ?? 0;
-}
-
-export function annotateReleaseSource(raw, changedLines, fileAddedByPendingChange = false) {
-  const changed = changedLines instanceof Set ? changedLines : new Set(changedLines);
-  if (!changed.size) return raw;
-  const newline = raw.includes("\r\n") ? "\r\n" : "\n";
-  const lines = raw.split(/\r?\n/);
-  const contentLines = new Set();
-  const headings = [];
-  const stack = [];
-  let inHero = false;
-  let inMain = false;
-  let linkDepth = 0;
-
-  lines.forEach((line, index) => {
-    if (/<header\b[^>]*\bclass=(?:"[^"]*\bhero\b[^"]*"|'[^']*\bhero\b[^']*')/i.test(line)) inHero = true;
-    if (/<main\b/i.test(line)) inMain = true;
-    const inContent = inHero || inMain;
-    if (inContent) contentLines.add(index + 1);
-
-    const heading = inContent ? line.match(/<h([1-4])\b/i) : null;
-    if (heading) {
-      const prefix = line.slice(0, heading.index);
-      const depthAtHeading = linkDepth
-        + countMatches(prefix, /<a\b/gi)
-        - countMatches(prefix, /<\/a\s*>/gi);
-      const level = Number(heading[1]);
-      while (stack.length && stack.at(-1).level >= level) stack.pop();
-      const item = {
-        line: index + 1,
-        level,
-        insideLink: depthAtHeading > 0,
-        parent: stack.at(-1) ?? null,
-      };
-      headings.push(item);
-      stack.push(item);
+export function resolveReleaseInfo(published, fragments) {
+  if (!published || !Array.isArray(published.releases)) throw new Error("Invalid published release list.");
+  const stableTag = publishedTag(published.latest, false);
+  const previews = published.releases.filter(release => {
+    if (!release || typeof release.draft !== "boolean" || typeof release.prerelease !== "boolean") {
+      throw new Error("Invalid published release list entry.");
     }
-
-    linkDepth += countMatches(line, /<a\b/gi) - countMatches(line, /<\/a\s*>/gi);
-    if (/<\/header\s*>/i.test(line)) inHero = false;
-    if (/<\/main\s*>/i.test(line)) inMain = false;
-  });
-
-  const safeHeadings = headings.filter(heading => !heading.insideLink);
-  const fallback = safeHeadings.find(heading => heading.level === 1) ?? safeHeadings[0];
-  if (!fallback) return raw;
-
-  let selected;
-  if (fileAddedByPendingChange) {
-    selected = [fallback];
-  } else {
-    const selectedByLine = new Map();
-    for (const line of changed) {
-      if (!contentLines.has(line)) continue;
-      let nearest = null;
-      for (const heading of safeHeadings) {
-        if (heading.line > line) break;
-        nearest = heading;
-      }
-      selectedByLine.set((nearest ?? fallback).line, nearest ?? fallback);
-    }
-    const selectedLines = new Set(selectedByLine.keys());
-    selected = [...selectedByLine.values()].filter(heading => {
-      for (let parent = heading.parent; parent; parent = parent.parent) {
-        if (selectedLines.has(parent.line) && changed.has(parent.line)) return false;
-      }
-      return true;
-    });
-  }
-
-  for (const heading of selected) {
-    const index = heading.line - 1;
-    if (/\bdata-release-(?:auto|change)=/i.test(lines[index])) continue;
-    lines[index] = lines[index].replace(/<h([1-4])\b/i, match => `${match} data-release-auto=""`);
-  }
-  return lines.join(newline);
-}
-
-function pendingLinesForSource(repositoryRoot, sourcePath, pendingCommits) {
-  if (!pendingCommits.size || git(repositoryRoot, ["ls-files", "--error-unmatch", "--", sourcePath], true) === null) {
-    return { changedLines: new Set(), fileAddedByPendingChange: false };
-  }
-  const changedLines = new Set();
-  const blame = git(repositoryRoot, ["blame", "--line-porcelain", "--", sourcePath]);
-  for (const line of blame.split(/\r?\n/)) {
-    const header = line.match(/^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/);
-    if (header && pendingCommits.has(header[1])) changedLines.add(Number(header[2]));
-  }
-  const sourceAddedCommit = addedCommit(repositoryRoot, sourcePath);
-  return {
-    changedLines,
-    fileAddedByPendingChange: pendingCommits.has(sourceAddedCommit),
-  };
-}
-
-export function createAutomaticReleaseAnnotator(release, repositoryRoot = root) {
-  const pendingCommits = readPendingChangeCommits(release, repositoryRoot);
-  const cache = new Map();
-  return (sourcePath, raw) => {
-    if (!pendingCommits.size) return raw;
-    if (!cache.has(sourcePath)) {
-      cache.set(sourcePath, pendingLinesForSource(repositoryRoot, sourcePath, pendingCommits));
-    }
-    const { changedLines, fileAddedByPendingChange } = cache.get(sourcePath);
-    return annotateReleaseSource(raw, changedLines, fileAddedByPendingChange);
-  };
-}
-
-export function resolveReleaseInfo(manifest, fragments) {
-  const stableVersion = manifest.match(/^version:[ \t]*(\d+\.\d+\.\d+)[ \t]*\r?$/m)?.[1];
-  if (!stableVersion) throw new Error("The APM version must be X.Y.Z.");
-  let bump = "patch";
+    if (release.draft || !release.prerelease) return false;
+    publishedTag(release, true);
+    return true;
+  }).sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at));
+  const previewTag = previews[0]?.tag_name ?? null;
   const pendingChanges = fragments.map(({ name, content }) => {
     const id = name.replace(/\.md$/, "");
     if (!changeId.test(id) || !name.endsWith(".md")) throw new Error(`Invalid change fragment name: ${name}`);
@@ -172,32 +39,50 @@ export function resolveReleaseInfo(manifest, fragments) {
       const field = line.match(/^\s*([A-Za-z_]+)\s*:\s*(.+?)\s*$/);
       return field ? [[field[1].toLowerCase(), field[2].replace(/^["']|["']$/g, "").toLowerCase()]] : [];
     }));
-    if (!Object.hasOwn(bumpRank, fields.bump)) throw new Error(`${name}: invalid release bump.`);
+    if (!releaseBumps.has(fields.bump)) throw new Error(`${name}: invalid release bump.`);
     if (!/^(added|changed|deprecated|removed|fixed|security)$/.test(fields.type ?? "")) {
       throw new Error(`${name}: invalid change type.`);
     }
     if (!/^\s*-\s/m.test(match[2].trim())) throw new Error(`${name}: the change body must contain markdown bullets.`);
-    if (bumpRank[fields.bump] > bumpRank[bump]) bump = fields.bump;
     return id;
   });
-  const parts = stableVersion.split(".").map(Number);
-  const index = { major: 0, minor: 1, patch: 2 }[bump];
-  parts[index]++;
-  for (let i = index + 1; i < parts.length; i++) parts[i] = 0;
-  const stableTag = `v${stableVersion}`;
-  const previewTag = pendingChanges.length ? `v${parts.join(".")}-pre` : null;
   return {
-    stableVersion, stableTag, stableUrl: releasesUrl + stableTag,
+    stableVersion: stableTag.replace(/^v/, ""), stableTag, stableUrl: releasesUrl + stableTag,
     previewTag, previewUrl: previewTag ? releasesUrl + previewTag : null, pendingChanges,
   };
 }
 
+export async function fetchPublishedReleases(fetchImpl = fetch) {
+  const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const request = async path => {
+    const response = await fetchImpl(releasesApi + path, { headers, signal: AbortSignal.timeout(30_000) });
+    if (!response.ok) throw new Error(`GitHub release lookup failed (${response.status}): ${releasesApi + path}`);
+    return response.json();
+  };
+  const [latest, firstPage] = await Promise.all([request("/latest"), request("?per_page=100&page=1")]);
+  if (!Array.isArray(firstPage)) throw new Error("Invalid GitHub release list response.");
+  const releases = [...firstPage];
+  let batch = firstPage;
+  for (let page = 2; batch.length === 100; page++) {
+    batch = await request(`?per_page=100&page=${page}`);
+    if (!Array.isArray(batch)) throw new Error("Invalid GitHub release list response.");
+    releases.push(...batch);
+  }
+  resolveReleaseInfo({ latest, releases }, []);
+  const metadata = ({ tag_name, draft, prerelease, published_at }) => ({ tag_name, draft, prerelease, published_at });
+  return { latest: metadata(latest), releases: releases.map(metadata) };
+}
+
 export function readReleaseInfo(repositoryRoot = root) {
+  const snapshot = resolve(repositoryRoot, ".docs-releases.json");
+  if (!existsSync(snapshot)) throw new Error("Missing published release snapshot. Run npm run docs:build to fetch it.");
   const directory = resolve(repositoryRoot, ".changes", "unreleased");
   const fragments = existsSync(directory) ? readdirSync(directory, { withFileTypes: true })
     .filter(entry => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "README.md")
     .map(entry => ({ name: entry.name, content: readFileSync(resolve(directory, entry.name), "utf8") })) : [];
-  return resolveReleaseInfo(readFileSync(resolve(repositoryRoot, "apm.yml"), "utf8"), fragments);
+  return resolveReleaseInfo(JSON.parse(readFileSync(snapshot, "utf8")), fragments);
 }
 
 export function previewBadge($, release, ui, label = ui.previewOnly) {
@@ -233,10 +118,9 @@ export function addReleaseBadges($, release, ui) {
     if (node.parents("a, pre, code").length || node.is("a")) {
       throw new Error("Place data-release-change outside links and copyable code samples.");
     }
-    if (!release.pendingChanges.includes(id)) return;
+    if (!release.previewTag || !release.pendingChanges.includes(id)) return;
     addBadge(element);
   });
-  if (release.previewTag) $("main [data-release-auto]").each((index, element) => addBadge(element));
 }
 
 export function populateReleaseInstalls($, release, ui) {
@@ -256,4 +140,12 @@ export function populateReleaseInstalls($, release, ui) {
     }
     node.append(block);
   });
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv[2] !== "--refresh") throw new Error("Usage: node scripts/docs-release.mjs --refresh");
+  const published = await fetchPublishedReleases();
+  writeFileSync(resolve(root, ".docs-releases.json"), `${JSON.stringify(published, null, 2)}\n`);
+  const release = resolveReleaseInfo(published, []);
+  console.log(`Documentation releases: stable ${release.stableTag}; pre-release ${release.previewTag ?? "none"}.`);
 }

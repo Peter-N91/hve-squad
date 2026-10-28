@@ -17,8 +17,8 @@ name: Rolling Preview
 # renames the pre-release from v0.13.4-pre to v0.14.0-pre. The stale one is
 # deleted so exactly one pre-release is open at any time.
 #
-# GITHUB_TOKEN is enough here: unlike release-prep.yml and sync-hve-core.yml,
-# nothing downstream needs to be triggered by what this workflow pushes.
+# GITHUB_TOKEN publishes the preview and explicitly dispatches a documentation
+# refresh; release events from this token do not trigger downstream workflows.
 
 on:
   push:
@@ -44,6 +44,7 @@ jobs:
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -153,3 +154,9 @@ jobs:
               --target "$SHA"
             echo "::notice::Opened pre-release $TAG"
           fi
+
+      - name: Refresh published documentation
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main

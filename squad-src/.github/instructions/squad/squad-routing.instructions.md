@@ -1,6 +1,6 @@
 ---
 description: "Squad routing rules mapping request patterns to roles, autonomy tiers, and parallel eligibility"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/routing.md'
 ---
 
 # Squad Routing Conventions
@@ -119,7 +119,7 @@ Eleven rows never survive the initial filter in most projects, because no profil
 * Match the most specific pattern first. When several patterns match, prefer the one whose role most directly owns the requested outcome.
 * Dispatch all parallel-eligible roles for a turn concurrently; run non-parallel roles (such as planning and implementation) sequentially.
 * Resolve every matched role through the roster before dispatch. If a role maps to **thin charter needed**, escalate rather than guessing a substitute.
-* Apply cost-first model selection: prefer the `fast` tier for read-heavy `auto` roles and reserve the `default` tier for reasoning-heavy `confirm` roles.
+* Run every dispatch, including quick single-role gates, through `New-SquadDispatchPlan.ps1 -ApplyModelRouting`; require `routingReady: true`. Forward active `routing=` as `requestedModelRouting`. Active `endpoint.model` wins over pins and static tiers; without a policy retain cost-first tiers.
 
 ### Discovery Gate
 
@@ -165,7 +165,7 @@ When any precondition is unmet, the coordinator dispatches the missing stage (or
 
 * When no Council Verdict or Council Waiver exists for the topic and the request crosses two or more council-member domains (architecture, security, cost, product-fit) or raises any RAI concern, the coordinator runs the council row before the implementer, sized to the work per *Council Membership* in `squad-council.instructions.md`.
 * When the latest verdict is `Go` or `Go-With-Conditions`, the coordinator dispatches the implementer and passes the consolidated conditions as inputs.
-* When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the Scribe before any implementer dispatches.
+* When the latest verdict is `Stop`, the coordinator escalates instead of dispatching. The user may explicitly override `Stop`, in which case the coordinator records the override through the validated handoff writer (or cold fallback) before any implementer dispatches.
 
 The gate enforces the council protocol from `.github/instructions/squad/squad-council.instructions.md` and the autonomous loop from `.github/instructions/squad/squad-autonomous.instructions.md` at routing time.
 

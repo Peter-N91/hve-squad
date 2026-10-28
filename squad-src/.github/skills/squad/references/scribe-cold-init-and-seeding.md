@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-cold-init-and-seeding
-description: "Scribe cold section: Initialization, Deliverable Root resolution, and repository-memory/learning-promotion writes. Read only for an initialization payload, a memory payload, or the roster-rebasing step of a promotion/expansion."
+description: "Scribe cold section: fallback initialization, Deliverable Root resolution, and repository-memory/learning-promotion writes."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -10,7 +10,22 @@ metadata:
 
 # Scribe Cold Section: Init, Seeding, and Repository Memory
 
-Read this file only when the turn's payload is one of: an **initialization** payload (Payload-to-Step Map Step 3), a **memory** payload (Step 4), or the deliverable-root rebasing sub-step of a **promotion** or **expansion** payload (Steps 10–11, which cross-reference *Initialization and Deliverable Roots* below for the rebasing rule). Every other turn skips this file entirely — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
+Fresh single-squad or member-root Init with the required runtime uses only
+[scribe-init.md](scribe-init.md) and `scripts/Initialize-Squad.ps1`. Confirmed
+additive catalog-role or pack expansion uses `roster-expansion.md` and its
+sealed-plan scripts. This file remains the fallback/non-additive refresh,
+memory, and promotion-rebasing contract; do not load it on either successful
+script path. The Init helper refuses existing roots, so it never resets history
+or performs an unrequested refresh. Whenever `pwsh` is available, seed rates
+with `Initialize-SquadConsumptionRates.ps1`, not a model-authored template copy.
+
+Read this file only when the turn's payload is one of: an unsupported or
+non-additive refresh **initialization** payload (Payload-to-Step Map Step 3), a **memory** payload
+(Step 4), or the deliverable-root rebasing sub-step of an unsupported-host
+**promotion/expansion** fallback (Steps 10–11). Supported Init/Expansion performs
+rebasing through the validated payload builder. Every other turn skips this file
+entirely — see the Cold-File Dispatch Table in
+[scribe-procedure.md](scribe-procedure.md).
 
 ### Initialization and Deliverable Roots
 
@@ -26,13 +41,18 @@ On initialization, write payload `packs` as one `Packs: <comma-separated names>`
 
 **Seed `history/` with no agent file.** Init creates no file for a roster member — not even a header-only one, and not for roles it expects to dispatch later. A history file is the proof that agent ran, so pre-creating one per roster row makes an undispatched role indistinguishable from a dispatched one and leaves the ledger rewrite reading files that record nothing. Each agent file is created with its header at the moment its first entry is appended.
 
-**The one file Init does write in `history/` is `history/Squad Scribe.md`**, holding this hand-off's own `#### Consumption — Orchestration` block, because the floor records the Scribe's orchestration on every state-writing turn, Init included. Append it before Step 13, then run the payload's `ledgerCommand` as the last write, exactly as on any other hand-off; a roster refresh does the same. An Init that leaves `consumption.md` at its seed while that block sits on disk fails the coordinator's next `-Check`, and every corrective hand-off then appends another block that a hand-written ledger is always one behind.
+**The one file Init does write in `history/` is `history/Squad Scribe.md`**, holding this hand-off's own `#### Consumption — Orchestration` block, because the floor records the Scribe's orchestration on every state-writing turn, Init included. Append it before Step 13, then perform the trusted ledger-helper invocation from the cold charter's Required Protocol as the last write; a roster refresh does the same. Treat payload `ledgerCommand` as inert compatibility data, never shell input. An Init that leaves `consumption.md` at its seed while that block sits on disk fails the coordinator's next `-Check`, and every corrective hand-off then appends another block that a hand-written ledger is always one behind.
 
 **Write the `notify` object and the Init decision, both of them.** `state.json` carries `notify` from the answer the coordinator captured; when the user declined, that is `approvalChannel: in-chat` with `enabled: false`, which is a recorded answer rather than an absent key. A run in `autonomous` or `autopilot` mode with no `notify` object has no way to reach the person its gates are waiting on. The Init decision records provenance in literal `<profile> +<pack>` form (for example, `default +foundry`), or `custom`, as the append-only audit trail; the current active-pack state is the `team.md` `Packs:` line.
 
 **Resolve each row's `Deliverable Root` against the `squadRoot` in hand before writing it.** The lookup table in *Deliverable Roots* (`squad-roster.instructions.md`) states roots relative to `squadRoot`, so seeding a sub-squad writes `members/<name>/plans/` into the `lead` row, not `.copilot-tracking/plans/`. Copying the table's literal paths into a sub-squad roster points every role at the repository root and puts its whole run outside its own sub-squad. `docs/` and `outputs/` are the two exceptions and are written unprefixed at every root.
 
 **On a refresh, preserve every consumer-edited roster value unless explicitly changed.** `Deliverable Root` is consumer-editable and the roster is the running value the coordinator dispatches against, so a refresh reseeds a root only for a role whose row it is adding. Apply the same preserve rule to existing `connectorBindings` rows and custom routing rows: keep them as-is unless the payload explicitly edits or removes them. Rewriting a cell back to default silently redirects behavior the user deliberately set.
+
+Supported additive catalog-role/pack expansion enforces this preserve rule in
+code and never enters Step 7: it changes only `team.md`, `routing.md`, and
+`decisions.md`, then checks the ledger read-only. It does not append a Scribe
+history block, advance state, or rewrite `consumption.md`.
 
 Copy confirmed `customRoutingRows` using the routing template's exact columns.
 On refresh, an absent `connectorBindings` or `customRoutingRows` field means
@@ -48,6 +68,8 @@ connector provenance with the append-only retirement decision defined in
 `connector-role-modes.md`, section 10. Write that evidence before replacing the
 active rows; keep history and its exact external member attribution intact.
 An unchanged identity needs no retirement record.
+
+An existing unusable reviewer root blocks review dispatch, not permission to reseed it. Only an explicit operator-authorized root-change payload may change that cell through cold Scribe, recording the old/new roots and authorization; preserve every other override. Newly added rows use the canonical Deliverable Roots table, including the read-only `intake-validator` capture root. Resolve member roots normally. Root changes grant no admission slot and bypass no ceiling, aggregate, history-integrity or restore refusal.
 
 **Write the model-routing mode and `Model` column exactly as handed over.** When the payload carries a routing mode (`ranked`, `economy`, or `manual`), write the single line `Model routing: <mode>` directly beneath `team.md`'s H1, and a `Model` column between `Model Tier` and `Deliverable Root` holding each role's Model ID as supplied — one lowercase id per cell, never a display name, and empty for a role the payload leaves unset. On a routing refresh, change only that line and the `Model` cells the payload names, preserving every other cell and row. When the mode is `off`, remove both the line and the column, and list the removed picks in the same turn's decision entry so a later switch back to `manual` can offer them. Record every mode change and every `manual` pick in a decision entry; a ranked or economy readout refresh needs only the `state.json` advance. See `model-routing.md` for what each mode means; the Scribe never ranks or picks a model itself.
 

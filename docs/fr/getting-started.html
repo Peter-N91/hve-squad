@@ -88,14 +88,10 @@ copilot</code></pre>
       <h2>VS Code</h2>
       <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. Choisissez ci-dessous l'installation via le plugin ou l'installation du package dans le dépôt.</p>
 
-      <h3>Option 1 — Installer via le plugin depuis le terminal intégré</h3>
-      <p>Ouvrez le terminal intégré de VS Code avec <strong>Terminal → Nouveau terminal</strong>, placez-vous à la racine du dépôt de votre projet, puis collez :</p>
-      <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
-copilot plugin install hve-squad@hve-squad-plugin
-copilot plugin install hve-squad-hve-core@hve-squad-plugin
-copilot</code></pre>
-      <p>Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>. Après avoir vérifié l'installation, passez à l'initialisation ci-dessous.</p>
-      <p>N'installez pas le plugin officiel <code>hve-core</code> à côté de <code>hve-squad-hve-core</code>. Pour les mises à jour, réinstallez l'entrée compagnon au lieu d'utiliser la commande de mise à jour du plugin. Suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">guide d'installation et de mise à jour pour CLI</a>.</p>
+      <h3>Option 1 — Installer les plugins dans les paramètres de VS Code</h3>
+      <p>Dans VS Code, ouvrez <strong>Paramètres → Extensions → Copilot → Plugins</strong>, enregistrez <code>Peter-N91/hve-squad-plugin</code>, puis installez <code>hve-squad</code> et <code>hve-squad-hve-core</code>. Les noms et emplacements des paramètres peuvent varier selon la version de VS Code ; suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">guide d'installation pour VS Code</a>.</p>
+      <p>Vérifiez la paire dans VS Code lui-même avant le sélecteur d'agents et l'initialisation ci-dessous. Une installation par terminal peut utiliser un autre <code>COPILOT_HOME</code> et ne prouve pas que Copilot Chat dispose des mêmes plugins. Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>.</p>
+      <p>N'installez pas le plugin officiel <code>hve-core</code> à côté de <code>hve-squad-hve-core</code>. Pour les mises à jour, réinstallez l'entrée compagnon au lieu d'utiliser la commande de mise à jour du plugin, comme le décrit le <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">guide d'installation pour VS Code</a>.</p>
 
       <h3>Option 2 — Installer le package dans le dépôt avec APM</h3>
       <p>Cette méthode installe l'ensemble des agents dans le dépôt via APM.</p>
@@ -212,7 +208,7 @@ targets:
       </section>
       </div>
 
-      <h2 id="chat-with-the-squad-coach">2. Vous débutez ? Discutez avec le Squad Coach</h2>
+      <h2 id="chat-with-the-squad-coach" data-release-change="20261019-squad-coach">2. Vous débutez ? Discutez avec le Squad Coach</h2>
       <p>
         Une fois HVE Squad installé, le <strong>Squad Coach fonctionne avant l'initialisation</strong> :
         ni <code>team.md</code> ni <code>federation.md</code> ne doivent exister. Décrivez le résultat
@@ -335,7 +331,7 @@ targets:
         <li>
           <p><strong>Initialiser de manière interactive et choisir les modèles classés.</strong> Sélectionnez <strong>Squad Coordinator</strong> et envoyez :</p>
           <pre><code>/squad init profile=default routing=ranked</code></pre>
-          <p>Confirmez la topologie, le profil, les rôles, les noms des membres et le canal d'approbation proposés. Le Scribe crée ensuite l'état de la squad. Inspectez <code>.copilot-tracking/squad/team.md</code> : <code>Model routing: ranked</code> et la colonne <code>Model</code> montrent les modèles choisis. Le classement utilise les modèles disponibles sur votre hôte, sans changer le modèle de session du coordinateur. Consultez <a href="usage.html#model-selection-per-role">Sélection des modèles par rôle</a>.</p>
+          <p>Confirmez la topologie, le profil, les rôles, les noms des membres et le canal d'approbation proposés. L'outil d'initialisation validé crée ensuite l'état ; les configurations non prises en charge conservent la procédure du Scribe. Inspectez <code>.copilot-tracking/squad/team.md</code> : <code>Model routing: ranked</code> et la colonne <code>Model</code> montrent les modèles choisis. Le classement utilise les modèles disponibles sur votre hôte, sans changer le modèle de session du coordinateur. Consultez <a href="usage.html#model-selection-per-role">Sélection des modèles par rôle</a> et la <a href="usage.html#script-backed-coordination">coordination pilotée par scripts</a>.</p>
         </li>
         <li id="coach-cost-readiness">
           <p><strong>Préparer la première exécution avec plafond.</strong> L'initialisation crée <code>consumption-rates.md</code> avec <code>observations: 0</code> et <code>last_reconciled: never</code>. Un plafond positif produit donc <code>cannot-confirm</code>, qu'une approbation ne peut pas lever. Demandez au coordinateur de préparer une proposition, pas de lancer une exécution sans plafond :</p>
@@ -388,9 +384,10 @@ targets:
       <p>
         Cette documentation suit <code>main</code>, qui peut devancer la dernière version stable.
         Un badge <strong>Préversion uniquement</strong> identifie une fonctionnalité fusionnée mais pas
-        encore publiée dans une version stable. Le site dérive ces badges des fragments de changement
-        en attente et des sections documentaires modifiées par les commits qui les ont introduits ; une publication
-        officielle consomme les fragments et retire automatiquement les badges. L'encart de chaque page
+        encore publiée dans une version stable. Les auteurs associent chaque fragment en attente au plus
+        petit libellé, paragraphe, élément de liste, titre, cellule de tableau ou bloc de code concerné.
+        Le site affiche un badge uniquement pour ces marqueurs explicites ; une publication officielle
+        consomme les fragments et retire automatiquement les badges. L'encart de chaque page
         affiche les deux versions, et chaque badge renvoie ici. Utilisez les versions stables pour les
         travaux dont vous dépendez.
       </p>
