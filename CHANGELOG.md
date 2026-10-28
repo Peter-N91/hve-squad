@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1] - 2026-10-28
+
+### Fixed
+
+- **Explicit model routing could be skipped on quick and single-role requests.** Carry requested policy separately from saved policy, apply the existing routing transaction during dispatch preparation, and require its readiness result in both coordinator paths. The shared APM source also feeds the generated plugin; its dispatch guard now resolves native agent IDs and rejects missing active Model cells. Updated `Get-SquadDispatchBrief.ps1`, `New-SquadDispatchPlan.ps1`, coordinator contracts, and the plugin builder.
+
+- **Tier 0 failures no longer wait for one long serial job, and releases no longer repeat the complete suite.** Corrected two obsolete wording assertions without changing routing behavior, partitioned CI into isolated shards with the existing required check and downloadable results, and split release validation into repository checks before tagging and installed-package checks afterward. All existing cases and published self-reference checks remain covered; older hotfix runners retain their full-suite fallback. See `tests/tier0/Invoke-Tier0Tests.ps1` and `.github/workflows/{tier0-conformance,release}.yml`.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.19.1"
+```
+
+[0.19.1]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.19.1
+
 ## [0.19.0] - 2026-10-27
 
 ### Added
