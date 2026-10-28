@@ -14,16 +14,17 @@ Accept `profile`, `pack`, `tier`, `routing`, `execution`, `mode`, `cost-ceiling`
 and cast overrides. Keep the session model and literal `auto`; never revive
 `models=`. Run scripts from the readable installed skill, without source reads.
 
-Without `pwsh` 7.4+ use `coordinator-legacy.md` and `state-write-contract.md`.
-Runtime unavailability is not failed validation; failures never permit bypass.
+Without `pwsh` 7.4+ use `coordinator-legacy.md`/`state-write-contract.md`.
+Unavailability is not failed validation; failures permit no bypass.
 
 ## 1. Read State Once
 
 Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root>
 -SessionModel <literal session id> -AsJson -CheckLedger` at turn start.
-Reuse a verified unchanged same-turn ledger receipt instead of another check.
-Use `-Roles` after classification; JSON defers scoring to the plan.
-Do not re-open files to confirm the same facts.
+Pass trusted `routing=` as `-RequestedModelRouting <mode>`; saved `off` cannot
+cancel it. `dispatchReady: false` requires preparation.
+Reuse a verified unchanged same-turn ledger receipt.
+Use `-Roles` after classification; JSON defers scoring. Reuse unchanged facts.
 
 * With explicit `squadRoot`, stay scoped to that member.
 * Without one, `kind=federation` hands control to `/squad-federation`; a Watch
@@ -40,11 +41,10 @@ Do not re-open files to confirm the same facts.
 
 ## 2. Classify and Load Only Active Policy
 
-Match the most specific pattern and direct owner. Uncertain or conflicting routes
-require clarification, not a specialist skill.
+Match the most specific pattern/direct owner; clarify conflicts without a specialist skill.
 
-Use `Get-SquadProcedure.ps1 -Name <comma-separated names>` to read only applicable
-canonical sections of `gates-and-modes.md`:
+Read applicable `gates-and-modes.md` sections with
+`Get-SquadProcedure.ps1 -Name <comma-separated names>`:
 
 | Trigger | Names or additional reference |
 |---------|-------------------------------|
@@ -57,7 +57,7 @@ canonical sections of `gates-and-modes.md`:
 | `mode=autopilot` | `autopilot`, plus triggered gates |
 | Connector bindings, setup/refresh, execution override or pending exchange | `connector-role-modes.md` |
 | Confirmed addition of catalog roles or packs | `roster-expansion.md` |
-| Manual model questions or an unresolved catalog fact | `model-routing.md`; `model-catalog.md` only for the unresolved fact |
+| Requested/persisted active model routing | `model-routing.md`; `model-catalog.md` only for an unresolved fact |
 | Economy consent or proposed bounded lane | `economy-mode.md` |
 | Notification delivery | `gates-and-modes.md` notification section and `squad-notifications.instructions.md` |
 | Council, Intake Readiness, or Discovery Verdict persistence | `verdict-writer.md` |
@@ -70,48 +70,49 @@ keeps every stage/gate/final validation; autonomous revalidation is capped at tw
 
 ## 3. Resolve and Schedule, Then Admit
 
-Put roles, routes, endpoint choices, dependencies, write sets, real model inputs,
-supplied active `routing` as `requestedModelRouting`, and any capped cost object
-in transport JSON outside squad state. Run
-`New-SquadDispatchPlan.ps1 -RepoRoot <repo> -InputPath <json>`.
-It returns waves, `routingRefresh` and preflight; it writes nothing.
-Pass the host's actual `agentTypes` enum when available; use its resolved native
-IDs, not a guessed API type from the display name.
+Prepare every worker, including quick single-role intake/research/planning,
+without a ceiling and under autopilot.
+Put roles, routes, endpoints, dependencies, write sets, host models, supplied active
+`routing` as `requestedModelRouting` and any cost object in transport JSON outside
+squad state. Run
+`New-SquadDispatchPlan.ps1 -RepoRoot <repo> -InputPath <json> -ApplyModelRouting`.
+It applies the hash-bound routing refresh and returns `routingReady: true`.
+Without the switch it is read-only.
+Pass available `agentTypes`; use resolved native IDs, not guessed display-name types.
 For active routing, `task` hosts pass their complete `availableModels` enum;
 `auto` is not inventory. A host without an enum may pass a concrete priced
 session model. Unresolved availability stops before refresh or dispatch.
-Unknown, unavailable or ambiguous endpoints stop. A confirmed missing catalog
-role/pack uses `roster-expansion.md`; substitution, recasting or removal is a
-separate explicit choice, never automatic.
+Unknown/unavailable/ambiguous endpoints stop. Confirmed missing catalog roles/packs
+use `roster-expansion.md`; substitution, recasting or removal needs a separate choice.
 
-The helper honors connector defaults; `both` needs disjoint outputs/admission and Alternates
-need cues. Apply routing/preflight writers before `admittedUnits`. Expand a
+Honor connector defaults; `both` needs disjoint outputs/admission, Alternates need
+cues. Require `routingReady: true` and persisted preflight before `admittedUnits`. Expand a
 confirmed catalog roster before planning its new role. `routing=off` and every
 non-additive roster change stay cold; `off` passes no override and Scribe keeps
 its pin.
 
-Confirm the routing tier once for an eligible parallel batch. Honor all artifact
-and verdict barriers before the next wave, even if a graph would otherwise allow
-it. Before producing output verify topic research and plan plus a required
+Confirm the tier once per eligible parallel batch. Honor artifact/verdict barriers
+before the next wave regardless of graph eligibility. Before output verify research,
+plan and any required
 non-Stop Council Verdict or recorded waiver. Dispatch the missing stage, never
 write it inline. Admit settled slots before children; at/above ceiling starts
 nothing. `approved-over-ceiling` is one sequential unit, not another gate's waiver.
 
 ## 4. Native Work and Persistence
 
-Before nontrivial work load `Get-SquadProcedure.ps1 -Name progress` with the other
-active sections. Its measured Progress Presentation contract owns 3-7 outcomes,
-tracker/chat fallback, phase updates and blockers.
-This is coordinator-owned ephemeral UI, not a role or state write.
+Before nontrivial work load `Get-SquadProcedure.ps1 -Name progress` alongside active
+sections. Progress Presentation owns 3-7 outcomes, tracker/chat fallback, phases
+and blockers: coordinator-owned ephemeral UI, not role work or state.
 
 Dispatch each planned endpoint with native `task`/`runSubagent`, the request,
 scoped context, exact output-root argument, read-only inputs, and any admitted
 Decision Ref/round/slot. Pass non-empty `endpoint.model` exactly as the native
 `model`; omit only when empty. Never use `pricingModel` or frontmatter instead.
+If the native tool cannot accept a model override, stop and disclose it; do not
+drop the route or edit frontmatter.
 Parallelize only an independent wave.
-Require final model identity, tool-call count,
-actual paths, outcome and unresolved questions. Review only after owners' final
-returns. Use the write-set snapshot/verify mode for a closing review when needed.
+Require final model identity, tool-call count, paths, outcome and open questions.
+Review after owners' final returns; use write-set snapshot/verify when needed.
 
 Run `Write-SquadHandoff.ps1 -Quiet` synchronously per `economy-scribe.md`.
 Exit 0 requires Section 5 proof before progress/next task; routing/artifact is
@@ -131,12 +132,12 @@ Validate the writer's exit, JSON status, turn/counts and warnings. Then run
 `Test-SquadTurnCompletion.ps1 -RepoRoot <repo> -SquadRoot <root>
 -ProofPath <actual handoff JSON> -ExpectedTurn <receipt turn>`.
 Cold consultative proofs include `role`, `findingsOnly` and `decisionRef`.
-The script checks actual files, turn/member history, consumption, admission,
-ledger and state. No second file audit or model verifier is needed.
+It checks files, turn/member history, consumption, admission, ledger and state;
+no second audit or model verifier.
 
-Only verified evidence completes a stage. Missing history needs its handoff, not
-rerunning a producer. `ledger-only` stays visible, never PASS. Missing proof,
-invented paths, unmatched agents or unadmitted slots require repair/escalation.
+Complete only with verified evidence. Backfill missing history, not the producer.
+`ledger-only` is never PASS. Missing proof, invented paths, unmatched agents or
+unadmitted slots require repair/escalation.
 
 Return classification, agents/tiers, findings, verified paths/receipt and open
 gates. Forward paths/relevant excerpts, not whole artifacts.

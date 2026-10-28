@@ -507,7 +507,7 @@ function Write-PluginHookManifest {
         $entry = [ordered]@{
             type       = 'command'
             bash       = 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/' + $definition.Script + '.sh"'
-            powershell = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:CLAUDE_PLUGIN_ROOT/hooks/scripts/' + $definition.Script + '.ps1"'
+            powershell = $(if ($definition.Script -eq 'dispatch-guards') { 'pwsh' } else { 'powershell.exe' }) + ' -NoProfile -ExecutionPolicy Bypass -File "$env:CLAUDE_PLUGIN_ROOT/hooks/scripts/' + $definition.Script + '.ps1"'
             timeoutSec = 10
         }
         if ($definition.Matcher) {
@@ -874,9 +874,9 @@ This is a **single-purpose action**: it drops hook files into the consuming repo
 ## Flow
 
 1. **Read the plugin's own `hooks.json`** and its referenced scripts under `hooks/scripts/`.
-2. **Filter to the cloud-agent-relevant subset.** Per the hooks reference, Copilot cloud agent honors every event type this plugin uses (`sessionStart`, `preToolUse`, `postToolUse`, `subagentStop`, `userPromptSubmitted`) but **only the `bash` field on a command hook** — `powershell` entries are ignored, and the `command` cross-platform fallback field is honored when `bash` is absent. Every hook entry in this plugin already carries a `bash` script, so no entry is dropped for lacking one; the filtering step only means: do not expect the `.ps1` companions to do anything once copied into a cloud-agent context, and do not bother copying them there.
+2. **Filter to the cloud-agent-relevant subset.** Copilot cloud agent honors the plugin's events but only the `bash` command field (`command` is a fallback); it ignores the `powershell` field. Keep each Bash entry. The dispatch guard's Bash wrapper calls `pwsh`, so its PowerShell implementation and runtime dependencies must also travel with the drop. PowerShell 7.4+ must be available in the cloud setup, as it is for the squad runtime; disclose this prerequisite rather than installing it or claiming the hook was executed.
 3. **Write the hook configuration** to `<targetDir>/hve-squad.json`, with paths rewritten relative to the repository root (cloud agent's working directory is `/workspace` when a repository is cloned) rather than the plugin's own install directory.
-4. **Copy the bash scripts** (not the PowerShell companions) to `<targetDir>/hve-squad/*.sh`, preserving execute permissions where the filesystem supports it.
+4. **Copy the Bash scripts** to `<targetDir>/hve-squad/*.sh`, preserving execute permissions. Also copy `dispatch-guards.ps1` beside its wrapper and the skill's `scripts/SquadCoordinator.psm1` and `scripts/Resolve-SquadConnectorDispatch.ps1` into `<targetDir>/hve-squad/runtime/`. These are the dispatch guard's required dependencies; the other PowerShell companions are not used by cloud agent.
 5. **Report exactly what was written** — the hook file path, each script path, and a one-line note that this drop must be committed to take effect for cloud agent (an uncommitted local file is invisible to a cloud-agent job, which operates on the cloned repository, not the developer's working tree).
 
 ## Idempotency
@@ -1018,7 +1018,13 @@ if ($MyInvocation.InvocationName -ne '.') {
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/invocations/$name/SKILL.md") -Content $invocationSkills[$name] -DryRun:$DryRun
         }
 
-        # ── hooks.json (plugin-root-qualified; scripts are retained in the output repo) ──
+        # Canonical dispatch guard; unrelated hook scripts remain distribution-owned.
+        foreach ($path in (Get-SourceFileList -Source $source -RepoRoot $RepoRoot -RelativeDir 'scripts/plugin-hooks')) {
+            $content = Get-SourceFileContent -Source $source -RepoRoot $RepoRoot -RelativePath $path
+            Write-TextFile -Path (Join-Path -Path $OutputRoot -ChildPath 'hooks/scripts' -AdditionalChildPath (Split-Path -Leaf $path)) -Content $content -DryRun:$DryRun
+        }
+
+        # ── hooks.json (plugin-root-qualified) ──
         Write-PluginHookManifest -OutputRoot $OutputRoot -DryRun:$DryRun
 
         # ── plugin.json (P02-T06; hooks/mcpServers fields added, P03/P04-aware) ──

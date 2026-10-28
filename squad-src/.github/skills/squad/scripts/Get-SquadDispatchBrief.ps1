@@ -37,6 +37,9 @@
     The repository root that holds `.github/agents/`. Defaults to the current directory.
 .PARAMETER SessionModel
     The coordinator's session model id, used for the orchestration consumption object.
+.PARAMETER RequestedModelRouting
+    The trusted user's routing input for this turn. Overrides the recorded mode in
+    this read-only brief; it does not persist the change or authorize dispatch.
 .PARAMETER AvailableModels
     The exact host-advertised model IDs, used only by the human-readable routing
     report. JSON mode defers scoring to New-SquadDispatchPlan.ps1.
@@ -66,6 +69,9 @@ param(
 
     [string]$SessionModel,
 
+    [ValidateSet('off', 'ranked', 'economy', 'manual')]
+    [string]$RequestedModelRouting,
+
     [string[]]$AvailableModels = @(),
 
     [datetime]$AsOf = (Get-Date),
@@ -91,7 +97,7 @@ $Roles = @($Roles | ForEach-Object { $_ -split ',' } | ForEach-Object Trim | Whe
 if ($SnapshotPath -and (-not $AsJson -or -not (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md')))) { throw 'SnapshotPath requires federation -AsJson output.' }
 if (-not (Test-Path -LiteralPath $SquadRoot -PathType Container)) {
     if ($AsJson) {
-        [ordered]@{ status = 'ok'; kind = 'none'; squadRoot = $SquadRoot; action = 'initialize'; reference = 'references/coordinator-init.md' } | ConvertTo-Json -Compress
+        [ordered]@{ status = 'ok'; kind = 'none'; squadRoot = $SquadRoot; requestedModelRouting = $RequestedModelRouting; action = 'initialize'; reference = 'references/coordinator-init.md' } | ConvertTo-Json -Compress
         exit 0
     }
     Write-Error "Get-SquadDispatchBrief: squad root not found: $SquadRoot"
@@ -121,7 +127,7 @@ if ($AsJson -and (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') 
     $savedSnapshot = if ($SnapshotPath) {
         Write-SquadTransportJson -Path $SnapshotPath -SquadRoot $SquadRoot -Value (Get-SquadFederationSnapshot -SquadRoot $SquadRoot -RepoRoot $RepoRoot)
     } else { '' }
-    [ordered]@{ status = 'ok'; kind = 'federation'; squadRoot = $SquadRoot; state = $federationState; registry = $registry; routing = $metaTables[0].Rows; snapshotPath = $savedSnapshot; reference = 'references/federation-runtime.md'; observedExecution = 'host-unreported' } | ConvertTo-Json -Depth 12 -Compress
+    [ordered]@{ status = 'ok'; kind = 'federation'; squadRoot = $SquadRoot; state = $federationState; registry = $registry; routing = $metaTables[0].Rows; requestedModelRouting = $RequestedModelRouting; snapshotPath = $savedSnapshot; reference = 'references/federation-runtime.md'; observedExecution = 'host-unreported' } | ConvertTo-Json -Depth 12 -Compress
     exit 0
 }
 
@@ -267,7 +273,7 @@ $teamPath = Join-Path $SquadRoot 'team.md'
 $statePath = Join-Path $SquadRoot 'state.json'
 if (-not (Test-Path -LiteralPath $teamPath) -or -not (Test-Path -LiteralPath $statePath)) {
     if ($AsJson) {
-        [ordered]@{ status = 'ok'; kind = 'uninitialized'; squadRoot = $SquadRoot; action = 'initialize'; reference = 'references/coordinator-init.md' } | ConvertTo-Json -Compress
+        [ordered]@{ status = 'ok'; kind = 'uninitialized'; squadRoot = $SquadRoot; requestedModelRouting = $RequestedModelRouting; action = 'initialize'; reference = 'references/coordinator-init.md' } | ConvertTo-Json -Compress
         exit 0
     }
     $out.Add('status: NOT INITIALIZED. This brief does not cover Init: read the three reference files whole.')
@@ -290,14 +296,16 @@ $sections = @('## Attribution', '## Usage & Cost', '### Derivation' | Where-Obje
 $ledger = switch ($sections.Count) { 3 { 'ok' } 0 { 'stub (do not dispatch the Scribe to repair it; the next script hand-off reseeds it)' } default { 'partial (reconcile through the Squad Scribe first)' } }
 
 $teamText = Get-Content -LiteralPath $teamPath -Raw -Encoding utf8
-$routing = if ($teamText -match '(?m)^Model routing:\s*`?(?<mode>[a-z]+)`?\s*$') { $Matches['mode'] } else { 'off' }
+$recordedRouting = if ($teamText -match '(?m)^Model routing:\s*`?(?<mode>[a-z]+)`?\s*$') { $Matches['mode'] } else { 'off' }
+$routing = if ($RequestedModelRouting) { $RequestedModelRouting } else { $recordedRouting }
 
 $capText = $env:COPILOT_SUBAGENT_MAX_CONCURRENT
 $cap = if ($capText -match '^\d+$' -and [int]$capText -gt 0) { [int]$capText } else { 4 }
 
-$covered = $routing -eq 'economy' -and -not $federated -and -not $ceiling
+$covered = $routing -eq 'economy' -and $routing -eq $recordedRouting -and -not $federated -and -not $ceiling
 $out.Add("state: schema $($state['schemaVersion']), turn $turn (next hand-off turn: $($turn + 1)), mode $($state['mode']), updated $updated")
 $out.Add("federation: $(if ($federated) { 'yes' } else { 'no' }) | cost ceiling: $(if ($ceiling) { 'active' } else { 'none' }) | ledger: $ledger | model routing: $routing | concurrency cap: $cap")
+if ($RequestedModelRouting) { $out.Add("routing intent: requested $RequestedModelRouting; recorded $recordedRouting. Prepare the selected role units before dispatch; this brief is not a dispatch plan.") }
 # economy-mode.md Consent (the same check Resolve-SquadModelRoute.ps1 and Write-SquadHandoff.ps1 make) and Route Markers.
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $decisionsText = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) { [string](Get-Content -LiteralPath $decisionsPath -Raw -Encoding utf8) } else { '' }
@@ -468,7 +476,7 @@ elseif ($AsJson) {
     [pscustomobject]@{ scoringPolicy = 'deferred-to-dispatch-plan'; snapshotIdentity = 'not-evaluated'; evaluationDate = $AsOf.ToString('yyyy-MM-dd'); availability = 'deferred'; roles = @(); warnings = @() }
 }
 else {
-    & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') -SquadRoot $SquadRoot -AvailableModels $AvailableModels -SessionModel $SessionModel -Role $Roles -AsOf $AsOf | ConvertFrom-Json
+    & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') -SquadRoot $SquadRoot -Mode $routing -AvailableModels $AvailableModels -SessionModel $SessionModel -Role $Roles -AsOf $AsOf | ConvertFrom-Json
 }
 if ($AsJson) {
     $ledgerCheck = [ordered]@{ status = 'not-run'; failureClass = ''; output = '' }
@@ -528,7 +536,11 @@ if ($AsJson) {
         nextTurn = $turn + 1
         updated = $updated
         mode = $state['mode']
+        recordedModelRouting = $recordedRouting
+        requestedModelRouting = $RequestedModelRouting
         modelRouting = $routing
+        dispatchReady = $false
+        dispatchPreparation = $(if ($RequestedModelRouting -eq 'off' -and $recordedRouting -ne 'off') { 'cold-scribe-routing-off' } else { 'New-SquadDispatchPlan.ps1 -ApplyModelRouting' })
         costPreflight = $preflight
         ledgerCheck = $ledgerCheck
         roster = $records
