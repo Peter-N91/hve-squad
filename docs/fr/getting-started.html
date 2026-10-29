@@ -17,6 +17,7 @@
       <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Accueil</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html" class="active">Bien démarrer</a>
         <a href="usage.html">Utilisation</a>
         <a href="demo.html">Démonstration</a>
@@ -43,6 +44,17 @@
 
   <main class="content">
     <div class="container">
+      <div class="callout">
+        <p>
+          <strong>Vous débutez avec HVE Squad ?</strong> Lisez d'abord <a href="concepts.html">Concepts</a> (environ dix minutes). Cette page
+          définit <em>équipe</em>, <em>fédération</em>, <em>profil</em>, <em>pack</em>, <code>init</code>,
+          <code>promote</code>, <em>interactif</em> et <em>autopilot</em>, les mots qu'emploient cette page et le Squad Coach.
+        </p>
+        <p>
+          Le parcours de cette page : installer (1), éventuellement interroger le Coach (2), initialiser (3), envoyer une demande de travail (4), puis
+          retrouver vos résultats et continuer (5).
+        </p>
+      </div>
       <h2>1. Installer pour votre environnement</h2>
       <div class="callout">
         <p>
@@ -233,6 +245,18 @@ targets:
           invoquez explicitement lorsque vous êtes prêt.
         </p>
       </div>
+      <p>
+        <strong>À qui il s'adresse.</strong> Toute personne qui débute avec HVE Squad, ou qui hésite sur la forme d'équipe, le profil, les packs ou
+        le message adaptés à son objectif. Il fonctionne avant toute initialisation.
+        <strong>Quand l'ignorer.</strong> Vous savez déjà ce que vous voulez (initialiser une équipe, puis envoyer une demande de travail), ou
+        vous suivez un parcours figé comme
+        l'<a href="https://peter-n91.github.io/hve-squad-hands-on-workshop/">atelier pratique</a> ; commencez à l'étape 3.
+      </p>
+      <p>
+        <strong>Les mots qu'il emploie.</strong> Le Coach parle avec les termes définis sur la page <a href="concepts.html">Concepts</a> :
+        équipe, fédération, profil, pack, aiguillage, <code>init</code>, <code>promote</code>, interactif et autopilot.
+        Si l'un d'eux vous est nouveau, lisez sa courte entrée à cet endroit, ou demandez au Coach de l'expliquer simplement avant de continuer.
+      </p>
 
       <h3>Ce que le Coach demande et fournit</h3>
       <p>
@@ -410,13 +434,61 @@ targets:
       </p>
       <div data-release-install="stable"></div>
 
-      <h2>3. Initialiser la squad</h2>
+      <h2 id="initialize-the-squad">3. Initialiser la squad</h2>
       <p>
         La squad repose sur un Squad Coordinator que l'utilisateur peut invoquer pour répartir sa demande entre les agents HVE
         Core et conserver son état sous <code>.copilot-tracking/squad/</code>.
         Commencez par initialiser et confirmer l'équipe proposée :
       </p>
       <pre><code>/squad init</code></pre>
+      <p>
+        <code>init</code> propose une équipe pour votre dépôt, vous pose quelques questions et n'écrit les fichiers d'état de l'équipe
+        qu'après votre confirmation. À lui seul, il ne lance aucun travail et ne produit ni recherche, ni plan, ni document, ni code. Ajoutez du contexte
+        après lui pour aider le coordinateur à proposer un profil adapté.
+        <a href="concepts.html#init-promote-and-work-requests"><code>init</code>, <code>promote</code> et demandes de travail</a>
+        le compare aux autres messages.
+      </p>
+      <p>Les questions posées, ce que chacune signifie et une réponse sûre pour une première exécution :</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Question</th><th>Signification</th><th>Première réponse sûre</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Une équipe ou une fédération ?</td>
+              <td>Une équipe est un roster pour l'ensemble du dépôt ; une fédération réunit plusieurs équipes indépendantes. <a href="concepts.html#teams-and-federations">Détails</a></td>
+              <td>Une équipe, le choix par défaut. Vous pourrez la promouvoir plus tard.</td>
+            </tr>
+            <tr>
+              <td>Quel profil ?</td>
+              <td>Le type d'équipe : une distribution de rôles prête à l'emploi pour un genre de travail. <a href="concepts.html#choosing-a-profile">Détails</a></td>
+              <td>Le profil que le coordinateur propose à partir de votre dépôt et de votre demande, ou <code>default</code> en cas de doute.</td>
+            </tr>
+            <tr>
+              <td>Des packs ?</td>
+              <td>Des spécialistes technologiques facultatifs ajoutés au profil. La liste peut afficher tous les packs enregistrés ; c'est un menu, pas une recommandation. <a href="concepts.html#packs-are-optional">Détails</a></td>
+              <td>Aucun, sauf si votre projet repose sur cette technologie. Si un nom n'est pas clair, répondez avec vos propres mots et demandez ce qu'il apporte.</td>
+            </tr>
+            <tr>
+              <td>Des noms de membres ?</td>
+              <td>Des noms facultatifs pour les membres du roster, utiles seulement lorsque deux lignes partagent un rôle.</td>
+              <td>Ignorez.</td>
+            </tr>
+            <tr>
+              <td>Comment les approbations doivent-elles vous parvenir ?</td>
+              <td>L'endroit où la squad vous sollicite lorsqu'elle a besoin d'une décision.</td>
+              <td>Dans la conversation (<code>in-chat</code>).</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Rien n'est écrit avant votre confirmation. Ensuite, vous pouvez ouvrir une nouvelle conversation si vous le souhaitez : la squad relit
+        son état dans <code>.copilot-tracking/squad/</code> au début de chaque tour, donc rien n'est perdu
+        (<a href="concepts.html#new-chats">pourquoi une nouvelle conversation est sans risque</a>).
+      </p>
+
       <h2>4. Envoyer une demande de travail</h2>
       <p>Après confirmation, envoyez une demande de travail distincte. Utilisez <code>mode=autopilot</code> pour enchaîner le travail tout en conservant les approbations humaines obligatoires, ou omettez ce paramètre pour approuver chaque étape :</p>
       <pre><code>/squad request="add input validation to the login form" mode=autopilot</code></pre>
@@ -425,6 +497,12 @@ targets:
         avant d'envoyer chaque demande. Envoyez le texte de la demande affiché ci-dessus sans le préfixe
         <code>/squad</code>. La voie <code>@squad.prompt.md</code> reste disponible, mais elle ajoute des appels
         d'agents intermédiaires et est plus lente.
+      </p>
+      <p>
+        Votre message est du texte brut : le travail que vous voulez, plus des options comme <code>mode=autopilot</code>. Dans une conversation
+        avec un agent, vous n'avez pas besoin de l'enveloppe <code>request="..."</code>, qui est le nom de l'entrée utilisée par les fichiers de prompt.
+        Chaque option est listée dans la <a href="concepts.html#message-reference">référence des messages</a>, et
+        <a href="concepts.html#autonomy-modes">interactif ou autopilot</a> explique lequel choisir.
       </p>
       <p>
         Dans un nouveau projet, le coordinateur examine votre dépôt et propose un profil avant de créer
@@ -453,6 +531,14 @@ targets:
         cycle de vie complet et des exemples.
       </p>
 
+      <h2 id="find-your-results">5. Retrouver vos résultats et continuer</h2>
+      <ul>
+        <li><strong>Les livrables</strong> arrivent dans des dossiers fixes selon le rôle, comme <code>.copilot-tracking/research/</code>, <code>.copilot-tracking/plans/</code>, <code>.copilot-tracking/changes/</code>, <code>.copilot-tracking/reviews/</code> et <code>docs/</code>. <a href="concepts.html#where-deliverables-go">Où vont les livrables</a> les liste tous, et <a href="concepts.html#custom-deliverable-paths">Changer l'endroit où un rôle écrit</a> montre comment orienter un rôle vers votre propre dossier.</li>
+        <li><strong>Les décisions et l'historique</strong> se trouvent dans <code>decisions.md</code> et <code>history/&lt;agent&gt;.md</code> : pourquoi la squad a choisi quelque chose, et ce que chaque agent a fait. <a href="concepts.html#state-folder">Le dossier d'état</a> explique chaque fichier.</li>
+        <li><strong>Poursuivre</strong> n'exige aucune étape particulière : ouvrez une nouvelle conversation si vous le souhaitez, ouvrez le même dossier, sélectionnez le même agent et dites ce que vous voulez ensuite. <a href="concepts.html#new-chats">Ouvrir une nouvelle conversation est sans risque</a>.</li>
+        <li><strong>Une longue exécution s'interrompt ?</strong> L'autopilot ne supprime pas les invites d'approbation de votre propre client. <a href="concepts.html#squad-autopilot-vs-host-approvals">Voir quoi modifier</a>.</li>
+      </ul>
+
       <h2>Facultatif : préparer la couche d'exécution Azure</h2>
       <p>
         Si vous initialisez le profil <code>azure</code>, la squad peut mettre en place dans votre dépôt une chaîne d'outils
@@ -469,9 +555,9 @@ targets:
       <p>Consultez <a href="usage.html">Utilisation → Couche d'exécution Azure</a> pour la procédure complète de mise en place.</p>
 
       <div class="pager">
-        <a class="prev" href="index.html">
+        <a class="prev" href="concepts.html">
           <div class="dir">← Retour</div>
-          <div class="ttl">Accueil</div>
+          <div class="ttl">Concepts</div>
         </a>
         <a class="next" href="usage.html">
           <div class="dir">Suite →</div>

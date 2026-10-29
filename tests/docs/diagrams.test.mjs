@@ -3,7 +3,7 @@ import test from "node:test";
 import { diagramSource, readSource } from "../../scripts/docs-content.mjs";
 import { localizeDiagram } from "../../scripts/diagram-locales.mjs";
 
-for (const slug of ["usage", "maintaining"]) {
+for (const slug of ["concepts", "usage", "maintaining"]) {
   test(`${slug}: diagrams preserve graph topology and localize every declared label`, () => {
     const { $ } = readSource(slug);
     $(".mermaid").each((index, element) => {

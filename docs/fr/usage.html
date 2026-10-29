@@ -17,6 +17,7 @@
       <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Accueil</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html">Bien démarrer</a>
         <a href="usage.html" class="active">Utilisation</a>
         <a href="demo.html">Démonstration</a>
@@ -110,6 +111,13 @@
 /squad request="reduce onboarding drop-off" discovery=standard
 /squad request="build the booking service end to end" mode=autopilot cost-ceiling=20
 /squad request="run security research and implement" routing=manual</code></pre>
+      <p>
+        Chaque option est un mot <code>name=value</code> de votre message. <code>request</code> est le nom de l'entrée
+        que les fichiers de prompt utilisent pour transporter le travail ; dans une conversation avec un agent, vous pouvez simplement écrire la demande en texte brut.
+        La <a href="concepts.html#message-reference">référence des messages</a> liste toutes les entrées, et
+        <a href="concepts.html#init-promote-and-work-requests"><code>init</code>, <code>promote</code> et demandes de travail</a>
+        explique les messages de configuration.
+      </p>
 
       <figure class="video-figure">
         <video controls preload="metadata" playsinline>
@@ -123,7 +131,7 @@
         </figcaption>
       </figure>
 
-      <h2>Modes d'autonomie</h2>
+      <h2 id="autonomy-modes">Modes d'autonomie</h2>
       <p>Ce que la squad fait avant de vous solliciter :</p>
       <table>
         <thead>
@@ -143,16 +151,30 @@
           <tr>
             <td><code>mode=autopilot</code></td>
             <td><code>mode=autopilot</code></td>
-            <td>La squad enchaîne recherche → planification → implémentation → revue de manière autonome et vous sollicite <strong>uniquement</strong> pour les actions à impact (déploiement, <code>git push</code>, fusion, modifications de schéma ou de données) et pour valider le <strong>résultat final</strong>.</td>
+            <td>La squad enchaîne recherche → planification → implémentation → revue de manière autonome et s'arrête pour vous demander avant les actions à impact (déploiement, <code>git push</code>, fusion, modifications de schéma ou de données), sur les signaux de risque (un verdict <em>Stop</em> du conseil, un constat à risque élevé, un plafond de coût qui serait dépassé) et pour valider le <strong>résultat final</strong>.</td>
           </tr>
         </tbody>
       </table>
       <p>
         Autopilot est le mode « dites-le une fois, laissez-le travailler » : il orchestre l'ensemble du pipeline
         de manière autonome, mais s'arrête toujours pour obtenir une validation humaine avant toute action irréversible et avant la publication.
-        Les deux points d'arrêt — action à impact et résultat final — déclenchent une notification via le canal d'approbation que vous
+        Chacun de ces points d'arrêt déclenche une notification via le canal d'approbation que vous
         choisissez à la création (le mode interactif vous notifie, lui, à chaque étape).
       </p>
+      <div class="callout">
+        <p>
+          <strong>Où le choisir.</strong> Ajoutez <code>mode=autonomous</code> ou <code>mode=autopilot</code> à une
+          demande de travail, ou omettez <code>mode</code> pour rester en mode interactif. C'est un mot du message, pas un
+          réglage du client, et <code>init</code> et <code>promote</code> ne l'utilisent jamais : vous confirmez chaque proposition.
+        </p>
+        <p>
+          <strong>L'autopilot ne supprime pas les invites de votre propre client.</strong> Les modes de la squad décident quelles
+          <em>décisions de travail</em> vous parviennent ; votre client décide séparément s'il demande avant de modifier des fichiers ou
+          d'exécuter des commandes, si bien qu'une longue exécution peut encore s'interrompre sur ces invites. Consultez
+          <a href="concepts.html#squad-autopilot-vs-host-approvals">L'autopilot de la squad n'est pas l'approbation de votre client</a>
+          pour savoir quoi modifier, et pourquoi le mode Autopilot propre à un client ne doit pas être activé en parallèle.
+        </p>
+      </div>
 
 
       <h2 id="script-backed-coordination">Coordination pilotée par scripts</h2>
@@ -453,7 +475,7 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         et le rédacteur de la racine à la fois, afin que la fédération puisse s'arrêter à la limite commune.
       </p>
 
-      <h2>Étape de découverte &mdash; lorsqu'aucun document n'existe encore</h2>
+      <h2 id="discovery-gate-when-there-is-nothing-written-down-yet">Étape de découverte &mdash; lorsqu'aucun document n'existe encore</h2>
       <p>
         Deux points de contrôle précèdent le travail et répondent à des déclencheurs <strong>opposés</strong>. L'étape
         de découverte se déclenche lorsqu'il n'y a <strong>aucun</strong> artefact d'entrée et en <em>produit</em>
@@ -554,7 +576,7 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         à la place.
       </p>
 
-      <h2>Contrôle des exigences en entrée</h2>
+      <h2 id="requirements-intake-gate">Contrôle des exigences en entrée</h2>
       <p>
         Lorsqu'une exécution s'appuie sur des artefacts d'exigences ou d'entrée &mdash; PRD, BRD, spécification, user
         story, document de conception, transcription ou fichier que vous indiquez à la squad &mdash; le coordinateur effectue
@@ -883,7 +905,7 @@ flowchart TD
     B --> F["notifications.md — append-only ping log"]
       </div>
 
-      <h2>Première exécution (mode d'initialisation)</h2>
+      <h2 id="first-run-init-mode">Première exécution (mode d'initialisation)</h2>
       <p>
         Lorsqu'un projet n'a pas de fichier <code>.copilot-tracking/squad/team.md</code>, le coordinateur propose un
         profil de squad et demande s'il faut poursuivre. Si vous refusez, vous pouvez choisir un autre profil ou
@@ -901,6 +923,14 @@ flowchart TD
         plusieurs sous-squads nommées. Choisir une fédération passe la main à <code>/squad-federation</code>
         (voir ci-dessous) ; choisir une squad unique conserve le déroulement décrit ci-dessus.
       </p>
+      <p>
+        L'initialisation pose ses questions dans cet ordre : une équipe ou une fédération, le profil et d'éventuels packs (ou une équipe
+        personnalisée), les noms des membres, puis le canal d'approbation. Elle s'arrête une fois les fichiers d'état créés : <code>init</code>
+        seul ne produit ni recherche, ni plan, ni autre livrable, et envoyer une demande de travail à un projet sans équipe lance
+        d'abord l'initialisation, puis poursuit votre demande.
+        <a href="getting-started.html#initialize-the-squad">Bien démarrer</a> explique chaque question et propose une première
+        réponse sûre.
+      </p>
 
       <h2 id="federation">Fédération &mdash; plusieurs sous-squads dans un même dépôt</h2>
       <p>
@@ -909,7 +939,9 @@ flowchart TD
         architectes. Elle est <strong>facultative et additive</strong> : un dépôt qui ne l'active jamais se comporte
         exactement comme une squad unique. Chaque sous-squad est une squad <em>ordinaire</em> &mdash; mêmes composition d'équipe,
         routage, décisions, historique et consommation &mdash; simplement enracinée dans
-        <code>.copilot-tracking/squad/members/&lt;name&gt;/</code> plutôt qu'au niveau supérieur.
+        <code>.copilot-tracking/squad/members/&lt;name&gt;/</code> plutôt qu'au niveau supérieur. Les termes vous sont nouveaux ?
+        <a href="concepts.html#teams-and-federations">Concepts &rarr; Équipes et fédérations</a> définit d'abord équipe,
+        fédération et sous-squad.
       </p>
       <pre><code># Build a federation (propose → confirm → create)
 /squad-federation init
@@ -955,12 +987,14 @@ flowchart TD
         changer un profil, ajouter ou retirer une sous-squad, ou constituer une équipe personnalisée pour chacune.
       </p>
 
-      <h3>Convertir une squad unique en fédération</h3>
+      <h3 id="promote-a-single-squad-to-a-federation">Convertir une squad unique en fédération</h3>
       <p>
         Si vous avez commencé avec une ancienne version et une <strong>squad unique</strong>, puis souhaitez adopter
         une fédération pour un projet plus complexe, multiéquipe ou multidomaine, vous ne repartez pas de zéro.
         La conversion <strong>intègre votre squad existante dans une fédération en tant que
-        première sous-squad</strong>, en déplaçant son état intact plutôt qu'en le reconstruisant.
+        première sous-squad</strong>, en déplaçant son état intact plutôt qu'en le reconstruisant. C'est une
+        étape de configuration comme <code>init</code> : elle vous demande de confirmer et ne lance aucun travail de son côté,
+        comme le compare côte à côte <a href="concepts.html#init-promote-and-work-requests">Concepts</a>.
       </p>
       <pre><code># Promote the current single squad into a federation
 /squad-federation promote
@@ -1104,8 +1138,13 @@ flowchart TD
         </figcaption>
       </figure>
 
-      <h2>Profils</h2>
-      <p>L'équipe initialisée par chaque profil :</p>
+      <h2 id="profiles">Profils</h2>
+      <p>
+        Un profil est le type d'équipe que vous créez : une distribution de rôles prête à l'emploi pour un genre de travail.
+        Vous en choisissez exactement un lors de l'initialisation de la squad, et c'est un ensemble de départ plutôt qu'un plafond. Vous
+        hésitez ? <a href="concepts.html#choosing-a-profile">Concepts &rarr; Choisir un profil</a> associe en langage courant
+        les genres de travail courants à un profil. L'équipe initialisée par chaque profil :
+      </p>
       <table>
         <thead>
           <tr><th>Profil</th><th>Membres</th><th>À utiliser pour</th></tr>
@@ -1169,7 +1208,15 @@ flowchart TD
         lacune découverte au milieu d'un tour.
       </p>
 
-      <h2>Packs</h2>
+      <h2 id="packs">Packs</h2>
+      <div class="callout">
+        <p>
+          <strong>Les packs sont facultatifs.</strong> Ignorez-les sauf si votre projet repose sur cette technologie ;
+          ne choisir aucun pack est une réponse normale. La question d'initialisation peut lister tous les packs enregistrés, mais
+          cette liste est un menu, pas une recommandation. Voir
+          <a href="concepts.html#packs-are-optional">Concepts &rarr; Les packs sont facultatifs</a>.
+        </p>
+      </div>
       <p>
         Un profil répond à la question <em>de quel type de travail s'agit-il ?</em>. Un <strong>pack</strong> répond à
         <em>sur quelles technologies repose-t-il ?</em>. Vous choisissez exactement un profil et lui ajoutez zéro, un ou plusieurs packs :
@@ -1377,7 +1424,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
         ne pourrait pas couvrir &mdash; deux domaines technologiques à la fois, là où un profil vous oblige à en choisir un.
       </p>
 
-      <h2>Profil, pack ou fédération ?</h2>
+      <h2 id="profile-pack-or-federation">Profil, pack ou fédération ?</h2>
       <p>
         Trois mécanismes peuvent ajouter des capacités, et il est facile de choisir le mauvais. La règle est simple :
       </p>

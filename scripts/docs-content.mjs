@@ -11,9 +11,9 @@ import {
 } from "./docs-release.mjs";
 
 export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const pageOrder = ["index", "getting-started", "usage", "demo", "demo-1", "demo-2", "demo-3", "demo-4", "ecosystem", "connector", "maintaining", "troubleshooting", "contributing"];
+export const pageOrder = ["index", "concepts", "getting-started", "usage", "demo", "demo-1", "demo-2", "demo-3", "demo-4", "ecosystem", "connector", "maintaining", "troubleshooting", "contributing"];
 export const navigationGroups = [
-  { key: "start", pages: ["index", "getting-started", "usage"] },
+  { key: "start", pages: ["index", "concepts", "getting-started", "usage"] },
   { key: "guides", pages: ["demo", "demo-1", "demo-2", "demo-3", "demo-4"], links: [{ key: "workshop", url: "https://peter-n91.github.io/hve-squad-hands-on-workshop/" }] },
   { key: "reference", pages: ["ecosystem", "connector", "troubleshooting"] },
   { key: "project", pages: ["maintaining", "contributing"] },

@@ -55,7 +55,9 @@ the installed version rather than owning those execution workflows.
 
 See [Getting Started → Squad Coach](https://peter-n91.github.io/hve-squad/getting-started.html#chat-with-the-squad-coach)
 for example conversations, the topology decision guide, preparation checklists, and an end-to-end
-initialization-to-completion example.
+initialization-to-completion example. The Coach uses the terms defined on
+[Concepts](https://peter-n91.github.io/hve-squad/concepts.html): read it first if team, federation, profile,
+pack, `init` or `promote` is new to you.
 
 ## Documentation
 
@@ -73,6 +75,7 @@ Full documentation lives on the project site:
 
 | Page                                                                          | What it covers                                                           |
 |-------------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| [Concepts](https://peter-n91.github.io/hve-squad/concepts.html)               | The vocabulary in one place: teams, federations, profiles, packs, `init`, `promote`, autopilot, and where state lives |
 | [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Prerequisites, installing the package with the correct target, first run |
 | [Usage](https://peter-n91.github.io/hve-squad/usage.html)                     | Profiles, autonomy modes, cost ceilings, remote approval, and Init Mode  |
 | [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html)             | The MCP server and the Copilot CLI plugin, and which surface to use      |
