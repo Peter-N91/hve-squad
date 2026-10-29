@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.2] - 2026-10-29
+
+### Changed
+
+- Updated hve-core dependency pin to `f60b057` (f60b057466bbdc79b78abcedfdda6b02f7740e3a).
+
+### Fixed
+
+- **VS Code's Copilot harness could report installed HVE Core agents as missing.**
+  Shared discovery now accepts active plugin roots advertised by the current host,
+  so separately synced plugin copies resolve consistently during initialization,
+  dispatch planning, model-pin lookup, and handoff attribution. Repository-local
+  overrides, the working VS Code Local-harness path, and CLI/App sibling-plugin
+  discovery remain supported. The resolver does not scan stale plugin caches;
+  native dispatch still requires the host-advertised agent identity and honors
+  invocation restrictions. Updated coordinator guidance, plugin packaging,
+  regression coverage, and English/French troubleshooting
+  (`squad-src/.github/skills/squad/scripts/SquadAgentDiscovery.ps1`,
+  `squad-src/.github/skills/squad/references/agent-discovery.md`).
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.19.2"
+```
+
+[0.19.2]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.19.2
+
 ## [0.19.1] - 2026-10-28
 
 ### Fixed
