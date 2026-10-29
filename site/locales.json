@@ -71,6 +71,7 @@
     },
     "pages": {
       "index": "Overview",
+      "concepts": "Concepts",
       "getting-started": "Getting started",
       "usage": "Usage",
       "demo": "Demos",
@@ -157,6 +158,7 @@
     },
     "pages": {
       "index": "Vue d’ensemble",
+      "concepts": "Concepts",
       "getting-started": "Bien démarrer",
       "usage": "Utilisation",
       "demo": "Démonstrations",

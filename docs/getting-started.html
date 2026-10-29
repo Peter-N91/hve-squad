@@ -17,6 +17,7 @@
       <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Home</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html" class="active">Getting Started</a>
         <a href="usage.html">Usage</a>
         <a href="demo.html">Demo</a>
@@ -43,6 +44,17 @@
 
   <main class="content">
     <div class="container">
+      <div class="callout">
+        <p>
+          <strong>New to HVE Squad?</strong> Read <a href="concepts.html">Concepts</a> first (about ten minutes). It
+          defines <em>team</em>, <em>federation</em>, <em>profile</em>, <em>pack</em>, <code>init</code>,
+          <code>promote</code>, <em>interactive</em> and <em>autopilot</em>, the words this page and the Squad Coach use.
+        </p>
+        <p>
+          The path on this page: install (1), optionally ask the Coach (2), initialize (3), send a work request (4), then
+          find your results and continue (5).
+        </p>
+      </div>
       <h2>1. Install for your environment</h2>
       <div class="callout">
         <p>
@@ -233,6 +245,18 @@ targets:
           Coordinator or Federation Coordinator, which you invoke explicitly when you are ready.
         </p>
       </div>
+      <p>
+        <strong>Who it is for.</strong> Anyone new to HVE Squad, or unsure which team shape, profile, packs or message fits
+        their goal. It works before anything is initialized.
+        <strong>When to skip it.</strong> You already know what you want (initialize one team, then send a work request), or
+        you are following a fixed runbook such as the
+        <a href="https://peter-n91.github.io/hve-squad-hands-on-workshop/">hands-on workshop</a>; start at step 3.
+      </p>
+      <p>
+        <strong>Words it will use.</strong> The Coach speaks in the terms defined on the <a href="concepts.html">Concepts</a>
+        page: team, federation, profile, pack, routing, <code>init</code>, <code>promote</code>, interactive and autopilot.
+        If one is new to you, read its short entry there, or ask the Coach to explain it in plain words before you continue.
+      </p>
 
       <h3>What the Coach asks and returns</h3>
       <p>
@@ -407,13 +431,61 @@ targets:
       </p>
       <div data-release-install="stable"></div>
 
-      <h2>3. Initialize the squad</h2>
+      <h2 id="initialize-the-squad">3. Initialize the squad</h2>
       <p>
         The squad is a user-invocable Squad Coordinator that routes your request to a cast of HVE
         Core agents and persists its state under <code>.copilot-tracking/squad/</code>.
         Initialize and confirm the proposed team first:
       </p>
       <pre><code>/squad init</code></pre>
+      <p>
+        <code>init</code> proposes a team for your repository, asks you a few questions, and writes the team's state files
+        only after you confirm. On its own it starts no work and produces no research, plan, document or code. Add context
+        after it to help the coordinator propose a fitting profile.
+        <a href="concepts.html#init-promote-and-work-requests"><code>init</code>, <code>promote</code> and work requests</a>
+        compares it with the other messages.
+      </p>
+      <p>The questions it asks, what each one means, and a safe answer for a first run:</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Question</th><th>What it means</th><th>Safe first answer</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>One team or a federation?</td>
+              <td>A team is one roster for the whole repository; a federation is several independent teams. <a href="concepts.html#teams-and-federations">Details</a></td>
+              <td>One team, the default. You can promote it later.</td>
+            </tr>
+            <tr>
+              <td>Which profile?</td>
+              <td>The kind of team: a ready-made cast of roles for one type of work. <a href="concepts.html#choosing-a-profile">Details</a></td>
+              <td>The profile the coordinator proposes from your repository and request, or <code>default</code> if unsure.</td>
+            </tr>
+            <tr>
+              <td>Any packs?</td>
+              <td>Optional technology specialists added on top of the profile. The list can show every registered pack; it is a menu, not a recommendation. <a href="concepts.html#packs-are-optional">Details</a></td>
+              <td>None, unless your project is built on that technology. If a name is unclear, answer in your own words and ask what it adds.</td>
+            </tr>
+            <tr>
+              <td>Member names?</td>
+              <td>Optional names for the roster's members, which only matter when two rows share a role.</td>
+              <td>Skip.</td>
+            </tr>
+            <tr>
+              <td>How should approvals reach you?</td>
+              <td>Where the squad pings you when it needs a decision.</td>
+              <td>In chat (<code>in-chat</code>).</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Nothing is written before you confirm. Afterwards you can start a new conversation if you like: the squad reads its
+        state from <code>.copilot-tracking/squad/</code> at the start of every turn, so nothing is lost
+        (<a href="concepts.html#new-chats">why a new chat is safe</a>).
+      </p>
+
       <h2>4. Send a work request</h2>
       <p>After confirmation, send a separate work request. Use <code>mode=autopilot</code> to sequence the work while keeping required human approvals, or omit it to approve each step:</p>
       <pre><code>/squad request="add input validation to the login form" mode=autopilot</code></pre>
@@ -422,6 +494,12 @@ targets:
         before sending each request. Send the request text shown above without the <code>/squad</code>
         prefix. The <code>@squad.prompt.md</code> route remains available, but it adds intermediary agent
         calls and is slower.
+      </p>
+      <p>
+        Your message is plain text: the work you want, plus options such as <code>mode=autopilot</code>. In an agent chat you
+        do not need the <code>request="..."</code> wrapper, which is the name of the input that prompt files use. Every option
+        is listed in the <a href="concepts.html#message-reference">message reference</a>, and
+        <a href="concepts.html#autonomy-modes">interactive versus autopilot</a> explains which to choose.
       </p>
       <p>
         On a fresh project the coordinator inspects your repo and proposes a profile before creating
@@ -450,6 +528,14 @@ targets:
         full lifecycle and examples.
       </p>
 
+      <h2 id="find-your-results">5. Find your results and continue</h2>
+      <ul>
+        <li><strong>Deliverables</strong> land in fixed folders by role, such as <code>.copilot-tracking/research/</code>, <code>.copilot-tracking/plans/</code>, <code>.copilot-tracking/changes/</code>, <code>.copilot-tracking/reviews/</code> and <code>docs/</code>. <a href="concepts.html#where-deliverables-go">Where deliverables go</a> lists them all, and <a href="concepts.html#custom-deliverable-paths">Change where a role writes</a> shows how to point a role at your own folder.</li>
+        <li><strong>Decisions and history</strong> are in <code>decisions.md</code> and <code>history/&lt;agent&gt;.md</code>: why the squad chose something, and what each agent did. <a href="concepts.html#state-folder">The state folder</a> explains every file.</li>
+        <li><strong>Continuing</strong> needs no special step: start a new chat if you like, open the same folder, select the same agent and say what you want next. <a href="concepts.html#new-chats">Starting a new chat is safe</a>.</li>
+        <li><strong>A long run pausing?</strong> Autopilot does not remove your client's own approval prompts. <a href="concepts.html#squad-autopilot-vs-host-approvals">See what to change</a>.</li>
+      </ul>
+
       <h2>Optional: scaffold the Azure execution layer</h2>
       <p>
         If you seed the <code>azure</code> profile, the squad can scaffold an Azure build-and-deploy
@@ -466,9 +552,9 @@ targets:
       <p>See <a href="usage.html">Usage → Azure execution layer</a> for the full scaffolding flow.</p>
 
       <div class="pager">
-        <a class="prev" href="index.html">
+        <a class="prev" href="concepts.html">
           <div class="dir">← Back</div>
-          <div class="ttl">Home</div>
+          <div class="ttl">Concepts</div>
         </a>
         <a class="next" href="usage.html">
           <div class="dir">Next →</div>

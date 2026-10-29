@@ -1,4 +1,13 @@
 const french = {
+  concepts: [[
+    ['Squad Coach<br/>advice only, no state', 'Squad Coach<br/>conseils uniquement, aucun état'],
+    ['init<br/>create the team', 'init<br/>créer l’équipe'],
+    ['Work request<br/>research, plan, implement, review', 'Demande de travail<br/>recherche, plan, implémentation, revue'],
+    ['Deliverables<br/>research, plans, changes, reviews, docs', 'Livrables<br/>recherches, plans, changements, revues, docs'],
+    ['Team memory<br/>decisions.md, history/, state.json', 'Mémoire de l’équipe<br/>decisions.md, history/, state.json'],
+    ['New chat?<br/>resume from the files', 'Nouvelle conversation ?<br/>reprise depuis les fichiers'],
+    ['promote<br/>optional: one team becomes a federation', 'promote<br/>facultatif : une équipe devient une fédération'],
+  ]],
   usage: [
     [
       ['Issue labeled squad/auto', 'Issue portant l’étiquette squad/auto'],

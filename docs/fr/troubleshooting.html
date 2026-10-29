@@ -17,6 +17,7 @@
       <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Accueil</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html">Bien démarrer</a>
         <a href="usage.html">Utilisation</a>
         <a href="demo.html">Démonstration</a>
@@ -207,6 +208,25 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
         les règles de délégation et de sécurité. Une ligne dont l'agent Primary ne peut pas écrire dans la <em>racine des livrables (Deliverable Root)</em>
         du rôle est toujours incorrecte. Après toute montée de version de hve-core, relancez <code>apm install</code> et comparez les agents
         avec <code>scripts/Get-HveCoreCastDelta.ps1</code>.
+      </p>
+
+      <h3>L'initialisation liste des packs que mon projet n'utilise pas</h3>
+      <p>
+        C'est normal, et rien ne dysfonctionne. La question peut lister tous les packs enregistrés (par exemple Foundry, AWS
+        ou Microsoft 365 Copilot) comme un menu d'options ; ce n'est pas une recommandation, et chaque pack est facultatif. N'en
+        choisissez aucun sauf si votre projet repose sur cette technologie. Si une option n'est pas claire, répondez avec vos propres mots et demandez
+        ce qu'elle apporte et pourquoi votre projet en aurait besoin. Un pack peut être ajouté ou retiré plus tard sans recréer l'équipe. Voir
+        <a href="concepts.html#packs-are-optional">Concepts &rarr; Les packs sont facultatifs</a>.
+      </p>
+
+      <h3>Une longue exécution en autopilot s'interrompt pour faire approuver des modifications de fichiers ou des commandes</h3>
+      <p>
+        Ces invites viennent de votre client Copilot, pas de la squad. <code>mode=autopilot</code> détermine quelles décisions
+        de travail la squad vous soumet ; il ne change pas le fait que votre client demande avant de modifier un fichier ou d'exécuter une
+        commande. Approuvez-les, ou élevez le niveau d'autorisation du client pour cette session (le niveau d'autorisation de VS Code ou
+        <code>/yolo</code> ; <code>/allow-all</code> ou <code>--allow-all-tools</code> dans Copilot CLI), uniquement dans un dépôt de
+        confiance. N'activez pas le mode Autopilot propre à un client pour les contourner : il peut répondre à votre place aux questions d'approbation de la squad.
+        Voir <a href="concepts.html#squad-autopilot-vs-host-approvals">Concepts &rarr; L'autopilot de la squad n'est pas l'approbation de votre client</a>.
       </p>
 
       <h2>Problèmes liés au plafond de coût</h2>

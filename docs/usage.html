@@ -17,6 +17,7 @@
       <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Home</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html">Getting Started</a>
         <a href="usage.html" class="active">Usage</a>
         <a href="demo.html">Demo</a>
@@ -111,6 +112,13 @@
 /squad request="reduce onboarding drop-off" discovery=standard
 /squad request="build the booking service end to end" mode=autopilot cost-ceiling=20
 /squad request="run security research and implement" routing=manual</code></pre>
+      <p>
+        Every option is a <code>name=value</code> word in your message. <code>request</code> is the name of the input
+        that prompt files use to carry the work; in an agent chat you can simply write the request as plain text.
+        The <a href="concepts.html#message-reference">message reference</a> lists every input, and
+        <a href="concepts.html#init-promote-and-work-requests"><code>init</code>, <code>promote</code> and work requests</a>
+        explains the setup messages.
+      </p>
 
       <figure class="video-figure">
         <video controls preload="metadata" playsinline>
@@ -124,7 +132,7 @@
         </figcaption>
       </figure>
 
-      <h2>Autonomy modes</h2>
+      <h2 id="autonomy-modes">Autonomy modes</h2>
       <p>How much the squad does before it asks you:</p>
       <table>
         <thead>
@@ -144,16 +152,30 @@
           <tr>
             <td><code>mode=autopilot</code></td>
             <td><code>mode=autopilot</code></td>
-            <td>The squad runs research → plan → implement → review on its own and asks you <strong>only</strong> for impactful actions (deploy, <code>git push</code>, merge, schema/data changes) and to validate the <strong>final outcome</strong>.</td>
+            <td>The squad runs research → plan → implement → review on its own and stops to ask you before impactful actions (deploy, <code>git push</code>, merge, schema/data changes), on risk signals (a council <em>Stop</em> verdict, a high-risk finding, a cost ceiling that would be exceeded) and to validate the <strong>final outcome</strong>.</td>
           </tr>
         </tbody>
       </table>
       <p>
         Autopilot is the "tell it once, let it run" mode: it sequences the whole pipeline
         autonomously but always stops for a human before anything irreversible and before release.
-        The two impactful/final stop-points fire a notification through the approval channel you
+        Each of these stop-points fires a notification through the approval channel you
         choose at build time (interactive mode pings you at every step instead).
       </p>
+      <div class="callout">
+        <p>
+          <strong>Where you choose it.</strong> Add <code>mode=autonomous</code> or <code>mode=autopilot</code> to a
+          work request, or omit <code>mode</code> to stay interactive. It is a word in the message, not a client
+          setting, and <code>init</code> and <code>promote</code> never use it: you confirm each proposal.
+        </p>
+        <p>
+          <strong>Autopilot does not remove your client's own prompts.</strong> Squad modes decide which
+          <em>work decisions</em> reach you; your client separately decides whether it asks before editing files or
+          running commands, so a long run can still pause on those prompts. See
+          <a href="concepts.html#squad-autopilot-vs-host-approvals">Squad autopilot is not your client's approvals</a>
+          for what to change, and why a client's own Autopilot mode should not be switched on alongside it.
+        </p>
+      </div>
 
 
       <h2 id="script-backed-coordination">Script-backed coordination</h2>
@@ -449,7 +471,7 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         and root-writer unit at a time so the federation can stop at the shared boundary.
       </p>
 
-      <h2>Discovery gate &mdash; when there is nothing written down yet</h2>
+      <h2 id="discovery-gate-when-there-is-nothing-written-down-yet">Discovery gate &mdash; when there is nothing written down yet</h2>
       <p>
         Two gates run ahead of the work, and they fire on <strong>opposite</strong> triggers. The
         discovery gate fires when there is <strong>no</strong> input artifact and <em>produces</em>
@@ -550,7 +572,7 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         instead.
       </p>
 
-      <h2>Requirements intake gate</h2>
+      <h2 id="requirements-intake-gate">Requirements intake gate</h2>
       <p>
         When a run is grounded in requirement or input artifacts &mdash; a PRD, BRD, spec, user
         story, design doc, transcript, or a file you point the squad at &mdash; the coordinator runs
@@ -879,7 +901,7 @@ flowchart TD
     B --> F["notifications.md — append-only ping log"]
       </div>
 
-      <h2>First run (Init Mode)</h2>
+      <h2 id="first-run-init-mode">First run (Init Mode)</h2>
       <p>
         When a project has no <code>.copilot-tracking/squad/team.md</code>, the coordinator proposes a
         squad profile and asks whether to proceed. If you decline, you can pick a different profile or
@@ -897,6 +919,14 @@ flowchart TD
         several named sub-squads. Choosing a federation hands off to <code>/squad-federation</code>
         (see below); choosing a single squad keeps the flow above unchanged.
       </p>
+      <p>
+        Init asks, in this order: one team or a federation, the profile and any packs (or a custom roster), member
+        names, and the approval channel. It stops once the state files exist: <code>init</code> on its own produces
+        no research, plan or other deliverable, and sending a work request to a project with no team runs Init
+        first and then continues with your request.
+        <a href="getting-started.html#initialize-the-squad">Getting Started</a> explains each question and a safe
+        first answer.
+      </p>
 
       <h2 id="federation">Federation &mdash; several sub-squads in one repo</h2>
       <p>
@@ -905,7 +935,9 @@ flowchart TD
         architects. It is <strong>opt-in and additive</strong>: a repository that never opts in behaves
         exactly like a single squad. Each sub-squad is an <em>ordinary</em> squad &mdash; same roster,
         routing, decisions, history, and consumption &mdash; only rooted at
-        <code>.copilot-tracking/squad/members/&lt;name&gt;/</code> instead of the top level.
+        <code>.copilot-tracking/squad/members/&lt;name&gt;/</code> instead of the top level. New to the terms?
+        <a href="concepts.html#teams-and-federations">Concepts &rarr; Teams and federations</a> defines team,
+        federation and sub-squad first.
       </p>
       <pre><code># Build a federation (propose → confirm → create)
 /squad-federation init
@@ -951,12 +983,14 @@ flowchart TD
         swap a profile, add or remove a sub-squad, or build a custom roster for any of them.
       </p>
 
-      <h3>Promote a single squad to a federation</h3>
+      <h3 id="promote-a-single-squad-to-a-federation">Promote a single squad to a federation</h3>
       <p>
         If you started on an older version with a <strong>single squad</strong> and now want the
         federation shape for a more complex, multi-team or multi-domain project, you do not start over.
         Promotion <strong>adopts your existing squad into a federation as
-        its first sub-squad</strong>, moving its state intact rather than rebuilding it.
+        its first sub-squad</strong>, moving its state intact rather than rebuilding it. It is a setup
+        step like <code>init</code>: it asks you to confirm and starts no work of its own, as
+        <a href="concepts.html#init-promote-and-work-requests">Concepts</a> compares side by side.
       </p>
       <pre><code># Promote the current single squad into a federation
 /squad-federation promote
@@ -1100,8 +1134,13 @@ flowchart TD
         </figcaption>
       </figure>
 
-      <h2>Profiles</h2>
-      <p>The cast each profile seeds:</p>
+      <h2 id="profiles">Profiles</h2>
+      <p>
+        A profile is the kind of team you are creating: a ready-made cast of roles for one type of work.
+        You pick exactly one when the squad is initialized, and it is a starting set rather than a ceiling. Not
+        sure which fits? <a href="concepts.html#choosing-a-profile">Concepts &rarr; Choosing a profile</a> maps
+        common kinds of work to a profile in plain language. The cast each profile seeds:
+      </p>
       <table>
         <thead>
           <tr><th>Profile</th><th>Members</th><th>Use when</th></tr>
@@ -1165,7 +1204,15 @@ flowchart TD
         gap you discover halfway through a turn.
       </p>
 
-      <h2>Packs</h2>
+      <h2 id="packs">Packs</h2>
+      <div class="callout">
+        <p>
+          <strong>Packs are optional.</strong> Skip them unless your project is built on that technology;
+          choosing no pack is a normal answer. The initialization question can list every registered pack, but
+          that list is a menu, not a recommendation. See
+          <a href="concepts.html#packs-are-optional">Concepts &rarr; Packs are optional</a>.
+        </p>
+      </div>
       <p>
         A profile answers <em>what kind of work is this</em>. A <strong>pack</strong> answers
         <em>what is it built on</em>. You pick exactly one profile and layer zero or more packs on top,
@@ -1368,7 +1415,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
         could not serve &mdash; two verticals at once, where a profile makes you pick one.
       </p>
 
-      <h2>Profile, pack, or federation?</h2>
+      <h2 id="profile-pack-or-federation">Profile, pack, or federation?</h2>
       <p>
         Three things can add capability, and it is easy to reach for the wrong one. The rule is short:
       </p>
