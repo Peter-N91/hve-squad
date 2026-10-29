@@ -6,6 +6,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:SkillRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Resolve-SquadConnectorDispatch.ps1')
+. (Join-Path $PSScriptRoot 'SquadAgentDiscovery.ps1')
 
 function Read-SquadTables {
     param([Parameter(Mandatory)][string]$Path)
@@ -71,38 +72,23 @@ function Resolve-SquadRepositoryPath {
 
 function Get-SquadAgentIndex {
     param([Parameter(Mandatory)][string]$RepoRoot)
-    $artifactRoot = Split-Path -Parent (Split-Path -Parent $script:SkillRoot)
     $index = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
-    $bases = @(
-        (Join-Path $RepoRoot '.github' 'agents'),
-        (Join-Path $RepoRoot '.agents' 'agents'),
-        (Join-Path $RepoRoot '.claude' 'agents'),
-        (Join-Path $artifactRoot 'agents'),
-        (Join-Path (Split-Path -Parent $artifactRoot) 'agents'),
-        (Join-Path (Split-Path -Parent $artifactRoot) 'hve-squad-hve-core' '.github' 'agents'),
-        (Join-Path (Split-Path -Parent $artifactRoot) 'hve-core' '.github' 'agents'),
-        (Join-Path (Split-Path -Parent $artifactRoot) 'hve-core' 'agents')
-    ) | Select-Object -Unique
-    foreach ($base in $bases) {
-        if (-not (Test-Path -LiteralPath $base -PathType Container)) { continue }
-        foreach ($file in Get-ChildItem -LiteralPath $base -Recurse -File -Filter '*.agent.md' | Sort-Object FullName) {
-            if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
-            $text = [IO.File]::ReadAllText($file.FullName).TrimStart([char]0xfeff) -replace "`r`n", "`n"
-            $match = [regex]::Match($text, '\A---\n(?<front>.*?)\n---(?:\n|$)', 'Singleline')
-            if (-not $match.Success) { continue }
-            $front = $match.Groups['front'].Value
-            $name = [regex]::Match($front, '(?m)^name:[ \t]*(?<value>[^\n]+)$')
-            if (-not $name.Success) { continue }
-            $identity = $name.Groups['value'].Value.Trim().Trim('"', "'")
-            if ($index.ContainsKey($identity)) { continue }
-            $pin = [regex]::Match($front, '(?m)^model:[ \t]*(?<value>[^\n]+)$')
-            $index.Add($identity, [pscustomobject]@{
-                    name = $identity
-                    path = $file.FullName
-                    dispatchable = $front -notmatch '(?m)^disable-model-invocation:[ \t]*true[ \t]*(?:#.*)?$'
-                    model = $(if ($pin.Success) { $pin.Groups['value'].Value.Trim().Trim('"', "'") } else { '' })
-                })
-        }
+    foreach ($file in Get-SquadAgentFile -RepoRoot $RepoRoot -ScriptRoot $PSScriptRoot) {
+        $text = [IO.File]::ReadAllText($file.FullName).TrimStart([char]0xfeff) -replace "`r`n", "`n"
+        $match = [regex]::Match($text, '\A---\n(?<front>.*?)\n---(?:\n|$)', 'Singleline')
+        if (-not $match.Success) { continue }
+        $front = $match.Groups['front'].Value
+        $name = [regex]::Match($front, '(?m)^name:[ \t]*(?<value>[^\n]+)$')
+        if (-not $name.Success) { continue }
+        $identity = $name.Groups['value'].Value.Trim().Trim('"', "'")
+        if ($index.ContainsKey($identity)) { continue }
+        $pin = [regex]::Match($front, '(?m)^model:[ \t]*(?<value>[^\n]+)$')
+        $index.Add($identity, [pscustomobject]@{
+                name = $identity
+                path = $file.FullName
+                dispatchable = $front -notmatch '(?m)^disable-model-invocation:[ \t]*true[ \t]*(?:#.*)?$'
+                model = $(if ($pin.Success) { $pin.Groups['value'].Value.Trim().Trim('"', "'") } else { '' })
+            })
     }
     return ,$index
 }

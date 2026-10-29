@@ -96,7 +96,7 @@ function Get-Tier0TestPlan {
         }
         @{
             Scope = 'Repository'; Shard = 'Coordinator'; Directory = 'tier0'
-            Files = @('CoordinatorRuntime.Tests.ps1')
+            Files = @('CoordinatorRuntime.Tests.ps1', 'AgentDiscovery.Tests.ps1')
         }
     )
 

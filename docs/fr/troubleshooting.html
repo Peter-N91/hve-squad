@@ -45,6 +45,10 @@
       <h3>CLI ou App ne trouve pas le coordinateur ou un spécialiste</h3>
       <p>Vérifiez que <code>hve-squad</code> et <code>hve-squad-hve-core</code> sont tous deux installés dans le répertoire de plugins du client actuel. Sélectionnez l'agent coordinateur, et non un skill, puis demandez <code>squad-doctor</code>. Suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">guide du plugin</a> pour les domaines manquants et les réinstallations du compagnon. Une mise à jour depuis le terminal ne met pas à jour une application utilisant un autre <code>COPILOT_HOME</code>.</p>
 
+      <h3>VS Code signale des agents HVE Core absents alors que les deux plugins sont activés</h3>
+      <p data-release-change="20261029-synced-plugin-agent-discovery">Le harnais Copilot de VS Code peut copier les plugins dans des répertoires versionnés distincts. Le coordinateur Squad transmet les racines des plugins actifs annoncées par cet hôte à ses scripts via le tableau JSON <code>SQUAD_ACTIVE_PLUGIN_ROOTS</code>, limité au processus. Ce n'est pas un paramètre VS Code ; aucune configuration manuelle n'est nécessaire lorsque l'hôte expose ces chemins. Les agents du dépôt restent prioritaires et la découverte des plugins voisins dans CLI/App reste disponible lorsque cet inventaire n'est pas défini.</p>
+      <p>Les agents déployés dans le dépôt par le harnais Local utilisent la découverte existante sans cet inventaire. Pour le harnais Copilot, mettez à jour le plugin Squad et démarrez une nouvelle conversation. Si l'hôte n'expose pas les chemins des personnalisations actives, la découverte reste indéterminée : fournissez ces chemins depuis les personnalisations activées de l'hôte actuel, plutôt que de réinstaller HVE Core, supprimer un rôle ou parcourir d'anciens caches de plugins. La présence d'un fichier installé ne prouve pas que son agent est disponible pour une délégation native.</p>
+
       <h3>Exactement 11 dépendances échouent pendant <code>apm install</code></h3>
       <p>
         Il s'agit d'une régression connue d'APM, et non d'un problème de réseau ou d'environnement du projet. Les résultats

@@ -287,6 +287,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'SquadAgentDiscovery.ps1')
 [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::InvariantCulture
 
 function Stop-Handoff {
@@ -688,28 +689,21 @@ function Test-ModelLabel {
 }
 
 function Find-AgentPin {
-    # Returns @{ Found; Models[] } from the agent's frontmatter under the repository agent folders.
+    # Returns @{ Found; Models[] } with the same discovery precedence as dispatch planning.
     param([string]$AgentName)
-    # Repository folders first (the flattened .github/agents layout included), then the installed plugin's agents/ beside this skill.
-    $bases = @()
-    if ($RepoBase) { $bases += @('.github/agents', '.agents/agents', '.claude/agents') | ForEach-Object { Join-Path $RepoBase $_ } }
-    $bases += @((Join-Path $PSScriptRoot '../../../agents'), (Join-Path $PSScriptRoot '../../agents'), (Join-Path $PSScriptRoot '../agents'))
-    foreach ($base in $bases) {
-        if (-not (Test-Path -LiteralPath $base -PathType Container)) { continue }
-        foreach ($file in (Get-ChildItem -LiteralPath $base -Recurse -File -Filter '*.md')) {
-            $lines = @([System.IO.File]::ReadLines($file.FullName) | Select-Object -First 40)
-            if ($lines.Count -lt 2 -or $lines[0].Trim() -ne '---') { continue }
-            $name = $null
-            $modelText = $null
-            for ($i = 1; $i -lt $lines.Count -and $lines[$i].Trim() -ne '---'; $i++) {
-                if ($lines[$i] -match '^name:\s*(.+?)\s*$') { $name = $Matches[1].Trim('"', "'") }
-                elseif ($lines[$i] -match '^model:\s*(.+?)\s*$') { $modelText = $Matches[1] }
-            }
-            if ($name -ceq $AgentName) {
-                $models = @()
-                if ($modelText) { $models = @($modelText.Trim('[', ']').Split(',') | ForEach-Object { ConvertFrom-ModelPin $_ } | Where-Object { $_ }) }
-                return @{ Found = $true; Models = $models }
-            }
+    foreach ($file in Get-SquadAgentFile -RepoRoot $RepoBase -ScriptRoot $PSScriptRoot) {
+        $lines = @([System.IO.File]::ReadLines($file.FullName) | Select-Object -First 40)
+        if ($lines.Count -lt 2 -or $lines[0].Trim() -ne '---') { continue }
+        $name = $null
+        $modelText = $null
+        for ($i = 1; $i -lt $lines.Count -and $lines[$i].Trim() -ne '---'; $i++) {
+            if ($lines[$i] -match '^name:\s*(.+?)\s*$') { $name = $Matches[1].Trim('"', "'") }
+            elseif ($lines[$i] -match '^model:\s*(.+?)\s*$') { $modelText = $Matches[1] }
+        }
+        if ($name -ceq $AgentName) {
+            $models = @()
+            if ($modelText) { $models = @($modelText.Trim('[', ']').Split(',') | ForEach-Object { ConvertFrom-ModelPin $_ } | Where-Object { $_ }) }
+            return @{ Found = $true; Models = $models }
         }
     }
     return @{ Found = $false; Models = @() }
