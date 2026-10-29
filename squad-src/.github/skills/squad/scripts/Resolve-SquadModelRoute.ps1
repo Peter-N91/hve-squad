@@ -29,8 +29,8 @@
     within its own floor, and every other role
     keeps its ranked pick. Under `economy` every role also reports `escalation` (for an
     economy pick cheaper than its ranked pick, that ranked pick: the one re-dispatch
-    target; otherwise empty) and `pin` (its agent's frontmatter `model:`, from the
-    repository or the installed plugin's `agents/` folder).
+    target; otherwise empty) and `pin` (its agent's frontmatter `model:`, using
+    the shared repository/active-plugin discovery order).
     Under `economy` the report also carries `consent`: `recorded` when `decisions.md`
     beside `team.md` holds a `## Economy Mode Accepted` entry, else `missing` with a
     warning. Missing consent never refuses. Other modes carry no `consent` field.
@@ -93,6 +93,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::InvariantCulture
 . (Join-Path $PSScriptRoot 'ModelBenchmarkScoring.ps1')
+. (Join-Path $PSScriptRoot 'SquadAgentDiscovery.ps1')
 $ScoringPolicy = Get-SquadBenchmarkPolicy
 
 $ReferencesRoot = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'references'
@@ -570,24 +571,19 @@ function Get-AgentPinLocal {
     param([string]$AgentName, [string]$Root)
 
     if (-not $AgentName) { return $null }
-    # Same search order as Find-AgentPin in Write-SquadHandoff.ps1.
-    $bases = @()
+    $repo = ''
     $match = [regex]::Match(($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Root) -replace '\\', '/'), '^(?<repo>.*?)/\.copilot-tracking(/|$)')
-    if ($match.Success) { $bases += @('.github/agents', '.agents/agents', '.claude/agents') | ForEach-Object { Join-Path $match.Groups['repo'].Value $_ } }
-    $bases += @((Join-Path $PSScriptRoot '../../../agents'), (Join-Path $PSScriptRoot '../../agents'), (Join-Path $PSScriptRoot '../agents'))
-    foreach ($base in $bases) {
-        if (-not (Test-Path -LiteralPath $base -PathType Container)) { continue }
-        foreach ($file in (Get-ChildItem -LiteralPath $base -Recurse -File -Filter '*.md')) {
-            $lines = @([System.IO.File]::ReadLines($file.FullName) | Select-Object -First 40)
-            if ($lines.Count -lt 2 -or $lines[0].Trim() -ne '---') { continue }
-            $name = $null
-            $model = $null
-            for ($i = 1; $i -lt $lines.Count -and $lines[$i].Trim() -ne '---'; $i++) {
-                if ($lines[$i] -match '^name:\s*(.+?)\s*$') { $name = $Matches[1].Trim('"', "'") }
-                elseif ($lines[$i] -match '^model:\s*(.+?)\s*$') { $model = (($Matches[1].Trim('[', ']').Split(',')[0]).Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() }
-            }
-            if ($name -ceq $AgentName) { return $model }
+    if ($match.Success) { $repo = $match.Groups['repo'].Value }
+    foreach ($file in Get-SquadAgentFile -RepoRoot $repo -ScriptRoot $PSScriptRoot) {
+        $lines = @([System.IO.File]::ReadLines($file.FullName) | Select-Object -First 40)
+        if ($lines.Count -lt 2 -or $lines[0].Trim() -ne '---') { continue }
+        $name = $null
+        $model = $null
+        for ($i = 1; $i -lt $lines.Count -and $lines[$i].Trim() -ne '---'; $i++) {
+            if ($lines[$i] -match '^name:\s*(.+?)\s*$') { $name = $Matches[1].Trim('"', "'") }
+            elseif ($lines[$i] -match '^model:\s*(.+?)\s*$') { $model = (($Matches[1].Trim('[', ']').Split(',')[0]).Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() }
         }
+        if ($name -ceq $AgentName) { return $model }
     }
     return $null
 }

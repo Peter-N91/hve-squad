@@ -45,6 +45,10 @@
       <h3>CLI or App cannot find the coordinator or a specialist</h3>
       <p>Confirm that both <code>hve-squad</code> and <code>hve-squad-hve-core</code> are installed in the current client's plugin home. Select the coordinator agent, not a skill, then ask for <code>squad-doctor</code>. Follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">plugin guide</a> for missing domains and companion reinstalls. A terminal update does not update an app using another <code>COPILOT_HOME</code>.</p>
 
+      <h3>VS Code reports HVE Core agents missing even though both plugins are enabled</h3>
+      <p data-release-change="20261029-synced-plugin-agent-discovery">VS Code's Copilot harness can copy plugins into separate versioned directories. Squad's coordinator passes the active plugin roots advertised by that host to its scripts through the process-local <code>SQUAD_ACTIVE_PLUGIN_ROOTS</code> JSON array. This is not a VS Code setting; no manual configuration change is needed when the host exposes those paths. Repository-local agents keep priority, and CLI/App sibling-plugin discovery remains available when this inventory is unset.</p>
+      <p>The Local harness's repository-deployed agents use the existing discovery path without this inventory. For the Copilot harness, update the Squad plugin and start a fresh chat. If the host does not expose active customization paths, discovery remains unresolved: provide those paths from the current host's enabled customizations rather than reinstalling HVE Core, dropping a role, or scanning old plugin caches. An installed file is not proof that its agent is available for native dispatch.</p>
+
       <h3>Exactly 11 dependencies fail during <code>apm install</code></h3>
       <p>
         This is a known APM regression, not a network or project-environment problem. The tested
