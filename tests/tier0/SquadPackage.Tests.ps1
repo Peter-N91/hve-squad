@@ -469,3 +469,44 @@ Describe 'GATE-46 Watch Mode per-case/per-ask squad selection and full RPI lifec
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('rather than as lifecycle-enforcement parity'))
     }
 }
+
+Describe 'GATE-46 canonical selection and complete spine' -Tag 'Unit' {
+    BeforeAll {
+        $script:ShippedFederation = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/federation.md') -Raw
+        $script:ShippedWatch = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -Raw
+    }
+
+    It 'ships one current-run profile selection and the complete spine' {
+        $script:ShippedFederation | Should -Match 'exactly one current-run'
+        $script:ShippedFederation | Should -Match 'researcher`, `lead`, `developer`, `tester`, `scribe'
+        $script:ShippedWatch | Should -Match 'Test-SquadWatchProfileSelection'
+    }
+}
+
+Describe 'GATE-47 canonical encoded Open Questions' -Tag 'Unit' {
+    BeforeAll {
+        $script:ShippedQuestions = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-cold-gates-and-verdicts.md') -Raw
+        $script:ShippedWatch = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -Raw
+    }
+
+    It 'ships bounded inert Open Questions rendering' {
+        $script:ShippedQuestions | Should -Match 'squad-watch-open-questions:start'
+        $script:ShippedQuestions | Should -Match 'OQ-WATCH-NNN'
+        $script:ShippedWatch | Should -Match 'ConvertTo-SquadWatchOpenQuestionsMarkdown'
+    }
+}
+
+Describe 'GATE-48 trusted PR issue routing publication reconciliation and source pinning' -Tag 'Unit' {
+    BeforeAll {
+        $script:ShippedWatch = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -Raw
+        $script:ShippedDelivery = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.Delivery.ps1') -Raw
+    }
+
+    It 'ships resolver outputs and fast-forward publication reconciliation' {
+        $script:ShippedWatch | Should -Match 'Resolve-SquadWatchDelivery'
+        $script:ShippedDelivery | Should -Match 'trustedBaseSha'
+        $script:ShippedDelivery | Should -Match 'reconcilePublication'
+        $script:ShippedDelivery | Should -Match 'gh pr create --draft'
+        $script:ShippedDelivery | Should -Match 'force push'
+    }
+}

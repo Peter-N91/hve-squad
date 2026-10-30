@@ -567,9 +567,9 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         <code>/squad</code>, a repository event starts the run. The shipped pattern turns a
         <strong>new issue labeled <code>squad/auto</code></strong> into a headless
         <code>mode=autopilot</code> run that opens a <strong>draft pull request</strong> which closes
-        the issue. It reuses everything you already configured &mdash; the autopilot pipeline, the
-        council, and the <code>github-issue</code> approval channel &mdash; so a gate still pauses for
-        your approval from a phone.
+        the issue. It reuses the autopilot pipeline, the
+        council, and the <code>github-issue</code> approval channel. Impactful-Action Gates still never
+        proceed unattended.
       </p>
       <div class="mermaid">
 flowchart TD
@@ -587,8 +587,8 @@ flowchart TD
       <p>
         The issue title and body are always treated as <strong>data, never instructions</strong>: the
         run reads them as the task description and never as commands that change its roster, routing,
-        gates, or approvals. The run opens a draft PR only &mdash; it never merges, force-pushes, or
-        deploys; those stay human-approved gates, backed by your branch protection.
+        gates, or approvals. Injection safety is unchanged. The run opens a draft PR only. It never merges, force-pushes, or
+        deploys. Those stay human-approved gates, backed by your branch protection. The figure above is the labeled-issue path.
       </p>
 
       <h3>Enable Watch Mode (one-time)</h3>
@@ -616,7 +616,7 @@ flowchart TD
         <li>
           <strong>Install the trigger workflow.</strong> Copy the reference workflow
           <code>.github/skills/squad/squad-watch.workflow.yml</code> to
-          <code>.github/workflows/squad-watch.yml</code>, review it, and commit it.
+          <code>.github/workflows/squad-watch.yml</code>, review it as a non-turnkey scaffold, and commit it only after you isolate credentials and the apply boundary. Copying the file is not security parity.
         </li>
         <li>
           <strong>Install the approval watcher</strong> (if you have not already) so gate approvals
@@ -624,8 +624,9 @@ flowchart TD
           <code>.github/workflows/squad-approval-watcher.yml</code>.
         </li>
         <li>
-          <strong>Label an issue <code>squad/auto</code></strong> to start a run. Only a repository
-          collaborator with write access can trigger it; an unauthorized label is ignored and noted
+          <strong>Label an issue <code>squad/auto</code></strong> to start a run. Only an actor with
+          repository permission write, maintain, or admin can trigger it. A registered approver without
+          that permission cannot start a run. An unauthorized label is ignored and noted
           on the issue.
         </li>
       </ol>
@@ -640,8 +641,8 @@ flowchart TD
 gh issue edit 42 --add-label squad/auto</code></pre>
       <p>
         Labeling is the signal: the <code>issues: [labeled]</code> event fires, the workflow checks the
-        label is <code>squad/auto</code> and the labeler has write access, and the run begins. One run
-        stays active per issue (a re-label will not start a second, competing run). The
+        label is <code>squad/auto</code> and the labeler has permission write, maintain, or admin, and the run begins. One complete
+        delivery runs at a time for the repository. A re-label does not start a competing interpretation of the same completed event. The
         <code>squad/auto</code> trigger label is separate from the <code>squad/*</code> approval labels
         (<code>squad/approved</code>, <code>squad/stop</code>, &hellip;) the approval watcher reads at a
         gate.
@@ -649,7 +650,8 @@ gh issue edit 42 --add-label squad/auto</code></pre>
       <p>
         Watch Mode is opt-in and in-repo only for now: an unlabeled issue does nothing, and pull
         requests from forks never start a privileged run (the workflow never uses
-        <code>pull_request_target</code>).
+        <code>pull_request_target</code>). A fork comment is rejected and falls back to
+        <code>pr-&lt;N&gt;</code> without widening authorization.
       </p>
 
       <h3>Optional: a New Issue template for <code>squad/auto</code></h3>
@@ -670,8 +672,11 @@ gh issue edit 42 --add-label squad/auto</code></pre>
         The contract (<code>.github/instructions/squad/squad-watch-mode.instructions.md</code>) defines
         how any repository event becomes a routed run: the trigger only supplies the event payload as
         data, and the coordinator's routing table picks the role. The shipped reference workflow wires
-        <strong>all of them in one file</strong> &mdash; a single <em>Prepare run</em> step authorizes the
-        actor, enforces fork-safety, and builds the routed prompt for whichever event fired.
+        <strong>all of them in one file</strong>. A single <em>Prepare run</em> step authorizes the
+        actor and enforces fork-safety, then builds the routed prompt. The template does not claim the
+        live issue-to-PR mapping. When that mapping does not apply, the live workflow fails closed to
+        <code>pr-&lt;N&gt;</code>. A mapped pull-request comment runs in
+        <code>issue-&lt;N&gt;</code> with the issue as the stable thread ref.
       </p>
       <table>
         <thead>
@@ -693,13 +698,13 @@ gh issue edit 42 --add-label squad/auto</code></pre>
           <tr>
             <td>Pull request</td>
             <td>Apply a <code>squad/review</code> label to a same-repo PR</td>
-            <td>Routes to the <code>tester</code> role &rarr; review comments on the PR</td>
+            <td>Joins the issue sub-squad when the live workflow maps it; otherwise fails closed to pr-&lt;N&gt; and the <code>tester</code> role posts review comments on the PR</td>
             <td>Yes</td>
           </tr>
           <tr>
             <td>Comment command</td>
-            <td>Comment <code>/squad &lt;request&gt;</code> on an issue or PR</td>
-            <td>Routes per the command &rarr; per-role outcome</td>
+            <td>Conversation-tab comment <code>/squad &lt;request&gt;</code> on an issue or PR. Review events are not subscribed</td>
+            <td>Routes per the command &rarr; per-role outcome. A pull-request comment joins the issue sub-squad only when the live workflow maps it; otherwise it fails closed to pr-&lt;N&gt;</td>
             <td>Yes</td>
           </tr>
           <tr>
@@ -774,8 +779,8 @@ on:
       <p>
         The names are deterministic, so you always know where to look:
       </p>
-      <pre><code>issue-123                   # an issue, or a /squad comment on it
-pr-456                      # a PR review, or a /squad comment on the PR
+      <pre><code>      issue-123                   # an issue, a comment on it, or a mapped pull-request comment
+      pr-456                      # an unmapped pull-request review or comment
 sweep-2026-07-27            # a scheduled maintenance sweep
 push-release-2-0-a1b2c3d    # a push to release/2.0 at commit a1b2c3d
 dispatch-9911223344         # a free-form manual dispatch (workflow run id)</code></pre>
@@ -792,6 +797,129 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
       <p>
         These sub-squads are <strong>kept</strong> &mdash; they are the audit trail, so nothing prunes
         them automatically. Archiving or removing one is a deliberate thing you ask for.
+      </p>
+
+      <h3>What every Watch run does</h3>
+      <p>
+        Every Watch Mode run executes the full pipeline: Research, Plan, Council when it applies,
+        Implement, and Review. A council that does not apply stays visible as
+        <code>Dispatch Record: n/a</code> with a short reason. It is not a fabricated dispatch.
+      </p>
+      <p>
+        The run selects exactly one canonical profile, and any packs, from the demand. It records
+        that selection and does not ask or notify when selection succeeds. Publication requires the
+        roster to equal that pinned catalog profile. A selected pack is not published until a trusted
+        installed-pack inventory exists (a documented fail-closed limitation, not an unchecked roster).
+        An incomplete profile or an extra role fails closed.
+        Authorization, Risk,
+        Impactful-Action, council, collision, and missing-role escalations stay visible. Every roster
+        carries the <code>researcher</code>, <code>lead</code>, <code>developer</code>,
+        <code>tester</code>, and <code>scribe</code> spine. Packs add roles. They never replace the
+        spine, and the roster is never built by copying a sibling sub-squad.
+      </p>
+      <p>
+        The pull-request body and the source-thread comment render the validated, encoded Open
+        Questions rows of the current run, and the pull request is always a draft. That slice starts at
+        the single <code>## Watch Profile Selection</code> heading whose run id equals the trusted
+        resolver run id. Earlier runs are not current requirements. A later or duplicate selection
+        heading fails closed and does not truncate the run. A heading inside a completed fence or DATA
+        frame is quoted text, not a boundary. Every council verdict in the slice counts, with ids
+        unique per verdict and finding:
+        <code>COUNCIL-&lt;verdict-ordinal&gt;-&lt;ROLE&gt;-RISK</code> and
+        <code>COUNCIL-&lt;verdict-ordinal&gt;-&lt;ROLE&gt;-COND-&lt;n&gt;</code>. A missing derivable id
+        fails closed and posts only a generic failure. Cells neutralize
+        bare domains and emails without changing <code>OQ-WATCH-###</code>,
+        <code>decisions.md#anchor</code>, or <code>owner/repo#N</code>. A no-material numeric-thread
+        comment renders the staging artifact only after member, run id, thread, stable ref, and trusted
+        base match the resolver. A mismatch posts the generic failure and opens no pull request.
+        Documented limitation: that comment evidence is produced in the same read-only job as the model.
+        The resolver binding makes it self-consistent, but it is not independently attested; a job split
+        would be needed. The
+        pull-request body, review comment, and issue-less summary receive the same bindings. A
+        <code>Stop</code> verdict still stops Implement. Impactful-Action Gates and injection safety
+        are unchanged: payload text is data, and the run never merges, force-pushes, deploys, or
+        writes to a live tracker. This change adds no main merge, schema change, review-event
+        subscription, or new autonomy. Historical <code>A-B-A</code> replay remains unsupported.
+      </p>
+
+      <h3>One delivery at a time</h3>
+      <p>
+        One complete Watch delivery runs at a time per repository. The workflow concurrency is
+        <code>queue: max</code>: it keeps at most 100 pending runs, and retained runs start FIFO by
+        queue-entry time. That is a throughput trade-off, not a per-issue lock. Authorization is
+        unchanged. An issue, issue comment, or <code>workflow_dispatch</code> actor needs repository
+        permission <code>write</code>, <code>maintain</code>, or <code>admin</code>. A registered
+        approver without one of those permissions cannot start a run. A labeled same-repository pull
+        request keeps its label gate. The template schedule and push rules are unchanged.
+      </p>
+
+      <h3>Pull-request comments and publication</h3>
+      <p>
+        The Conversation tab is the only supported pull-request comment channel. A
+        <code>/squad</code> comment there joins the issue sub-squad <code>issue-&lt;N&gt;</code> only
+        when the pull request is in the same repository, open, on branch
+        <code>squad/issue-&lt;N&gt;</code>, authored by <code>github-actions[bot]</code>, and the actor
+        is authorized. Otherwise the comment stays in <code>pr-&lt;N&gt;</code>. Mapping also fails closed when
+        <code>.github/workflows/squad-watch.yml</code> is absent at <code>trustedBaseSha</code>. Review and
+        review-comment events are not subscribed. A fork pull-request comment is rejected and falls
+        back to <code>pr-&lt;N&gt;</code> without widening authorization. A PAT or GitHub App publisher
+        is not <code>github-actions[bot]</code>, so mapping fails closed and the identity falls back
+        to <code>pr-&lt;N&gt;</code>.
+      </p>
+      <p>
+        Issue 42 and pull request 99 are the mapped example: the run is in <code>issue-42</code>
+        with stable thread ref <code>owner/repo#42</code>, where state stays. Comments and review
+        target thread 99, and publication uses <code>squad/issue-42</code> and pull request 99 only.
+        The Source allowlist uses that resolved thread, <code>owner/repo#99</code>, not
+        <code>owner/repo#42</code>.
+        Resolver outputs are
+        <code>member</code>, <code>stableRef</code>, <code>sourceThread</code>,
+        <code>sourceThreadNumber</code>, <code>publicationBranch</code>, <code>existingPr</code>,
+        <code>sourceSha</code>, and <code>trustedBaseSha</code>. <code>trustedBaseSha</code> is
+        independent of <code>sourceSha</code>. Publication checks out the pinned
+        <code>sourceSha</code> and fast-forwards only. Apply downloads the patch when the publication
+        branch already exists and the run has changes, including a tracking-only update, and rejects a
+        patch whose current-run <code>decisions.md</code> lacks a required question. Apply revalidation
+        keeps the resolver <code>stableRef</code> and <code>trustedBaseSha</code>, so a material draft
+        body renders the required questions rather than the generic failure. If that branch
+        moved, publication fails closed. An expected branch that disappeared after resolution is not
+        recreated. The workflow never force-pushes. <code>Closes #N</code> is written only for a
+        numeric issue reference.
+      </p>
+      <p>
+        A duplicate completion suppresses only model interpretation. Recovery recomputes profile and
+        coverage, ignores a committed <code>questionsValid</code> flag, and fails closed when committed
+        <code>decisions.md</code> or <code>team.md</code> is missing, or when the publication JSON
+        disagrees with those files or the resolver binding (member, run, thread, stable ref, and trusted base). Reconciliation
+        is a fast-forward push, one draft pull request if none exists, and the marker-delimited Open
+        Questions block. A free-form
+        <code>workflow_dispatch</code> with no numeric thread writes the run summary instead of a
+        comment when that run has no material publication. A dispatch audit patch stages only
+        <code>.copilot-tracking/squad/watch-audit/&lt;member&gt;/watch-publication.json</code> and
+        <code>AUDIT.md</code>. The ignored member tree is not force-added. An interrupted resume of the same
+        event reuses the persisted
+        <code>receivedAt</code> and <code>runId</code>. A lost ephemeral checkpoint is a fresh run.
+        A new run with no material change and no existing deliverable creates no branch, placeholder,
+        or pull request. Tracking-only state may be committed only when a mapped branch or pull
+        request already exists. Questions are encoded before they reach GitHub. Invalid coverage
+        publishes only a generic failure string, not partial attacker-controlled cells. Review comments
+        posted by a Watch review run are validated and encoded by the same trusted renderer before they
+        are posted: bare domains, emails, mentions, links, closing keywords, and HTML are neutralized,
+        and length is capped.
+      </p>
+
+      <h3>The shipped workflow is a scaffold</h3>
+      <p>
+        <code>squad-watch.workflow.yml</code> is a non-turnkey scaffold. Copying it does not claim
+        security parity with a split-job workflow. Its broad write permissions, checkout credentials,
+        and <code>--allow-all-tools</code> are pre-existing exposure. This change does not widen actor
+        authorization. Isolate credentials, trusted helpers, and the apply boundary before you enable
+        the copy. The repository checkout precedes the nested <code>.squad-trusted</code> checkout, so a
+        later root checkout does not delete the pinned helpers. Helpers are imported only after
+        <code>git show &lt;trustedBaseSha&gt;</code> verifies the verifier and the helper files,
+        including that <code>.squad-trusted</code> HEAD matches that SHA.
+        The template does not claim the live issue-to-PR mapping. When that mapping does not
+        apply, the live workflow fails closed to <code>pr-&lt;N&gt;</code>.
       </p>
 
       <h2>Finding the details behind a gate</h2>

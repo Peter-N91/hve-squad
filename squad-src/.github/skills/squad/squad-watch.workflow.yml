@@ -163,14 +163,11 @@ env:
   SQUAD_MODEL: claude-sonnet-5
 
 concurrency:
-  # One active run per target (idempotency). Do not cancel an in-flight run.
-  group: >-
-    squad-watch-${{ github.event_name }}-${{
-    github.event.issue.number ||
-    github.event.pull_request.number ||
-    github.event.inputs.issue_number ||
-    github.ref }}
+  # One complete delivery at a time for this repository. Never cancel in-flight work.
+  # At most 100 runs wait; retained runs start FIFO by queue-entry time.
+  group: squad-watch-${{ github.repository }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   watch:
@@ -309,7 +306,17 @@ jobs:
             ].join('\n');
 
             function dataBlock(obj) {
-              const lines = Object.entries(obj).map(([k, v]) => `${k}: ${v ?? ''}`);
+              const lines = Object.entries(obj).map(([k, v]) => {
+                const encoded = JSON.stringify(v ?? '')
+                  .replace(/</g, '\\u003c')
+                  .replace(/>/g, '\\u003e')
+                  .replace(/\u2028/g, '\\u2028')
+                  .replace(/\u2029/g, '\\u2029');
+                if (encoded.includes('>') || encoded.includes('\u2028') || encoded.includes('\u2029')) {
+                  throw new Error('DATA framing left a raw delimiter');
+                }
+                return `${k}: ${encoded}`;
+              });
               return ['<<<DATA', ...lines, 'DATA>>>'].join('\n');
             }
 
@@ -404,6 +411,27 @@ jobs:
                   const onPr = !!context.payload.issue.pull_request;
                   // A comment joins its thread's sub-squad: PR comments arrive as
                   // issue_comment events but belong to the pull request.
+                  let forkRejected = false;
+                  if (onPr) {
+                    const { data: prData } = await github.rest.pulls.get({
+                      owner,
+                      repo,
+                      pull_number: context.payload.issue.number,
+                    });
+                    const sameRepo = prData.head.repo && prData.base.repo &&
+                      prData.head.repo.full_name === prData.base.repo.full_name;
+                    if (!sameRepo) {
+                      forkRejected = true;
+                      authorized = false;
+                      notify = false;
+                      sub = subSquadName(`pr-${context.payload.issue.number}`);
+                      target = String(context.payload.issue.number);
+                      core.info('Watch Mode: fork rejection is executable on the template PR-comment path; pr-N fallback grants no privileged run.');
+                    }
+                  }
+                  if (forkRejected) {
+                    prompt = '';
+                  } else {
                   sub = subSquadName(`${onPr ? 'pr' : 'issue'}-${context.payload.issue.number}`);
                   const ref = `${owner}/${repo}#${context.payload.issue.number}`;
                   prompt = [
@@ -422,6 +450,7 @@ jobs:
                     'nothing.', '',
                     dataBlock({ Kind: 'comment', Thread: `#${context.payload.issue.number}`, Ref: ref, SubSquad: sub, IsPullRequest: String(onPr), Command: args }),
                   ].join('\n');
+                  }
                 }
               }
             } else if (evt === 'schedule') {
@@ -501,11 +530,30 @@ jobs:
               }
             }
 
+            const repoMeta = await github.rest.repos.get({ owner, repo });
+            const baseRef = await github.rest.git.getRef({
+              owner,
+              repo,
+              ref: `heads/${repoMeta.data.default_branch}`,
+            });
+            const trustedBaseSha = baseRef.data.object.sha;
             core.setOutput('authorized', authorized ? 'true' : 'false');
             core.setOutput('notify', notify ? 'true' : 'false');
             core.setOutput('kind', kind);
             core.setOutput('target', target);
             core.setOutput('subSquad', sub);
+            core.setOutput('member', sub);
+            core.setOutput('stableRef', target ? `${owner}/${repo}#${target}` : '');
+            core.setOutput('sourceThread', target ? `${owner}/${repo}#${target}` : '');
+            core.setOutput('sourceThreadNumber', target);
+            core.setOutput('publicationBranch', kind === 'pull_request' ? '' : (target ? `squad/issue-${target}` : ''));
+            core.setOutput('existingPr', '');
+            core.setOutput('sourceSha', context.sha);
+            core.setOutput('trustedBaseSha', trustedBaseSha);
+            core.setOutput('suppressInterpret', 'false');
+            core.setOutput('resumeKind', 'fresh');
+            core.setOutput('reconcilePublication', 'false');
+            core.setOutput('publishSourceComment', authorized && kind !== 'pull_request' ? 'true' : 'false');
 
             if (authorized && prompt) {
               const file = path.join(process.env.RUNNER_TEMP, 'squad-prompt.txt');
@@ -521,6 +569,14 @@ jobs:
       - name: Checkout
         if: steps.prep.outputs.authorized == 'true'
         uses: actions/checkout@v4
+
+      - name: Checkout trusted helpers
+        if: steps.prep.outputs.authorized == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.prep.outputs.trustedBaseSha }}
+          path: .squad-trusted
+          persist-credentials: false
 
       - name: Set up Node.js
         if: steps.prep.outputs.authorized == 'true'
@@ -558,6 +614,58 @@ jobs:
             --model "$RUN_MODEL" \
             --allow-all-tools \
             --deny-tool='shell(rm)'
+
+      - name: Gate publication on profile and question validators
+        if: steps.prep.outputs.authorized == 'true' && steps.prep.outputs.kind != 'pull_request'
+        shell: pwsh
+        env:
+          SQUAD_WATCH_TRUSTED_ROOT: ${{ github.workspace }}/.squad-trusted
+          SQUAD_WATCH_MEMBER: ${{ steps.prep.outputs.member }}
+          SQUAD_WATCH_MODE: summary
+          SQUAD_WATCH_EVIDENCE: ${{ runner.temp }}/squad-watch-publication.json
+          TRIGGER_RUN_ID: ${{ github.run_id }}
+          SOURCE_THREAD: ${{ steps.prep.outputs.sourceThread }}
+          SQUAD_WATCH_TRUSTED_SHA: ${{ steps.prep.outputs.trustedBaseSha }}
+        run: |
+          $trusted = $env:SQUAD_WATCH_TRUSTED_ROOT
+          if ([string]::IsNullOrWhiteSpace($env:SQUAD_WATCH_TRUSTED_SHA)) { throw 'trustedBaseSha is empty. Refusing to import Watch helpers.' }
+          $pinnedHead = (& git -C $trusted rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $pinnedHead -cne $env:SQUAD_WATCH_TRUSTED_SHA) { throw "Trusted checkout HEAD '$pinnedHead' is not pinned '$($env:SQUAD_WATCH_TRUSTED_SHA)'." }
+          $assertBlob = @(& git -C $trusted show "$($env:SQUAD_WATCH_TRUSTED_SHA):squad-src/.github/skills/squad/scripts/Assert-SquadWatchTrustedCheckout.ps1")
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned trusted-checkout verifier is missing.' }
+          $assertPath = Join-Path $env:RUNNER_TEMP 'Assert-SquadWatchTrustedCheckout.ps1'
+          [System.IO.File]::WriteAllText($assertPath, (($assertBlob -join "`n") + "`n"))
+          & $assertPath -TrustedRoot $trusted -ExpectedSha $env:SQUAD_WATCH_TRUSTED_SHA
+          $module = Join-Path $trusted 'squad-src/.github/skills/squad/scripts/SquadWatch.psm1'
+          Import-Module $module -Force
+          Assert-SquadWatchTrustedHelper -TrustedRoot $trusted -Path $module | Out-Null
+          $workspace = (Resolve-Path .).Path
+          $member = $env:SQUAD_WATCH_MEMBER
+          $memberRoot = Join-Path $workspace ".copilot-tracking/squad/members/$member"
+          $profileMarkdown = ''
+          $decisionsPath = Join-Path $memberRoot 'decisions.md'
+          if (Test-Path -LiteralPath $decisionsPath) { $profileMarkdown = Get-Content -LiteralPath $decisionsPath -Raw }
+          $rows = @()
+          $questionsPath = Join-Path $memberRoot 'watch-questions.json'
+          if (Test-Path -LiteralPath $questionsPath) {
+            $rows = @((Get-Content -LiteralPath $questionsPath -Raw | ConvertFrom-Json).rows)
+          }
+          $catalog = (& git -C $trusted show "$($env:SQUAD_WATCH_TRUSTED_SHA):squad-src/.github/skills/squad/references/profiles-and-packs.md") -join "`n"
+          $gate = Save-SquadWatchPublicationEvidence -Repository $workspace -Member $member -CurrentRunId "autopilot-run-$($env:TRIGGER_RUN_ID)" -ProfileMarkdown $profileMarkdown -Rows $rows -CurrentThread $env:SOURCE_THREAD -TrustedBaseSha $env:SQUAD_WATCH_TRUSTED_SHA -CatalogMarkdown $catalog
+          if ($gate.BlockPublication -or -not $gate.QuestionsValid) {
+            throw 'Watch profile or question validation failed. Publication is blocked.'
+          }
+
+      - name: Open one draft pull request for new material publication
+        if: steps.prep.outputs.authorized == 'true' && steps.prep.outputs.reconcilePublication == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --draft \
+            --title "Squad Watch" \
+            --body-file "$RUNNER_TEMP/pr-body.md"
 
       - name: Escalate on unauthorized trigger
         if: steps.prep.outputs.notify == 'true' && steps.prep.outputs.target != ''

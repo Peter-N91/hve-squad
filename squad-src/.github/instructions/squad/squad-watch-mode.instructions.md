@@ -5,7 +5,7 @@ applyTo: '**/.copilot-tracking/squad/**'
 
 # Squad Watch Mode Conventions
 
-These conventions define **Watch Mode**: the event-driven, "continuous AI" trigger half of the squad. Watch Mode turns a repository event — a new issue, a pull request, a `/squad` comment, a schedule, a manual dispatch, or a push — into a squad run, and the run's terminal deliverable is a pull request rather than a chat reply.
+These conventions define **Watch Mode**: the event-driven, "continuous AI" trigger half of the squad. Watch Mode turns a repository event — a new issue, a pull request, a `/squad` comment, a schedule, a manual dispatch, or a push — into a squad run, and publication follows the cold Watch contract rather than a chat reply.
 
 Watch Mode is the outbound counterpart to the inbound approval half already shipped at `.github/skills/squad/github-approval-watcher.workflow.yml`. It realizes the **Deferred: Watch Mode (DR-01)** item in `.github/instructions/squad/squad-state.instructions.md` without a state-schema change.
 
@@ -70,7 +70,7 @@ An event payload — an issue body, a PR description, a comment — is **attacke
 A run starts only on a signal from an **authorized account**:
 
 * For a label gate, the label must be applied by a repository collaborator with write access.
-* For a command gate, the commenter must be the registered approver (`notify.github.handle`) or a repository collaborator with write access — identical to the approval-watcher's authorization rule.
+* For a command gate, the commenter must hold repository permission `write`, `maintain`, or `admin`. A registered approver without that permission cannot start a run.
 * For a workflow gate, the committed workflow itself is the authorization; its `on:` filters and `permissions:` block bound what may trigger.
 
 Events from unauthorized actors are ignored and logged. Watch Mode never elevates an arbitrary GitHub user to a run initiator.

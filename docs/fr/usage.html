@@ -566,9 +566,9 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         <code>/squad</code>, c'est un événement du dépôt qui lance l'exécution. Le modèle fourni transforme une
         <strong>nouvelle issue étiquetée <code>squad/auto</code></strong> en exécution sans interface
         <code>mode=autopilot</code> qui ouvre une <strong>pull request en brouillon</strong> fermant
-        l'issue. Il réutilise tout ce que vous avez déjà configuré &mdash; le pipeline autopilot,
-        le conseil et le canal d'approbation <code>github-issue</code> &mdash; de sorte qu'un point de contrôle suspend toujours le travail en attendant
-        votre approbation depuis un téléphone.
+        l'issue. Il réutilise le pipeline autopilot,
+        le conseil et le canal d'approbation <code>github-issue</code>. Les Impactful-Action Gates n'autorisent toujours pas
+        la poursuite sans présence humaine.
       </p>
       <div class="mermaid">
 flowchart TD
@@ -586,8 +586,8 @@ flowchart TD
       <p>
         Le titre et le corps de l'issue sont toujours traités comme des <strong>données, jamais comme des instructions</strong> :
         l'exécution les lit comme une description de la tâche, jamais comme des commandes modifiant la composition de l'équipe, le routage,
-        les contrôles ou les approbations. Elle n'ouvre qu'une PR en brouillon &mdash; elle ne fusionne jamais, ne force jamais de push et
-        ne déploie jamais ; ces actions restent soumises à une approbation humaine, renforcée par votre protection de branche.
+        les contrôles ou les approbations. La sécurité contre l'injection est inchangée. Elle n'ouvre qu'une PR en brouillon. Elle ne fusionne jamais, ne force jamais de push et
+        ne déploie jamais. Ces actions restent soumises à une approbation humaine, renforcée par votre protection de branche. La figure ci-dessus est le parcours d'une issue étiquetée.
       </p>
 
       <h3>Activer le mode Watch (une seule fois)</h3>
@@ -615,7 +615,7 @@ flowchart TD
         <li>
           <strong>Installez le workflow de déclenchement.</strong> Copiez le workflow de référence
           <code>.github/skills/squad/squad-watch.workflow.yml</code> vers
-          <code>.github/workflows/squad-watch.yml</code>, examinez-le, puis créez un commit.
+          <code>.github/workflows/squad-watch.yml</code>, examinez-le comme une ossature non prête à l'emploi, et ne créez le commit qu'après avoir isolé les informations d'identification et la frontière d'application. Copier le fichier n'est pas une parité de sécurité.
         </li>
         <li>
           <strong>Installez le dispositif de surveillance des approbations</strong> (si ce n'est pas déjà fait) pour que les approbations
@@ -623,8 +623,9 @@ flowchart TD
           <code>.github/workflows/squad-approval-watcher.yml</code>.
         </li>
         <li>
-          <strong>Étiquetez une issue <code>squad/auto</code></strong> pour lancer une exécution. Seul un collaborateur
-          du dépôt disposant d'un accès en écriture peut la déclencher ; une étiquette posée sans autorisation est ignorée et signalée
+          <strong>Étiquetez une issue <code>squad/auto</code></strong> pour lancer une exécution. Seul un acteur disposant
+          de la permission de dépôt write, maintain ou admin peut la déclencher. Un approbateur enregistré sans
+          cette permission ne peut pas lancer d'exécution. Une étiquette posée sans autorisation est ignorée et signalée
           dans l'issue.
         </li>
       </ol>
@@ -639,8 +640,8 @@ flowchart TD
 gh issue edit 42 --add-label squad/auto</code></pre>
       <p>
         L'étiquetage est le signal : l'événement <code>issues: [labeled]</code> se déclenche, le workflow vérifie que
-        l'étiquette est <code>squad/auto</code> et que la personne qui l'a posée dispose d'un accès en écriture, puis l'exécution commence. Une seule exécution
-        reste active par issue (réappliquer l'étiquette ne lance pas une seconde exécution concurrente). L'étiquette de déclenchement
+        l'étiquette est <code>squad/auto</code> et que la personne qui l'a posée a la permission write, maintain ou admin, puis l'exécution commence. Une seule livraison
+        complète s'exécute à la fois pour le dépôt. Réappliquer l'étiquette ne lance pas une interprétation concurrente du même événement déjà terminé. L'étiquette de déclenchement
         <code>squad/auto</code> est distincte des étiquettes d'approbation <code>squad/*</code>
         (<code>squad/approved</code>, <code>squad/stop</code>, &hellip;) que le dispositif de surveillance lit à un
         point de contrôle.
@@ -648,7 +649,8 @@ gh issue edit 42 --add-label squad/auto</code></pre>
       <p>
         Le mode Watch est facultatif et limité au dépôt pour le moment : une issue sans étiquette ne déclenche rien, et les pull
         requests provenant de forks ne lancent jamais d'exécution privilégiée (le workflow n'utilise jamais
-        <code>pull_request_target</code>).
+        <code>pull_request_target</code>). Un commentaire de fork est rejeté et retombe sur
+        <code>pr-&lt;N&gt;</code> sans élargir l'autorisation.
       </p>
 
       <h3>Facultatif : un modèle de nouvelle issue pour <code>squad/auto</code></h3>
@@ -669,8 +671,11 @@ gh issue edit 42 --add-label squad/auto</code></pre>
         Le contrat (<code>.github/instructions/squad/squad-watch-mode.instructions.md</code>) définit
         comment tout événement du dépôt devient une exécution routée : le déclencheur fournit uniquement le contenu de l'événement sous forme
         de données, et la table de routage du coordinateur choisit le rôle. Le workflow de référence fourni les relie
-        <strong>tous dans un seul fichier</strong> &mdash; une étape unique <em>Préparer l'exécution</em> autorise
-        l'acteur, applique les protections relatives aux forks et construit le prompt routé pour l'événement survenu.
+        <strong>tous dans un seul fichier</strong>. Une étape unique <em>Préparer l'exécution</em> autorise
+        l'acteur et applique les protections relatives aux forks, puis construit le prompt routé. L'ossature
+        ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce rattachement
+        ne s'applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>. Un commentaire de pull request rattaché
+        s'exécute dans <code>issue-&lt;N&gt;</code>, avec l'issue comme référence de fil stable.
       </p>
       <table>
         <thead>
@@ -692,13 +697,13 @@ gh issue edit 42 --add-label squad/auto</code></pre>
           <tr>
             <td>Pull request</td>
             <td>Appliquer une étiquette <code>squad/review</code> à une PR du même dépôt</td>
-            <td>Oriente vers le rôle <code>tester</code> &rarr; commentaires de revue sur la PR</td>
+            <td>Rejoint la sous-squad de l'issue lorsque le workflow actif la rattache ; sinon échoue de façon fermée vers pr-&lt;N&gt; et le rôle <code>tester</code> publie des commentaires de revue sur la PR</td>
             <td>Oui</td>
           </tr>
           <tr>
             <td>Commande en commentaire</td>
-            <td>Commenter <code>/squad &lt;request&gt;</code> sur une issue ou une PR</td>
-            <td>Oriente selon la commande &rarr; résultat propre au rôle</td>
+            <td>Commentaire de l'onglet Conversation <code>/squad &lt;request&gt;</code> sur une issue ou une PR. Les événements de revue ne sont pas abonnés</td>
+            <td>Oriente selon la commande &rarr; résultat propre au rôle. Un commentaire de pull request rejoint la sous-squad de l'issue seulement lorsque le workflow actif le rattache ; sinon il échoue de façon fermée vers pr-&lt;N&gt;</td>
             <td>Oui</td>
           </tr>
           <tr>
@@ -773,8 +778,8 @@ on:
       <p>
         Les noms sont déterministes : vous savez donc toujours où chercher :
       </p>
-      <pre><code>issue-123                   # an issue, or a /squad comment on it
-pr-456                      # a PR review, or a /squad comment on the PR
+      <pre><code>      issue-123                   # an issue, a comment on it, or a mapped pull-request comment
+      pr-456                      # an unmapped pull-request review or comment
 sweep-2026-07-27            # a scheduled maintenance sweep
 push-release-2-0-a1b2c3d    # a push to release/2.0 at commit a1b2c3d
 dispatch-9911223344         # a free-form manual dispatch (workflow run id)</code></pre>
@@ -791,6 +796,117 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
       <p>
         Ces sous-squads sont <strong>conservées</strong> &mdash; elles constituent la piste d'audit, et rien ne les supprime
         automatiquement. En archiver ou en supprimer une est une action délibérée que vous devez demander.
+      </p>
+
+      <h3>Ce que fait chaque exécution Watch</h3>
+      <p>
+        Chaque exécution du mode Watch parcourt le pipeline complet : recherche, plan, conseil lorsqu'il s'applique,
+        implémentation et revue. Un conseil qui ne s'applique pas reste visible sous
+        <code>Dispatch Record: n/a</code> avec une raison courte. Ce n'est pas une délégation inventée.
+      </p>
+      <p>
+        L'exécution sélectionne exactement un profil canonique, et les packs éventuels, à partir de la demande. Elle consigne
+        cette sélection et ne pose pas de question ni n'envoie de notification lorsque la sélection réussit. La publication exige que le
+        roster égale ce profil du catalogue épinglé. Un pack sélectionné n'est pas publié tant qu'un inventaire de confiance des packs installés
+        n'existe pas (limitation documentée qui échoue de façon fermée, et non un roster non contrôlé). Un profil incomplet ou un rôle en trop
+        échoue de façon fermée. Les escalades d'autorisation, de risque,
+        d'action à impact, de conseil, de collision et de rôle manquant restent visibles. Chaque roster
+        porte la colonne vertébrale <code>researcher</code>, <code>lead</code>, <code>developer</code>,
+        <code>tester</code> et <code>scribe</code>. Les packs ajoutent des rôles. Ils ne remplacent jamais la
+        colonne vertébrale, et le roster n'est jamais construit en copiant une sous-squad sœur.
+      </p>
+      <p>
+        Le corps de la pull request et le commentaire du fil source affichent les lignes Open Questions
+        validées et encodées de l'exécution en cours, et la pull request est toujours un brouillon. Cette tranche commence au seul titre
+        <code>## Watch Profile Selection</code> dont l'identifiant d'exécution égale celui du résolveur de confiance. Les exécutions
+        antérieures ne sont pas des exigences courantes. Un titre de sélection ultérieur ou en double échoue de façon fermée et ne tronque
+        pas l'exécution. Un titre dans une fence terminée ou un cadre DATA est du texte cité, pas une frontière. Chaque verdict de conseil
+        de la tranche compte, avec des identifiants uniques par verdict et par constat :
+        <code>COUNCIL-&lt;verdict-ordinal&gt;-&lt;ROLE&gt;-RISK</code> et
+        <code>COUNCIL-&lt;verdict-ordinal&gt;-&lt;ROLE&gt;-COND-&lt;n&gt;</code>. Un identifiant dérivable manquant échoue de façon fermée
+        et ne publie qu'un échec générique. Les cellules neutralisent les noms de domaine nus et les
+        e-mails sans modifier <code>OQ-WATCH-###</code>, <code>decisions.md#anchor</code> ni <code>owner/repo#N</code>. Un commentaire sans
+        changement matériel sur un fil numérique n'affiche l'artefact de staging qu'après correspondance du membre, de l'identifiant
+        d'exécution, du fil, de la référence stable et de la base de confiance avec le résolveur. Une discordance publie l'échec générique
+        et n'ouvre pas de pull request. Limitation documentée : cette preuve de commentaire est produite dans le même job en lecture seule
+        que le modèle. Le rattachement au résolveur la rend cohérente, mais elle n'est pas attestée de façon indépendante ; une séparation
+        de jobs serait nécessaire. Le corps de la pull request, le commentaire de revue et le résumé sans issue reçoivent les mêmes
+        rattachements. Un verdict
+        <code>Stop</code> arrête toujours l'implémentation. Les Impactful-Action Gates et la sécurité contre l'injection
+        sont inchangés : le texte de la charge utile reste des données, et l'exécution ne fusionne jamais, ne force jamais de push, ne déploie jamais et
+        n'écrit jamais dans un outil de suivi actif. Ce changement n'ajoute ni fusion vers main, ni changement de schéma, ni abonnement aux événements de revue,
+        ni nouvelle autonomie. La relecture historique <code>A-B-A</code> reste non prise en charge.
+      </p>
+
+      <h3>Une seule livraison à la fois</h3>
+      <p>
+        Une seule livraison Watch complète s'exécute à la fois par dépôt. La concurrence du workflow est
+        <code>queue: max</code> : elle conserve au plus 100 exécutions en attente, et les exécutions conservées démarrent en FIFO selon
+        l'heure d'entrée dans la file. C'est un compromis de débit, pas un verrou par issue. L'autorisation est
+        inchangée. Un acteur d'issue, de commentaire d'issue ou de <code>workflow_dispatch</code> doit avoir la permission de dépôt
+        <code>write</code>, <code>maintain</code> ou <code>admin</code>. Un approbateur enregistré sans l'une de ces permissions ne peut pas lancer une exécution. Une pull
+        request étiquetée du même dépôt conserve son contrôle par étiquette. Les règles de planification et de push du modèle restent inchangées.
+      </p>
+
+      <h3>Commentaires de pull request et publication</h3>
+      <p>
+        L'onglet Conversation est le seul canal de commentaire de pull request pris en charge. Un commentaire
+        <code>/squad</code> y rejoint la sous-squad d'issue <code>issue-&lt;N&gt;</code> seulement
+        lorsque la pull request est dans le même dépôt, ouverte, sur la branche
+        <code>squad/issue-&lt;N&gt;</code>, créée par <code>github-actions[bot]</code>, et que l'acteur
+        est autorisé. Sinon le commentaire reste dans <code>pr-&lt;N&gt;</code>. Le rattachement échoue aussi de façon fermée lorsque
+        <code>.github/workflows/squad-watch.yml</code> est absent au <code>trustedBaseSha</code>. Les événements de revue et
+        de commentaire de revue ne sont pas abonnés. Un commentaire sur une pull request de fork est rejeté et retombe
+        sur <code>pr-&lt;N&gt;</code> sans élargir l'autorisation. Un éditeur PAT ou GitHub App
+        n'est pas <code>github-actions[bot]</code>, donc le rattachement échoue de façon fermée et l'identité retombe
+        sur <code>pr-&lt;N&gt;</code>.
+      </p>
+      <p>
+        L'issue 42 et la pull request 99 sont l'exemple rattaché : l'exécution est dans <code>issue-42</code>,
+        avec la référence de fil stable <code>owner/repo#42</code>, où l'état reste. Les commentaires et la revue
+        ciblent le fil 99, et la publication utilise <code>squad/issue-42</code> et la pull request 99 seulement.
+        La liste d'autorisation Source utilise ce fil résolu, <code>owner/repo#99</code>, et non <code>owner/repo#42</code>.
+        Les sorties du résolveur sont
+        <code>member</code>, <code>stableRef</code>, <code>sourceThread</code>,
+        <code>sourceThreadNumber</code>, <code>publicationBranch</code>, <code>existingPr</code>,
+        <code>sourceSha</code> et <code>trustedBaseSha</code>. <code>trustedBaseSha</code> est
+        indépendant de <code>sourceSha</code>. La publication extrait le
+        <code>sourceSha</code> épinglé et n'avance qu'en fast-forward. Apply télécharge le correctif lorsque la branche de publication
+        existe déjà et que l'exécution a des changements, y compris une mise à jour de suivi seule, et rejette un correctif dont le <code>decisions.md</code> de l'exécution en cours n'a pas une question requise. La revérification d'Apply conserve le <code>stableRef</code> et le <code>trustedBaseSha</code> du résolveur, afin qu'un corps de brouillon matériel affiche les questions requises plutôt que l'échec générique. Si cette branche a bougé, la publication échoue
+        de façon fermée. Une branche attendue qui a disparu après la résolution n'est pas recréée. Le workflow ne force jamais de push.
+        <code>Closes #N</code> n'est écrit que pour une référence d'issue numérique.
+      </p>
+      <p>
+        Une complétion en double ne supprime que l'interprétation du modèle. La reprise recalcule le profil et la couverture,
+        ignore un drapeau <code>questionsValid</code> commité, et échoue de façon fermée si <code>decisions.md</code> ou
+        <code>team.md</code> commité manque, ou si le JSON de publication ne correspond pas à ces fichiers ou à l'identité du
+        résolveur (membre, exécution, fil, référence stable et base de confiance). La réconciliation est un push en fast-forward, une pull request en brouillon
+        s'il n'en existe pas, et le bloc Open Questions délimité par marqueurs. Un <code>workflow_dispatch</code> libre sans fil
+        numérique écrit le résumé de l'exécution au lieu d'un commentaire lorsqu'il n'y a pas de publication matérielle.
+        Un correctif d'audit de dispatch n'ajoute que
+        <code>.copilot-tracking/squad/watch-audit/&lt;member&gt;/watch-publication.json</code> et <code>AUDIT.md</code>.
+        L'arborescence de membre ignorée n'est pas ajoutée de force. Une reprise interrompue du même événement réutilise les
+        <code>receivedAt</code> et <code>runId</code> persistés. Un point de contrôle éphémère perdu est une exécution neuve.
+        Une nouvelle exécution sans changement matériel et sans livrable existant ne crée ni branche, ni espace réservé,
+        ni pull request. L'état de suivi seul ne peut être commité que lorsqu'une branche ou une pull
+        request déjà rattachée existe. Les questions sont encodées avant d'atteindre GitHub. Une couverture invalide ne publie
+        qu'une chaîne d'échec générique, pas de cellules partielles contrôlées par un attaquant. Les commentaires de revue publiés
+        par une exécution de revue Watch sont validés et encodés par le même moteur de rendu de confiance avant d'être
+        publiés : les noms de domaine nus, les e-mails, les mentions, les liens, les mots-clés de clôture et le HTML sont neutralisés, et la longueur est plafonnée.
+      </p>
+
+      <h3>Le workflow livré est une ossature</h3>
+      <p>
+        <code>squad-watch.workflow.yml</code> est une ossature qui n'est pas prête à l'emploi. La copier ne revendique pas
+        une parité de sécurité avec un workflow à jobs séparés. Ses autorisations d'écriture larges, ses informations d'identification de checkout
+        et <code>--allow-all-tools</code> sont une exposition préexistante. Ce changement n'élargit pas l'autorisation des acteurs.
+        Isolez les informations d'identification, les aides de confiance et la frontière d'application avant d'activer
+        la copie. Le checkout du dépôt précède le checkout imbriqué <code>.squad-trusted</code>, afin qu'un checkout racine
+        ultérieur ne supprime pas les aides épinglées. Les aides ne sont importées qu'après que
+        <code>git show &lt;trustedBaseSha&gt;</code> a vérifié le vérificateur et les fichiers d'aide,
+        y compris la correspondance du HEAD de <code>.squad-trusted</code> avec ce SHA.
+        L'ossature ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce
+        rattachement ne s'applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>.
       </p>
 
       <h2>Retrouver les détails d'un point de contrôle</h2>

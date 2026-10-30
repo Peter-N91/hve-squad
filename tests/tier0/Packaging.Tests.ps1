@@ -377,3 +377,198 @@ Describe 'GATE-46 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSyncHveCore | Should -Match ([regex]::Escape('Full RPI stage artifacts (`research/<date>/*.md`, `plans/*.md`, `changes/*.md`, `reviews/*.md`) and `history/autopilot-run-*.md` are produced'))
     }
 }
+
+Describe 'GATE-48 Watch workflow publication contract' {
+    BeforeAll {
+        $script:LiveWatch = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml') -Raw
+        $script:TemplateWatch = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml') -Raw
+        $script:Tier0Runner = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'tests/tier0/Invoke-Tier0Tests.ps1') -Raw
+    }
+
+    It 'GATE-48 pins repository-wide queue max concurrency in both workflows' {
+        foreach ($workflow in @($script:LiveWatch, $script:TemplateWatch)) {
+            $workflow | Should -Match ([regex]::Escape('group: squad-watch-${{ github.repository }}'))
+            $workflow | Should -Match ([regex]::Escape('cancel-in-progress: false'))
+            $workflow | Should -Match ([regex]::Escape('queue: max'))
+        }
+    }
+
+    It 'GATE-48 keeps review-event subscriptions absent and Conversation comments supported' {
+        foreach ($workflow in @($script:LiveWatch, $script:TemplateWatch)) {
+            $workflow | Should -Not -Match 'pull_request_review:'
+            $workflow | Should -Match 'issue_comment:'
+            $workflow | Should -Match '/squad'
+        }
+    }
+
+    It 'GATE-48 preserves live and template actor rules without authorization widening' {
+        foreach ($workflow in @($script:LiveWatch, $script:TemplateWatch)) {
+            $workflow | Should -Match ([regex]::Escape("['write', 'admin', 'maintain']"))
+            $workflow | Should -Not -Match 'notify\.github\.handle'
+            $workflow | Should -Not -Match 'registered approver'
+        }
+    }
+
+    It 'GATE-48 wires every resolver output through apply review escalation staging and upload' {
+        foreach ($name in @('member', 'stableRef', 'sourceThread', 'sourceThreadNumber', 'publicationBranch', 'existingPr', 'sourceSha', 'trustedBaseSha', 'suppressInterpret', 'reconcilePublication', 'publishSourceComment')) {
+            $script:LiveWatch | Should -Match $name
+            $script:TemplateWatch | Should -Match $name
+        }
+        $script:LiveWatch | Should -Match 'needs.interpret.outputs.reconcilePublication'
+        $script:LiveWatch | Should -Match 'needs.interpret.outputs.publishSourceComment'
+        $script:LiveWatch | Should -Match 'needs.interpret.outputs.sourceThreadNumber'
+    }
+
+    It 'GATE-48 reacquires trusted helpers in every privileged job' {
+        $trustedCheckouts = [regex]::Matches($script:LiveWatch, [regex]::Escape('.squad-trusted'))
+        $trustedCheckouts.Count | Should -BeGreaterOrEqual 4
+        $script:LiveWatch | Should -Match ([regex]::Escape('persist-credentials: false'))
+        $script:LiveWatch | Should -Match 'Assert-SquadWatchTrustedHelper'
+        $script:TemplateWatch | Should -Match ([regex]::Escape('.squad-trusted'))
+        $script:TemplateWatch | Should -Match ([regex]::Escape('persist-credentials: false'))
+    }
+
+    It 'GATE-48 updates only the marked Open Questions body block' {
+        $script:LiveWatch | Should -Match ([regex]::Escape('<!-- squad-watch-open-questions:start -->'))
+        $script:LiveWatch | Should -Match 'Update-SquadWatchMarkedBody'
+    }
+
+    It 'GATE-48 keeps fast-forward-only push and failure escalation' {
+        $script:LiveWatch | Should -Not -Match '--force'
+        $script:LiveWatch | Should -Match 'Refusing to force-push'
+        $script:LiveWatch | Should -Match 'Escalate on run failure'
+    }
+
+    It 'GATE-47 comments encoded questions and creates no PR or placeholder for blocked no-material' {
+        $script:LiveWatch | Should -Match 'publishSourceComment'
+        $script:LiveWatch | Should -Match 'no material publication'
+        $script:LiveWatch | Should -Match 'hasMaterialChanges'
+    }
+
+    It 'GATE-47 keeps gh pr create --draft unconditional for new material publication' {
+        foreach ($workflow in @($script:LiveWatch, $script:TemplateWatch)) {
+            $workflow | Should -Match 'gh pr create'
+            $create = [regex]::Match($workflow, 'gh pr create\s*\\?\s*--draft')
+            $create.Success | Should -BeTrue
+        }
+    }
+
+    It 'GATE-48 rejects a trusted checkout path outside the workspace' {
+        $paths = @(
+            (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml'),
+            (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml')
+        )
+        $extractor = @'
+import json, sys, yaml
+from pathlib import Path
+rows = []
+for path in sys.argv[1:]:
+    doc = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    for job in (doc.get("jobs") or {}).values():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            if not str(step.get("uses") or "").startswith("actions/checkout"):
+                continue
+            rows.append({"file": path, "name": step.get("name") or "", "path": (step.get("with") or {}).get("path")})
+print(json.dumps(rows))
+'@
+        $json = & python -c $extractor @paths
+        $LASTEXITCODE | Should -Be 0
+        $rows = @($json | ConvertFrom-Json)
+        $rows.Count | Should -BeGreaterThan 0
+        foreach ($row in $rows) {
+            $checkoutPath = [string]$row.path
+            if ([string]::IsNullOrWhiteSpace($checkoutPath)) { continue }
+            $checkoutPath | Should -Not -Match 'runner\.temp'
+            $checkoutPath | Should -Not -Match '^[A-Za-z]:[\\/]|^/'
+            $checkoutPath | Should -Not -Match '\.\.'
+            $checkoutPath | Should -Be '.squad-trusted' -Because "trusted helper checkout $($row.name) must stay workspace-relative"
+        }
+    }
+
+    It 'GATE-48 parses both Watch workflows and their embedded scripts' {
+        $python = Get-Command python -ErrorAction Stop
+        $files = @(
+            (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml'),
+            (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml')
+        )
+        $extractor = @'
+import json, sys, yaml
+from pathlib import Path
+items = []
+for path in sys.argv[1:]:
+    doc = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    for job_name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        for index, step in enumerate(job.get("steps") or []):
+            if not isinstance(step, dict):
+                continue
+            if step.get("run"):
+                items.append({"file": path, "job": job_name, "name": step.get("name") or str(index), "shell": step.get("shell") or "bash", "kind": "run", "script": step["run"]})
+            uses = str(step.get("uses") or "")
+            payload = step.get("with") or {}
+            if uses.startswith("actions/github-script") and isinstance(payload, dict) and payload.get("script"):
+                items.append({"file": path, "job": job_name, "name": step.get("name") or str(index), "shell": "javascript", "kind": "github-script", "script": payload["script"]})
+print(json.dumps(items))
+'@
+        $json = & $python.Source -c $extractor @files
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json)) {
+            throw "YAML parser failed for a Watch workflow. $json"
+        }
+        $items = $json | ConvertFrom-Json
+        @($items).Count | Should -BeGreaterThan 10
+        $bash = Get-Command bash -ErrorAction Stop
+        foreach ($item in $items) {
+            if ($item.kind -eq 'github-script') {
+                $dir = Join-Path $TestDrive ("js-" + [guid]::NewGuid().ToString('n'))
+                New-Item -ItemType Directory -Path $dir | Out-Null
+                $scriptPath = Join-Path $dir 'script.js'
+                $wrapper = Join-Path $dir 'parse.js'
+                Set-Content -LiteralPath $scriptPath -Value $item.script -Encoding utf8
+                Set-Content -LiteralPath $wrapper -Value "const fs=require('fs'); const script=fs.readFileSync(process.argv[1],'utf8'); new Function('return (async () => {\n'+script+'\n})');" -Encoding utf8
+                & node $wrapper $scriptPath
+                $LASTEXITCODE | Should -Be 0 -Because "$($item.name) github-script must parse"
+            }
+            elseif ($item.shell -like 'pwsh*' -or $item.shell -like 'powershell*') {
+                $parseErrors = $null
+                $tokens = $null
+                [System.Management.Automation.Language.Parser]::ParseInput([string]$item.script, [ref]$tokens, [ref]$parseErrors) | Out-Null
+                @($parseErrors).Count | Should -Be 0 -Because "$($item.name) PowerShell must parse"
+                if ([string]$item.script -match 'Import-Module \$watchModule' -or [string]$item.script -match 'Import-Module \$installModule') {
+                    $showAt = $item.script.IndexOf('Assert-SquadWatchTrustedCheckout.ps1')
+                    $importAt = $item.script.IndexOf('Import-Module')
+                    $showAt | Should -BeGreaterOrEqual 0 -Because "$($item.name) must load the pinned verifier from git show"
+                    $showAt | Should -BeLessThan $importAt
+                }
+                if ([string]$item.script -match 'Assert-SquadWatchTrustedHelper') {
+                    $importAt = $item.script.IndexOf('Import-Module')
+                    $assertAt = $item.script.IndexOf('Assert-SquadWatchTrustedHelper')
+                    $importAt | Should -BeGreaterOrEqual 0
+                    $importAt | Should -BeLessThan $assertAt
+                }
+            }
+            else {
+                $dir = Join-Path $TestDrive ("sh-" + [guid]::NewGuid().ToString('n'))
+                New-Item -ItemType Directory -Path $dir | Out-Null
+                $scriptPath = Join-Path $dir 'script.sh'
+                [System.IO.File]::WriteAllText($scriptPath, ([string]$item.script).Replace("`r`n", "`n"))
+                $posix = if ($scriptPath -match '^[A-Za-z]:\\') {
+                    '/mnt/' + ($scriptPath.Substring(0, 1).ToLower()) + ($scriptPath.Substring(2) -replace '\\', '/')
+                }
+                else {
+                    $scriptPath
+                }
+                & $bash.Source -n $posix
+                $LASTEXITCODE | Should -Be 0 -Because "$($item.name) bash must parse"
+            }
+        }
+    }
+
+    It 'Tier 0 source mode discovers WatchMode.Tests.ps1' {
+        $script:Tier0Runner | Should -Match 'WatchMode\.Tests\.ps1'
+    }
+}

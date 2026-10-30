@@ -2013,7 +2013,28 @@ function New-SquadWatchHandoff {
         return
     }
 
+    Add-SquadWatchTrustedExclude -Repository $workspace
     Invoke-SquadWatchGit -WorkspaceRoot $workspace -Arguments @('add', '-A') | Out-Null
+    $trustedStaged = @(
+        Invoke-SquadWatchGit -WorkspaceRoot $workspace -Arguments @('diff', '--cached', '--name-only') |
+            Where-Object { ($_ -replace '\\', '/') -match '(?i)^\.squad-trusted(?:/|$)' }
+    )
+    if ($trustedStaged.Count -gt 0) {
+        Invoke-SquadWatchGit -WorkspaceRoot $workspace -Arguments (@('reset', '-q', '--') + $trustedStaged) | Out-Null
+        throw 'Refusing to stage .squad-trusted. The trusted checkout is excluded from publication.'
+    }
+    $auditExtra = @(
+        Invoke-SquadWatchGit -WorkspaceRoot $workspace -Arguments @('diff', '--cached', '--name-only') |
+            Where-Object {
+                $normalized = $_ -replace '\\', '/'
+                $normalized -match '^\.copilot-tracking/squad/watch-audit/.+' -and
+                $normalized -notmatch '/watch-publication\.json$' -and
+                $normalized -notmatch '/AUDIT\.md$'
+            }
+    )
+    if ($auditExtra.Count -gt 0) {
+        Invoke-SquadWatchGit -WorkspaceRoot $workspace -Arguments (@('reset', '-q', '--') + $auditExtra) | Out-Null
+    }
     $stagedPaths = @(
         Invoke-SquadWatchGit -WorkspaceRoot $workspace -Arguments @(
             'diff', '--cached', '--name-only', '--diff-filter=ACDMRTUXB'
@@ -2025,10 +2046,11 @@ function New-SquadWatchHandoff {
             Remove-Item -LiteralPath $patch -Force
         }
         return [pscustomobject]@{
-            HasChanges      = $false
-            StagedPaths     = @()
-            MaterialChanges = @()
-            PatchPath       = $null
+            HasChanges          = $false
+            HasMaterialChanges = $false
+            StagedPaths         = @()
+            MaterialChanges     = @()
+            PatchPath           = $null
         }
     }
 
@@ -2058,12 +2080,15 @@ function New-SquadWatchHandoff {
     ) | Out-Null
 
     [pscustomobject]@{
-        HasChanges      = $true
-        StagedPaths     = $stagedPaths
-        MaterialChanges = $materialChanges
-        PatchPath       = $patch
+        HasChanges          = $true
+        HasMaterialChanges = ($materialChanges.Count -gt 0)
+        StagedPaths         = $stagedPaths
+        MaterialChanges     = $materialChanges
+        PatchPath           = $patch
     }
 }
+
+. (Join-Path $PSScriptRoot 'SquadWatch.Delivery.ps1')
 
 Export-ModuleMember -Function @(
     'New-SquadWatchBaseline'
@@ -2071,4 +2096,37 @@ Export-ModuleMember -Function @(
     'Restore-SquadWatchRuntimeOverlay'
     'Test-SquadWatchLifecycle'
     'New-SquadWatchHandoff'
+    'Get-SquadWatchDataFieldName'
+    'ConvertTo-SquadWatchDataBlock'
+    'ConvertFrom-SquadWatchDataBlock'
+    'Test-SquadWatchOpenQuestions'
+    'ConvertTo-SquadWatchOpenQuestionsMarkdown'
+    'Test-SquadWatchProfileSelection'
+    'Test-SquadWatchActorAuthorized'
+    'Resolve-SquadWatchDelivery'
+    'Update-SquadWatchMarkedBody'
+    'Sync-SquadWatchPublication'
+    'Assert-SquadWatchTrustedHelper'
+    'Get-SquadWatchPublicationDecision'
+    'Save-SquadWatchPublicationEvidence'
+    'Get-SquadWatchCommittedQuestionsMarkdown'
+    'Get-SquadWatchRequiredQuestionId'
+    'Get-SquadWatchTeamRoster'
+    'Get-SquadWatchRequiredRole'
+    'ConvertTo-SquadWatchInertReview'
+    'Add-SquadWatchForcedPublicationEvidence'
+    'Assert-SquadWatchTrustedCheckout'
+    'Add-SquadWatchTrustedExclude'
+    'Get-SquadWatchProfileCatalog'
+    'Resolve-SquadWatchCanonicalRoster'
+    'Get-SquadWatchRequiredQuestionCoverage'
+    'Get-SquadWatchClosingLabel'
+    'Test-SquadWatchExpectedBranch'
+    'Get-SquadWatchEvidenceQuestionsMarkdown'
+    'Get-SquadWatchQuestionRecompute'
+    'Get-SquadWatchCurrentRunMarkdown'
+    'Get-SquadWatchCurrentRunBoundary'
+    'Get-SquadWatchStagedQuestionsMarkdown'
+    'Test-SquadWatchAppliedPublication'
+    'Export-SquadWatchDispatchAudit'
 )
