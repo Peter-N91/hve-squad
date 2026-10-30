@@ -27,7 +27,8 @@ Do not seed merely because the entrypoint was invoked.
 | Native notification delivery | `squad-notifications.instructions.md` |
 | No supported runtime | `federation-coordinator-legacy.md`, `state-write-contract.md` |
 
-Resolve instructions through the host or plugin `references/rules`; loading gaps waive no policy.
+Rules: host/plugin `references/rules`; gaps waive no policy.
+Synced hosts first follow `agent-discovery.md`.
 
 ## Lifecycle Invariants
 

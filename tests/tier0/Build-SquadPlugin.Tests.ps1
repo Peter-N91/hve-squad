@@ -63,6 +63,16 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         $script:BuildExitCode | Should -Be 0 -Because ($script:BuildOutput -join "`n")
     }
 
+    It 'ships shared active-plugin discovery and both coordinator entry contracts' {
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/scripts/SquadAgentDiscovery.ps1') | Should -BeTrue
+        Get-Content -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/references/agent-discovery.md') -Raw |
+            Should -Match 'SQUAD_ACTIVE_PLUGIN_ROOTS'
+        foreach ($name in @('coordinator-runtime', 'federation-runtime')) {
+            Get-Content -LiteralPath (Join-Path $script:OutputRoot "skills/squad/references/$name.md") -Raw |
+                Should -Match 'agent-discovery.md'
+        }
+    }
+
     It 'ships the user-only Squad Coach and a supported manual-agent handoff' {
         $agentPath = Join-Path $script:OutputRoot 'agents/squad/squad-coach.agent.md'
         Test-Path -LiteralPath $agentPath -PathType Leaf | Should -BeTrue
@@ -338,7 +348,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
             $agents = Join-Path $repo '.github/agents'
             foreach ($path in @($runtime, $squad, $agents)) { $null = [IO.Directory]::CreateDirectory($path) }
             Copy-Item -LiteralPath (Join-Path $script:OutputRoot 'hooks/scripts/dispatch-guards.ps1') -Destination $drop
-            foreach ($name in @('SquadCoordinator.psm1', 'Resolve-SquadConnectorDispatch.ps1')) {
+            foreach ($name in @('SquadCoordinator.psm1', 'Resolve-SquadConnectorDispatch.ps1', 'SquadAgentDiscovery.ps1')) {
                 Copy-Item -LiteralPath (Join-Path $script:OutputRoot "skills/squad/scripts/$name") -Destination $runtime
             }
             [IO.File]::WriteAllText((Join-Path $agents 'squad-lead.agent.md'), "---`nname: Squad Lead`n---`n")

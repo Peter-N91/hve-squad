@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Concepts — hve-squad</title>
+  <meta name="description" content="Le vocabulaire de hve-squad au même endroit : équipes et fédérations, profils et packs, init, promote et demandes de travail, modes d'autonomie, et où la squad conserve sa mémoire." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <script src="../assets/theme.js"></script>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <link rel="alternate" hreflang="en" href="../concepts.html" />
+  <script src="../assets/site.js" defer></script>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
+      <div class="nav-links">
+        <a href="index.html">Accueil</a>
+        <a href="concepts.html" class="active">Concepts</a>
+        <a href="getting-started.html">Bien démarrer</a>
+        <a href="usage.html">Utilisation</a>
+        <a href="demo.html">Démonstration</a>
+        <a href="ecosystem.html">Écosystème</a>
+        <a href="connector.html">Connecteur</a>
+        <a href="maintaining.html">Maintenance</a>
+        <a href="troubleshooting.html">Dépannage</a>
+        <a href="contributing.html">Contribuer</a>
+        <a href="https://github.com/Peter-N91/hve-squad">GitHub</a>
+        <a class="language-link" href="../concepts.html" lang="en">English</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Guide utilisateur</div>
+      <h1>Concepts</h1>
+      <p class="lead">
+        À lire en premier. Cette page définit les mots qu'emploient le Squad Coach, les coordinateurs et l'atelier
+        pratique, afin que rien dans les pages suivantes n'apparaisse sans explication.
+      </p>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="container">
+      <div class="callout">
+        <p>
+          <strong>Dix minutes de lecture, et inutile de tout retenir.</strong> Chaque terme ci-dessous a sa propre
+          section, et le Coach, les guides et l'atelier renvoient vers la section qui l'explique. Le parcours de
+          lecture est <a href="index.html">Vue d'ensemble</a> &rarr; Concepts (cette page)
+          &rarr; <a href="getting-started.html">Bien démarrer</a> &rarr; <a href="usage.html">Utilisation</a>.
+        </p>
+      </div>
+
+      <h2 id="terms-at-a-glance">Les termes en un coup d'œil</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Terme</th><th>En une phrase</th><th>Détails</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>HVE Core</strong></td><td>La bibliothèque d'agents, de prompts, d'instructions et de compétences qui réalise le travail d'ingénierie.</td><td><a href="#hve-squad-and-hve-core">HVE Squad et HVE Core</a></td></tr>
+            <tr><td><strong>HVE Squad</strong></td><td>La couche au-dessus de HVE Core qui aiguille votre demande vers une distribution d'agents et garde la trace de ce qui s'est passé.</td><td><a href="#hve-squad-and-hve-core">HVE Squad et HVE Core</a></td></tr>
+            <tr><td><strong>Agent</strong> et <strong>compétence</strong></td><td>Un agent est un rôle qui agit ; une compétence est une procédure qu'un agent charge.</td><td><a href="#agents-and-skills">Agents et compétences</a></td></tr>
+            <tr><td><strong>Squad Coach</strong></td><td>Un agent de conseil seul qui explique HVE Squad et vous remet des messages prêts à copier.</td><td><a href="#squad-coach">Squad Coach</a></td></tr>
+            <tr><td><strong>Équipe</strong> (ou : squad)</td><td>Un roster d'agents avec un plan, un journal de décisions et un historique.</td><td><a href="#teams-and-federations">Équipes et fédérations</a></td></tr>
+            <tr><td><strong>Fédération</strong></td><td>Plusieurs équipes indépendantes dans un même dépôt, avec un registre qui aiguille le travail entre elles.</td><td><a href="#teams-and-federations">Équipes et fédérations</a></td></tr>
+            <tr><td><code>init</code></td><td>Crée les fichiers d'état de l'équipe après votre confirmation d'une proposition. Ne lance aucun travail.</td><td><a href="#init-promote-and-work-requests">init, promote et demandes de travail</a></td></tr>
+            <tr><td><code>promote</code></td><td>Transforme votre équipe existante en premier membre d'une fédération, en conservant son historique.</td><td><a href="#init-promote-and-work-requests">init, promote et demandes de travail</a></td></tr>
+            <tr><td><strong>Demande de travail</strong></td><td>Tout autre message : le résultat que vous souhaitez, que l'équipe recherche, planifie, construit et relit.</td><td><a href="#init-promote-and-work-requests">init, promote et demandes de travail</a></td></tr>
+            <tr><td><strong>Profil</strong></td><td>Le type d'équipe que vous créez : une distribution de rôles prête à l'emploi pour un genre de travail.</td><td><a href="#profiles-and-packs">Profils et packs</a></td></tr>
+            <tr><td><strong>Pack</strong></td><td>Un ensemble facultatif de spécialistes technologiques ajouté à un profil.</td><td><a href="#profiles-and-packs">Profils et packs</a></td></tr>
+            <tr><td><strong>Interactif</strong> et <strong>autopilot</strong></td><td>Ce que l'équipe fait avant de vous solliciter : chaque étape, ou seulement les décisions importantes.</td><td><a href="#autonomy-modes">Interactif et autopilot</a></td></tr>
+            <tr><td><strong>Livrable</strong>, <code>decisions.md</code>, historique</td><td>Ce qu'une équipe produit, pourquoi elle l'a choisi et ce que chaque agent a fait, le tout conservé sous forme de fichiers dans votre dépôt.</td><td><a href="#durable-state">Où la squad conserve sa mémoire</a></td></tr>
+            <tr><td><strong>Aiguillage</strong>, <strong>point de validation</strong>, <strong>conseil</strong></td><td>Envoyer le travail au bon rôle, un point d'arrêt de la squad, et un panel de relecteurs.</td><td><a href="#other-words">Autres mots que vous rencontrerez</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="how-the-pieces-fit">Comment les éléments s'articulent</h2>
+      <div class="mermaid">
+flowchart LR
+    Q["Squad Coach<br/>advice only, no state"] -.-> A
+    A["init<br/>create the team"] --> B["Work request<br/>research, plan, implement, review"]
+    B --> C["Deliverables<br/>research, plans, changes, reviews, docs"]
+    B --> D["Team memory<br/>decisions.md, history/, state.json"]
+    D --> E["New chat?<br/>resume from the files"]
+    E --> B
+    A -.-> F["promote<br/>optional: one team becomes a federation"]
+      </div>
+
+      <h3 id="hve-squad-and-hve-core">HVE Squad et HVE Core</h3>
+      <p>
+        <a href="https://github.com/microsoft/hve-core">HVE Core</a> est une bibliothèque d'agents, de prompts,
+        d'instructions et de compétences pour un travail d'ingénierie structuré : recherche, planification,
+        implémentation, revue, exigences, architecture et plus encore. Utilisé directement, vous choisissez un agent à la fois.
+      </p>
+      <p>
+        <strong>HVE Squad</strong> s'appuie dessus. Il ajoute des coordinateurs qui lisent votre demande,
+        choisissent les rôles qui doivent la traiter, délèguent aux agents HVE Core correspondants et consignent
+        ce qui s'est passé. HVE Squad épingle une révision précise de HVE Core et maintient cette référence alignée avec chacune de
+        ses versions, de sorte que les agents délégués sont ceux avec lesquels cette version a été testée.
+      </p>
+      <p>
+        Une règle pratique lorsqu'un comportement vous surprend : si la question porte sur <em>le comportement d'un agent de recherche,
+        de plan ou de revue lui-même</em>, il s'agit d'une convention de HVE Core. Si elle porte sur
+        <em>les équipes, les profils, les packs, l'aiguillage, les approbations ou les fichiers que la squad écrit</em>, il s'agit de HVE
+        Squad.
+      </p>
+
+      <h3 id="agents-and-skills">Agents et compétences</h3>
+      <p>
+        Un <strong>agent</strong> est un rôle doté d'une mission et d'outils. Une <strong>compétence</strong>
+        est une procédure réutilisable qu'un agent charge lorsqu'il en a besoin, comme les compétences HVE Core de recherche,
+        de planification, d'implémentation et de revue.
+      </p>
+      <p>
+        C'est pourquoi un roster présente deux formes. Un exécutant préfixé Squad, comme Squad
+        Researcher, Squad Lead, Squad Implementor ou Squad Reviewer, est un agent léger qui charge la
+        compétence HVE Core correspondante. D'autres rôles, comme le BRD Builder ou l'UX UI Designer, délèguent
+        directement à un agent HVE Core. Ce choix est configuré explicitement dans le roster de l'équipe
+        (<code>team.md</code>) ; le modèle ne le décide pas au fil de l'eau.
+      </p>
+      <p>Vous ne sélectionnez vous-même que quelques agents. Les autres sont délégués pour vous :</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Agent que vous sélectionnez</th><th>Servez-vous-en pour</th><th>Modifie-t-il quelque chose ?</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Squad Coach</strong></td><td>Comprendre HVE Squad, choisir une configuration et obtenir les prochains messages à envoyer.</td><td>Non. Il donne uniquement des conseils et fonctionne avant toute initialisation.</td></tr>
+            <tr><td><strong>Squad Coordinator</strong></td><td>Créer une équipe (<code>init</code>) et lui envoyer des demandes de travail.</td><td>Oui : il délègue à l'équipe et écrit son état.</td></tr>
+            <tr><td><strong>Squad Federation Coordinator</strong></td><td>Créer ou agrandir une fédération, promouvoir une équipe unique et envoyer du travail à l'une de ses équipes.</td><td>Oui, au niveau de la fédération et dans chaque équipe.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        D'autres agents spécialisés, comme ceux du rapport de gouvernance, de la recherche documentaire et des
+        enseignements partagés, sont décrits dans <a href="usage.html">Utilisation</a>. Researcher, Lead, Implementor, Reviewer et les
+        autres rôles ne sont jamais sélectionnés par vous : le coordinateur les délègue.
+      </p>
+
+      <h2 id="teams-and-federations">Équipes et fédérations</h2>
+      <p>
+        Une <strong>équipe</strong> (la documentation dit aussi <strong>squad</strong>) est un roster d'agents
+        qui partagent un plan, un journal de décisions et un historique. Elle vit dans votre dépôt sous
+        <code>.copilot-tracking/squad/</code> et est créée par <code>init</code>.
+      </p>
+      <p>
+        Une <strong>fédération</strong> réunit plusieurs équipes dans le même dépôt, côte à côte. Chaque équipe
+        conserve son propre roster, ses décisions et son historique sous <code>.copilot-tracking/squad/members/&lt;name&gt;/</code>,
+        et un registre (<code>federation.md</code>) ainsi qu'une table d'aiguillage (<code>meta-routing.md</code>)
+        déterminent quelle équipe reçoit une demande. Vous travaillez avec une fédération par l'intermédiaire du Squad Federation
+        Coordinator.
+      </p>
+      <p>
+        <strong>Commencez avec une seule équipe.</strong> Choisissez une fédération uniquement lorsque deux flux de travail ou plus ont
+        des responsables, des livrables, des rythmes ou des limites d'accès différents, par exemple une équipe produit et une équipe
+        plateforme qui livrent séparément. Une spécialité technologique n'est pas une raison de fédérer : c'est
+        le rôle d'un <a href="#profiles-and-packs">pack</a>. La règle de décision complète figure dans
+        <a href="usage.html#profile-pack-or-federation">Profil, pack ou fédération ?</a>.
+      </p>
+      <p>
+        Chaque équipe d'une fédération porte un nom unique qui est aussi le nom de son dossier et la valeur que vous transmettez
+        avec <code>squad=&lt;name&gt;</code>. Les noms suivent le <em>kebab-case</em> : des mots en minuscules reliés par des tirets,
+        comme <code>azure-migration</code>.
+      </p>
+
+      <h2 id="messages-you-send">Les messages que vous envoyez</h2>
+      <p>
+        Vous dialoguez avec la squad en sélectionnant un agent et en lui envoyant un message. Les messages se répartissent en
+        quelques types, et seul le mot-clé initial les distingue. Aucune commande slash n'est nécessaire dans aucun hôte :
+        les onglets d'hôte de cette documentation indiquent quel agent sélectionner et le texte exact à envoyer.
+      </p>
+
+      <h3 id="init-promote-and-work-requests"><code>init</code>, <code>promote</code> et demandes de travail</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Message</th><th>À envoyer à</th><th>À utiliser lorsque</th><th>Ce qui se passe</th><th>Ce qu'il ne fait pas</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>init</code></td>
+              <td>Squad Coordinator</td>
+              <td>Le dépôt n'a pas encore d'équipe.</td>
+              <td>Le coordinateur demande d'abord si vous voulez une équipe ou une fédération. Pour une équipe, il propose un profil, des packs facultatifs, des noms de membres et un canal d'approbation, vous demande de confirmer, puis seulement alors écrit les fichiers d'état de l'équipe.</td>
+              <td>À lui seul, il ne lance aucun travail et ne produit ni recherche, ni plan, ni document, ni code.</td>
+            </tr>
+            <tr>
+              <td><code>init</code></td>
+              <td>Squad Federation Coordinator</td>
+              <td>Vous voulez plusieurs équipes dès le départ, ou ajouter une équipe à une fédération existante.</td>
+              <td>Il propose les équipes, vous demande de confirmer, puis crée la fédération ou y ajoute la nouvelle équipe.</td>
+              <td>Il ne modifie ni ne supprime jamais une équipe existante.</td>
+            </tr>
+            <tr>
+              <td><code>promote</code></td>
+              <td>Squad Federation Coordinator</td>
+              <td>Vous avez déjà une équipe et avez maintenant besoin d'équipes indépendantes.</td>
+              <td>Il liste ce qui va être déplacé : l'état de l'équipe et ses dossiers de travail sous <code>.copilot-tracking/</code>. Après votre confirmation, il les relocalise sous <code>members/&lt;name&gt;/</code> en tant que premier membre de la fédération. Les décisions et l'historique sont déplacés intacts, pas recréés.</td>
+              <td>À lui seul, il ne lance aucun travail. Il relocalise des fichiers sans les supprimer, et vos décisions et votre historique ne sont pas réécrits. La seule modification qu'il apporte est de rebaser la colonne Deliverable Root du <code>team.md</code> déplacé ; <code>docs/</code> et <code>outputs/</code> restent en place. Lancez ensuite <code>init</code> pour ajouter d'autres équipes.</td>
+            </tr>
+            <tr>
+              <td>Une <strong>demande de travail</strong></td>
+              <td>Le coordinateur de l'équipe (avec <code>squad=&lt;name&gt;</code> dans une fédération)</td>
+              <td>Vous voulez un résultat : un plan, un document, une modification, une revue.</td>
+              <td>L'équipe recherche, planifie, implémente et relit, s'arrête à ses points de validation et consigne ce qu'elle a fait.</td>
+              <td>Elle ne réinitialise rien. Sur un dépôt sans équipe, elle lance d'abord <code>init</code> puis poursuit votre demande.</td>
+            </tr>
+            <tr>
+              <td>Une <strong>question au Coach</strong></td>
+              <td>Squad Coach</td>
+              <td>Vous voulez un conseil ou le prochain message à envoyer. Il fonctionne à toute étape.</td>
+              <td>Il lit la documentation installée et votre projet, puis répond par un parcours détaillé.</td>
+              <td>Il n'initialise, ne délègue ni n'écrit jamais rien.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Dans la conversation, <code>init</code> et <code>promote</code> demandent toujours votre confirmation avant d'écrire quoi que ce soit,
+        et ils n'acceptent pas de mode. (Le mode Watch n'a aucun humain dans la boucle : il amorce ses propres équipes ; voir
+        <a href="usage.html">Utilisation</a>.) Ajoutez du contexte après <code>init</code> pour aider le coordinateur à proposer un profil adapté, et précisez
+        qu'il doit s'arrêter une fois l'équipe prête, afin qu'il ne se mette pas à travailler de lui-même :
+      </p>
+      <pre><code>/squad init Use the documents in docs/ as context. Set up one team for this planning work, and stop once the team is ready; I will send the work request next.</code></pre>
+
+      <h3 id="message-anatomy">Comment écrire un message</h3>
+      <p>
+        Un message comporte jusqu'à trois parties : un mot-clé facultatif (<code>init</code> ou <code>promote</code>) au début,
+        des options facultatives <code>name=value</code> et votre demande en langage courant. Dans une conversation avec un agent,
+        vous pouvez écrire la demande comme du texte ordinaire. L'enveloppe <code>request="..."</code> que vous voyez dans certains
+        exemples est le nom de l'entrée que les fichiers de prompt utilisent pour transporter ce même texte ; elle est
+        facultative ici.
+      </p>
+      <pre><code>/squad mode=autopilot Add input validation to the login form, with tests</code></pre>
+      <p>Les options se placent avant ou après votre demande. Les exemples les mettent en premier, sur leur propre ligne, car c'est plus lisible.</p>
+
+      <h3 id="message-reference">Référence des messages</h3>
+      <p>Voici toutes les entrées qu'acceptent les prompts Squad livrés. Tout ce qui n'est pas listé ici est du texte ordinaire pour l'équipe.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Entrée</th><th>Valeurs</th><th>S'applique à</th><th>Ce qu'elle contrôle</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>request</code></td><td>Texte libre</td><td>Tous les coordinateurs</td><td>Le travail de ce tour. Facultatif dans une conversation avec un agent : écrivez directement le texte.</td></tr>
+            <tr><td><code>init</code></td><td>Mot-clé</td><td>Les deux coordinateurs</td><td>Crée une équipe, une fédération, ou ajoute une équipe à une fédération. Voir ci-dessus.</td></tr>
+            <tr><td><code>promote</code></td><td>Mot-clé</td><td>Federation Coordinator</td><td>Adopte l'équipe unique existante comme premier membre d'une fédération. Voir ci-dessus.</td></tr>
+            <tr><td><code>squad=&lt;name&gt;</code></td><td>Le nom d'un membre de la fédération</td><td>Federation Coordinator</td><td>Envoie la demande à une équipe nommée. Omettez-le pour laisser l'aiguillage de la fédération choisir.</td></tr>
+            <tr><td><code>watch=</code></td><td>Défini par l'automatisation</td><td>Federation Coordinator</td><td>Provenance d'une exécution en mode Watch. Vous ne le saisissez jamais.</td></tr>
+            <tr><td><code>profile=</code></td><td>Un nom de profil</td><td>Première exécution</td><td>Le type d'équipe à créer. Voir <a href="usage.html#profiles">Profils</a>.</td></tr>
+            <tr><td><code>pack=</code></td><td>Un ou plusieurs noms de pack</td><td>Première exécution, ou ajout à une équipe</td><td>Spécialistes technologiques facultatifs. Voir <a href="usage.html#packs">Packs</a>.</td></tr>
+            <tr><td><code>mode=</code></td><td><code>autonomous</code> ou <code>autopilot</code></td><td>Demandes de travail</td><td>Ce qui s'exécute avant que l'équipe vous sollicite. Omettez-le pour le mode interactif.</td></tr>
+            <tr><td><code>routing=</code></td><td><code>off</code>, <code>ranked</code>, <code>economy</code>, <code>manual</code></td><td>Les deux coordinateurs</td><td>Le modèle d'IA utilisé par chaque rôle. Voir <a href="usage.html#model-selection-per-role">Sélection du modèle par rôle</a>.</td></tr>
+            <tr><td><code>cost-ceiling=</code></td><td>Un nombre positif en USD, ou <code>unset</code></td><td>Demandes de travail</td><td>Une limite estimée de dépenses de modèles vérifiée avant le début du travail. Voir <a href="usage.html#cost-admission-control">Contrôle d'admission des coûts</a>.</td></tr>
+            <tr><td><code>discovery=</code></td><td><code>quick</code>, <code>standard</code>, <code>deep</code>, <code>skip</code></td><td>Demandes de travail</td><td>Lance ou ignore l'entretien de découverte. Voir <a href="usage.html#discovery-gate-when-there-is-nothing-written-down-yet">Étape de découverte</a>.</td></tr>
+            <tr><td><code>tier=</code>, <code>owner=</code>, <code>execution=</code></td><td>Voir Utilisation</td><td>Demandes de travail</td><td>Avancé : un niveau de modèle par tour, un membre nommé lorsque deux lignes partagent un rôle, et l'exécution par connecteur.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Le Squad Coach n'accepte que <code>request=</code> et <code>host=vscode|cli|app</code> ; les deux sont facultatifs.</p>
+
+      <h2 id="profiles-and-packs">Profils et packs</h2>
+      <p>
+        <strong>Un profil est l'équipe que vous constituez : une distribution de rôles prête à l'emploi pour un genre de
+        travail. Les packs sont des spécialistes supplémentaires facultatifs que vous pouvez ajouter par-dessus.</strong> Vous choisissez exactement un
+        profil et zéro ou plusieurs packs.
+      </p>
+      <p>
+        Si vous choisissez <code>product</code>, vous n'avez pas choisi une fonctionnalité : vous avez choisi une équipe composée d'un
+        chercheur, d'un responsable de plan, d'un développeur, d'un testeur et d'un scribe, plus les rôles pour les exigences, la conception,
+        la responsabilité produit, les présentations et les expériences. Un pack ne remplace jamais cette équipe ; il lui ajoute quelques
+        spécialistes technologiques.
+      </p>
+
+      <h3 id="choosing-a-profile">Choisir un profil</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Votre travail consiste surtout à</th><th>Choisissez</th><th>Vous obtenez</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>De l'ingénierie générale, ou un premier essai</td><td><code>default</code></td><td>L'équipe minimale : chercheur, responsable de plan, développeur, testeur et scribe. Le point de départ recommandé.</td></tr>
+            <tr><td>Exigences métier, feuille de route, backlog, documents pour les parties prenantes</td><td><code>product</code></td><td>L'équipe de base plus analyste, responsable produit, concepteur, présentateur, rédacteur technique, expérimentateur, data scientist et valideur d'entrée.</td></tr>
+            <tr><td>Architecture Azure, infrastructure as code, coûts, déploiement</td><td><code>azure</code></td><td>L'équipe de base plus architecte Azure, auteur IaC, déployeur, gestionnaire de coûts, sécurité et rôles d'as-built.</td></tr>
+            <tr><td>Mettre à niveau ou migrer une application existante</td><td><code>modernization</code></td><td>L'équipe de base plus un modernisateur, des architectes, un auteur IaC et un gestionnaire de coûts.</td></tr>
+            <tr><td>Sécurité, confidentialité, chaîne d'approvisionnement, IA responsable</td><td><code>security</code></td><td>L'équipe de base plus les rôles sécurité, chaîne d'approvisionnement, RAI et confidentialité.</td></tr>
+            <tr><td>Éléments de preuve d'audit ou questionnaire client</td><td><code>compliance</code></td><td>Les rôles sécurité, chaîne d'approvisionnement, confidentialité, RAI, vulnérabilités, risques et accessibilité en plus de l'équipe de base.</td></tr>
+            <tr><td>Exploiter un système déployé</td><td><code>operations</code></td><td>Les rôles de diagnostic, de performance, d'observabilité, d'as-built et de déploiement.</td></tr>
+            <tr><td>Conception UX, conformité d'accessibilité ou conception de systèmes</td><td><code>design</code>, <code>accessibility</code>, <code>architecture</code></td><td>L'équipe de base plus les spécialistes correspondants.</td></tr>
+            <tr><td>Travaux complexes qui couvrent toutes les disciplines</td><td><code>full</code></td><td>Tous les rôles sauf ceux qui sont en option.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Les membres exacts de chaque profil figurent dans <a href="usage.html#profiles">Utilisation &rarr; Profils</a>.
+        Un profil est un ensemble de départ, pas un plafond : tout rôle de la distribution peut être ajouté plus tard en le demandant au
+        coordinateur. En cas de doute, acceptez le profil que le coordinateur propose à partir de votre
+        dépôt et de votre demande.
+      </p>
+
+      <h3 id="packs-are-optional">Les packs sont facultatifs</h3>
+      <p>
+        Un pack ajoute les spécialistes d'une technologie sur laquelle repose votre projet : <code>power-platform</code>,
+        <code>m365-copilot</code>, <code>aws</code> ou <code>foundry</code>. Ignorez les packs sauf si votre projet
+        utilise cette technologie. La question d'initialisation peut lister tous les packs enregistrés, ce qui donne
+        l'impression d'une recommandation ; c'est un menu, et chaque pack est facultatif. Ne choisir aucun pack est une réponse
+        normale.
+      </p>
+      <p>
+        La plupart des clients permettent de répondre à une question avec vos propres mots au lieu de choisir une option listée. Utilisez-le
+        lorsque vous ne savez pas ce qu'une option signifie : demandez au coordinateur de l'expliquer et en quoi votre
+        projet en aurait besoin. Les packs peuvent être ajoutés ou retirés plus tard sans recréer l'équipe ni perdre son
+        historique. Une application Power Platform qui nécessite aussi une piste d'audit est une seule équipe composée du profil
+        <code>compliance</code> plus du pack <code>power-platform</code>.
+      </p>
+
+      <h2 id="autonomy-modes">Interactif et autopilot</h2>
+      <p>
+        La squad peut vous solliciter avant chaque étape, ou exécuter tout le pipeline et ne vous demander que les décisions
+        importantes. Vous choisissez à chaque demande de travail en ajoutant <code>mode=</code> au message ; il n'existe pas de
+        paramètre séparé.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Mode</th><th>Comment le choisir</th><th>Qui approuve quoi</th><th>Choisissez-le lorsque</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Interactif</strong></td><td>Omettez <code>mode</code></td><td>Vous approuvez chaque étape : recherche, plan, implémentation, revue.</td><td>Vous apprenez, ou le travail est nouveau pour vous.</td></tr>
+            <tr><td><code>mode=autonomous</code></td><td>Ajoutez-le à une demande de travail</td><td>Une boucle de validation bornée revérifie une implémentation, puis vous rend la main.</td><td>Vous voulez un second regard sur une modification.</td></tr>
+            <tr><td><code>mode=autopilot</code></td><td>Ajoutez-le à une demande de travail</td><td>La squad enchaîne recherche, plan, implémentation et revue seule. Elle s'arrête pour vous demander avant les actions à impact (déploiement, <code>git push</code>, fusion, modifications de schéma ou de données), sur les signaux de risque comme un verdict <em>Stop</em> du conseil, un constat à risque élevé ou un plafond de coût qui serait dépassé, et pour le résultat final.</td><td>L'objectif est clair et vous voulez que l'exécution se poursuive sans vous à chaque étape.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>init</code> et <code>promote</code> n'utilisent jamais de mode : vous confirmez chaque proposition. Le
+        comportement complet est décrit dans <a href="usage.html#autonomy-modes">Utilisation &rarr; Modes d'autonomie</a>.
+      </p>
+
+      <h3 id="squad-autopilot-vs-host-approvals">L'autopilot de la squad n'est pas l'approbation de votre client</h3>
+      <p>
+        Deux couches distinctes déterminent quand on vous demande quelque chose. Le <strong>mode</strong> de la squad
+        décide quelles <em>décisions de travail</em> elle vous soumet : un plan, un déploiement, le résultat final.
+        Le <strong>niveau d'autorisation de votre client</strong> décide si Copilot demande avant de modifier un fichier,
+        d'exécuter une commande ou d'appeler un outil. <code>mode=autopilot</code> ne change pas la seconde couche.
+      </p>
+      <p>
+        C'est pourquoi une longue exécution en autopilot peut s'interrompre sur des invites telles que conserver des modifications de
+        fichiers ou autoriser une commande, alors même que la squad ne vous attend pas. Approuvez-les, ou élevez le niveau d'autorisation
+        pour cette session. Dans VS Code, choisissez le niveau d'autorisation dans la zone de saisie du chat, ou envoyez
+        <code>/yolo</code> pour contourner les approbations durant la session en cours (<code>/disableYolo</code> les rétablit) ;
+        consultez <a href="https://code.visualstudio.com/docs/agents/run/approvals">Manage approvals and permissions</a>.
+        Dans Copilot CLI, utilisez <code>/allow-all</code> (alias <code>/yolo</code>) dans la session, ou démarrez avec
+        <code>--allow-all-tools</code> ; consultez la
+        <a href="https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference">référence des commandes CLI</a>.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>N'élevez les autorisations que dans un dépôt de confiance.</strong> Allow-all supprime la confirmation
+          pour les modifications de fichiers et les commandes ; utilisez un clone jetable ou un conteneur de développement pour du code inconnu. N'activez pas
+          le mode <em>Autopilot</em> propre à votre client pour faire avancer une exécution de la squad : l'Autopilot de VS Code,
+          par exemple, répond aux questions qui bloqueraient autrement la progression, ce qui pourrait inclure les propres questions
+          d'approbation de la squad. Le <code>mode=autopilot</code> de la squad et l'Autopilot d'un client sont des
+          fonctionnalités différentes qui portent le même nom.
+        </p>
+      </div>
+
+      <h2 id="durable-state">Où la squad conserve sa mémoire</h2>
+      <p>
+        <strong>La conversation n'est pas la mémoire.</strong> La squad écrit ce qu'elle décide et fait dans des fichiers de
+        votre dépôt, puis les relit au début de chaque tour. Vous n'êtes pas lié à une seule fenêtre de conversation :
+        le contexte voyage avec le dépôt.
+      </p>
+
+      <h3 id="state-folder">Le dossier d'état</h3>
+      <p>Tout se trouve sous <code>.copilot-tracking/squad/</code> (ou <code>members/&lt;name&gt;/</code> pour un membre de fédération) :</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Fichier</th><th>Ce qu'il contient</th><th>Le modifiez-vous ?</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>team.md</code></td><td>Le roster : chaque rôle, qui le tient, son niveau de modèle et sa colonne <strong>Deliverable Root</strong> (où il écrit).</td><td>Seulement la colonne Deliverable Root. <a href="#custom-deliverable-paths">Voir ci-dessous.</a></td></tr>
+            <tr><td><code>routing.md</code></td><td>Quels types de demande vont à quel rôle.</td><td>Non. Demandez au coordinateur de le modifier.</td></tr>
+            <tr><td><code>decisions.md</code></td><td>Un journal en ajout seul des décisions et de leurs raisons : verdicts du conseil, de l'entrée et de la découverte, approbations.</td><td>Non. Les entrées ne sont jamais modifiées.</td></tr>
+            <tr><td><code>history/&lt;agent&gt;.md</code></td><td>Un enregistrement en ajout seul par agent : chaque demande traitée, le livrable écrit, le résultat et la consommation.</td><td>Non.</td></tr>
+            <tr><td><code>state.json</code></td><td>L'état lisible par machine : le tour en cours, les rôles actifs et le mode.</td><td>Non.</td></tr>
+            <tr><td><code>notifications.md</code></td><td>Un journal des notifications d'approbation envoyées par la squad.</td><td>Non.</td></tr>
+            <tr><td><code>consumption.md</code>, <code>consumption-rates.md</code></td><td>Le registre estimé de consommation et la table de tarifs correspondante.</td><td>Non.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Une fédération ajoute <code>federation.md</code> et <code>meta-routing.md</code> au niveau supérieur, et chaque
+        membre conserve les mêmes fichiers dans son propre dossier. Comme <code>decisions.md</code> et les fichiers d'historique
+        sont en ajout seul, ils servent de piste d'audit de la manière dont un résultat a été obtenu.
+      </p>
+
+      <h3 id="where-deliverables-go">Où vont les livrables</h3>
+      <p>
+        Chaque rôle écrit son artefact dans un dossier fixe, afin que la squad puisse vérifier qu'une étape a bien produit
+        son résultat. L'entrée d'historique de l'agent indique le fichier écrit sur sa ligne <code>Deliverable:</code>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Rôle</th><th>Emplacement par défaut</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>researcher</td><td><code>.copilot-tracking/research/&lt;date&gt;/</code></td></tr>
+            <tr><td>lead, analyst, product-owner, designer, experimenter, modernizer</td><td><code>.copilot-tracking/plans/</code></td></tr>
+            <tr><td>developer, iac-author</td><td><code>.copilot-tracking/changes/</code></td></tr>
+            <tr><td>tester, challenger, intake-validator</td><td><code>.copilot-tracking/reviews/</code></td></tr>
+            <tr><td>technical-writer</td><td><code>docs/</code></td></tr>
+            <tr><td>architect, azure-architect et les autres rôles d'architecte</td><td><code>docs/architecture/</code></td></tr>
+            <tr><td>risk-manager</td><td><code>docs/risks/</code></td></tr>
+            <tr><td>data-scientist</td><td><code>outputs/</code></td></tr>
+            <tr><td>presenter</td><td><code>.copilot-tracking/ppt/&lt;date&gt;/&lt;deck-slug&gt;/</code></td></tr>
+            <tr><td>security, rai, privacy, accessibility, supply-chain, performance, observability</td><td>Un dossier correspondant sous <code>.copilot-tracking/</code>, tel que <code>security-plans/</code> ou <code>rai-plans/</code></td></tr>
+            <tr><td>scribe</td><td>Le dossier de la squad lui-même : il écrit l'état, pas des livrables.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Dans une fédération, chaque emplacement <code>.copilot-tracking/</code> passe sous le dossier du membre, par
+        exemple <code>.copilot-tracking/squad/members/product/plans/</code>. Seuls <code>docs/</code> et
+        <code>outputs/</code> restent à la racine du dépôt, car la documentation publiée et les sorties de données
+        appartiennent à l'ensemble du dépôt. Les rôles qui renvoient leurs constats au coordinateur plutôt qu'un fichier,
+        comme le gestionnaire de coûts et le déployeur, sont consignés dans l'historique.
+      </p>
+
+      <h3 id="custom-deliverable-paths">Changer l'endroit où un rôle écrit</h3>
+      <ol>
+        <li>Ouvrez <code>.copilot-tracking/squad/team.md</code> (ou le <code>team.md</code> propre au membre dans une fédération).</li>
+        <li>Trouvez la ligne du rôle et modifiez sa cellule <strong>Deliverable Root</strong>. Utilisez un chemin relatif à la racine du dépôt, dans la même forme que les autres cellules, par exemple <code>research-notes/</code>.</li>
+        <li>Envoyez votre prochaine demande. Le coordinateur transmet à chaque agent la racine lue dans la ligne du roster ; la modification s'applique donc dès la délégation suivante, sans réinitialisation, et une actualisation du roster conserve votre modification. L'agent qui écrit crée le dossier ; vous n'avez pas à le faire.</li>
+      </ol>
+      <p>
+        N'utilisez ni <code>..</code>, ni chemin absolu, ni <code>~</code>. Dans une fédération, gardez une racine personnalisée
+        dans <code>docs/</code>, <code>outputs/</code> ou le dossier du membre : un livrable écrit
+        hors du dossier de son équipe a quitté sa racine, et le coordinateur le traite comme une étape en échec et la
+        relance. Ne modifiez à la main que cette colonne : les autres colonnes sont gérées par la squad ; demandez donc
+        au coordinateur lorsque vous voulez changer un rôle, un modèle ou un nom.
+      </p>
+      <p>
+        Après la délégation suivante, ouvrez le <code>history/&lt;agent&gt;.md</code> de l'agent et vérifiez que son chemin
+        <code>Deliverable:</code> est celui que vous avez défini. Un artefact trouvé au chemin par défaut de l'agent
+        signifie que la délégation n'a pas respecté le roster ; signalez-le plutôt que d'accepter cet emplacement.
+      </p>
+
+      <h3 id="new-chats">Ouvrir une nouvelle conversation est sans risque</h3>
+      <p>
+        Le coordinateur lit le dossier d'état au début de chaque tour ; une nouvelle conversation reprend donc
+        exactement là où les fichiers indiquent que se trouve le travail. Ouvrir une nouvelle conversation après <code>init</code> et entre
+        les grandes étapes est sans risque et souvent préférable : une conversation neuve garde un contexte réduit, et rien
+        n'est perdu. Dans la nouvelle conversation, ouvrez le même dossier de dépôt, sélectionnez de nouveau le même agent et dites ce que vous
+        voulez ensuite, par exemple <em>Résume où nous en sommes et poursuis depuis la dernière étape terminée</em>.
+      </p>
+      <p>
+        Vous n'avez jamais besoin de répéter <code>init</code> : il ne s'applique que lorsqu'aucune équipe n'existe encore (ou, avec une
+        fédération, pour ajouter une équipe). Les fichiers sont des fichiers ordinaires de votre dépôt ; vous pouvez donc les valider ou
+        copier le dossier pour continuer sur une autre machine ou transmettre le projet à un collègue.
+      </p>
+
+      <h2 id="inputs">Ce dont la squad part</h2>
+      <p>
+        Aucune structure de dossiers n'est exigée. L'équipe part de votre dépôt et de tout ce que vous lui indiquez : exigences,
+        spécifications, transcriptions, base de code existante. Nommez ces fichiers dans votre message, comme le fait l'atelier
+        pratique avec son dossier <code>knowledge-docs/</code>. Ce dossier est l'entrée propre à cet atelier, pas une
+        organisation que HVE Squad vous demande de créer.
+      </p>
+      <p>
+        Lorsqu'une exécution repose sur des entrées écrites, l'étape de contrôle des exigences les vérifie avant la planification. Lorsque rien
+        n'est encore écrit et que votre équipe est <code>product</code> ou <code>full</code>, l'étape de découverte propose
+        un court entretien qui produit le brief. Voir
+        <a href="usage.html#discovery-gate-when-there-is-nothing-written-down-yet">Étape de découverte</a> et
+        <a href="usage.html#requirements-intake-gate">Contrôle des exigences en entrée</a>.
+      </p>
+
+      <h2 id="squad-coach">Squad Coach</h2>
+      <p>
+        Le Squad Coach est un agent de conseil seul. Il lit le code et la documentation de la version que vous avez
+        installée, examine votre projet et répond par une recommandation et un parcours de messages prêts à copier.
+        Il n'initialise jamais d'équipe, ne délègue aucun travail, n'écrit aucun fichier et ne modifie pas votre configuration.
+      </p>
+      <ul>
+        <li><strong>À qui il s'adresse :</strong> toute personne qui débute avec HVE Squad, ou qui hésite sur la forme d'équipe, le profil, les packs ou le message adaptés à un objectif. Il fonctionne avant toute équipe.</li>
+        <li><strong>Quand l'ignorer :</strong> vous savez déjà ce que vous voulez (initialiser une équipe, puis envoyer une demande de travail), ou vous suivez un parcours figé comme l'atelier pratique, qui utilise volontairement des messages fixes afin de pouvoir comparer les résultats.</li>
+        <li><strong>Les mots qu'il emploie :</strong> les termes de cette page. Si l'un d'eux vous est nouveau, lisez sa section ici ou demandez au Coach de l'expliquer simplement avant de continuer.</li>
+      </ul>
+      <p>Consultez <a href="getting-started.html#chat-with-the-squad-coach">Bien démarrer &rarr; Squad Coach</a> pour savoir comment ouvrir une conversation dans votre client.</p>
+
+      <h2 id="other-words">Autres mots que vous rencontrerez</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Mot</th><th>Signification</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Rôle</strong>, <strong>membre</strong></td><td>Un rôle est un poste du roster, comme researcher ou tester. Un membre est une ligne nommée de <code>team.md</code> (par exemple Alpha) qui tient un rôle ; dans une fédération, « membre » désigne aussi l'une de ses équipes.</td></tr>
+            <tr><td><strong>Aiguillage</strong></td><td>Envoyer le travail au bon endroit. <code>routing.md</code> aiguille une demande vers un rôle, et <code>meta-routing.md</code> vers une équipe. Cela n'a aucun rapport avec l'option <code>routing=</code>, qui choisit le modèle d'IA utilisé par chaque rôle.</td></tr>
+            <tr><td><strong>Point de validation</strong> (gate)</td><td>Un point d'arrêt où la squad s'arrête pour une décision ou une validation : découverte, entrée, action à impact, risque et résultat final.</td></tr>
+            <tr><td><strong>Conseil</strong></td><td>Un panel de rôles de revue qui examine un plan sous plusieurs angles avant l'implémentation et consigne un verdict dans <code>decisions.md</code>.</td></tr>
+            <tr><td><strong>Scribe</strong></td><td>Le rôle qui écrit les fichiers d'état de la squad. Les autres agents ne les modifient jamais.</td></tr>
+            <tr><td><strong>Plafond de coût</strong></td><td>Une limite facultative des dépenses estimées de modèles pour une exécution. C'est un contrôle, pas une garantie de facture.</td></tr>
+            <tr><td><strong>Mode Watch</strong></td><td>Démarrer la squad depuis une issue ou un événement GitHub plutôt que depuis la conversation. Voir <a href="usage.html">Utilisation</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pager">
+        <a class="prev" href="index.html">
+          <div class="dir">← Retour</div>
+          <div class="ttl">Accueil</div>
+        </a>
+        <a class="next" href="getting-started.html">
+          <div class="dir">Suite →</div>
+          <div class="ttl">Bien démarrer</div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>
+        hve-squad · construit sur les agents et conventions de <a href="https://github.com/microsoft/hve-core">Microsoft HVE Core</a>
+        · <a href="https://github.com/Peter-N91/hve-squad">Code source sur GitHub</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -17,6 +17,7 @@
       <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Accueil</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html">Bien démarrer</a>
         <a href="usage.html">Utilisation</a>
         <a href="demo.html">Démonstration</a>
@@ -44,6 +45,10 @@
       <h2>Problèmes courants</h2>
       <h3>CLI ou App ne trouve pas le coordinateur ou un spécialiste</h3>
       <p>Vérifiez que <code>hve-squad</code> et <code>hve-squad-hve-core</code> sont tous deux installés dans le répertoire de plugins du client actuel. Sélectionnez l'agent coordinateur, et non un skill, puis demandez <code>squad-doctor</code>. Suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">guide du plugin</a> pour les domaines manquants et les réinstallations du compagnon. Une mise à jour depuis le terminal ne met pas à jour une application utilisant un autre <code>COPILOT_HOME</code>.</p>
+
+      <h3>VS Code signale des agents HVE Core absents alors que les deux plugins sont activés</h3>
+      <p data-release-change="20261029-synced-plugin-agent-discovery">Le harnais Copilot de VS Code peut copier les plugins dans des répertoires versionnés distincts. Le coordinateur Squad transmet les racines des plugins actifs annoncées par cet hôte à ses scripts via le tableau JSON <code>SQUAD_ACTIVE_PLUGIN_ROOTS</code>, limité au processus. Ce n'est pas un paramètre VS Code ; aucune configuration manuelle n'est nécessaire lorsque l'hôte expose ces chemins. Les agents du dépôt restent prioritaires et la découverte des plugins voisins dans CLI/App reste disponible lorsque cet inventaire n'est pas défini.</p>
+      <p>Les agents déployés dans le dépôt par le harnais Local utilisent la découverte existante sans cet inventaire. Pour le harnais Copilot, mettez à jour le plugin Squad et démarrez une nouvelle conversation. Si l'hôte n'expose pas les chemins des personnalisations actives, la découverte reste indéterminée : fournissez ces chemins depuis les personnalisations activées de l'hôte actuel, plutôt que de réinstaller HVE Core, supprimer un rôle ou parcourir d'anciens caches de plugins. La présence d'un fichier installé ne prouve pas que son agent est disponible pour une délégation native.</p>
 
       <h3>Exactement 11 dépendances échouent pendant <code>apm install</code></h3>
       <p>
@@ -203,6 +208,25 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
         les règles de délégation et de sécurité. Une ligne dont l'agent Primary ne peut pas écrire dans la <em>racine des livrables (Deliverable Root)</em>
         du rôle est toujours incorrecte. Après toute montée de version de hve-core, relancez <code>apm install</code> et comparez les agents
         avec <code>scripts/Get-HveCoreCastDelta.ps1</code>.
+      </p>
+
+      <h3>L'initialisation liste des packs que mon projet n'utilise pas</h3>
+      <p>
+        C'est normal, et rien ne dysfonctionne. La question peut lister tous les packs enregistrés (par exemple Foundry, AWS
+        ou Microsoft 365 Copilot) comme un menu d'options ; ce n'est pas une recommandation, et chaque pack est facultatif. N'en
+        choisissez aucun sauf si votre projet repose sur cette technologie. Si une option n'est pas claire, répondez avec vos propres mots et demandez
+        ce qu'elle apporte et pourquoi votre projet en aurait besoin. Un pack peut être ajouté ou retiré plus tard sans recréer l'équipe. Voir
+        <a href="concepts.html#packs-are-optional">Concepts &rarr; Les packs sont facultatifs</a>.
+      </p>
+
+      <h3>Une longue exécution en autopilot s'interrompt pour faire approuver des modifications de fichiers ou des commandes</h3>
+      <p>
+        Ces invites viennent de votre client Copilot, pas de la squad. <code>mode=autopilot</code> détermine quelles décisions
+        de travail la squad vous soumet ; il ne change pas le fait que votre client demande avant de modifier un fichier ou d'exécuter une
+        commande. Approuvez-les, ou élevez le niveau d'autorisation du client pour cette session (le niveau d'autorisation de VS Code ou
+        <code>/yolo</code> ; <code>/allow-all</code> ou <code>--allow-all-tools</code> dans Copilot CLI), uniquement dans un dépôt de
+        confiance. N'activez pas le mode Autopilot propre à un client pour les contourner : il peut répondre à votre place aux questions d'approbation de la squad.
+        Voir <a href="concepts.html#squad-autopilot-vs-host-approvals">Concepts &rarr; L'autopilot de la squad n'est pas l'approbation de votre client</a>.
       </p>
 
       <h2>Problèmes liés au plafond de coût</h2>
