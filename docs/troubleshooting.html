@@ -17,10 +17,12 @@
       <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Home</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html">Getting Started</a>
         <a href="usage.html">Usage</a>
         <a href="demo.html">Demo</a>
         <a href="ecosystem.html">Ecosystem</a>
+        <a href="connector.html">Connector</a>
         <a href="maintaining.html">Maintaining</a>
         <a href="troubleshooting.html" class="active">Troubleshooting</a>
         <a href="contributing.html">Contributing</a>
@@ -43,6 +45,10 @@
       <h2>Common issues</h2>
       <h3>CLI or App cannot find the coordinator or a specialist</h3>
       <p>Confirm that both <code>hve-squad</code> and <code>hve-squad-hve-core</code> are installed in the current client's plugin home. Select the coordinator agent, not a skill, then ask for <code>squad-doctor</code>. Follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">plugin guide</a> for missing domains and companion reinstalls. A terminal update does not update an app using another <code>COPILOT_HOME</code>.</p>
+
+      <h3>VS Code reports HVE Core agents missing even though both plugins are enabled</h3>
+      <p data-release-change="20261029-synced-plugin-agent-discovery">VS Code's Copilot harness can copy plugins into separate versioned directories. Squad's coordinator passes the active plugin roots advertised by that host to its scripts through the process-local <code>SQUAD_ACTIVE_PLUGIN_ROOTS</code> JSON array. This is not a VS Code setting; no manual configuration change is needed when the host exposes those paths. Repository-local agents keep priority, and CLI/App sibling-plugin discovery remains available when this inventory is unset.</p>
+      <p>The Local harness's repository-deployed agents use the existing discovery path without this inventory. For the Copilot harness, update the Squad plugin and start a fresh chat. If the host does not expose active customization paths, discovery remains unresolved: provide those paths from the current host's enabled customizations rather than reinstalling HVE Core, dropping a role, or scanning old plugin caches. An installed file is not proof that its agent is available for native dispatch.</p>
 
       <h3>Exactly 11 dependencies fail during <code>apm install</code></h3>
       <p>
@@ -204,6 +210,25 @@ apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
         with <code>scripts/Get-HveCoreCastDelta.ps1</code>.
       </p>
 
+      <h3>Initialization lists packs my project does not use</h3>
+      <p>
+        That is expected, and nothing is wrong. The question can list every registered pack (for example Foundry, AWS
+        or Microsoft 365 Copilot) as a menu of options; it is not a recommendation, and every pack is optional. Choose none
+        unless your project is built on that technology. If an option is unclear, answer in your own words and ask what it
+        adds and why your project would need it. A pack can be added or removed later without recreating the team. See
+        <a href="concepts.html#packs-are-optional">Concepts &rarr; Packs are optional</a>.
+      </p>
+
+      <h3>A long autopilot run keeps pausing to approve file changes or commands</h3>
+      <p>
+        Those prompts come from your Copilot client, not from the squad. <code>mode=autopilot</code> decides which work
+        decisions the squad brings to you; it does not change whether your client asks before editing a file or running a
+        command. Approve them, or raise the client's permission level for this session (VS Code's permission level or
+        <code>/yolo</code>; Copilot CLI's <code>/allow-all</code> or <code>--allow-all-tools</code>), only in a repository you
+        trust. Do not enable a client's own Autopilot mode to get past them: it can answer the squad's approval questions for
+        you. See <a href="concepts.html#squad-autopilot-vs-host-approvals">Concepts &rarr; Squad autopilot is not your client's approvals</a>.
+      </p>
+
       <h2>Cost-ceiling issues</h2>
 
       <h3>A fresh squad initialized before showing its Cost Preflight result</h3>
@@ -316,7 +341,7 @@ $env:PATH = "C:\Program Files\Graphviz\bin;$env:PATH"</code></pre>
         <li>See <a href="https://github.com/Peter-N91/hve-squad/blob/main/CHANGELOG.md">CHANGELOG.md</a> for what is included in each version.</li>
         <li>Consumers can pin to a tagged version, for example <code>apm install "Peter-N91/hve-squad#vX.Y.z"</code>.</li>
         <li>Releases are cut by hand when the pending work is judged ready, not on a schedule.</li>
-        <li>Between releases, everything already merged is installable from a rolling pre-release: <code>apm install "Peter-N91/hve-squad#vX.Y.z-pre"</code>. That tag moves on every merge, so it is for testing rather than for anything you depend on. A pre-release never shows as <strong>Latest</strong>.</li>
+        <li>Between releases, everything already merged is installable from a rolling pre-release: see the <a href="getting-started.html#testing-the-pre-release">current pre-release tag and install command</a>. That tag moves on every merge, so it is for testing rather than for anything you depend on. A pre-release never shows as <strong>Latest</strong>.</li>
         <li>Installing with no ref at all resolves to the default branch, not to the latest release, and APM warns about the drift. Always pin.</li>
       </ul>
 

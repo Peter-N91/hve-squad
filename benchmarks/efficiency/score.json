@@ -1,0 +1,74 @@
+{
+  "schema": "benchmark-score-v1",
+  "scenario": "task-cli-cold-start",
+  "measuredAt": "2026-10-26T16:26:36Z",
+  "source": {
+    "commit": "3bf61f082aa96ff195caba6d68efc7bb22c62e36",
+    "squadSourceHash": "19670b6ad9395846fef577c0c367be5d4fc951ebe0fa7e3c5029b0e835dfce0c",
+    "uncommittedChanges": false
+  },
+  "environment": {
+    "model": "claude-sonnet-5.5",
+    "cli": "GitHub Copilot CLI 1.0.104-3. Run 'copilot update' to check for updates.",
+    "powershell": "7.6.7"
+  },
+  "runs": {
+    "requested": 1,
+    "scored": 1,
+    "failed": 0
+  },
+  "summary": {
+    "quality": 82.0,
+    "dimensions": {
+      "businessClarity": 16.0,
+      "scopeFidelity": 15.0,
+      "acceptanceCriteria": 17.0,
+      "traceability": 18.0,
+      "risksAndDecisions": 16.0
+    },
+    "functional": 1,
+    "workflow": 0,
+    "criticalHighFindings": 0,
+    "averageSeconds": 1308.813,
+    "averageCredits": 496.355651,
+    "activity": {
+      "scribeDispatches": 1.0,
+      "scribeModelRequests": 3.0,
+      "scribeSeconds": 11.481,
+      "scribeCredits": 0.37845,
+      "coordinatorModelRequests": 46.0,
+      "authorModelRequests": 40.0
+    }
+  },
+  "trials": [
+    {
+      "run": 1,
+      "scored": true,
+      "quality": 82.0,
+      "dimensions": {
+        "businessClarity": 16.0,
+        "scopeFidelity": 15.0,
+        "acceptanceCriteria": 17.0,
+        "traceability": 18.0,
+        "risksAndDecisions": 16.0
+      },
+      "functional": true,
+      "workflow": false,
+      "criticalHighFindings": 0,
+      "seconds": 1308.813,
+      "credits": 496.355651,
+      "failedChecks": [
+        "requirements/reviewOutcome"
+      ],
+      "note": "",
+      "activity": {
+        "scribeDispatches": 1.0,
+        "scribeModelRequests": 3.0,
+        "scribeSeconds": 11.481,
+        "scribeCredits": 0.37845,
+        "coordinatorModelRequests": 46.0,
+        "authorModelRequests": 40.0
+      }
+    }
+  ]
+}

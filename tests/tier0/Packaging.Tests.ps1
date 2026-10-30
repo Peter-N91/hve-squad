@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; inspects source and built-package contents locally.
+
 # D7 (routing-performance plan amendment-1, P04-T05) packaging-parity Tier 0 coverage.
 # Covers: (a) no dangling `.github/instructions/squad/` path prose survives in the
 # built plugin output; (b) every file named in 00-index.md's and SKILL.md's reference
@@ -210,18 +212,23 @@ BeforeAll {
         }
     }
 
-    # (d) Scribe hot-core byte budget. The hot core is parsed from 00-index.md's own
-    # "The Scribe reads ... on every turn" sentence (the reference files) plus the
-    # agent charter file itself, rather than hardcoded, so this test tracks the
-    # contract if it is ever re-worded.
-    $indexText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/00-index.md') -Raw
-    $hotCoreSentence = [regex]::Match($indexText, 'The Scribe reads (.+?) on every turn')
-    $script:ScribeHotCoreReferenceFiles = @([regex]::Matches($hotCoreSentence.Groups[1].Value, '`([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value })
+    # Measure the ordinary read set and keep the legacy cold surface budget too.
+    $scribeText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw
+    $ordinarySection = [regex]::Match($scribeText, '(?s)## Ordinary handoff.*?(?=\r?\n## )')
+    $script:ScribeHotCoreReferenceFiles = @([regex]::Matches($ordinarySection.Value, '`references/([a-zA-Z0-9_.-]+\.md)`') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
     $script:ScribeHotCoreFiles = @(
         'squad-src/.github/agents/squad/squad-scribe.agent.md'
     ) + @($script:ScribeHotCoreReferenceFiles | ForEach-Object { "squad-src/.github/skills/squad/references/$_" })
     $script:ScribeHotCoreBytes = ($script:ScribeHotCoreFiles | ForEach-Object {
-            (Get-Item -LiteralPath (Join-Path $script:SourceRootResolved $_)).Length
+            [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)) -replace "`r`n", "`n"))
+        } | Measure-Object -Sum).Sum
+    $script:ScribeColdCoreFiles = @(
+        'squad-src/.github/agents/squad/squad-scribe.agent.md'
+    ) + @(
+        'scribe-cold-charter.md', '00-index.md', 'scribe-procedure.md', 'entry-schemas.md', 'scribe-payload-template.md'
+    ) | ForEach-Object { if ($_ -like 'squad-src/*') { $_ } else { "squad-src/.github/skills/squad/references/$_" } }
+    $script:ScribeColdCoreBytes = ($script:ScribeColdCoreFiles | ForEach-Object {
+            [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)) -replace "`r`n", "`n"))
         } | Measure-Object -Sum).Sum
 
     $baselinePath = Join-Path $script:SourceRootResolved 'tests/tier0/baselines/prefill-baseline.json'
@@ -235,9 +242,9 @@ Describe 'D7-1 Plugin build succeeds and carries every new reference file' {
     }
 
     It '<_> ships in the built plugin output' -ForEach @(
-        'model-catalog.md', 'model-routing.md', 'scribe-payload-template.md',
+        'model-catalog.md', 'model-benchmarks.md', 'model-routing.md', 'model-scoring.md', 'scribe-payload-template.md',
         'scribe-cold-init-and-seeding.md', 'scribe-cold-federation.md', 'scribe-cold-gates-and-verdicts.md',
-        'consumption-rates-template.md'
+        'consumption-rates-template.md', 'economy-scribe.md', 'scribe-cold-charter.md'
     ) {
         Test-Path -LiteralPath (Join-Path $script:PluginReferencesRoot $_) -PathType Leaf |
             Should -BeTrue -Because 'the deliverable requires every new reference file to ship in the plugin build, not only in squad-src'
@@ -246,6 +253,36 @@ Describe 'D7-1 Plugin build succeeds and carries every new reference file' {
     It 'ships the deterministic Watch Mode handoff module in the plugin output' {
         Test-Path -LiteralPath (Join-Path $script:PluginOutputRoot 'skills/squad/scripts/SquadWatch.psm1') -PathType Leaf |
             Should -BeTrue -Because 'consumer handoff prerequisites must be delivered with the squad skill'
+    }
+}
+
+Describe 'Shared scoring is delivered with the plugin runtime (SQ-33c)' {
+    It 'delivers the scorer unchanged beside the resolver' {
+        $source = Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/scripts/ModelBenchmarkScoring.ps1'
+        $delivered = Join-Path $script:PluginOutputRoot 'skills/squad/scripts/ModelBenchmarkScoring.ps1'
+        Test-Path -LiteralPath $delivered -PathType Leaf | Should -BeTrue
+        (Get-FileHash -LiteralPath $delivered).Hash | Should -Be (Get-FileHash -LiteralPath $source).Hash
+    }
+}
+
+Describe 'Deterministic coordinator transactions ship with the runtime' {
+    It 'delivers <Name> unchanged beside the coordinator scripts' -ForEach @(
+        @{ Name = 'SquadUsage.psm1' }
+        @{ Name = 'Get-SquadUsage.ps1' }
+        @{ Name = 'Set-SquadModelRouting.ps1' }
+        @{ Name = 'Write-SquadVerdict.ps1' }
+        @{ Name = 'SquadPromotion.psm1' }
+        @{ Name = 'Get-SquadPromotionPlan.ps1' }
+        @{ Name = 'Promote-SquadFederation.ps1' }
+        @{ Name = 'Get-SquadFederationInitPlan.ps1' }
+        @{ Name = 'Initialize-SquadFederation.ps1' }
+        @{ Name = 'Get-SquadRosterExpansionPlan.ps1' }
+        @{ Name = 'Expand-SquadRoster.ps1' }
+    ) {
+        $source = Join-Path $script:SourceRootResolved "squad-src/.github/skills/squad/scripts/$Name"
+        $delivered = Join-Path $script:PluginOutputRoot "skills/squad/scripts/$Name"
+        Test-Path -LiteralPath $delivered -PathType Leaf | Should -BeTrue
+        (Get-FileHash -LiteralPath $delivered).Hash | Should -Be (Get-FileHash -LiteralPath $source).Hash
     }
 }
 
@@ -305,16 +342,33 @@ Describe 'D7-4 No shipped file leaks the private knowledge-docs guides' {
     }
 }
 
-Describe 'D7-5 Scribe hot-core byte budget holds at or under the BEFORE baseline' {
+Describe 'D7-5 Ordinary hot contract shrinks while legacy cold protections remain budgeted' {
+    It 'measures the complete ordinary reference set rather than silently measuring zero references' {
+        $script:ScribeHotCoreReferenceFiles | Should -Be @('economy-scribe.md')
+        $script:ScribeHotCoreFiles.Count | Should -Be 2
+    }
+
+    It 'keeps the pinned Scribe agent below 3000 normalized UTF-8 bytes' {
+        $path = Join-Path $script:SourceRootResolved 'squad-src/.github/agents/squad/squad-scribe.agent.md'
+        [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText($path) -replace "`r`n", "`n")) | Should -BeLessThan 3000
+    }
+
+    It 'keeps agent plus ordinary contract within 6 KiB' {
+        $script:ScribeHotCoreBytes | Should -BeLessOrEqual 6144
+        $path = Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/economy-scribe.md'
+        [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText($path) -replace "`r`n", "`n")) | Should -BeLessOrEqual 3072
+    }
+
     It 'measured the BEFORE baseline scribe/plugin-cli figure' {
         $script:ScribeBaselineBytes | Should -BeGreaterThan 0 -Because 'tests/tier0/baselines/prefill-baseline.json must carry the BEFORE scribe/plugin-cli row'
     }
 
-    It 'sums to no more than the BEFORE baseline unconditionalBytes' {
-        $script:ScribeHotCoreBytes | Should -BeLessOrEqual $script:ScribeBaselineBytes -Because (
-            "the always-read set ($($script:ScribeHotCoreFiles -join ', ')) totals $($script:ScribeHotCoreBytes) bytes, " +
-            "which must not exceed the BEFORE baseline of $($script:ScribeBaselineBytes) bytes"
-        )
+    It 'retains the full legacy cold charter/procedure/schema/payload within the prior surface budget' {
+        $script:ScribeColdCoreBytes | Should -BeLessOrEqual $script:ScribeBaselineBytes
+        $cold = Get-Content -LiteralPath (Join-Path $script:PluginReferencesRoot 'scribe-cold-charter.md') -Raw
+        foreach ($protection in @('Copy each `team.md` row verbatim', 'unused permitted slot', 'copy → verify → delete-source', 'Never write outside consumer-local memory', 'never invent a model name')) {
+            $cold | Should -Match ([regex]::Escape($protection))
+        }
     }
 }
 
@@ -328,7 +382,7 @@ Describe 'D7-6 Model routing never touches an agent''s own frontmatter model sca
     }
 }
 
-Describe 'GATE-46 Repository Watch Mode and Sync-and-Adapt workflows enforce full RPI and package provisioning' {
+Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce full RPI and package provisioning' {
     BeforeAll {
         $script:RepoSquadWatch = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml') -Raw
         $script:RepoSyncHveCore = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/sync-hve-core.yml') -Raw
@@ -378,14 +432,14 @@ Describe 'GATE-46 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
     }
 }
 
-Describe 'GATE-48 Watch workflow publication contract' {
+Describe 'GATE-50 Watch workflow publication contract' {
     BeforeAll {
         $script:LiveWatch = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml') -Raw
         $script:TemplateWatch = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml') -Raw
-        $script:Tier0Runner = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'tests/tier0/Invoke-Tier0Tests.ps1') -Raw
+        $script:Tier0Runner = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'tests/tier0/Tier0TestPlan.psm1') -Raw
     }
 
-    It 'GATE-48 pins repository-wide queue max concurrency in both workflows' {
+    It 'GATE-50 pins repository-wide queue max concurrency in both workflows' {
         foreach ($workflow in @($script:LiveWatch, $script:TemplateWatch)) {
             $workflow | Should -Match ([regex]::Escape('group: squad-watch-${{ github.repository }}'))
             $workflow | Should -Match ([regex]::Escape('cancel-in-progress: false'))
@@ -393,7 +447,7 @@ Describe 'GATE-48 Watch workflow publication contract' {
         }
     }
 
-    It 'GATE-48 keeps review-event subscriptions absent and Conversation comments supported' {
+    It 'GATE-50 keeps review-event subscriptions absent and Conversation comments supported' {
         foreach ($workflow in @($script:LiveWatch, $script:TemplateWatch)) {
             $workflow | Should -Not -Match 'pull_request_review:'
             $workflow | Should -Match 'issue_comment:'
@@ -401,7 +455,7 @@ Describe 'GATE-48 Watch workflow publication contract' {
         }
     }
 
-    It 'GATE-48 preserves live and template actor rules without authorization widening' {
+    It 'GATE-50 preserves live and template actor rules without authorization widening' {
         foreach ($workflow in @($script:LiveWatch, $script:TemplateWatch)) {
             $workflow | Should -Match ([regex]::Escape("['write', 'admin', 'maintain']"))
             $workflow | Should -Not -Match 'notify\.github\.handle'
@@ -409,7 +463,7 @@ Describe 'GATE-48 Watch workflow publication contract' {
         }
     }
 
-    It 'GATE-48 wires every resolver output through apply review escalation staging and upload' {
+    It 'GATE-50 wires every resolver output through apply review escalation staging and upload' {
         foreach ($name in @('member', 'stableRef', 'sourceThread', 'sourceThreadNumber', 'publicationBranch', 'existingPr', 'sourceSha', 'trustedBaseSha', 'suppressInterpret', 'reconcilePublication', 'publishSourceComment')) {
             $script:LiveWatch | Should -Match $name
             $script:TemplateWatch | Should -Match $name
@@ -419,7 +473,7 @@ Describe 'GATE-48 Watch workflow publication contract' {
         $script:LiveWatch | Should -Match 'needs.interpret.outputs.sourceThreadNumber'
     }
 
-    It 'GATE-48 reacquires trusted helpers in every privileged job' {
+    It 'GATE-50 reacquires trusted helpers in every privileged job' {
         $trustedCheckouts = [regex]::Matches($script:LiveWatch, [regex]::Escape('.squad-trusted'))
         $trustedCheckouts.Count | Should -BeGreaterOrEqual 4
         $script:LiveWatch | Should -Match ([regex]::Escape('persist-credentials: false'))
@@ -428,24 +482,24 @@ Describe 'GATE-48 Watch workflow publication contract' {
         $script:TemplateWatch | Should -Match ([regex]::Escape('persist-credentials: false'))
     }
 
-    It 'GATE-48 updates only the marked Open Questions body block' {
+    It 'GATE-50 updates only the marked Open Questions body block' {
         $script:LiveWatch | Should -Match ([regex]::Escape('<!-- squad-watch-open-questions:start -->'))
         $script:LiveWatch | Should -Match 'Update-SquadWatchMarkedBody'
     }
 
-    It 'GATE-48 keeps fast-forward-only push and failure escalation' {
+    It 'GATE-50 keeps fast-forward-only push and failure escalation' {
         $script:LiveWatch | Should -Not -Match '--force'
         $script:LiveWatch | Should -Match 'Refusing to force-push'
         $script:LiveWatch | Should -Match 'Escalate on run failure'
     }
 
-    It 'GATE-47 comments encoded questions and creates no PR or placeholder for blocked no-material' {
+    It 'GATE-49 comments encoded questions and creates no PR or placeholder for blocked no-material' {
         $script:LiveWatch | Should -Match 'publishSourceComment'
         $script:LiveWatch | Should -Match 'no material publication'
         $script:LiveWatch | Should -Match 'hasMaterialChanges'
     }
 
-    It 'GATE-47 keeps gh pr create --draft unconditional for new material publication' {
+    It 'GATE-49 keeps gh pr create --draft unconditional for new material publication' {
         foreach ($workflow in @($script:LiveWatch, $script:TemplateWatch)) {
             $workflow | Should -Match 'gh pr create'
             $create = [regex]::Match($workflow, 'gh pr create\s*\\?\s*--draft')
@@ -453,7 +507,7 @@ Describe 'GATE-48 Watch workflow publication contract' {
         }
     }
 
-    It 'GATE-48 rejects a trusted checkout path outside the workspace' {
+    It 'GATE-50 rejects a trusted checkout path outside the workspace' {
         $paths = @(
             (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml'),
             (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml')
@@ -489,7 +543,7 @@ print(json.dumps(rows))
         }
     }
 
-    It 'GATE-48 parses both Watch workflows and their embedded scripts' {
+    It 'GATE-50 parses both Watch workflows and their embedded scripts' {
         $python = Get-Command python -ErrorAction Stop
         $files = @(
             (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml'),

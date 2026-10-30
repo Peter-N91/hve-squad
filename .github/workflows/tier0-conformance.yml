@@ -13,6 +13,10 @@ name: Tier 0 Conformance
 #   ref mode (workflow_call, workflow_dispatch) — installs a published ref exactly
 #     as a consumer would. This is the release gate, and the only mode that can
 #     assert the manifest pinned itself (PKG-01).
+#
+# Independent file-level shards retain the complete selection, with one aggregate
+# "Package conformance" check for branch protection. Release callers select
+# repository-only or installed-package cases rather than repeating both.
 
 on:
   pull_request:
@@ -21,23 +25,40 @@ on:
     paths:
       - 'squad-src/**'
       - 'scripts/Build-SquadPlugin.ps1'
+      - 'scripts/plugin-hooks/**'
       - 'apm.yml'
       - 'tests/tier0/**'
+      - 'tests/lib/**'
       - '.github/workflows/tier0-conformance.yml'
+      - '.github/workflows/release.yml'
   push:
     branches:
       - main
     paths:
       - 'squad-src/**'
       - 'scripts/Build-SquadPlugin.ps1'
+      - 'scripts/plugin-hooks/**'
       - 'apm.yml'
       - 'tests/tier0/**'
+      - 'tests/lib/**'
       - '.github/workflows/tier0-conformance.yml'
+      - '.github/workflows/release.yml'
   workflow_call:
     inputs:
       ref:
         description: 'Published ref to install and assert, for example v0.16.0.'
-        required: true
+        required: false
+        default: ''
+        type: string
+      source-ref:
+        description: 'Immutable checkout for the suite and source mode; defaults to the event commit.'
+        required: false
+        default: ''
+        type: string
+      scope:
+        description: 'All, Repository (no installation), or Package.'
+        required: false
+        default: All
         type: string
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Manual trigger for testing a published ref; the input is passed via env and only ever reaches an apm install argument.
@@ -49,16 +70,67 @@ on:
         type: string
 
 concurrency:
-  group: tier0-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  # A release caller must not cancel the independent main integration check, or
+  # its own complementary source/tag call.
+  group: ${{ github.workflow }}-tier0-${{ github.event.pull_request.number || inputs.source-ref || inputs.ref || github.ref }}-${{ inputs.scope || 'All' }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  conformance:
-    name: Package conformance
+  plan:
+    name: Select conformance shards
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      shards: ${{ steps.plan.outputs.shards }}
+      modern: ${{ steps.plan.outputs.modern }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          ref: ${{ inputs.source-ref || github.sha }}
+
+      - name: Select the exact test plan
+        id: plan
+        shell: pwsh
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_SCOPE: ${{ inputs.scope || 'All' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runner = Get-Command ./tests/tier0/Invoke-Tier0Tests.ps1 -ErrorAction Stop
+          $modern = $runner.Parameters.ContainsKey('Scope') -and $runner.Parameters.ContainsKey('Shard')
+          if ($modern) {
+            Import-Module ./tests/tier0/Tier0TestPlan.psm1 -Force
+            $mode = if ($env:INPUT_REF) { 'Installed' } else { 'Source' }
+            $plan = @(Get-Tier0TestPlan -Mode $mode -Scope $env:INPUT_SCOPE)
+            $shards = @($plan.Shard | Select-Object -Unique)
+            if ($shards.Count -eq 0) { throw 'No Tier 0 shards selected.' }
+          }
+          else {
+            Write-Warning 'Legacy hotfix runner: preserving its complete, unsharded suite instead of skipping unsupported selections.'
+            $shards = @('All')
+          }
+          $sha = & git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot freeze the Tier 0 checkout.' }
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          "modern=$($modern.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "shards=$(ConvertTo-Json -InputObject $shards -Compress)" >> $env:GITHUB_OUTPUT
+
+  conformance:
+    name: Tier 0 (${{ matrix.shard }})
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ needs.plan.outputs.modern == 'true' && 25 || 60 }}
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     permissions:
       contents: read
     steps:
@@ -67,10 +139,12 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
+          ref: ${{ needs.plan.outputs.sha }}
 
       # setup-only: the suite drives apm itself, so it needs the CLI and nothing else.
       - name: Install the APM CLI
         uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        if: inputs.scope != 'Repository' || needs.plan.outputs.modern != 'true'
         with:
           setup-only: 'true'
           apm-version: '0.18.0'
@@ -80,7 +154,18 @@ jobs:
       # suite is authored and verified against 5.
       - name: Install Pester
         shell: pwsh
-        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Write-Warning "Pester install attempt $attempt failed; retrying."
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
 
       - name: Run Tier 0
         shell: pwsh
@@ -89,15 +174,25 @@ jobs:
           # on the reset rather than failing, which reads as a hung job.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_REF: ${{ inputs.ref }}
-          # A rerun keeps its old event payload while checkout refreshes the PR merge
-          # ref. HEAD^1 is the base of the tree under test; other events stay absolute.
+          # HEAD^1 is the base of the exact PR merge tree under test.
           TIER0_BASE_SHA: ${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}
+          INPUT_SCOPE: ${{ inputs.scope || 'All' }}
+          INPUT_SHARD: ${{ matrix.shard }}
+          MODERN_RUNNER: ${{ needs.plan.outputs.modern }}
         run: |
+          $testArgs = @{
+            Output = 'Detailed'
+            ScratchRoot = Join-Path $env:RUNNER_TEMP 'tier0-install'
+          }
+          if ($env:MODERN_RUNNER -eq 'true') {
+            $testArgs.Scope = $env:INPUT_SCOPE
+            $testArgs.Shard = $env:INPUT_SHARD
+          }
           if ($env:INPUT_REF) {
-            ./tests/tier0/Invoke-Tier0Tests.ps1 -Ref $env:INPUT_REF -Output Detailed
+            ./tests/tier0/Invoke-Tier0Tests.ps1 -Ref $env:INPUT_REF @testArgs
           }
           else {
-            ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Output Detailed
+            ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . @testArgs
           }
 
       - name: Summarize
@@ -124,3 +219,30 @@ jobs:
           }
 
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($lines -join "`n")
+
+      - name: Retain shard results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tier0-${{ inputs.scope || 'All' }}-${{ matrix.shard }}
+          path: tests/tier0/tier0-results.xml
+          retention-days: 7
+          if-no-files-found: warn
+          overwrite: true
+
+  required:
+    name: Package conformance
+    if: always()
+    needs: [plan, conformance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every selected shard
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          SHARD_RESULT: ${{ needs.conformance.result }}
+        run: |
+          if [[ "$PLAN_RESULT" != success || "$SHARD_RESULT" != success ]]; then
+            echo "::error::Tier 0 did not pass every selected shard (plan=$PLAN_RESULT, shards=$SHARD_RESULT)."
+            exit 1
+          fi

@@ -67,10 +67,19 @@ Combine the per-meter prices from Step 2 with the cost model from Step 3 to prod
 
 ### Step 5: Review the Squad's Own AI Spend (AI Spend Review Mode Only)
 
-Read, never write, the squad root's `consumption.md` (its `## Unit Economics (value)` and `## Observed Usage (host-reported)` sections), `state.json` (`currentRun.costPreflight`), and, when the request names earlier runs or squad roots, their ledgers too. Run `scripts/Measure-SquadLedger.ps1 -SquadRoot <root> -Format json` when a shell is available, so every figure comes from the script rather than from reading the tables by eye. Then:
+Read, never write, the squad root's `consumption.md` (its main Usage & Cost,
+`## Unit Economics (value)`, and Cost Comparison sections), `state.json`
+(`currentRun.costPreflight`), and, when the request names earlier runs or squad
+roots, their ledgers too. Run
+`scripts/Measure-SquadLedger.ps1 -SquadRoot <root> -SessionLog auto -Format json`
+when a shell is available, so every figure comes from the script rather than from
+reading the tables by eye. Then:
 
 1. **Unit economics first.** Report cost per accepted deliverable (credits spent divided by deliverables an independent review-class verdict accepted), first-pass yield, rework share, and orchestration share. A deliverable no review accepted carries zero value: never divide by dispatches or by deliverables merely produced. A cheaper model that lowers cost per dispatch but raises rework is a loss when cost per accepted deliverable rises.
-2. **Label every figure.** Mark each number `measured` (host-reported credits or tokens), `estimated` (the dispatch-size estimator), or `derived` (computed from the two), and say which one a recommendation rests on.
+2. **Label every figure.** Mark each number `measured` when JSON `basis` is
+   `exact-native`, `estimated` when it comes from the dispatch-size fallback, or
+   `derived` when it is the without-Squad counterfactual over exact request tokens.
+   Say which basis a recommendation rests on.
 3. **Compare runs fairly.** Compare only like work (same request class and roster), with at least three runs per side, reporting medians and the spread. A single run is an anecdote: say so rather than claiming a change. Prefer pairs of runs on the same task over unrelated runs.
 4. **Find the waste.** Name the largest contributor among rework (re-dispatched owners and repeated reviews), orchestration (coordinator and Scribe turns), discovery reads, and model choice, and quantify it from the ledger. Flag a run whose cost per accepted deliverable exceeds 1.5 times the median of comparable earlier runs as an anomaly.
 5. **Guardrails.** When `costPreflight` carries a ceiling, report spend against it and the projected spend for the remaining planned dispatches; recommend a ceiling from the median comparable run plus its spread, never from a single run.

@@ -1,0 +1,30 @@
+{
+  "taskId": "task-2026-10-12-0002",
+  "connectorId": "acme-delivery-orchestrator-v3",
+  "bindingId": "developer-delivery-orchestrator",
+  "role": "developer",
+  "status": "completed",
+  "artifacts": [],
+  "outputs": [
+    {
+      "outputId": "implementation-note",
+      "artifacts": [
+        {
+          "path": "invoice-total-fix.md",
+          "type": "md"
+        }
+      ]
+    },
+    {
+      "outputId": "validation-note",
+      "artifacts": [
+        {
+          "path": "invoice-total-validation.md",
+          "type": "md"
+        }
+      ]
+    }
+  ],
+  "narrative": "Completed the bounded implementation and validation work and mapped each artifact to its declared output slot.",
+  "createdAt": "2026-10-12T17:20:00Z"
+}

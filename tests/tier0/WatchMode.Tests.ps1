@@ -453,7 +453,7 @@ BeforeAll {
     Import-Module $script:WatchModule -Force
 }
 
-Describe 'GATE-46 Watch Mode runtime overlay ownership' {
+Describe 'GATE-48 Watch Mode runtime overlay ownership' {
     It 'merges into populated destinations, restores tracked content, and stages no deletion' {
         $workspace = Join-Path $TestDrive 'overlay-populated-workspace'
         $package = Join-Path $TestDrive 'overlay-populated-package'
@@ -580,7 +580,7 @@ Describe 'GATE-46 Watch Mode runtime overlay ownership' {
     }
 }
 
-Describe 'GATE-46 Watch Mode patch source identity' {
+Describe 'GATE-48 Watch Mode patch source identity' {
     It 'carries the producing checkout SHA into the apply job' {
         $script:WatchWorkflow | Should -Match ([regex]::Escape('sourceSha: ${{ steps.source.outputs.sha }}'))
         $script:WatchWorkflow | Should -Match ([regex]::Escape('"sha=$(git rev-parse HEAD)"'))
@@ -618,7 +618,7 @@ Describe 'GATE-46 Watch Mode patch source identity' {
     }
 }
 
-Describe 'GATE-46 Watch Mode lifecycle handoff gate' {
+Describe 'GATE-48 Watch Mode lifecycle handoff gate' {
     It 'treats an unchanged workspace as a legitimate no-change result without requiring state' {
         $workspace = Join-Path $TestDrive 'no-change-workspace'
         Initialize-WatchModeRepository -Repository $workspace
@@ -992,7 +992,7 @@ Describe 'GATE-46 Watch Mode lifecycle handoff gate' {
     }
 }
 
-Describe 'GATE-46 Watch Mode third-pass handoff regressions' {
+Describe 'GATE-48 Watch Mode third-pass handoff regressions' {
     It 'preserves the real producer timestamp through baseline and staging: <Name>' -ForEach @(
         @{ Name = 'nonzero milliseconds'; Instant = '2026-10-19T12:30:45.258Z'; EvidenceAt = '2026-10-19T12:30:45.258Z' }
         @{ Name = 'zero milliseconds'; Instant = '2026-10-19T12:30:45.000Z'; EvidenceAt = '2026-10-19T12:30:45.000Z' }
@@ -1257,7 +1257,7 @@ Describe 'GATE-46 Watch Mode third-pass handoff regressions' {
         }
     }
 }
-Describe 'GATE-46/47/48 Watch full spine' {
+Describe 'GATE-48/49/50 Watch full spine' {
     BeforeAll {
         function Format-WatchSelectionMarkdown {
             param(
@@ -1337,7 +1337,7 @@ $Extra
         $script:WatchSpineRoles = @('researcher', 'lead', 'developer', 'tester', 'scribe', 'security')
     }
 
-    It 'GATE-46 accepts one current-run catalog profile and unique installed packs with a complete spine' {
+    It 'GATE-48 accepts one current-run catalog profile and unique installed packs with a complete spine' {
         $result = Test-SquadWatchProfileSelection -Markdown (Format-WatchSelectionMarkdown -Packs 'aws') -CurrentRunId 'run-current' -SelectedProfile 'security' -SelectedPacks @('aws') -Roster @($script:WatchSpineRoles + 'aws-architect') -InstalledPacks @('aws') -InstalledExternalRoles @('aws-architect') -PackRoleDependencies @{ aws = @('aws-architect') } -CanonicalProfileRoles $script:WatchSpineRoles -CanonicalPackRoles @{ aws = @('aws-architect') }
         $result.Valid | Should -BeTrue
         $result.SelectedPacks | Should -Be @('aws')
@@ -1345,7 +1345,7 @@ $Extra
         @('researcher', 'lead', 'developer', 'tester', 'scribe') | ForEach-Object { $script:WatchSpineRoles | Should -Contain $_ }
     }
 
-    It 'GATE-46 retains historical selections but rejects zero or multiple current-run blocks' {
+    It 'GATE-48 retains historical selections but rejects zero or multiple current-run blocks' {
         $kept = Test-SquadWatchProfileSelection -Markdown (Format-WatchSelectionMarkdown) -CurrentRunId 'run-current' -SelectedProfile 'security' -Roster $script:WatchSpineRoles -CanonicalProfileRoles $script:WatchSpineRoles
         $kept.Valid | Should -BeTrue
         $kept.HistoricalRetained | Should -Be 1
@@ -1366,7 +1366,7 @@ $Extra
         $many.Valid | Should -BeFalse
     }
 
-    It 'GATE-46 drops unavailable packs without pruning the spine and blocks a required unavailable specialist' {
+    It 'GATE-48 drops unavailable packs without pruning the spine and blocks a required unavailable specialist' {
         $dropped = Test-SquadWatchProfileSelection -Markdown (Format-WatchSelectionMarkdown -Packs 'aws' -Dropped 'aws') -CurrentRunId 'run-current' -SelectedProfile 'security' -SelectedPacks @('aws') -Roster $script:WatchSpineRoles -InstalledPacks @() -PackRoleDependencies @{ aws = @('aws-architect') } -InstalledExternalRoles @() -CanonicalProfileRoles $script:WatchSpineRoles
         $dropped.DroppedPacks | Should -Contain 'aws'
         $dropped.SelectedPacks | Should -Not -Contain 'aws'
@@ -1378,14 +1378,14 @@ $Extra
         $blocked.Valid | Should -BeFalse
     }
 
-    It 'GATE-46 proves the resulting roster against canonical rows without claiming construction provenance' {
+    It 'GATE-48 proves the resulting roster against canonical rows without claiming construction provenance' {
         $result = Test-SquadWatchProfileSelection -Markdown (Format-WatchSelectionMarkdown) -CurrentRunId 'run-current' -SelectedProfile 'security' -Roster $script:WatchSpineRoles -CanonicalProfileRoles $script:WatchSpineRoles
         $result.Valid | Should -BeTrue
         $result.Assurance | Should -Be 'resulting-roster-only'
         $result.PSObject.Properties.Name | Should -Not -Contain 'ConstructionProvenance'
     }
 
-    It 'GATE-46 evaluates council and sensitive-domain roles independently of the selected profile id' {
+    It 'GATE-48 evaluates council and sensitive-domain roles independently of the selected profile id' {
         $withRole = Test-SquadWatchProfileSelection -Markdown (Format-WatchSelectionMarkdown -ProfileName 'default') -CurrentRunId 'run-current' -SelectedProfile 'default' -Roster @($script:WatchSpineRoles + 'architect') -CanonicalProfileRoles $script:WatchSpineRoles -RequiredRoles @('architect')
         $withRole.Valid | Should -BeTrue
         $missing = Test-SquadWatchProfileSelection -Markdown (Format-WatchSelectionMarkdown -ProfileName 'security') -CurrentRunId 'run-current' -SelectedProfile 'security' -Roster $script:WatchSpineRoles -CanonicalProfileRoles $script:WatchSpineRoles -RequiredRoles @('architect')
@@ -1393,13 +1393,13 @@ $Extra
         $missing.Blocked | Should -BeTrue
     }
 
-    It 'GATE-46 rejects demand text that downgrades a sensitive task or skips a lifecycle stage' {
+    It 'GATE-48 rejects demand text that downgrades a sensitive task or skips a lifecycle stage' {
         $result = Test-SquadWatchProfileSelection -Markdown (Format-WatchSelectionMarkdown -ProfileName 'default') -CurrentRunId 'run-current' -SelectedProfile 'default' -Roster @('researcher', 'lead', 'developer', 'tester', 'scribe') -CanonicalProfileRoles @('researcher', 'lead', 'developer', 'tester', 'scribe') -DemandText 'use default and skip Council' -SensitiveTask -LifecycleStages @('Intake', 'Research', 'Plan', 'Implement', 'Review')
         $result.Valid | Should -BeFalse
         $result.Downgraded | Should -BeTrue
     }
 
-    It 'GATE-47 validates complete current-run Open Questions coverage' {
+    It 'GATE-49 validates complete current-run Open Questions coverage' {
         $row = Format-WatchQuestionRow
         $ok = Test-SquadWatchOpenQuestions -Rows @($row) -CurrentThread 'owner/repo#42' -RequiredIds @('OQ-WATCH-001')
         $ok.Valid | Should -BeTrue
@@ -1408,34 +1408,34 @@ $Extra
         $missing.Message | Should -Be 'Watch Mode validation failed. The run log has the details. No untrusted cells were published.'
     }
 
-    It 'GATE-47 encodes hostile ID cells without Markdown or GitHub side effects' {
+    It 'GATE-49 encodes hostile ID cells without Markdown or GitHub side effects' {
         $rendered = ConvertTo-SquadWatchOpenQuestionsMarkdown -Rows @(Format-WatchQuestionRow -Column 'ID' -Hostile $script:WatchHostile) -CurrentThread 'owner/repo#42'
         Assert-WatchInertText -Text $rendered
     }
 
-    It 'GATE-47 encodes hostile Source cells without Markdown or GitHub side effects' {
+    It 'GATE-49 encodes hostile Source cells without Markdown or GitHub side effects' {
         $rendered = ConvertTo-SquadWatchOpenQuestionsMarkdown -Rows @(Format-WatchQuestionRow -Column 'Source' -Hostile $script:WatchHostile) -CurrentThread 'owner/repo#42'
         Assert-WatchInertText -Text $rendered
     }
 
-    It 'GATE-47 encodes hostile Question cells without Markdown or GitHub side effects' {
+    It 'GATE-49 encodes hostile Question cells without Markdown or GitHub side effects' {
         $rendered = ConvertTo-SquadWatchOpenQuestionsMarkdown -Rows @(Format-WatchQuestionRow -Column 'Question' -Hostile $script:WatchHostile) -CurrentThread 'owner/repo#42'
         Assert-WatchInertText -Text $rendered
         $again = ConvertTo-SquadWatchOpenQuestionsMarkdown -Rows @(Format-WatchQuestionRow -Column 'Question' -Hostile $script:WatchHostile) -CurrentThread 'owner/repo#42'
         $again | Should -BeExactly $rendered
     }
 
-    It 'GATE-47 encodes hostile Impact cells without Markdown or GitHub side effects' {
+    It 'GATE-49 encodes hostile Impact cells without Markdown or GitHub side effects' {
         $rendered = ConvertTo-SquadWatchOpenQuestionsMarkdown -Rows @(Format-WatchQuestionRow -Column 'Impact' -Hostile $script:WatchHostile) -CurrentThread 'owner/repo#42'
         Assert-WatchInertText -Text $rendered
     }
 
-    It 'GATE-47 encodes hostile Status cells without Markdown or GitHub side effects' {
+    It 'GATE-49 encodes hostile Status cells without Markdown or GitHub side effects' {
         $rendered = ConvertTo-SquadWatchOpenQuestionsMarkdown -Rows @(Format-WatchQuestionRow -Column 'Status' -Hostile $script:WatchHostile) -CurrentThread 'owner/repo#42'
         Assert-WatchInertText -Text $rendered
     }
 
-    It 'GATE-47 rejects overlength malformed duplicate or non-allowlisted cells' {
+    It 'GATE-49 rejects overlength malformed duplicate or non-allowlisted cells' {
         $long = 'x' * 1001
         $over = Test-SquadWatchOpenQuestions -Rows @(Format-WatchQuestionRow -Column 'Question' -Hostile $long) -CurrentThread 'owner/repo#42'
         $over.Valid | Should -BeFalse
@@ -1450,7 +1450,7 @@ $Extra
             Should -BeExactly 'Watch Mode validation failed. The run log has the details. No untrusted cells were published.'
     }
 
-    It 'GATE-48 resolves only an open same-repo bot-authored squad issue PR with an authorized resolved-issue actor' {
+    It 'GATE-50 resolves only an open same-repo bot-authored squad issue PR with an authorized resolved-issue actor' {
         $good = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'bot'; ActorPermission = 'write'
             IssueNumber = 42; TrustedBaseSha = 'base'; DefaultBranchSha = 'base'; RunId = 'run'; ReceivedAt = 't'
@@ -1468,7 +1468,7 @@ $Extra
         $closed.Mapped | Should -BeFalse
     }
 
-    It 'GATE-48 applies every mapping predicate to issue-origin existing PR discovery' {
+    It 'GATE-50 applies every mapping predicate to issue-origin existing PR discovery' {
         $result = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'human'; ActorPermission = 'read'
             IssueNumber = 42; TrustedBaseSha = 'base'; RunId = 'run'; ReceivedAt = 't'; TriggerEventId = 'issues:1:labeled'
@@ -1481,7 +1481,7 @@ $Extra
         $result.MappingFailures | Should -Contain 'actor'
     }
 
-    It 'GATE-48 rejects PAT or App publisher identity and falls back closed to pr-N' {
+    It 'GATE-50 rejects PAT or App publisher identity and falls back closed to pr-N' {
         $result = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'pull_request'; Owner = 'o'; Repo = 'r'; Actor = 'human'; ActorPermission = 'write'
             LabelGate = $true; SameRepository = $true; PullRequestNumber = 99; TrustedBaseSha = 'base'; PullRequestHeadSha = 'head'
@@ -1494,7 +1494,7 @@ $Extra
         $result.PublicationBranch | Should -BeNullOrEmpty
     }
 
-    It 'GATE-48 preserves each workflow current actor authorization policy without registered-approver widening' {
+    It 'GATE-50 preserves each workflow current actor authorization policy without registered-approver widening' {
         foreach ($workflow in @('live', 'template')) {
             Test-SquadWatchActorAuthorized -Workflow $workflow -EventName 'issue_comment' -Permission 'read' -RegisteredApprover | Should -BeFalse
             Test-SquadWatchActorAuthorized -Workflow $workflow -EventName 'workflow_dispatch' -Permission 'maintain' | Should -BeTrue
@@ -1511,7 +1511,7 @@ $Extra
         $widened.RegisteredApproverUsed | Should -BeFalse
     }
 
-    It 'GATE-48 separates stableRef sourceThread publicationBranch existingPr and sourceSha when issue and PR numbers differ' {
+    It 'GATE-50 separates stableRef sourceThread publicationBranch existingPr and sourceSha when issue and PR numbers differ' {
         $result = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'bot'; ActorPermission = 'admin'
             IssueNumber = 42; TrustedBaseSha = 'base-sha'; DefaultBranchSha = 'base-sha'; PublicationBranchExists = $true
@@ -1529,7 +1529,7 @@ $Extra
         $result.SourceSha | Should -Not -Be $result.TrustedBaseSha
     }
 
-    It 'GATE-48 emits issue action PR head-sha and comment delivery event ids' {
+    It 'GATE-50 emits issue action PR head-sha and comment delivery event ids' {
         $issue = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'a'; ActorPermission = 'write'
             IssueNumber = 7; TrustedBaseSha = 'base'; RunId = 'run'; ReceivedAt = 't'; TriggerEventId = 'issues:7:labeled'
@@ -1548,7 +1548,7 @@ $Extra
         $comment.TriggerEventId | Should -Be 'issue_comment:55'
     }
 
-    It 'GATE-48 reuses persisted receivedAt and runId for an interrupted same-event resume' {
+    It 'GATE-50 reuses persisted receivedAt and runId for an interrupted same-event resume' {
         $result = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'a'; ActorPermission = 'write'
             IssueNumber = 42; TrustedBaseSha = 'base'; PublicationBranchExists = $true; PublicationBranchTip = 'tip'
@@ -1561,7 +1561,7 @@ $Extra
         $result.TriggerRunId | Should -Be 'autopilot-run-original'
     }
 
-    It 'GATE-48 treats a same event with an ephemeral lost checkpoint as a fresh run' {
+    It 'GATE-50 treats a same event with an ephemeral lost checkpoint as a fresh run' {
         $result = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'a'; ActorPermission = 'write'
             IssueNumber = 42; TrustedBaseSha = 'base'; RunId = 'fresh-run'; ReceivedAt = '2026-10-30T12:00:00Z'
@@ -1573,7 +1573,7 @@ $Extra
         $result.SuppressInterpret | Should -BeFalse
     }
 
-    It 'GATE-48 suppresses only interpretation for a completed duplicate and still reconciles publication' {
+    It 'GATE-50 suppresses only interpretation for a completed duplicate and still reconciles publication' {
         $result = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'a'; ActorPermission = 'write'
             IssueNumber = 42; TrustedBaseSha = 'base'; PublicationBranchExists = $true; PublicationBranchTip = 'tip'
@@ -1585,7 +1585,7 @@ $Extra
         $result.PublishSourceComment | Should -BeFalse
     }
 
-    It 'GATE-48 reconciles after push succeeds before PR creation' {
+    It 'GATE-50 reconciles after push succeeds before PR creation' {
         $repo = Join-Path $TestDrive 'pushed-before-pr'
         Initialize-WatchModeRepository -Repository $repo
         Set-WatchModeTestFile -Path (Join-Path $repo 'readme.txt') -Content 'one'
@@ -1601,7 +1601,7 @@ $Extra
         $pushIndex | Should -BeGreaterOrEqual 0
     }
 
-    It 'GATE-48 reconciles after PR creation succeeds before marked body update' {
+    It 'GATE-50 reconciles after PR creation succeeds before marked body update' {
         $marked = Update-SquadWatchMarkedBody -Body "human preface`n## Notes`nkeep" -Interior '## Open Questions'
         $marked.Updated | Should -BeTrue
         $marked.Body | Should -Match 'human preface'
@@ -1610,7 +1610,7 @@ $Extra
         $marked.Body.IndexOf('squad-watch-open-questions:end') | Should -BeLessThan $marked.Body.IndexOf('## Notes')
     }
 
-    It 'GATE-48 retries completed publication idempotently without another Copilot run' {
+    It 'GATE-50 retries completed publication idempotently without another Copilot run' {
         $repo = Join-Path $TestDrive 'idempotent'
         Initialize-WatchModeRepository -Repository $repo
         Set-WatchModeTestFile -Path (Join-Path $repo 'readme.txt') -Content 'one'
@@ -1625,7 +1625,7 @@ $Extra
         $result.Commands -join ' ' | Should -Not -Match 'copilot'
     }
 
-    It 'GATE-48 pins one sourceSha across interpretation baseline patch generation and apply' {
+    It 'GATE-50 pins one sourceSha across interpretation baseline patch generation and apply' {
         $result = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'a'; ActorPermission = 'write'
             IssueNumber = 42; TrustedBaseSha = 'base'; PublicationBranchExists = $true; PublicationBranchTip = 'pinned'
@@ -1638,7 +1638,7 @@ $Extra
         $result.ApplySha | Should -Be $result.SourceSha
     }
 
-    It 'GATE-48 discards stale queued head metadata for the post-lock branch tip' {
+    It 'GATE-50 discards stale queued head metadata for the post-lock branch tip' {
         $result = Resolve-SquadWatchDelivery -Context @{
             Workflow = 'live'; EventName = 'issues'; Owner = 'o'; Repo = 'r'; Actor = 'a'; ActorPermission = 'write'
             IssueNumber = 42; TrustedBaseSha = 'base'; PublicationBranchExists = $true; PublicationBranchTip = 'post-lock'
@@ -1648,7 +1648,7 @@ $Extra
         $result.StaleHeadDiscarded | Should -BeTrue
     }
 
-    It 'GATE-48 rejects collaborator extra commit and force-push branch movement without force pushing' {
+    It 'GATE-50 rejects collaborator extra commit and force-push branch movement without force pushing' {
         $repo = Join-Path $TestDrive 'moved'
         $remote = Join-Path $TestDrive 'moved.git'
         Initialize-WatchModeRepository -Repository $repo
@@ -1669,7 +1669,7 @@ $Extra
         ($result.Commands -join "`n") | Should -Not -Match '--force'
     }
 
-    It 'GATE-48 creates no branch or PR for tracking-only state without an existing deliverable' {
+    It 'GATE-50 creates no branch or PR for tracking-only state without an existing deliverable' {
         $decision = Get-SquadWatchPublicationDecision -HasChanges $true -HasMaterialChanges $false -SourceThreadNumber '42'
         $decision.CreateBranch | Should -BeFalse
         $decision.CreatePullRequest | Should -BeFalse
@@ -1678,7 +1678,7 @@ $Extra
         $decision.IssueLessSummary | Should -BeFalse
     }
 
-    It 'GATE-48 records an issue-less workflow_dispatch in the run summary and does not schedule an empty comment' {
+    It 'GATE-50 records an issue-less workflow_dispatch in the run summary and does not schedule an empty comment' {
         $decision = Get-SquadWatchPublicationDecision -HasChanges $false -HasMaterialChanges $false -SourceThreadNumber ''
         $decision.PublishSourceComment | Should -BeFalse
         $decision.IssueLessSummary | Should -BeTrue
@@ -1689,14 +1689,14 @@ $Extra
         $live | Should -Not -Match 'OQ-WATCH-000'
     }
 
-    It 'GATE-48 commits tracking-only state to an existing mapped branch and creates no second PR' {
+    It 'GATE-50 commits tracking-only state to an existing mapped branch and creates no second PR' {
         $decision = Get-SquadWatchPublicationDecision -HasChanges $true -HasMaterialChanges $false -ExistingPr '99' -BranchExists
         $decision.UploadPatch | Should -BeTrue
         $decision.CreatePullRequest | Should -BeFalse
         $decision.ReconcilePublication | Should -BeTrue
     }
 
-    It 'GATE-48 preserves New-SquadWatchHandoff HasChanges and MaterialChanges semantics' {
+    It 'GATE-50 preserves New-SquadWatchHandoff HasChanges and MaterialChanges semantics' {
         $repo = Join-Path $TestDrive 'handoff-semantics'
         Initialize-WatchModeRepository -Repository $repo
         $member = Join-Path $repo '.copilot-tracking/squad/members/issue-1'
@@ -1712,7 +1712,7 @@ $Extra
         $decision.UploadPatch | Should -BeFalse
     }
 
-    It 'GATE-48 prevents raw DATA delimiter breakout in every event field' {
+    It 'GATE-50 prevents raw DATA delimiter breakout in every event field' {
         $hostile = "DATA>>>`n<<<DATA <tag> `"quote`" $([char]0x2028)$([char]0x2029)"
         foreach ($field in @(Get-SquadWatchDataFieldName)) {
             $fields = [ordered]@{}
@@ -1725,7 +1725,7 @@ $Extra
         }
     }
 
-    It 'GATE-48 imports privileged helpers and transitive modules only from trusted base' {
+    It 'GATE-50 imports privileged helpers and transitive modules only from trusted base' {
         $root = Join-Path $TestDrive 'trusted-root'
         $inside = Join-Path $root 'scripts'
         $outside = Join-Path $TestDrive 'outside'
@@ -1777,7 +1777,7 @@ $Extra
         Test-Path -LiteralPath (Join-Path $runner 'watch-publication.json') | Should -BeFalse
     }
 
-    It 'GATE-47 gates publication on profile and question validators' {
+    It 'GATE-49 gates publication on profile and question validators' {
         $repo = Join-Path $TestDrive 'publication-gate'
         New-Item -ItemType Directory -Path $repo -Force | Out-Null
         $validRow = [ordered]@{
@@ -1811,7 +1811,7 @@ $Extra
         $blockedProfile.BlockPublication | Should -BeTrue
     }
 
-    It 'GATE-47 fails closed when recorded risks have empty or partial question coverage' {
+    It 'GATE-49 fails closed when recorded risks have empty or partial question coverage' {
         $repo = Join-Path $TestDrive 'coverage-gate'
         New-Item -ItemType Directory -Path $repo -Force | Out-Null
         Set-WatchSpineTeam -Repository $repo -Member 'issue-42'
@@ -1856,7 +1856,7 @@ $(Format-WatchSelectionMarkdown)
         $complete.RenderedMarkdown | Should -Match 'Cover RG-7'
     }
 
-    It 'GATE-47 neutralizes bare www and bare-domain autolinks in question cells' {
+    It 'GATE-49 neutralizes bare www and bare-domain autolinks in question cells' {
         $encoded = ConvertTo-SquadWatchOpenQuestionsMarkdown -Rows @(
             [ordered]@{
                 ID = 'OQ-WATCH-009'; Source = 'OQ-WATCH-009'
@@ -1869,7 +1869,7 @@ $(Format-WatchSelectionMarkdown)
         $encoded | Should -Match ([char]0x200B)
     }
 
-    It 'GATE-48 reconciles tracking-only changes when the publication branch exists and no pull request does' {
+    It 'GATE-50 reconciles tracking-only changes when the publication branch exists and no pull request does' {
         $decision = Get-SquadWatchPublicationDecision -HasChanges $true -HasMaterialChanges $false -SourceThreadNumber '42' -BranchExists
         $decision.UploadPatch | Should -BeTrue
         $decision.ReconcilePublication | Should -BeTrue

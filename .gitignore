@@ -2,6 +2,10 @@
 # APM dependencies
 apm_modules/
 
+# Local efficiency wizard answers and atomic writes.
+/.efficiency-wizard-defaults.json
+/.efficiency-wizard-defaults.json.*.tmp
+
 # Generated/copied orchestration assets (local only)
 .github/**
 !.github/ISSUE_TEMPLATE/
@@ -76,3 +80,4 @@ results.sarif
 tests/docs/node_modules/
 node_modules/
 _site/
+.docs-releases.json

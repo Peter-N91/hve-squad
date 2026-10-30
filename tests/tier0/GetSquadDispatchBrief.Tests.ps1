@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; checks the read-only brief using local fixture repositories.
+
 # Behavioral coverage for the read-only dispatch brief, squad skill
 # scripts/Get-SquadDispatchBrief.ps1. Runs the script as a child process against TestDrive
 # repositories, because it calls `exit`. Invokes no model.
@@ -41,6 +43,8 @@ BeforeAll {
             [switch]$BlockedReviewer,
             [switch]$ModelColumn,
             [switch]$DriftedHeader,
+            [ValidateSet('none', 'legacy-no-bindings', 'valid-add', 'missing-aligned', 'invalid-aligned', 'cyclic-aligned')]
+            [string]$ConnectorMode = 'none',
             [AllowEmptyString()][string]$Routing = 'economy',
             [string]$Alternate = '—'
         )
@@ -80,6 +84,31 @@ BeforeAll {
                 '| tester | Rev | Squad Reviewer | — | — | task | fast | `.copilot-tracking/reviews/` |'
             )
         }
+        if ($ConnectorMode -ne 'none' -and -not $ModelColumn -and -not $DriftedHeader) {
+            $team += '| gcp | GCP Assessor | Squad Connector | — | — | task | default | `.copilot-tracking/gcp-assessments/` |'
+        }
+        if ($ConnectorMode -notin @('none', 'legacy-no-bindings') -and -not $ModelColumn -and -not $DriftedHeader) {
+            $team += ''
+            $team += '## Connector Bindings'
+            $team += ''
+            $team += '| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |'
+            $team += '| ---------- | ------------ | -------- | ------------- | --------- | ----------- | ------ | ----------- | ---------- | ------------ | ----------------- |'
+            switch ($ConnectorMode) {
+                'valid-add' {
+                    $team += '| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | azure-architect | connector |'
+                }
+                'missing-aligned' {
+                    $team += '| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp |  | connector |'
+                }
+                'invalid-aligned' {
+                    $team += '| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | imaginary-role | connector |'
+                }
+                'cyclic-aligned' {
+                    $team += '| gcp-assessor | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:gcp/GCP Assessor | GCP Assessor | gcp | bridge-role | connector |'
+                    $team += '| bridge-cycle | acme-delivery-orchestrator-v3 | docs/templates/connector-example/manifest.1.1.json | orchestrator | add | role | role:bridge-role/GCP Assessor | GCP Assessor | bridge-role | gcp | connector |'
+                }
+            }
+        }
         Write-Text (Join-Path $squad 'team.md') ($team -join "`n")
         $preflight = if ($Ceiling) { '{"ceilingUsd":5,"decision":"within-ceiling"}' } else { '{"ceilingUsd":null,"decision":"not-requested"}' }
         Write-Text (Join-Path $squad 'state.json') ('{"schemaVersion":"1.4","updated":"2026-10-03T18:00:00Z","turn":4,"mode":"interactive","currentRun":{"costPreflight":' + $preflight + '}}')
@@ -99,13 +128,14 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         Test-Path -LiteralPath $script:Script | Should -BeTrue
     }
 
-    It 'refuses an uninitialized squad (no team.md) with exit 7' {
-        $result = Invoke-Brief -Repo (New-BriefRepo -Uninitialized)
-        $result.ExitCode | Should -Be 7 -Because $result.Output
-        $result.Output | Should -Not -Match 'Squad Dispatch Brief'
+    It 'returns an explicit Init pointer for an uninitialized JSON request' {
+        $result = Invoke-Brief -Repo (New-BriefRepo -Uninitialized) -Extra @('-AsJson')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        ($result.Output | ConvertFrom-Json).kind | Should -Be 'uninitialized'
+        ($result.Output | ConvertFrom-Json).action | Should -Be 'initialize'
     }
 
-    It 'refuses with exit 7 and prints no brief when team.md records <Case> (G2)' -ForEach @(
+    It 'returns universal metadata without economy consent or bounded procedure for <Case>' -ForEach @(
         @{ Case = 'Model routing: ranked'; Routing = 'ranked' }
         @{ Case = 'Model routing: manual'; Routing = 'manual' }
         @{ Case = 'no Model routing line'; Routing = '' }
@@ -113,9 +143,9 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $repo = New-BriefRepo -Routing $Routing
         $before = Get-TreeHash -Root $repo
         $result = Invoke-Brief -Repo $repo
-        $result.ExitCode | Should -Be 7 -Because $result.Output
-        $result.Output | Should -Match 'economy-only'
-        $result.Output | Should -Not -Match 'Squad Dispatch Brief'
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'Squad Dispatch Brief'
+        $result.Output | Should -Not -Match '(?m)^## Bounded Lane|WARN economy consent|(?m)^consent:'
         Get-TreeHash -Root $repo | Should -Be $before
     }
 
@@ -149,8 +179,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match '(?m)^## Bounded Lane'
         $result.Output | Should -Match '(?m)^## Plan-Driven Parallelism'
         $result.Output | Should -Match '(?m)^## Scripted Writes'
-        $result.Output | Should -Match ([regex]::Escape('This is a complete, valid payload:'))
-        $result.Output | Should -Match '(?m)^```json'
+        $result.Output | Should -Match 'minimal structured JSON per `references/economy-scribe\.md`'
         $result.Output | Should -Not -Match 'not found in'
         Get-TreeHash -Root $repo | Should -Be $before
     }
@@ -180,10 +209,16 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match ([regex]::Escape('roster precheck (Step 1b): PASS'))
     }
 
-    It 'gives the Scribe the hand-off command line and tells the coordinator never to run it' {
+    It 'gives the coordinator the direct ordinary-writer command and keeps cold writes with the Scribe' {
         $result = Invoke-Brief -Repo (New-BriefRepo)
-        $result.Output | Should -Match ([regex]::Escape('Dispatch the Squad Scribe with the payload JSON and this exact command line, which the Scribe runs as its first action; never run it yourself:'))
-        $result.Output | Should -Match '`pwsh -File ''[^'']+Write-SquadHandoff\.ps1'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json>`'
+        $result.Output | Should -Match 'run the validated writer directly and synchronously\. Do not dispatch the Scribe for this write:'
+        $result.Output | Should -Match '`pwsh -NoProfile -File ''[^'']+Write-SquadHandoff\.ps1'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json> -Quiet`'
+        $result.Output | Should -Match '(?m)^## Payload Contract\r?$'
+        $result.Output | Should -Match 'Optional `decision`:.*adrNoted: boolean'
+        $result.Output | Should -Match 'historyRecords\[\].*passedModel.*routingIdentity'
+        $result.Output | Should -Match 'routingIdentity.*requestedModel, effectiveModel, observedModel, routeRationale'
+        $result.Output | Should -Match 'stateAdvance.*required.*activeRoles: string\[\]'
+        $result.Output | Should -Match 'Use the Squad Scribe for cold operations\.'
         $result.Output | Should -Not -Match ([regex]::Escape('-PayloadJson $p'))
         $result.Output | Should -Not -Match '(?m)^### Script Hand-off'
     }
@@ -192,6 +227,29 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result = Invoke-Brief -Repo (New-BriefRepo) -Extra @('-SessionModel', 'claude-sonnet-5.5')
         [System.Text.Encoding]::UTF8.GetByteCount($result.Output) | Should -BeLessThan 20480
         $result.Output | Should -Not -Match 'WARN brief exceeds'
+    }
+
+    It 'retains selected-panel dates and makes each excluded candidate distinguishable from host availability' {
+        $repo = New-BriefRepo
+        $snapshot = Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/model-benchmarks.md') -Raw
+        $asOf = [regex]::Match($snapshot, '\*\*Generated:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $available = 'gpt-5.3-codex,claude-sonnet-5.5,gpt-6.1-sol'
+        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'gpt-6.1-sol', '-AvailableModels', $available, '-AsOf', $asOf)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'availability host-advertised'
+        $result.Output | Should -Match 'panel implementation-(full|scicode) v1'
+        $result.Output | Should -Match 'evidence dates:.*result (unknown|\d{4}-\d{2}-\d{2}), retrieved \d{4}-\d{2}-\d{2}, verified \d{4}-\d{2}-\d{2}'
+        $resolver = Join-Path $PackageRoot '.agents/skills/squad/scripts/Resolve-SquadModelRoute.ps1'
+        $expected = & $resolver -SquadRoot (Join-Path $repo '.copilot-tracking/squad') -AvailableModels $available `
+            -SessionModel gpt-6.1-sol -AsOf ([datetime]$asOf) | ConvertFrom-Json
+        $classes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        foreach ($role in $expected.roles) {
+            if (-not $classes.Add($role.class)) { continue }
+            foreach ($candidate in @($role.evidenceCandidates | Where-Object evidenceStatus -ne 'sufficient')) {
+                $result.Output | Should -Match ([regex]::Escape("Evidence exclusion $($role.class)/$($candidate.id):"))
+            }
+        }
+        $result.Output | Should -Match 'host-unreported'
     }
 
     It 'flags a disable-model-invocation Primary as not dispatchable and fails the precheck' {
@@ -209,6 +267,32 @@ Describe 'Get-SquadDispatchBrief.ps1' {
     It 'reports a stub ledger so no Scribe repair is dispatched' {
         $result = Invoke-Brief -Repo (New-BriefRepo -StubLedger)
         $result.Output | Should -Match ([regex]::Escape('ledger: stub (do not dispatch the Scribe to repair it'))
+    }
+
+    It 'classifies an additive Squad Connector member from its aligned role when Connector Bindings are valid' {
+        $result = Invoke-Brief -Repo (New-BriefRepo -ConnectorMode 'valid-add')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match ([regex]::Escape('| gcp | Squad Connector | no (not installed) |'))
+        $result.Output | Should -Not -Match 'connector alignment error'
+    }
+
+    It 'preserves a legacy connector-backed roster row when Connector Bindings are absent' {
+        $result = Invoke-Brief -Repo (New-BriefRepo -ConnectorMode 'legacy-no-bindings')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -Match ([regex]::Escape('| gcp | Squad Connector | no (not installed) |'))
+        $result.Output | Should -Not -Match 'connector alignment error'
+    }
+
+    It 'fails closed on connector alignment errors: <Mode>' -ForEach @(
+        @{ Mode = 'missing-aligned'; Message = 'missing Aligned Role' }
+        @{ Mode = 'invalid-aligned'; Message = 'has no assignment class mapping' }
+        @{ Mode = 'cyclic-aligned'; Message = 'cyclic Aligned Role chain' }
+    ) {
+        $result = Invoke-Brief -Repo (New-BriefRepo -ConnectorMode $Mode)
+        $NormalizedOutput = ($result.Output -replace '\s*\|\s*', ' ') -replace '\s+', ' '
+        $result.ExitCode | Should -Not -Be 0 -Because $result.Output
+        $result.Output | Should -Match 'connector alignment error'
+        $NormalizedOutput | Should -Match ([regex]::Escape($Message))
     }
 }
 
@@ -238,9 +322,9 @@ Describe 'Get-SquadDispatchBrief.ps1 consent and Route markers (B1)' {
         (Invoke-Brief -Repo (New-BriefRepo)).Output | Should -Match ([regex]::Escape('route markers: every history record needs routingIdentity whose routeRationale starts with Route: economy, or Route: bounded on the Bounded Lane'))
     }
 
-    It 'still refuses outside economy with exit 7 before any consent check' {
+    It 'does not apply the economy consent check outside economy' {
         $result = Invoke-Brief -Repo (New-BriefRepo -Routing 'ranked')
-        $result.ExitCode | Should -Be 7
+        $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.Output | Should -Not -Match 'consent:'
     }
 }

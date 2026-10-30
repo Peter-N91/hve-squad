@@ -1,12 +1,7 @@
 name: Release
 
-# Triggers:
-#   workflow_dispatch — cuts a GitHub Release for the version in apm.yml.
-#                       If a `version` input is provided, apm.yml is bumped
-#                       to that version (and committed) before tagging.
-#   push to main      — reads version from apm.yml; creates a GitHub Release if
-#                       a matching tag does not exist yet. Expects the CHANGELOG
-#                       to already contain an entry for that version.
+# Triggered explicitly by Release Prep, or manually for a hotfix/direct release.
+# Dependency-pin pushes must not rehearse or cut a release.
 on:
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Manual release trigger (write access required); the version override is validated as semver before use.
@@ -25,12 +20,6 @@ on:
         required: false
         default: main
         type: string
-  push:
-    branches:
-      - main
-    paths:
-      - 'apm.yml'
-      - 'CHANGELOG.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -40,14 +29,54 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    name: Create Release
+  candidate:
+    name: Freeze release candidate
     runs-on: ubuntu-latest
-    # Skip commits that were authored by this workflow to prevent push-loop.
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' &&
-       !startsWith(github.event.head_commit.message, 'chore(release):'))
+    outputs:
+      sha: ${{ steps.identity.outputs.sha }}
+      suite_present: ${{ steps.identity.outputs.suite_present }}
+    steps:
+      - name: Checkout release candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || 'main' }}
+      - name: Record candidate identity
+        id: identity
+        env:
+          REF: ${{ inputs.ref || 'main' }}
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [[ -f tests/tier0/Invoke-Tier0Tests.ps1 ]]; then
+            echo "suite_present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "suite_present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No Tier 0 suite on '${REF}' — this release is UNGATED. Expected on any line at or above 0.16.0."
+          fi
+
+  # Repository contracts need the source checkout, but no APM installation.
+  # Package/runtime cases run only after tagging, against the consumer install.
+  source_conformance:
+    name: Repository conformance before tagging
+    needs: candidate
+    if: needs.candidate.outputs.suite_present == 'true'
+    uses: ./.github/workflows/tier0-conformance.yml
+    with:
+      source-ref: ${{ needs.candidate.outputs.sha }}
+      scope: Repository
+
+  tag:
+    name: Create release tag
+    needs: [candidate, source_conformance]
+    if: >-
+      always() && needs.candidate.result == 'success' &&
+      (needs.source_conformance.result == 'success' || needs.candidate.outputs.suite_present == 'false')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      exists: ${{ steps.tag_check.outputs.exists }}
+      sha: ${{ steps.identity.outputs.sha }}
     permissions:
       contents: write
     steps:
@@ -56,57 +85,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ${{ inputs.ref || 'main' }}
-
-      # ── Release gate ─────────────────────────────────────────────────────
-      #    Tier 0 runs twice, and the two runs assert different things.
-      #
-      #    Here, before the tag exists, it can only run in source mode against the
-      #    ref being released. That catches an undelivered agent, a roster naming
-      #    something that was never packaged, a body over the host cap.
-      #
-      #    After the tag is pushed it runs again in ref mode, which is the only mode
-      #    that can assert PKG-01 — that the tag pinned its own self-references. That
-      #    check is un-runnable before tagging, because there is no ref to install.
-      #
-      #    Tier 1 is deliberately NOT wired in yet. It spends Copilot requests and has
-      #    not yet run green twice in a row, and a release gate standing on a harness
-      #    that has never executed is a liability, not a safeguard. Promote it here on
-      #    the condition stated in tests/squad-behavior-contract.md, not before.
-      - name: Set up the conformance suite
-        id: suite
-        shell: bash
-        env:
-          REF: ${{ inputs.ref || 'main' }}
-        run: |
-          if [[ -f tests/tier0/Invoke-Tier0Tests.ps1 ]]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No Tier 0 suite on '${REF}' — this release is UNGATED. Expected on any line at or above 0.16.0."
-          fi
-
-      - name: Install the APM CLI
-        if: steps.suite.outputs.present == 'true'
-        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
-        with:
-          setup-only: 'true'
-          apm-version: '0.18.0'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Pester
-        if: steps.suite.outputs.present == 'true'
-        shell: pwsh
-        run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
-
-      - name: Tier 0 conformance of the ref being released
-        if: steps.suite.outputs.present == 'true'
-        shell: pwsh
-        env:
-          # Unauthenticated resolution hits the GitHub rate limit and APM then waits on
-          # the reset rather than failing, which reads as a hung job.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Output Detailed
+          ref: ${{ needs.candidate.outputs.sha }}
 
       # ── Manual dispatch only: bump apm.yml version if requested ─────────
       - name: Bump apm.yml version (manual override)
@@ -157,24 +136,6 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── Extract release notes from CHANGELOG.md ───────────────────────────
-      - name: Extract CHANGELOG entry
-        if: steps.tag_check.outputs.exists == 'false'
-        id: changelog
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          # Matches lines like "## [0.8.2] - 2026-06-17"
-          NOTES=$(awk -v ver="$VERSION" \
-            'BEGIN{found=0}
-             $0 ~ "^## \\[" ver "\\]" {found=1; next}
-             found && /^## \[/{exit}
-             found{print}' CHANGELOG.md)
-          if [[ -z "$NOTES" ]]; then
-            NOTES="See [CHANGELOG.md](CHANGELOG.md) for full details."
-          fi
-          printf '%s' "$NOTES" > /tmp/release_notes.md
-
       # ── Pin squad self-references, then tag that commit ──────────────────
       #    The 47 Peter-N91/hve-squad entries in apm.yml ship as bare paths, and
       #    APM resolves a bare path against the default branch. Without this step a
@@ -201,25 +162,62 @@ jobs:
           git push origin "HEAD:refs/tags/$TAG"
           echo "::notice::Tagged $TAG at a pinned manifest; main is unchanged."
 
-      # ── Verify the published ref before anyone can install it ────────────
-      #    A tag that froze the dependency list but not its contents is the defect
-      #    that made earlier tags non-reproducible, and it is invisible until the tag
-      #    exists. Failing here leaves a tag but no Release: recoverable, and loud.
-      - name: Tier 0 conformance of the published tag
-        if: steps.tag_check.outputs.exists == 'false' && steps.suite.outputs.present == 'true'
-        shell: pwsh
+      - name: Record tagged identity
+        if: steps.tag_check.outputs.exists == 'false'
+        id: identity
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  # The entire installed-package selection, including PKG-01, runs exactly once.
+  # No Release exists until every shard passes. Failed installs/tests leave a tag,
+  # not a success-shaped published release.
+  published_conformance:
+    name: Published package conformance
+    needs: [candidate, tag]
+    if: needs.tag.outputs.exists == 'false' && needs.candidate.outputs.suite_present == 'true'
+    uses: ./.github/workflows/tier0-conformance.yml
+    with:
+      ref: ${{ needs.tag.outputs.tag }}
+      source-ref: ${{ needs.tag.outputs.sha }}
+      scope: Package
+
+  release:
+    name: Create Release
+    needs: [candidate, tag, published_conformance]
+    if: >-
+      always() && needs.tag.result == 'success' && needs.tag.outputs.exists == 'false' &&
+      (needs.published_conformance.result == 'success' || needs.candidate.outputs.suite_present == 'false')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout verified tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.tag.outputs.sha }}
+
+      - name: Extract CHANGELOG entry
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: ./tests/tier0/Invoke-Tier0Tests.ps1 -Ref $env:TAG -Output Detailed
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          NOTES=$(awk -v ver="$VERSION" \
+            'BEGIN{found=0}
+             $0 ~ "^## \\[" ver "\\]" {found=1; next}
+             found && /^## \[/{exit}
+             found{print}' CHANGELOG.md)
+          if [[ -z "$NOTES" ]]; then
+            NOTES="See [CHANGELOG.md](CHANGELOG.md) for full details."
+          fi
+          printf '%s' "$NOTES" > /tmp/release_notes.md
 
       # ── Create GitHub Release (the tag already exists) ────────────
       - name: Create GitHub Release
-        if: steps.tag_check.outputs.exists == 'false'
+        id: publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.version.outputs.tag }}
-          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ needs.tag.outputs.tag }}
+          VERSION: ${{ needs.tag.outputs.version }}
           DRAFT: ${{ inputs.draft }}
         run: |
           ARGS=(
@@ -242,3 +240,10 @@ jobs:
           fi
 
           gh release create "${ARGS[@]}"
+
+      # GITHUB_TOKEN release writes do not trigger the Pages release event.
+      - name: Refresh published documentation
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main

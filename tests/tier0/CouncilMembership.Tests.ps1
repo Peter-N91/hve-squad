@@ -59,12 +59,77 @@ BeforeAll {
     $script:Routing = Get-InstructionBody -Name 'squad-routing.instructions.md'
     $script:Roster = Get-InstructionBody -Name 'squad-roster.instructions.md'
     $script:Coordinator = Get-AgentBody -Name 'squad-coordinator.agent.md'
+    $script:CoordinatorRuntime = Get-SquadReferenceBody -Name 'coordinator-runtime.md'
     $script:ModernizationPlanner = Get-AgentBody -Name 'squad-modernization-planner.agent.md'
     $script:GatesAndModes = Get-SquadReferenceBody -Name 'gates-and-modes.md'
     $script:OperatingProcedure = Get-SquadReferenceBody -Name 'operating-procedure.md'
     $script:ScribeVerdicts = Get-SquadReferenceBody -Name 'scribe-cold-gates-and-verdicts.md'
     $script:ScribeInit = Get-SquadReferenceBody -Name 'scribe-cold-init-and-seeding.md'
     $script:SeedTemplates = Get-SquadReferenceBody -Name 'seed-templates.md'
+    $script:ConnectorRoleModes = Get-SquadReferenceBody -Name 'connector-role-modes.md'
+
+    function Split-TableLineLocal {
+        param([Parameter(Mandatory)][string]$Line)
+        $trimmed = $Line.Trim()
+        if ($trimmed.StartsWith('|')) { $trimmed = $trimmed.Substring(1) }
+        if ($trimmed.EndsWith('|')) { $trimmed = $trimmed.Substring(0, $trimmed.Length - 1) }
+        @($trimmed -split '\|') | ForEach-Object { $_.Trim() }
+    }
+
+    function Get-MarkdownTablesLocal {
+        param([Parameter(Mandatory)][string]$Content)
+        $tables = [System.Collections.Generic.List[object]]::new()
+        $lines = $Content -split '\r?\n'
+        $run = [System.Collections.Generic.List[string]]::new()
+        foreach ($line in $lines) {
+            if ($line.TrimStart().StartsWith('|')) {
+                $run.Add($line)
+                continue
+            }
+            if ($run.Count -ge 2) {
+                $header = Split-TableLineLocal -Line $run[0]
+                $rows = [System.Collections.Generic.List[hashtable]]::new()
+                foreach ($rowLine in ($run | Select-Object -Skip 1)) {
+                    if ($rowLine -match '^\s*\|\s*:?-') { continue }
+                    $cells = Split-TableLineLocal -Line $rowLine
+                    $row = @{}
+                    for ($i = 0; $i -lt $header.Count; $i++) {
+                        $row[$header[$i]] = if ($i -lt $cells.Count) { $cells[$i] } else { '' }
+                    }
+                    $rows.Add($row)
+                }
+                $tables.Add([pscustomobject]@{ Header = $header; Rows = $rows.ToArray() })
+            }
+            $run = [System.Collections.Generic.List[string]]::new()
+        }
+        if ($run.Count -ge 2) {
+            $header = Split-TableLineLocal -Line $run[0]
+            $rows = [System.Collections.Generic.List[hashtable]]::new()
+            foreach ($rowLine in ($run | Select-Object -Skip 1)) {
+                if ($rowLine -match '^\s*\|\s*:?-') { continue }
+                $cells = Split-TableLineLocal -Line $rowLine
+                $row = @{}
+                for ($i = 0; $i -lt $header.Count; $i++) {
+                    $row[$header[$i]] = if ($i -lt $cells.Count) { $cells[$i] } else { '' }
+                }
+                $rows.Add($row)
+            }
+            $tables.Add([pscustomobject]@{ Header = $header; Rows = $rows.ToArray() })
+        }
+        $tables.ToArray()
+    }
+
+    function Get-CouncilLensMapLocal {
+        $table = @(Get-MarkdownTablesLocal -Content $script:Council | Where-Object { $_.Header -contains 'Lens' -and ($_.Header -contains 'Role' -or $_.Header -contains 'Role ID') })[0]
+        $map = @{}
+        foreach ($row in $table.Rows) {
+            $lens = ([string]$row['Lens']).Trim()
+            $role = if ($row.ContainsKey('Role')) { [string]$row['Role'] } else { [string]$row['Role ID'] }
+            $role = ($role -replace '`', '').Trim()
+            if ($lens -and $role) { $map[$lens] = $role }
+        }
+        $map
+    }
 }
 
 Describe 'Task-fit council and council extension wording pins (GATE-29..GATE-37)' {
@@ -143,7 +208,7 @@ Describe 'Task-fit council and council extension wording pins (GATE-29..GATE-37)
             $script:Council | Should -Match ([regex]::Escape('* A `## Council Waiver` for the topic, recorded on the user''s decline'))
             $script:Routing | Should -Match ([regex]::Escape('A non-`Stop` Council Verdict, or a user''s `## Council Waiver`, exists for the topic'))
             $script:GatesAndModes | Should -Match ([regex]::Escape('a non-`Stop` Council Verdict, or a user''s `## Council Waiver`, for the topic'))
-            $script:Coordinator | Should -Match ([regex]::Escape('a non-`Stop` Council Verdict or a user''s Council Waiver'))
+            $script:CoordinatorRuntime | Should -Match 'non-Stop Council Verdict or recorded waiver'
         }
     }
 
@@ -159,7 +224,8 @@ Describe 'Task-fit council and council extension wording pins (GATE-29..GATE-37)
         It 'the council still never invents a finding or substitutes an agent' {
             $script:Council | Should -Match ([regex]::Escape('never synthesizes a Council Verdict from its own reasoning to cover a lens it did not dispatch'))
             $script:Council | Should -Match ([regex]::Escape('never substitutes a non-mapped agent for an absent council member'))
-            $script:Coordinator | Should -Match ([regex]::Escape('Dispatch in one parallel batch only the task-fit roles the work needs'))
+            $script:GatesAndModes | Should -Match 'dispatches a \*\*task-fit\*\* council in a single parallel batch'
+            $script:CoordinatorRuntime | Should -Match 'Get-SquadProcedure\.ps1.+Name'
         }
 
         It 'no fixed four-role council remains in the contract text' {
@@ -169,6 +235,26 @@ Describe 'Task-fit council and council extension wording pins (GATE-29..GATE-37)
             $script:Autonomous | Should -Not -Match ([regex]::Escape('dispatches the default council'))
             $script:GatesAndModes | Should -Not -Match ([regex]::Escape('dispatches the default council in a single parallel batch'))
             $script:ModernizationPlanner | Should -Not -Match ([regex]::Escape('council review (`architect`, `security`, `cost-manager`, `product-owner`)'))
+        }
+    }
+
+    Context 'CONN-21: connector rows never satisfy council lenses' {
+        It 'resolves council lenses to canonical internal role ids even when connector-backed roles are present in the roster' {
+            $lensMap = Get-CouncilLensMapLocal
+            $availableRoles = @('architect', 'security', 'product-owner', 'rai', 'cost-manager', 'gcp', 'developer', 'Squad Connector')
+            $requestedLenses = @('Architecture', 'Security', 'Product-fit')
+
+            $selected = @(
+                foreach ($lens in $requestedLenses) {
+                    $role = $lensMap[$lens]
+                    if ($role -in $availableRoles) { $role }
+                }
+            )
+
+            $selected | Should -Be @('architect', 'security', 'product-owner')
+            $selected | Should -Not -Contain 'gcp'
+            $selected | Should -Not -Contain 'Squad Connector'
+            $script:ConnectorRoleModes | Should -Match ([regex]::Escape('Council dispatch always uses internal canonical agents from roster resolution without connector overlays.'))
         }
     }
 }

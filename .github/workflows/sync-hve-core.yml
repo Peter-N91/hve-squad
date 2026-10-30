@@ -23,9 +23,10 @@ name: Sync and Adapt
 #        - clones microsoft/hve-core at that exact SHA
 #        - rewrites all microsoft/hve-core entries with the new SHA
 #        - leaves squad entries pointing at the default upstream slug
-#   6. Records the pin move as a change fragment under .changes/unreleased/,
+#   6. Runs Tier 0 against the candidate manifest before anything reaches main.
+#   7. Records the pin move as a change fragment under .changes/unreleased/,
 #      exactly as a contributor would.
-#   7. Commits apm.yml and the fragment, then pushes to main.
+#   8. Commits apm.yml and the fragment, then pushes to main.
 #
 # It no longer cuts a release. The fragment reaches testers within minutes as
 # part of the rolling pre-release (preview.yml) and reaches consumers when a
@@ -35,13 +36,12 @@ name: Sync and Adapt
 # from microsoft/hve-core at a pinned commit SHA.
 #
 # Required configuration
-#   Secret SYNC_DEPS_TOKEN — a PAT with Contents: read and write, Issues: read and
-#     write, and Actions: read and write on this repository. It is used for the
-#     push, for the release dispatch, and for raising the adaptation issue. All
-#     three need a PAT rather than the built-in GITHUB_TOKEN, because events
-#     authored by GITHUB_TOKEN do not trigger other workflows — a GITHUB_TOKEN
-#     issue would never reach `squad-watch.yml`, and a GITHUB_TOKEN push would
-#     never reach `release.yml`.
+#   Secret SYNC_DEPS_TOKEN — a PAT with Contents: read and write and Issues: read
+#     and write on this repository. It is used for the push and for raising the
+#     adaptation issue. Both need a PAT rather than the built-in GITHUB_TOKEN,
+#     because events authored by GITHUB_TOKEN do not trigger downstream workflows:
+#     the issue would never reach `squad-watch.yml`, and the push would never
+#     refresh the rolling preview.
 #   Labels `squad/auto` and `squad/review` must exist (see squad-watch.yml).
 
 on:
@@ -74,7 +74,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: write
       issues: write
     steps:
       - name: Checkout
@@ -344,6 +343,38 @@ jobs:
           [[ "$DRY_RUN" == "true" ]] && ARGS+=(-DryRun)
           pwsh scripts/Update-ApmDependencies.ps1 "${ARGS[@]}"
 
+      # ── Validate the candidate before main can observe it ────────────────
+      - name: Install the APM CLI for candidate conformance
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          setup-only: 'true'
+          apm-version: '0.18.0'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Pester for candidate conformance
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Write-Warning "Pester install attempt $attempt failed; retrying."
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
+
+      - name: Validate candidate package before push
+        if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Output Detailed
+
       # ── Record the pin move as a change fragment ─────────────────────────
       #    A pin move is a change like any other, so it queues the same way a
       #    contributor's does: as a fragment. It becomes installable within
@@ -385,4 +416,3 @@ jobs:
           else
             echo "::notice::No changes after regeneration — nothing to commit."
           fi
-

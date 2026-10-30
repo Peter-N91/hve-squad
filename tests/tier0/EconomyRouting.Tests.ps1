@@ -2,6 +2,8 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+# AI cost: none; checks shipped contract text, not a live economy-mode session.
+
 # Static text pins for the opt-in `routing=economy` mode (SQ-35 in
 # tests/squad-behavior-contract.md) against the built package: every place that
 # enumerates the routing modes names `economy`, the *Economy Mode* contract keeps its
@@ -36,10 +38,13 @@ BeforeAll {
     $skill = $script:Model.SquadSkillRoot
     $script:Routing = Get-EconomyFileText (Join-Path $skill 'references/model-routing.md')
     $script:EconomySection = Get-EconomyFileText (Join-Path $skill 'references/economy-mode.md')
+    $script:OrdinaryWriter = Get-EconomyFileText (Join-Path $skill 'references/economy-scribe.md')
     $script:WatchWorkflow = Get-EconomyFileText (Join-Path $skill 'squad-watch.workflow.yml')
     $script:WatchInstructions = Get-EconomyFileText (@($script:Model.Instructions | Where-Object Name -eq 'squad-watch-mode.instructions.md')[0]).Path
     $script:OperatingProcedure = Get-EconomyFileText (Join-Path $skill 'references/operating-procedure.md')
     $script:Resolver = Get-EconomyFileText (Join-Path $skill 'scripts/Resolve-SquadModelRoute.ps1')
+    $script:Scoring = Get-EconomyFileText (Join-Path $skill 'scripts/ModelBenchmarkScoring.ps1')
+    $script:ScoringPolicy = Get-EconomyFileText (Join-Path $skill 'references/model-scoring.md')
     $script:Coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0]
     $script:FederationCoordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-federation-coordinator.agent.md')[0]
     $script:Roster = @($script:Model.Instructions | Where-Object Name -eq 'squad-roster.instructions.md')[0]
@@ -60,8 +65,9 @@ Describe 'Every routing-mode enumeration names economy (SQ-35)' {
     }
 
     It 'the coordinator routing input and the federation pass-through list economy' {
-        $script:Coordinator.Body | Should -Match ([regex]::Escape('`routing=off|ranked|economy|manual`'))
-        $script:FederationCoordinator.Body | Should -Match ([regex]::Escape('`routing` (`off`, `ranked`, `economy`, or `manual`'))
+        $script:Coordinator.Body | Should -Match 'references/coordinator-runtime\.md'
+        $script:FederationCoordinator.Body | Should -Match 'references/federation-runtime\.md'
+        (Get-EconomyFileText (Join-Path $script:Model.SquadSkillRoot 'references/model-routing.md')) | Should -Match ([regex]::Escape('`routing=off|ranked|economy|manual`'))
     }
 
     It 'the roster instructions and the Route step read the persisted economy line' {
@@ -86,14 +92,34 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $script:Routing | Should -Match '(?m)^\| `economy` \| The id \[economy-mode\.md\]\(economy-mode\.md\) picks for the role \|'
         $script:Routing | Should -Match ([regex]::Escape('Everywhere below that says `ranked`, `economy` behaves the same except for its pick.'))
         $script:Routing | Should -Not -Match '(?m)^## Economy Mode'
-        ([regex]::Matches($script:Routing, 'economy')).Count | Should -BeLessOrEqual 6 -Because 'model-routing.md is read on every ranked and manual turn, so economy keeps to the mode list, one row, and one sentence'
+        ([regex]::Matches($script:Routing, 'economy')).Count | Should -BeLessOrEqual 7 -Because 'only the mode list, row, routing sentence, and shared historical economy-scribe.md filename belong in the common reference'
         $script:Routing | Should -Not -Match '(?i)fit 2 or better|lowest \*\*Blended\*\* rate'
     }
 
-    It 'picks the lowest-Blended id at fit 2 or better within the role''s own floor, allowlisted roles only' {
+    It 'picks the lowest known price after independent qualification, allowlisted roles only' {
         $script:EconomySection | Should -Match '`ranked` \(see `model-routing.md`\) with one change: roles on the \*Role Allowlist\* are ordered cost first'
-        $script:EconomySection | Should -Match ([regex]::Escape('under the role''s own floor, keep the rows at fit 2 or better for the `implementation` class, and take the lowest **Blended** rate'))
+        $script:EconomySection | Should -Match ([regex]::Escape('each primary percentile must be at least `0.50`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('Extra capability or confidence above the minimum never overrides a lower price.'))
+        $script:EconomySection | Should -Match ([regex]::Escape('An unpriced model is never free.'))
         $script:EconomySection | Should -Match ([regex]::Escape('the review that checks the cheaper work is never weakened'))
+    }
+
+    It 'ships one versioned scorer with explicit coverage and host-independent normalization' {
+        $script:Scoring | Should -Match "Version = 'squad-capability-v3'"
+        $script:Scoring | Should -Match 'MinimumPercentile = \[decimal\]0\.50'
+        $script:Scoring | Should -Match 'MinimumPercentile = \[decimal\]0\.75'
+        $script:ScoringPolicy | Should -Match 'implementation-scicode-upper-quartile-v1'
+        $script:Scoring | Should -Not -Match '\$AvailableModels'
+        $script:Resolver | Should -Match ([regex]::Escape(". (Join-Path `$PSScriptRoot 'ModelBenchmarkScoring.ps1')"))
+        $script:ScoringPolicy | Should -Match 'Secondary evaluations'
+        $script:ScoringPolicy | Should -Match 'not success probabilities'
+    }
+
+    It 'uses capability-first Ranked suggestions and admits frontier models above a fast floor' {
+        $script:Routing | Should -Match 'Compare \*\*granular task capability\*\*'
+        $script:Routing | Should -Match 'minimum, never a spending or capability ceiling'
+        $script:Resolver | Should -Not -Match "Purpose -eq 'ranked'"
+        $script:Resolver | Should -Match ([regex]::Escape("'fast' { return @('fast-lightweight', 'balanced', 'code-specialized', 'frontier-reasoning') }"))
     }
 
     It 'allowlists exactly the low-impact implementation roles and names the excluded ones' {
@@ -110,15 +136,15 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $script:EconomySection | Should -Match ([regex]::Escape('takes a `team.md` Model Tier edit, never a routing input'))
     }
 
-    It 'escalates once to the ranked pick, written into the Model cell by the Scribe first, reset by the next re-rank' {
+    It 'escalates once to the ranked pick through the routing writer, reset by the next economy plan' {
         $script:EconomySection | Should -Match ([regex]::Escape('After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that owner once on its ranked pick'))
-        $script:EconomySection | Should -Match ([regex]::Escape('The coordinator hands the Scribe that id for the role''s `Model` cell before the re-dispatch'))
-        $script:EconomySection | Should -Match ([regex]::Escape('the next turn''s re-rank resets the cell'))
+        $script:EconomySection | Should -Match ([regex]::Escape('persist the cell through `Set-SquadModelRouting.ps1`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('the next economy plan resets the cell'))
     }
 
     It 'asks for consent once and records it as an Economy Mode Accepted decision' {
         $script:EconomySection | Should -Match ([regex]::Escape('before any dispatch under it, the coordinator says once, plainly, what changes'))
-        $script:EconomySection | Should -Match ([regex]::Escape('a decision entry headed `## Economy Mode Accepted`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('Pass the stated trade as `economyConsent`'))
         $script:EconomySection | Should -Match ([regex]::Escape('An unattended run never accepts economy for the user'))
     }
 
@@ -128,8 +154,8 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $lines = @($block.TrimEnd("`n") -split '\n' | Where-Object { $_ })
         $lines[0] | Should -Be '## Economy Mode Accepted <timestamp>'
         @($lines | Select-Object -Skip 1 | ForEach-Object { ($_ -split ':')[0] }) | Should -Be @('* User', '* Previous mode', '* Trade accepted', '* Never weakened')
-        $script:EconomySection | Should -Match ([regex]::Escape('the Scribe writes that entry with the roster-refresh payload, in exactly this shape'))
-        $script:EconomySection | Should -Match ([regex]::Escape('Missing consent is reported, never enforced'))
+        $script:EconomySection | Should -Match ([regex]::Escape('`Set-SquadModelRouting.ps1` writes the mode, selected cells, refresh decision, and this exact entry atomically'))
+        $script:EconomySection | Should -Match ([regex]::Escape('Missing consent fails a scripted switch before dispatch'))
     }
     It 'marks every economy history entry with Route: economy' {
         $script:EconomySection | Should -Match ([regex]::Escape('Every history entry produced under economy starts its **Route rationale** identity bullet (`model-routing.md` *Identity Bullets*) with `Route: economy`'))
@@ -140,7 +166,8 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
     }
 
     It 'leaves off as the no-policy default' {
-        $script:Routing | Should -Match ([regex]::Escape('**No policy is the default and is byte-for-byte today''s behavior.**'))
+        $script:Routing | Should -Match ([regex]::Escape('**No policy is the default; dispatch model selection is unchanged.**'))
+        $script:Routing | Should -Match 'omits the dispatch `model` parameter entirely'
         $script:Routing | Should -Match '(?m)^\| `off` +\| Nothing'
         $script:EconomySection | Should -Match ([regex]::Escape('It is opt-in; `off` stays the default.'))
         $script:EconomySection | Should -Match ([regex]::Escape('Under `off`, `ranked`, or `manual` nothing here applies'))
@@ -152,7 +179,38 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
 
     It 'keeps the economy procedure out of the coordinator, which only lists the mode' {
         $script:Coordinator.Body | Should -Not -Match '(?i)Economy Mode Accepted|re-dispatch that `implementation` owner|fit 2 or better'
-        ([regex]::Matches($script:Coordinator.Body, '(?i)economy')).Count | Should -BeLessOrEqual 1
+        ([regex]::Matches($script:Coordinator.Body, '(?i)economy')).Count | Should -BeLessOrEqual 3 -Because 'one routing input plus the shared ordinary-contract reference at load and handoff is not economy policy'
+    }
+}
+
+Describe 'The ordinary writer is universal while economy consent and routing remain scoped' {
+    It 'does not gate ordinary handoffs or rate seeding on economy mode' {
+        $script:OrdinaryWriter | Should -Match '\*\*off, ranked, economy, (?:and|or) manual\*\*'
+        $script:OrdinaryWriter | Should -Match '(?i)after each worker'
+        $script:OrdinaryWriter | Should -Not -Match '(?m)^\| 7 \|'
+        $script:EconomySection | Should -Match 'retained `-Mode` parameter does not affect rates'
+        $script:EconomySection | Should -Match 'Only under economy, the writer warns for missing consent'
+        $script:EconomySection | Should -Match 'these rules do not apply to other modes'
+    }
+
+    It 'defines one structured quiet success object without inventing a new payload field' {
+        $example = [regex]::Match($script:OrdinaryWriter, '`(\{"status":"written".*?\})`').Groups[1].Value
+        $example | Should -Not -BeNullOrEmpty
+        $status = $example | ConvertFrom-Json
+        @($status.PSObject.Properties.Name) | Should -Be @('status', 'turn', 'dispatchEntries', 'historyCounts', 'ledgerCheck')
+        $status.ledgerCheck | Should -Be 'PASS'
+        $script:OrdinaryWriter | Should -Match '`ledgerCheck` is `PASS` or `ledger-only`'
+        $script:OrdinaryWriter | Should -Match 'Warnings remain visible on stderr'
+        $script:OrdinaryWriter | Should -Match 'Missing/malformed status or unexpected counts are failure'
+        $script:OrdinaryWriter | Should -Match '\*\*not PASS\*\*'
+        $script:OrdinaryWriter | Should -Not -Match 'quietStatus|directWriter'
+    }
+
+    It 'retains overhead artifacts without charging fictional Scribe dispatches' {
+        $scribeAgent = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0].Body
+        $scribeAgent | Should -Match 'history/Squad Scribe\.md'
+        $script:OrdinaryWriter | Should -Match 'actual coordinator usage only, never fictional Scribe tokens'
+        $script:OrdinaryWriter | Should -Match 'add Scribe''s actual overhead if it ran'
     }
 }
 
@@ -189,5 +247,12 @@ Describe 'No floor exception and a single ranking path' {
         $function | Should -Match ([regex]::Escape('return $Ranked[0].Id'))
         $script:Resolver | Should -Match ([regex]::Escape('Get-EscalationTarget -Ranked $ranked'))
         $script:Resolver | Should -Match ([regex]::Escape('if ($target -and $target -ne $suggested) { $target } else { $null }'))
+    }
+
+    It 'keeps connector aligned-role failures fail-closed (missing, invalid, cyclic, and missing Member Name)' {
+        $script:Resolver | Should -Match ([regex]::Escape("connector-backed row is missing Member Name"))
+        $script:Resolver | Should -Match ([regex]::Escape('binding ''$bindingId'' is missing Aligned Role'))
+        $script:Resolver | Should -Match ([regex]::Escape('aligned role ''$alignedRole'' has no assignment class mapping'))
+        $script:Resolver | Should -Match ([regex]::Escape("cyclic Aligned Role chain at binding"))
     }
 }

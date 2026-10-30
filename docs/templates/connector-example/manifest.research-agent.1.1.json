@@ -1,0 +1,13 @@
+{
+  "connectorId": "acme-research-agent",
+  "schemaVersion": "1.1",
+  "transport": "file",
+  "endpointKind": "agent",
+  "capabilities": ["Produces source-grounded research using the consumer's research skills and instructions."],
+  "roles": ["researcher"],
+  "dropPath": ".connector-drops/acme-research-agent/",
+  "deadlineMinutesDefault": 60,
+  "retryCapDefault": 2,
+  "contact": "squad-integrations@example.com",
+  "version": "1.0.0"
+}

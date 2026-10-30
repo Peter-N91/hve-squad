@@ -1,0 +1,17 @@
+{
+  "connectorId": "tier1-research-agent",
+  "schemaVersion": "1.1",
+  "transport": "file",
+  "endpointKind": "agent",
+  "capabilities": [
+    "Produces one bounded research note for the Tier 1 connector resume scenario."
+  ],
+  "roles": [
+    "researcher"
+  ],
+  "dropPath": ".connector-drops/tier1-research-agent/",
+  "deadlineMinutesDefault": 60,
+  "retryCapDefault": 2,
+  "contact": "tier1-harness@localhost",
+  "version": "1.0.0"
+}

@@ -1,6 +1,6 @@
 ---
 name: squad-scribe-cold-federation
-description: "Scribe cold section: Federation Promotion, Federation Initialization and Expansion, and the Federation Autopilot-Run Summary. Read only for a promotion, expansion, federation-initialization, or federation-level autopilot-run-summary payload."
+description: "Scribe cold section: unsupported-host federation lifecycle, repairs, root history, and aggregate summaries."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -10,7 +10,22 @@ metadata:
 
 # Scribe Cold Section: Federation Writes
 
-Read this file only when the turn's payload is one of: **promotion** (Payload-to-Step Map Step 10), **expansion** (Step 11), a confirmed **federation-initialization** payload, or a **federation autopilot-run summary** payload written at the federation root. An ordinary single-squad turn, including one running inside an already-federated sub-squad, never needs this file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
+Read this file only when the turn's payload is one of: an unsupported-host
+**promotion**, **federation Init/Expansion** fallback, a federation repair or
+rename/removal, a federation-level history payload, or a **federation
+autopilot-run summary**. Supported Promotion and Init/Expansion use validated
+PowerShell transactions and never dispatch Scribe. An ordinary single-squad turn,
+including one running inside an already-federated sub-squad, never needs this
+file — see the Cold-File Dispatch Table in [scribe-procedure.md](scribe-procedure.md).
+
+For promotion and expansion, including the new sub-squad's scoped Init, apply
+Consumption Accounting to the Scribe's own state-write dispatch: prefer its
+reported model, otherwise read its agent pin; never substitute the coordinator's session model.
+Reject a payload that prescribes a lower attribution rung contrary to that evidence,
+before any state write. Coordinator overhead may use a different model:
+record separate dated orchestration entries with one block each, aggregated in the
+existing ledger row. Relocation preserves every old block; it is not permission to
+reprice historical work using today's model.
 
 ### Federation Promotion
 
@@ -22,20 +37,36 @@ Adopt an existing single squad into a federation as its first sub-squad, per *Pr
 4. **Move by copy → verify → delete-source, in that order, per file.** Write the destination, read it back and confirm it matches, and only then remove the source. Never remove, clear, or truncate anything at the source before its verified destination copy exists. Deleting first is the failure this ordering prevents: a relocation that clears the source and then cannot find the files has destroyed append-only logs no later step reconstructs. On any destination write failure, stop and return a failure note with the source intact.
 
    **Every destination path is written from the project root, including the parent directories the move creates.** `.copilot-tracking/squad/members/<name>/plans/` is the whole path, not a segment to append to wherever the last step happened to be working. A promotion that created its destinations from inside `.copilot-tracking/` left `.copilot-tracking/.copilot-tracking/squad/members/<name>/` behind it — empty, so nothing was lost and nothing reported a failure, and the tree now carries a second tracking directory that every later path resolution has to step around. The promotion creates nothing outside `.copilot-tracking/squad/`.
+
+   Connector bindings move with their owning roster, never to federation-global
+   authority. Preserve binding/member ids and manifest paths; do not rewrite a
+   manifest's mailbox as though it were a deliverable root. Before promotion,
+   complete or explicitly abandon pending exchanges and issue fresh tasks with
+   rebased roots afterwards; never retarget an existing bound request silently.
 5. **Rebase the relocated roster's deliverable roots.** In the moved `members/<name>/team.md`, prefix every `Deliverable Root` cell beginning with `.copilot-tracking/` with `.copilot-tracking/squad/members/<name>/`, leaving `docs/` and `outputs/` unchanged. Rebase whatever the cell holds, including a consumer-edited path, so a customized root survives pointing at its own relocated directory. This column is the only field the promotion rewrites. Re-cast, rename, add, or drop nothing else. **The `Deliverable:` paths already recorded in `history/` are not rewritten** — those files are append-only and move byte-for-byte, so every pre-promotion entry keeps naming the pre-promotion location. Step 8 is what makes those paths resolvable again; editing the entries instead breaks a stronger rule than the one it repairs.
 6. **Seed the federation-root meta layer**: `federation.md`, `meta-routing.md`, federation `state.json`, `history/<name>.md`, and a root `consumption-rates.md` copied verbatim from [consumption-rates-template.md](consumption-rates-template.md). The root rate file is used only by untargeted federation autopilot.
-7. **Carry the consumption ledger across the boundary.** The promotion is a recorded turn, not a gap. Run *Consumption Accounting* scoped to `members/<name>/`: append the promotion's `orchestration` block to that root's `history/Squad Scribe.md`, rewrite its `consumption.md` from every block in the relocated `history/`, and overwrite the sub-squad `state.json` totals. Then seed the federation `state.json` totals from that ledger's total row, so federation-level cost does not read zero over a populated ledger.
+7. **Carry the consumption ledger across the boundary (cold fallback only).** This path records the Scribe dispatch that actually performed the unsupported-host move. Run *Consumption Accounting* scoped to `members/<name>/`: append that actual `orchestration` block to `history/Squad Scribe.md`, rewrite `consumption.md`, and update the sub-squad totals; then seed federation totals from its verified row. The script-backed path never enters this step and preserves the member ledger/totals unchanged.
 8. **Record the promotion.** Append the first federation-level entry to the federation-root `decisions.md` recording the promotion, the chosen name, the source → destination relocation, and the deliverable directories moved. Write the relocation as one **prefix mapping line per moved directory**, in the form `.copilot-tracking/<dir>/ → .copilot-tracking/squad/members/<name>/<dir>/`, rather than as prose. **`<dir>` stands for a directory you name — `plans`, `designs`, `reviews` — and four moved directories produce four lines.** A single line carrying the placeholder itself, such as `.copilot-tracking/<type>/ → .copilot-tracking/squad/members/<name>/<type>/`, resolves nothing and is the same failure as recording the move as a sentence. That mapping is the only thing that makes a pre-promotion `Deliverable:` path resolvable, because the entry holding it is append-only and was moved unedited; a promotion recorded as a sentence leaves every artifact reference in `history/` pointing at nothing. When the payload carries Watch Mode provenance, record the triggering event (`source`, `ref`, `eventId`, `actor`, `receivedAt`) and note that the promotion ran unattended and auto-approved.
 
 9. **Confirm the tracking root is clean before returning.** List `.copilot-tracking/` and confirm it holds `squad/` plus only the directories the relocation list deliberately left in place. Any other directory is something the promotion created by accident — most often a nested `.copilot-tracking/` — and it is removed, along with any empty directory left at a source path the move emptied. A promotion that reports success over a tree it also littered is the same class of failure as one that reports success over artifacts it left behind.
 
-### Federation Initialization and Expansion
+### Federation Initialization Compatibility Fallback and Expansion
 
-For a confirmed initial federation payload when no federation exists, seed root `federation.md`, `meta-routing.md`, `decisions.md`, `state.json`, `consumption-rates.md`, and `history/` from [federation-templates.md](federation-templates.md). Copy the complete current rate template. This initialization is outside Cost Preflight and leaves the root compact decision `not-requested`; aggregate admission starts only when a later untargeted federation autopilot run requests a ceiling.
+Only when the Federation Init scripts are unavailable, a confirmed initial
+federation payload seeds root `federation.md`, `meta-routing.md`, `decisions.md`,
+`state.json`, `consumption-rates.md`, and `history/` from
+[federation-templates.md](federation-templates.md). Copy the complete current
+rate template. This fallback is outside Cost Preflight and leaves the root compact
+decision `not-requested`; aggregate admission starts only when a later untargeted
+federation autopilot run requests a ceiling.
 
 For a legacy federation missing root `consumption-rates.md`, seed only that file from the current complete template immediately before its first untargeted federation-autopilot preflight. Preserve every existing root file and start the root calibration as ineligible until aggregate observations reconcile it.
 
-Register a newly seeded sub-squad into an existing federation, per *Expansion* (`squad-federation.instructions.md`). This registers at the federation root only; the sub-squad's own tree is seeded by the standard scoped Init.
+Only on the same unsupported host, register a newly seeded sub-squad into an
+existing federation per *Expansion* (`squad-federation.instructions.md`). This
+registers at the federation root only; the sub-squad's own tree is seeded by the
+standard scoped Init. A failure from the supported transaction is not permission
+to enter this fallback.
 
 1. **Refuse when there is no federation or on collision.** When federation-root `federation.md` is absent, or the new name already appears as a row, write nothing and return a failure note. For a Watch Mode expansion, say whether the colliding row is `Owner=watch-mode` and what source ref its `Description` records, so the coordinator can distinguish safe reuse of the same event from a human-owned sub-squad it must never write into.
 2. **Append the registry row (preserve-on-replace).** Read `federation.md`, add one row (`Sub-squad`, `Profile`, `Kind=in-repo`, `Location=members/<name>/`, optional `Owner`, `Description`), and rewrite preserving every existing row, its frontmatter, and its heading. Never edit or remove an existing row. For a Watch Mode expansion set `Owner=watch-mode` and write a `Description` naming the source ref and, once known, the terminal deliverable.

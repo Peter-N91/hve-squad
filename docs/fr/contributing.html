@@ -17,10 +17,12 @@
       <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Accueil</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html">Bien démarrer</a>
         <a href="usage.html">Utilisation</a>
         <a href="demo.html">Démonstrations</a>
         <a href="ecosystem.html">Écosystème</a>
+        <a href="connector.html">Connecteur</a>
         <a href="maintaining.html">Maintenance</a>
         <a href="troubleshooting.html">Dépannage</a>
         <a href="contributing.html" class="active">Contribuer</a>
@@ -134,13 +136,17 @@ type: Fixed
         qui nécessite davantage de tests. Entre-temps, la fusion est publiée dans la
         <strong>préversion glissante</strong> : votre changement peut donc être installé et testé en quelques minutes :
       </p>
-      <pre><code>apm install "Peter-N91/hve-squad#v0.15.0-pre" --target copilot</code></pre>
+      <div data-release-install="preview"></div>
       <p>
         Le tag exact figure sur la
         <a href="https://github.com/Peter-N91/hve-squad/releases">page Releases</a>, avec la mention
         de préversion. Il s’agit d’un canal plutôt que d’un point fixe : le tag se déplace à chaque fusion et change
         de nom lorsqu’un fragment <code>minor</code> est intégré. Utilisez une version publiée épinglée pour tout
-        ce dont vous dépendez. La référence complète du format se trouve dans
+        ce dont vous dépendez. Lorsque la fusion documente un comportement du package qui n'est pas encore
+        publié, marquez le plus petit élément concerné dans les guides des deux langues avec la valeur
+        <code>data-release-change</code> de ce fragment. Pages affiche le badge glissant uniquement sur
+        ces marqueurs explicites ; Release Prep consomme le fragment, puis la compilation suivante retire
+        ces badges. La référence complète du format se trouve dans
         <a href="https://github.com/Peter-N91/hve-squad/blob/main/.changes/README.md">.changes/README.md</a>.
       </p>
 

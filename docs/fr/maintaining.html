@@ -17,10 +17,12 @@
       <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" />hve<span class="dot">-</span>squad</a>
       <div class="nav-links">
         <a href="index.html">Accueil</a>
+        <a href="concepts.html">Concepts</a>
         <a href="getting-started.html">Bien démarrer</a>
         <a href="usage.html">Utilisation</a>
         <a href="demo.html">Démonstrations</a>
         <a href="ecosystem.html">Écosystème</a>
+        <a href="connector.html">Connecteur</a>
         <a href="maintaining.html" class="active">Maintenance</a>
         <a href="troubleshooting.html">Dépannage</a>
         <a href="contributing.html">Contribuer</a>
@@ -72,12 +74,16 @@
 
       <h2>Scripts</h2>
       <h3>Site de documentation</h3>
-      <p>Le site est en HTML statique avec du CSS partagé et du JavaScript d’amélioration progressive, publié directement depuis <code>docs/</code>. Ouvrez <code>docs/index.html</code> localement ; aucune compilation frontend ni aucun serveur n’est nécessaire. Les pages anglaises se trouvent dans <code>docs/</code> et leurs équivalents français dans <code>docs/fr/</code>, avec les mêmes noms de fichiers et des identifiants d’ancre communs.</p>
-      <p>Mettez à jour les deux langues dans le même changement. Conservez les noms et paramètres des commandes, et signalez les liens vers les guides externes, rapports historiques et vidéos disponibles uniquement en anglais. La présentation et les contrôles communs se trouvent dans <code>docs/assets/style.css</code>, <code>theme.js</code> et <code>site.js</code>. Les onglets d’environnement appartiennent à chaque exemple de commande et partagent l’environnement sélectionné entre les exemples et les pages ; le changement de langue conserve la page courante.</p>
-      <p>Rédigez les exemples Squad exécutables dans des blocs <code>pre &gt; code</code> avec la syntaxe des prompts VS Code. Le moteur de rendu partagé conserve cette source et crée les requêtes CLI/App avec l’agent correspondant, en préservant les arguments et le texte multiligne. Séparez les commandes shell et les déclencheurs par commentaire GitHub ; marquez les références qui comparent explicitement les environnements avec <code>data-host-reference</code>. Sans JavaScript, les exemples de prompts d’origine restent lisibles.</p>
-      <pre><code>npm --prefix tests/docs ci --ignore-scripts
-    npm --prefix tests/docs test</code></pre>
-      <p>La dépendance de test isolée n’est pas distribuée sur GitHub Pages. Les tests vérifient les paires de langues, les liens et ressources locaux, les onglets au clavier, les préférences enregistrées et le contenu de configuration sans script. Le workflow Pages les exécute pour les pull requests de documentation et avant le déploiement. Vérifiez aussi les mises en page pour ordinateur et mobile dans un navigateur après toute modification visuelle.</p>
+      <p>Eleventy construit le site publié à partir des sources anglaises dans <code>docs/</code> et françaises dans <code>docs/fr/</code>, avec les mêmes noms de fichiers et des identifiants d'ancre communs. Les pages et index de recherche générés sont placés dans <code>_site/</code> ; ouvrir une page source d'origine n'affiche pas les encarts de version ni les commandes d'installation versionnées générés.</p>
+      <p>Mettez à jour les deux langues dans le même changement. Conservez les noms et paramètres des commandes, et signalez les liens vers les guides externes, rapports historiques et vidéos disponibles uniquement en anglais. Le cadre publié, les traductions et l'apparence se trouvent dans <code>site/pages.njk</code>, <code>site/locales.json</code> et <code>site/assets/site.css</code>. Les onglets d'environnement appartiennent à chaque exemple de commande et partagent l'environnement sélectionné entre les exemples et les pages ; le changement de langue conserve la page courante.</p>
+      <p>Les badges de préversion sont explicites ; ils ne sont pas déduits de l'historique Git. Pour un comportement du package nouvellement documenté, ajoutez <code>data-release-change="fragment-name"</code> au plus petit libellé, paragraphe, élément de liste, titre, cellule de tableau ou bloc <code>pre</code> complet concerné, dans les deux langues. Marquez un titre uniquement lorsque toute la section ou la page est nouvelle ; sinon, marquez l'option ou l'explication exacte afin que le contenu stable ne paraisse pas inédit. Ne placez jamais le marqueur dans un lien ou un bloc de code copiable et ne marquez pas les corrections uniquement documentaires. Ces pull requests utilisent <code>skip-changelog</code>. La version stable provient de la dernière publication stable de GitHub, et non de <code>apm.yml</code>. Les encarts et commandes d'installation de préversion apparaissent uniquement lorsqu'une préversion publiée, non brouillon, existe, avec le tag réel de la plus récente. Les badges de fonctionnalité exigent aussi un fragment en attente correspondant et disparaissent lorsqu'il est consommé.</p>
+      <p>Rédigez les exemples Squad exécutables dans des blocs <code>pre &gt; code</code> avec la syntaxe canonique des commandes slash. Le moteur de rendu partagé utilise cette source pour créer des requêtes sans préfixe pour VS Code, la CLI et l’application avec l’agent correspondant, en préservant les arguments et le texte multiligne. Séparez les commandes shell et les déclencheurs par commentaire GitHub ; marquez les références qui comparent explicitement les environnements avec <code>data-host-reference</code>. Sans JavaScript, les exemples canoniques d’origine restent lisibles.</p>
+      <pre><code>npm ci
+npm run docs:test
+npm run docs:build
+npm run docs:dev</code></pre>
+      <p>La compilation actualise une seule fois depuis GitHub l'instantané ignoré <code>.docs-releases.json</code>, puis le partage entre le rendu et la validation. Définissez <code>GH_TOKEN</code> ou <code>GITHUB_TOKEN</code> si les limites de l'API non authentifiée s'appliquent ; un échec de consultation fait échouer la compilation au lieu de deviner les versions disponibles. Le texte et les exemples sources sont préservés, et les traductions, liens, ressources et index de recherche sont vérifiés. Les tests couvrent aussi les onglets au clavier, les préférences enregistrées, le contenu sans script, les badges explicites et la promotion d'une version.</p>
+      <p>Le workflow Pages reconstruit le site lors des changements documentaires et de fragments en attente, ainsi que des publications, modifications ou suppressions de versions. Release, Release Prep et Rolling Preview déclenchent explicitement une actualisation après publication ou retrait, y compris en cas d'échec partiel ; une simulation de Release Prep ne la déclenche pas. Les événements de publication construisent la branche par défaut plutôt qu'un ancien tag, afin que les encarts et commandes d'installation se mettent à jour automatiquement. Vérifiez les mises en page pour ordinateur et mobile après toute modification visuelle.</p>
       <h3>Scripts du package</h3>
       <p>Définis dans <code>apm.yml</code> :</p>
       <ul>
@@ -647,7 +653,7 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
       <p>
         <strong>Entre les publications, <code>main</code> est installable.</strong> Chaque fusion déclenche
         <strong>Rolling Preview</strong>, qui regroupe les fragments en attente dans une seule préversion GitHub
-        portant le tag de la version qu’ils déterminent (<code>v0.15.0-pre</code>) et déplace de force
+        portant le tag de la version qu’ils déterminent (voir la <a href="getting-started.html#testing-the-pre-release">version actuelle et la commande d'installation</a>) et déplace de force
         ce tag vers la nouvelle tête de branche. Ce workflow ne fait que lire : aucun fragment n’est consommé, aucune version n’est incrémentée et
         <code>CHANGELOG.md</code> reste intact. Une seule préversion est ouverte à la fois ; lorsqu’un
         fragment <code>minor</code> est intégré, l’ancienne est donc supprimée et le nouveau nom prend sa place.

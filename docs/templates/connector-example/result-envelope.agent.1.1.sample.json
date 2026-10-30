@@ -1,0 +1,15 @@
+{
+  "taskId": "task-2026-10-15-research-0001",
+  "connectorId": "acme-research-agent",
+  "bindingId": "research-org",
+  "role": "researcher",
+  "status": "completed",
+  "artifacts": [
+    {
+      "path": "dotnet-validation-research.md",
+      "type": "md"
+    }
+  ],
+  "narrative": "Researched the approved repository sources and recorded evidence, alternatives, and remaining uncertainties.",
+  "createdAt": "2026-10-15T17:30:00Z"
+}

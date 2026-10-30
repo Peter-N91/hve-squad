@@ -8,6 +8,7 @@
     Verifies a squad root's Scribe write completeness against an expectation, usable
     on any squad root (federation root or member sub-squad).
 .DESCRIPTION
+    AI cost: none; checks local Scribe output without dispatching an agent or a judge.
     This is the P00-T04 write-completeness verifier (routing-performance plan
     amendment-1, condition #39, OBJ-12). It never asserts on rule content or wording;
     it asserts only that the Scribe's turn actually happened end-to-end:
@@ -253,6 +254,20 @@ function Test-LedgerBand {
     return ([math]::Abs($Actual - $Expected) -le [math]::Max($Floor, [math]::Abs($Expected) * $Tolerance))
 }
 
+function ConvertTo-RateModelKey {
+    <#
+    .SYNOPSIS
+        Normalizes model spelling using the ledger writer's existing key rules.
+    .PARAMETER Value
+        Recorded model id or display-name rate key; version punctuation is preserved.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowEmptyString()][string]$Value)
+    $Text = ($Value -replace '`', '' -replace '\((copilot|preview)\)', '').Trim().ToLowerInvariant()
+    ($Text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
+}
+
 if (-not $model.Ledger) {
     Add-Check -Name 'consumption.md ledger total reconciles with blocks' -Passed $false -Detail 'consumption.md is empty or missing'
 }
@@ -280,13 +295,33 @@ else {
         # an arithmetic slip is caught even when every token column reconciles.
         $expectedCost = 0.0
         $unpriced = [System.Collections.Generic.List[string]]::new()
+        $invalidRates = [System.Collections.Generic.List[string]]::new()
+        # Pricing evaluator v2: long-context tiers per block, then calibration exactly once.
+        $calibrationFactor = if ($model.Calibration) { [double]$model.Calibration } else { 1.0 }
         foreach ($block in $model.Blocks) {
             $rate = if ($block.Fields['priced_as']) { $model.Rates[[string]$block.Fields['priced_as']] }
+            if (-not $rate) {
+                $RateKey = ConvertTo-RateModelKey ([string]$block.Fields['priced_as'])
+                if ($RateKey) {
+                    $MatchingKeys = @($model.Rates.Keys | Where-Object { (ConvertTo-RateModelKey $_) -eq $RateKey })
+                    if ($MatchingKeys.Count -eq 1) { $rate = $model.Rates[$MatchingKeys[0]] }
+                }
+            }
             if (-not $rate) { $unpriced.Add("$($block.Source):$($block.Fields['priced_as'])"); continue }
-            $expectedCost += (([double]$block.Fields['input_tokens'] * $rate.input) + ([double]$block.Fields['cached_tokens'] * $rate.cached) +
-                ([double]$block.Fields['cache_write_tokens'] * $rate.cache_write) + ([double]$block.Fields['output_tokens'] * $rate.output)) / 1e6
+            if ($rate.ContainsKey('lc_error')) { $invalidRates.Add("$($block.Source):$($block.Fields['priced_as']) ($($rate.lc_error))"); continue }
+            $inputTokens = [double]$block.Fields['input_tokens']
+            $cachedTokens = [double]$block.Fields['cached_tokens']
+            $effective = @{ input = $rate.input; cached = $rate.cached; cache_write = $rate.cache_write; output = $rate.output }
+            if ($rate.ContainsKey('long_context_threshold') -and ($inputTokens + $cachedTokens) -gt [double]$rate.long_context_threshold) {
+                $effective = @{ input = $rate.lc_input; cached = $rate.lc_cached; cache_write = $rate.lc_cache_write; output = $rate.lc_output }
+            }
+            $expectedCost += (($inputTokens * $effective.input) + ($cachedTokens * $effective.cached) +
+                ([double]$block.Fields['cache_write_tokens'] * $effective.cache_write) + ([double]$block.Fields['output_tokens'] * $effective.output)) / 1e6 * $calibrationFactor
         }
-        if ($unpriced.Count -gt 0) {
+        if ($invalidRates.Count -gt 0) {
+            Add-Check -Name 'ledger Total cost reconciles with blocks priced at consumption-rates.md' -Passed $false -Detail "invalid long-context rate metadata for: $($invalidRates -join ', ')"
+        }
+        elseif ($unpriced.Count -gt 0) {
             Add-Check -Name 'ledger Total cost reconciles with blocks priced at consumption-rates.md' -Passed $false -Detail "no rate row for: $($unpriced -join ', ')"
         }
         elseif ($totalRow.Count -gt 6) {

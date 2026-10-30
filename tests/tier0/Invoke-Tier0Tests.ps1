@@ -43,13 +43,20 @@
     always passed explicitly.
 .PARAMETER Output
     Pester output verbosity.
+.PARAMETER Scope
+    All runs the existing complete selection. Repository runs only source-checkout
+    tests without installing APM dependencies. Package runs installed-package tests,
+    including published self-reference checks in ref mode.
+.PARAMETER Shard
+    Runs one isolated CI partition. All preserves the complete local selection.
 .EXAMPLE
     ./Invoke-Tier0Tests.ps1 -Ref v0.15.3
 .EXAMPLE
     ./Invoke-Tier0Tests.ps1 -SourceRoot .
 .NOTES
-    See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-15,
-    GATE-22..GATE-28).
+    See tests/squad-behavior-contract.md for the cases this implements (PKG-01..PKG-18,
+    COACH-01..COACH-05, COACH-07, GATE-22..GATE-28, CONN-01..CONN-12).
+    COACH-06 is covered by docs tests.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Install')]
 param(
@@ -72,6 +79,12 @@ param(
     [ValidateSet('None', 'Normal', 'Detailed', 'Diagnostic')]
     [string]$Output = 'Detailed',
 
+    [ValidateSet('All', 'Repository', 'Package')]
+    [string]$Scope = 'All',
+
+    [ValidateSet('All', 'Contracts', 'Handoff', 'Lifecycle', 'Coordinator')]
+    [string]$Shard = 'All',
+
     # Cap breaches in third-party agents are reported, not gated.
     [switch]$IncludeAdvisory
 )
@@ -79,17 +92,26 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-Import-Module (Join-Path $PSScriptRoot '..' 'lib' 'SquadInstall.psm1') -Force
+Import-Module (Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'lib', 'SquadInstall.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'Tier0TestPlan.psm1') -Force
 
+$mode = if ($PSCmdlet.ParameterSetName -eq 'Source') { 'Source' } else { 'Installed' }
+$plan = @(Get-Tier0TestPlan -Mode $mode -Scope $Scope -Shard $Shard)
+if ($plan.Count -eq 0) {
+    throw "No Tier 0 containers selected for mode=$mode, scope=$Scope, shard=$Shard."
+}
+if ($mode -eq 'Source') {
+    $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
+}
 $installLog = $null
+$needsPackage = @($plan | Where-Object Scope -eq 'Package').Count -gt 0
 
-if ($PSCmdlet.ParameterSetName -ne 'Installed') {
+if ($needsPackage -and $PSCmdlet.ParameterSetName -ne 'Installed') {
     if (-not $ScratchRoot) {
         $ScratchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "hve-squad-tier0-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
     }
 
     if ($PSCmdlet.ParameterSetName -eq 'Source') {
-        $SourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
         Write-Host "Installing the manifest from $SourceRoot into $ScratchRoot" -ForegroundColor Cyan
         $install = Install-SquadPackage -Destination $ScratchRoot -SourceRoot $SourceRoot -Target $Target
         Write-Host "Overlaid squad-src/ from $SourceRoot" -ForegroundColor Cyan
@@ -103,67 +125,25 @@ if ($PSCmdlet.ParameterSetName -ne 'Installed') {
     $PackageRoot = $install.Root
 }
 
-$PackageRoot = (Resolve-Path -LiteralPath $PackageRoot).Path
+if ($needsPackage) {
+    $PackageRoot = (Resolve-Path -LiteralPath $PackageRoot).Path
+}
 
 # Only a release tag pins its own references; main ships the unpinned manifest by design.
 $expectPinned = $PSCmdlet.ParameterSetName -eq 'Install' -and $Ref -match '^v\d+\.\d+\.\d+'
 
 $containers = @(
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'SquadPackage.Tests.ps1') -Data @{
-        PackageRoot  = $PackageRoot
-        InstallLog   = $installLog
-        ExpectPinned = [bool]$expectPinned
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ScribeHandoffPipelining.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'CouncilMembership.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ScribeInitConvergence.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'EconomyRouting.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'ConsumptionRatesSeeder.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'SetSquadCostPreflight.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'WriteSquadHandoff.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'BoundedLane.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
-    }
-    New-PesterContainer -Path (Join-Path $PSScriptRoot 'GetSquadDispatchBrief.Tests.ps1') -Data @{
-        PackageRoot = $PackageRoot
+    foreach ($test in $plan) {
+        $data = if ($test.Scope -eq 'Package') { @{ PackageRoot = $PackageRoot } } else { @{ SourceRoot = $SourceRoot } }
+        if ($test.Name -eq 'SquadPackage.Tests.ps1') {
+            $data.InstallLog = $installLog
+            $data.ExpectPinned = [bool]$expectPinned
+        }
+        if ($test.Directory -eq 'lib') { $data = @{} }
+        $path = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath $test.Directory, $test.Name
+        New-PesterContainer -Path $path -Data $data
     }
 )
-
-# Manifest coverage is a property of the working copy, not of an installed tree.
-if ($PSCmdlet.ParameterSetName -eq 'Source') {
-    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Manifest.Tests.ps1') -Data @{
-        SourceRoot = $SourceRoot
-    }
-    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Build-SquadPlugin.Tests.ps1') -Data @{
-        SourceRoot = $SourceRoot
-    }
-    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Performance.Tests.ps1') -Data @{
-        SourceRoot = $SourceRoot
-    }
-    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'Packaging.Tests.ps1') -Data @{
-        SourceRoot = $SourceRoot
-    }
-    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'WatchMode.Tests.ps1') -Data @{
-        SourceRoot = $SourceRoot
-    }
-    $containers += New-PesterContainer -Path (Join-Path $PSScriptRoot 'HotFileBudget.Tests.ps1') -Data @{
-        SourceRoot = $SourceRoot
-    }
-}
 
 $config = New-PesterConfiguration
 $config.Run.Container = $containers

@@ -1,11 +1,11 @@
 ---
 description: "Squad state layout and mapping of squad coordination tools to HVE Core mechanisms"
-applyTo: '**/.copilot-tracking/squad/**'
+applyTo: '**/.copilot-tracking/squad/**/state.json'
 ---
 
 # Squad State Conventions
 
-These conventions define where squad state lives, who may change it, and how the squad's coordination tools map onto concrete HVE Core mechanisms. The Squad Coordinator reads this layout to locate roster, routing, decisions, and history; the Squad Scribe writes to it on the coordinator's behalf.
+These conventions define where squad state lives, who may change it, and how the squad's coordination tools map onto concrete HVE Core mechanisms. The coordinator reads this layout; supported ordinary writes use the validated deterministic writer directly or through Scribe, and cold writes remain Scribe-owned. Existing Markdown/state storage is unchanged.
 
 State is per-project and runtime-created. It is never packaged with the squad source — only the coordinator produces it under `.copilot-tracking/squad/` when a project first runs the squad.
 
@@ -24,23 +24,24 @@ All squad state lives under the squad root (`.copilot-tracking/squad/` by defaul
 
 | Path                  | Purpose                                                                    | Write Semantics      |
 |-----------------------|----------------------------------------------------------------------------|----------------------|
-| `team.md`             | Roster of roles and the agents that fill them (see roster conventions)     | Replace via scribe   |
+| `team.md`             | Roster, routing mode, agents, and active-policy Model cells                 | Replace via Scribe; selected Model-cell refresh via validated script |
 | `routing.md`          | Request-pattern routing table (see routing conventions)                    | Replace via scribe   |
-| `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only via Scribe; Cost Preflight via coordinator |
+| `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only via validated writer or Scribe; Cost Preflight via coordinator |
 | `notifications.md`    | Chronological log of notifications (pings) fired and their delivery channel | Append-only          |
 | `history/<agent>.md`  | Per-agent dispatch history: requests handled, findings, outcomes           | Append-only          |
 | `history/autopilot-run-<id>.md` | Per-run autopilot pipeline summary: stages, gates, approvals     | Append-only by id    |
-| `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via Scribe; Cost Preflight compare-and-swap via coordinator |
-| `consumption.md`      | Aggregated member/model/credit ledger; carries the cost comparison line    | Replace via scribe   |
-| `consumption-rates.md`| Per-model token-rate table (USD per 1M) plus the comparison methodology    | Replace via scribe   |
+| `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via validated writer or Scribe; Cost Preflight compare-and-swap via coordinator |
+| `consumption.md`      | Aggregated member/model/credit ledger; carries the cost comparison line    | Replace via validated writer or Scribe |
+| `consumption-sessions.json` | Optional exact-native per-session journal used to rebuild cumulative exact totals | Replace atomically by the ledger writer; created lazily |
+| `consumption-rates.md`| Per-model token-rate table (USD per 1M) plus the comparison methodology    | Replace via seeder or Scribe |
 
 * `decisions.md`, `notifications.md`, and the `history/<agent>.md` files are **append-only**. New entries are added to the end; prior entries are never edited or removed.
-* Init seeds `history/` as an empty directory. Each `history/<agent>.md` is created by the dispatch it records, in the same write as its first entry, because the file's presence is the proof that stage ran.
+* Init seeds only `history/Squad Scribe.md` with initialization overhead. Each role's `history/<agent>.md` is created with the dispatch it records, never pre-created as proof of a stage that did not run.
 * `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the coordinator overwrites as the squad advances. It carries the `notify` object (the captured notification contact) and the current `mode`.
 
 ### state.json Shape
 
-The Scribe seeds `state.json` on first run and overwrites it as the squad advances. Before a child dispatch, the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching Cost Preflight decision entry, and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`; this is the sole exception to Scribe-owned writes.
+The Scribe seeds `state.json`; the validated ordinary writer or cold Scribe advances it. In every routing mode, the coordinator may synchronously run `Write-SquadHandoff.ps1 -Quiet` using the minimal JSON in `references/economy-scribe.md`, without loading cold schemas or dispatching Scribe. Council, Intake Readiness, and Discovery Verdicts use `Write-SquadVerdict.ps1 -Quiet` after that handoff; it shares the same per-root lock, appends only the validated verdict to `decisions.md`, and works unchanged at a federation member root. Hash-bound Model-cell and additive-roster writers change only their sealed configuration/decision files, never state or accounting. Serialize every writer with Cost Preflight per root. Quiet success requires one valid status/count/check object; warnings stay visible on stderr. Failure never permits unvalidated hand edits or ordinary ledger arithmetic. Before a child dispatch the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching decision and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`.
 
 ```json
 {
@@ -83,7 +84,7 @@ The Scribe seeds `state.json` on first run and overwrites it as the squad advanc
 }
 ```
 
-The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`). The `currentRun` object holds estimated run totals plus the latest compact Cost Preflight decision. The full planned-demand table and permitted dispatch set live in the matching `decisions.md` entry rather than as JSON scratch data.
+The `notify` object follows `.github/instructions/squad/squad-notifications.instructions.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`). The `currentRun` object holds ledger totals plus the latest compact Cost Preflight decision; that decision's `evaluatedSpendUsd` is exact host usage plus pending reservations when its basis is `host-exact+estimated-reservation` (the older `host-observed+estimated-reservation` spelling remains readable). The exact next-wave rows and permitted dispatch set live in the matching `decisions.md` entry rather than as JSON scratch data.
 
 Cost-ceiling omission is stateful only inside one run. When the latest Cost Preflight `runId` matches the active run id, an omitted argument preserves its finite positive `ceilingUsd`. The literal `cost-ceiling=unset` replaces the compact object with the exact `not-requested` shape above while preserving `estCostUsd` and `estCreditsTotal`. A new run id with no supplied ceiling also starts from that `not-requested` shape; a ceiling never carries across run ids.
 
@@ -97,12 +98,12 @@ Watch Mode runs additionally carry an optional `trigger` object recording the ev
 
 ## Consumption Tracking
 
-Squad runs estimate the model cost and AI-credit consumption of every dispatch so a project can see what a run spent. The billing model is GitHub Copilot usage-based billing (UBB): token-metered, effective 2026-06-01, priced per model in USD per 1M tokens, where 1 AI credit equals $0.01 USD. No per-dispatch token telemetry exists, so every figure is an estimate. The runtime exposes only a per-user aggregate `ai_credits_used` through the usage-metrics REST API, available after the fact for optional reconciliation.
+Squad records model cost and AI-credit consumption for every dispatch. GitHub Copilot UBB is token-metered from 2026-06-01, priced per model in USD per 1M tokens; 1 AI credit is $0.01. History blocks are deterministic estimates. Complete native session records replace ledger/state estimates only after role attribution and nano-AIU reconciliation; otherwise the estimator stays visible. The usage-metrics REST aggregate is fallback calibration only.
 
 The Scribe records consumption in three places:
 
 * A per-dispatch consumption block appended to `history/<agent>.md` (append-only), one block per dispatch, written as an `#### Consumption` heading followed by a fenced `json` block, with fields in this order: `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Numeric fields are bare numbers. The container is fixed rather than free-form because these blocks are the source the aggregated ledger is rebuilt from. **The block records consumption, not cost**: rates and money live in the two files below and nowhere else, and `priced_as` is what carries the pricing decision forward to the ledger.
-* The aggregated `consumption.md` ledger (replace via scribe), which mirrors roster order and splits into two role-aligned tables so it stays readable at a glance: an **Attribution** table (resolved model, model source, tier) and a **Usage & Cost** table (estimated turns, tokens, cost, credits, basis), each adding an `orchestration` row for coordinator and Scribe overhead, the second totaling the run and carrying the cost-comparison line. This ledger is the common readme of members, models, and credits. **The file replaces, but its rows accumulate**: each rewrite is derived from every consumption block recorded in `history/*.md` for the run, summed per role, never from the current turn's dispatches alone. Deriving it from the turn in hand drops every earlier role while leaving its history entry intact, and the result still totals correctly — which is why the coordinator's Step 1 reconcile counts ledger rows against history entries rather than checking that the ledger is merely populated.
+* The aggregated `consumption.md` ledger (replace via writer) mirrors roster order in **Attribution** and **Usage & Cost** tables, adds `orchestration`, totals the run, and carries Cost Comparison. Basis is `exact-native` only when complete records reconcile; otherwise it keeps the history-derived estimate. **The file replaces, but rows accumulate**: fallback rewrites sum every run block in `history/*.md`, never only the current turn. Exact rewrites sum every accepted session snapshot in optional `consumption-sessions.json`, upserting the active session by native session id and validating that cached history identities remain an ordered prefix. When no journal exists yet, `-SessionLog auto` may bootstrap it from complete repository sessions only when every metered history timestamp maps to exactly one non-overlapping native event window; the active session alone has a bounded open-tail allowance for the host tool-completion event, and the next session refreshes that prior snapshot from its completed log before appending. Ambiguity keeps the estimator. This is why a new Copilot session adds to prior exact totals instead of resetting them, and why reconciliation counts ledger rows against history rather than checking only that the ledger exists.
 * The `consumption-rates.md` table (replace via scribe; seeded from the `consumption-rates-template.md` skill reference, cold — read only at Init or a Step 7.1 reseed), the single maintainable source of per-model input, cached, cache-write, and output rates in USD per 1M tokens, plus the tier-fallback rates, the dispatch-size estimator, and the calibration block.
 
 Model attribution — which model each block reports and how it is resolved — is governed by [Model Attribution](#model-attribution) below.
@@ -126,7 +127,7 @@ est_credits  = est_cost_usd / 0.01
 
 ### Calibration
 
-Estimates that are never checked stay wrong. `consumption-rates.md` carries a `calibration_factor` — the running mean of `observed_credits / estimated_credits` across reconciled runs, clamped to 0.25-10.0 — that multiplies every cost estimate. When the coordinator supplies an `observed_credits` figure (the per-user aggregate `ai_credits_used` delta read from the Copilot usage-metrics REST API across the run), the Scribe folds that run's ratio into the mean and stamps the calibration block. Until at least one run has been reconciled the factor stays at 1.00 and the ledger carries an "uncalibrated" note.
+Estimates are fallback and future-reservation inputs, not completed-work authority when native attribution is available. `consumption-rates.md` retains a `calibration_factor` — the running mean of legacy `observed_credits / estimated_credits`, clamped to 0.25-10.0 — only for that fallback. Exact-native ledger rows and ceiling consumption are never calibrated or scaled. Until a fallback estimate has eligible reconciliation evidence, the factor stays at 1.00 and the fallback carries an "uncalibrated" note.
 
 Every numeric output carries an "estimated, not billed" disclaimer. These values support run planning and cost comparison, not invoicing.
 
@@ -196,13 +197,16 @@ Totals are computed by summing the rows, never estimated. The total row must equ
 
 ## State Ownership
 
-Only the Squad Coordinator initiates state changes, and the Squad Scribe performs every ordinary write. Initialization is outside admission. Before later work dispatch, the sole exception is the deterministic Cost Preflight transaction: while no parallel writer exists, the coordinator compares `updated`, changes only `currentRun.costPreflight` plus an exact legacy schema bump when required, appends the matching decision, and reads both back. A collision or mismatch permits no dispatch. Other cast agents never write squad state directly.
+Only the owning coordinator initiates state changes. Supported ordinary and
+configuration writes use validated scripts; cold operations use Scribe. Cost
+Preflight remains the narrow compare-and-swap transaction. Other cast agents
+never write squad state directly.
 
-This single-writer rule keeps shared state consistent across parallel dispatch: concurrent roles cannot race on the same files because every mutation funnels through the scribe. Under autopilot pipelining this still holds per squad root: at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order, and a federation applies this same per-root rule independently to each sub-squad root.
+One writer per root keeps concurrent roles from racing: serialize handoff writer, verdict writer, routing refresh, roster expansion, cold Scribe, and Cost Preflight. Under cold autopilot pipelining, at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order. Direct ordinary handoffs, verdicts, routing refreshes, and roster expansions run synchronously, never alongside another writer; each federation member applies this independently.
 
 ## Proof of Dispatch
 
-A `history/<agent>.md` entry is the squad's proof that a role actually ran. Because only the Scribe writes history — and only when the coordinator dispatched the agent and handed back findings — the presence of a per-agent history entry is verifiable evidence that the stage happened; its absence is evidence that it did not.
+A verified `history/<agent>.md` entry is proof of dispatch only together with its domain artifact and consumption block. The validated ordinary writer or cold Scribe writes it from actual dispatch findings. Its absence means the stage is unproven, not permission to claim it complete. `history/Squad Scribe.md` retains orchestration overhead on direct routes but does not imply a Scribe dispatch; count only actual coordinator/Scribe usage.
 
 The coordinator and the pipeline gates treat history as the gate mechanism:
 

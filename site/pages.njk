@@ -73,11 +73,20 @@ eleventyExcludeFromCollections: true
       <div class="sidebar-inner">
         <p class="nav-caption">{{ doc.ui.documentation }}</p>
         <nav class="docs-nav" aria-label="{{ doc.ui.navigation }}">{% include "navigation.njk" %}</nav>
-        <div class="sidebar-footer"><span>{{ doc.ui.version }}</span> <code>v{{ doc.version }}</code><p>{{ doc.ui.ecosystem }}</p></div>
+        <div class="sidebar-footer"><span>{{ doc.ui.release.stable }}</span> <a href="{{ doc.release.stableUrl }}"><code>{{ doc.release.stableTag }}</code></a><p>{{ doc.ui.ecosystem }}</p></div>
       </div>
     </aside>
     <main id="{{ doc.mainId }}" class="doc-main" tabindex="-1">
       <div class="doc-breadcrumb" data-pagefind-ignore>{{ doc.ui.documentation }} <span aria-hidden="true">/</span> {{ doc.label }}</div>
+      <aside class="release-notice" aria-label="{{ doc.ui.release.availability }}" data-pagefind-ignore>
+        <p><strong>{{ doc.ui.release.docsTrackMain }}</strong></p>
+        <div class="release-channels">
+          <a href="{{ doc.release.stableUrl }}">{{ doc.ui.release.stable }} <code>{{ doc.release.stableTag }}</code></a>
+          {% if doc.release.previewTag %}{{ doc.previewBadge | safe }}{% endif %}
+        </div>
+        {% if doc.release.previewTag %}<p>{{ doc.ui.release.notice }} <a href="getting-started.html#testing-the-pre-release">{{ doc.ui.release.tryPreview }}</a>.</p>
+        {% else %}<p>{{ doc.ui.release.noPreview }}</p>{% endif %}
+      </aside>
       {% if doc.toc.length %}<details class="mobile-toc" data-pagefind-ignore>
         <summary>{{ doc.ui.onThisPage }}</summary>
         <nav aria-label="{{ doc.ui.onThisPage }}">{% include "toc-links.njk" %}</nav>
