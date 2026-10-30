@@ -1410,7 +1410,7 @@ function Get-SquadWatchProfileCatalog {
     $section = ''
     foreach ($line in ([string]$Markdown -split "`r?`n")) {
         if ($line -match '^## Squad Profiles') { $section = 'profile'; continue }
-        if ($line -match '^## Squad Packs') { $section = 'pack'; continue }
+        if ($line -match '^## (Squad|Registered) Packs') { $section = 'pack'; continue }
         if ($line -match '^## ') { $section = ''; continue }
         if ($section -and $line -match '^\|\s*`(?<name>[a-z0-9-]+)`\s*\|\s*(?<members>[^|]+)\|') {
             $catalogName = $Matches['name']
