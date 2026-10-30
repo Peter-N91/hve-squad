@@ -74,8 +74,10 @@ Return to the coordinator:
 	from evidence-based business-outcome validation for each claim ID; preserve its
 	value category, hypothesis, beneficiary, baseline, target metric, measurement
 	and decision owners, observation/window, evidence, status and source references
-	in the review record and return. State missing evidence; use `pending` until its
-	measurement window and evidence support a conclusion. Accepted-delivery
+	in the review record and return. Follow [Business Value Measurement](../../skills/squad/references/business-value-measurement.md)
+	for status definitions: keep status `pending` while its observation window is open
+	or evidence collection is incomplete; after both complete, use `supported` only
+	when evidence supports the target, otherwise `gap`. Accepted-delivery
 	economics is not realized business benefit; never invent actuals, financial
 	value or business approval.
 * **Plan Deviations** — planned-not-done, done-not-planned, and done-differently items, or `none`.

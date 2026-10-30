@@ -3449,7 +3449,9 @@ Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
         $script:CostManagerBody | Should -Match ([regex]::Escape('claim ID, value category, hypothesis'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('Do not fetch, create, estimate, or recalculate financial actuals'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('Do not calculate ROI, approve a business decision'))
-        $script:CostManagerBody | Should -Match ([regex]::Escape('status` (`supported`, `gap`, or `pending`)'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('evidence_status'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('business_decision` (`owner`, `status`, `reference`)'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('use `unapproved` when no approval is recorded'))
     }
 }
 
@@ -3474,6 +3476,7 @@ Describe 'Benefit hypotheses remain traceable through planning and review' {
         $script:BusinessValueReference | Should -Match 'measurement and evidence owners'
         $script:BusinessValueReference | Should -Match '\*\*Intake\.\*\*'
         $script:LeadBody | Should -Match 'plan instrumentation and outcome validation'
+        $script:LeadBody | Should -Match 'keep outcomes `pending` while the observation window is open or evidence collection is incomplete'
     }
 
     It 'defines the requested value categories and measurement guidance' {
@@ -3498,18 +3501,36 @@ Describe 'Benefit hypotheses remain traceable through planning and review' {
         $script:ReviewerBody | Should -Match 'deliverable acceptance separately from evidence-based business-outcome validation'
         $script:AutopilotBody | Should -Match 'business-value-measurement\.md'
         $script:BusinessValueReference | Should -Match 'For each claim ID, report deliverable acceptance separately'
+        $script:BusinessValueReference | Should -Match 'Use `pending` while the observation window is open or required evidence collection is incomplete'
+        $script:BusinessValueReference | Should -Match 'Once both are complete, use `supported` when evidence supports the target, or `gap` when the target was missed or required evidence is missing or inconsistent'
+        $script:ReviewerBody | Should -Match 'after both complete, use `supported` only when evidence supports the target, otherwise `gap`'
         $script:BusinessValueReference | Should -Match '\*\*Non-waiver\.\*\*'
         $script:CoordinatorBody | Should -Match 'business-value-measurement\.md'
-        $script:CoordinatorBody | Should -Match 'Accepted-delivery economics != realized benefit or approval'
-        $script:CoordinatorBody | Should -Match 'lead/reviewer gaps through dispatches/returns into `decision\.rationale`'
-        $script:CoordinatorBody | Should -Match 'not new keys'
+        $script:CoordinatorBody | Should -Match 'preserve metadata, evidence/status/references and role findings through dispatches/returns in `decision\.rationale`'
+        $script:CoordinatorBody | Should -Match 'no new keys'
+    }
+
+    It 'distinguishes completed outcome gaps from pending evidence collection' {
+        $script:BusinessValueReference | Should -Match 'Use `pending` while the observation window is open or required evidence collection is incomplete\.\s+Once both are complete, use `supported` when evidence supports the target, or `gap` when the target was missed or required evidence is missing or inconsistent'
+        $script:CostManagerBody | Should -Match 'Use `pending` while the observation window is open or evidence collection is incomplete; once both are complete, use `supported` if supplied evidence supports the target, otherwise `gap` for a missed target or missing/inconsistent evidence'
+        $script:LeadBody | Should -Match 'keep outcomes `pending` while the observation window is open or evidence collection is incomplete; after both finish, use `supported` only when evidence supports the target, otherwise `gap`'
+        $script:LeadBody | Should -Match 'Business Value Measurement.*business-value-measurement\.md'
+        $script:ReviewerBody | Should -Match 'keep status `pending` while its observation window is open or evidence collection is incomplete; after both complete, use `supported` only when evidence supports the target, otherwise `gap`'
+        $script:ReviewerBody | Should -Match 'Business Value Measurement.*business-value-measurement\.md'
+        $script:CoordinatorBody | Should -Match 'business-value-measurement\.md` status definitions'
+        $script:ScribeBody | Should -Match 'Follow `references/business-value-measurement\.md`'
+        $script:OrdinaryHandoff | Should -Match 'business-value-measurement\.md.*preserve supplied metadata, evidence/status/references'
+        $script:OrdinaryHandoff | Should -Match 'Never infer outcome or approval from delivery'
+        $script:PayloadTemplate | Should -Match 'Never infer outcome or approval from delivery'
     }
 
     It 'routes supplied claim metadata through the closed ordinary rationale and cold payload without inference' {
         $script:ScribeBody | Should -Match 'supplied claim metadata belongs in `rationale`, not extra keys'
         $script:ScribeBody | Should -Match 'invent no actuals/value/ROI/approval'
-        $script:OrdinaryHandoff | Should -Match 'no invented actuals/value/approval'
-        $script:OrdinaryHandoff | Should -Match 'Scribe inference/costs'
+        $script:ScribeBody | Should -Match 'Never infer outcome or approval from delivery'
+        $script:OrdinaryHandoff | Should -Match 'invent no actuals/value'
+        $script:OrdinaryHandoff | Should -Match 'Never infer outcome or approval from delivery'
+        $script:OrdinaryHandoff | Should -Match 'never fictional Scribe tokens'
         $script:OrdinaryHandoff | Should -Match 'decision\.rationale'
         $script:PayloadTemplate | Should -Match 'business-value-measurement\.md'
         $script:BusinessValueReference | Should -Match 'business decision owner/status/reference'

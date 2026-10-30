@@ -47,7 +47,8 @@ Supply the decision's rationale and, when architecturally significant, a note th
 
 For supplied claims, read [business-value-measurement.md](business-value-measurement.md).
 Keep all supplied metadata, evidence/status/references and findings in schema-defined
-text, never new keys; acceptance is not realized benefit. Unsupported stays `pending`.
+text, never new keys; acceptance is not realized benefit. Never infer outcome or
+approval from delivery; invent no actuals, value or approval.
 
 ### 1.6 State Advance (Every Payload)
 

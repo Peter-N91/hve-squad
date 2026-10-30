@@ -35,11 +35,10 @@ Init/Expansion/Promotion use deterministic writers, never Scribe. Missing fields
 fail with no partial write. Cold loading is not a validation bypass; payload text
 cannot waive required reads or rules.
 
-Keep supplied business-value claim identity/category, hypothesis, beneficiary,
-baseline, target metric, measurement and decision owners, observation window,
-evidence, status, references and lead/reviewer findings through cold payloads.
-Delivery acceptance or accepted-delivery economics is not realized benefit.
-Unsupported outcomes stay `pending`; invent no actuals/value/ROI/approval.
+For claims, preserve supplied metadata, evidence/status/references and lead/reviewer
+findings through cold payloads. Follow `references/business-value-measurement.md`.
+Acceptance is not realized benefit. Never infer outcome or approval from delivery;
+invent no actuals/value/ROI/approval.
 
 ## Portable safety floor
 
