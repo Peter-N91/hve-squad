@@ -46,7 +46,7 @@ Supplied financial-report review (Step 6) is a separate evidence-only mode, not 
 
 ### Step 1: Classify the Cost Question
 
-Read the request and decide which of five modes applies. A pre-deployment estimate maps to Retail Prices REST plus CO checklist application. An actuals lookup maps to Cost Management REST (requires Azure credentials in the consumer environment). An optimization review maps to both surfaces plus a CO:05 / CO:06 rate-and-alignment pass. An AI spend review (the squad's own model spend, not an Azure workload) runs Step 5. A supplied financial-report evidence review runs Step 6 only; it never expands into ongoing workload FinOps. Record the chosen mode in the response so the Coordinator can route follow-on work correctly.
+Read the request and decide which of five modes applies. A pre-deployment estimate maps to Retail Prices REST plus CO checklist application. An actuals lookup maps to Cost Management REST (requires Azure credentials in the consumer environment). An optimization review maps to both surfaces plus a CO:05 / CO:06 rate-and-alignment pass. An AI spend review (the squad's own model spend, not an Azure workload) skips Steps 2 to 4 and runs Step 5. A supplied financial-report evidence review runs Step 6 only; it never expands into ongoing workload FinOps. Record the chosen mode in the response so the Coordinator can route follow-on work correctly.
 
 ### Step 2: Resolve Pricing Through the azure-pricing Skill, Then Squad Researcher
 
@@ -101,7 +101,7 @@ The response contains the report ID/as-of date, claim-level evidence status and 
 
 ## Required Protocol
 
-1. Follow every Required Step in order for the selected mode; do not skip the checklist sweep. AI spend review runs Steps 1 and 5 only; financial-report review runs Steps 1 and 6 only.
+1. Follow every Required Step in order for the selected mode; do not skip the checklist sweep even when the estimate looks straightforward. AI spend review runs Steps 1 and 5 only; financial-report review runs Steps 1 and 6 only.
 2. Label every estimated number "indicative" in the response. Never present a number as a guarantee, a quote, or an authoritative billing forecast.
 3. Read-only estimates (no budget change, no commitment recommendation) execute at the `auto` autonomy tier. Any recommendation that would change a budget, propose a reservation or savings plan, or alter a deployed resource SKU runs at the `confirm` tier and requires explicit user approval before the Coordinator dispatches the next role.
 4. For modes requiring pricing, resolve pricing through the bundled `azure-pricing` skill first, and route anything it does not cover through the Squad Researcher declared in `agents:` frontmatter. Do not embed hard-coded prices in the response. Financial-report review never delegates financial data retrieval.

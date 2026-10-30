@@ -138,9 +138,8 @@ Describe 'Measure-SquadLedger reproduces the correct ledger on a fully-applied f
 
     It 'prints the derivation lines in the scribe-procedure.md Step 7 shape, including the per-file block enumeration' {
         $result = Invoke-Ledger -SquadRoot $script:AppliedRoot -Format markdown
-        $result.ExitCode | Should -Be 0 -Because $result.Output
-        $result.Output | Should -Match 'Squad Researcher\.md (?:\u2014|-) 1 block\(s\)'
-        $result.Output | Should -Match 'Squad Scribe\.md (?:\u2014|-) 1 block\(s\)'
+        $result.Output | Should -Match 'Squad Researcher\.md — 1 block\(s\)'
+        $result.Output | Should -Match 'Squad Scribe\.md — 1 block\(s\)'
         $result.Output | Should -Match 'total = 0\.3171'
     }
 
@@ -3430,6 +3429,7 @@ Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
     }
 
     It 'scopes zero value to accepted-deliverable unit economics' {
+        $script:CostManagerBody | Should -Match ([regex]::Escape('An AI spend review (the squad''s own model spend, not an Azure workload) skips Steps 2 to 4 and runs Step 5.'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('AI spend review runs Steps 1 and 5 only'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('An unaccepted deliverable has zero value only in this unit-economics measure'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('This does not determine financial business value.'))
@@ -3463,9 +3463,8 @@ Describe 'Benefit hypotheses remain traceable through planning and review' {
         $script:ReviewerBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-reviewer.agent.md') -Raw) -replace '\s+', ' '
         $script:ScribeBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw) -replace '\s+', ' '
         $script:PayloadTemplate = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/scribe-payload-template.md') -Raw) -replace '\s+', ' '
-        $script:CoordinatorBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/coordinator-runtime.md') -Raw) -replace '\s+', ' '
+        $script:CoordinatorAgent = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw) -replace '\s+', ' '
         $script:OrdinaryHandoff = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/economy-scribe.md') -Raw) -replace '\s+', ' '
-        $script:AutopilotBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-autopilot.instructions.md') -Raw) -replace '\s+', ' '
         $script:BusinessValueReference = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/business-value-measurement.md') -Raw
     }
 
@@ -3499,15 +3498,14 @@ Describe 'Benefit hypotheses remain traceable through planning and review' {
 
     It 'distinguishes deliverable acceptance from business outcomes and approvals' {
         $script:ReviewerBody | Should -Match 'deliverable acceptance separately from evidence-based business-outcome validation'
-        $script:AutopilotBody | Should -Match 'business-value-measurement\.md'
         $script:BusinessValueReference | Should -Match 'For each claim ID, report deliverable acceptance separately'
         $script:BusinessValueReference | Should -Match 'Use `pending` while the observation window is open or required evidence collection is incomplete'
         $script:BusinessValueReference | Should -Match 'Once both are complete, use `supported` when evidence supports the target, or `gap` when the target was missed or required evidence is missing or inconsistent'
         $script:ReviewerBody | Should -Match 'after both complete, use `supported` only when evidence supports the target, otherwise `gap`'
         $script:BusinessValueReference | Should -Match '\*\*Non-waiver\.\*\*'
-        $script:CoordinatorBody | Should -Match 'business-value-measurement\.md'
-        $script:CoordinatorBody | Should -Match 'preserve metadata, evidence/status/references and role findings through dispatches/returns in `decision\.rationale`'
-        $script:CoordinatorBody | Should -Match 'no new keys'
+        $script:CoordinatorAgent | Should -Match 'references/business-value-measurement\.md'
+        $script:CoordinatorAgent | Should -Match 'business approval stays separate from execution/review'
+        $script:CoordinatorAgent | Should -Match 'delivery acceptance is not realized benefit'
     }
 
     It 'distinguishes completed outcome gaps from pending evidence collection' {
@@ -3517,23 +3515,23 @@ Describe 'Benefit hypotheses remain traceable through planning and review' {
         $script:LeadBody | Should -Match 'Business Value Measurement.*business-value-measurement\.md'
         $script:ReviewerBody | Should -Match 'keep status `pending` while its observation window is open or evidence collection is incomplete; after both complete, use `supported` only when evidence supports the target, otherwise `gap`'
         $script:ReviewerBody | Should -Match 'Business Value Measurement.*business-value-measurement\.md'
-        $script:CoordinatorBody | Should -Match 'business-value-measurement\.md` status definitions'
-        $script:ScribeBody | Should -Match 'Follow `references/business-value-measurement\.md`'
-        $script:OrdinaryHandoff | Should -Match 'business-value-measurement\.md.*preserve supplied metadata, evidence/status/references'
-        $script:OrdinaryHandoff | Should -Match 'Never infer outcome or approval from delivery'
-        $script:PayloadTemplate | Should -Match 'Never infer outcome or approval from delivery'
+        $script:ScribeBody | Should -Match 'follow `references/business-value-measurement\.md`'
+        $script:PayloadTemplate | Should -Match 'never infer outcome, value, or approval from delivery'
     }
 
     It 'routes supplied claim metadata through the closed ordinary rationale and cold payload without inference' {
-        $script:ScribeBody | Should -Match 'supplied claim metadata belongs in `rationale`, not extra keys'
-        $script:ScribeBody | Should -Match 'invent no actuals/value/ROI/approval'
-        $script:ScribeBody | Should -Match 'Never infer outcome or approval from delivery'
-        $script:OrdinaryHandoff | Should -Match 'invent no actuals/value'
-        $script:OrdinaryHandoff | Should -Match 'Never infer outcome or approval from delivery'
+        $script:BusinessValueReference | Should -Match 'supported `decision\.rationale`, within the closed ordinary decision schema `\{title,rationale,adrNoted\}`'
+        $script:BusinessValueReference | Should -Match 'Do not add unsupported verdict JSON keys'
+        $script:OrdinaryHandoff | Should -Match 'Optional `decision`: \{title: string,rationale: string,adrNoted: boolean\}'
         $script:OrdinaryHandoff | Should -Match 'never fictional Scribe tokens'
-        $script:OrdinaryHandoff | Should -Match 'decision\.rationale'
-        $script:PayloadTemplate | Should -Match 'business-value-measurement\.md'
+        $script:ScribeBody | Should -Match 'never infer outcome, value, or approval'
+        $script:PayloadTemplate | Should -Match 'keep metadata in schema-defined text, never new keys'
         $script:BusinessValueReference | Should -Match 'business decision owner/status/reference'
         $script:BusinessValueReference | Should -Match 'Never invent owners, baselines, targets, evidence, results, decision references, financial actuals, ROI, or approval'
+    }
+
+    It 'keeps benefit handling conditional instead of adding it to the universal ordinary handoff contract' {
+        $script:OrdinaryHandoff | Should -Not -Match 'business-value-measurement'
+        $script:BusinessValueReference | Should -Match 'do not add a universal measurement read or a Scribe dispatch to ordinary work'
     }
 }

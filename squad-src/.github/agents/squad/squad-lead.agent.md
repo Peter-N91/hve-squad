@@ -75,8 +75,8 @@ Return to the coordinator:
 * **Deliverables** — a table of deliverable, owning role, expected artifact path, and dependencies, in execution order.
 * **Implement Shape** — `single-build` or `deliverable-fan-out`, with the reason.
 * **Benefit Claims** — when supplied, the preserved claim metadata, evidence and
-	references above, planned validation and unresolved gaps; unsupported outcomes
-	remain `pending` while the observation window is open or evidence collection is
-	incomplete; after both finish, classify them per the measurement reference.
+  references above, planned validation and unresolved gaps; unsupported outcomes
+  remain `pending` while the observation window is open or evidence collection is
+  incomplete; after both finish, classify them per the measurement reference.
 * **Assumptions and Open Decisions** — what the plan rests on, or `none`.
 * **Gaps in Research** — anything the research did not answer, or `none`.

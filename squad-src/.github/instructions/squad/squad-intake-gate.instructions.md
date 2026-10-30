@@ -10,7 +10,7 @@ These conventions define the **intake gate**: a conditional pre-work check the S
 The gate is **conditional and additive**. When a turn has no requirement or input artifacts to validate, the gate is a silent no-op and the squad proceeds exactly as today. A repository that never grounds work in inputs never pays the intake-dispatch cost.
 
 An intake run appends one `## Intake Readiness Verdict` through
-`Write-SquadVerdict.ps1 -Quiet` after the ordinary `Write-SquadHandoff.ps1 -Quiet` handoff. No role or coordinator
+`Write-SquadVerdict.ps1` after the ordinary handoff. No role or coordinator
 hand-edits it; unsupported exit 2 uses cold Scribe.
 
 ## Relationship to the Implementation Gate
@@ -54,7 +54,7 @@ When the resolved validator agent is absent from the active roster or not instal
 
 1. The coordinator dispatches the `intake-validator` against the scoped inputs (the requirement/input artifacts under review), passing the artifacts and the intended downstream work as context.
 2. The validator returns a structured finding that names: its verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`), the completeness and clarity gaps it found (may be empty), the specific clarifying questions a human must answer (may be empty), and any assumptions it recommends recording.
-3. The validator is read-only. The coordinator records its dispatch synchronously with `Write-SquadHandoff.ps1 -Quiet`, then sends the closed verdict payload to `Write-SquadVerdict.ps1 -Quiet` at the same root.
+3. The validator is read-only. The coordinator records its dispatch with `Write-SquadHandoff.ps1`, then sends the closed verdict payload to `Write-SquadVerdict.ps1`.
 4. Intake runs on its own turn edge: the coordinator does not dispatch planning or implementation on the same turn it runs the gate when the verdict is `Not-Ready`. A `Ready` or a remediated-then-`Ready` verdict clears the same-turn or next-turn work.
 
 ## Readiness Assessment
@@ -88,7 +88,7 @@ On a `Not-Ready` verdict, the coordinator remediates the inputs before it procee
 3. **Bounded cap.** The remediation loop is capped at **two** cycles. After the second re-validation, the coordinator stops looping regardless of outcome.
 4. **Escalate on unresolved or human-only gaps.** The coordinator escalates to the user — rather than looping again — the moment a blocking gap requires a human decision the squad cannot make (a business choice, a missing external fact, a stakeholder trade-off), when the cap is reached with blocking gaps still open, or when two consecutive cycles fail to reduce the blocking-gap set (divergence). On escalation it presents the outstanding blocking gaps and the validator's clarifying questions and waits.
 
-Each validator dispatch and each remediation dispatch is an ordinary `Write-SquadHandoff.ps1 -Quiet` stage with its own verified `history/<agent>.md` entry and consumption block, so the loop is auditable after the fact. Only unsupported exit 2 uses cold Scribe; other writer failures do not clear the gate.
+Each validator dispatch and each remediation dispatch is a Scribe-recorded stage with its own `history/<agent>.md` entry and consumption block, so the loop is auditable after the fact.
 
 ## Intake Readiness Verdict Schema
 
