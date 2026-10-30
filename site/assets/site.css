@@ -1097,15 +1097,34 @@ html:not(.js) .code-block pre {
 }
 
 .table-scroll table {
+  min-width: var(--table-min-width, 0);
   margin: 0;
 }
 
+/* Each column keeps about 10rem, so a wide table scrolls inside its frame instead of squeezing every column. */
+.table-scroll table:has(tr > :nth-child(3)) {
+  --table-min-width: 30rem;
+}
+
+.table-scroll table:has(tr > :nth-child(4)) {
+  --table-min-width: 40rem;
+}
+
+.table-scroll table:has(tr > :nth-child(5)) {
+  --table-min-width: 50rem;
+}
+
+.table-scroll table:has(tr > :nth-child(6)) {
+  --table-min-width: 60rem;
+}
+
+/* "anywhere" would let columns shrink to one letter and break names mid-word; "normal" keeps words whole and lets the frame scroll. */
 .doc-content :is(th, td) {
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   text-align: start;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 
 .doc-content th {
@@ -1114,9 +1133,9 @@ html:not(.js) .code-block pre {
   font-size: 14px;
 }
 
-.doc-content td code {
+.doc-content :is(th, td) code {
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 
 .doc-content tr:last-child td {
@@ -1623,10 +1642,6 @@ html:not(.js) .code-block pre {
     padding: 12px;
   }
 
-  .table-scroll table {
-    min-width: 520px;
-  }
-
   .search-dialog {
     width: calc(100% - 24px);
     max-height: calc(100dvh - 24px);
@@ -1833,6 +1848,11 @@ html:not(.js) .code-block pre {
     min-width: 0;
     table-layout: fixed;
     font-size: 9pt;
+  }
+
+  .doc-content :is(th, td),
+  .doc-content :is(th, td) code {
+    overflow-wrap: anywhere;
   }
 
   .doc-content tr {
