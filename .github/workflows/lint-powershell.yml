@@ -1,8 +1,8 @@
 # PSScriptAnalyzer lint for the PowerShell surface.
 #
 # PSScriptAnalyzer is the standard FLOSS linter for PowerShell. It runs over the
-# build scripts in scripts/ and the test suites in tests/, which together are the
-# only executable code this repository authors; squad-src/ is markdown assets.
+# build scripts in scripts/, the test suites in tests/, and packaged helper scripts
+# under squad-src/.github/skills/squad/scripts/. Other squad-src/ content is assets.
 #
 # The gate blocks on Error severity. Every finding, at every severity, is listed
 # in the job summary and kept as an artifact.
@@ -67,7 +67,7 @@ jobs:
           Set-StrictMode -Version Latest
 
           $findings = @()
-          foreach ($path in @('scripts', 'tests')) {
+          foreach ($path in @('scripts', 'tests', 'squad-src/.github/skills/squad/scripts')) {
             if (Test-Path -LiteralPath $path) {
               $findings += Invoke-ScriptAnalyzer -Path $path -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
             }

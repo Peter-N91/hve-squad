@@ -309,6 +309,47 @@ test('maintaining.html and fr/maintaining.html document roster-catalog.md and by
   }
 });
 
+function headingSlug(text) {
+  return text.toLowerCase().replace(/&mdash;|&amp;|&/g, ' ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function sectionBySlug(document, slug) {
+  const heading = [...document.querySelectorAll('h2, h3')].find(node => headingSlug(node.textContent) === slug);
+  if (!heading) return '';
+  const parts = [];
+  for (let node = heading.nextElementSibling; node && !/^H[23]$/.test(node.tagName); node = node.nextElementSibling) {
+    parts.push(node.textContent);
+  }
+  return parts.join('\n');
+}
+
+test('paired EN/FR Watch concept sections state the same delivery contract', () => {
+  const pairs = [
+    ['usage.html', 'fr/usage.html', 'what-every-watch-run-does', 'ce-que-fait-chaque-ex-cution-watch'],
+    ['usage.html', 'fr/usage.html', 'one-delivery-at-a-time', 'une-seule-livraison-la-fois'],
+    ['usage.html', 'fr/usage.html', 'pull-request-comments-and-publication', 'commentaires-de-pull-request-et-publication'],
+    ['usage.html', 'fr/usage.html', 'the-shipped-workflow-is-a-scaffold', 'le-workflow-livr-est-une-ossature'],
+    ['maintaining.html', 'fr/maintaining.html', 'watch-delivery-rules', 'r-gles-de-livraison-watch'],
+  ];
+  for (const [enPage, frPage, enSlug, frSlug] of pairs) {
+    const en = openPage(enPage, { scripts: false });
+    const fr = openPage(frPage, { scripts: false });
+    try {
+      const enText = sectionBySlug(en.window.document, enSlug);
+      const frText = sectionBySlug(fr.window.document, frSlug);
+      assert.notEqual(enText, '', `${enPage} missing #${enSlug}`);
+      assert.notEqual(frText, '', `${frPage} missing paired section for #${enSlug}`);
+      for (const token of ['queue: max', 'trustedBaseSha', 'github-actions[bot]', 'watch-publication.json']) {
+        if (!enText.includes(token)) continue;
+        assert.ok(frText.includes(token), `${frPage} #${enSlug} missing ${token}`);
+      }
+    } finally {
+      en.window.close();
+      fr.window.close();
+    }
+  }
+});
+
 test('no docs page contains squad-src/ internal paths (consumer-facing only)', () => {
   const consumerPages = ['usage.html', 'troubleshooting.html', 'fr/usage.html', 'fr/troubleshooting.html'];
   for (const page of consumerPages) {

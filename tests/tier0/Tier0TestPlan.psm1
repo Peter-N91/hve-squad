@@ -85,6 +85,7 @@ function Get-Tier0TestPlan {
                 'Build-SquadPlugin.Tests.ps1'
                 'Performance.Tests.ps1'
                 'Packaging.Tests.ps1'
+                'WatchMode.Tests.ps1'
                 'HotFileBudget.Tests.ps1'
                 'ConnectorContract.Tests.ps1'
                 'SquadBuilder.Tests.ps1'

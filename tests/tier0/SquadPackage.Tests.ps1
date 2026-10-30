@@ -689,3 +689,90 @@ Describe 'GATE-45 Coordinator progress presentation contract' -Tag 'Unit' {
         $script:ProgressProcedure | Should -Match '\| `squad_memory`.*Write durable per-agent notes with the memory tool to `/memories/repo/squad-<agent>\.md`'
     }
 }
+
+Describe 'GATE-48 Watch Mode per-case/per-ask squad selection and full RPI lifecycle contract' -Tag 'Unit' {
+    BeforeAll {
+        $script:WatchModeInstruction = @(
+            $script:Model.Instructions |
+                Where-Object Name -eq 'squad-watch-mode.instructions.md'
+        )[0]
+        $script:FederationRef = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/federation.md') -Raw
+        $script:WatchWorkflowTemplate = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'squad-watch.workflow.yml') -Raw
+    }
+
+    It 'requires per-case and per-ask profile and pack selection across all Watch Mode triggers in squad-watch-mode.instructions.md' {
+        $script:WatchModeInstruction.Body | Should -Match ([regex]::Escape('Every Watch Mode trigger (`issues`, `pull_request`, `issue_comment`, `schedule`, `workflow_dispatch`, `push`) selects its event sub-squad''s **profile** and optional **packs** per case and per ask'))
+        $script:WatchModeInstruction.Body | Should -Match ([regex]::Escape('seeding from the canonical templates rather than copying a prior `members/*` roster'))
+        $script:WatchModeInstruction.Body | Should -Match ([regex]::Escape('Every seeded roster carries the full `researcher`, `lead`, `developer`, `tester`, `scribe` spine, and every substantive run executes the complete Research → Plan → Council → Implement → Review pipeline even when the brief lists numbered steps.'))
+    }
+
+    It 'requires canonical sub-squad seeding, missing federation-root repair, and full RPI execution in references/federation.md' {
+        $script:FederationRef | Should -Match ([regex]::Escape('Select the profile and any optional packs **per case and per ask** for every trigger kind (`issue`, `pull_request`, `issue_comment`, `schedule`, `workflow_dispatch`, `push`)'))
+        $script:FederationRef | Should -Match ([regex]::Escape('do not copy a roster or history layout from an earlier `members/*` directory'))
+        $script:FederationRef | Should -Match ([regex]::Escape('When `members/*` directories exist on disk without a root `federation.md`, seed the missing federation-root meta layer'))
+        $script:FederationRef | Should -Match ([regex]::Escape('Numbered steps or checklists in an issue body (including **Sync and Adapt** briefs) are input requirements to research, plan, implement, and review — not a reason to skip Research or Plan.'))
+    }
+
+    It 'wires per-case/per-ask squad selection and the full RPI spine across all trigger branches in squad-watch.workflow.yml' {
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('SQUAD SELECTION PER CASE AND PER ASK (NON-NEGOTIABLE).'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('COMPLETE SQUAD LIFECYCLE (FULL RPI - NON-NEGOTIABLE).'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('IMMEDIATE SCRIBE CHECKPOINTS (NON-NEGOTIABLE).'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Never copy a team.md, routing.md, or history/ layout from an earlier members/*'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Stage 1 (Research): dispatch researcher'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Stage 2 (Plan): gated on the research artifact existing on disk'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Stage 4 (Implement): gated on the plan artifact'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Stage 5 (Review): gated on the implementation artifacts existing on disk'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Stage 6 (Final-Outcome & Two-Level Verification): have Squad Scribe write'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Run /squad-federation mode=autopilot ${watchArg({ source: ''issue_comment'''))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Run /squad-federation mode=autopilot ${watchArg({ source: ''workflow_dispatch'''))
+    }
+
+    It 'ships the handoff module and explicitly scopes the reference template prerequisites' {
+        Test-Path -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -PathType Leaf |
+            Should -BeTrue -Because 'installed consumers need the deterministic handoff helper in the deployed squad skill'
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('New-SquadWatchBaseline'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('New-SquadWatchHandoff'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('rather than as lifecycle-enforcement parity'))
+    }
+}
+
+Describe 'GATE-48 canonical selection and complete spine' -Tag 'Unit' {
+    BeforeAll {
+        $script:ShippedFederation = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/federation.md') -Raw
+        $script:ShippedWatch = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -Raw
+    }
+
+    It 'ships one current-run profile selection and the complete spine' {
+        $script:ShippedFederation | Should -Match 'exactly one current-run'
+        $script:ShippedFederation | Should -Match 'researcher`, `lead`, `developer`, `tester`, `scribe'
+        $script:ShippedWatch | Should -Match 'Test-SquadWatchProfileSelection'
+    }
+}
+
+Describe 'GATE-49 canonical encoded Open Questions' -Tag 'Unit' {
+    BeforeAll {
+        $script:ShippedQuestions = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-cold-gates-and-verdicts.md') -Raw
+        $script:ShippedWatch = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -Raw
+    }
+
+    It 'ships bounded inert Open Questions rendering' {
+        $script:ShippedQuestions | Should -Match 'squad-watch-open-questions:start'
+        $script:ShippedQuestions | Should -Match 'OQ-WATCH-NNN'
+        $script:ShippedWatch | Should -Match 'ConvertTo-SquadWatchOpenQuestionsMarkdown'
+    }
+}
+
+Describe 'GATE-50 trusted PR issue routing publication reconciliation and source pinning' -Tag 'Unit' {
+    BeforeAll {
+        $script:ShippedWatch = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -Raw
+        $script:ShippedDelivery = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.Delivery.ps1') -Raw
+    }
+
+    It 'ships resolver outputs and fast-forward publication reconciliation' {
+        $script:ShippedWatch | Should -Match 'Resolve-SquadWatchDelivery'
+        $script:ShippedDelivery | Should -Match 'trustedBaseSha'
+        $script:ShippedDelivery | Should -Match 'reconcilePublication'
+        $script:ShippedDelivery | Should -Match 'gh pr create --draft'
+        $script:ShippedDelivery | Should -Match 'force push'
+    }
+}

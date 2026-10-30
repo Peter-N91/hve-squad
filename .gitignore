@@ -55,6 +55,13 @@ apm_modules/
 !.copilot-tracking/squad/members/issue-*/**
 !.copilot-tracking/squad/members/pr-*/
 !.copilot-tracking/squad/members/pr-*/**
+!.copilot-tracking/squad/watch-audit/
+!.copilot-tracking/squad/watch-audit/*/
+!.copilot-tracking/squad/watch-audit/*/watch-publication.json
+!.copilot-tracking/squad/watch-audit/*/AUDIT.md
+
+# Watch trusted helper checkout. Never stage or commit the base-pinned tree.
+.squad-trusted/
 
 knowledge-docs/
 

@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-09-27"
+  last_updated: "2026-10-19"
 ---
 
 # Scribe Cold Section: Gates, Verdicts, and Run Summaries
@@ -91,6 +91,8 @@ The Scribe stamps this shape when a council runs. The council is task-fit, so th
 * Permits Implementation Dispatch: yes (Go, Go-With-Conditions) | no (Stop)
 * Conditions Outstanding: <count>
 ```
+
+For a Watch Mode material handoff, the final topic verdict must agree with the most-restrictive findings: a `Block`, `Risk: High`, or unresolved blocking issue cannot be synthesized as `Go`. A skipped summary row never overrides a Council Verdict already recorded for that run. `Go-With-Conditions` still permits implementation dispatch with the conditions attached. Before handoff, record their satisfaction or explicit acceptance in the latest verdict for the topic; append a resolved verdict rather than rewriting an earlier decision. `Conditions Outstanding` must be a nonnegative integer. Zero declares no unresolved conditions. When a positive count remains (for example, an accepted deferral), add `* Conditions Satisfied:` and/or `* Conditions Accepted:` bullets naming every condition as `(role) <exact condition text from Findings by Role>`. Missing, unrelated, or incomplete disposition records block handoff; a valid explicit acceptance still permits it.
 
 ### Intake Readiness Verdict Placeholder
 
@@ -201,6 +203,11 @@ description: "Autopilot-run summary for topic <id>"
 * Opt-In: mode=autopilot
 * Cost Ceiling: <value or unset>
 * Outcome: completed (awaiting final validation) | incomplete (<n> stage(s) without a dispatch record) | escalated (<reason>) | stopped (<reason>)
+* Trigger Source: <state.json trigger.source; Watch Mode only>
+* Trigger Ref: <state.json trigger.ref; Watch Mode only>
+* Trigger Event ID: <state.json trigger.eventId; Watch Mode only>
+* Trigger Actor: <state.json trigger.actor; Watch Mode only>
+* Trigger Received At: <state.json trigger.receivedAt; Watch Mode only>
 
 ## Cost Preflight Rounds
 
@@ -222,6 +229,10 @@ description: "Autopilot-run summary for topic <id>"
 
 `Dispatch Record` names the history file the Scribe wrote for that stage, and is filled from `history/` rather than from the coordinator's account of the run. A stage with no such file carries the literal `— none recorded`, and any such cell forces the `incomplete` outcome above. This is the run's own report that its cast was not dispatched, written by the only participant that knows.
 
+The five `Trigger ...` bullets are omitted outside Watch Mode. In Watch Mode they are required, copied exactly from `state.json trigger`, and repeated on a resumed run's latest summary entry so the trusted handoff can bind the latest stages to the authorized event rather than to an older committed summary.
+
+Preserve fractional seconds in `receivedAt`; the handoff compares timestamp instants, so equivalent timezone offsets are valid without rounding away milliseconds. Stage results, the latest role outcomes, and the final summary must describe completed work, never `not started`, `in progress`, or a failed result. Successful test reports such as `8 pass, 0 fail` remain successful outcomes. Plain-text deliverables may omit Markdown headings, but a heading alone is not substantive evidence in either `.md` or `.txt` files.
+
 In a deliverable fan-out run, the single `implement` row expands into one row per deliverable (`implement: <deliverable>` with its owning agent).
 
 ## notifications.md
@@ -237,3 +248,11 @@ description: "Append-only log of squad notifications (pings) and their delivery 
 
 Each entry records a notification the squad fired: when, to whom, the trigger, the channel it resolved to, and the decision awaited. Entries are appended in chronological order and never edited.
 ```
+
+## Watch Open Questions
+
+When the payload includes current-run Open Questions, validate every `ID`, `Source`, `Question`, `Impact`, and `Status` cell before writing. After normalization, limits are ID 32, Source 256, Question 1,000, Impact 1,000, and Status 256. Reject empty cells, overlength cells, and duplicate IDs. `Source` accepts only `OQ-WATCH-NNN`, `decisions.md#lower-kebab-anchor`, or the current thread `owner/repo#N`.
+
+Rendering is deterministic and idempotent: normalize CR, LF, and table pipes to spaces; HTML-escape `&`, `<`, and `>`; neutralize every `@` with U+200B; break image, link, and fence delimiters; and insert U+200B before `#` in `Closes`, `Fixes`, or `Resolves` references. Do not write a partial attacker-controlled table. On validation failure, record the generic failure and escalate on the source thread.
+
+Publish the encoded table between `<!-- squad-watch-open-questions:start -->` and `<!-- squad-watch-open-questions:end -->` on a material draft or an existing mapped PR. Leave every byte outside that pair unchanged. If the markers are duplicated or ambiguous, stop and leave the body unchanged. A run with no material change and no existing deliverable creates no branch, placeholder, or pull request; its encoded questions travel on the source thread. The current-run slice starts at the single `## Watch Profile Selection` heading whose run id equals the trusted resolver run id. A later selection heading, or a second heading for that same run id, fails closed and is not a truncation boundary. A heading inside a completed fence or DATA frame is quoted text, not a boundary. Council coverage uses one question id per verdict and finding, `COUNCIL-<ordinal>-<ROLE>-RISK` and `COUNCIL-<ordinal>-<ROLE>-COND-<n>`. Two verdicts by the same role require two ids. A no-material numeric source-thread comment renders the staging artifact only after its member, run id, thread, stable ref, and trusted base match the resolver; a mismatch posts the generic failure. That artifact is produced in the same read-only job as the model. The binding check makes it self-consistent, but it is not independently attested. Isolating that attestation from the model runner is a residual limitation, not part of this publication path.
