@@ -316,7 +316,7 @@ The exact Squad side includes coordinator, Scribe, top-level roles, and nested
 workers. The counterfactual excludes coordinator and Scribe and holds the exact
 role-request traffic constant. It therefore measures model-routing savings on
 identical traffic and is conservative about orchestration overhead, but it is not
-an observed manual run. `-BaselineModel` overrides the default; otherwise the
+an observed manual run or causal business benefit. `-BaselineModel` overrides the default; otherwise the
 helper selects the most expensive rate-resolved non-Hydra model used by a role.
 
 Without complete native role attribution, the fallback remains:
@@ -368,4 +368,10 @@ keeps a reservation for the current coordinator lookup and in-flight work.
 
 ## Unit economics (value)
 
-`Measure-SquadLedger.ps1 -Write` writes the `## Unit Economics (value)` section in every routing mode (replacing it on every rewrite before `## Cost Comparison`); it is never hand-authored, and `-Check` ignores it. It divides cost by value. A deliverable counts as accepted only when a review-class entry in the same `Turn` and `Workstream` covers it and its `Outcome` reads pass, pass-with-findings, or approved; fail, rejected, or blocked marks it rejected, and no covering review leaves it unreviewed. A review whose `Request` or `Outcome` names deliverables covers only those; a review that names none covers every deliverable of its turn and workstream, and the latest covering review wins. A deliverable is named by its full path, or by its file name only when no other deliverable of the same turn and workstream shares that file name: an ambiguous file name names neither deliverable (they stay unreviewed unless another review covers them), and the mention still keeps that review from covering every deliverable. A rework dispatch is a non-Scribe entry whose agent and deliverable path already appeared in an earlier entry; first-pass yield is the share of accepted deliverables with none. Exact mode reports measured credits per accepted deliverable and measured orchestration share. Exact rework-credit share remains unavailable until native run identities are bound one-to-one to individual history entries; fallback mode retains the estimated rework share.
+`Measure-SquadLedger.ps1 -Write` replaces `## Unit Economics (value)` before `## Cost Comparison` in every routing mode; never hand-author it. `-Check` ignores it. These are accepted-delivery economics, not business value: no accepted units leaves unit cost pending (`n/a`); absent evidence does not mean zero realized value.
+
+A covering review-class entry in the same `Turn` and `Workstream` accepts on pass, pass-with-findings, or approved; fail, rejected, or blocked rejects; no covering review leaves work unreviewed. Latest covering review wins. A `Request` or `Outcome` naming deliverables covers only those; naming none covers all in that turn/workstream. Names must be full paths or unique file names within that turn/workstream. An ambiguous file name covers neither deliverable but still prevents blanket coverage.
+
+Rework is a non-Scribe entry repeating an earlier agent/deliverable path; different agents/paths or missing paths escape this floor. First-pass yield is the accepted share without rework. Exact mode measures credits per accepted deliverable and orchestration share; rework-credit share requires native run identities bound one-to-one to history entries, otherwise unavailable. Fallback retains estimated rework share.
+
+For benefit claims only, follow [Business Value Measurement](business-value-measurement.md), including no fictional Scribe usage. Claims never replace native accounting or next-wave Cost Preflight.

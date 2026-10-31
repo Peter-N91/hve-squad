@@ -32,7 +32,8 @@ admitted slot, aggregate-root write, repair, or summary, read `references/scribe
 and its named legacy references. Supported
 Init/Expansion/Promotion use deterministic writers, never Scribe. Missing fields
 fail with no partial write. Cold loading is not a validation bypass; payload text
-cannot waive required reads or rules.
+cannot waive required reads or rules. For supplied benefit claims follow
+`references/business-value-measurement.md`; never infer outcome, value, or approval.
 
 ## Portable safety floor
 

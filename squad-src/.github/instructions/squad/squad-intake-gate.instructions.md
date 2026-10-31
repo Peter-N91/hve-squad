@@ -69,6 +69,8 @@ The validator assesses each in-scope input against these dimensions and reports 
 
 A gap is **blocking** when it would force the downstream role to guess a material decision; it is **non-blocking** when a reasonable, recordable assumption closes it.
 
+For business-benefit claims, apply the intake and preservation rules in [Business Value Measurement](../../skills/squad/references/business-value-measurement.md).
+
 ## Verdict Synthesis
 
 The verdict writer records the label the validator returned and validates it against the supplied blocking/non-blocking gap counts; it does not synthesize or downgrade it. The labels mean:

@@ -364,7 +364,7 @@ Describe 'Measure-SquadLedger -Write splices the derived fragment and run totals
             $after | Should -Match ([regex]::Escape("manual model across 12 turns is estimated at **`$$baseline"))
             if ($baseline -eq '0.10') { $after | Should -Match '\*\*-217\.08%\*\*' }
             else { $after | Should -Match 'saving unavailable \(non-positive manual baseline\)' }
-            $after | Should -Not -Match 'stale — refreshed|NaN|Infinity'
+            $after | Should -Not -Match 'stale — refreshed|\b(?:NaN|Infinity)\b'
             (Invoke-Ledger -SquadRoot $root -Check).ExitCode | Should -Be 0
         }
     }
@@ -2665,6 +2665,41 @@ description: "Append-only dispatch history for a single squad agent"
         $check.ExitCode | Should -Be 0 -Because $check.Output
     }
 
+    It 'keeps benefit metadata outside native accounting without fake Scribe usage or duplicate cost' {
+        $events = @($script:BaseEvents | Select-Object -SkipLast 1 | ForEach-Object {
+            $_.Replace('owner-scribe', 'coordinator-root').Replace('scribe-session', 'coordinator-session').Replace('"agentName":"Squad Scribe","agentDisplayName":"scribe"', '"agentName":"coordinator","agentDisplayName":"coordinator"').Replace('"agentName":"Squad Scribe"', '"agentName":"coordinator"')
+        })
+        $f = New-SessionFixtureLocal -EventLines $events
+        $first = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $first.ExitCode | Should -Be 0 -Because $first.Output
+        $ledgerPath = Join-Path $f.Root 'consumption.md'
+        $journalPath = Join-Path $f.Root 'consumption-sessions.json'
+        $ledgerBefore = Get-Content -LiteralPath $ledgerPath -Raw
+        $journalBefore = Get-Content -LiteralPath $journalPath -Raw
+        $stateBefore = Get-Content -LiteralPath (Join-Path $f.Root 'state.json') -Raw
+        $claim = 'Claim ID: benefit-speed-01; source evidence: evidence/cycle-time.csv; baseline: 12 minutes per case; target: 9 minutes per case; measurement owner: Measurement Owner; business decision owner: Business Owner; status: pending; decision ref: decisions/review-01.'
+        Add-Content -LiteralPath (Join-Path $f.Root 'decisions.md') -Value "`n$claim"
+        $metadataEvent = @{ type = 'assistant.message'; timestamp = '2026-10-01T10:04:00.000Z'; data = @{ content = $claim } } | ConvertTo-Json -Depth 4 -Compress
+        Add-Content -LiteralPath (Join-Path $f.SessionDir 'events.jsonl') -Value (@($events | Where-Object { $_ -match '"type":"session.usage_record"' }) + $metadataEvent)
+
+        $replay = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+        $replay.ExitCode | Should -Be 0 -Because $replay.Output
+        $ledger = Get-Content -LiteralPath $ledgerPath -Raw
+        $ledger | Should -BeExactly $ledgerBefore
+        (Get-Content -LiteralPath $journalPath -Raw) | Should -BeExactly $journalBefore
+        (Get-Content -LiteralPath (Join-Path $f.Root 'state.json') -Raw) | Should -BeExactly $stateBefore
+        $journal = $journalBefore | ConvertFrom-Json
+        @($journal.sessions).Count | Should -Be 1
+        $journal.sessions[0].records | Should -Be 2
+        $ledger | Should -Match '\| orchestration \| 1 \| 10,000 \| 40,000 \| 10,000 \| 5,000 \| 0\.0515 \| 5\.15 \| exact-native \|'
+        $ledger | Should -Match '\| \*\*Total\*\* \| \*\*2\*\* \| \*\*110,000\*\* \| \*\*120,000\*\* \| \*\*10,000\*\* \| \*\*15,000\*\* \| \*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\* \|'
+        $ledger | Should -Match 'calculated counterfactual'
+        $ledger | Should -Match 'not an observed alternate run'
+        $ledger | Should -Match 'cost per accepted deliverable remains pending \(n/a\)'
+        $ledger | Should -Match 'does not establish financial business value or imply zero financial business value'
+        (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }).ExitCode | Should -Be 0
+    }
+
     It 'canonicalizes plugin-qualified native identities to the same history agents used by APM installs' {
         $events = @(
             $script:BaseEvents | ForEach-Object {
@@ -3243,6 +3278,8 @@ Describe 'Unit economics (value) section' {
         $out | Should -Match '\| Accepted by an independent review \| 0 \| derived \|'
         $out | Should -Match '\| Unreviewed \| 1 \| derived \|'
         $out | Should -Match '\| Est\. credits per accepted deliverable \| n/a \| estimated \|'
+        $out | Should -Match 'cost per accepted deliverable remains pending \(n/a\)'
+        $out | Should -Match 'does not establish financial business value or imply zero financial business value'
     }
 
     It 'a review that names deliverables covers only those it names' {
@@ -3391,9 +3428,11 @@ Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
         $script:CostManagerBody = $text.Substring($text.IndexOf("`n---", 4) + 5)
     }
 
-    It 'has an AI spend review mode that measures cost per accepted deliverable, not per dispatch' {
+    It 'scopes zero value to accepted-deliverable unit economics' {
         $script:CostManagerBody | Should -Match ([regex]::Escape('An AI spend review (the squad''s own model spend, not an Azure workload) skips Steps 2 to 4 and runs Step 5.'))
-        $script:CostManagerBody | Should -Match ([regex]::Escape('A deliverable no review accepted carries zero value: never divide by dispatches or by deliverables merely produced.'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('AI spend review runs Steps 1 and 5 only'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('An unaccepted deliverable has zero value only in this unit-economics measure'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('This does not determine financial business value.'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('`## Unit Economics (value)`'))
     }
 
@@ -3402,5 +3441,97 @@ Describe 'Squad Cost Manager reviews the squad''s own AI spend by value' {
         $script:CostManagerBody | Should -Match ([regex]::Escape('with at least three runs per side, reporting medians and the spread'))
         $script:CostManagerBody | Should -Match ([regex]::Escape('Each recommendation that changes a pin, a ceiling, or the roster is `confirm`-tier.'))
         $script:CostManagerBody.Length | Should -BeLessOrEqual 30000
+    }
+
+    It 'reviews a supplied financial report only for evidence gaps' {
+        $script:CostManagerBody | Should -Match ([regex]::Escape('A supplied financial-report evidence review runs Step 6 only'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('references/business-value-measurement.md'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('claim ID, value category, hypothesis'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('Do not fetch, create, estimate, or recalculate financial actuals'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('Do not calculate ROI, approve a business decision'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('evidence_status'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('business_decision` (`owner`, `status`, `reference`)'))
+        $script:CostManagerBody | Should -Match ([regex]::Escape('use `unapproved` when no approval is recorded'))
+    }
+}
+
+Describe 'Benefit hypotheses remain traceable through planning and review' {
+    BeforeAll {
+        $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+        $script:IntakeBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/instructions/squad/squad-intake-gate.instructions.md') -Raw) -replace '\s+', ' '
+        $script:LeadBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-lead.agent.md') -Raw) -replace '\s+', ' '
+        $script:ReviewerBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-reviewer.agent.md') -Raw) -replace '\s+', ' '
+        $script:ScribeBody = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-scribe.agent.md') -Raw) -replace '\s+', ' '
+        $script:PayloadTemplate = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/scribe-payload-template.md') -Raw) -replace '\s+', ' '
+        $script:CoordinatorAgent = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw) -replace '\s+', ' '
+        $script:OrdinaryHandoff = (Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/economy-scribe.md') -Raw) -replace '\s+', ' '
+        $script:BusinessValueReference = Get-Content -LiteralPath (Join-Path $root 'squad-src/.github/skills/squad/references/business-value-measurement.md') -Raw
+    }
+
+    It 'requires a measurable benefit claim at intake and plans its validation' {
+        $script:IntakeBody | Should -Match 'business-value-measurement\.md'
+        $script:BusinessValueReference | Should -Match 'Claim ID, category, and hypothesis'
+        $script:BusinessValueReference | Should -Match 'Beneficiary and scope'
+        $script:BusinessValueReference | Should -Match 'measurement and evidence owners'
+        $script:BusinessValueReference | Should -Match '\*\*Intake\.\*\*'
+        $script:LeadBody | Should -Match 'plan instrumentation and outcome validation'
+        $script:LeadBody | Should -Match 'keep outcomes `pending` while the observation window is open or evidence collection is incomplete'
+    }
+
+    It 'defines the requested value categories and measurement guidance' {
+        foreach ($category in @(
+                'revenue enablement'
+                'cost avoidance'
+                'capacity gained'
+                'labour augmentation'
+                'quality'
+                'speed'
+                'risk reduction'
+                'new capacity'
+                'engagement'
+            )) {
+            $script:BusinessValueReference | Should -Match ([regex]::Escape($category))
+        }
+        $script:BusinessValueReference | Should -Match 'Baseline and target'
+        $script:BusinessValueReference | Should -Match 'booked value'
+    }
+
+    It 'distinguishes deliverable acceptance from business outcomes and approvals' {
+        $script:ReviewerBody | Should -Match 'deliverable acceptance separately from evidence-based business-outcome validation'
+        $script:BusinessValueReference | Should -Match 'For each claim ID, report deliverable acceptance separately'
+        $script:BusinessValueReference | Should -Match 'Use `pending` while the observation window is open or required evidence collection is incomplete'
+        $script:BusinessValueReference | Should -Match 'Once both are complete, use `supported` when evidence supports the target, or `gap` when the target was missed or required evidence is missing or inconsistent'
+        $script:ReviewerBody | Should -Match 'after both complete, use `supported` only when evidence supports the target, otherwise `gap`'
+        $script:BusinessValueReference | Should -Match '\*\*Non-waiver\.\*\*'
+        $script:CoordinatorAgent | Should -Match 'references/business-value-measurement\.md'
+        $script:CoordinatorAgent | Should -Match 'business approval stays separate from execution/review'
+        $script:CoordinatorAgent | Should -Match 'delivery acceptance is not realized benefit'
+    }
+
+    It 'distinguishes completed outcome gaps from pending evidence collection' {
+        $script:BusinessValueReference | Should -Match 'Use `pending` while the observation window is open or required evidence collection is incomplete\.\s+Once both are complete, use `supported` when evidence supports the target, or `gap` when the target was missed or required evidence is missing or inconsistent'
+        $script:CostManagerBody | Should -Match 'Use `pending` while the observation window is open or evidence collection is incomplete; once both are complete, use `supported` if supplied evidence supports the target, otherwise `gap` for a missed target or missing/inconsistent evidence'
+        $script:LeadBody | Should -Match 'keep outcomes `pending` while the observation window is open or evidence collection is incomplete; after both finish, use `supported` only when evidence supports the target, otherwise `gap`'
+        $script:LeadBody | Should -Match 'Business Value Measurement.*business-value-measurement\.md'
+        $script:ReviewerBody | Should -Match 'keep status `pending` while its observation window is open or evidence collection is incomplete; after both complete, use `supported` only when evidence supports the target, otherwise `gap`'
+        $script:ReviewerBody | Should -Match 'Business Value Measurement.*business-value-measurement\.md'
+        $script:ScribeBody | Should -Match 'follow `references/business-value-measurement\.md`'
+        $script:PayloadTemplate | Should -Match 'never infer outcome, value, or approval from delivery'
+    }
+
+    It 'routes supplied claim metadata through the closed ordinary rationale and cold payload without inference' {
+        $script:BusinessValueReference | Should -Match 'supported `decision\.rationale`, within the closed ordinary decision schema `\{title,rationale,adrNoted\}`'
+        $script:BusinessValueReference | Should -Match 'Do not add unsupported verdict JSON keys'
+        $script:OrdinaryHandoff | Should -Match 'Optional `decision`: \{title: string,rationale: string,adrNoted: boolean\}'
+        $script:OrdinaryHandoff | Should -Match 'never fictional Scribe tokens'
+        $script:ScribeBody | Should -Match 'never infer outcome, value, or approval'
+        $script:PayloadTemplate | Should -Match 'keep metadata in schema-defined text, never new keys'
+        $script:BusinessValueReference | Should -Match 'business decision owner/status/reference'
+        $script:BusinessValueReference | Should -Match 'Never invent owners, baselines, targets, evidence, results, decision references, financial actuals, ROI, or approval'
+    }
+
+    It 'keeps benefit handling conditional instead of adding it to the universal ordinary handoff contract' {
+        $script:OrdinaryHandoff | Should -Not -Match 'business-value-measurement'
+        $script:BusinessValueReference | Should -Match 'do not add a universal measurement read or a Scribe dispatch to ordinary work'
     }
 }

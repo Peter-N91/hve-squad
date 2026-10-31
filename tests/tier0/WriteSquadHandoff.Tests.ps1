@@ -237,6 +237,42 @@ Describe 'Write-SquadHandoff.ps1 writes an ordinary hand-off and verifies the le
         (Get-Content -LiteralPath (Join-Path $root 'consumption.md') -Raw) | Should -Match '# Squad Consumption Ledger \(Run: rp-fixture-01\)'
     }
 
+    It 'persists supplied benefit evidence through decision.rationale without adding usage or schema fields' {
+        $controlRoot = New-Root
+        $root = New-Root
+        $controlPayload = New-Payload
+        $payload = New-Payload
+        $claims = @(
+            'Claim ID: benefit-speed-01; category: speed; hypothesis: reduce cycle time; beneficiary: fixture team; source evidence: evidence/cycle-time.csv; baseline: 12 minutes per case, September 2026; target: 9 minutes per case by December 2026; measurement owner: Measurement Owner; business decision owner: Business Owner; status: supported; decision ref: decisions/review-01.'
+            'Claim ID: benefit-quality-02; source evidence: evidence/defects.csv; baseline: 4 defects per 100 cases; target: 2 defects per 100 cases; measurement owner: Quality Owner; business decision owner: Service Owner; status: gap; decision ref: decisions/review-02.'
+            'Claim ID: benefit-capacity-03; source evidence: evidence/capacity.csv; baseline: 20 cases per day; target: 25 cases per day; measurement owner: Operations Owner; business decision owner: Business Owner; status: pending; decision ref: decisions/review-03. Financial business value remains pending; no financial actuals supplied.'
+        )
+        $payload.decision.rationale = $claims -join "`n"
+        $control = Invoke-Writer -Root $controlRoot -Payload $controlPayload -Quiet
+        $control.ExitCode | Should -Be 0 -Because $control.Output
+        $result = Invoke-Writer -Root $root -Payload $payload -Quiet
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $status = $result.Stdout | ConvertFrom-Json
+        $controlStatus = $control.Stdout | ConvertFrom-Json
+        $status.ledgerCheck | Should -Be 'PASS'
+        $status.dispatchEntries | Should -Be $controlStatus.dispatchEntries
+        ($status.historyCounts | ConvertTo-Json -Compress) | Should -BeExactly ($controlStatus.historyCounts | ConvertTo-Json -Compress)
+        $decisions = (Get-Content -LiteralPath (Join-Path $root 'decisions.md') -Raw) -replace "`r`n", "`n"
+        foreach ($claim in $claims) { $decisions | Should -Match ([regex]::Escape($claim)) }
+        $decisions | Should -Match ([regex]::Escape($payload.decision.rationale))
+        $state = Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json
+        $controlState = Get-Content -LiteralPath (Join-Path $controlRoot 'state.json') -Raw | ConvertFrom-Json
+        @($state.PSObject.Properties.Name) | Should -Be @($controlState.PSObject.Properties.Name)
+        @($state.currentRun.PSObject.Properties.Name) | Should -Be @($controlState.currentRun.PSObject.Properties.Name)
+        $state.currentRun.estCostUsd | Should -Be $controlState.currentRun.estCostUsd
+        $state.currentRun.estCreditsTotal | Should -Be $controlState.currentRun.estCreditsTotal
+        foreach ($agent in @('Squad Researcher', 'Squad Scribe')) {
+            $history = Get-Content -LiteralPath (Join-Path $root "history/$agent.md") -Raw
+            $controlHistory = Get-Content -LiteralPath (Join-Path $controlRoot "history/$agent.md") -Raw
+            $history | Should -BeExactly $controlHistory
+        }
+    }
+
     It 'advances state.json with the closed key set intact and every untouched field preserved' {
         $root = New-Root
         $seedState = Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json

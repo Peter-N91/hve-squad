@@ -141,5 +141,7 @@ Ordinary handoffs run synchronously through the validated writer.
 Supported verdicts run synchronously through the verdict writer.
 
 Return the matched pattern, actual agents and tiers, their synthesized findings,
-verified paths/state receipt, and unresolved approvals or blockers. No model pin:
-the user's selected session model remains in force.
+verified paths/state receipt, and unresolved approvals or blockers. For supplied
+benefit claims follow `references/business-value-measurement.md`: business approval
+stays separate from execution/review; delivery acceptance is not realized benefit.
+No model pin: the user's selected session model remains in force.
