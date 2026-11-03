@@ -3,7 +3,7 @@ title: Squad Skill Security Model
 description: STRIDE model for local squad routing, connector file exchanges, and state persistence.
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-28
+ms.date: 2026-11-02
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
@@ -21,8 +21,9 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `Get-SquadFederationInitPlan.ps1`, `Initialize-SquadFederation.ps1`,
 `Get-SquadRosterExpansionPlan.ps1`, `Expand-SquadRoster.ps1`,
 `Write-SquadHandoff.ps1`, `Write-SquadVerdict.ps1`, `Measure-SquadLedger.ps1`,
-the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`, and
-`Initialize-SquadConsumptionRates.ps1`.
+the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`,
+`Initialize-SquadConsumptionRates.ps1`, and the read-only governance report
+renderer `New-SquadGovernanceReport.ps1` with its `SquadGovernanceReport.*` modules.
 The two buckets below cover configuration/dispatch and file exchange/persistence.
 Each enumerates all six STRIDE categories. Agent instructions are procedural
 controls, not a sandbox or a substitute for host filesystem permissions.
@@ -107,6 +108,15 @@ Different filesystem permissions or unattended policies change the risk.
   The ledger, run totals, and journal publish as one rollback-capable transaction.
   These helpers never emit prompts, responses, tool arguments, or raw log lines;
   host logs and the journal are not connector identity evidence.
+* The governance report renderer reads squad state, the ledger, and the session
+  journal strictly read-only and treats every value as untrusted text: content is
+  HTML-escaped, and the output carries no script, remote reference, or live link.
+  It does not follow linked files or directories out of the squad root, caps the
+  size of each file it reads, and writes exactly one local file atomically,
+  refusing URLs, network shares, directories, and any path inside the squad state
+  tree, including one reached through a link. Output is a pure function of the
+  state and its as-of date. It never writes, repairs, or re-prices state; its
+  derived figures (including ROI) are display-only arithmetic over ledger values.
 * The promotion planner writes only a transport plan outside squad state. It hashes
   the complete plain-squad tree and every candidate directory. The promotion writer
   requires that exact plan hash plus an exhaustive relocate/keep partition, stages

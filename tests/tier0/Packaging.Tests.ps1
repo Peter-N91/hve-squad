@@ -278,6 +278,14 @@ Describe 'Deterministic coordinator transactions ship with the runtime' {
         @{ Name = 'Initialize-SquadFederation.ps1' }
         @{ Name = 'Get-SquadRosterExpansionPlan.ps1' }
         @{ Name = 'Expand-SquadRoster.ps1' }
+        @{ Name = 'New-SquadGovernanceReport.ps1' }
+        @{ Name = 'SquadGovernanceReport.psm1' }
+        @{ Name = 'SquadGovernanceReport.Markdown.ps1' }
+        @{ Name = 'SquadGovernanceReport.State.ps1' }
+        @{ Name = 'SquadGovernanceReport.Ledger.ps1' }
+        @{ Name = 'SquadGovernanceReport.Economics.ps1' }
+        @{ Name = 'SquadGovernanceReport.Model.ps1' }
+        @{ Name = 'SquadGovernanceReport.Html.ps1' }
     ) {
         $source = Join-Path $script:SourceRootResolved "squad-src/.github/skills/squad/scripts/$Name"
         $delivered = Join-Path $script:PluginOutputRoot "skills/squad/scripts/$Name"
